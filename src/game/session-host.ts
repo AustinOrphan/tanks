@@ -28,6 +28,21 @@ export interface GameSessionHost {
    */
   start(): void;
   /**
+   * Is a gameplay session running right now? (issue #427)
+   *
+   * The EMPTY state made observable. The host could always be empty -- construction builds
+   * nothing and `start()` is a separate, explicit call -- but nothing outside could ask,
+   * so "the shell exists with no session" was a property the code had and no test could
+   * state. That is the gap this closes: `#427`'s criteria are all of the form "X still
+   * works while the host has no active session", and none of them is checkable without a
+   * way to assert the second half.
+   *
+   * Deliberately a QUESTION, not the handle. Returning the `GameHandle` would hand callers
+   * the thing this module exists to own, and the one legitimate consumer -- a shell asking
+   * whether to offer Resume -- needs the boolean and nothing else.
+   */
+  hasSession(): boolean;
+  /**
    * The reboot seams, handed to every session this host starts.
    *
    * The SAME two function objects on every call, never rebuilt per session. A session
@@ -165,6 +180,7 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
   };
 
   return {
+    hasSession: () => handle !== null,
     start(): void {
       // `replace`, not `create`: routing the first session through the same path as every
       // later one is what makes `start()` obey the `spent` latch and dispose a predecessor.

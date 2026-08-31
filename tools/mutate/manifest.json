@@ -2092,8 +2092,8 @@
     "find": "    stop();\n    canvas?.remove();\n    create(versus);",
     "replace": "    stop();\n    create(versus);",
     "expect": "killed",
-    "expectFailures": 5,
-    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`.",
+    "expectFailures": 6,
+    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`. COUNT MOVED 5 -> 6 for issue #427: the empty-host cases added to session-host.test.ts include one that walks start -> replace -> replace asserting exactly one canvas is alive throughout, so a host that leaves the dead element behind fails there as well. Re-measured on the tree, not predicted.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2118,8 +2118,8 @@
     "find": "      stop();\n      spent = true;",
     "replace": "      stop();",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Disposes the running session on page teardown but never latches, so the host will still build another one. Both reboot seams are already in a HUD click handler's hands when `pagehide` fires, and a click that lands in the same task then constructs a canvas, renderer, input controller and frame loop onto a document that is going away -- holding a GL context nothing will ever dispose. The teardown itself still looks correct, which is why nothing else notices. 2 of 54, both in session-host.test.ts: 'dispose() latches: a late reboot request starts no session on a dying page' and 'start() after dispose() starts nothing', the second because `start()` routes through the same guard.",
+    "expectFailures": 3,
+    "why": "Disposes the running session on page teardown but never latches, so the host will still build another one. Both reboot seams are already in a HUD click handler's hands when `pagehide` fires, and a click that lands in the same task then constructs a canvas, renderer, input controller and frame loop onto a document that is going away -- holding a GL context nothing will ever dispose. The teardown itself still looks correct, which is why nothing else notices. 2 of 54, both in session-host.test.ts: 'dispose() latches: a late reboot request starts no session on a dying page' and 'start() after dispose() starts nothing', the second because `start()` routes through the same guard. COUNT MOVED 2 -> 3 for issue #427: the empty-host case that fires a late `requestCampaignSession` AFTER dispose -- asserting the host stays empty rather than building a session onto a dying page -- is exactly what the latch prevents, so it detects this too. Re-measured on the tree, not predicted.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2443,8 +2443,8 @@
     "find": "    styleSink?.(hex, skin, accentHex);",
     "replace": "    (styleSink as StyleSink)(hex, skin, accentHex);",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "The optional call made mandatory -- the paint shop demanding a gameplay renderer again, which is the exact coupling issue #427 removed. This is the one line that decides whether Customize is an APPLICATION route or a gameplay one: `restyle` runs on every hull, skin and accent pick, and with no session there is no sink, so a non-optional call throws on a page whose only crime is having no match running. WHY IT NEEDS ITS OWN ENTRY, measured rather than assumed: with this mutation applied, `loop.test.ts` still passes 397 of 397. It cannot see the defect, because every route it reaches goes through `startGameWith`, which always attaches a sink -- so the whole existing suite agrees a session is present and the missing case is the one nobody was testing. `route-ui.test.ts` fails 2 of its 14: `the paint shop records a pick and drives the preview with NO renderer attached`, and `a detached sink stops the pushes without stopping the pick`, which is that case's own negative control (it re-runs the same pick after clearing the sink, so a build that pushed a triple regardless of the sink would fail there too). Two failures, MEASURED by applying this edit and running the file, not predicted. Scoped to route-ui.test.ts; expectFailures counts that scoped run only.",
+    "expectFailures": 3,
+    "why": "The optional call made mandatory -- the paint shop demanding a gameplay renderer again, which is the exact coupling issue #427 removed. This is the one line that decides whether Customize is an APPLICATION route or a gameplay one: `restyle` runs on every hull, skin and accent pick, and with no session there is no sink, so a non-optional call throws on a page whose only crime is having no match running. WHY IT NEEDS ITS OWN ENTRY, measured rather than assumed: with this mutation applied, `loop.test.ts` still passes 397 of 397. It cannot see the defect, because every route it reaches goes through `startGameWith`, which always attaches a sink -- so the whole existing suite agrees a session is present and the missing case is the one nobody was testing. `route-ui.test.ts` fails 2 of its 14: `the paint shop records a pick and drives the preview with NO renderer attached`, and `a detached sink stops the pushes without stopping the pick`, which is that case's own negative control (it re-runs the same pick after clearing the sink, so a build that pushed a triple regardless of the sink would fail there too). Two failures, MEASURED by applying this edit and running the file, not predicted. Scoped to route-ui.test.ts; expectFailures counts that scoped run only. COUNT MOVED 2 -> 3 for issue #427: the combined case that drives every route handler against a real empty `GameSessionHost` fires `onPickSkin`, so a mandatory style sink throws there as well as in the two paint-shop cases. Re-measured on the tree, not predicted.",
     "tests": [
       "src/game/route-ui.test.ts"
     ]
@@ -2555,6 +2555,19 @@
     "why": "Start accepts a Teams match with everybody on one team. The match then runs to an immediate, unlosable conclusion -- the issue's binding rule is 'Start requires at least two represented teams', and this is the state that rule exists to refuse. It survives every OTHER gate: the slots are assigned, the devices are present, a human is playing, so `versusSetupProblem` returns null and the button enables. The `false &&` form is chosen over deleting the line because it leaves `representedTeams` referenced, so the mutation cannot be mistaken for dead-code removal by a reader of the diff. Killed by the case asserting the refusal in `'teams'` AND its own control -- the identical slots must still be startable in `'ffa'`, without which the test could pass against a build that simply refused Teams outright. Scoped to versus-setup.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/versus-setup.test.ts"
+    ]
+  },
+  {
+    "id": "empty-session-host-reports-a-session",
+    "file": "src/game/session-host.ts",
+    "find": "    hasSession: () => handle !== null,",
+    "replace": "    hasSession: () => true,",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The host claims a gameplay session whether or not one exists -- so the EMPTY state, which is the entire point of issue #427, becomes unobservable. A shell asking 'should I offer Resume' gets yes on a page that has never started a match, and every criterion of the form 'X still works while the host has no active session' loses its second half: the assertions still run, they just stop distinguishing anything. Chosen over `() => false` deliberately, though both are killed: a stuck-false accessor is caught by the two positive cases and reads as an obvious omission, while stuck-TRUE passes the naive 'it reports a session after start()' check and fails only where the emptiness is the claim -- which is the harder shape to notice in review. Four failures across two files, MEASURED: the empty-host cases in session-host.test.ts and the combined route case in route-ui.test.ts, which asserts that driving every application route leaves the host empty. Scoped to those two files; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/session-host.test.ts",
+      "src/game/route-ui.test.ts"
     ]
   }
 ]

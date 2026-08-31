@@ -289,3 +289,87 @@ describe('createGameSessionHost: stop and dispose', () => {
     expect(h.shellDisposals).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The EMPTY host (issue #427): the shell exists, and no gameplay does.
+//
+// The property was always true -- construction builds nothing and `start()` is a separate
+// call -- but nothing could ask, so it was a fact about the code that no test could state.
+// These use `hasSession()` to state it, and every one of them is of the form the issue's
+// criteria take: "X is still so while the host has no active session".
+describe('createGameSessionHost: the empty host (issue #427)', () => {
+  it('owns no gameplay at all until something explicitly starts one', () => {
+    const h = harness();
+    // Criterion 2, asserted through the collaborators the host would have had to call.
+    // Not "the fields are null" -- that is unobservable from here and would pin the
+    // implementation rather than the ownership.
+    expect(h.host.hasSession()).toBe(false);
+    expect(h.startArgs, 'a session was built at construction').toHaveLength(0);
+    expect(h.canvases, 'a canvas was built at construction').toHaveLength(0);
+    expect(h.root.querySelectorAll('canvas'), 'the root already holds a canvas').toHaveLength(0);
+  });
+
+  it('reports a session once one is started, and not before', () => {
+    // The positive half. Without it `hasSession` could be `() => false` and every
+    // assertion above would still pass -- which is the shape of a guard that pins nothing.
+    const h = harness();
+    expect(h.host.hasSession()).toBe(false);
+    h.host.start();
+    expect(h.host.hasSession()).toBe(true);
+  });
+
+  it('returns to empty on stop, and stays empty after dispose', () => {
+    const h = harness();
+    h.host.start();
+    h.host.stop();
+    expect(h.host.hasSession(), 'stop left a session behind').toBe(false);
+    // `dispose` is `stop` plus the latch, so an already-stopped host stays empty and a
+    // late reboot request cannot refill it -- which is the property the latch exists for.
+    h.host.dispose();
+    expect(h.host.hasSession()).toBe(false);
+    h.host.requestCampaignSession();
+    expect(h.host.hasSession(), 'a late reboot request built a session onto a dead page').toBe(false);
+    expect(h.startArgs, 'a session was built after dispose').toHaveLength(1);
+  });
+
+  it('leaves the page-scoped shell untouched while it is empty', () => {
+    // Criterion 4. The host BORROWS the shell and never disposes it -- so an empty host,
+    // a started one and a stopped one must all leave it alone. `boot.ts`'s `pagehide` is
+    // the one owner, and a host that disposed it would hand the next session a latched
+    // audio engine with nothing thrown.
+    const h = harness();
+    expect(h.shellDisposals).toBe(0);
+    h.host.start();
+    h.host.stop();
+    h.host.dispose();
+    expect(h.shellDisposals, 'the host disposed the page shell').toBe(0);
+  });
+
+  it('hands every session the SAME shell instance, empty host or not', () => {
+    // The other half of criterion 4: surviving is not enough if each session gets a copy.
+    // Settings, audio and the dismissed Launch gate are identity-scoped -- a second
+    // instance is how mute and the splash used to reset on a Campaign<->Versus switch.
+    const h = harness();
+    h.host.start();
+    h.host.requestVersusSession(config('vs-duel-01'));
+    expect(h.startArgs).toHaveLength(2);
+    expect(h.startArgs[0][5]).toBe(h.shell);
+    expect(h.startArgs[1][5]).toBe(h.shell);
+  });
+
+  it('never leaves a session running through a replacement -- exactly one at a time', () => {
+    // Criterion 5, as a sequence rather than a single state: every transition is explicit,
+    // and at no point are two sessions live. Read off the disposal ledger, which
+    // distinguishes "disposed each once" from "disposed the first one twice".
+    const h = harness();
+    h.host.start();
+    expect(h.host.hasSession()).toBe(true);
+    h.host.requestVersusSession(config('vs-duel-01'));
+    expect(h.disposedIds, 'the campaign session outlived its replacement').toEqual([0]);
+    expect(h.host.hasSession()).toBe(true);
+    h.host.requestCampaignSession();
+    expect(h.disposedIds).toEqual([0, 1]);
+    expect(h.host.hasSession()).toBe(true);
+    expect(h.root.querySelectorAll('canvas'), 'a dead canvas was left behind the live one').toHaveLength(1);
+  });
+});
