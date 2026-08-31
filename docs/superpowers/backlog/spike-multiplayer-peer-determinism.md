@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-08-31
 scope: Spike -- multiplayer — which mode, and does peer determinism hold?
 implementation-issues: []
 implementation-prs: []
@@ -38,7 +38,7 @@ moved; two remain** (re-verified against the tree on 2026-08-31, not carried for
   selection is perception-bounded and breaks ties with a seeded per-AI draw; zero
   `kind === 'player' && t.alive` scans remain in `ai/targeting.ts`.
 - **STANDS** — the arena validator **hard-fails at module load** on any campaign grid without
-  exactly one `P` (`config/validate.ts:282`; versus boards are validated separately through
+  exactly one `P` (`config/validate.ts`'s `players !== 1` check; versus boards are validated separately through
   the versus catalog).
 - **STANDS** — a death still resets the arena by `tanks[i]` ↔ `spawns[i]` index alignment
   (`respawnPos`, `world.ts`). The fifth, "no gamepad code, so local versus has no second

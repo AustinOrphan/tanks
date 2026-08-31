@@ -49,9 +49,9 @@ items triaged; the difference is itemised at the end. All five figures are recom
 
 ### Gaps with a reachability argument
 
-- `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `targeting.ts:333` documents the divergence as negligible rather than closing it. #1
+- `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `bankShot`'s own comment in `targeting.ts` documents the divergence as negligible rather than closing it. #1
 - The retroreflecting-seam fix is open: it must distinguish a coplanar neighbour that continues the surface from a perpendicular one that merely touches it. CLAUDE.md §Known holes owns the measurement and the record of the fix that was tried and reverted — do not restate them here. #1
-- `melody.ts:99`'s density knob is inert at and above 0.5: the predicate is `rnd() < spec.density * 2`. **13 of 42** generated layers ship at ≥ 0.5. *(pinned)* #70
+- `melody.ts`'s density knob is inert at and above 0.5: the predicate is `rnd() < spec.density * 2`. **13 of 42** generated layers ship at ≥ 0.5. *(pinned)* #70
 - `melody.ts` carries `previous` as a palette *index* across bars whose palettes may differ in size, weakening the contour guarantee. #70
 - Six tracks — blitz, dread, hunt, siege, standoff, triumph — belong to no suite, so nothing can select them: **25 of 31** reachable. *(pinned)* #71, #74
 - The suite walk can backtrack X→Y→X; `rankCandidates` takes only `from` and has no memory of the previous suite. #72
@@ -82,13 +82,13 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - `dispose()` ordering was never swept; the assertion `.sort()`s, making it explicitly order-insensitive. #6
 - `renderer.dispose()` idempotency is still unmeasured — **the blocker PR #6 recorded has lifted**, since `tools/gl/harness.ts` now runs in a real browser and already calls `dispose()`. #6
 - The GL harness's two `refit()` checks pass bare literals (`34, 18`), not the bounds of any shipped arena or of `WIDE_ARENA` (which is 34 × 26). No `refit` check is driven by production arena data. #67
-- `makeTank`/`mkTank` is redefined in **8 test files** — and `src/sim/arena.ts:38` already exports a `makeTank` that two other test files import. The shared helper exists; it is neither named `test-helpers.ts` nor used consistently. #2
+- `makeTank`/`mkTank` is redefined in **8 test files** — and `src/sim/arena.ts` already exports a `makeTank` that two other test files import. The shared helper exists; it is neither named `test-helpers.ts` nor used consistently. #2
 - Musical content — authored pitches, layer lengths, voicings — is deliberately unpinned. #68
 - `barSteps` has a lower bound and an integrality check, but no upper bound. #70
 - Authored layers are not validated against the track's declared chords; the chord check fires for generated layers. #70
 - `TRACKS_PER_SUITE = 3` and the start suite are unmeasured feel constants; the test pins the mechanism against whatever the constant is. #72
 - The music seed is taken from `Date.now()` at bed construction and is not surfaced as a dev flag, so a specific walk cannot be replayed. #72
-- The 3.0s countdown is an unmeasured feel choice, pinned only by the tautological seconds assertion. (The "TAKE AIM" string itself IS pinned, at `hud.test.ts:338`.) #63
+- The 3.0s countdown is an unmeasured feel choice, pinned only by the tautological seconds assertion. (The "TAKE AIM" string is GONE: `hud.test.ts`'s "is a bare number -- no \"AIM\"/\"TAKE AIM\" word, on either non-live phase" now pins its ABSENCE. This line previously claimed the opposite.) #63
 - SFX recipe numbers were tuned by ear against design intent and never measured. #64
 - `arenas.json`'s prose — `notes` and each claim's `why` — ships in the browser bundle. #65
 - `engine.ts`'s non-`setMusicContext` call site was not swept; sequences of length ≥ 5 and a real unstubbed bed were never exercised. #74 *(prose-only PR)*
@@ -152,7 +152,7 @@ Each needs a measurement, a browser, or a person.
 
 147 items were enumerated from the harvested set. 63 were already closed by later work
 (62 found by the triage, plus one the review caught: the `startMusic()`/`loaderror` race
-was filed as unsettleable and is in fact tested at `engine.synth.test.ts:218`, since #73).
+was filed as unsettleable and is in fact tested by `engine.synth.test.ts`'s "starts the bed when no track loaded, and stops it on stopMusic", since #73).
 8 remain unsettleable. 76 were still open.
 
 The 8 unsettleable are the in-scope lines of "Cannot be settled by reading the tree" — they
