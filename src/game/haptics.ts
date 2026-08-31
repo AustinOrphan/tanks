@@ -151,6 +151,13 @@ export function createHapticsDirector(
           vibrate(MINE_FUSE_WARN_PULSE_MS);
         }
         break;
+      case 'fire-blocked':
+        // DELIBERATELY INERT for now (issue #356). A restrained blocked-fire vibration is
+        // one of that issue's five candidate treatments, and it explicitly asks for them to
+        // be compared before one is adopted -- so wiring one here would settle by accident
+        // what the issue exists to decide. The case is present to keep the guard below
+        // honest.
+        break;
       default: {
         // Exhaustiveness guard: a new SimEvent kind fails to compile here, the
         // same discipline audio/director.ts uses.

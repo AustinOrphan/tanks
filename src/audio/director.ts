@@ -76,6 +76,13 @@ export function createAudioDirector(
         // blink carries the rest, so nothing here needs a clock of its own.
         engine.play('mine-fuse-warn');
         break;
+      case 'fire-blocked':
+        // DELIBERATELY SILENT for now (issue #356). A dry mechanical click is one of the
+        // five candidate treatments that issue is comparing, and picking it here would
+        // pre-empt that comparison -- the whole point of the issue is that the cue is
+        // chosen from evidence rather than from whoever wired the event up first. The case
+        // exists so the exhaustiveness guard below stays meaningful.
+        break;
       default: {
         // Exhaustiveness guard: if a new SimEvent kind is added, this fails to compile.
         const _exhaustive: never = e;

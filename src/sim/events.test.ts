@@ -14,6 +14,7 @@ function label(e: SimEvent): string {
     case 'mine-fuse-warning': return 'mine-fuse-warning';
     case 'mine-detonate': return 'mine-detonate';
     case 'tank-destroyed': return 'tank-destroyed';
+    case 'fire-blocked': return 'fire-blocked';
     case 'respawn': return 'respawn';
     case 'wall-destroyed': return 'wall-destroyed';
     case 'win': return 'win';

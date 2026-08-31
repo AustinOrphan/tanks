@@ -91,6 +91,11 @@ export function spawnBullet(
   // The cap is now the owner's resolved weapon limit (configFor); it is SHELL_CAP for
   // every shipped kind today, so this is behaviour-identical (see config/roster.test.ts).
   if (ownerShellCount(world, ownerId) >= configFor(owner.kind).weapon.maxActiveProjectiles) {
+    // Refused, and SAID SO (issue #356). Emitted for every owner, not just the player, for
+    // the same reason the cap itself applies to every owner -- a signal each consumer opts
+    // into is one the next consumer silently misses. Filtering to the local player is the
+    // consumer's job (`ownerId`), exactly as it is for `fire`.
+    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })
     return false
   }
   const cfg = bulletConfig[type]

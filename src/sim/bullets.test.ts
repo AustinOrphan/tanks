@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { configFor } from './config'
 import { createWorld } from './world'
 import { spawnBullet, ownerShellCount, stepBullets, resolveBulletHits } from './bullets'
 import type { SimEvent } from './events'
@@ -65,6 +66,42 @@ describe('spawnBullet + ownerShellCount', () => {
     // of phantom shots while the tank sat empty. mines.test.ts already pins the
     // equivalent for a capped mine drop; this mirrors it.
     expect(events.filter((e) => e.type === 'fire')).toHaveLength(SHELL_CAP)
+    // ...and it must not be silent to the CONSUMER either (issue #356). Before this event
+    // a refused shot was indistinguishable from an input that never happened, which is
+    // what makes the cap read as dropped input rather than as a rule being enforced.
+    // Exactly one, on the one refusal: a per-attempt event that fired on every accepted
+    // shot too would make any cue built on it useless.
+    expect(events.filter((e) => e.type === 'fire-blocked')).toEqual([
+      { type: 'fire-blocked', ownerId: 1, reason: 'shell-cap' },
+    ])
+  })
+
+  it('emits fire-blocked for a NON-player owner too, since the cap applies to every owner', () => {
+    // Matches the cap's own posture: a signal each consumer opts into is one the next
+    // consumer silently misses. Filtering to the local player is the consumer's job via
+    // `ownerId`, exactly as it already is for `fire`.
+    const brown = mkTank({ id: 7, kind: 'brown', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [brown], spawns: [], lives: 3 })
+    const events: SimEvent[] = []
+    const cap = configFor('brown').weapon.maxActiveProjectiles
+    for (let i = 0; i < cap; i++) expect(spawnBullet(world, 7, 0, 'normal', events)).toBe(true)
+    expect(spawnBullet(world, 7, 0, 'normal', events)).toBe(false)
+    expect(events.filter((e) => e.type === 'fire-blocked')).toEqual([
+      { type: 'fire-blocked', ownerId: 7, reason: 'shell-cap' },
+    ])
+  })
+
+  it('does NOT emit fire-blocked when the refusal is not the cap', () => {
+    // The control for both cases above, and the reason `reason` is a discriminator rather
+    // than a boolean: a dead owner is also refused, and #356 is scoped to the CAP alone.
+    // Without this, a treatment keyed on the event would fire for a refusal it was never
+    // meant to explain -- and "the shot was blocked" would be telling a dead player their
+    // magazine is full.
+    const dead = mkTank({ id: 9, kind: 'player', pos: { x: 0, y: 0 }, alive: false })
+    const world = createWorld({ walls: [], tanks: [dead], spawns: [], lives: 3 })
+    const events: SimEvent[] = []
+    expect(spawnBullet(world, 9, 0, 'normal', events)).toBe(false)
+    expect(events).toEqual([])
   })
 
   it('rejects a NON-player owner\'s shell at SHELL_CAP (cap applies to every owner)', () => {
