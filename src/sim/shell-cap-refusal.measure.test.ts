@@ -37,6 +37,33 @@ import type { World } from './world';
 //
 // The countdown is excluded from every rate: fire is blocked outright for its 180 ticks
 // (world.ts's `canAct`), so counting them would dilute every number here.
+//
+// ---------------------------------------------------------------------------
+// WHAT IT MEASURED, and why #356 cannot be answered without #358.
+//
+// Swept across the shipped cap and the lower ones #358's role matrix proposes, 3 seeds x
+// 3 arenas x 60s per driver:
+//
+//   player cap | HELD refusals/min | longest burst | BOT refusals/min | longest burst
+//   -----------+-------------------+---------------+------------------+--------------
+//        5     |        0.0        |      0t       |       0.8        |     5t (0.08s)
+//        3     |      317.4        |  38t (0.63s)  |      79.7        |  131t (2.18s)
+//        2     |      560.3        |  62t (1.03s)  |     149.7        |  115t (1.92s)
+//        1     |     1378.3        | 116t (1.93s)  |     353.4        |  166t (2.77s)
+//
+// THE REFUSAL RATE IS A PROPERTY OF THE CAP, NOT OF THE FEATURE. At the shipped 5 the cue
+// would fire about once a minute for a scripted player and NEVER for one holding the
+// trigger -- the fire cooldown paces a held-fire player below the cap, so it never binds,
+// which is why HELD reads zero there rather than being the worst case its name suggests.
+// One cap step down and the same cue fires several times a second in bursts approaching a
+// full second; at cap 1 it is 2412 refusals against 27 shots, 89 refusals per shot.
+//
+// So "how prominent may the cue be" and "does it need a rate limit" have no fixed answer:
+// at cap 5 a prominent unlimited cue is defensible, and at any lower cap an unlimited one
+// is exactly the "unbounded sound, vibration, toast, or animation output" #356 forbids.
+// The treatment comparison this issue requires should be run at the cap #358 selects, and
+// re-run if that value moves.
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 
 const SECONDS = 60;
