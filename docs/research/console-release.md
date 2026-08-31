@@ -121,6 +121,11 @@ This is the **smallest** blocker of the set.
 audio, mutate` — no packaging target. It is `"private": true`, `"version": "0.0.0"`.
 `ls -a | grep -i licen` exits 1: **there is no LICENSE file.**
 
+> **Superseded 2026-08-31 (issue #116).** The repository now carries a root `LICENSE`
+> (PolyForm Shield 1.0.0), `CONTENT-LICENSE.md` for reserved first-party content, and a
+> README license section. The finding above is retained as the dated observation that
+> prompted that work, not as current state.
+
 three.js 0.169.0 and howler 2.2.4 are both MIT (read from `node_modules/*/package.json`), and
 MIT requires the copyright notice travel with distributions — so a commercial binary needs a
 notices screen or file that does not exist today. *I am not a lawyer; treat this as a prompt
