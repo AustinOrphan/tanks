@@ -32,11 +32,16 @@ import type { World } from './world';
 //   VITE_RUN_MEASURE=1 npx vitest run src/sim/mine-escape.measure.test.ts
 // and read the tables off the console.
 //
-// Read via `import.meta.env`, NOT `process.env`: this file lives under src/sim/,
-// and purity.test.ts's FORBIDDEN_GLOBALS bans the bare token "process" anywhere
-// in src/sim/, test files included. The same guard bans the bare token for the
-// browser global one would naturally use for "the 0.5s reaction span" -- it
-// scans PROSE too, so this file says "interval" throughout on purpose.
+// Read via `import.meta.env`, NOT `process.env`: this file lives under src/sim/, and
+// purity.test.ts's FORBIDDEN_GLOBALS bans a set of bare tokens there, test files included.
+//
+// CORRECTION to what this comment said when it was written. It claimed the guard "scans
+// PROSE too". It does not: `scanImportsAndGlobals` runs `stripComments(src)` first, so
+// comments are invisible to it. What it caught was the browser global one would naturally
+// use for "the 0.5s reaction span" appearing inside a `console.log` STRING LITERAL, which is
+// code. That is why the tables below say "interval" -- the constraint is real, the reason
+// recorded for it was wrong, and a reader who believed the old wording would have avoided
+// the word in comments for no reason while still tripping the guard from a string.
 //
 // ---------------------------------------------------------------------------
 // THREE LANDMINES, each of which produced a silently dead harness before it was
