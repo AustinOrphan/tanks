@@ -2630,5 +2630,17 @@
     "tests": [
       "src/sim/ai/targeting.test.ts"
     ]
+  },
+  {
+    "id": "refused-shot-says-nothing",
+    "file": "src/sim/bullets.ts",
+    "find": "    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
+    "replace": "    // events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The shell-cap refusal goes back to emitting nothing, which is the state issue #356 opens against: `spawnBullet` returns `false` and a refused shot becomes indistinguishable from an input that never happened -- for the player AND for every consumer of the event stream. It is invisible to everything else by construction. No sim state changes, so `BASELINE_HASH` cannot see it; the shot is still correctly refused, so the cap's own assertions still pass; and nothing renders, plays or vibrates today, so no presentation test can see it either -- the audio and haptics cases for this event are deliberately silent until #356's comparison picks a treatment. That combination is exactly why the emit needs its own pin: every OTHER signal in the tree says the code is fine. Killed by the two cases asserting the event's full payload on a player and on a non-player owner, whose control is the third case -- a DEAD owner is also refused and must emit nothing, which is why `reason` is a discriminator rather than a boolean. Scoped to bullets.test.ts; expectFailures counts that scoped run only. The mutation COMMENTS the push out rather than deleting the line: the harness requires a non-empty `replace`, and a commented line is also the more realistic shape of the regression -- someone silencing a cue during debugging and not restoring it.",
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ]
   }
 ]
