@@ -25,12 +25,21 @@ import { extname, join, resolve } from 'node:path';
  * Playwright is NOT a dependency of this repo: the package downloads browsers
  * on install, which would slow every CI run for a tool that is not wired into
  * CI. Resolve it from the environment instead, in order of preference.
+ *
+ * Two candidates, and there used to be a third: an absolute path into one agent
+ * session's scratch directory on one machine. That session is long gone and the
+ * directory with it -- verified absent, and that host no longer even uses the id format
+ * the path was built from -- so the entry could never resolve. Not restated literally
+ * here, because a dead machine-specific path is the thing being removed. It
+ * was harmless only because it sat third: CI installs playwright with `--no-save` and
+ * hits the bare specifier, and a local override has `PLAYWRIGHT_MODULE`. Removed rather
+ * than refreshed, because the machine it pointed at is not a location this repo can
+ * depend on; point `PLAYWRIGHT_MODULE` at a checkout instead.
  */
 async function loadChromium() {
   const candidates = [
     process.env.PLAYWRIGHT_MODULE,
     'playwright',
-    '/home/dev/.claude/jobs/17681316/tmp/pw/node_modules/playwright/index.mjs',
   ].filter(Boolean);
   const tried = [];
   for (const spec of candidates) {

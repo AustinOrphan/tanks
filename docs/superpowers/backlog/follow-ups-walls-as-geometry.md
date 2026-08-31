@@ -38,8 +38,8 @@ population stated (an earlier draft of this entry and the comment in `collision.
 carried the same numerator against two different denominators, 20,000 and 160,000):
 **154 of 159,201** hull centres on a 0.05 grid across the playable rect [0,22]x[0,18].
 **Not reachable at the depths the sim produces**: the shallowest such start is **0.720
-units** from the nearest legal hull centre, against the 0.375-unit shove `world.ts:99`
-documents, and mine blasts only shrink
+units** from the nearest legal hull centre, against the 0.375-unit shove `world.ts`'s
+`SEPARATION_PASSES` comment documents, and mine blasts only shrink
 the region (0 of 633,600 at >=50% destruction). A 57,600-tick probe (4 arenas x 12 seeds x
 1200) saw 0 tanks outside, 0 inside a wall, 0 shells escaped — but that samples end-of-tick
 only and does not bound mid-`stepMovement` depth across the three
@@ -50,7 +50,7 @@ RNG timing moves, and it moved twice on this branch (widened 12 -> 30 frames whe
 were renumbered). It should assert a specific deterministic event instead of a time bound.
 
 **4. Wall mesh and material count rose 1.6x-4.1x.** arena-02 went 20 -> 81 wall entities, and
-`render/entities.ts:568` allocates a `BoxGeometry` AND a material per wall. Destructible
+`render/entities.ts`'s `makeWall` allocates a `BoxGeometry` AND a material per wall. Destructible
 cells are 3x subdivided and never merge, which is deliberate — but nothing has measured the
 render cost, and the growth is entirely in the destructible family.
 
