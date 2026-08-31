@@ -85,3 +85,31 @@ so development is never blocked on assets. (It used to declare all ten anyway an
 let each 404: 10 requests and 93,790 uncached bytes per load, measured against the
 deployed site.) See [CREDITS.md](CREDITS.md); its attribution tables are
 intentionally empty rather than fabricated.
+
+## License
+
+**Source-available, not open source.** The two are different, and the difference is the
+point: you can read this code, but it does not carry an open-source grant.
+
+Three things govern this repository, and every file is under exactly one of them:
+
+- **Code, tests and repository tooling** — [PolyForm Shield 1.0.0](LICENSE), the official
+  text, unmodified.
+- **First-party content** — artwork, audio, levels and maps, narrative and copy, media,
+  logos and branding — **All Rights Reserved**. See
+  [CONTENT-LICENSE.md](CONTENT-LICENSE.md), which classifies paths so a reader can tell
+  which of the three applies to any file.
+- **Dependencies** — their own licenses, recorded in
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+Shield permits reading and private experimentation, but **not** using the software to
+provide a competing product — and that holds whether a competing release is **paid or
+free**. `LICENSE` controls; this paragraph is a summary, not the terms.
+
+The owner may grant exceptions, commercial licenses or modding permissions separately, and
+separately granted **written** permission overrides the default.
+
+Outside code and asset contributions are not being accepted yet — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for why, and for what is welcome instead.
+
+*This section records the project's licensing boundary. It is not legal advice.*
