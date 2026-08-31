@@ -12,6 +12,7 @@ import {
   MINE_TRIP_PATTERN_MS,
   MINE_DANGER_RADIUS,
   type VibrateFn,
+  BLOCKED_FIRE_PATTERN_MS,
 } from './haptics';
 import type { SimEvent } from '../sim/events';
 
@@ -293,5 +294,61 @@ describe('mine warning haptics (issue #276)', () => {
     const d = createHapticsDirector(vibrate, PLAYER_ID);
     d.handle([warnEvent('mine-fuse-warning', { x: 0, y: 0 }), warnEvent('mine-triggered', { x: 0, y: 0 })]);
     expect(calls).toEqual([]);
+  });
+});
+
+
+describe('blocked-fire cue (issue #356, first arm)', () => {
+  const blocked = (ownerId: number): SimEvent =>
+    ({ type: 'fire-blocked', ownerId, reason: 'shell-cap' }) as SimEvent;
+
+  it('stays SILENT with no flag, because the treatments have not been compared yet', () => {
+    // The default the issue requires: no arm may become the shipped cue by being wired
+    // first. Passing { blockedFire: 'haptic' } instead makes this fail, which is the next
+    // test -- the two together are the whole gate.
+    const calls: (number | number[])[] = [];
+    const d = createHapticsDirector((p) => calls.push(p), 7);
+    d.handle([blocked(7)]);
+    expect(calls).toEqual([]);
+  });
+
+  it('plays the double tap for the controlling player when the flag names it', () => {
+    const calls: (number | number[])[] = [];
+    const d = createHapticsDirector((p) => calls.push(p), 7, { blockedFire: 'haptic' });
+    d.handle([blocked(7)]);
+    expect(calls).toEqual([BLOCKED_FIRE_PATTERN_MS]);
+  });
+
+  it('ignores a refusal that belongs to someone else', () => {
+    // `fire-blocked` carries whoever was refused, AI tanks included. A hand does not want
+    // to feel an enemy running out of shells. Dropping the ownerId gate makes this fail.
+    const calls: (number | number[])[] = [];
+    const d = createHapticsDirector((p) => calls.push(p), 7, { blockedFire: 'haptic' });
+    d.handle([blocked(9)]);
+    expect(calls).toEqual([]);
+  });
+
+  it('is distinguishable from a successful shot by SHAPE, not just length', () => {
+    // The issue asks for a pattern "distinct from successful firing". Two cues that
+    // differed only in duration would satisfy a naive inequality and be indistinguishable
+    // through a hand, so this asserts the structural difference: one pulse against three
+    // elements, and every tap shorter than the shot it is not.
+    expect(Array.isArray(BLOCKED_FIRE_PATTERN_MS)).toBe(true);
+    expect(BLOCKED_FIRE_PATTERN_MS.length).toBeGreaterThan(1);
+    expect(typeof FIRE_PULSE_MS).toBe('number');
+    for (const ms of [BLOCKED_FIRE_PATTERN_MS[0], BLOCKED_FIRE_PATTERN_MS[2]]) {
+      expect(ms).toBeLessThan(FIRE_PULSE_MS);
+    }
+  });
+
+  it('follows the director when the player id is rebound', () => {
+    // setPlayerId exists because tank numbering differs per arena; a cue still bound to
+    // the old id would buzz for whoever inherited it. Removing the rebind fails this.
+    const calls: (number | number[])[] = [];
+    const d = createHapticsDirector((p) => calls.push(p), 7, { blockedFire: 'haptic' });
+    d.setPlayerId(9);
+    d.handle([blocked(9)]);
+    d.handle([blocked(7)]);
+    expect(calls).toEqual([BLOCKED_FIRE_PATTERN_MS]);
   });
 });
