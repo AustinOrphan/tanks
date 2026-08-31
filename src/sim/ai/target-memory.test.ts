@@ -132,3 +132,31 @@ describe('last-seen contact memory', () => {
     expect(memoryAim(ai)).not.toBeCloseTo(angleOf(vsub(foe.pos, ai.pos)), 2);
   });
 });
+
+describe('memory through the pipeline', () => {
+  it('survives from one tick to the next, and expires on schedule inside step()', async () => {
+    // The wiring test. Everything above drives updateTargetMemory directly, so all of it
+    // would pass against a build where stepAi never called it, or where cloneWorld dropped
+    // the two new fields on the way into the next tick.
+    const { step } = await import('../world');
+    const { createWorldFor } = await import('../arena');
+    const { ARENA_DEFS, arenaById } = await import('../config/arenas');
+    const { COUNTDOWN_TICKS } = await import('../constants');
+
+    let w = createWorldFor(arenaById(ARENA_DEFS[0].id), 1) as World;
+    const player = w.tanks.find((t) => t.kind === 'player') as Tank;
+    const idle = { move: { x: 0, y: 0 }, aim: { x: player.pos.x + 10, y: player.pos.y }, fire: false, mine: false };
+    for (let i = 0; i <= COUNTDOWN_TICKS + 60; i++) w = step(w, idle).world;
+
+    const enemies = w.tanks.filter((t) => t.kind !== 'player');
+    expect(enemies.length).toBeGreaterThan(0);
+    // At least one enemy has seen the player by now and is carrying a contact -- which can
+    // only be true if stepAi calls the updater AND the clone preserves it across ticks.
+    const remembering = enemies.filter((t) => t.aiLastSeenPos !== undefined);
+    expect(remembering.length).toBeGreaterThan(0);
+    for (const e of remembering) {
+      expect(e.aiLastSeenTicks).toBeGreaterThan(0);
+      expect(e.aiLastSeenTicks).toBeLessThanOrEqual(AI_LAST_SEEN_TICKS);
+    }
+  });
+});
