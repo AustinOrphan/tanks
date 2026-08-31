@@ -12,6 +12,7 @@ import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
 import { createAimRay, type AimRay } from './aimray';
 import type { SkinId } from '../game/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
+import { createAiContact, type AiContact } from './ai-contact';
 
 export interface Renderer3D {
   render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
@@ -70,6 +71,11 @@ export interface RendererOptions {
    * comment for why the gate lives inside `spawn`, not here.
    */
   readonly enemyDeathPulse?: boolean;
+  /**
+   * `?dev=1&aiContact=1` (devflags.ts): draws which opponent each AI is committed to and
+   * whether it can see it, is remembering it, or has nothing. See ai-contact.ts.
+   */
+  readonly aiContact?: boolean;
 }
 
 export function createRenderer(
@@ -99,6 +105,7 @@ export function createRenderer(
     options.mineReach || options.mineTimer
       ? createMineDebug(ctx.scene, { reach: !!options.mineReach, timer: !!options.mineTimer })
       : null;
+  const aiContact: AiContact | null = options.aiContact ? createAiContact(ctx.scene) : null;
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -115,6 +122,7 @@ export function createRenderer(
     entities.sync(prev, curr, alpha, dt);
     aimRay?.sync(curr);
     mineDebug?.sync(curr);
+    aiContact?.sync(curr);
     particles.spawn(events);
     particles.update(dt);
     deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
@@ -147,6 +155,7 @@ export function createRenderer(
   function dispose(): void {
     aimRay?.dispose();
     mineDebug?.dispose();
+    aiContact?.dispose();
     entities.dispose();
     particles.dispose();
     deathPulse.dispose();

@@ -84,6 +84,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   sandboxWalls: 'Sandbox',
 
   aimRay: 'Diagnostics',
+  aiContact: 'Diagnostics',
   shellCount: 'Diagnostics',
   seed: 'Diagnostics',
   autoplay: 'Diagnostics',

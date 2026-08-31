@@ -13,10 +13,11 @@ Nothing below does anything unless `dev` is present in the query string: `?aimRa
 alone is inert, it needs `?dev=1&aimRay=1`. A shared link cannot turn a flag on by
 accident.
 
-## Boolean flags (15)
+## Boolean flags (16)
 
 | Flag | Param | Default | Description |
 | --- | --- | --- | --- |
+| `aiContact` | `aiContact` | `false` | Rings each AI with its contact state -- green for an opponent it can see, amber for one it is only remembering, grey for none -- and labels the committed target id with its remaining commitment and memory ticks. |
 | `aimRay` | `aimRay` | `false` | Draws the player's computed aim: a ray along the turret and a marker where the cursor maps to on the ground. |
 | `autoplay` | `autoplay` | `false` | Drives the player with the scripted "competent player" AI instead of reading the input controller -- the game demos itself. |
 | `coopPool` | `coopPool` | `false` | Restores the shipped shared-life-pool coop model: every player death drains the pool by one and schedules that tank's own per-tank respawn. The default (this flag off) is the shared-attempts ruling: a lone death costs nothing and the survivor fights on; only a full wipe spends a life and restarts the arena. |

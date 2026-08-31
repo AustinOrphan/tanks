@@ -17,7 +17,7 @@ import { createAimRay } from '../../src/render/aimray';
 import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { createWorld } from '../../src/sim/world';
-import type { Tank, Spawn } from '../../src/sim/types';
+import type { Tank, Spawn, Wall } from '../../src/sim/types';
 import { framedBounds } from '../../src/render/framing';
 import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
@@ -1741,6 +1741,121 @@ await checkAsync('the idle spin comes back when the mouse leaves the canvas', as
   if (bytesDiffering(stopped, stillStopped) !== 0) return 'the spin never stopped, so a resume proves nothing';
   const moved = bytesDiffering(stillStopped, resumed);
   if (moved < 1000) return `only ${moved} of ${resumed.length} bytes changed 500ms after the mouse left -- the spin did not come back`;
+  return null;
+});
+
+/**
+ * A brown AI at the arena centre committed to a player just north of it, in whichever of
+ * ai-contact.ts's three contact states is asked for.
+ *
+ * `remembered` puts a slab between them and gives the AI a last-seen snapshot; `none`
+ * keeps the slab and lets the memory run out. The tanks are at the SAME poses in all
+ * three, so any framebuffer difference between two of them is the overlay and nothing
+ * else -- the same isolation argument the tread-trails check above makes.
+ */
+function contactWorld(state: 'visible' | 'remembered' | 'none'): ReturnType<typeof createWorld> {
+  // TWO players, both present in all three worlds: id 3 sits beside the AI with a clear
+  // line, id 2 sits behind the slab. The slab is present in all three too. So the walls
+  // and every tank pose are IDENTICAL across the three fixtures and only the AI's own
+  // target/memory fields move -- which is what makes a framebuffer difference between two
+  // of them attributable to the overlay rather than to the scene. A first draft varied the
+  // wall between the arms and could not support that claim.
+  const ai: Tank = {
+    id: 1, kind: 'brown', pos: { x: W / 2, y: H / 2 }, bodyAngle: 0, turretAngle: 0, alive: true,
+    desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+    aiState: 'idle', aiTimer: 0,
+    aiTargetId: state === 'visible' ? 3 : 2,
+    aiTargetTicks: 30,
+    ...(state === 'visible' ? {} : { aiLastSeenPos: { x: W / 2, y: H / 2 + 2.6 } }),
+    aiLastSeenTicks: state === 'remembered' ? 55 : 0,
+  } as Tank;
+  const hidden: Tank = {
+    id: 2, kind: 'player', pos: { x: W / 2, y: H / 2 + 3 }, bodyAngle: 0, turretAngle: 0,
+    alive: true, desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0,
+    mineCooldown: 0, aiState: 'idle', aiTimer: 0,
+  };
+  const beside: Tank = {
+    id: 3, kind: 'player', pos: { x: W / 2 + 3, y: H / 2 }, bodyAngle: 0, turretAngle: 0,
+    alive: true, desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0,
+    mineCooldown: 0, aiState: 'idle', aiTimer: 0,
+  };
+  const blocker: Wall = {
+    id: 9, kind: 'solid', destroyed: false,
+    aabb: { minX: W / 2 - 2, minY: H / 2 + 1.2, maxX: W / 2 + 2, maxY: H / 2 + 1.8 },
+  };
+  const spawns: Spawn[] = [
+    { kind: 'brown', pos: ai.pos, angle: 0 },
+    { kind: 'player', pos: hidden.pos, angle: 0 },
+    { kind: 'player', pos: beside.pos, angle: 0 },
+  ] as Spawn[];
+  return createWorld({ walls: [blocker], tanks: [ai, hidden, beside], spawns, lives: 3 });
+}
+
+function contactFrame(state: 'visible' | 'remembered' | 'none', on: boolean): Uint8Array {
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY, { aiContact: on });
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const w = contactWorld(state);
+  r.render(w, w, 1, [], 1 / 60);
+  const px = grab(gl, c.width, c.height);
+  r.dispose();
+  c.remove();
+  return px;
+}
+
+check('the AI contact overlay (#359/#372) reaches the framebuffer through renderer.ts', () => {
+  // Vitest can classify the state (ai-contact.test.ts) but cannot see a pixel, and the
+  // gallery's moment-scene.ts builds its own scene that never constructs this overlay --
+  // so without this check a `sync()` that computed everything correctly and drew it at the
+  // wrong height, or never added it to the scene, would pass every test in the repo. That
+  // is not hypothetical here: the whole overlay is flat geometry a hair above the ground
+  // plane, which is exactly where a z-fight or a wrong Y hides.
+  const off = contactFrame('visible', false);
+  const on = contactFrame('visible', true);
+  // MEASURED on this fixture, 1600000-byte frames: 1345 bytes move with the overlay on.
+  // Burying its flat geometry under the ground plane (RING_Y = -0.5, the exact failure
+  // this exists to catch) drops that to 643 -- the billboarded labels still show through,
+  // which is why the bound sits between the two rather than at zero.
+  const moved = bytesDiffering(off, on);
+  if (moved < 1000) {
+    return `only ${moved} of ${on.length} bytes changed with aiContact on -- the overlay did not reach the framebuffer`;
+  }
+  return null;
+});
+
+check('the three contact states are distinguishable ON SCREEN, not just in the classifier', () => {
+  // What #372 actually asks for: "developer traces should distinguish visible contact,
+  // remembered last-seen contact, and no contact". Three states that classified correctly
+  // and rendered identically would satisfy the unit tests and none of the requirement.
+  // The tank poses are identical across all three worlds, so every difference below is
+  // the overlay.
+  const frames = {
+    visible: contactFrame('visible', true),
+    remembered: contactFrame('remembered', true),
+    none: contactFrame('none', true),
+  };
+  // The wall is present in 'remembered' and 'none' and absent in 'visible', so those two
+  // comparisons carry the wall as well; 'remembered' vs 'none' is the clean pair -- same
+  // geometry, same tanks, same wall, differing only in whether memory is left.
+  const pairs: [string, string][] = [
+    ['remembered', 'none'], ['visible', 'remembered'], ['visible', 'none'],
+  ];
+  // MEASURED, healthy against the same tree with the geometry buried:
+  //
+  //   remembered/none      1582 -> 1231
+  //   visible/remembered   2026 -> 1228
+  //   visible/none          858 ->  156
+  //
+  // Only the last pair discriminates the GEOMETRY. The other two carry a differing label
+  // (`m55` against `m0`, `#2` against `#3`), so they stay high even when nothing but the
+  // sprites is drawn -- worth stating plainly rather than letting three green numbers
+  // imply three independent proofs. The bound is therefore set from visible/none.
+  for (const [a, b] of pairs) {
+    const moved = bytesDiffering(frames[a as keyof typeof frames], frames[b as keyof typeof frames]);
+    if (moved < 500) {
+      return `${a} and ${b} rendered ${moved} differing bytes of ${frames.visible.length} -- those two states look the same on screen`;
+    }
+  }
   return null;
 });
 

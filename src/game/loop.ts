@@ -144,6 +144,7 @@ export interface GameDeps {
     options?: {
       aimRay?: boolean;
       mineReach?: boolean;
+      aiContact?: boolean;
       mineTimer?: boolean;
       mineWarn?: import('../render/mine-warning').MineWarnStyle | null;
       playerColor?: string;
@@ -1453,6 +1454,7 @@ export function startGameWith(
   const renderer = deps.createRenderer(canvas, width, height, shownBounds.cellSize, {
     aimRay: deps.devFlags.aimRay,
     mineReach: deps.devFlags.mineReach,
+    aiContact: deps.devFlags.aiContact,
     mineTimer: deps.devFlags.mineTimer,
     mineWarn: deps.devFlags.mineWarn,
     // The paint shop's saved colour, skin and accent, applied from the first frame.
