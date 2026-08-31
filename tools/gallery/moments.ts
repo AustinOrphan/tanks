@@ -891,6 +891,129 @@ export const MOMENTS: Record<string, MomentDef> = {
       input: () => AI_TRACKING_INPUT,
     };
   })(),
+
+  /**
+   * Issue #372's artefact: an AI that LOSES sight of its target keeps looking at the last
+   * place it actually saw it, for a bounded span, and only then falls back to #371's
+   * search. `ai-tracking` above stages the easy half of that -- a turret following a
+   * target it can see. This stages the half the issue is actually about, which is what
+   * the turret does once it CANNOT.
+   *
+   * Brown again, and for the same reason `ai-tracking` gives (`brownDecision` hardcodes
+   * `desiredMove: { x: 0, y: 0 }`, so every pixel of motion is turret), plus a second one
+   * that matters only here: the shipped STATIC_BASIC carries `bankShotWeight` 0, so
+   * brown.ts's `bankAngle` is null on every tick and its `hasSolution` reduces EXACTLY to
+   * `lineOfSight`. That makes the wall below the single variable -- losing sight is the
+   * whole cause of the behaviour on screen, with no banked solution keeping the tank on
+   * target through it.
+   *
+   * MEASURED (throwaway vite-node probe, duplicate fixture, deleted before commit), on
+   * this exact geometry:
+   *
+   *   tick 28  last tick with line of sight; the player is at x = 0.400, bearing 82.41deg
+   *   tick 29  line of sight breaks and stays broken for the rest of the moment
+   *   tick 46  the turret finishes slewing and sits at 82.4054deg
+   *   ..118    FLAT. 73 consecutive ticks at that one value, to 4 decimal places
+   *   tick 119 `aiLastSeenTicks` reaches 0 -- 29 + AI_LAST_SEEN_TICKS (90) exactly
+   *   tick 120 the turret leaves the held bearing and starts #371's search sweep
+   *
+   * 82.4054deg is not "roughly where the player went". It is `atan2(3, 0.400)`, the
+   * bearing to the position observed on tick 28 -- the LAST OBSERVED one, which is the
+   * distinction issue #372 draws between remembering and knowing.
+   *
+   * WHY THE PLAYER PATROLS. See `input` below for the reasoning; the measurement is that
+   * the player reverses direction three times inside the plateau while the turret reports
+   * exactly ONE distinct value, 82.4054, across ticks 70-118. The tank cannot be
+   * following, because the thing it would be following keeps turning around. The band is
+   * also held clear of the remembered point, so the turret is never accidentally on
+   * target: over the whole plateau the held bearing sits between 15.83 and 32.21deg off
+   * the bearing to where the player actually is.
+   *
+   * THE CONTRAST IS REAL, and was checked before this moment was authored rather than
+   * assumed -- `ai-tracking`'s own comment records the opposite outcome (46 of 47 frames
+   * byte-identical when the knob under test turned out to be inert). Re-running this
+   * fixture with the memory suppressed (`aiLastSeenTicks`/`aiLastSeenPos` cleared after
+   * every step, so `rememberedContact` is always null and the aim chain falls through to
+   * `searchAim`): the two timelines differ by up to 95.70deg, and only 39 of 165 ticks
+   * come out byte-identical. The control is NOT motionless either -- its longest flat run
+   * is 21 ticks, since a drawn search heading can be reached and then held for the rest of
+   * its AI_SEARCH_HOLD_TICKS window. 73 against 21 is the contrast, not stillness against
+   * motion.
+   *
+   * 165 ticks: 29 of tracking, 90 of held attention, and 46 more so the handoff INTO the
+   * search sweep is on screen rather than implied by the clip ending.
+   *
+   * `expect: []` is load-bearing, and is why the wall sits where it does. brown's firing
+   * gate needs `aimTicks >= 48` (STATIC_BASIC's 0.8s reaction) and its first firing
+   * OPPORTUNITY past that gate is tick 50 -- the derivation is in `ai-tracking`'s comment
+   * above. Sight breaks here on tick 29, which resets `aimTicks` 19 ticks before the gate
+   * could close, so no shot is ever armed: the probe above reports NO events of any type
+   * across all 165 ticks, in both the live and the suppressed arm.
+   */
+  'ai-last-seen': (() => {
+    const LAST_SEEN_PLAYER_Y = 3;
+    const LAST_SEEN_PLAYER_X0 = -1.0;
+    // Starts at x 0.25 so the sightline from the AI at the origin is still clear at tick 0
+    // and is cut at tick 29; ends at 2.8 so the whole slab is in frame, which is well east
+    // of anywhere the script takes the player (max x 2.50), so sight never comes back.
+    const LAST_SEEN_WALL: Wall = {
+      id: 1, kind: 'solid', destroyed: false,
+      aabb: { minX: 0.25, minY: 1.2, maxX: 2.8, maxY: 1.8 },
+    };
+    const EAST: InputState = { move: { x: 1, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false };
+    const WEST: InputState = { move: { x: -1, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false };
+    return {
+      ticks: 165,
+      expect: [],
+      // The AI (0, 0), the wall it hides behind (x 0.25..2.8 at y 1.5) and the player's
+      // whole excursion (x -1.0..2.50 at y 3) all sit inside this box. Framed for the
+      // TOP view the capture recipe uses: this moment's whole content is where a turret
+      // points relative to a target it cannot see, and the game camera's oblique angle
+      // foreshortens exactly that bearing.
+      focus: [0.75, 0.3, 1.4], span: 4.8,
+      build: () => {
+        const w = createWorld({
+          walls: [LAST_SEEN_WALL],
+          spawns: [
+            { kind: 'brown', pos: { x: 0, y: 0 }, angle: 0 },
+            { kind: 'player', pos: { x: LAST_SEEN_PLAYER_X0, y: LAST_SEEN_PLAYER_Y }, angle: 0 },
+          ],
+          lives: 3,
+          tanks: [
+            {
+              id: 1, kind: 'brown',
+              // 1.8 rad is ~5deg off the bearing to the player's start, so the clip opens
+              // on the turret closing that gap rather than already welded to the target.
+              pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 1.8, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+              aiState: 'idle', aiTimer: 0,
+            },
+            {
+              id: 2, kind: 'player',
+              pos: { x: LAST_SEEN_PLAYER_X0, y: LAST_SEEN_PLAYER_Y }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+              aiState: 'idle', aiTimer: 0,
+            },
+          ],
+          seed: 7,
+        });
+        // Same round-start landmine every other moment here documents.
+        w.roundStartTick = -600;
+        return w;
+      },
+      // Once it is hidden the player PATROLS -- 18 ticks west, 18 ticks east, repeating
+      // from tick 70 -- rather than driving on in a straight line. Two reasons, both
+      // about what a viewer can conclude from the clip. A target that simply left could
+      // not distinguish an attentive turret from a frozen one. And a target that came
+      // back THROUGH the remembered point would put the turret momentarily on top of it
+      // by coincidence, which is exactly the frame someone would screenshot to argue the
+      // opposite; the patrol band (x 1.60..2.50) is bounded away from the remembered
+      // x = 0.400 so that never happens. Reversals land on both sides of the expiry, so
+      // the clip shows a moving target being ignored while remembering AND while
+      // searching.
+      input: (t: number) => (t < 70 ? EAST : Math.floor((t - 70) / 18) % 2 === 0 ? WEST : EAST),
+    };
+  })(),
 };
 
 /**

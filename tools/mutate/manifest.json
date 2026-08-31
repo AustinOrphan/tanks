@@ -2885,5 +2885,17 @@
       "src/sim/ai/target-memory.test.ts"
     ],
     "why": "step() clones the world every tick, so a field the clone drops is a field that cannot outlive one tick. Subtle because updateTargetMemory re-records immediately: a dropped memory looks present at any single instant, and only a tick count that has AGED below the full span proves it survived a tick without refresh."
+  },
+  {
+    "id": "remembered-contact-never-reaches-the-turret",
+    "file": "src/sim/ai/index.ts",
+    "find": "  const remembered = decision.hasSolution ? null : memoryAim(tank);",
+    "replace": "  const remembered = null;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "tools/gallery/moments.test.ts"
+    ],
+    "why": "Pins the CONSUMPTION of last-seen memory, which last-seen-memory-not-wired-into-stepai does not: that entry cuts the write, this one cuts the read. With the read gone the memory is still recorded and still expires on schedule, so every unit case in target-memory.test.ts stays green -- MEASURED, the whole of src/sim (1227 tests) passes with this line neutered. The only thing that changes is that a tank which has just lost sight sweeps immediately instead of looking where its target went, which is the entire behaviour issue #372 asks for. tools/gallery/moments.test.ts's ai-last-seen block is the only coverage that notices."
   }
 ]

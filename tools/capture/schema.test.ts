@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import { producerForKind } from './producers.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
+import { readFileSync } from 'node:fs';
 import { CAPTURE_RECIPES, createRegistry } from './registry.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import { canonicalStringify, recipeHash, validateRecipe } from './schema.mjs';
@@ -25,6 +26,7 @@ describe('capture recipe schema', () => {
       'gallery.ai-tracking.normal',
       'gallery.ricochet.still',
       'gallery.drive.normal',
+      'gallery.ai-last-seen.normal',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });
@@ -44,8 +46,25 @@ describe('capture recipe schema', () => {
     }
     expect([...kinds.keys()].sort()).toEqual(['still', 'temporal']);
     for (const [kind, scenarios] of kinds) {
-      expect(`${kind}: ${scenarios.size} scenario(s)`).toBe(`${kind}: 2 scenario(s)`);
+      // AT LEAST two, which is the invariant this test's own title states. An exact `2`
+      // was a snapshot of the catalogue on the day it was written, and it turns every
+      // later recipe into an unrelated red -- issue #372's ai-last-seen clip hit it as
+      // the third temporal scenario. Still compared as a string so a failure names the
+      // kind and what was wrong with it rather than printing a bare `1`.
+      const enough = scenarios.size >= 2 ? 'multiple' : `only ${scenarios.size}`;
+      expect(`${kind}: ${enough} scenario(s)`).toBe(`${kind}: multiple scenario(s)`);
     }
+  });
+
+  it('documents every registry entry in README.md, and documents no entry it does not ship', () => {
+    // The registry table in README.md is hand-maintained and had no guard: adding
+    // `gallery.ai-last-seen.normal` found it silently out of date the moment the fifth
+    // recipe landed. Both directions, because a row for a deleted recipe misleads exactly
+    // as much as a missing row for a live one. Negative control: dropping the new row from
+    // the table reds this with the ID named -- verified live and reverted.
+    const documentation = readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+    const rows = [...documentation.matchAll(/^\| `([a-z0-9.-]+)` \| /gm)].map((m) => m[1]);
+    expect(rows.sort()).toEqual(CAPTURE_RECIPES.map((entry: any) => entry.recipe.id).sort());
   });
 
   it('rejects duplicate IDs instead of making lookup order decide which recipe runs', () => {

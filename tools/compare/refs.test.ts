@@ -105,12 +105,16 @@ describe('requireRecipe', () => {
   it('lists what the ref does know when the recipe is missing there', () => {
     // The actionable half: "missing" alone leaves the reader guessing whether they typo'd
     // the ID or picked a ref that predates it.
+    // Derived from the shipped registry rather than snapshotted: the hardcoded list this
+    // replaced was a picture of the catalogue on the day it was written, and adding a
+    // fifth recipe reddened it with nothing wrong. What is actually under test survives
+    // -- that the message enumerates the ids the ref knows, sorted and comma-separated,
+    // rather than merely saying "missing". Negative control: dropping the `.join(', ')`
+    // list from refs.mjs's message reds this, and so does leaving one id out of it.
+    const known = SHIPPED.map((r: { id: string }) => r.id).sort().join(', ');
+    expect(known.split(', ').length).toBeGreaterThan(1); // the list is a list, not one id
     expect(() => requireRecipe(registry, side, 'gallery.nope.still'))
-      .toThrow(new RegExp(
-        String.raw`does not exist at head HEAD \(bbbbbbb\)\. That ref knows: `
-        + String.raw`gallery\.ai-tracking\.normal, gallery\.drive\.normal, `
-        + String.raw`gallery\.fire\.still, gallery\.ricochet\.still`,
-      ));
+      .toThrow(`does not exist at head HEAD (bbbbbbb). That ref knows: ${known}`);
   });
 });
 
