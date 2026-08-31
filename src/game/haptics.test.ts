@@ -307,14 +307,14 @@ describe('blocked-fire cue (issue #356, first arm)', () => {
     // first. Passing { blockedFire: 'haptic' } instead makes this fail, which is the next
     // test -- the two together are the whole gate.
     const calls: (number | number[])[] = [];
-    const d = createHapticsDirector((p) => calls.push(p), 7);
+    const d = createHapticsDirector((p) => { calls.push(p); return true; }, 7);
     d.handle([blocked(7)]);
     expect(calls).toEqual([]);
   });
 
   it('plays the double tap for the controlling player when the flag names it', () => {
     const calls: (number | number[])[] = [];
-    const d = createHapticsDirector((p) => calls.push(p), 7, { blockedFire: 'haptic' });
+    const d = createHapticsDirector((p) => { calls.push(p); return true; }, 7, { blockedFire: 'haptic' });
     d.handle([blocked(7)]);
     expect(calls).toEqual([BLOCKED_FIRE_PATTERN_MS]);
   });
@@ -323,7 +323,7 @@ describe('blocked-fire cue (issue #356, first arm)', () => {
     // `fire-blocked` carries whoever was refused, AI tanks included. A hand does not want
     // to feel an enemy running out of shells. Dropping the ownerId gate makes this fail.
     const calls: (number | number[])[] = [];
-    const d = createHapticsDirector((p) => calls.push(p), 7, { blockedFire: 'haptic' });
+    const d = createHapticsDirector((p) => { calls.push(p); return true; }, 7, { blockedFire: 'haptic' });
     d.handle([blocked(9)]);
     expect(calls).toEqual([]);
   });
@@ -345,7 +345,7 @@ describe('blocked-fire cue (issue #356, first arm)', () => {
     // setPlayerId exists because tank numbering differs per arena; a cue still bound to
     // the old id would buzz for whoever inherited it. Removing the rebind fails this.
     const calls: (number | number[])[] = [];
-    const d = createHapticsDirector((p) => calls.push(p), 7, { blockedFire: 'haptic' });
+    const d = createHapticsDirector((p) => { calls.push(p); return true; }, 7, { blockedFire: 'haptic' });
     d.setPlayerId(9);
     d.handle([blocked(9)]);
     d.handle([blocked(7)]);
