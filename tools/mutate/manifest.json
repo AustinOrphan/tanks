@@ -2556,5 +2556,18 @@
     "tests": [
       "src/game/versus-setup.test.ts"
     ]
+  },
+  {
+    "id": "empty-session-host-reports-a-session",
+    "file": "src/game/session-host.ts",
+    "find": "    hasSession: () => handle !== null,",
+    "replace": "    hasSession: () => true,",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The host claims a gameplay session whether or not one exists -- so the EMPTY state, which is the entire point of issue #427, becomes unobservable. A shell asking 'should I offer Resume' gets yes on a page that has never started a match, and every criterion of the form 'X still works while the host has no active session' loses its second half: the assertions still run, they just stop distinguishing anything. Chosen over `() => false` deliberately, though both are killed: a stuck-false accessor is caught by the two positive cases and reads as an obvious omission, while stuck-TRUE passes the naive 'it reports a session after start()' check and fails only where the emptiness is the claim -- which is the harder shape to notice in review. Four failures across two files, MEASURED: the empty-host cases in session-host.test.ts and the combined route case in route-ui.test.ts, which asserts that driving every application route leaves the host empty. Scoped to those two files; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/session-host.test.ts",
+      "src/game/route-ui.test.ts"
+    ]
   }
 ]
