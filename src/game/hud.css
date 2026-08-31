@@ -359,6 +359,116 @@
   }
 }
 
+/* Forced colours (issue #368): what survives when the user agent replaces the palette.
+ *
+ * EVERY declaration in this file that concerns forced-colors lives inside this one block,
+ * and nothing outside it changed. That is deliberate: a token's VALUE moving is a visual
+ * change owing its own evidence, and this issue is conformance under a mode most players
+ * never enter -- so ordinary rendering is provably untouched by construction.
+ *
+ * WRITTEN FROM MEASUREMENT, not from the specification's prose. `tools/uikit/forced-colors.mjs`
+ * reads the shipped controls in Chromium under `forced-colors: active` in BOTH schemes, and
+ * these are the four things it found -- each of which decides a rule below:
+ *
+ *   1. `transparent` is NOT preserved. `.ui-selectable`'s base `2px solid transparent`
+ *      comes back as OPAQUE `rgb(255,255,255)` on dark and `rgb(0,0,0)` on light -- the
+ *      identical value `.ui-selectable--on` is forced to. So the selection ring, which the
+ *      primitive's own comment calls "the ONLY visual signal of the current choice",
+ *      disappears completely: every swatch, skin, source and option looks chosen.
+ *      This was the headline defect and it is why `border-style` carries the signal here.
+ *   2. `box-shadow` is suppressed to `none`. `.ui-btn--primary` loses its raised slab and
+ *      `.ui-btn:disabled` loses the FLATTENED shadow its own comment counts as one of its
+ *      three channels -- under forcing it has two, not three.
+ *   3. `color` and `border-color` collapse `.ui-btn--primary`, `.ui-btn--danger` and plain
+ *      `.ui-btn` onto one another; their backgrounds differ only by an alpha (1.0 / 0.18 /
+ *      0.16) of the SAME forced colour, which is not a visible difference. Hierarchy has to
+ *      be redrawn on a channel forcing does not touch.
+ *   4. `opacity` and `filter` still apply, and the focus outline survives -- forced to a
+ *      system colour (measured `rgba(0,230,255,0.8)` dark, `rgba(5,0,73,0.8)` light) with
+ *      its width and offset intact. So focus needs no rule here; it is already visible, and
+ *      `hud.css.test.ts` pins that this block does not quietly take it away.
+ *
+ * ORDER IS LOAD-BEARING. `.ui-btn` and `.ui-selectable` are both (0,1,0) and eleven shipped
+ * controls carry BOTH (`hud.ts`: skins, controller sources, versus options and roles), so
+ * the later rule wins on every property it names. The selection rules therefore come after
+ * the button edge and restate `border-width`, or a selectable button would take the plain
+ * button's 1px and lose the 2px its ring is drawn at. */
+@media (forced-colors: active) {
+  /* A button with no border and a near-Canvas fill has no visible boundary at all once the
+   * fill is forced. This is the edge every control gets back. */
+  .ui-btn {
+    border: 1px solid ButtonBorder;
+  }
+
+  /* Unselected: the ring is present but BROKEN, which reads as "choosable, not chosen"
+   * without depending on a hue. `border-width` is restated because `.ui-btn` above sets
+   * 1px on the controls that are both. */
+  .ui-selectable {
+    border-width: 2px;
+    border-style: dotted;
+  }
+
+  /* Chosen: SOLID, and in the system's own selection colour. Two channels, either of which
+   * survives alone -- shape for a theme whose Highlight is close to its CanvasText, colour
+   * for a reader who does not register the dotted/solid difference. */
+  .ui-selectable--on {
+    border-style: solid;
+    border-color: Highlight;
+  }
+
+  /* The one primary action per decision region, redrawn as WEIGHT rather than fill. Its
+   * green and its raised shadow are both gone by this point (findings 2 and 3). */
+  .ui-btn--primary {
+    border-width: 4px;
+  }
+
+  /* Destructive: a dashed edge, because its red is gone too and "resets your saved data"
+   * must not look like every other slab. Paired as always with the arm/confirm step. */
+  .ui-btn--danger {
+    border-style: dashed;
+  }
+
+  /* The refusal keeps `cursor` and gains the agent's own disabled colour, but its 0.45
+   * opacity now stacks ON TOP of a forced GrayText rather than on a bright fill, which is
+   * a contrast loss in the one mode chosen for contrast. Dimming is redundant here anyway:
+   * the forced disabled colour already differs from CanvasText (measured `rgb(63,242,63)`
+   * dark, `rgb(96,0,0)` light), so the state is carried without it. */
+  .ui-btn:disabled {
+    opacity: 1;
+  }
+
+  /* THE ONE OPT-OUT, and the whole justification for it: on a colour swatch the colour is
+   * the CONTENT. `hud.ts` sets each swatch's fill inline from the palette, and forcing
+   * replaces all eleven with one system colour -- so the hull and accent pickers stop
+   * offering a choice at all rather than merely looking different. Scoped to the swatch
+   * itself and to nothing else in this file.
+   *
+   * Opting out means this element's OWN colours are no longer forced, including the
+   * selection ring's authored white -- which on a light high-contrast theme would sit
+   * against a white Canvas. That is exactly why the ring's signal above is `border-style`
+   * and not a colour: the dotted/solid distinction is unaffected by the opt-out and stays
+   * legible whichever way the theme resolves. */
+  .hud-swatch {
+    forced-color-adjust: none;
+  }
+
+  /* ...and the cost of that opt-out, paid back. Because the swatch's own colours are no
+   * longer forced, `.ui-selectable`'s base ring keeps its authored `transparent` here --
+   * so an unchosen near-white swatch had NO boundary at all against a light theme's white
+   * Canvas. Found by looking at the capture, not at the numbers: every measurement above
+   * was already correct, because a transparent border is exactly what the unforced
+   * stylesheet asks for.
+   *
+   * A system keyword still resolves inside an opted-out subtree -- the opt-out stops the
+   * agent REPLACING colours, it does not stop `CanvasText` meaning what it means -- so this
+   * gives the boundary back without touching the fill the opt-out exists to preserve.
+   * Scoped away from the chosen one, whose ring is already `Highlight`. */
+  .hud-swatch:not(.ui-selectable--on) {
+    border-color: CanvasText;
+  }
+}
+
+
 /* The application backdrop (issue #317): the ground application screens stand on, so a
  * menu is a layer over something rather than an overlay on a live game.
  *

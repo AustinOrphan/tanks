@@ -1512,3 +1512,123 @@ describe('hover treatment on the UI kit primitives (issue #392)', () => {
     }
   });
 });
+
+describe('forced-colors conformance (issue #368)', () => {
+  const src = stripComments(css);
+
+  /**
+   * The text of the one `@media (forced-colors: active)` block, brace-matched.
+   *
+   * TEXT, not `getComputedStyle`. jsdom does not evaluate `@media (forced-colors: active)`
+   * at all -- it never matches, so every declaration inside is unreachable to the computed
+   * cascade and an assertion on one would read the UNFORCED value and pass while measuring
+   * nothing. That is a stronger version of the `var()` hole `resolved()` exists for, and it
+   * is why the pixels are evidenced in a real browser instead
+   * (`tools/uikit/forced-colors.mjs`). What this file owns is that the rules are PRESENT,
+   * scoped, and say what the contract says.
+   */
+  const forcedBlock = (): string => {
+    const at = src.indexOf('@media (forced-colors: active)');
+    expect(at, 'no @media (forced-colors: active) block').toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = src.indexOf('{', at); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
+    }
+    throw new Error('unterminated @media (forced-colors: active) block');
+  };
+
+  it('gives every state its distinction on a channel forcing does not replace', () => {
+    const block = forcedBlock();
+    // Named individually rather than counted, for the reason the hover sweep gives: a
+    // count survives one selector being deleted and another duplicated.
+    //
+    // Each pair below is a MEASURED collapse (see the block's own comment) and the
+    // property that repairs it. Colour is deliberately not asserted for any of them --
+    // the whole point is that the agent has taken colour away.
+    for (const [selector, property] of [
+      ['.ui-btn', 'border'],                 // a control with no edge, once its fill flattens
+      ['.ui-selectable', 'border-style'],    // unselected: transparent is forced OPAQUE
+      ['.ui-selectable--on', 'border-style'], // chosen: solid against the unselected dotted
+      ['.ui-btn--primary', 'border-width'],  // one primary per region, redrawn as weight
+      ['.ui-btn--danger', 'border-style'],   // destructive, whose red is gone
+    ] as const) {
+      const at = block.indexOf(`${selector} {`);
+      expect(at, `${selector} has no forced-colors rule`).toBeGreaterThan(-1);
+      const body = block.slice(at, block.indexOf('}', at));
+      expect(body, `${selector} must carry ${property}`).toContain(property);
+    }
+  });
+
+  it('the selected ring is distinguished by SHAPE, not only by a system colour', () => {
+    // The load-bearing half, and the reason it is asserted separately: `.hud-swatch` opts
+    // out of colour forcing below, so on a swatch the ring's colour is whatever was
+    // authored -- which on a light high-contrast theme can land on a light Canvas. The
+    // dotted/solid difference is unaffected by that opt-out, so it is the channel that
+    // holds in both cases. A contract that signalled selection by colour alone would pass
+    // the rule sweep above and still lose the ring on the one element that opted out.
+    const block = forcedBlock();
+    const off = block.slice(block.indexOf('.ui-selectable {'));
+    const offBody = off.slice(0, off.indexOf('}'));
+    const on = block.slice(block.indexOf('.ui-selectable--on {'));
+    const onBody = on.slice(0, on.indexOf('}'));
+    expect(offBody).toContain('dotted');
+    expect(onBody).toContain('solid');
+    // ...and they must not be the same style, which is the whole distinction.
+    expect(offBody.includes('dotted') && onBody.includes('dotted')).toBe(false);
+  });
+
+  it('opts out of colour forcing in exactly ONE place, and says why', () => {
+    // Criterion 5: `forced-color-adjust` is a scoped semantic necessity, never a wholesale
+    // opt-out. Asserted over the WHOLE file rather than the block, because a second use
+    // added anywhere else is exactly the drift this must catch -- and `none` applied to a
+    // container would silently take every descendant out of forcing with it.
+    const uses = [...src.matchAll(/forced-color-adjust\s*:\s*([a-z-]+)/g)].map((m) => m[1]);
+    expect(uses, 'forced-color-adjust is used more than once').toEqual(['none']);
+    const block = forcedBlock();
+    const at = block.indexOf('forced-color-adjust');
+    const rule = block.lastIndexOf('{', at);
+    const selector = block.slice(block.lastIndexOf('}', rule) + 1, rule).trim();
+    expect(selector, 'the opt-out must be on the swatch alone').toBe('.hud-swatch');
+  });
+
+  it('gives the opted-out swatch a boundary the opt-out cannot take away', () => {
+    // The cost of `forced-color-adjust: none`, paid back. With the swatch's own colours no
+    // longer forced, `.ui-selectable`'s base ring keeps its authored `transparent` -- so an
+    // unchosen near-white swatch had NO boundary at all against a light theme's white
+    // Canvas. Every computed reading was correct while that was true, because a transparent
+    // border is exactly what the unforced stylesheet asks for; it was found by looking at
+    // the capture. A system keyword still resolves inside an opted-out subtree, which is
+    // what makes the repair possible without touching the fill.
+    const block = forcedBlock();
+    const at = block.indexOf('.hud-swatch:not(.ui-selectable--on) {');
+    expect(at, 'the unchosen swatch has no explicit boundary').toBeGreaterThan(-1);
+    const body = block.slice(at, block.indexOf('}', at));
+    expect(body).toContain('border-color');
+    // A SYSTEM keyword, not an authored one: an authored colour here would be exactly the
+    // hue dependency the opt-out already forces this element to live without.
+    expect(body).toMatch(/CanvasText|ButtonText|Highlight/);
+  });
+
+  it('confines EVERY forced-colors declaration to the block, so normal rendering cannot move', () => {
+    // The claim the PR makes about risk, made checkable. A system-colour keyword or a
+    // `forced-color-adjust` outside the query would change what ordinary players see --
+    // and `ButtonBorder`/`Highlight` are ordinary colours to a browser that is not
+    // forcing, so such a rule would apply silently rather than error.
+    const outside = src.replace(forcedBlock(), '');
+    for (const keyword of ['ButtonBorder', 'Highlight', 'CanvasText', 'GrayText', 'forced-color-adjust']) {
+      expect(outside, `${keyword} appears outside the forced-colors block`).not.toContain(keyword);
+    }
+  });
+
+  it('does not take the focus ring away, which the browser already forces correctly', () => {
+    // Measured rather than assumed (tools/uikit/forced-colors.mjs): the outline survives
+    // forcing with its width and offset intact and its colour replaced by a system one --
+    // `rgba(0,230,255,0.8)` on dark, `rgba(5,0,73,0.8)` on light. So the correct amount of
+    // CSS here is NONE, and this pins that absence: a well-meaning `outline: none` or a
+    // re-declared focus colour inside the block would be a regression, not an improvement.
+    const block = forcedBlock();
+    expect(block).not.toContain('outline');
+    expect(block).not.toContain(':focus');
+  });
+});

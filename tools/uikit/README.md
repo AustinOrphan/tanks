@@ -64,3 +64,63 @@ hard way:
 - **Scope queries to the open panel.** The versus pane and the controller panel are built at
   mount and merely hidden, so an unscoped `.ui-selectable--on` matches a control that cannot
   be screenshotted — the attribute read succeeds while the capture fails.
+
+---
+
+# Forced colours
+
+`forced-colors.mjs` answers a different question from the state captures above: not "what
+does this control look like" but **"which authored properties does the user agent still
+honour when the palette is replaced"**.
+
+```
+npm run build
+PLAYWRIGHT_MODULE=$PWD/node_modules/playwright/index.mjs \
+  node tools/uikit/forced-colors.mjs dist --out fc-out
+```
+
+It reads the same shipped controls in all four combinations of `forced-colors` ×
+`prefers-color-scheme` and writes `forced-colors.json`, a readable `summary.txt`, and one
+screenshot per surface per combination.
+
+## Why it measures rather than photographs
+
+The forced-colors contract is a set of claims about the *browser*, not about this
+stylesheet — "box-shadow is suppressed", "opacity still applies", "transparent survives".
+Writing CSS from those claims and photographing the result evidences the photograph. So
+every reading is a computed-property delta between the forced and unforced pass.
+
+Three of those claims were checked against Chromium before issue #368's CSS was written,
+and **one of them was wrong**:
+
+- `box-shadow` **is** suppressed to `none`. Confirmed.
+- `opacity` and `filter` **do** still apply. Confirmed.
+- `transparent` is **not** preserved. `.ui-selectable`'s base `2px solid transparent` comes
+  back fully opaque and identical to the selected ring's colour, on both themes — so the
+  selection signal vanished entirely. This was the issue's headline defect and it would
+  have been missed by a contract written from the first two claims alone.
+
+## The comparisons it exists for
+
+Per-control deltas cannot answer "is this control still distinguishable from that one",
+which is what conformance actually means. `summary.txt` therefore ends with explicit pairs:
+
+- `primary-vs-quiet`, `destructive-vs-quiet` — hierarchy, which forcing flattens.
+- `selected-vs-unselected` — the selection ring.
+
+Each reports `matching=[...] indistinguishable=<bool>` across background, colour, border
+colour, border width and border style. **Colour matching is expected** once forcing has
+run — that is the point of forcing — so a check reading `border-color` alone reports a
+collapse for a pair that width or style separates perfectly well. Only an all-channel match
+is a real collapse.
+
+## Sharp edges beyond the ones above
+
+- **`.catch(() => {})` on a click does not make it fast.** The rejection is swallowed but
+  Playwright still burns its full 30s actionability timeout first; four passes of that is a
+  ten-minute run that looks like a hang. Pass an explicit short `{ timeout }`.
+- **`element.focus()` does not survive `blurIfPointer`.** `hud.ts` drops focus after a
+  pointer interaction, so a programmatic focus placed just after the click that opened a
+  panel is gone before it is read — the first draft reported `engaged: false` and a null
+  outline, which would have left the focus criterion unmeasured while looking like a
+  finding. Tab-walk to the control and read `document.activeElement` instead.
