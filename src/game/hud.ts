@@ -64,6 +64,7 @@ import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achieve
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { VERSUS_STOCK } from '../sim/constants';
+import { configFor } from '../sim/config';
 import { versusMapChoices, type VersusConfig } from './versus-config';
 import {
   defaultSlots,
@@ -792,6 +793,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            AND the button together, only under Teams, so the row is genuinely absent
            (not merely hidden) under FFA. -->
       <div class="hud-versus-row hud-versus-friendlyfire-row"></div>
+      <!-- The FIXED ordnance limits (issue #268). Read out of the tank configuration at
+           render time, never written here: the binding decision is that standard VS has
+           no shell/mine cap controls and that the UI must derive the numbers rather than
+           duplicate them. Text, not buttons, because it states a rule instead of offering
+           one. NO BACKTICKS in this markup: it lives in a template literal. -->
+      <div class="hud-versus-row">
+        <h2>Standard rules</h2>
+        <p class="ui-hint hud-versus-limits"></p>
+      </div>
       <div class="hud-versus-row">
         <h2>Who's playing</h2>
         <!-- SUPERSEDED BY ISSUE #260, and the old comment is replaced rather than left
@@ -1045,6 +1055,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const versusOpenBtn = el.querySelector('.hud-versus-open') as HTMLButtonElement;
   const campaignOpenBtn = el.querySelector('.hud-campaign-open') as HTMLButtonElement;
   const versusSetupView = el.querySelector('.hud-versus-setup') as HTMLElement;
+  const versusLimitsLine = el.querySelector('.hud-versus-limits') as HTMLElement;
   const versusModeRow = el.querySelector('.hud-versus-mode-row') as HTMLElement;
   const versusModeNoteEl = el.querySelector('.hud-versus-mode-note') as HTMLElement;
   const versusPlayersRow = el.querySelector('.hud-versus-players-row') as HTMLElement;
@@ -2603,6 +2614,32 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     }
   }
 
+  /**
+   * The standard ordnance limits, in words (issue #268).
+   *
+   * READ FROM THE SAME CONFIGURATION THE SIMULATION ENFORCES, every time: `spawnBullet`
+   * gates on `configFor(kind).weapon.maxActiveProjectiles` and `dropMine` on
+   * `configFor(kind).mineCapacity`, and those are the two values printed here. No UI
+   * constant, no second copy -- issue #268's criterion is that approved config changes
+   * move this line with them, and a literal here is exactly the drift it forbids.
+   *
+   * `'player'` is the right kind for every VS slot: FFA and Teams strip enemy tanks
+   * entirely (arena.ts's loadArena), so every tank in a versus match -- human or bot --
+   * occupies a player slot and carries the player profile.
+   *
+   * Deliberately plain language. The decision asks for the effective limits "without
+   * requiring players to understand implementation terminology", so this says shells and
+   * mines in play rather than active projectiles or capacity.
+   */
+  function renderVersusLimits(): void {
+    const cfg = configFor('player');
+    const shells = cfg.weapon.maxActiveProjectiles;
+    const mines = cfg.mineCapacity;
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    versusLimitsLine.textContent =
+      `Every tank can have ${plural(shells, 'shell')} and ${plural(mines, 'mine')} in play at once.`;
+  }
+
   function renderVersusFriendlyFireLabel(b: HTMLButtonElement): void {
     b.textContent = versusConfigState.friendlyFire ? 'Friendly fire: On' : 'Friendly fire: Off';
   }
@@ -2899,6 +2936,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     versusStockRow.appendChild(b);
   }
   renderVersusStockSelection();
+  // Once, not per change: these limits are configuration, and nothing in the pane can
+  // alter them -- that is the whole point of issue #268's binding decision.
+  renderVersusLimits();
 
   // Map and the who's-playing preview both depend on external/derived data
   // (versusMapChoices(players), currentAssignment) rather than a fixed option set, so

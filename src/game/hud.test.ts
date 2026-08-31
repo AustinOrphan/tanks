@@ -10,6 +10,7 @@ import { versusMapChoices, type VersusConfig } from './versus-config';
 import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
+import { configFor } from '../sim/config';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
 
 let hud: Hud | null = null;
@@ -4386,5 +4387,62 @@ describe('createHud application transition contract', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The fixed VS ordnance limits (issue #268).
+//
+// The binding decision is that standard VS exposes no cap controls and that the UI
+// DERIVES the numbers from the same configuration the simulation enforces. The first
+// half is structural -- VersusConfig has no such fields to render -- so what needs
+// asserting is the second: that this line is a read of config and not a copy of it.
+//
+// A test comparing the rendered text to configFor CANNOT establish that on its own: it
+// passes identically against a UI that hardcodes today's 5 and 2, because config also
+// says 5 and 2. The discriminator is running this file with tank-defs.json edited, where
+// a derived UI and a derived assertion move together and a hardcoded one fails. That run
+// is reported on the PR; these cases are what it exercises.
+// ---------------------------------------------------------------------------
+describe('standard VS ordnance limits (issue #268)', () => {
+  const limitsLine = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-versus-limits') as HTMLElement;
+
+  const mount = (): HTMLElement => {
+    const root = document.createElement('div');
+    createHud(root);
+    return root;
+  };
+
+  it('states the shell and mine limits the simulation actually enforces', () => {
+    const cfg = configFor('player');
+    const text = limitsLine(mount()).textContent ?? '';
+    // The two authoritative values: spawnBullet gates on the first, dropMine on the second.
+    expect(text).toContain(String(cfg.weapon.maxActiveProjectiles));
+    expect(text).toContain(String(cfg.mineCapacity));
+  });
+
+  it('names both kinds of ordnance in plain language, not implementation terms', () => {
+    // The decision asks for the limits "without requiring players to understand
+    // implementation terminology". A line that said maxActiveProjectiles would satisfy
+    // the numbers assertion above and fail the readable-rule requirement.
+    const text = (limitsLine(mount()).textContent ?? '').toLowerCase();
+    expect(text).toContain('shell');
+    expect(text).toContain('mine');
+    for (const jargon of ['maxactiveprojectiles', 'minecapacity', 'cap', 'projectile']) {
+      expect(text).not.toContain(jargon);
+    }
+  });
+
+  it('offers no control that could change either limit', () => {
+    // Criterion 1, asserted at the DOM rather than trusted to the descriptor's shape:
+    // the row is text, and the pane grows no shell/mine input as it is extended.
+    const root = mount();
+    expect(limitsLine(root).tagName).toBe('P');
+    expect(root.querySelectorAll('.hud-versus-setup input')).toHaveLength(0);
+    const labels = Array.from(root.querySelectorAll('.hud-versus-setup button')).map(
+      (b) => (b.textContent ?? '').toLowerCase(),
+    );
+    expect(labels.some((l) => l.includes('shell') || l.includes('mine'))).toBe(false);
   });
 });
