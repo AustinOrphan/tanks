@@ -1253,8 +1253,8 @@
       "src/game/ui.test.ts",
       "src/game/hud.test.ts"
     ],
-    "why": "Exactly the state the HUD was in before #321: the selection ring is drawn and nothing is announced, so which choice is current is carried by a white border and by nothing else. `setSelected` exists to make the two channels inseparable, and this mutation separates them again by writing the state to a `data-` attribute instead: the value is still recorded, still moves with the choice, and is still invisible to every assistive technology. The class toggle is untouched, so every visual assertion in the suite stays green. Killed by three unit cases in ui.test.ts and by the two HUD sweeps over all 50 choice controls.",
-    "expectFailures": 5
+    "why": "Exactly the state the HUD was in before #321: the selection ring is drawn and nothing is announced, so which choice is current is carried by a white border and by nothing else. `setSelected` exists to make the two channels inseparable, and this mutation separates them again by writing the state to a `data-` attribute instead: the value is still recorded, still moves with the choice, and is still invisible to every assistive technology. The class toggle is untouched, so every visual assertion in the suite stays green. Killed by three unit cases in ui.test.ts and by the two HUD sweeps over all 50 choice controls. COUNT MOVED 5 -> 7 for issue #281: the per-slot TEAM buttons are choice controls built with `setSelected`, so the two cases that read their `aria-pressed` -- the untouched slot showing its EFFECTIVE team, and a chosen team surviving a round trip through FFA -- detect this defect as well. Re-measured on the tree, not predicted; the harness reported the mismatch and the declaration was corrected to what it actually trips.",
+    "expectFailures": 7
   },
   {
     "id": "ui-disabled-reason-emptied-rather-than-removed",
@@ -2568,6 +2568,30 @@
     "tests": [
       "src/game/session-host.test.ts",
       "src/game/route-ui.test.ts"
+    ]
+  },
+  {
+    "id": "teams-offered-at-two-players",
+    "file": "src/game/hud.ts",
+    "find": "  const teamsOfferedAt = (players: number): boolean => players > 2;",
+    "replace": "  const teamsOfferedAt = (players: number): boolean => players > 0;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "Teams becomes selectable at two players, which issue #281's first binding rule forbids by name: 'Teams mode is not a distinct option for two players because it is equivalent to FFA.' Two players on two teams IS free-for-all, and two on one team is a match nobody can win -- which the one-team Start gate then refuses, so the offer becomes a trap rather than a choice. It is a SILENT defect on the shipped pane: the button simply enables, every downstream mode-dependent row renders correctly, and the match starts and plays; what it costs is a mode that means nothing and a refusal the player cannot see the cause of. Killed by the three cases that drive the pane with a real `.click()` -- chosen over `dispatchEvent` deliberately, because a disabled button IGNORES a real click and HONOURS a dispatched one, so only the former measures what a player can actually do. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-mode-does-not-follow-the-player-count",
+    "file": "src/game/hud.ts",
+    "find": "      const mode = teamsOfferedAt(players) ? versusConfigState.mode : 'ffa';",
+    "replace": "      const mode = versusConfigState.mode;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Dropping from three players to two while Teams is selected LEAVES the pane in Teams -- a mode it no longer offers. The disabled button cannot prevent this state, because the player never touches the mode row to reach it; they touch the player count. The result is a pane whose mode control shows a refused option as chosen, whose Teams-only friendly-fire row is still on screen, and whose Start may be refused by the one-team gate with no visible way to fix it, since the team controls are the thing that would let a player split the sides. Exactly ONE test fails, which is the point of the entry: the offer rule and this consistency rule are separate claims, and a build could satisfy the first while breaking the second -- the disabled button and the forced fallback are not the same guarantee. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
     ]
   }
 ]
