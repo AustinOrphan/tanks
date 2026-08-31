@@ -417,11 +417,18 @@ describe('ai-last-seen moment specifics', () => {
     for (let t = 46; t <= 118; t++) {
       expect(deg(tl.worlds[t].tanks[0].turretAngle)).toBeCloseTo(deg(bearing), 9);
     }
-    // Not vacuous: the thing it would be tracking is demonstrably NOT there any more.
-    // Over the same span the player travels away from and back past the remembered
-    // point, so a turret reading current state could not sit still through it.
+    // Not vacuous, in the two ways it could be. The player MOVES across the same span
+    // (a frozen target would let a tracking turret sit still too)...
     const xs = Array.from({ length: 118 - 46 + 1 }, (_, i) => tl.worlds[46 + i].tanks[1].pos.x);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(1.5);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(1.1);
+    // ...and the held bearing is never the bearing to where the player actually is, so
+    // no frame of the clip can be read as the turret being on target by coincidence.
+    // MEASURED: the separation runs 15.83deg to 32.21deg over the plateau.
+    for (let t = 46; t <= 118; t++) {
+      const p = tl.worlds[t].tanks[1].pos;
+      const sep = Math.abs(deg(bearing) - deg(Math.atan2(p.y, p.x)));
+      expect(sep).toBeGreaterThan(15);
+    }
     // And the remembered POINT is the observed one, not a live handle on the target:
     // storing the Tank rather than a copy would make these two equal at every tick.
     for (let t = brk; t <= 118; t++) {

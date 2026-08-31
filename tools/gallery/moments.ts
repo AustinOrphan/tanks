@@ -921,13 +921,13 @@ export const MOMENTS: Record<string, MomentDef> = {
    * bearing to the position observed on tick 28 -- the LAST OBSERVED one, which is the
    * distinction issue #372 draws between remembering and knowing.
    *
-   * WHY THE PLAYER DOUBLES BACK. A target that simply drove on in a straight line would
-   * not tell a viewer whether the turret was attentive or omniscient, because a turret
-   * that had frozen for any reason at all would look identical. So the script reverses at
-   * ticks 70, 102 and 134. Across ticks 70-102 the player travels from x = 2.50 back to
-   * x = 0.90 -- and the turret reports exactly ONE distinct value, 82.4054, over that
-   * entire span. The tank cannot be following, because the thing it would be following
-   * turned around and came back.
+   * WHY THE PLAYER PATROLS. See `input` below for the reasoning; the measurement is that
+   * the player reverses direction three times inside the plateau while the turret reports
+   * exactly ONE distinct value, 82.4054, across ticks 70-118. The tank cannot be
+   * following, because the thing it would be following keeps turning around. The band is
+   * also held clear of the remembered point, so the turret is never accidentally on
+   * target: over the whole plateau the held bearing sits between 15.83 and 32.21deg off
+   * the bearing to where the player actually is.
    *
    * THE CONTRAST IS REAL, and was checked before this moment was authored rather than
    * assumed -- `ai-tracking`'s own comment records the opposite outcome (46 of 47 frames
@@ -966,8 +966,11 @@ export const MOMENTS: Record<string, MomentDef> = {
       ticks: 165,
       expect: [],
       // The AI (0, 0), the wall it hides behind (x 0.25..2.8 at y 1.5) and the player's
-      // whole excursion (x -1.0..2.50 at y 3) all sit inside this box.
-      focus: [0.75, 0.3, 1.5], span: 4.4,
+      // whole excursion (x -1.0..2.50 at y 3) all sit inside this box. Framed for the
+      // TOP view the capture recipe uses: this moment's whole content is where a turret
+      // points relative to a target it cannot see, and the game camera's oblique angle
+      // foreshortens exactly that bearing.
+      focus: [0.75, 0.3, 1.4], span: 4.8,
       build: () => {
         const w = createWorld({
           walls: [LAST_SEEN_WALL],
@@ -998,10 +1001,17 @@ export const MOMENTS: Record<string, MomentDef> = {
         w.roundStartTick = -600;
         return w;
       },
-      // Three reversals, at 70, 102 and 134. The first two straddle the held-attention
-      // span and the third lands inside the search sweep, so the clip shows the turret
-      // ignoring a moving target in BOTH states, not just the memorable one.
-      input: (t: number) => ((t >= 70 && t < 102) || t >= 134 ? WEST : EAST),
+      // Once it is hidden the player PATROLS -- 18 ticks west, 18 ticks east, repeating
+      // from tick 70 -- rather than driving on in a straight line. Two reasons, both
+      // about what a viewer can conclude from the clip. A target that simply left could
+      // not distinguish an attentive turret from a frozen one. And a target that came
+      // back THROUGH the remembered point would put the turret momentarily on top of it
+      // by coincidence, which is exactly the frame someone would screenshot to argue the
+      // opposite; the patrol band (x 1.60..2.50) is bounded away from the remembered
+      // x = 0.400 so that never happens. Reversals land on both sides of the expiry, so
+      // the clip shows a moving target being ignored while remembering AND while
+      // searching.
+      input: (t: number) => (t < 70 ? EAST : Math.floor((t - 70) / 18) % 2 === 0 ? WEST : EAST),
     };
   })(),
 };
