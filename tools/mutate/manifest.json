@@ -2806,7 +2806,7 @@
     "find": "    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
     "replace": "    events.push({ type: 'fire-blocked', ownerId: 0, reason: 'shell-cap' })",
     "expect": "killed",
-    "expectFailures": 2,
+    "expectFailures": 3,
     "tests": [
       "src/sim/fire-refusal-paths.test.ts",
       "src/sim/bullets.test.ts"
