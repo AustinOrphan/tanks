@@ -11,6 +11,7 @@
 import type { TankKind, UnarmedTrigger, GameMode } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import type { QualityPreset } from '../render/quality';
+import type { AiTargetPerception } from '../sim/types';
 import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
 
 export interface DevFlags {
@@ -208,6 +209,14 @@ export interface DevFlags {
    */
   quality: QualityPreset | null;
   /**
+   * AI target-SELECTION perception. Null (the default) leaves `World.aiTargetPerception`
+   * at `'full'` -- the AI may pick any live opponent, exactly as the player can see any tank
+   * on the board. `los` restores the bound issue #359 shipped and the owner then superseded.
+   *
+   * Selection only: aiming and firing still require a real line of sight either way.
+   */
+  aiPerception: AiTargetPerception | null;
+  /**
    * How many of the `players` slots are computer-controlled -- bots as simulated
    * players (owner directive 1's literal ask), riding the SAME per-slot substitution
    * `autoplay` already uses at slot 0 (see `game/loop.ts`'s `effectiveInput.sample()`).
@@ -329,6 +338,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   enemyDeathPulse: false,
   backdrop: null,
   mineWarn: null,
+  aiPerception: null,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -349,6 +359,21 @@ function asQuality(params: URLSearchParams): QualityPreset | null {
   const raw = params.get('quality');
   if (raw === null) return null;
   return QUALITY_PRESET_NAMES.has(raw) ? (raw as QualityPreset) : null;
+}
+
+/**
+ * `los` restores issue #359's line-of-sight bound on AI target SELECTION; `full` states the
+ * shipped default explicitly. Null when absent or unrecognised, resolving to
+ * World.aiTargetPerception's own default -- same reject-to-null idiom as asQuality.
+ *
+ * The URL token is `los`, not `line-of-sight`: a hyphen in a query value is legal but reads
+ * badly next to the other flags, and the sim's own vocabulary stays the longer, clearer one.
+ */
+function asAiPerception(params: URLSearchParams): AiTargetPerception | null {
+  const raw = params.get('aiPerception');
+  if (raw === 'los') return 'line-of-sight';
+  if (raw === 'full') return 'full';
+  return null;
 }
 
 /** 'ffa' or 'teams', or null when absent or unrecognised -- null resolves to
@@ -503,6 +528,7 @@ export function parseDevFlags(search: string): DevFlags {
     players: asPlayers(params),
     coopPool: isOn(params, 'coopPool'),
     quality: asQuality(params),
+    aiPerception: asAiPerception(params),
     bots: asBots(params),
     mode: asMode(params),
     friendlyFire: isOn(params, 'friendlyFire'),
@@ -745,6 +771,15 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'flag off) is the shared-attempts ruling: a lone death costs nothing and the ' +
       'survivor fights on; only a full wipe spends a life and restarts the arena.',
     notes: ['Only meaningful once `players` >= 2.'],
+  },
+  aiPerception: {
+    kind: 'valued',
+    values: ['full', 'los'],
+    description:
+      'Bounds AI target SELECTION by line of sight (`los`) instead of the shipped full-board ' +
+      'default. Selection only -- aiming and firing always require a real line of sight. ' +
+      'Measured before the default changed: the bound was never reached by a banking profile ' +
+      'and left a non-banking one with no target for most of its life.',
   },
   quality: {
     kind: 'valued',

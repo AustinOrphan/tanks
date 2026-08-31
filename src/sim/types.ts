@@ -39,6 +39,16 @@ export type BulletType = 'normal' | 'fast' | 'ricochet';
  */
 export type UnarmedTrigger = 'none' | 'proximity' | 'bullet' | 'both';
 
+/**
+ * How much of the board an AI may consider when choosing WHO to fight (issue #359).
+ *
+ * `'full'` -- any live opponent, matching what the player can see. The shipped default.
+ * `'line-of-sight'` -- only opponents it currently perceives, behind `?dev=1&aiPerception=los`.
+ *
+ * A SELECTION policy, not a firing one: aiming still requires a real line of sight either way.
+ */
+export type AiTargetPerception = 'full' | 'line-of-sight';
+
 export type TankKind = 'player' | 'brown' | 'grey' | 'teal' | 'olive' | 'green' | 'yellow';
 export type AiState = 'idle' | 'aim' | 'fire' | 'reposition';
 

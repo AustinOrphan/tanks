@@ -1,4 +1,4 @@
-import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger, GameMode, Vec2, ArenaGeometry } from './types';
+import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger, AiTargetPerception, GameMode, Vec2, ArenaGeometry } from './types';
 import { angleOf, slewAngle, vsub, isActionLocked } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks, resolveWalls } from './collision';
@@ -16,6 +16,33 @@ export interface World {
   seed: number;
   /** What may detonate an UNARMED mine. See UnarmedTrigger. */
   unarmedTrigger: UnarmedTrigger;
+  /**
+   * How much of the board an AI may consider when choosing WHO to fight (issue #359,
+   * owner ruling 2026-08-31 superseding rule 1's perception bound).
+   *
+   * `'full'` is the shipped default: an AI may select any live opponent, exactly as the
+   * PLAYER can see any tank on the board. The camera frames the whole playable area and
+   * nothing fogs or culls, so a line-of-sight bound on SELECTION gave the AI an
+   * information limit the human does not have -- and its counterplay was "stand behind a
+   * wall and be forgotten", which reads as exploitable rather than beatable.
+   *
+   * `'line-of-sight'` restores the bound, behind `?dev=1&aiPerception=los`, so the
+   * experiment stays runnable. Measured before the ruling: the bound was never once
+   * reached by a banking profile (grey and teal, 0.00% of live ticks) and left a
+   * non-banking one with no target for most of its life (brown 44.78%, olive 77.79%),
+   * because an LOS-only reading deletes bank shots and had to be widened for any profile
+   * with `bankShotWeight > 0`.
+   *
+   * SELECTION ONLY. Aiming and firing still require a real line of sight (`hasSolution`),
+   * so full awareness does not let a turret track a target through a wall -- it decides
+   * who the tank is fighting, not what it can shoot.
+   *
+   * OPTIONAL, unlike `unarmedTrigger` beside it, and read as `?? 'full'`. The shipped
+   * behaviour is the absent case, so every existing World literal -- a dozen render and sim
+   * fixtures included -- keeps meaning exactly what it meant, and only a test that wants the
+   * bound has to say so. `arenaGeometry` is the same shape for the same reason.
+   */
+  aiTargetPerception?: AiTargetPerception;
   /**
    * Whether a tank killed earlier in the SAME resolveBulletHits pass still blocks a
    * later bullet aimed at it, instead of letting it pass through untouched.
@@ -124,6 +151,8 @@ export function createWorld(init: {
   seed?: number;
   /** Defaults to 'none', the shipped rule. */
   unarmedTrigger?: UnarmedTrigger;
+  /** Defaults to 'full' -- see World.aiTargetPerception. */
+  aiTargetPerception?: AiTargetPerception;
   /** Defaults to false, the shipped GHOST rule. See World.corpseBlocksShells. */
   corpseBlocksShells?: boolean;
   /** Defaults to true, the adopted lean. See World.muzzleClearsTanks. */
@@ -147,6 +176,7 @@ export function createWorld(init: {
     nextId: maxId + 1,
     seed: init.seed ?? 1,
     unarmedTrigger: init.unarmedTrigger ?? 'none',
+    aiTargetPerception: init.aiTargetPerception ?? 'full',
     corpseBlocksShells: init.corpseBlocksShells ?? false,
     muzzleClearsTanks: init.muzzleClearsTanks ?? true,
     coopAttempts: init.coopAttempts ?? true,

@@ -48,10 +48,11 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (11)
+## Valued flags (12)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
+| `aiPerception` | `aiPerception` | `full`, `los` | `null` | Bounds AI target SELECTION by line of sight (`los`) instead of the shipped full-board default. Selection only -- aiming and firing always require a real line of sight. Measured before the default changed: the bound was never reached by a banking profile and left a non-banking one with no target for most of its life. |
 | `backdrop` | `backdrop` | `felt` | `null` | Draws the application backdrop with a named alternative treatment; the shipped default is the flat application ground. |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
