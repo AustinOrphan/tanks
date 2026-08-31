@@ -312,6 +312,17 @@ export interface DevFlags {
    * default rather than guessing.
    */
   mineWarn: MineWarnStyle | null;
+  /**
+   * Which experimental blocked-fire cue to play when the active-shell cap refuses a shot
+   * (issue #356). `null` -- absent or unrecognised -- keeps the shipped silence.
+   *
+   * The issue requires several materially different treatments to be COMPARED before one
+   * is adopted, so every arm ships behind this flag and none becomes the default here.
+   *
+   * Reject-to-null, the same idiom as `backdrop`/`mineWarn`: `?blockedFire=klaxon` keeps
+   * the default rather than guessing at a treatment that does not exist.
+   */
+  blockedFire: BlockedFireCue | null;
 }
 
 /**
@@ -326,6 +337,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   shellCount: false,
   seed: null,
   mineTrigger: null,
+  blockedFire: null,
   mineReach: false,
   mineTimer: false,
   aiContact: false,
@@ -364,6 +376,18 @@ const QUALITY_PRESET_NAMES = new Set(['low', 'medium', 'high']);
 const VERSUS_MODE_NAMES = new Set(['ffa', 'teams']);
 
 const BACKDROP_TREATMENTS = new Set(['felt']);
+
+/**
+ * Issue #356's candidate blocked-fire cues, named so they can be compared in one session.
+ *
+ * Only `haptic` so far: the issue lists five treatments (weapon-local visual, tank-local
+ * ring, mechanical audio, haptic, transient HUD) plus a multimodal arm, and this is the
+ * first. The others are not omitted for lack of a flag -- the flag is the part they share
+ * -- but because each needs its own artefact. The audio arm in particular needs a designed
+ * voice rather than a reused one, which is a judgement the issue reserves.
+ */
+const BLOCKED_FIRE_CUES = new Set(['haptic']);
+export type BlockedFireCue = 'haptic';
 
 /** One of the three named presets, or null when absent or unrecognised -- an
  * unrecognised value (`?quality=potato`) is rejected to null rather than guessed,
@@ -405,6 +429,12 @@ function asMineTrigger(params: URLSearchParams): UnarmedTrigger | null {
 }
 
 /** The one named non-default treatment, or null when absent or unrecognised. */
+function asBlockedFireCue(params: URLSearchParams): BlockedFireCue | null {
+  const raw = params.get('blockedFire');
+  if (raw === null) return null;
+  return BLOCKED_FIRE_CUES.has(raw) ? (raw as BlockedFireCue) : null;
+}
+
 function asBackdrop(params: URLSearchParams): BackdropTreatment | null {
   const raw = params.get('backdrop');
   if (raw === null) return null;
@@ -524,6 +554,7 @@ export function parseDevFlags(search: string): DevFlags {
     shellCount: isOn(params, 'shellCount'),
     seed: asSeed(params, 'seed'),
     mineTrigger: asMineTrigger(params),
+    blockedFire: asBlockedFireCue(params),
     mineReach: isOn(params, 'mineReach'),
     mineTimer: isOn(params, 'mineTimer'),
     aiContact: isOn(params, 'aiContact'),
@@ -850,6 +881,13 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Enemy tanks also fire the identity death pulse (a coloured world ring); off = ' +
       'players only, enemies keep just the explosion burst.',
+  },
+  blockedFire: {
+    kind: 'valued',
+    values: [...BLOCKED_FIRE_CUES],
+    description:
+      'Plays an experimental cue when the active-shell cap refuses a shot; the shipped ' +
+      'default is silent. Issue #356 compares several treatments before adopting one.',
   },
   backdrop: {
     kind: 'valued',

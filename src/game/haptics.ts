@@ -1,3 +1,4 @@
+import type { BlockedFireCue } from './devflags';
 import type { SimEvent } from '../sim/events';
 import type { Vec2 } from '../sim/types';
 import { MINE_BLAST_RADIUS, TANK_RADIUS } from '../sim/constants';
@@ -56,6 +57,20 @@ export const MINE_FUSE_WARN_PULSE_MS = 18;
 export const MINE_TRIP_PATTERN_MS: number[] = [22, 40, 22];
 
 /**
+ * Issue #356's haptic candidate: a dry double tap for a shot the shell cap refused.
+ *
+ * DISTINCT FROM FIRING BY SHAPE, not merely by length. `FIRE_PULSE_MS` is one 15 ms pulse;
+ * this is two 8 ms taps with a 24 ms gap, so it reads as a mechanism failing to catch
+ * rather than as a quieter shot. The issue asks for a pattern "distinct from successful
+ * firing", and two cues that differ only in duration are not distinguishable through a
+ * hand on a controller.
+ *
+ * Both taps are shorter than FIRE_PULSE_MS on purpose: a refusal is a smaller event than a
+ * shot and must not out-shout one.
+ */
+export const BLOCKED_FIRE_PATTERN_MS: number[] = [8, 24, 8];
+
+/**
  * "Near" for the mine-detonate cue: the radius `detonateMine` actually kills at,
  * not the wider `AI_MINE_FLEE_RADIUS` an AI starts retreating from (constants.ts).
  * A buzz for every mine an AI would merely give ground to would fire constantly
@@ -93,9 +108,18 @@ export interface HapticsDirector {
 // loop passes the real player id; no live tank is ever id 0.
 const DEFAULT_PLAYER_ID = 0;
 
+export interface HapticsOptions {
+  /**
+   * `?dev=1&blockedFire=haptic` (devflags.ts). Null -- the shipped default -- stays silent,
+   * because issue #356 requires its treatments to be compared before one is adopted.
+   */
+  readonly blockedFire?: BlockedFireCue | null;
+}
+
 export function createHapticsDirector(
   vibrate: VibrateFn,
   initialPlayerId: number = DEFAULT_PLAYER_ID,
+  options: HapticsOptions = {},
 ): HapticsDirector {
   let playerId = initialPlayerId;
   let playerPos: Vec2 | null = null;
@@ -152,11 +176,22 @@ export function createHapticsDirector(
         }
         break;
       case 'fire-blocked':
-        // DELIBERATELY INERT for now (issue #356). A restrained blocked-fire vibration is
-        // one of that issue's five candidate treatments, and it explicitly asks for them to
-        // be compared before one is adopted -- so wiring one here would settle by accident
-        // what the issue exists to decide. The case is present to keep the guard below
-        // honest.
+        // Issue #356's haptic arm, and SILENT unless the flag names it -- the issue asks
+        // for its treatments to be compared before one is adopted, so none of them may
+        // become the default by being wired first.
+        //
+        // Gated on the CONTROLLING player: `fire-blocked` is emitted for whoever was
+        // refused, including AI tanks, and a hand does not want to feel an enemy's
+        // capacity problems.
+        //
+        // No rate limit here, and that is measured rather than assumed. #451 made a
+        // cap-blocked attempt activate the fire cooldown as if it were a real shot, so a
+        // held trigger cannot generate more than one refusal per fire cadence: the longest
+        // unbroken burst is ONE tick at every cap measured (5, 4 and 3), against 38 ticks
+        // before that change. The unbounded output #356 forbids is unreachable by spamming.
+        if (options.blockedFire === 'haptic' && e.ownerId === playerId) {
+          vibrate(BLOCKED_FIRE_PATTERN_MS);
+        }
         break;
       default: {
         // Exhaustiveness guard: a new SimEvent kind fails to compile here, the

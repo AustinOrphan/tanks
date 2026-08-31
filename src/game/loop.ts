@@ -964,7 +964,8 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
       dismiss: () => shell.dismissLaunch(),
     },
     createDirector: createAudioDirector,
-    createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
+    createHaptics: (playerId) =>
+      createHapticsDirector(resolveVibrate(), playerId, { blockedFire: devFlags.blockedFire }),
     createStateMachine: createGameStateMachine,
     // The pane needs the retained VS setup (issue #260) and `GameDeps.createHud` is
     // deliberately still `(root) => Hud`: the store is a BROWSER-WIRING concern, so it
