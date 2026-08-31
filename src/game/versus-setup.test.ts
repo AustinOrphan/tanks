@@ -299,3 +299,29 @@ describe('resizeSlots: the player-count buttons', () => {
     expect(chosen[0].role).toBe('human');
   });
 });
+
+describe('legacy cap fields cannot reach a standard match (issue #268)', () => {
+  it('drops shell/mine cap keys a previous or experimental schema may have stored', () => {
+    // Structural, not a filter list: sanitizeSetup builds its result field by field and
+    // returns `{ mode, players, stock, friendlyFire, arenaId, slots }`, so a key it does
+    // not name cannot survive whatever storage holds. Asserted anyway, because "cannot
+    // alter a standard match" is a claim about STORED data and the shape that guarantees
+    // it is one edit away from growing a passthrough.
+    const fallback = BASE;
+    const stored = {
+      ...fallback,
+      shellCap: 99,
+      mineCap: 9,
+      maxActiveProjectiles: 42,
+      mineCapacity: 7,
+    };
+    const clean = sanitizeSetup(stored, fallback);
+    expect(clean).toEqual(sanitizeSetup({ ...fallback }, fallback));
+    for (const key of ['shellCap', 'mineCap', 'maxActiveProjectiles', 'mineCapacity']) {
+      expect(Object.prototype.hasOwnProperty.call(clean, key)).toBe(false);
+    }
+    // And the keys it DOES own are untouched by the noise around them.
+    expect(clean.stock).toBe(fallback.stock);
+    expect(clean.players).toBe(fallback.players);
+  });
+});
