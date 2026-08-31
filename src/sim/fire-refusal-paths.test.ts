@@ -83,6 +83,12 @@ describe('what a refused shot says, per refusal path (issue #356)', () => {
   });
 
   it('DEAD: silent, even at the cap', () => {
+    // NO SINGLE MUTATION BREAKS THIS ONE, and that is worth stating rather than leaving a
+    // reader to discover it. Three independent guards stop a dead tank firing --
+    // applyPlayerInput's own liveness check, spawnBullet's, and the respawn shield that
+    // makes `canAct` false the moment the tank comes back -- so deleting any one, or even
+    // the first two together, leaves this green (measured). The case still discriminates on
+    // deadness: the same fixture fires normally with `alive` true, one line above.
     const r = step(liveWorld(CAP, { alive: false }), FIRE);
     expect(fired(r.events)).toHaveLength(0);
     expect(blocked(r.events)).toHaveLength(0);
