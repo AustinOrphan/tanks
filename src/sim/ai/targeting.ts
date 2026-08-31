@@ -479,6 +479,33 @@ export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfi
  * jitters MORE than the old uniform spread -- a deliberate, measured
  * difficulty change, not an accident.
  */
+/**
+ * WHICH OPPONENT AN AI IS FIGHTING -- the one place that decision is made (issue #359).
+ *
+ * Four behaviours resolved this independently and identically
+ * (`brown.ts`, `grey.ts`, `teal.ts`, and `seekMove` below), each with the same comment
+ * deferring the multi-player question to this issue. One function is what makes the
+ * deferred policy implementable at all: a per-AI commitment window, a seeded tie-break and
+ * a perception bound cannot be added to four copies without them drifting apart, and
+ * "movement and firing use the same committed opponent" is not even expressible while each
+ * caller picks its own.
+ *
+ * TODAY THIS IS EXACTLY WHAT THE FOUR CALLERS DID, deliberately: the FIRST alive
+ * player-kind tank in `world.tanks` order. That is P1-preferred rather than wrong -- at
+ * playerCount > 1 a second human is simply invisible to the AI, which is the slot-order
+ * bias #359 exists to remove. Extracting the seam and changing the policy are separate
+ * steps, and this is the first: `BASELINE_HASH` must not move.
+ *
+ * `tank` is accepted and unused. It is the parameter every part of the policy needs -- the
+ * seeded per-AI tie-break, the profile's preferred range band, the commitment state -- and
+ * threading it now means the behaviours' call sites do not change again when the policy
+ * lands. An unused parameter is cheap; a second signature change across four files is not.
+ */
+export function resolveOpponent(world: World, tank: Tank): Tank | undefined {
+  void tank;
+  return world.tanks.find((t) => t.kind === 'player' && t.alive);
+}
+
 export function profileAimSpread(cfg: ResolvedTankConfig): number {
   return AI_AIM_SPREAD / cfg.ai.aimAccuracy;
 }
@@ -552,10 +579,10 @@ export function estimationError(world: World, tank: Tank, spread: number): numbe
 export function seekMove(world: World, tank: Tank, cfg: ResolvedTankConfig): Vec2 {
   const wander = wanderMove(world, tank);
   // Finds the FIRST alive player-kind tank -- correct-as-P1-preferred, not wrong, at
-  // playerCount > 1: a second human is simply invisible to this AI, which still
-  // engages whichever player-kind tank comes first in tank-array order. Who AI
-  // targets when two humans are on the board is balance work, deferred.
-  const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
+  // playerCount > 1: resolved through `resolveOpponent` above (issue #359) rather than
+  // repeated here, so movement and firing cannot end up committed to different opponents
+  // once the policy lands. Unchanged today: still the first alive player-kind tank.
+  const player = resolveOpponent(world, tank);
   if (!player) return wander;
 
   const d = vdist(tank.pos, player.pos);

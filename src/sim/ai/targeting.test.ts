@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter, shotHitsOwnSide,
   friendlyInMineBlast, mineThreatensPlayer, incomingThreats, dangerAvoidMove,
-  profileHazardSpread, estimationError, wallBlocksPath, wallBlocksStep,
-} from './targeting';
+  profileHazardSpread, estimationError, wallBlocksPath, wallBlocksStep, resolveOpponent } from './targeting';
 import {
   AI_AIM_SPREAD, AI_JITTER_TICKS, TANK_RADIUS, BULLET_RADIUS, AI_HULL_CLEARANCE,
   AI_MINE_FLEE_RADIUS, AI_MINE_TACTICAL_RADIUS, AI_HAZARD_SPREAD, WANDER_TICKS, DANGER_CORRIDOR,
@@ -1097,5 +1096,67 @@ describe('wallBlocksPath (issue #224)', () => {
     const w = { ...wanderWorld(1, 0), walls: [wall(1, wallX, -5, 5, 5)] };
     expect(wallBlocksPath(w, t, EAST, ticks, fast)).toBe(true);
     expect(wallBlocksPath(w, t, EAST, ticks, slow)).toBe(false);
+  });
+});
+
+describe('resolveOpponent: the one place an AI decides who it is fighting (issue #359)', () => {
+  function aiTank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
+    return {
+      id, kind, pos, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0, ...over,
+    };
+  }
+  function w(tanks: Tank[]): World {
+    return {
+      tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+    };
+  }
+
+  // THE POLICY THIS PINS IS THE ONE #359 EXISTS TO CHANGE, and it is pinned deliberately.
+  // The golden trace is single-player, so first-vs-last player is indistinguishable to it:
+  // reversing the search inside `resolveOpponent` leaves all 374 sim/AI tests green, which
+  // was MEASURED, not assumed. That means the extraction shipped with the multi-player
+  // behaviour unpinned, and the next PR would have been free to change it by accident
+  // rather than by decision. These cases make the current slot-order bias explicit so
+  // replacing it is a visible diff.
+  it('picks the FIRST alive player-kind tank, which is the slot-order bias to remove', () => {
+    const ai = aiTank(1, 'grey', { x: 0, y: 0 });
+    const p1 = aiTank(2, 'player', { x: 10, y: 0 });
+    const p2 = aiTank(3, 'player', { x: 1, y: 0 });
+    // p2 is far nearer, and is still not chosen -- array order wins today. That is the
+    // defect, stated as a test rather than left in a comment.
+    expect(resolveOpponent(w([ai, p1, p2]), ai)?.id).toBe(p1.id);
+  });
+
+  it('skips a dead player to reach a live one', () => {
+    const ai = aiTank(1, 'grey', { x: 0, y: 0 });
+    const dead = aiTank(2, 'player', { x: 1, y: 0 }, { alive: false });
+    const live = aiTank(3, 'player', { x: 10, y: 0 });
+    expect(resolveOpponent(w([ai, dead, live]), ai)?.id).toBe(live.id);
+  });
+
+  it('never returns a non-player tank, however many are on the board', () => {
+    const ai = aiTank(1, 'grey', { x: 0, y: 0 });
+    const other = aiTank(2, 'brown', { x: 1, y: 0 });
+    expect(resolveOpponent(w([ai, other]), ai)).toBeUndefined();
+    const p = aiTank(3, 'player', { x: 5, y: 0 });
+    expect(resolveOpponent(w([ai, other, p]), ai)?.kind).toBe('player');
+  });
+
+  it('gives every AI the same answer today -- the symmetry #359 replaces with a seeded tie-break', () => {
+    // Two AIs, two players. Both AIs converge on the same target, which is what "prevents
+    // believable pressure distribution" means in the issue. Asserted so the fix is a
+    // change to a stated expectation rather than to an absence.
+    const a1 = aiTank(1, 'grey', { x: 0, y: 0 });
+    const a2 = aiTank(2, 'teal', { x: 20, y: 20 });
+    const p1 = aiTank(3, 'player', { x: 10, y: 0 });
+    const p2 = aiTank(4, 'player', { x: 21, y: 20 });
+    const world = w([a1, a2, p1, p2]);
+    expect(resolveOpponent(world, a1)?.id).toBe(p1.id);
+    // a2 is adjacent to p2 and still targets p1.
+    expect(resolveOpponent(world, a2)?.id).toBe(p1.id);
   });
 });
