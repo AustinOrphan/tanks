@@ -2690,5 +2690,66 @@
       "src/sim/ai/search.test.ts"
     ],
     "why": "The hold is the difference between a search and jitter. Issue #371 asks for headings held for a decision span; a fresh draw every tick satisfies every bound in search.test.ts except the hold itself, and produces a barrel that shivers rather than looks."
+  },
+  {
+    "id": "target-commitment-not-wired-into-stepai",
+    "file": "src/sim/ai/index.ts",
+    "find": "    commitTarget(world, tank);",
+    "replace": "    // commitTarget(world, tank);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/baseline/trace.test.ts"
+    ],
+    "why": "Pins the WIRING of issue #359's commitment, not the policy. target-selection.test.ts drives commitTarget directly and passes in full while stepAi never calls it, which would leave every AI on the pure fallback -- re-selecting from scratch every tick, with the stickiness the issue asks for present in the module and absent from the game. The golden trace is what notices, because five of its runs' timing depends on the commitment holding."
+  },
+  {
+    "id": "target-selection-tie-break-is-symmetric",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return tieBreak(world, subject, a) > tieBreak(world, subject, b);",
+    "replace": "  return a.id < b.id;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/ai/target-selection.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Rule 3 by name: equivalent candidates must be separated by a seeded PER-AI draw, never by slot or array order. Falling back to id order is precisely the bias issue #359 exists to remove, and with one player -- the campaign and the whole golden trace -- it is invisible, so only the symmetric multi-player fixtures catch it."
+  },
+  {
+    "id": "target-selection-drops-the-perception-bound",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return cfg.ai.bankShotWeight > 0;",
+    "replace": "  return true;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "why": "Rule 1: an AI may select only from opponents it perceives. The shipped predicate is line of sight, widened to 'anything a banking profile could bank at' because indirect fire is that role's identity. Returning true outright restores full omniscience for every profile, including the non-banking ones the bound actually constrains."
+  },
+  {
+    "id": "resolve-opponent-ignores-the-commitment",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "    if (held && isTargetable(world, tank, held)) return held;",
+    "replace": "    if (false && held && isTargetable(world, tank, held)) return held;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "The committed id must be READ BACK, not merely written. Skipping straight to the pure fallback leaves commitTarget writing state nothing consumes, so an AI would re-select every tick and 'movement and firing use the same committed opponent' would hold only by the fallback's determinism -- until the first selection input a decision can mutate."
+  },
+  {
+    "id": "target-switch-margin-ignored",
+    "file": "src/sim/ai/target-selection.ts",
+    "find": "      AI_TARGET_SWITCH_MARGIN",
+    "replace": "      -1",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "why": "Rule 6: at the end of a commitment span an AI keeps its opponent unless another is MATERIALLY better. A negative margin makes any improvement sufficient, so the AI flips target at every span boundary -- the per-tick-thrashing failure mode one span removed. Worth an entry because the first version of the matching test could not detect it: its challenger was further from preferred range than the held target, so no margin was ever crossed."
   }
 ]
