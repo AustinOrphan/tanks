@@ -1754,16 +1754,28 @@ await checkAsync('the idle spin comes back when the mouse leaves the canvas', as
  * else -- the same isolation argument the tread-trails check above makes.
  */
 function contactWorld(state: 'visible' | 'remembered' | 'none'): ReturnType<typeof createWorld> {
+  // TWO players, both present in all three worlds: id 3 sits beside the AI with a clear
+  // line, id 2 sits behind the slab. The slab is present in all three too. So the walls
+  // and every tank pose are IDENTICAL across the three fixtures and only the AI's own
+  // target/memory fields move -- which is what makes a framebuffer difference between two
+  // of them attributable to the overlay rather than to the scene. A first draft varied the
+  // wall between the arms and could not support that claim.
   const ai: Tank = {
     id: 1, kind: 'brown', pos: { x: W / 2, y: H / 2 }, bodyAngle: 0, turretAngle: 0, alive: true,
     desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
     aiState: 'idle', aiTimer: 0,
-    aiTargetId: 2, aiTargetTicks: 30,
+    aiTargetId: state === 'visible' ? 3 : 2,
+    aiTargetTicks: 30,
     ...(state === 'visible' ? {} : { aiLastSeenPos: { x: W / 2, y: H / 2 + 2.6 } }),
     aiLastSeenTicks: state === 'remembered' ? 55 : 0,
   } as Tank;
-  const player: Tank = {
+  const hidden: Tank = {
     id: 2, kind: 'player', pos: { x: W / 2, y: H / 2 + 3 }, bodyAngle: 0, turretAngle: 0,
+    alive: true, desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0,
+    mineCooldown: 0, aiState: 'idle', aiTimer: 0,
+  };
+  const beside: Tank = {
+    id: 3, kind: 'player', pos: { x: W / 2 + 3, y: H / 2 }, bodyAngle: 0, turretAngle: 0,
     alive: true, desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0,
     mineCooldown: 0, aiState: 'idle', aiTimer: 0,
   };
@@ -1773,12 +1785,10 @@ function contactWorld(state: 'visible' | 'remembered' | 'none'): ReturnType<type
   };
   const spawns: Spawn[] = [
     { kind: 'brown', pos: ai.pos, angle: 0 },
-    { kind: 'player', pos: player.pos, angle: 0 },
+    { kind: 'player', pos: hidden.pos, angle: 0 },
+    { kind: 'player', pos: beside.pos, angle: 0 },
   ] as Spawn[];
-  return createWorld({
-    walls: state === 'visible' ? [] : [blocker],
-    tanks: [ai, player], spawns, lives: 3,
-  });
+  return createWorld({ walls: [blocker], tanks: [ai, hidden, beside], spawns, lives: 3 });
 }
 
 function contactFrame(state: 'visible' | 'remembered' | 'none', on: boolean): Uint8Array {
@@ -1802,6 +1812,10 @@ check('the AI contact overlay (#359/#372) reaches the framebuffer through render
   // plane, which is exactly where a z-fight or a wrong Y hides.
   const off = contactFrame('visible', false);
   const on = contactFrame('visible', true);
+  // MEASURED on this fixture, 1600000-byte frames: 1345 bytes move with the overlay on.
+  // Burying its flat geometry under the ground plane (RING_Y = -0.5, the exact failure
+  // this exists to catch) drops that to 643 -- the billboarded labels still show through,
+  // which is why the bound sits between the two rather than at zero.
   const moved = bytesDiffering(off, on);
   if (moved < 1000) {
     return `only ${moved} of ${on.length} bytes changed with aiContact on -- the overlay did not reach the framebuffer`;
@@ -1826,6 +1840,16 @@ check('the three contact states are distinguishable ON SCREEN, not just in the c
   const pairs: [string, string][] = [
     ['remembered', 'none'], ['visible', 'remembered'], ['visible', 'none'],
   ];
+  // MEASURED, healthy against the same tree with the geometry buried:
+  //
+  //   remembered/none      1582 -> 1231
+  //   visible/remembered   2026 -> 1228
+  //   visible/none          858 ->  156
+  //
+  // Only the last pair discriminates the GEOMETRY. The other two carry a differing label
+  // (`m55` against `m0`, `#2` against `#3`), so they stay high even when nothing but the
+  // sprites is drawn -- worth stating plainly rather than letting three green numbers
+  // imply three independent proofs. The bound is therefore set from visible/none.
   for (const [a, b] of pairs) {
     const moved = bytesDiffering(frames[a as keyof typeof frames], frames[b as keyof typeof frames]);
     if (moved < 500) {

@@ -67,11 +67,11 @@ const COLORS: Record<ContactState, number> = {
 /** Just off the felt, matching the RING_Y precedent minedebug.ts sets for the same reason. */
 const RING_Y = 0.031;
 const LABEL_Y = 1.25;
-const LINE_WIDTH = 0.06;
+const LINE_WIDTH = 0.14;
 const CONTACT_RING_R = 0.42;
 
 function ringMesh(radius: number): THREE.Mesh {
-  const w = Math.max(0.03, radius * 0.06);
+  const w = Math.max(0.07, radius * 0.14);
   const mesh = new THREE.Mesh(
     new THREE.RingGeometry(radius - w, radius, 48),
     new THREE.MeshBasicMaterial({
