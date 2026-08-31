@@ -595,12 +595,17 @@ function better(world: World, subject: Tank, a: Tank, b: Tank, preferred: number
 /** The best currently-perceived candidate, or undefined when the AI sees nobody. */
 export function selectPerceived(world: World, tank: Tank, cfg: ResolvedTankConfig): Tank | undefined {
   const preferred = cfg.ai.preferredDistance;
-  let best: Tank | undefined;
+  // `chosen`, not `best`: `dangerAvoidMove` below ends with `return best;` and the mutation
+  // manifest anchors an entry on that exact line. A second identical line here makes that
+  // find string ambiguous and the entry stops applying -- silently, since a stale anchor
+  // reports failed-to-apply rather than a survivor. Renaming here is cheaper than weakening
+  // a pin that already exists.
+  let chosen: Tank | undefined;
   for (const other of world.tanks) {
     if (!isTargetable(world, tank, other) || !perceives(world, tank, other, cfg)) continue;
-    if (!best || better(world, tank, other, best, preferred)) best = other;
+    if (!chosen || better(world, tank, other, chosen, preferred)) chosen = other;
   }
-  return best;
+  return chosen;
 }
 
 /**

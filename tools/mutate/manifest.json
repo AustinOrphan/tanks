@@ -2620,18 +2620,6 @@
     ]
   },
   {
-    "id": "ai-opponent-selection-reverses-slot-order",
-    "file": "src/sim/ai/targeting.ts",
-    "find": "  return world.tanks.find((t) => t.kind === 'player' && t.alive);",
-    "replace": "  return [...world.tanks].reverse().find((t) => t.kind === 'player' && t.alive);",
-    "expect": "killed",
-    "expectFailures": 2,
-    "why": "Every AI switches from the first alive player-kind tank to the LAST, which at more than one player is a different opponent for every behaviour at once -- movement, direct fire and bank-shot planning all follow it, since issue #359 routed them through this one function. WHY THIS ENTRY EXISTS: the extraction that created the seam shipped with this behaviour UNPINNED, and it was measured rather than assumed -- applying this exact mutation left all 374 tests under `tools/baseline` and `src/sim/ai` green, because the golden trace is single-player and first-vs-last is indistinguishable there. `BASELINE_HASH` cannot see it either, for the same reason. That gap is the whole point: #359's real fix replaces this slot-order policy deliberately, and without a pin the next change could replace it by accident. Killed by the two multi-player cases -- one where a far NEARER player is still not chosen, and one where two AIs converge on the same target -- which state the current bias as an expectation so changing it is a visible diff. Scoped to targeting.test.ts; expectFailures counts that scoped run only.",
-    "tests": [
-      "src/sim/ai/targeting.test.ts"
-    ]
-  },
-  {
     "id": "refused-shot-says-nothing",
     "file": "src/sim/bullets.ts",
     "find": "    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
@@ -2714,7 +2702,7 @@
       "src/sim/ai/target-selection.test.ts",
       "src/sim/ai/targeting.test.ts"
     ],
-    "why": "Rule 3 by name: equivalent candidates must be separated by a seeded PER-AI draw, never by slot or array order. Falling back to id order is precisely the bias issue #359 exists to remove, and with one player -- the campaign and the whole golden trace -- it is invisible, so only the symmetric multi-player fixtures catch it."
+    "why": "Rule 3 by name: equivalent candidates must be separated by a seeded PER-AI draw, never by slot or array order. Falling back to id order is precisely the bias issue #359 exists to remove, and with one player -- the campaign and the whole golden trace -- it is invisible, so only the symmetric multi-player fixtures catch it. Replaces ai-opponent-selection-reverses-slot-order, removed with issue #359: that entry mutated first-alive-in-array-order selection, which no longer exists, so its find string could only ever report failed-to-apply."
   },
   {
     "id": "target-selection-drops-the-perception-bound",
