@@ -2812,5 +2812,42 @@
       "src/sim/ai/hazard-competence.test.ts"
     ],
     "why": "Issue #223 criteria 4 and 5 live at the DECISION, not the profile. bot-difficulty.test.ts pins that the presets scale estimationAccuracy monotonically and stays entirely green against a build that then ignores it here -- every difficulty would judge mines identically while the preset table still looked correct. Measured at the time of writing: an easy bot believes it is safe inside the real kill radius on 18.79% of draws, normal 2.94%, hard 0.00%."
+  },
+  {
+    "id": "ai-opponent-selection-reverses-slot-order",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return world.tanks.find((t) => t.kind === 'player' && t.alive);",
+    "replace": "  return [...world.tanks].reverse().find((t) => t.kind === 'player' && t.alive);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Every AI switches from the first alive player-kind tank to the LAST, which at more than one player is a different opponent for every behaviour at once -- movement, direct fire and bank-shot planning all follow it, since issue #359 routed them through this one function. WHY THIS ENTRY EXISTS: the extraction that created the seam shipped with this behaviour UNPINNED, and it was measured rather than assumed -- applying this exact mutation left all 374 tests under `tools/baseline` and `src/sim/ai` green, because the golden trace is single-player and first-vs-last is indistinguishable there. `BASELINE_HASH` cannot see it either, for the same reason. That gap is the whole point: #359's real fix replaces this slot-order policy deliberately, and without a pin the next change could replace it by accident. Killed by the two multi-player cases -- one where a far NEARER player is still not chosen, and one where two AIs converge on the same target -- which state the current bias as an expectation so changing it is a visible diff. Scoped to targeting.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/ai/targeting.test.ts"
+    ]
+  },
+  {
+    "id": "mine-slot-never-freed-on-detonation",
+    "file": "src/sim/mines.ts",
+    "find": "  if (owner) owner.activeMineIds = owner.activeMineIds.filter((id) => id !== mine.id)",
+    "replace": "  void owner",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ordnance-capacity.test.ts",
+      "src/sim/mines.test.ts"
+    ],
+    "why": "Mine capacity release has ONE mechanism, unlike shells: activeMineIds is an explicit array detonateMine has to prune, where a retired shell simply stops being counted. Drop the prune and a player silently loses a mine slot for the rest of the round -- until a death resets it, which is why the tick-boundary test has to stop at the first round reset to see this at all."
+  },
+  {
+    "id": "vs-limits-line-reads-the-wrong-config-field",
+    "file": "src/game/hud.ts",
+    "find": "    const mines = cfg.mineCapacity;",
+    "replace": "    const mines = cfg.weapon.maxActiveProjectiles;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "why": "Issue #268 requires each displayed limit to come from the field the simulation actually enforces -- dropMine gates on cfg.mineCapacity, spawnBullet on cfg.weapon.maxActiveProjectiles -- so a line that read one field twice would be right about shells and silently wrong about mines. Note the OTHER drift this issue names, a hardcoded literal, cannot be pinned here: 5 and 2 are today's shipped values, so a literal agrees with config and SURVIVES. That half is proven instead by editing tank-defs.json to 3/1, where the derived line follows and a hardcoded one fails; the run is recorded on the PR."
   }
 ]
