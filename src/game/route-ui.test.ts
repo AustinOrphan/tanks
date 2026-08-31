@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRouteUi, type RouteUi, type RouteUiDeps, type StyleSink } from './route-ui';
 import type { Hud } from './hud';
+import { createGameSessionHost } from './session-host';
 import { createGameStateMachine, createOutcomeClassifier, type GameStateMachine } from './state';
 import { createAppSettings } from './app-settings';
 import { createMemoryStorage, createStores } from './storage';
@@ -366,6 +367,62 @@ describe('the application routes work with no gameplay session behind them', () 
     // twice is the stale-capture shape session-host.ts's own tests exist to catch, one
     // layer down.
     expect(f.previewDisposals()).toBe(1);
+  });
+
+  it('drives every route while a real GameSessionHost stays EMPTY (issue #427)', () => {
+    // Criterion 1, end to end and in one place: the application routes render and accept
+    // their existing actions while `GameSessionHost` has no active session.
+    //
+    // The two halves are asserted TOGETHER deliberately. Route UI working in isolation is
+    // this file's other fourteen cases; a host being empty is session-host.test.ts's. What
+    // neither says alone is that driving the routes does not quietly bring a session into
+    // existence -- which is exactly the coupling #427 exists to remove, and exactly what a
+    // route handler reaching for a world would do.
+    const f = fixture();
+    const root = document.createElement('div');
+    const started: unknown[] = [];
+    const host = createGameSessionHost({
+      root,
+      bootCanvas: () => {
+        throw new Error('the empty host built a canvas');
+      },
+      startGame: () => {
+        started.push(1);
+        throw new Error('the empty host started a session');
+      },
+      shell: {} as never,
+    });
+
+    expect(host.hasSession()).toBe(false);
+    // Every route handler this module owns, fired in turn. `fire` throws if one was never
+    // registered, so this is also a sweep: a handler dropped from the route UI fails here
+    // rather than silently not being exercised.
+    f.fire('onMuteToggle');
+    f.fire('onVolumeChange', 0.4);
+    f.fire('onVersusOpen');
+    f.fire('onCampaignOpen');
+    f.fire('onPauseTap');
+    f.fire('onTouchSchemeChange', 'point');
+    f.fire('onFireModeChange', 'button');
+    f.fire('onHapticsChange', false);
+    f.fire('onCustomizeOpen');
+    f.fire('onPickSkin', 'camo');
+    f.fire('onCustomizeClose');
+    f.fire('onControllersOpen');
+    f.fire('onControllersClose');
+    f.fire('onResetStats');
+    f.fire('onResetProgress');
+
+    // The host is untouched -- and `bootCanvas`/`startGame` throw, so this is not merely
+    // "no session was recorded": any attempt at all would have surfaced as an exception
+    // out of the handler rather than as a quiet zero here.
+    expect(host.hasSession()).toBe(false);
+    expect(started).toHaveLength(0);
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+    // ...and the routes did their work: the store moved, which is what says the handlers
+    // ran rather than being no-ops that trivially touch nothing.
+    expect(f.deps.customization.skin()).toBe('camo');
+    expect(f.volume()).toBeCloseTo(0.4, 10);
   });
 
   it('unlockedLevels answers from progress alone', () => {
