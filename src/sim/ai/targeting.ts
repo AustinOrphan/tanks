@@ -4,6 +4,7 @@ import { raySegmentVsAABB, circleVsAABB, reflectSweep, driveVelocity } from '../
 import { configFor, type ResolvedTankConfig } from '../config';
 import {
   AIM_EPS, AI_AIM_SPREAD, AI_HAZARD_SPREAD, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
+  AI_TARGET_TIE_BAND,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
   AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig, SWEEP_EPS,
   AI_PATH_HORIZON_TICKS,
@@ -501,19 +502,133 @@ export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfi
  * threading it now means the behaviours' call sites do not change again when the policy
  * lands. An unused parameter is cheap; a second signature change across four files is not.
  */
-export function resolveOpponent(world: World, tank: Tank): Tank | undefined {
-  // A LOOKUP, not a selection (issue #359). The choice is made once per tick by
-  // `commitTarget` (ai/target-selection.ts) and stored on the tank, so every call site here
-  // -- brown, grey, teal and seekMove -- is reading one committed answer rather than each
-  // re-deriving its own. That is what makes "movement and firing use the same committed
-  // opponent" structural instead of coincidental.
+/**
+ * Can `other` be targeted by the AI tank `subject`?
+ *
+ * The MIRROR of player-profile.ts's `isOpponent`, which answers the same question for a bot
+ * driving a PLAYER slot -- there, in campaign-coop, the opponents are the enemies. Here the
+ * subject IS an enemy, so its opponents are the player-kind tanks. Kept separate rather than
+ * generalised: one predicate that tried to serve both directions would have to branch on the
+ * subject's own kind, which is the "branch on tank kind" the simulation rules forbid.
+ */
+export function isTargetable(world: World, subject: Tank, other: Tank): boolean {
+  if (!other.alive || other.kind !== 'player') return false;
+  // Teams matter only once both tanks carry one; campaign-coop enemies carry none.
+  if (world.mode === 'teams' && other.team !== undefined && other.team === subject.team) return false;
+  return true;
+}
+
+/**
+ * Is this opponent PERCEIVED right now?
+ *
+ * Line of sight only, which is the perception model the rest of the AI already uses. Rule 1
+ * binds ACQUISITION, not retention: a committed target is kept through a sight break for the
+ * rest of its span (rules 5 and 7 -- "losing direct sight does not... immediately pick a
+ * different player"). Gating retention here instead would drop the target the instant a wall
+ * intervened and send seekMove straight to `wander`, which is a different and much larger
+ * behaviour change than the one this issue asks for.
+ */
+function perceives(world: World, tank: Tank, other: Tank, cfg: ResolvedTankConfig): boolean {
+  if (lineOfSight(tank.pos, other.pos, world.walls)) return true;
+  // A BANKING PROFILE PERCEIVES WHAT IT CAN BANK AT, and that is not a loophole -- it is
+  // the shipped role. brown.ts's own comment calls "shoots you round the corner when it
+  // cannot see you" the sniper's whole read on screen, and both brown and teal solve
+  // `bankShot` against a target with no line of sight. An LOS-only bound would silently
+  // delete indirect fire from every profile that has it, which is a far larger behaviour
+  // change than the slot-order bias issue #359 exists to fix, and one no ruling asked for.
   //
-  // `alive` is still checked here as well as in commitTarget: a target can die to a blast
-  // resolved LATER in the same tick than the commitment, and a decision must never aim at a
-  // corpse just because the commitment was valid when it was written.
-  if (tank.aiTargetId === undefined) return undefined;
-  const target = world.tanks.find((t) => t.id === tank.aiTargetId);
-  return target?.alive ? target : undefined;
+  // Gated on the WEIGHT rather than on solving a bank path here: bankShot is O(walls^2) and
+  // selection runs per candidate per tick, so paying for it during targeting would put an
+  // arena-sized cost on a decision that only needs to know whether indirect fire is this
+  // profile's business at all.
+  //
+  // The honest limitation, recorded rather than glossed: for a banking profile this makes
+  // the perception bound of rule 1 nearly inert, because it can select an opponent it cannot
+  // see. Narrowing it needs a real perception model with memory -- #372's bounded last-seen
+  // contact -- not a tighter predicate here.
+  return cfg.ai.bankShotWeight > 0;
+}
+
+/**
+ * How badly does this candidate fit the profile's preferred range? Lower is better.
+ *
+ * Rule 2 asks for the perceived opponent whose observed distance is closest to the profile's
+ * preferred band -- not the nearest one. A defensive kiter with preferredDistance 9 should
+ * pick the opponent it can hold at range over the one already in its face.
+ */
+export function rangeCost(tank: Tank, other: Tank, preferred: number): number {
+  return Math.abs(vdist(tank.pos, other.pos) - preferred);
+}
+
+/**
+ * The seeded per-AI tie-break (rule 3).
+ *
+ * A pure hash of (seed, subject id, candidate id) -- no RNG stream, same shape as
+ * `wanderMove` and `aimJitter`, with a multiplier distinct from both. It depends on the
+ * SUBJECT as well as the candidate, which is the part the rule is about: a tie-break keyed
+ * only on the candidate would rank the players identically for every AI and swing the whole
+ * enemy line onto one target at once, which is the symmetric result the rule forbids by name.
+ *
+ * Deliberately NOT tank-array or slot order, and deliberately not time-varying: a tie-break
+ * that moved with `world.tick` would re-roll ties inside a commitment span.
+ */
+function tieBreak(world: World, subject: Tank, other: Tank): number {
+  return nextRng(world.seed + subject.id * 2749 + other.id * 40529).value;
+}
+
+/**
+ * Rank candidates by range cost, quantised into bands so near-equivalent candidates are
+ * genuinely tied, then broken by the seeded per-AI draw.
+ *
+ * The band is what makes rule 3 reachable at all. Two opponents are almost never at exactly
+ * equal distance in floating point, so an unquantised comparison would make the tie-break
+ * dead code -- and a dead tie-break looks identical to a working one until a symmetric
+ * fixture is written, which is the whole point of the rule.
+ */
+function better(world: World, subject: Tank, a: Tank, b: Tank, preferred: number): boolean {
+  const ba = Math.round(rangeCost(subject, a, preferred) / AI_TARGET_TIE_BAND);
+  const bb = Math.round(rangeCost(subject, b, preferred) / AI_TARGET_TIE_BAND);
+  if (ba !== bb) return ba < bb;
+  return tieBreak(world, subject, a) > tieBreak(world, subject, b);
+}
+
+/** The best currently-perceived candidate, or undefined when the AI sees nobody. */
+export function selectPerceived(world: World, tank: Tank, cfg: ResolvedTankConfig): Tank | undefined {
+  const preferred = cfg.ai.preferredDistance;
+  let best: Tank | undefined;
+  for (const other of world.tanks) {
+    if (!isTargetable(world, tank, other) || !perceives(world, tank, other, cfg)) continue;
+    if (!best || better(world, tank, other, best, preferred)) best = other;
+  }
+  return best;
+}
+
+/**
+ * Who this AI tank is fighting (issue #359).
+ *
+ * THE COMMITTED CHOICE FIRST. `commitTarget` (ai/target-selection.ts) is the only writer of
+ * `aiTargetId`, and `stepAi` calls it once per tank before the decision runs -- so brown,
+ * grey, teal and `seekMove` all read one answer here rather than each re-deriving its own.
+ * That is what makes the issue's "movement and firing use the same committed opponent"
+ * structural rather than coincidental.
+ *
+ * The pure selection is a FALLBACK, not dead code. A decision function may legitimately be
+ * called without the commitment layer having run -- every unit test that drives `decideAi`
+ * directly does exactly that -- and an AI that reported "no opponent" merely because nothing
+ * had written to it yet would be an artefact of call order rather than of the world. The
+ * fallback is a pure function of `(world, tank)`, so it too gives every call site in a tick
+ * the same answer.
+ *
+ * `alive` is re-checked on the committed path because a target can die to a blast resolved
+ * LATER in the same tick than the commitment was written, and no decision may aim at a
+ * corpse just because the commitment was valid when it was made.
+ */
+export function resolveOpponent(world: World, tank: Tank, cfg: ResolvedTankConfig): Tank | undefined {
+  if (tank.aiTargetId !== undefined) {
+    const held = world.tanks.find((t) => t.id === tank.aiTargetId);
+    if (held && isTargetable(world, tank, held)) return held;
+  }
+  return selectPerceived(world, tank, cfg);
 }
 
 export function profileAimSpread(cfg: ResolvedTankConfig): number {
@@ -592,7 +707,7 @@ export function seekMove(world: World, tank: Tank, cfg: ResolvedTankConfig): Vec
   // playerCount > 1: resolved through `resolveOpponent` above (issue #359) rather than
   // repeated here, so movement and firing cannot end up committed to different opponents
   // once the policy lands. Unchanged today: still the first alive player-kind tank.
-  const player = resolveOpponent(world, tank);
+  const player = resolveOpponent(world, tank, cfg);
   if (!player) return wander;
 
   const d = vdist(tank.pos, player.pos);

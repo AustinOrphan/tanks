@@ -1115,48 +1115,66 @@ describe('resolveOpponent: the one place an AI decides who it is fighting (issue
     };
   }
 
-  // THE POLICY THIS PINS IS THE ONE #359 EXISTS TO CHANGE, and it is pinned deliberately.
-  // The golden trace is single-player, so first-vs-last player is indistinguishable to it:
-  // reversing the search inside `resolveOpponent` leaves all 374 sim/AI tests green, which
-  // was MEASURED, not assumed. That means the extraction shipped with the multi-player
-  // behaviour unpinned, and the next PR would have been free to change it by accident
-  // rather than by decision. These cases make the current slot-order bias explicit so
-  // replacing it is a visible diff.
-  it('picks the FIRST alive player-kind tank, which is the slot-order bias to remove', () => {
+  // THE POLICY THESE PINNED HAS NOW BEEN REPLACED (issue #359). They previously asserted
+  // the slot-order bias on purpose -- "so replacing it is a visible diff" -- and this is
+  // that diff. `resolveOpponent` is now a committed-target lookup with a perception-bounded,
+  // preferred-range, seeded-tie-break fallback; the policy itself is covered in depth by
+  // ai/target-selection.test.ts, so what stays here is the contract of THIS function.
+  const CFG = configFor('grey');
+
+  it('no longer returns the first player in array order', () => {
     const ai = aiTank(1, 'grey', { x: 0, y: 0 });
-    const p1 = aiTank(2, 'player', { x: 10, y: 0 });
-    const p2 = aiTank(3, 'player', { x: 1, y: 0 });
-    // p2 is far nearer, and is still not chosen -- array order wins today. That is the
-    // defect, stated as a test rather than left in a comment.
-    expect(resolveOpponent(w([ai, p1, p2]), ai)?.id).toBe(p1.id);
+    const preferred = CFG.ai.preferredDistance;
+    const firstButWrongRange = aiTank(2, 'player', { x: preferred * 3, y: 0 });
+    const laterButPreferred = aiTank(3, 'player', { x: preferred, y: 0 });
+    // Array order used to decide this outright. Range to the profile's preferred band does.
+    expect(resolveOpponent(w([ai, firstButWrongRange, laterButPreferred]), ai, CFG)?.id).toBe(
+      laterButPreferred.id,
+    );
   });
 
   it('skips a dead player to reach a live one', () => {
     const ai = aiTank(1, 'grey', { x: 0, y: 0 });
-    const dead = aiTank(2, 'player', { x: 1, y: 0 }, { alive: false });
+    const dead = aiTank(2, 'player', { x: 9, y: 0 }, { alive: false });
     const live = aiTank(3, 'player', { x: 10, y: 0 });
-    expect(resolveOpponent(w([ai, dead, live]), ai)?.id).toBe(live.id);
+    expect(resolveOpponent(w([ai, dead, live]), ai, CFG)?.id).toBe(live.id);
   });
 
   it('never returns a non-player tank, however many are on the board', () => {
     const ai = aiTank(1, 'grey', { x: 0, y: 0 });
     const other = aiTank(2, 'brown', { x: 1, y: 0 });
-    expect(resolveOpponent(w([ai, other]), ai)).toBeUndefined();
+    expect(resolveOpponent(w([ai, other]), ai, CFG)).toBeUndefined();
     const p = aiTank(3, 'player', { x: 5, y: 0 });
-    expect(resolveOpponent(w([ai, other, p]), ai)?.kind).toBe('player');
+    expect(resolveOpponent(w([ai, other, p]), ai, CFG)?.kind).toBe('player');
   });
 
-  it('gives every AI the same answer today -- the symmetry #359 replaces with a seeded tie-break', () => {
-    // Two AIs, two players. Both AIs converge on the same target, which is what "prevents
-    // believable pressure distribution" means in the issue. Asserted so the fix is a
-    // change to a stated expectation rather than to an absence.
-    const a1 = aiTank(1, 'grey', { x: 0, y: 0 });
-    const a2 = aiTank(2, 'teal', { x: 20, y: 20 });
-    const p1 = aiTank(3, 'player', { x: 10, y: 0 });
-    const p2 = aiTank(4, 'player', { x: 21, y: 20 });
-    const world = w([a1, a2, p1, p2]);
-    expect(resolveOpponent(world, a1)?.id).toBe(p1.id);
-    // a2 is adjacent to p2 and still targets p1.
-    expect(resolveOpponent(world, a2)?.id).toBe(p1.id);
+  it('prefers the COMMITTED target over anything the fallback would pick', () => {
+    // The committed id is the whole point of the function: a tank carrying one must read it
+    // back even when a fresh selection would choose differently. Without this, stickiness
+    // would live only in commitTarget and any call site could silently disagree with it.
+    const preferred = CFG.ai.preferredDistance;
+    const committedTo = aiTank(3, 'player', { x: preferred * 3, y: 0 });
+    const wouldPick = aiTank(2, 'player', { x: preferred, y: 0 });
+    const ai = aiTank(1, 'grey', { x: 0, y: 0 }, { aiTargetId: 3, aiTargetTicks: 30 });
+    const world = w([ai, wouldPick, committedTo]);
+    expect(resolveOpponent(world, ai, CFG)?.id).toBe(committedTo.id);
+    // ...and with no commitment, the fallback is what answers.
+    const fresh = aiTank(1, 'grey', { x: 0, y: 0 });
+    expect(resolveOpponent(w([fresh, wouldPick, committedTo]), fresh, CFG)?.id).toBe(wouldPick.id);
+  });
+
+  it('two AIs at the same spot no longer converge on one player by construction', () => {
+    // The symmetry the old policy had by definition. The seeded tie-break is per-AI, so two
+    // tanks in identical positions may differ; ai/target-selection.test.ts owns the
+    // distribution assertion, this one just states the symmetry is gone as a guarantee.
+    const preferred = CFG.ai.preferredDistance;
+    const p1 = aiTank(3, 'player', { x: -preferred, y: 0 });
+    const p2 = aiTank(4, 'player', { x: preferred, y: 0 });
+    const picks = new Set<number | undefined>();
+    for (let id = 1; id <= 12; id++) {
+      const ai = aiTank(id, 'grey', { x: 0, y: 0 });
+      picks.add(resolveOpponent(w([ai, p1, p2]), ai, CFG)?.id);
+    }
+    expect(picks).toEqual(new Set([p1.id, p2.id]));
   });
 });

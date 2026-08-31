@@ -106,7 +106,14 @@ describe('shot-type weights gate what teal attempts (tealDecision)', () => {
     const { teal, w } = bankFixture();
     const d = tealDecision(w, teal, withAi(configFor('teal'), { bankShotWeight: 0 }));
     expect(d.fire).toBe(false);
-    expect(d.nextState).toBe('reposition');
+    // `hasSolution`, not `nextState`, is the discriminator now. This fixture hides the
+    // player behind cover, and since issue #359 a profile that cannot bank cannot PERCEIVE
+    // an opponent it has no line to -- so teal reaches its no-target branch ('idle') rather
+    // than its repositioning one. Both mean "no fire" here; hasSolution states the reason
+    // directly and does not move if that branch is relabelled.
+    expect(d.hasSolution).toBe(false);
+    // It keeps roaming either way: the no-target branch is not a freeze.
+    expect(d.desiredMove).not.toEqual({ x: 0, y: 0 });
   });
 
   it('directShotWeight 0 deletes the direct shot: clear LOS, no fire', () => {

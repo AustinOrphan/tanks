@@ -95,7 +95,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // function, which is what lets the deferred multi-player policy -- a per-AI commitment
   // window, a seeded tie-break, a perception bound -- land in ONE place. Still returns the
   // first alive player-kind tank today, so this extraction moves no behaviour.
-  const player = resolveOpponent(world, tank);
+  const player = resolveOpponent(world, tank, cfg);
   if (!player) {
     // No target, but Teal is the MOBILE personality (spec §7): keep roaming, exactly as
     // Grey does in the same situation. Freezing at {0,0} here made Teal a stationary

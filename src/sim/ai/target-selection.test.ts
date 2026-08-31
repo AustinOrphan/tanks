@@ -49,18 +49,34 @@ describe('committed opponent selection', () => {
     expect(checked).toBe(TANK_KINDS.length);
   });
 
-  it('acquires only what it can SEE, and reports the reason', () => {
-    const ai = tank(1, 'grey', { x: 0, y: 0 });
+  it('acquires only what it can SEE, for a profile that does not bank', () => {
+    // BROWN, not grey, and the choice is the test. `perceives` treats a banking profile as
+    // perceiving what it could bank at -- indirect fire is that role's whole identity -- so
+    // grey (bankShotWeight 0.1) sees through walls by design and cannot show this bound at
+    // all. brown's STATIC_BASIC banks at weight 0, so it is the profile the rule bites on.
+    expect(configFor('brown').ai.bankShotWeight).toBe(0);
+    const ai = tank(1, 'brown', { x: 0, y: 0 });
     const seen = tank(2, 'player', { x: 9, y: 0 });
     const w = world([ai, seen]);
     expect(commitTarget(w, ai)).toBe('acquired');
-    expect(resolveOpponent(w, ai)?.id).toBe(2);
+    expect(resolveOpponent(w, ai, configFor('brown'))?.id).toBe(2);
 
     // The same opponent, behind a wall, is not acquirable at all.
-    const blind = tank(1, 'grey', { x: 0, y: 0 });
+    const blind = tank(1, 'brown', { x: 0, y: 0 });
     const w2 = world([blind, tank(2, 'player', { x: 9, y: 0 })], { walls: [wall(3, -3, 4, 3)] });
     expect(commitTarget(w2, blind)).toBe(null);
-    expect(resolveOpponent(w2, blind)).toBeUndefined();
+    expect(resolveOpponent(w2, blind, configFor('brown'))).toBeUndefined();
+  });
+
+  it('a BANKING profile is allowed to select what it cannot see, and that is deliberate', () => {
+    // The counterpart, asserted rather than left implicit: the same geometry that hides an
+    // opponent from brown does not hide it from grey. Recorded because it makes rule 1's
+    // perception bound nearly inert for banking profiles -- a real limitation that wants a
+    // perception model with memory (#372), not a tighter predicate.
+    expect(configFor('grey').ai.bankShotWeight).toBeGreaterThan(0);
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const w = world([grey, tank(2, 'player', { x: 9, y: 0 })], { walls: [wall(3, -3, 4, 3)] });
+    expect(commitTarget(w, grey)).toBe('acquired');
   });
 
   it('holds one opponent for the whole span, THROUGH a sight break', () => {
@@ -92,7 +108,7 @@ describe('committed opponent selection', () => {
     a.alive = false;
     expect(commitTarget(w, ai)).toBe('target-lost');
     expect(ai.aiTargetId).toBeUndefined();
-    expect(resolveOpponent(w, ai)).toBeUndefined();
+    expect(resolveOpponent(w, ai, configFor('grey'))).toBeUndefined();
   });
 
   it('never leaves a live AI pointed at a corpse', () => {
@@ -100,7 +116,7 @@ describe('committed opponent selection', () => {
     // in the SAME tick than the commitment was written.
     const ai = tank(1, 'grey', { x: 0, y: 0 }, { aiTargetId: 2, aiTargetTicks: 50 });
     const dead = tank(2, 'player', { x: 9, y: 0 }, { alive: false });
-    expect(resolveOpponent(world([ai, dead]), ai)).toBeUndefined();
+    expect(resolveOpponent(world([ai, dead]), ai, configFor('grey'))).toBeUndefined();
   });
 
   it('prefers the opponent nearest the profile PREFERRED range, not the nearest one', () => {
