@@ -139,15 +139,29 @@ function identityColor(slot: number): number {
  * `IDENTITY_COLOR_FALLBACK` -- white, which is also the unstyled-slot placeholder -- so a
  * 2v1v1 match rendered one whole side as "no identity".
  *
- * The third hue was picked by MEASUREMENT, not by eye like the first two: `#ff4fd8` is the
- * candidate whose worst-case RGB distance to anything it must not be confused with is
- * largest (107, against the purple identity ring `0x9d3bff`). Amber and gold sat 28-36 from
- * the yellow tank; violet sat 29 from that same ring. A vivid red/blue/magenta trio, verified distinct
+ * The third hue was picked by MEASUREMENT, and the first measurement was WRONG in a way
+ * worth recording. Ranking candidates by RGB distance chose a magenta `#ff4fd8`, which
+ * sits 97 away from everything -- and only **10 degrees of hue** from `UNSTYLED_SLOT_HEX`.
+ * This file's own note on `IDENTITY_RING_COLORS` above already says that ~320-330 degree
+ * territory is spoken for, and that slot 3's hue was moved off it for exactly that reason.
+ * RGB distance is the wrong metric here; HUE SEPARATION is the one the palette is actually
+ * reasoned about in.
+ *
+ * Re-picked on that basis: the largest unoccupied hue gap among the saturated colours is 78
+ * degrees, between olive (75) and the green tank (154). `#4eff3b` sits at its midpoint, 39
+ * degrees from the nearest saturated neighbour, and carries the SAME saturation and value
+ * as the two existing team hues (0.77 / 1.00) so the trio reads as one set.
+ *
+ * RED AND GREEN IS THE WORST PAIR FOR A DEUTERANOPE, and that is accepted rather than
+ * overlooked: the constraint set leaves no hue that is both well separated here and
+ * colour-blind-safe against red. It is why `TEAM_LABELS` exists and why the stock readout
+ * carries the letter -- the issue requires the reinforcement precisely so the hue is not
+ * load-bearing on its own. A vivid red/blue/green trio, verified distinct
  * from every roster colour, both identity-ring hues and the unstyled-slot placeholder
  * by entities.test.ts's sweep -- same reuse-the-mechanism, new-colour-source shape PR1
  * itself used for IDENTITY_RING_COLORS' own placeholder swatch.
  */
-export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0xff4fd8];
+export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];
 
 /**
  * Single letters for the same three sides, and the reason they exist (issue #281).
