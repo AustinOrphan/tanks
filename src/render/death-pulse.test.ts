@@ -280,3 +280,75 @@ describe('death pulse: dispose', () => {
     expect(scene.children.length).toBe(0);
   });
 });
+
+describe('death pulse under the reduced-motion policy (issue #289)', () => {
+  /** Drive one ring to the given fraction of its life and report scale + opacity. */
+  function ringAfter(reduced: boolean, seconds: number) {
+    const { scene, dp } = setup();
+    const deadTank = makeTank(1, 'player', 5, 8, { controlledBy: 0, alive: false });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 8 }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [deadTank], spawns, lives: 3 });
+    dp.setReducedMotion(reduced);
+    dp.spawn([destroyedEvent(1, 'player', 5, 8)], world, { enemyEnabled: false });
+    dp.update(seconds);
+    const ring = deathRings(scene)[0];
+    return ring
+      ? { scale: ring.scale.x, opacity: ring.material.opacity, present: true }
+      : { scale: 0, opacity: 0, present: false };
+  }
+
+  it('stops the ring EXPANDING, and keeps it fading', () => {
+    const full = ringAfter(false, 0.15);
+    const reduced = ringAfter(true, 0.15);
+    // Full motion grows the shockwave...
+    expect(full.scale).toBeGreaterThan(1);
+    // ...reduced holds it at its spawn size, which is the "static or opacity-based
+    // alternative" the issue asks for in place of nonessential movement.
+    expect(reduced.scale).toBe(1);
+    // The fade is the SAME in both: it is what still communicates the death, so reduced
+    // motion must not also remove it. Asserted as equality, not merely "less than 1" --
+    // a reduced policy that quietly shortened the fade would be a different effect, not
+    // a calmer one.
+    expect(reduced.opacity).toBeCloseTo(full.opacity, 12);
+    expect(reduced.opacity).toBeLessThan(1);
+    expect(reduced.present).toBe(true);
+  });
+
+  it('is FULL motion until told otherwise, so the policy is opt-in', () => {
+    // A system nobody configured must behave exactly as it did before issue #289.
+    const { scene, dp } = setup();
+    const deadTank = makeTank(1, 'player', 5, 8, { controlledBy: 0, alive: false });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 8 }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [deadTank], spawns, lives: 3 });
+    dp.spawn([destroyedEvent(1, 'player', 5, 8)], world, { enemyEnabled: false });
+    dp.update(0.15);
+    expect(deathRings(scene)[0].scale.x).toBeGreaterThan(1);
+  });
+
+  it('takes the policy MID-FLIGHT, not only at the next death', () => {
+    // `'system'` follows the OS, which can change with the page open, so a ring already
+    // in the air has to stop growing rather than finish its expansion.
+    const { scene, dp } = setup();
+    const deadTank = makeTank(1, 'player', 5, 8, { controlledBy: 0, alive: false });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 8 }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [deadTank], spawns, lives: 3 });
+    dp.spawn([destroyedEvent(1, 'player', 5, 8)], world, { enemyEnabled: false });
+    dp.update(0.05);
+    const grown = deathRings(scene)[0].scale.x;
+    expect(grown).toBeGreaterThan(1);
+    dp.setReducedMotion(true);
+    dp.update(0.05);
+    expect(deathRings(scene)[0].scale.x).toBe(1); // snapped back to static, not still growing
+  });
+
+  it('recycles on the same frame either way: the policy changes look, not lifetime', () => {
+    // The ring's life is its own clock. If reduced motion also changed when a ring
+    // expired, two players on the same seed would see deaths clear at different times --
+    // a presentation preference leaking into pacing.
+    for (const seconds of [0.4, 1.0, 2.0]) {
+      const full = ringAfter(false, seconds);
+      const reduced = ringAfter(true, seconds);
+      expect(reduced.present).toBe(full.present);
+    }
+  });
+});
