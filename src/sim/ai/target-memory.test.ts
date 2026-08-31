@@ -5,6 +5,12 @@
 // target is NOW. That last case is why the fixtures below move the target while it is out of
 // sight; a memory that tracked it would be indistinguishable from one that did not, in any
 // fixture where the target stands still.
+//
+// ONE MUTATION SURVIVES THIS FILE, and it is equivalent rather than uncovered: storing
+// `target.pos` by reference instead of a snapshot. Every position write in the simulation
+// REPLACES the vector (`tank.pos = vadd(...)`, `t.pos = { ...s.pos }`) rather than mutating
+// `.x`/`.y`, so a held reference never observes a later move. The snapshot stays because the
+// alternative depends on a convention enforced nowhere near this file.
 import { describe, it, expect } from 'vitest';
 import { updateTargetMemory, rememberedContact, memoryAim } from './target-memory';
 import { AI_LAST_SEEN_TICKS } from '../constants';
@@ -150,13 +156,24 @@ describe('memory through the pipeline', () => {
 
     const enemies = w.tanks.filter((t) => t.kind !== 'player');
     expect(enemies.length).toBeGreaterThan(0);
-    // At least one enemy has seen the player by now and is carrying a contact -- which can
-    // only be true if stepAi calls the updater AND the clone preserves it across ticks.
     const remembering = enemies.filter((t) => t.aiLastSeenPos !== undefined);
     expect(remembering.length).toBeGreaterThan(0);
-    for (const e of remembering) {
-      expect(e.aiLastSeenTicks).toBeGreaterThan(0);
-      expect(e.aiLastSeenTicks).toBeLessThanOrEqual(AI_LAST_SEEN_TICKS);
+
+    // PERSISTENCE needs a memory that has AGED, and that is a separate claim from one that
+    // merely exists. `updateTargetMemory` runs every tick, so a build whose clone dropped
+    // the fields would re-record a full-span contact immediately and satisfy the check
+    // above -- measured: that mutation survives it. A tick count strictly below the span can
+    // only be reached by surviving a tick without a refresh.
+    let aged = 0;
+    for (let i = 0; i < 240; i++) {
+      w = step(w, idle).world;
+      for (const e of w.tanks) {
+        if (e.kind === 'player' || e.aiLastSeenPos === undefined) continue;
+        if ((e.aiLastSeenTicks ?? 0) < AI_LAST_SEEN_TICKS) aged++;
+        expect(e.aiLastSeenTicks).toBeGreaterThan(0); // never carried at or below zero
+        expect(e.aiLastSeenTicks).toBeLessThanOrEqual(AI_LAST_SEEN_TICKS);
+      }
     }
+    expect(aged).toBeGreaterThan(0);
   });
 });

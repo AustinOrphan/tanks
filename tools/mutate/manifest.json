@@ -2837,5 +2837,53 @@
       "src/game/hud.test.ts"
     ],
     "why": "Issue #268 requires each displayed limit to come from the field the simulation actually enforces -- dropMine gates on cfg.mineCapacity, spawnBullet on cfg.weapon.maxActiveProjectiles -- so a line that read one field twice would be right about shells and silently wrong about mines. Note the OTHER drift this issue names, a hardcoded literal, cannot be pinned here: 5 and 2 are today's shipped values, so a literal agrees with config and SURVIVES. That half is proven instead by editing tank-defs.json to 3/1, where the derived line follows and a hardcoded one fails; the run is recorded on the PR."
+  },
+  {
+    "id": "last-seen-memory-tracks-the-live-target",
+    "file": "src/sim/ai/target-memory.ts",
+    "find": "  if (lineOfSight(tank.pos, target.pos, world.walls)) {",
+    "replace": "  if (true) {",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "The omniscience mutation, and the one thing issue #372 forbids outright: refreshing the remembered point without checking line of sight turns a memory of where the target WAS into a live read of where it IS. Invisible in any fixture where the target stands still, which is why the cases here move it while hidden."
+  },
+  {
+    "id": "last-seen-memory-never-expires",
+    "file": "src/sim/ai/target-memory.ts",
+    "find": "  tank.aiLastSeenTicks = Math.max(0, (tank.aiLastSeenTicks ?? 0) - 1);",
+    "replace": "  tank.aiLastSeenTicks = Math.max(1, (tank.aiLastSeenTicks ?? 0));",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "A memory that never ages is a permanent contact: the tank keeps its turret on a point it observed once and never hands off to issue #371's search, which is the 'bounded' half of #372's title."
+  },
+  {
+    "id": "last-seen-memory-not-wired-into-stepai",
+    "file": "src/sim/ai/index.ts",
+    "find": "    updateTargetMemory(world, tank, resolveOpponent(world, tank, configFor(tank.kind)));",
+    "replace": "    void updateTargetMemory;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "Pins the WIRING, not the module. Every unit case in target-memory.test.ts drives updateTargetMemory directly and passes in full while stepAi never calls it, leaving the shipped game with no memory at all and every blind tank falling straight through to search."
+  },
+  {
+    "id": "clone-drops-the-remembered-contact",
+    "file": "src/sim/world.ts",
+    "find": "    ...(t.aiLastSeenPos ? { aiLastSeenPos: { ...t.aiLastSeenPos } } : {}),",
+    "replace": "    aiLastSeenPos: undefined,",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "step() clones the world every tick, so a field the clone drops is a field that cannot outlive one tick. Subtle because updateTargetMemory re-records immediately: a dropped memory looks present at any single instant, and only a tick count that has AGED below the full span proves it survived a tick without refresh."
   }
 ]
