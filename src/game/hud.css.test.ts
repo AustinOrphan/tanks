@@ -638,7 +638,11 @@ describe('hud.css is syntactically whole', () => {
     // removed from the DOM -- this fixture never calls setSessionKind('versus'), so it
     // stays hidden throughout, exactly like .hud-continue/.hud-new-game/
     // .hud-versus-open above ALREADY are counted here whether shown or not.
-    expect(buttons.length).toBe(86);
+    // 89 since issue #267: three difficulty buttons on the versus pane's one bot slot
+    // (`defaultSlots(2)` is `[human, bot]`). They carry `.ui-btn`/`.ui-btn--sm`, so they
+    // are inside this sweep rather than falling through to browser default styling --
+    // which is exactly what the sweep is for.
+    expect(buttons.length).toBe(89);
     expect(unstyled).toEqual([]);
 
     dispose();
