@@ -135,6 +135,8 @@ export const MOMENT_IDS = [
   // Issue #359's artefact capture: two AIs each holding their own committed opponent
   // while both opponents cross the board.
   'ai-commitment',
+  // The same issue's other half: the AI letting go, 37 ticks after a better target appeared.
+  'ai-retarget',
 ];
 
 /**

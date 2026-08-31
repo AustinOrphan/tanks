@@ -1119,6 +1119,86 @@ export const MOMENTS: Record<string, MomentDef> = {
       input2: (t: number) => (t >= 25 ? run(13.6, -1) : hold(13.6, -1)),
     };
   })(),
+
+  /**
+   * Issue #359's other half: the RETARGET. `ai-commitment` above shows an AI refusing to
+   * be pulled off its committed opponent; this shows the same rule letting go.
+   *
+   * Both halves are the same mechanism seen from opposite sides, and neither is legible
+   * without the other -- a turret that never switches looks stubborn rather than
+   * committed, and one that switches looks like it is simply chasing the best target.
+   * What makes it a COMMITMENT is the gap between "a better target exists" and "the AI
+   * acts on it", and that gap is what this moment measures.
+   *
+   * MEASURED (throwaway vite-node probe, duplicate fixture, deleted before commit). One
+   * brown at the origin, preferred distance 10; the held player drives AWAY from that
+   * band while the challenger drives INTO it:
+   *
+   *   tick   1   commits to player 2 -- cost 0.66 against the challenger's 4.80
+   *   tick  55   THE CHALLENGER BECOMES CHEAPER (2.42 against 2.81) and stays cheaper
+   *   ..91       the AI holds player 2 anyway, for 37 more ticks
+   *   tick  92   switches to player 3, the first tick the span allows it: costs are
+   *              4.09 against 1.24, a gap of 2.85 over AI_TARGET_SWITCH_MARGIN's 2
+   *   ..140      turret swings 25.8deg (tick 91) to 108.1deg (tick 130)
+   *
+   * THOSE 37 TICKS ARE THE ARTEFACT. A per-tick target solve switches at 55. A committed
+   * one cannot even look until its span expires, and `commitTarget` then still requires
+   * the challenger to win by a margin rather than by a hair. Both rules are visible here
+   * as one continuous half-second of the turret staying put while the better target is
+   * already on screen.
+   *
+   * BOTH PLAYERS DRIVE EAST, which is why they never collide despite sharing a lane: they
+   * start 19.5 units apart and move in parallel. `ai-commitment`'s first draft put two
+   * players on a collision course down one lane and they bounced apart halfway.
+   *
+   * 140 TICKS. Shots leave at 50, 90 and 130 -- brown's reaction gate again, unavoidable
+   * with continuous sight -- and MEASURED, nothing connects: extending this same fixture
+   * to 200 ticks adds only a fourth `fire` at 170 and still no `tank-destroyed`. The
+   * targets are 10-16 units out and a shell covers 0.1 units a tick, so every shot here
+   * is still in flight when the clip ends.
+   */
+  'ai-retarget': (() => {
+    const AI = { x: 0, y: 0 };
+    const HELD = { x: 7, y: 8 };
+    const CHALLENGER = { x: -12.5, y: 8 };
+    const EAST: InputState = { move: { x: 1, y: 0 }, aim: { x: 1000, y: 8 }, fire: false, mine: false };
+    return {
+      ticks: 140,
+      expect: [
+        { type: 'fire' as const, tick: 50 },
+        { type: 'fire' as const, tick: 90 },
+        { type: 'fire' as const, tick: 130 },
+      ],
+      // Wide on purpose: the mechanic IS distance, so the frame has to hold a tank at 10
+      // units and another at 16 at the same time. Centred between the AI and the lane.
+      focus: [0.5, 0.3, 4.2], span: 21,
+      build: () => {
+        const w = createWorld({
+          walls: [],
+          spawns: [
+            { kind: 'brown', pos: { ...AI }, angle: 0 },
+            { kind: 'player', pos: { ...HELD }, angle: 0 },
+            { kind: 'player', pos: { ...CHALLENGER }, angle: 0 },
+          ],
+          lives: 9,
+          tanks: [
+            { id: 1, kind: 'brown', pos: { ...AI }, bodyAngle: 0, turretAngle: 1.0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            { id: 2, kind: 'player', pos: { ...HELD }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            { id: 3, kind: 'player', pos: { ...CHALLENGER }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+          ],
+          seed: 7,
+        });
+        // Same round-start landmine every other moment here documents.
+        w.roundStartTick = -600;
+        return w;
+      },
+      input: () => EAST,
+      input2: () => EAST,
+    };
+  })(),
 };
 
 /**

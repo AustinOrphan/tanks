@@ -617,3 +617,69 @@ describe('ai-commitment moment specifics', () => {
     expect(tl.events.flat().map((e) => e.type).filter((t) => t !== 'fire')).toEqual([]);
   });
 });
+
+
+describe('ai-retarget moment specifics', () => {
+  const DEF = MOMENTS['ai-retarget'];
+  const deg = (r: number) => (r * 180) / Math.PI;
+  const PREFERRED = 10; // STATIC_BASIC's preferredDistance; the fixture is built around it
+  const cost = (w: World, i: number) => Math.abs(Math.hypot(w.tanks[i].pos.x, w.tanks[i].pos.y) - PREFERRED);
+
+  it('holds the committed target for 37 ticks AFTER a cheaper one is available', () => {
+    // The whole artefact, and the one number that distinguishes a commitment from a
+    // per-tick solve. Derived from the timeline, not hardcoded: a re-tuned
+    // targetCommitmentTime moves the switch and this reports the new gap rather than
+    // reddening on a stale constant.
+    const tl = simulateMoment(DEF);
+    const first = (pred: (t: number) => boolean) => {
+      for (let t = 1; t <= DEF.ticks; t++) if (pred(t)) return t;
+      return -1;
+    };
+    const held = tl.worlds[1].tanks[0].aiTargetId;
+    const cheaper = first((t) => cost(tl.worlds[t], 2) < cost(tl.worlds[t], 1));
+    const switched = first((t) => tl.worlds[t].tanks[0].aiTargetId !== held);
+    expect(cheaper).toBeGreaterThan(0);
+    expect(switched).toBeGreaterThan(cheaper);
+    // MEASURED: cheaper at 55, switch at 92 -- a 37-tick hold. Asserted as a substantial
+    // gap rather than as 37 exactly, because the exact figure is a function of
+    // targetCommitmentTime and of how fast the players close, neither of which this
+    // moment is about. A per-tick target solve switches ON the tick it becomes cheaper,
+    // which makes this gap 0 and reds the line.
+    expect(switched - cheaper).toBeGreaterThan(20);
+  });
+
+  it('switches to the challenger, not to nothing, and stays switched', () => {
+    const tl = simulateMoment(DEF);
+    const held = tl.worlds[1].tanks[0].aiTargetId;
+    const end = tl.worlds[DEF.ticks].tanks[0].aiTargetId;
+    expect(held).toBe(2);
+    expect(end).toBe(3);
+    // Not a flicker: once it moves it stays for the rest of the clip. A target that
+    // oscillated would satisfy "held !== end" while being exactly the thrash #359 forbids.
+    let changes = 0;
+    for (let t = 2; t <= DEF.ticks; t++) {
+      if (tl.worlds[t].tanks[0].aiTargetId !== tl.worlds[t - 1].tanks[0].aiTargetId) changes++;
+    }
+    expect(changes).toBe(1);
+  });
+
+  it('the turret actually swings when it lets go, so the switch is on screen', () => {
+    // Bookkeeping is not evidence: the target id changing without the turret moving would
+    // be a clip of nothing happening. MEASURED: 25.8deg at tick 91, 108.1deg at 130.
+    const tl = simulateMoment(DEF);
+    const at = (t: number) => deg(tl.worlds[t].tanks[0].turretAngle);
+    const held = tl.worlds[1].tanks[0].aiTargetId;
+    let switched = -1;
+    for (let t = 2; t <= DEF.ticks; t++) if (tl.worlds[t].tanks[0].aiTargetId !== held) { switched = t; break; }
+    expect(Math.abs(at(DEF.ticks) - at(switched - 1))).toBeGreaterThan(60);
+  });
+
+  it('nothing connects: the clip is shots-in-flight only', () => {
+    // 140 is chosen for this. Every target sits 10-16 units out and a shell covers 0.1
+    // units a tick, so nothing fired here can arrive before the clip ends -- MEASURED by
+    // extending the same fixture to 200 ticks, which adds a fourth fire at 170 and still
+    // no tank-destroyed. A death would reset a position AND roundStartTick mid-clip.
+    const tl = simulateMoment(DEF);
+    expect(tl.events.flat().map((e) => e.type).filter((t) => t !== 'fire')).toEqual([]);
+  });
+});
