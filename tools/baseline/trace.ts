@@ -407,10 +407,21 @@ import { step } from '../../src/sim/world';
  * place. Both changes move this same hash independently, which is the case #456's own note
  * warned about -- and this is it happening.
  *
+ * 2026-08-31, issue #372 gave the AI a bounded memory of where it last SAW its committed
+ * target, so a tank that has lost sight looks at that point instead of falling straight
+ * through to #371's search.
+ *
+ * RECOMPUTED TWICE while this branch waited, and that is the pattern rather than an
+ * accident: #456 (the full-awareness ruling) and #451 (the shell-cap refusal cooldown) each
+ * moved this same pin while this PR was open, and a hash measured against either earlier
+ * tree is simply wrong for the merged one. Take main's version of this file on every rebase
+ * and re-measure -- never reconcile two hashes.
+ *
  * No existing arena's simulation moved on any of the first three occasions, on the fourth
  * exactly one did and it is named above, on the fifth every arena's turret track did, on
  * the sixth five runs' timing did, and on the seventh five runs' timing moved back.
  * Previous values, newest first:
+ * 64013a606e3dce459ff04d01e4364be477e340ae9b287c14cf865c9e16e7d85a
  * b7e8b2aa567be37d7bf6a84cc920b4dfe6a438503f8a3acb7df09d7739f0c583
  * 1ec4ad63d5a05699b5d16f37bd1d5f114f52284ad654103d2a6f4e8f0cf5cf06
  * b7e8b2aa567be37d7bf6a84cc920b4dfe6a438503f8a3acb7df09d7739f0c583
@@ -420,7 +431,7 @@ import { step } from '../../src/sim/world';
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = '64013a606e3dce459ff04d01e4364be477e340ae9b287c14cf865c9e16e7d85a';
+export const BASELINE_HASH = '8584bf34ddca8347c7fe9f3c8bdbdd5b43c292c06c7af214398884d44edc50be';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

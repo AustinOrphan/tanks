@@ -203,6 +203,11 @@ function cloneTank(t: Tank): Tank {
     pos: { ...t.pos },
     desiredMove: { ...t.desiredMove },
     activeMineIds: [...t.activeMineIds],
+    // Deep-copied like pos/desiredMove above, not left to the spread. Nothing mutates a
+    // remembered contact in place today -- ai/target-memory.ts always assigns a fresh
+    // object -- but every other object field here is copied, and a shallow one would make
+    // the first in-place edit alias the memory across every clone of the world.
+    ...(t.aiLastSeenPos ? { aiLastSeenPos: { ...t.aiLastSeenPos } } : {}),
   };
 }
 
