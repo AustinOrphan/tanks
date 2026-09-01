@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { createAppShell, type AppShell } from './app-shell';
+import { createAppShell, createBrowserAppShell, type AppShell } from './app-shell';
 import { createAppSettings, type AppSettings } from './app-settings';
 import { createMemoryStorage, createStores } from './storage';
 import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIES } from './capabilities';
-import { RENDER_CAPABILITY_SUPPORTED, type RenderCapability } from './render-capability';
+import {
+  probeRenderCapability,
+  RENDER_CAPABILITY_SUPPORTED,
+  type RenderCapability,
+} from './render-capability';
 import { createBrowserDeps } from './loop';
 import type { AudioEngine } from '../audio/engine';
 
@@ -171,5 +175,40 @@ describe('createAppShell: the retained render capability (issue #470)', () => {
     const { shell } = build('production', answer);
     shell.dispose();
     expect(shell.render).toBe(answer);
+  });
+});
+
+/**
+ * The one line in this module that runs the REAL probe (issue #470).
+ *
+ * Everything above injects the answer, which is what makes those cases readable without a
+ * GPU -- and is exactly why none of them can see whether `createBrowserAppShell` ever asks.
+ * `createBrowserAppShell` is production-only wiring: `main.ts` names it and
+ * `createBrowserDeps` defaults to it, and no other test in this repo constructs it, so
+ * before this case a shell that assumed support shipped with the whole suite green. That
+ * is the same class as `devflags-developer-mode-gate-always-off` -- a gate that goes
+ * permanently one way for the real browser while nothing fails.
+ */
+describe('createBrowserAppShell: the one real probe on the page (issue #470)', () => {
+  /**
+   * jsdom genuinely has no WebGL -- render-capability.test.ts's 'runs against a real
+   * document and reports this environment unsupported' establishes that against the same
+   * environment -- so a shell that really probed cannot report support here.
+   *
+   * Would fail if the wiring hardcoded an answer instead of calling the probe: a literal
+   * `{ webgl2: true, failure: null }` on that line reads as SUPPORTED in an environment
+   * that demonstrably is not, which in a real unsupported browser would sail past
+   * `boot.ts`'s gate and put the player back on the pre-#470 path -- a canvas, a session
+   * and a world built before `THREE.WebGLRenderer` throws.
+   */
+  it('takes a real reading rather than assuming the browser can render', () => {
+    const shell = createBrowserAppShell();
+    try {
+      expect(shell.render).toEqual(probeRenderCapability());
+      expect(shell.render.webgl2).toBe(false);
+      expect(shell.render.failure).toBe('no-webgl2');
+    } finally {
+      shell.dispose();
+    }
   });
 });
