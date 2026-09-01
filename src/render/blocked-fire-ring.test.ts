@@ -99,6 +99,30 @@ describe('blocked-fire ring (issue #356)', () => {
     expect(r.material.opacity).toBeLessThan(1);
   });
 
+  it('snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight', () => {
+    // The case the test above cannot see: it sets the preference BEFORE spawning, so it
+    // passes whether `update` skips the scale term or applies a rest scale. The preference
+    // is a live media query and can flip while a ring is in the air.
+    //
+    // Negative control: restoring `if (!reducedMotion) r.mesh.scale.setScalar(...)` fails
+    // this. That guard freezes the ring at its current scale -- so it stops contracting
+    // rather than reaching rest, and stays visibly oversized for the rest of its life.
+    const scene = new THREE.Scene();
+    const sys = createBlockedFireRingSystem(scene);
+    sys.spawn([blocked(1)], world([tank(1, 'player')]), 'ring');
+    const r = rings(scene)[0] as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+    sys.update(0.06);
+    const midFlight = r.scale.x;
+    expect(midFlight).toBeGreaterThan(1);
+
+    sys.setReducedMotion(true);
+    sys.update(0.06);
+    expect(r.scale.x).toBe(1);
+    // Still a cue, still fading: reduced motion removes the travel, not the information.
+    expect(r.material.opacity).toBeLessThan(1);
+    expect(rings(scene)).toHaveLength(1);
+  });
+
   it('dispose empties the scene', () => {
     const scene = new THREE.Scene();
     const sys = createBlockedFireRingSystem(scene);

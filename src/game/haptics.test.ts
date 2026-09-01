@@ -15,6 +15,7 @@ import {
   BLOCKED_FIRE_PATTERN_MS,
 } from './haptics';
 import type { SimEvent } from '../sim/events';
+import { BLOCKED_FIRE_CUES, type BlockedFireCue } from './devflags';
 
 /** Records every call, and always reports success -- a fake device that never refuses. */
 function fakeVibrate(): { vibrate: VibrateFn; calls: Array<number | number[]> } {
@@ -357,7 +358,7 @@ describe('blocked-fire cue (issue #356, first arm)', () => {
 describe('blocked-fire cue: the arms are separable (issue #356)', () => {
   const blocked = (ownerId: number): SimEvent =>
     ({ type: 'fire-blocked', ownerId, reason: 'shell-cap' }) as SimEvent;
-  const buzzed = (cue: 'haptic' | 'audio' | 'haptic+audio') => {
+  const buzzed = (cue: BlockedFireCue) => {
     const calls: (number | number[])[] = [];
     const d = createHapticsDirector((p) => { calls.push(p); return true; }, 7, { blockedFire: cue });
     d.handle([blocked(7)]);
@@ -372,5 +373,23 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
 
   it('the multimodal arm vibrates AND (see director.test.ts) sounds', () => {
     expect(buzzed('haptic+audio')).toEqual([BLOCKED_FIRE_PATTERN_MS]);
+  });
+
+  it('vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue', () => {
+    // The mirror of director.test.ts's audio table, and the half that makes `ring+audio` a
+    // CHECKED pair rather than a label: it must reach the screen and the speaker and stop
+    // there. Without this row a bundle that also buzzed would pass as "ring plus audio",
+    // and #356 would attribute a preference to the wrong set of channels.
+    const carriesHaptic: Record<BlockedFireCue, boolean> = {
+      haptic: true,
+      audio: false,
+      'haptic+audio': true,
+      ring: false,
+      'ring+audio': false,
+    };
+    expect(Object.keys(carriesHaptic).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
+    for (const [cue, shouldBuzz] of Object.entries(carriesHaptic)) {
+      expect(buzzed(cue as BlockedFireCue)).toEqual(shouldBuzz ? [BLOCKED_FIRE_PATTERN_MS] : []);
+    }
   });
 });

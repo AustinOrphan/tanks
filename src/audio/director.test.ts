@@ -3,6 +3,7 @@ import { createAudioDirector } from './director';
 import type { AudioEngine } from './engine';
 import { DEFAULT_VOLUME } from './manifest';
 import type { SimEvent } from '../sim/events';
+import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../game/devflags';
 
 interface PlayCall {
   key: string;
@@ -193,7 +194,7 @@ describe('mine warning cues (issue #276)', () => {
 describe('blocked-fire cue (issue #356)', () => {
   const blocked = (ownerId: number): SimEvent =>
     ({ type: 'fire-blocked', ownerId, reason: 'shell-cap' }) as SimEvent;
-  const played = (opts?: { blockedFire?: 'haptic' | 'audio' | 'haptic+audio' | null }, owner = 7) => {
+  const played = (opts?: { blockedFire?: BlockedFireCue | null }, owner = 7) => {
     const keys: string[] = [];
     const engine = { play: (k: string) => keys.push(k), stopMusic: () => {}, playMusic: () => {} };
     const d = createAudioDirector(engine as never, 7, opts);
@@ -210,10 +211,35 @@ describe('blocked-fire cue (issue #356)', () => {
     expect(played({ blockedFire: 'audio' })).toEqual(['fire-blocked']);
   });
 
-  it('plays it for the multimodal arm too', () => {
-    // The combination #356 asks for by name. If this arm did not reach BOTH channels it
-    // would be a second single-channel arm wearing a compound label.
+  it('plays it for BOTH multimodal arms', () => {
+    // The combinations #356 asks for by name. If either did not reach BOTH channels it
+    // would be a second single-channel arm wearing a compound label -- which is exactly
+    // what `ring+audio` was: the render side accepted it and the gate here did not, so the
+    // pair drew a ring in silence while the flag advertised a multimodal treatment.
     expect(played({ blockedFire: 'haptic+audio' })).toEqual(['fire-blocked']);
+    expect(played({ blockedFire: 'ring+audio' })).toEqual(['fire-blocked']);
+  });
+
+  it('sounds for EVERY cue carrying `audio`, and for no other -- one row per cue', () => {
+    // Per cue rather than per remembered case. The bug this replaces was not a wrong
+    // branch, it was a missing one: `ring+audio` existed in the union and nothing here
+    // mentioned it, so no assertion could fail. Keying the table off BLOCKED_FIRE_CUES
+    // means a sixth cue cannot be added without stating whether it sounds -- the union
+    // widening fails `Record<BlockedFireCue, boolean>` at compile time, and adding to the
+    // set alone fails the key comparison below.
+    const carriesAudio: Record<BlockedFireCue, boolean> = {
+      haptic: false,
+      audio: true,
+      'haptic+audio': true,
+      ring: false,
+      'ring+audio': true,
+    };
+    expect(Object.keys(carriesAudio).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
+    for (const [cue, shouldSound] of Object.entries(carriesAudio)) {
+      expect(played({ blockedFire: cue as BlockedFireCue })).toEqual(
+        shouldSound ? ['fire-blocked'] : [],
+      );
+    }
   });
 
   it('the arms are SEPARABLE: the haptic arm makes no sound', () => {

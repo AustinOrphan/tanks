@@ -120,7 +120,11 @@ export function createBlockedFireRingSystem(scene: THREE.Scene): BlockedFireRing
       // k runs 0 -> 1 across the life. Scale closes from the overshoot onto the hull and
       // opacity falls with it, so the ring arrives and vanishes rather than lingering.
       const k = 1 - r.life / LIFETIME_SECONDS;
-      if (!reducedMotion) r.mesh.scale.setScalar(1 + OVERSHOOT * (1 - k));
+      // Set the scale on EVERY frame under the CURRENT policy rather than skipping the term
+      // when reduced motion is on. Skipping it froze an already-airborne ring at whatever
+      // scale it had reached when the preference flipped, so a mid-flight toggle left an
+      // oversized ring sitting there for the rest of its life instead of at rest.
+      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + OVERSHOOT * (1 - k));
       r.mesh.material.opacity = 1 - k;
     }
   }

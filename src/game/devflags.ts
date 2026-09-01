@@ -380,10 +380,10 @@ const BACKDROP_TREATMENTS = new Set(['felt']);
 /**
  * Issue #356's candidate blocked-fire cues, named so they can be compared in one session.
  *
- * Three arms so far: `haptic`, `audio`, and `haptic+audio` -- which is the MULTIMODAL
- * combination the issue asks for by name ("compare at least one multimodal combination
- * against the strongest single-channel treatment"). The two channels are deliberately the
- * ones that need no screen space, so they can be judged without the HUD arms existing yet.
+ * `haptic`, `audio`, and `haptic+audio` -- the last being the MULTIMODAL combination the
+ * issue asks for by name ("compare at least one multimodal combination against the
+ * strongest single-channel treatment"). Those two channels are deliberately the ones that
+ * need no screen space, so they can be judged without the HUD arms existing yet.
  *
  * `ring` is the tank-local visual treatment (render/blocked-fire-ring.ts), and
  * `ring+audio` pairs it with the click -- a SECOND multimodal arm, so the issue's
@@ -394,7 +394,14 @@ const BACKDROP_TREATMENTS = new Set(['felt']);
  * for lack of a flag -- the flag is the part every arm shares -- but each needs its own
  * render artefact.
  */
-const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio', 'ring', 'ring+audio']);
+/**
+ * Exported so each channel's suite can assert one row PER CUE rather than per remembered
+ * case. A cue reaches a channel when its name carries that channel, but nothing enforces
+ * that -- every consumer enumerates -- and `ring+audio` shipped silent because the audio
+ * enumeration was the one not updated. The tables in director.test.ts and haptics.test.ts
+ * are keyed off this set, so a sixth cue fails them until its channels are stated.
+ */
+export const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio', 'ring', 'ring+audio']);
 export type BlockedFireCue = 'haptic' | 'audio' | 'haptic+audio' | 'ring' | 'ring+audio';
 
 /** One of the three named presets, or null when absent or unrecognised -- an
