@@ -3043,15 +3043,137 @@
     "why": "The OTHER site that answers `probe-failed`, and the sibling of `render-capability-could-not-ask-reads-as-no-webgl2`. A host that produced no canvas has said nothing about WebGL, so it is the same 'could not ask' case as a throw -- reporting `no-webgl2` here blames the GPU for a host that never handed over an element to ask with. The two sites are one line apart and return byte-identical text, which is why the sibling entry has to anchor on its leading newline and indentation to stay unambiguous, and why neither entry can stand in for the other: this pair exists so that BOTH classification sites carry coverage rather than one being assumed from the other. 1 of 14 in the scoped run -- 'reports probe-failed when the host produces no canvas at all'. The other two `probe-failed` cases keep passing: 'reports probe-failed when createElement itself throws' and 'reports probe-failed, not no-webgl2, when getContext throws' both route to the catch site this entry does not touch. expectFailures counts that scoped run only."
   },
   {
-    "id": "render-capability-resolves-its-host-outside-the-try",
-    "file": "src/game/render-capability.ts",
-    "find": "export function probeRenderCapability(host?: RenderCapabilityHost): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host ?? (globalThis.document as RenderCapabilityHost | undefined);",
-    "replace": "export function probeRenderCapability(\n  host: RenderCapabilityHost = globalThis.document,\n): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host;",
+    "id": "route-host-registers-the-gameplay-handlers-per-session",
+    "file": "src/game/route-host.ts",
+    "find": "      const mine = ++generation;",
+    "replace": "      const mine = ++generation;\n      hud.onMineTap(() => state.mineTap?.());",
+    "expect": "killed",
+    "expectFailures": 4,
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "The defect issue #468 exists to prevent, reintroduced one line lower down: a gameplay handler registered on every `attach()` rather than once at construction. `hud.ts` APPENDS every `on*` callback and has no unregister anywhere -- all 25 of its registration methods are `push(cb)` returning `void` -- so this is additive and silent: after one stop-and-start a single Mine tap presses the mine twice, and a New Game click on the same shape would start two campaign runs. Nothing before this issue could see it, because nothing could stop a session and start another on one HUD. 4 of 423 in the scoped run, and WHICH four is the point: three in route-host.test.ts, whose Proxy HUD APPENDS exactly as the real one does, plus 'a tap after the LAST session reaches nobody' in loop.test.ts. loop.test.ts's own HUD fake REPLACES (`onMineTap = cb`), so it cannot count registrations at all -- which is precisely why route-host.test.ts's fake was written to append. Mutates the Mine handler only; the other six are the same shape and are covered by the one-registration-per-name loop in 'builds exactly one HUD'."
+  },
+  {
+    "id": "route-host-attach-never-fills-the-slot",
+    "file": "src/game/route-host.ts",
+    "find": "      const state: SlotState = {};\n      live = state;",
+    "replace": "      const state: SlotState = {};\n      void state;",
+    "expect": "killed",
+    "expectFailures": 91,
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second."
+  },
+  {
+    "id": "route-host-attach-does-not-invalidate-the-old-slot",
+    "file": "src/game/route-host.ts",
+    "find": "      const mine = ++generation;",
+    "replace": "      const mine = generation;",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "The defect raised by review on PR #474, as the exact code that was there. A default PARAMETER is evaluated in the parameter list, before the function body and therefore outside the try -- so a locked-down context whose `document` getter throws throws out of the probe instead of reporting `probe-failed`, defeating the one distinction this module's return type exists to make. Every other property access here is wrapped for exactly that case, and this was the one that was not. Invisible to every injected-host test by construction: the default is what an injected host BYPASSES, so only a case that drives the real `globalThis.document` through a throwing getter can see it. 1 of 16 -- 'reports probe-failed when reading the default document throws', which was written for this and confirmed to fail against the reverted code before the fix landed. Its sibling 'when there is no document at all' keeps passing under this mutation, because an ABSENT property yields undefined rather than throwing; the two guard different halves and neither stands in for the other.",
     "tests": [
-      "src/game/render-capability.test.ts"
-    ]
+      "src/game/route-host.test.ts"
+    ],
+    "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other."
+  },
+  {
+    "id": "session-teardown-keeps-the-gameplay-slot",
+    "file": "src/game/loop.ts",
+    "find": "      slot.detach();",
+    "replace": "      void slot;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "A session that never gives the slot back. `attach()` replaces `live` on the next session, so a Campaign<->Versus switch still behaves -- what breaks is the LAST session: after the final teardown the trampolines still dispatch into a disposed input controller, renderer and audio director. 1 of 405 in the scoped run, 'a tap after the LAST session reaches nobody, rather than a disposed one'. Its sibling 'a tap reaches the LIVE session once' deliberately survives this and falls to dropping `live = state` from `attach()` instead -- measured both ways, because the two mechanisms back each other up and reading either as the control for both would claim coverage that is not there."
+  },
+  {
+    "id": "route-host-attach-never-resets-the-route",
+    "file": "src/game/route-host.ts",
+    "find": "      if (deps.launchGate.dismissed()) sm.toMainMenu();",
+    "replace": "      void deps.launchGate.dismissed();",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The page-scoped state machine keeps whatever route the OUTGOING session left it on. Before this issue every Campaign<->Versus reboot built a fresh machine, which opened at Main Menu; a machine that now survives the reboot has to do that reset explicitly, or the incoming session is born mid-gameplay -- or at an outcome screen -- having never entered gameplay. That is the 'stale route state' issue #468's acceptance criteria name. 1 of 18, 'resets to Main Menu for a replacement session', which is the only case that drives the machine INTO gameplay before re-attaching."
+  },
+  {
+    "id": "route-host-attach-resets-past-the-launch-gate",
+    "file": "src/game/route-host.ts",
+    "find": "      if (deps.launchGate.dismissed()) sm.toMainMenu();",
+    "replace": "      sm.toMainMenu();",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The opposite error, and the reason the reset is guarded rather than unconditional: resetting on the FIRST attach of a document load skips the Launch splash entirely. That is not merely a missing screen -- the splash gesture is what unlocks the `AudioContext` (see `app-shell.ts`'s own note on ordering), so the menu comes up silent until the player happens to click something. 1 of 18, 'leaves the splash up for the FIRST session of a document load'. Paired with `route-host-attach-never-resets-the-route`: one entry per direction, because a single test cannot fail both ways and an unguarded reset passes the other one."
+  },
+  {
+    "id": "route-host-clears-the-retained-versus-config-on-detach",
+    "file": "src/game/route-host.ts",
+    "find": "        detach(): void {\n          if (!current()) return;\n          live = null;\n        },",
+    "replace": "        detach(): void {\n          if (!current()) return;\n          live = null;\n          versusConfig = null;\n        },",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Clears the retained versus config when a session detaches, so quitting a match empties the Versus Setup form the player filled in. `session-host.ts` retains its own `lastVersusConfig` across a campaign detour for exactly this reason and says so; this is the same fact one layer up, where the pane can actually read it. Silent: the pane still opens, still works, and merely forgets. 1 of 18, 'survives the session that set it' -- the only case that reads the config back AFTER a detach."
+  },
+  {
+    "id": "route-host-snapshots-the-versus-config-instead-of-reading-it-live",
+    "file": "src/game/route-host.ts",
+    "find": "    get initialVersusConfig(): VersusConfig | null {\n      return versusConfig;\n    },",
+    "replace": "    initialVersusConfig: versusConfig,",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Replaces the live getter with a value copied at construction. `route-ui.ts` reads `deps.initialVersusConfig` at CLICK time, and the route host is built before any session exists, so a snapshot is permanently `null`: the Versus Setup pane never prefills at all, for anyone, ever. Compiles cleanly and reads like a simplification, which is what makes it worth pinning. 2 of 18: 'is read LIVE, so a config set after construction reaches the pane' and 'survives the session that set it'. The third case, 'starts null, so a fresh page opens the pane on an empty form', keeps passing by construction -- it asserts the value this mutation hardcodes, which is what makes the trio a real discrimination rather than a single-value echo."
+  },
+  {
+    "id": "route-host-passes-session-scoped-request-seams-to-the-routes",
+    "file": "src/game/route-host.ts",
+    "find": "    requestVersusSession: requests.requestVersusSession,\n    requestCampaignSession: requests.requestCampaignSession,",
+    "replace": "    requestVersusSession: deps.requestVersusSession,\n    requestCampaignSession: deps.requestCampaignSession,",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The route UI's Versus Start and Campaign buttons wired to a SESSION's request callbacks instead of the page-level seam. That is the coupling issue #468 exists to remove -- 'gameplay-starting route actions become explicit application-level requests that do not require dereferencing an existing gameplay session' -- and with eager startup still in place it would look fine in a browser, because a session always happens to exist. It stops working the moment #428 boots into an empty host, which is the point at which it would be hardest to attribute. 3 of 18: the two empty-host request cases and 'keeps reaching the page seam across a session lifecycle'. The fixture makes this loud on purpose -- its session-scoped `requestVersusSession`/`requestCampaignSession` THROW, so a host that forwarded `deps` straight into `createRouteUi` fails rather than quietly recording nothing."
+  },
+  {
+    "id": "route-host-disposal-leaves-the-preview-context-alive",
+    "file": "src/game/route-host.ts",
+    "find": "      routeUi.disposePreview();\n      hud.dispose();",
+    "replace": "      hud.dispose();",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The page teardown disposes the HUD but not the Customize panel's live preview -- a SECOND WebGL context, hanging off an element the HUD owns. `route-ui.ts` documents this page's ceiling as 'peak is two live contexts, never three', and the panel can genuinely still be open at teardown because `boot.ts`'s `pagehide` can fire at any time. Invisible to everything except a disposal count: nothing about the answer, the screen or any later session changes. 1 of 18, 'disposes the HUD and the live preview, and only from here' -- whose other half (that a SESSION teardown disposes neither) is what moved in this issue."
+  },
+  {
+    "id": "boot-builds-the-route-ui-per-session",
+    "file": "src/boot.ts",
+    "find": "      routeHost.dispose();",
+    "replace": "      void routeHost;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one."
   }
 ]
