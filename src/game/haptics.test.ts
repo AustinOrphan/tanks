@@ -352,3 +352,25 @@ describe('blocked-fire cue (issue #356, first arm)', () => {
     expect(calls).toEqual([BLOCKED_FIRE_PATTERN_MS]);
   });
 });
+
+
+describe('blocked-fire cue: the arms are separable (issue #356)', () => {
+  const blocked = (ownerId: number): SimEvent =>
+    ({ type: 'fire-blocked', ownerId, reason: 'shell-cap' }) as SimEvent;
+  const buzzed = (cue: 'haptic' | 'audio' | 'haptic+audio') => {
+    const calls: (number | number[])[] = [];
+    const d = createHapticsDirector((p) => { calls.push(p); return true; }, 7, { blockedFire: cue });
+    d.handle([blocked(7)]);
+    return calls;
+  };
+
+  it('the AUDIO arm does not vibrate', () => {
+    // The mirror of director.test.ts's "the haptic arm makes no sound". Together they are
+    // what lets #356 attribute a preference to a channel rather than to a bundle.
+    expect(buzzed('audio')).toEqual([]);
+  });
+
+  it('the multimodal arm vibrates AND (see director.test.ts) sounds', () => {
+    expect(buzzed('haptic+audio')).toEqual([BLOCKED_FIRE_PATTERN_MS]);
+  });
+});

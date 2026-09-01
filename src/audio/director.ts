@@ -1,3 +1,4 @@
+import type { BlockedFireCue } from '../game/devflags';
 import type { AudioEngine } from './engine';
 import type { SimEvent } from '../sim/events';
 
@@ -18,9 +19,19 @@ const DEFAULT_PLAYER_ID = 0;
 // Each successive ricochet bounce shifts the ping pitch up for audible juice.
 const RICOCHET_RATE_STEP = 0.15;
 
+export interface AudioDirectorOptions {
+  /**
+   * `?dev=1&blockedFire=audio` or `haptic+audio` (devflags.ts). Anything else -- including
+   * the shipped default of null -- stays silent, because issue #356 requires its
+   * treatments to be compared before one is adopted.
+   */
+  readonly blockedFire?: BlockedFireCue | null;
+}
+
 export function createAudioDirector(
   engine: AudioEngine,
   initialPlayerId: number = DEFAULT_PLAYER_ID,
+  options: AudioDirectorOptions = {},
 ): AudioDirector {
   let playerId = initialPlayerId;
   function handleOne(e: SimEvent): void {
@@ -77,11 +88,22 @@ export function createAudioDirector(
         engine.play('mine-fuse-warn');
         break;
       case 'fire-blocked':
-        // DELIBERATELY SILENT for now (issue #356). A dry mechanical click is one of the
-        // five candidate treatments that issue is comparing, and picking it here would
-        // pre-empt that comparison -- the whole point of the issue is that the cue is
-        // chosen from evidence rather than from whoever wired the event up first. The case
-        // exists so the exhaustiveness guard below stays meaningful.
+        // Issue #356's audio arm, and SILENT unless the flag names it: the issue chooses
+        // its cue from evidence, not from whoever wired the event up first.
+        //
+        // Gated on the CONTROLLING player, like every other cue here. `fire-blocked` is
+        // emitted for whoever was refused, AI tanks included, and an enemy running out of
+        // shells is not something the player should hear.
+        //
+        // No rate limit, and that is measured: #451 made a cap-blocked attempt activate
+        // the fire cooldown as if it were a real shot, so the longest unbroken burst is
+        // ONE tick at every cap measured. See haptics.ts's note for the numbers.
+        if (
+          (options.blockedFire === 'audio' || options.blockedFire === 'haptic+audio') &&
+          e.ownerId === playerId
+        ) {
+          engine.play('fire-blocked');
+        }
         break;
       default: {
         // Exhaustiveness guard: if a new SimEvent kind is added, this fails to compile.

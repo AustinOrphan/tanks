@@ -189,7 +189,10 @@ export function createHapticsDirector(
         // held trigger cannot generate more than one refusal per fire cadence: the longest
         // unbroken burst is ONE tick at every cap measured (5, 4 and 3), against 38 ticks
         // before that change. The unbounded output #356 forbids is unreachable by spamming.
-        if (options.blockedFire === 'haptic' && e.ownerId === playerId) {
+        if (
+          (options.blockedFire === 'haptic' || options.blockedFire === 'haptic+audio') &&
+          e.ownerId === playerId
+        ) {
           vibrate(BLOCKED_FIRE_PATTERN_MS);
         }
         break;

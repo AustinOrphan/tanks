@@ -78,6 +78,8 @@ const FALLBACK_FREQ: Record<string, number> = {
   'mine-fuse-warn': 1560,
   'mine-trip': 880,
   'mine-boom': 70,
+  // Low and short: the procedural fallback for a refusal must not read as a shot.
+  'fire-blocked': 200,
   victory: 520,
   defeat: 160,
 };

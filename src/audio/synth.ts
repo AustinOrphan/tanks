@@ -41,6 +41,7 @@ export type SfxKey =
   | 'mine-fuse-warn'
   | 'mine-trip'
   | 'mine-boom'
+  | 'fire-blocked'
   | 'victory'
   | 'defeat';
 
@@ -189,6 +190,27 @@ const RECIPES: Record<
   'mine-drop': (c, t, r) => [
     noiseVoice(c, t, { duration: 0.04, peak: 0.18, type: 'bandpass', from: 900, to: 500, q: 2 }, r),
     toneVoice(c, t, { from: 320, to: 190, duration: 0.09, peak: 0.2, type: 'square' }, r),
+  ],
+  /**
+   * Issue #356's audio candidate: the cannon refusing to fire.
+   *
+   * A DRY MECHANICAL CLICK, in the issue's own words. Deliberately built as the negative
+   * of `cannon`: no low body, no tail, and a tenth of the peak, so it reads as the
+   * mechanism catching rather than as a weak shot. A blocked shot that sounded like a
+   * quiet shot would be worse than silence -- the player would think they had fired.
+   *
+   * Two very short elements: a high filtered tick (the sear) and a low square blip (the
+   * mechanism seating). Both well under the 0.09 s a cannon runs for.
+   *
+   * TIMBRE IS PROVISIONAL and wants an ear on it, the same caveat `mine-fuse-warn`
+   * carries. That this fires exactly when the cap refuses a shot, and never otherwise, is
+   * pinned by tests; that this is the RIGHT click is not a claim a test can make -- which
+   * is why it ships behind `?dev=1&blockedFire=audio` alongside the other candidates
+   * rather than as the adopted cue.
+   */
+  'fire-blocked': (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.018, peak: 0.09, type: 'highpass', from: 4200, to: 3000 }, r),
+    toneVoice(c, t, { from: 210, to: 150, duration: 0.03, peak: 0.07, type: 'square' }, r),
   ],
   // A rising pair: "armed" should sound like a state change, not an impact.
   'mine-arm': (c, t, r) => [

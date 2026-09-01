@@ -380,14 +380,17 @@ const BACKDROP_TREATMENTS = new Set(['felt']);
 /**
  * Issue #356's candidate blocked-fire cues, named so they can be compared in one session.
  *
- * Only `haptic` so far: the issue lists five treatments (weapon-local visual, tank-local
- * ring, mechanical audio, haptic, transient HUD) plus a multimodal arm, and this is the
- * first. The others are not omitted for lack of a flag -- the flag is the part they share
- * -- but because each needs its own artefact. The audio arm in particular needs a designed
- * voice rather than a reused one, which is a judgement the issue reserves.
+ * Three arms so far: `haptic`, `audio`, and `haptic+audio` -- which is the MULTIMODAL
+ * combination the issue asks for by name ("compare at least one multimodal combination
+ * against the strongest single-channel treatment"). The two channels are deliberately the
+ * ones that need no screen space, so they can be judged without the HUD arms existing yet.
+ *
+ * Still to come: the three visual treatments the issue also lists (weapon-local pulse,
+ * tank-local ring, transient HUD). They are not omitted for lack of a flag -- the flag is
+ * the part every arm shares -- but because each needs its own render artefact.
  */
-const BLOCKED_FIRE_CUES = new Set(['haptic']);
-export type BlockedFireCue = 'haptic';
+const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio']);
+export type BlockedFireCue = 'haptic' | 'audio' | 'haptic+audio';
 
 /** One of the three named presets, or null when absent or unrecognised -- an
  * unrecognised value (`?quality=potato`) is rejected to null rather than guessed,

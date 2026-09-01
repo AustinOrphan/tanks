@@ -188,3 +188,42 @@ describe('mine warning cues (issue #276)', () => {
     expect(calls.filter((c) => c.key === 'mine-fuse-warn')).toHaveLength(4);
   });
 });
+
+
+describe('blocked-fire cue (issue #356)', () => {
+  const blocked = (ownerId: number): SimEvent =>
+    ({ type: 'fire-blocked', ownerId, reason: 'shell-cap' }) as SimEvent;
+  const played = (opts?: { blockedFire?: 'haptic' | 'audio' | 'haptic+audio' | null }, owner = 7) => {
+    const keys: string[] = [];
+    const engine = { play: (k: string) => keys.push(k), stopMusic: () => {}, playMusic: () => {} };
+    const d = createAudioDirector(engine as never, 7, opts);
+    d.handle([blocked(owner)]);
+    return keys;
+  };
+
+  it('stays silent with no flag, because the treatments have not been compared yet', () => {
+    expect(played()).toEqual([]);
+    expect(played({ blockedFire: null })).toEqual([]);
+  });
+
+  it('plays the click when the flag names audio', () => {
+    expect(played({ blockedFire: 'audio' })).toEqual(['fire-blocked']);
+  });
+
+  it('plays it for the multimodal arm too', () => {
+    // The combination #356 asks for by name. If this arm did not reach BOTH channels it
+    // would be a second single-channel arm wearing a compound label.
+    expect(played({ blockedFire: 'haptic+audio' })).toEqual(['fire-blocked']);
+  });
+
+  it('the arms are SEPARABLE: the haptic arm makes no sound', () => {
+    // What makes the comparison meaningful. If every arm reached every channel there
+    // would be nothing to compare, and a reviewer judging "audio" would in fact be
+    // judging audio plus haptics.
+    expect(played({ blockedFire: 'haptic' })).toEqual([]);
+  });
+
+  it('ignores a refusal that belongs to someone else', () => {
+    expect(played({ blockedFire: 'audio' }, 9)).toEqual([]);
+  });
+});
