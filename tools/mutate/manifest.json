@@ -2687,11 +2687,11 @@
     "find": "    commitTarget(world, tank);",
     "replace": "    // commitTarget(world, tank);",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "tests": [
       "src/sim/ai/target-selection.test.ts"
     ],
-    "why": "Pins the WIRING of issue #359's commitment, not the policy. target-selection.test.ts drives commitTarget directly and passes in full while stepAi never calls it, which would leave every AI on the pure fallback -- re-selecting from scratch every tick, with the stickiness the issue asks for present in the module and absent from the game. The golden trace is what notices, because five of its runs' timing depends on the commitment holding. Re-pointed 2026-08-31: the golden trace used to kill this (five runs's timing depended on the commitment holding), but the owner's full-awareness ruling made the commitment behaviourally invisible in single-player -- the trace reverted to its pre-#359 value and this entry started SURVIVING. Its value was always multi-player, so it is now pinned by a two-player stepAi case instead."
+    "why": "Pins the WIRING of issue #359's commitment, not the policy. target-selection.test.ts drives commitTarget directly and passes in full while stepAi never calls it, which would leave every AI on the pure fallback -- re-selecting from scratch every tick, with the stickiness the issue asks for present in the module and absent from the game. The golden trace is what notices, because five of its runs' timing depends on the commitment holding. Re-pointed 2026-08-31: the golden trace used to kill this (five runs's timing depended on the commitment holding), but the owner's full-awareness ruling made the commitment behaviourally invisible in single-player -- the trace reverted to its pre-#359 value and this entry started SURVIVING. Its value was always multi-player, so it is now pinned by a two-player stepAi case instead. Remeasured 2026-09-01 at 2 of the 16 tests now in target-selection.test.ts, up from a declared 1 -- the population changed, the contract did not. The file gained 'under the dev flag, the bound survives a REAL TICK -- the clone has to carry it' alongside the cloneWorld aiTargetPerception fix, and that test drives a real stepInputs tick, so an unwired commitTarget leaves its two acquired-target assertions unwritten as well. The pre-existing two-player 'stepAi writes and HOLDS a committed target across ticks' case is still the other failure."
   },
   {
     "id": "target-selection-tie-break-is-symmetric",
@@ -2712,11 +2712,11 @@
     "find": "  return cfg.ai.bankShotWeight > 0;",
     "replace": "  return true;",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "tests": [
       "src/sim/ai/target-selection.test.ts"
     ],
-    "why": "Rule 1: an AI may select only from opponents it perceives. The shipped predicate is line of sight, widened to 'anything a banking profile could bank at' because indirect fire is that role's identity. Returning true outright restores full omniscience for every profile, including the non-banking ones the bound actually constrains."
+    "why": "Rule 1: an AI may select only from opponents it perceives. The shipped predicate is line of sight, widened to 'anything a banking profile could bank at' because indirect fire is that role's identity. Returning true outright restores full omniscience for every profile, including the non-banking ones the bound actually constrains. Remeasured 2026-09-01 at 2 of the 16 tests now in target-selection.test.ts, up from a declared 1, for the same reason and in the same file: 'the bound survives a REAL TICK -- the clone has to carry it' asserts this rule one tick deep, through stepInputs, where the pre-existing 'acquires only what it can SEE, for a profile that does not bank' asserts it at the direct call. Two depths of one rule, not a widened contract."
   },
   {
     "id": "resolve-opponent-ignores-the-commitment",
@@ -2887,6 +2887,19 @@
       "src/sim/ai/target-memory.test.ts"
     ],
     "why": "step() clones the world every tick, so a field the clone drops is a field that cannot outlive one tick. Subtle because updateTargetMemory re-records immediately: a dropped memory looks present at any single instant, and only a tick count that has AGED below the full span proves it survived a tick without refresh."
+  },
+  {
+    "id": "clone-drops-the-ai-target-perception",
+    "file": "src/sim/world.ts",
+    "find": "    aiTargetPerception: world.aiTargetPerception,\n",
+    "replace": "    // aiTargetPerception dropped by mutation\n",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/world.test.ts",
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "why": "The sibling of versus-respawn-clone-drops-arena-geometry and clone-drops-the-remembered-contact, and the most dangerous of the three because World.aiTargetPerception is OPTIONAL: ai/targeting.ts reads it as `(world.aiTargetPerception ?? 'full')`, so a clone that omits it does not surface as `undefined` at the use site -- it surfaces as the shipped default, from tick 1 onward. game/loop.ts sets the field for `?dev=1&aiPerception=los` on the world it builds, stepInputs opens with cloneWorld, and the selected line-of-sight bound lasted zero ticks: the dev experiment silently measured the very default it was set up to compare against. TypeScript cannot see it either, because `aiTargetPerception?:` makes the object literal without the field a perfectly valid World -- which is why this shipped. Gap measured with this harness rather than argued: against the pre-assertion test files (this same world.ts, with src/sim/world.test.ts and src/sim/ai/target-selection.test.ts taken from main at f3ff4fc) the mutation SURVIVES, 0 of 24 scoped tests failing. Nothing outside that 24 was measured here, but the tree-wide gap is the shipped record rather than an inference: the required `verify (current)` check -- the complete mutation manifest plus the full unit suite under Node 24 -- is green on main at f3ff4fc, and f3ff4fc is the tree WITHOUT this clone copy. With this PR's tests the same mutation is killed by 3 of 27: world.test.ts's direct `cloneWorld` assertion, world.test.ts's five-tick 'does not let aiTargetPerception decay' case (the clone is per tick, so a single tick is the weakest possible probe), and target-selection.test.ts's 'the bound survives a REAL TICK', which is the only one of the three that shows the game-visible consequence -- a wall-blind brown acquiring the player through the wall it cannot see past."
   },
   {
     "id": "remembered-contact-never-reaches-the-turret",

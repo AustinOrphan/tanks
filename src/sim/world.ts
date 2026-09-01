@@ -217,6 +217,11 @@ export function cloneWorld(world: World): World {
     nextId: world.nextId,
     seed: world.seed,
     unarmedTrigger: world.unarmedTrigger,
+    // Copied RAW, not through `?? 'full'` like ai/targeting.ts reads it: createWorld already
+    // normalises, and a raw World literal is entitled to omit the field (see its doc comment
+    // above), so normalising here would change a fixture's shape on its first tick. Same
+    // reason `arenaGeometry` below is a plain copy.
+    aiTargetPerception: world.aiTargetPerception,
     corpseBlocksShells: world.corpseBlocksShells,
     muzzleClearsTanks: world.muzzleClearsTanks,
     coopAttempts: world.coopAttempts,
