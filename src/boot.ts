@@ -1,7 +1,8 @@
 import { createGameSessionHost } from './game/session-host';
-import type { GameSessionHostDeps } from './game/session-host';
+import type { GameSessionHost, GameSessionHostDeps } from './game/session-host';
 import type { AppShell } from './game/app-shell';
 import type { RenderCapabilityFailure } from './game/render-capability';
+import type { RouteHost, SessionRequests } from './game/route-host';
 
 /**
  * Everything main.ts does, with its collaborators handed in.
@@ -73,6 +74,24 @@ export interface BootDeps {
    * context does rather than an unhandled rejection at module scope.
    */
   readonly createAppShell: () => AppShell;
+  /**
+   * Builds the page's application-route UI -- HUD, state machine, route controller -- ONCE
+   * (issue #468).
+   *
+   * Injected for the same reason `createAppShell` is: the real one reaches
+   * `createBrowserDeps`, a real `document` and a real `TankPreview`, and none of that is
+   * reachable from a boot test. The `SessionRequests` argument is the seam the route UI's
+   * Versus Start and Campaign buttons call into, handed in rather than read off a session
+   * -- which is what makes those buttons work while the host is empty.
+   *
+   * Called INSIDE the try, and AFTER the capability gate below: a browser that cannot
+   * render should not pay for a HUD it is about to have cleared out of the root.
+   */
+  readonly createRouteHost: (
+    root: HTMLElement,
+    shell: AppShell,
+    requests: SessionRequests,
+  ) => RouteHost;
 }
 
 export const NO_WEBGL_MESSAGE =
@@ -149,19 +168,50 @@ export function boot(deps: BootDeps): void {
     // a hand-built shell into a TypeError on the error path.
     if (!shell.render.webgl2) throw new UnsupportedRenderError(shell.render.failure ?? 'no-webgl2');
 
+    /**
+     * The page's application-route UI (issue #468).
+     *
+     * Built BEFORE the session host and disposed after it, because it is the half that
+     * outlives sessions: the HUD element tree, the state machine and the route
+     * controller. Until this issue all three were built inside `startGameWith`, so the
+     * Main Menu a player sees before touching anything cost a world, a seed and a
+     * renderer to put on screen.
+     *
+     * The two start requests are LATE-BOUND through `sessions`, which does not exist
+     * yet: the route UI's Versus Start and Campaign buttons are page-level requests, and
+     * the thing that services them is the session host built two statements down. That
+     * indirection is issue #468's "explicit application-level start-request seam" -- and
+     * `?.` rather than an assertion because the same buttons are reachable during the
+     * window before `sessions` is assigned, and a click there must do nothing rather
+     * than throw. Issue #428 replaces the forwarding body; the seam stays.
+     */
+    let sessions: GameSessionHost | null = null;
+    const routeHost = deps.createRouteHost(deps.root, shell, {
+      requestVersusSession: (config) => sessions?.requestVersusSession(config),
+      requestCampaignSession: () => sessions?.requestCampaignSession(),
+    });
+
+
+
     // The replaceable half (issue #317). It owns the canvas, the running session, and
     // the two reboot seams a session calls to ask for its successor -- all three of
     // which were anonymous closures in this function until `session-host.ts`. The
     // reboot suites in boot.test.ts still drive them through `boot()`, deliberately:
     // tests that predate the extraction and still pass are what proves it preserved
     // the stale-capture, fresh-canvas and callback-identity properties they pin.
-    const sessions = createGameSessionHost({
+    sessions = createGameSessionHost({
       root: deps.root,
       bootCanvas: deps.bootCanvas,
       startGame: deps.startGame,
       shell,
+      routeHost,
     } satisfies GameSessionHostDeps);
-    sessions.start();
+    // Assigned to the `let` declared above the route host, which is what closes the loop:
+    // from here on, a Versus Start click reaches this host. Every later read of
+    // `sessions` in this function is on the assigned value, so the `?.`s are for the
+    // construction window only.
+    const host = sessions;
+    host.start();
 
     // startGame's teardown was once unreachable: nothing called it, so the
     // frame loop, the window listeners and the GL context outlived the page.
@@ -179,7 +229,14 @@ export function boot(deps: BootDeps): void {
       if (e.persisted) return;
       // The host disposes whichever session is CURRENT, which is why the reboot paths
       // could reassign it without this line changing.
-      sessions.dispose();
+      host.dispose();
+      // ...and only now the page's route UI (issue #468). This is the ONE call site: a
+      // session's own teardown detaches from the route host and disposes nothing it
+      // owns, because the next session needs the same HUD still on screen. Ordered after
+      // the session teardown so the outgoing session has already given the slot back,
+      // and before `shell.dispose()` for the same reason that one is last -- the HUD's
+      // handlers can still reach settings and audio until they are gone.
+      routeHost.dispose();
       // The PAGE is going away, so this is the one place the shell may be disposed -- it
       // releases the OS reduced-motion listener and the audio engine the sessions only
       // ever borrowed. Ordered after the session teardown so the session's own

@@ -109,7 +109,8 @@ import { versusMapChoices, type VersusConfig } from './versus-config';
 import { boot as bootPage } from '../boot';
 import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
-import { createAppShell } from './app-shell';
+import { createAppShell, type AppShell } from './app-shell';
+import { createRouteHost, type RouteHost } from './route-host';
 import { RENDER_CAPABILITY_SUPPORTED } from './render-capability';
 import type { GameHandle } from './loop';
 import { createMemoryStorage, type StorageNamespace } from './storage';
@@ -348,6 +349,27 @@ interface Recorder {
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
   deps: GameDeps;
+  /**
+   * The page's route UI (issue #468), built ONCE per harness from `deps` -- the REAL
+   * `createRouteHost` over the fakes, not a fake of it.
+   *
+   * One per harness rather than one per `startGameWith` call because that is the
+   * production shape: `boot.ts` builds it before the first session and every later
+   * session borrows the same one. The reboot-in-miniature tests below (dispose, then
+   * start a second session on the same `h.deps`) are the ones this matters to -- passing
+   * a fresh route host there would hide exactly the double-registration this issue
+   * exists to prevent.
+   */
+  routeHost: RouteHost;
+  /** The element the route host built its HUD in. Sessions no longer take a root. */
+  uiRoot: HTMLElement;
+  /**
+   * Point the PAGE-level start requests at a spy (issue #468).
+   *
+   * The Versus Start and Campaign buttons are application-level requests now, so this --
+   * not a per-session `deps.requestVersusSession` -- is what a click reaches.
+   */
+  setPageRequests(next: Partial<{ versus: (config: VersusConfig) => void; campaign: () => void }>): void;
   rec: Recorder;
   storage: Storage;
   settingsStore: PlayerSettingsStore;
@@ -1523,8 +1545,38 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     developerMode: opts.developerMode ?? Object.keys(opts.devFlags ?? {}).length > 0,
   };
 
+  const uiRoot = document.createElement('div');
+  /**
+   * The PAGE-level start requests (issue #468).
+   *
+   * Mutable, and read at click time, because that is the production shape: `boot.ts`
+   * wires these to the session host, which does not exist when the route host is built.
+   * Since #468 the Versus Start and Campaign buttons reach THESE rather than whichever
+   * session happens to be live, so a test that wants to observe a click sets them here
+   * -- setting `deps.requestVersusSession` on a per-session deps object no longer has
+   * anything to do with what the button calls.
+   */
+  const pageRequests: {
+    versus: (config: VersusConfig) => void;
+    campaign: () => void;
+  } = {
+    versus: (config) => deps.requestVersusSession?.(config),
+    campaign: () => deps.requestCampaignSession?.(),
+  };
+  // The real route host over the harness's fakes. `deps` is a full `GameDeps`, which
+  // structurally satisfies `RouteHostDeps`, so nothing here has to restate the subset.
+  const routeHost = createRouteHost(uiRoot, deps, {
+    requestVersusSession: (config) => pageRequests.versus(config),
+    requestCampaignSession: () => pageRequests.campaign(),
+  });
+
   return {
     deps,
+    routeHost,
+    uiRoot,
+    setPageRequests(next): void {
+      Object.assign(pageRequests, next);
+    },
     rec,
     storage,
     /** The UNWRAPPED store, for asserting what was actually accepted and persisted. */
@@ -1688,8 +1740,7 @@ function bootAtSplash(
   h = makeDeps(),
 ): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
   const canvas = document.createElement('canvas');
-  const root = document.createElement('div');
-  const handle = startGameWith(canvas, root, h.deps);
+  const handle = startGameWith(canvas, h.deps, h.routeHost);
   return Object.assign(h, { handle });
 }
 
@@ -1841,13 +1892,25 @@ describe('startGameWith: construction', () => {
     h.handle.dispose();
   });
 
-  it('builds the HUD in the ui root it was given', () => {
-    const canvas = document.createElement('canvas');
-    const root = document.createElement('div');
+  /**
+   * Re-anchored by issue #468: the HUD is built in the root the ROUTE HOST was given, and
+   * a session no longer takes a root at all. What the assertion is worth is unchanged --
+   * a HUD built somewhere other than the page's root paints nothing a player can see.
+   *
+   * The second half is the part that is new, and the reason this is worth keeping: two
+   * sessions on one route host must not build two HUDs. Before this issue every session
+   * called `deps.createHud`, so `hudRoots` grew per session; now it must not.
+   */
+  it('builds ONE HUD, in the route host\'s root, however many sessions run', () => {
     const h = makeDeps();
-    const handle = startGameWith(canvas, root, h.deps);
-    expect(h.rec.hudRoots[0]).toBe(root);
-    handle.dispose();
+    expect(h.rec.hudRoots).toEqual([h.uiRoot]);
+
+    const first = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+    first.dispose();
+    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+    second.dispose();
+
+    expect(h.rec.hudRoots, 'a session built its own HUD').toEqual([h.uiRoot]);
   });
 });
 
@@ -2675,6 +2738,115 @@ describe('startGameWith: the persistence notice (issue #320)', () => {
   });
 });
 
+/**
+ * The retained Versus config across a REAL session change (raised by review on PR #475).
+ *
+ * `route-host.test.ts` pins that the config survives a `detach()`, which is the half a
+ * route-host test can see. It cannot see this half: `applyVersusToDeps` stamps
+ * `initialVersusConfig: null` on every campaign session, so it is `startGameWith` -- not
+ * the route host -- that decides whether starting Campaign after a Versus match wipes the
+ * pane. Only a test that runs two real sessions on one route host reaches that.
+ */
+describe('startGameWith: the retained Versus config across sessions (issue #468)', () => {
+  const RETAINED: VersusConfig = {
+    mode: 'teams',
+    players: 4,
+    arenaId: 'arena-01',
+    stock: 5,
+    friendlyFire: true,
+    slots: defaultSlots(4),
+  };
+
+  it('a campaign session started after a versus one does not empty the pane', () => {
+    // The journey this exists to serve: play a match, go back to the menu, open Versus
+    // again to tweak it. A session that pushed its own (absent) config unconditionally
+    // clears the retained one, and the form comes up blank on exactly that path.
+    const base = makeDeps();
+    const versus = startGameWith(
+      document.createElement('canvas'),
+      { ...base.deps, initialVersusConfig: RETAINED },
+      base.routeHost,
+    );
+    versus.dispose();
+
+    const campaign = startGameWith(document.createElement('canvas'), base.deps, base.routeHost);
+    base.hud.openVersus();
+    expect(
+      base.rec.versusSetupPushes.at(-1),
+      'the campaign session cleared the retained versus config',
+    ).toEqual({ show: true, initial: RETAINED });
+    campaign.dispose();
+  });
+
+  it('a versus session still overwrites it with its OWN config', () => {
+    // The other direction, so the fix cannot be "never write it": the pane must follow the
+    // most recent match, not the first one ever played.
+    const base = makeDeps();
+    const other: VersusConfig = { ...RETAINED, arenaId: 'arena-02', stock: 2 };
+    const first = startGameWith(
+      document.createElement('canvas'),
+      { ...base.deps, initialVersusConfig: RETAINED },
+      base.routeHost,
+    );
+    first.dispose();
+    const second = startGameWith(
+      document.createElement('canvas'),
+      { ...base.deps, initialVersusConfig: other },
+      base.routeHost,
+    );
+    base.hud.openVersus();
+    expect(base.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: other });
+    second.dispose();
+  });
+});
+
+describe('startGameWith: the gameplay slot is given back (issue #468)', () => {
+  /**
+   * The production half of `route-host.test.ts`'s slot mechanics: that `startGameWith`
+   * actually TAKES the slot and its teardown actually GIVES IT BACK.
+   *
+   * Counted as an EFFECT: `rec.minePresses` is what the input controller was actually
+   * told to do, not how many callbacks were registered.
+   *
+   * WHAT THIS PAIR CANNOT SEE, stated because it would otherwise read as broader than it
+   * is: this file's HUD fake REPLACES each `on*` callback (`onMineTap = cb`), so double
+   * REGISTRATION is invisible here however many sessions run. The append-and-count
+   * version of that is `route-host.test.ts`, whose fake mirrors the real `hud.ts`. What
+   * these two pin is the production wiring on either side of it -- that `startGameWith`
+   * takes the slot, and that its teardown gives it back.
+   *
+   * Both controls were run, not assumed:
+   *  - drop `live = state` from `attach()` and the FIRST assertion reads 0;
+   *  - drop `slot.detach()` from `startGameWith`'s `dispose()`, or register the
+   *    trampolines per attach instead of once, and the SECOND reads 1 instead of 0.
+   */
+  it('a tap reaches the LIVE session once, after a stop and a start', () => {
+    const h = makeDeps();
+    const first = boot(h);
+    h.hud.mineTap();
+    expect(h.rec.minePresses, 'the first session did not receive its own tap').toBe(1);
+
+    first.handle.dispose();
+    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+
+    h.hud.mineTap();
+    expect(h.rec.minePresses, 'the retired session was still receiving taps').toBe(2);
+    second.dispose();
+  });
+
+  it('a tap after the LAST session reaches nobody, rather than a disposed one', () => {
+    // The empty-host state, driven through production: the trampolines are still live
+    // and the slot is empty. A session that never detached would push its now-disposed
+    // input controller here instead.
+    const h = makeDeps();
+    const first = boot(h);
+    first.handle.dispose();
+    const before = h.rec.minePresses;
+    h.hud.mineTap();
+    expect(h.rec.minePresses, 'a tap reached a disposed session').toBe(before);
+  });
+});
+
 describe('startGameWith: settings survive internal session replacement', () => {
   it('a second session on the SAME deps comes up with the first session\'s settings', () => {
     // boot.ts's reboot path in miniature: dispose the handle, build another session on
@@ -2689,8 +2861,8 @@ describe('startGameWith: settings survive internal session replacement', () => {
     first.handle.dispose();
 
     const canvas = document.createElement('canvas');
-    const root = document.createElement('div');
-    const second = startGameWith(canvas, root, h.deps);
+    // The SAME route host the first session used -- boot.ts's reboot path in miniature.
+    const second = startGameWith(canvas, h.deps, h.routeHost);
     expect(h.rec.audioMuted.at(-1), 'the replacement session unmuted').toBe(true);
     expect(h.rec.volumes.at(-1), 'the replacement session restored DEFAULT_VOLUME').toBe(0.2);
     expect(h.rec.schemeSets.at(-1)).toBe('point');
@@ -2706,8 +2878,8 @@ describe('startGameWith: settings survive internal session replacement', () => {
     const first = boot(h);
     first.handle.dispose();
     const canvas = document.createElement('canvas');
-    const root = document.createElement('div');
-    const second = startGameWith(canvas, root, h.deps);
+    // The SAME route host the first session used -- boot.ts's reboot path in miniature.
+    const second = startGameWith(canvas, h.deps, h.routeHost);
     const before = h.rec.audioMuted.length;
     h.settingsStore.setMuted(true);
     expect(h.rec.audioMuted.length - before, 'the dead session was still listening').toBe(1);
@@ -2846,10 +3018,32 @@ describe('startGameWith: listeners and teardown', () => {
     }
   });
 
-  it('disposes every collaborator it constructed', () => {
+  /**
+   * Re-anchored by issue #468: "constructed" is now a shorter list.
+   *
+   * The HUD is NOT here any more, and its absence is the assertion. It belongs to the
+   * page (`route-host.ts`), so a session that still disposed it would blank the shell on
+   * every Quit and every Campaign<->Versus switch -- while `boot.test.ts`'s pagehide
+   * suites stayed green, because the page is going away in those anyway. The route host
+   * disposes it, once, and only from the page teardown: `h.routeHost.dispose()` below is
+   * the other half of this pair.
+   */
+  it('disposes every collaborator it constructed -- and nothing the PAGE owns', () => {
     const h = boot();
     h.handle.dispose();
-    expect(h.rec.disposed.sort()).toEqual(['audio', 'hud', 'input', 'renderer']);
+    expect(h.rec.disposed.sort(), 'a session disposed something above it').toEqual([
+      'audio',
+      'input',
+      'renderer',
+    ]);
+
+    h.routeHost.dispose();
+    expect(h.rec.disposed.sort(), 'the page teardown left the HUD alive').toEqual([
+      'audio',
+      'hud',
+      'input',
+      'renderer',
+    ]);
   });
 
   it('stops the frame loop, so a queued callback cannot advance the world', () => {
@@ -5945,14 +6139,29 @@ describe('startGameWith: the live tank preview', () => {
     h.handle.dispose();
   });
 
-  it('is disposed on teardown if the panel is still open when the game tears down', () => {
-    // main.ts's pagehide path can call dispose() at any time, panel open or not --
-    // see loop.ts's own comment on this. Not covered by the "closes via the
-    // chokepoint" test above, which only exercises the Back/state-change path.
+  /**
+   * Re-anchored by issue #468: the teardown that reclaims a still-open preview is the
+   * PAGE's, not a session's.
+   *
+   * main.ts's pagehide path can fire at any time, panel open or not -- see route-host.ts's
+   * own comment on this. Not covered by the "closes via the chokepoint" test above, which
+   * only exercises the Back/state-change path.
+   *
+   * The first half is the half that moved, and is worth its own assertion: the Customize
+   * panel is an APPLICATION route, so quitting a match with it open must not tear its
+   * preview down. Before this issue it did, because the session owned the route UI.
+   */
+  it('survives a session teardown, and is disposed by the page teardown', () => {
     const h = boot(makeDeps());
     h.hud.openCustomize();
     expect(h.rec.disposed).not.toContain('preview');
+
     h.handle.dispose();
+    expect(h.rec.disposed, 'a session tore down an application route\'s preview').not.toContain(
+      'preview',
+    );
+
+    h.routeHost.dispose();
     expect(h.rec.disposed).toContain('preview');
   });
 
@@ -6103,11 +6312,16 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
   describe('Start: forwards the pane\'s own config to requestVersusSession', () => {
     it('invokes the spy with exactly the config the pane handed back', () => {
       // Fails if the handler ignores its argument (e.g. calls
-      // `deps.requestVersusSession?.(deps.initialVersusConfig)` instead of `(config)`),
-      // or drops the call, or calls it with something else.
+      // `requestVersusSession(deps.initialVersusConfig)` instead of `(config)`), or
+      // drops the call, or calls it with something else.
+      //
+      // Re-anchored by issue #468: the spy goes on the PAGE-level request seam, not on
+      // a session's deps. Start is an application-level request now -- it must work
+      // with no session at all, which is why nothing here dereferences one.
       const calls: VersusConfig[] = [];
       const base = makeDeps();
-      const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
+      base.setPageRequests({ versus: (c) => calls.push(c) });
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
       h.hud.startVersus(REMATCH_CONFIG);
       expect(calls).toEqual([REMATCH_CONFIG]);
       h.handle.dispose();
@@ -6297,9 +6511,13 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
   it('the Campaign button click invokes requestCampaignSession exactly once, with no arguments', () => {
     // Fails if onCampaignOpen's handler drops the call, calls something else, or
     // forwards an argument requestCampaignSession does not take.
+    //
+    // Re-anchored by issue #468, exactly as the Versus Start case above: the button is
+    // a page-level request, so the spy goes on the route host's seam.
     const calls: unknown[][] = [];
     const base = makeDeps();
-    const h = boot({ ...base, deps: versusDeps(base, CONFIG, (...args: unknown[]) => calls.push(args)) });
+    base.setPageRequests({ campaign: (...args: unknown[]) => calls.push(args) });
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
     h.hud.openCampaign();
     expect(calls).toEqual([[]]);
     h.handle.dispose();
@@ -7672,6 +7890,8 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
   requestCampaign(): void;
   pagehide(): void;
   sessions(): number;
+  /** The page's real shell, for reading the PAGE-level Launch gate directly. */
+  shell: AppShell;
 } {
   const root = document.createElement('div');
   let requestVersus: ((config: VersusConfig) => void) | null = null;
@@ -7705,32 +7925,54 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
       return canvas;
     },
     createAppShell: () => shell,
-    startGame: (canvas, uiRoot, versus, reqVersus, reqCampaign): GameHandle => {
+    /**
+     * The REAL `createRouteHost`, over the harness's fakes -- and the REAL state machine,
+     * not `makeDeps`' fake.
+     *
+     * That override is the entire point of the seam. `makeDeps` fakes
+     * `createStateMachine` over a `currentSurface` variable that lives in ITS closure, so
+     * a second session built on the same deps inherits the first session's surface and
+     * "the reboot did not replay the splash" passes without production doing anything.
+     * Which location the page opens at is decided by `createGameStateMachine` alone
+     * (`state.ts`'s `locationAtRoute(launchRoute())`), so a test that replaces it cannot
+     * observe this defect at all.
+     *
+     * Since issue #468 the machine, the HUD and the route handlers belong to the route
+     * host rather than the session, which is why these two overrides moved here.
+     */
+    createRouteHost: (hostRoot, appShell, requests) =>
+      createRouteHost(
+        hostRoot,
+        {
+          ...h.deps,
+          createStateMachine: createGameStateMachine,
+          launchGate: {
+            dismissed: () => appShell.launchDismissed(),
+            dismiss: () => appShell.dismissLaunch(),
+          },
+        },
+        requests,
+      ),
+    startGame: (canvas, versus, reqVersus, reqCampaign, _appShell, routeHost): GameHandle => {
       sessions += 1;
       requestVersus = reqVersus;
       requestCampaign = reqCampaign;
-      return startGameWith(canvas, uiRoot, {
-        ...applyVersusToDeps(h.deps, versus, reqVersus, reqCampaign),
-        // The REAL state machine, not `makeDeps`' fake.
-        //
-        // This override is the entire point of the seam. `makeDeps` fakes
-        // `createStateMachine` over a `currentSurface` variable that lives in ITS closure,
-        // so a second session built on the same deps inherits the first session's surface
-        // and "the reboot did not replay the splash" passes without production doing
-        // anything. Which location a new session opens at is decided by
-        // `createGameStateMachine` alone (`state.ts`'s `locationAtRoute(launchRoute())`),
-        // so a test that replaces it cannot observe this defect at all.
-        createStateMachine: createGameStateMachine,
-        // ...and `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
-        // harness's own default is session-owned (`releaseAudio` disposes), which would
-        // hand the second session an engine the first one had already latched shut.
-        createAudio: () => shellAudio,
-        releaseAudio: (engine) => engine.stopMusic(),
-        launchGate: {
-          dismissed: () => shell.launchDismissed(),
-          dismiss: () => shell.dismissLaunch(),
+      return startGameWith(
+        canvas,
+        {
+          ...applyVersusToDeps(h.deps, versus, reqVersus, reqCampaign),
+          // `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
+          // harness's own default is session-owned (`releaseAudio` disposes), which would
+          // hand the second session an engine the first one had already latched shut.
+          createAudio: () => shellAudio,
+          releaseAudio: (engine) => engine.stopMusic(),
+          launchGate: {
+            dismissed: () => shell.launchDismissed(),
+            dismiss: () => shell.dismissLaunch(),
+          },
         },
-      });
+        routeHost,
+      );
     },
     host: {
       addEventListener: (_t, fn) => pagehideFns.push(fn),
@@ -7752,6 +7994,16 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
     requestCampaign: () => requestCampaign!(),
     pagehide: () => pagehideFns.forEach((fn) => fn({ persisted: false })),
     sessions: () => sessions,
+    /**
+     * The page's real shell, so a test can read the PAGE-level Launch gate rather than
+     * inferring it from what the HUD was painted.
+     *
+     * Needed since issue #468: the state machine now survives a reboot, so a session that
+     * dismissed its own splash and never told the page produces an identical screen. The
+     * page gate is still the input to `attach()`'s route reset and to what a #428 boot
+     * with no session would open on -- so it has to be read directly to be observed.
+     */
+    shell,
   };
 }
 
@@ -7790,6 +8042,38 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
       h.rec.hudStates.slice(before),
       'the reboot replayed the splash the player already dismissed',
     ).not.toContain('launch');
+  });
+
+  /**
+   * The gesture must reach the PAGE, not just this session's state machine.
+   *
+   * Read off the shell rather than off the screen, and that is the whole point since issue
+   * #468: the machine now survives a reboot, so a session that dismissed its own splash
+   * and never called `launchGate.dismiss()` paints exactly the same thing -- the two
+   * sibling cases below both stayed green with the page write deleted (measured: the
+   * manifest entry `splash-gesture-not-reported-to-the-page` SURVIVED at 0 of 405 before
+   * these two cases existed).
+   *
+   * What still depends on the write, and is why it is not dead code: `route-host.ts`'s
+   * `attach()` resets the route only when the gate is down, so without it a reboot hands
+   * the incoming session the outgoing one's route; and #428's session-less boot reads it
+   * to decide where the page opens at all.
+   */
+  it('a pointer dismissal is recorded on the PAGE, not only in the session', () => {
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    expect(page.shell.launchDismissed()).toBe(false);
+    page.pointerdown();
+    expect(page.shell.launchDismissed(), 'the session kept the dismissal to itself').toBe(true);
+  });
+
+  it('a KEYBOARD dismissal is recorded on the PAGE too', () => {
+    // The keyboard path is the one with an early return, which is where a second call is
+    // easiest to drop.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.keydown({ key: 'x', repeat: false, target: null });
+    expect(page.shell.launchDismissed(), 'a key dismissal never reached the page').toBe(true);
   });
 
   it('a KEYBOARD dismissal reports to the page too, not just the pointer one', () => {
@@ -7895,7 +8179,11 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     const h = makeDeps();
     const page = runTheRoute(h);
     expect(page.sessions()).toBe(5);
-    expect(h.rec.hudRoots).toHaveLength(5);
+    // ...and exactly TWO HUDs over those five sessions, which is the whole of issue
+    // #468 measured at the production boundary. `makeDeps` builds one route host of
+    // its own (unused here) and `bootPageOn` builds the one this page runs on; what
+    // matters is that five sessions added none. Before this issue it was five.
+    expect(h.rec.hudRoots, 'a session built its own HUD').toHaveLength(2);
   });
 
   it('leaves exactly one live host listener of each kind, not one per session', () => {
@@ -7941,18 +8229,26 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     expect(h.noticeListenerCount()).toBe(1);
   });
 
-  it('disposes each retired session exactly once -- input, renderer and HUD alike', () => {
+  it('disposes each retired session exactly once, and the page HUD not at all', () => {
     // Exactly once each, not at-least-once: a double dispose releases an audio bed and
     // unregisters listeners the INCOMING session may already own. Four, because the
     // fifth session is still live.
+    //
+    // The HUD moved OUT of this list in issue #468 and into the zero-assertion below,
+    // which is the sharper claim: five sessions over the route, four of them retired,
+    // and the menu the player is looking at was never torn down once.
     const h = makeDeps();
     runTheRoute(h);
-    for (const owner of ['input', 'renderer', 'hud']) {
+    for (const owner of ['input', 'renderer']) {
       expect(
         h.rec.disposed.filter((d) => d === owner),
         `${owner} was not disposed exactly once per retired session`,
       ).toHaveLength(4);
     }
+    expect(
+      h.rec.disposed.filter((d) => d === 'hud'),
+      'a session disposed the page HUD',
+    ).toHaveLength(0);
   });
 
   it('never lets a session dispose the page audio engine, and stops each outgoing bed', () => {

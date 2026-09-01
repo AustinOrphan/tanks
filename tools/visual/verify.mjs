@@ -443,7 +443,12 @@ async function settle(page) {
   try {
     await page.waitForFunction(
       () => {
-        const c = document.querySelector('canvas');
+        // `:not(.hud-preview)` since issue #468: the route UI is now built BEFORE the
+        // gameplay canvas, so the HUD's Customize preview canvas is first in the
+        // document. A bare `canvas` selector reported that one's context instead --
+        // measured, not inferred: this check read a 300x150 buffer after the hoist and a
+        // full-viewport one before it, while every screenshot-based check was unaffected.
+        const c = document.querySelector('canvas:not(.hud-preview)');
         if (!c || !c.width || !c.height) return false;
         if (!document.querySelector('.hud-topbar')) return false;
         const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
@@ -460,7 +465,7 @@ async function settle(page) {
     // retry, and the checks decide whether it is a failure.
   }
   return page.evaluate(() => {
-    const c = document.querySelector('canvas');
+    const c = document.querySelector('canvas:not(.hud-preview)');
     if (!c) return { canvas: false, hasContext: false, contextLost: null };
     const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
     return {

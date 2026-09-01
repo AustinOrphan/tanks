@@ -5,6 +5,7 @@ import { defaultSlots } from './versus-setup';
 import type { GameHandle } from './loop';
 import type { VersusConfig } from './versus-config';
 import type { AppShell } from './app-shell';
+import type { RouteHost } from './route-host';
 
 function config(arenaId: string): VersusConfig {
   return { mode: 'ffa', players: 2, arenaId, stock: 3, friendlyFire: false, slots: defaultSlots(2) };
@@ -12,11 +13,11 @@ function config(arenaId: string): VersusConfig {
 
 type StartArgs = [
   HTMLCanvasElement,
-  HTMLElement,
   { config: VersusConfig } | null,
   (c: VersusConfig) => void,
   () => void,
   AppShell,
+  RouteHost,
 ];
 
 function harness(): {
@@ -34,18 +35,26 @@ function harness(): {
    */
   disposedIds: number[];
   shellDisposals: number;
+  /** The page's route UI, borrowed by every session and disposed by neither. */
+  routeHost: RouteHost;
+  routeHostDisposals: number;
 } {
   const root = document.createElement('div');
   const startArgs: StartArgs[] = [];
   const canvases: HTMLCanvasElement[] = [];
   const disposedIds: number[] = [];
-  const box = { shellDisposals: 0 };
+  const box = { shellDisposals: 0, routeHostDisposals: 0 };
   let nextId = 0;
   const shell = {
     dispose(): void {
       box.shellDisposals += 1;
     },
   } as unknown as AppShell;
+  const routeHost = {
+    dispose(): void {
+      box.routeHostDisposals += 1;
+    },
+  } as unknown as RouteHost;
 
   const host = createGameSessionHost({
     root,
@@ -57,8 +66,8 @@ function harness(): {
       canvases.push(canvas);
       return canvas;
     },
-    startGame: (canvas, uiRoot, versus, reqVersus, reqCampaign, s): GameHandle => {
-      startArgs.push([canvas, uiRoot, versus, reqVersus, reqCampaign, s]);
+    startGame: (canvas, versus, reqVersus, reqCampaign, s, rh): GameHandle => {
+      startArgs.push([canvas, versus, reqVersus, reqCampaign, s, rh]);
       const id = nextId++;
       return {
         dispose(): void {
@@ -67,15 +76,23 @@ function harness(): {
       };
     },
     shell,
+    // The page's route UI, borrowed exactly like `shell` (issue #468). A stand-in
+    // rather than a real one for the same reason: this file asserts that the host
+    // hands the SAME object to every session, not what that object does.
+    routeHost,
   });
 
   return {
     host,
     root,
     shell,
+    routeHost,
     startArgs,
     canvases,
     disposedIds,
+    get routeHostDisposals(): number {
+      return box.routeHostDisposals;
+    },
     get shellDisposals(): number {
       return box.shellDisposals;
     },
@@ -87,10 +104,9 @@ describe('createGameSessionHost: start', () => {
     const h = harness();
     h.host.start();
     expect(h.startArgs).toHaveLength(1);
-    const [canvas, uiRoot, versus] = h.startArgs[0];
+    const [canvas, versus] = h.startArgs[0];
     expect(canvas).toBe(h.canvases[0]);
     expect(canvas.parentElement, 'the session was started on a canvas outside the root').toBe(h.root);
-    expect(uiRoot).toBe(h.root);
     // `null`, not a config: the page opens on campaign. A host that started the first
     // session from a retained versus config would put a returning player straight into
     // a match they did not ask for.
@@ -126,19 +142,22 @@ describe('createGameSessionHost: start', () => {
 });
 
 describe('createGameSessionHost: the reboot seams', () => {
-  it('hands every session the SAME two callbacks and the SAME shell', () => {
+  it('hands every session the SAME two callbacks, the SAME shell and the SAME route UI', () => {
     // Identity, not equality. A fresh pair per session would hand the OUTGOING session's
     // closure to the incoming one; a fresh shell would reintroduce the resetting-mute
-    // (#320) and replaying-splash (#317) defects with every unit test still green.
+    // (#320) and replaying-splash (#317) defects with every unit test still green; a
+    // fresh route UI (issue #468) would rebuild the whole menu on every switch, which is
+    // the defect this host's route-UI argument exists to make impossible.
     const h = harness();
     h.host.start();
-    h.startArgs[0][3](config('arena-02'));
-    h.startArgs[1][4]();
+    h.startArgs[0][2](config('arena-02'));
+    h.startArgs[1][3]();
     expect(h.startArgs).toHaveLength(3);
-    for (const [, , , reqVersus, reqCampaign, shell] of h.startArgs) {
-      expect(reqVersus).toBe(h.startArgs[0][3]);
-      expect(reqCampaign).toBe(h.startArgs[0][4]);
+    for (const [, , reqVersus, reqCampaign, shell, routeHost] of h.startArgs) {
+      expect(reqVersus).toBe(h.startArgs[0][2]);
+      expect(reqCampaign).toBe(h.startArgs[0][3]);
       expect(shell).toBe(h.shell);
+      expect(routeHost).toBe(h.routeHost);
     }
   });
 
@@ -147,8 +166,8 @@ describe('createGameSessionHost: the reboot seams', () => {
     // its own UI must get the one the sessions hold, not a second entry point.
     const h = harness();
     h.host.start();
-    expect(h.startArgs[0][3]).toBe(h.host.requestVersusSession);
-    expect(h.startArgs[0][4]).toBe(h.host.requestCampaignSession);
+    expect(h.startArgs[0][2]).toBe(h.host.requestVersusSession);
+    expect(h.startArgs[0][3]).toBe(h.host.requestCampaignSession);
   });
 
   it('a versus request disposes the running session exactly once and starts one carrying the config', () => {
@@ -158,7 +177,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     h.host.requestVersusSession(vs);
     expect(h.disposedIds, 'the outgoing session was left running').toEqual([0]);
     expect(h.startArgs).toHaveLength(2);
-    expect(h.startArgs[1][2]).toEqual({ config: vs });
+    expect(h.startArgs[1][1]).toEqual({ config: vs });
   });
 
   it('a campaign request from a versus session starts with versus: null', () => {
@@ -167,7 +186,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestCampaignSession();
     expect(h.disposedIds).toEqual([0, 1]);
-    expect(h.startArgs[2][2], 'the campaign reboot carried the versus config forward').toBeNull();
+    expect(h.startArgs[2][1], 'the campaign reboot carried the versus config forward').toBeNull();
   });
 
   it('a versus request AFTER a campaign detour carries its OWN config', () => {
@@ -179,7 +198,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestCampaignSession();
     h.host.requestVersusSession(config('vs-duel-01'));
-    expect(h.startArgs[3][2]).toEqual({ config: config('vs-duel-01') });
+    expect(h.startArgs[3][1]).toEqual({ config: config('vs-duel-01') });
   });
 
   it('a SECOND replacement disposes the SECOND session, not the first -- the stale-capture control', () => {
@@ -353,8 +372,8 @@ describe('createGameSessionHost: the empty host (issue #427)', () => {
     h.host.start();
     h.host.requestVersusSession(config('vs-duel-01'));
     expect(h.startArgs).toHaveLength(2);
-    expect(h.startArgs[0][5]).toBe(h.shell);
-    expect(h.startArgs[1][5]).toBe(h.shell);
+    expect(h.startArgs[0][4]).toBe(h.shell);
+    expect(h.startArgs[1][4]).toBe(h.shell);
   });
 
   it('never leaves a session running through a replacement -- exactly one at a time', () => {
