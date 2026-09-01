@@ -2743,14 +2743,20 @@ describe('startGameWith: the gameplay slot is given back (issue #468)', () => {
    * The production half of `route-host.test.ts`'s slot mechanics: that `startGameWith`
    * actually TAKES the slot and its teardown actually GIVES IT BACK.
    *
-   * Counted as an EFFECT, not as a registration. `hud.ts` appends every `on*` callback
-   * and has no unregister, so before this issue a page-scoped HUD would hold one Mine
-   * handler per session and one tap would press the mine twice -- silently, and in a way
-   * no registration count can distinguish from a trampoline that dispatched twice.
+   * Counted as an EFFECT: `rec.minePresses` is what the input controller was actually
+   * told to do, not how many callbacks were registered.
    *
-   * Its negative control is `slot.detach()` in `startGameWith`'s `dispose()`: delete that
-   * line and the second assertion reads 2. Measured, not asserted -- see the manifest
-   * entry `session-teardown-keeps-the-gameplay-slot`.
+   * WHAT THIS PAIR CANNOT SEE, stated because it would otherwise read as broader than it
+   * is: this file's HUD fake REPLACES each `on*` callback (`onMineTap = cb`), so double
+   * REGISTRATION is invisible here however many sessions run. The append-and-count
+   * version of that is `route-host.test.ts`, whose fake mirrors the real `hud.ts`. What
+   * these two pin is the production wiring on either side of it -- that `startGameWith`
+   * takes the slot, and that its teardown gives it back.
+   *
+   * Both controls were run, not assumed:
+   *  - drop `live = state` from `attach()` and the FIRST assertion reads 0;
+   *  - drop `slot.detach()` from `startGameWith`'s `dispose()`, or register the
+   *    trampolines per attach instead of once, and the SECOND reads 1 instead of 0.
    */
   it('a tap reaches the LIVE session once, after a stop and a start', () => {
     const h = makeDeps();

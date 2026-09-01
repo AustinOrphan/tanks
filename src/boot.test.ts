@@ -460,6 +460,92 @@ describe('boot: the shell capability probe (issue #470)', () => {
   });
 });
 
+/**
+ * The page's route UI (issue #468), owned here exactly as the shell is.
+ *
+ * The suite above pins the SHELL's once-per-page/never-per-session ownership. These are
+ * the same four claims for the thing that owns the HUD, and they matter for a sharper
+ * reason: the shell is invisible, so a second one only loses preferences, while a second
+ * route UI means a second HUD element tree in the root and a menu that rebuilds itself on
+ * every Campaign<->Versus switch.
+ */
+describe('boot: the page-scoped route UI (issue #468)', () => {
+  const CONFIG_A: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+
+  it('builds it exactly ONCE, in the page root', () => {
+    const h = harness();
+    boot(h.deps);
+    expect(h.routeHostBuilds).toBe(1);
+    expect(h.routeHostRoots).toEqual([h.root]);
+  });
+
+  it('hands every session the SAME instance across both reboot paths', () => {
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][2](CONFIG_A); // a versus reboot
+    h.startArgs[1][3](); // ...and back to campaign
+    expect(h.startArgs).toHaveLength(3);
+    for (const args of h.startArgs) {
+      expect(args[5], 'a session was handed a fresh route UI').toBe(h.startArgs[0][5]);
+    }
+    expect(h.routeHostBuilds, 'a reboot rebuilt the page route UI').toBe(1);
+  });
+
+  it('does NOT dispose it on a session reboot', () => {
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][2](CONFIG_A);
+    expect(h.routeHostDisposals, 'a reboot tore down the menu the player is looking at').toBe(0);
+  });
+
+  it('disposes it exactly once when the PAGE goes away, after the session', () => {
+    const h = harness();
+    boot(h.deps);
+    expect(h.routeHostDisposals).toBe(0);
+    h.firePagehide();
+    expect(h.routeHostDisposals).toBe(1);
+  });
+
+  it('keeps it alive through a bfcache freeze', () => {
+    // A frozen page comes back intact and must come back with its HUD still in the root.
+    const h = harness();
+    boot(h.deps);
+    h.firePagehide(true);
+    expect(h.routeHostDisposals).toBe(0);
+  });
+
+  /**
+   * The application-level start seam (issue #468).
+   *
+   * Boot hands the route UI two request callbacks rather than letting it reach into a
+   * session, and those callbacks reach the session host. Fired here through the seam boot
+   * actually built, which is what proves the late binding closed: the route UI is built
+   * BEFORE the host exists, so a seam that captured `sessions` by value would forward
+   * nothing forever.
+   */
+  it('wires the route UI\'s start requests to the session host', () => {
+    const h = harness();
+    boot(h.deps);
+    expect(h.sessionRequests).toHaveLength(1);
+
+    h.sessionRequests[0].requestVersusSession(CONFIG_A);
+    expect(h.startArgs, 'a Versus Start from the route UI started nothing').toHaveLength(2);
+    expect(h.startArgs[1][1]!.config).toBe(CONFIG_A);
+
+    h.sessionRequests[0].requestCampaignSession();
+    expect(h.startArgs).toHaveLength(3);
+    expect(h.startArgs[2][1], 'the campaign request carried a versus config').toBeNull();
+  });
+
+  it('builds no route UI at all when the capability probe says no', () => {
+    // Ordered after the gate deliberately: a browser that cannot render should not pay
+    // for a HUD that `root.innerHTML = ''` is about to clear out from under it.
+    const h = harness({ render: { webgl2: false, failure: 'no-webgl2' } });
+    boot(h.deps);
+    expect(h.routeHostBuilds).toBe(0);
+  });
+});
+
 describe('boot: the message itself', () => {
   it('names WebGL and offers a way forward', () => {
     // It is the only thing a visitor on an unsupported browser ever sees.
