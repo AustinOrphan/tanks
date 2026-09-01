@@ -4,6 +4,7 @@ import { createAppShell, type AppShell } from './app-shell';
 import { createAppSettings, type AppSettings } from './app-settings';
 import { createMemoryStorage, createStores } from './storage';
 import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIES } from './capabilities';
+import { RENDER_CAPABILITY_SUPPORTED, type RenderCapability } from './render-capability';
 import { createBrowserDeps } from './loop';
 import type { AudioEngine } from '../audio/engine';
 
@@ -28,7 +29,10 @@ function recordingAudio(): { engine: AudioEngine; calls: string[] } {
   return { engine, calls };
 }
 
-function build(namespace: 'production' | 'developer' = 'production'): { shell: AppShell; audio: string[]; settingsDisposals: () => number } {
+function build(
+  namespace: 'production' | 'developer' = 'production',
+  render: RenderCapability = RENDER_CAPABILITY_SUPPORTED,
+): { shell: AppShell; audio: string[]; settingsDisposals: () => number } {
   const { engine, calls } = recordingAudio();
   let settingsDisposals = 0;
   const settings = realSettings(namespace);
@@ -40,7 +44,7 @@ function build(namespace: 'production' | 'developer' = 'production'): { shell: A
     },
   } as AppSettings;
   return {
-    shell: createAppShell({ settings: wrapped, audio: engine }),
+    shell: createAppShell({ settings: wrapped, audio: engine, render }),
     audio: calls,
     settingsDisposals: () => settingsDisposals,
   };
@@ -127,5 +131,45 @@ describe('createBrowserDeps: the storage namespace reaches the save API (issue #
     const deps = createBrowserDeps(shell);
     expect(deps.storageNamespace).toBe(shell.settings.namespace);
     expect(deps.storage).toBe(shell.settings.storage);
+  });
+});
+
+/**
+ * The retained capability answer (issue #470).
+ *
+ * The shell RETAINS what the probe said; it does not take the reading itself. That split
+ * is what lets `boot.ts` decide before a session exists, and lets a test drive both sides
+ * without a GPU -- and it is why `createBrowserAppShell` is the one place the real probe
+ * runs.
+ */
+describe('createAppShell: the retained render capability (issue #470)', () => {
+  it('exposes exactly what it was handed, unchanged', () => {
+    expect(build().shell.render).toBe(RENDER_CAPABILITY_SUPPORTED);
+
+    const answer: RenderCapability = { webgl2: false, failure: 'no-webgl2' };
+    expect(build('production', answer).shell.render).toBe(answer);
+  });
+
+  /**
+   * A FIELD, not a live source: unlike a gamepad, WebGL 2 support does not arrive mid
+   * document, and a shell that re-probed would take a fresh reading per read.
+   *
+   * Would fail if `render` became a getter over a fresh probe -- two reads would still be
+   * `toEqual`, but no longer the same object.
+   */
+  it('answers with the same object every time it is asked', () => {
+    const { shell } = build();
+    expect(shell.render).toBe(shell.render);
+  });
+
+  /**
+   * Survives the whole shell lifecycle for the same reason settings and audio do: the page
+   * keeps it while sessions come and go.
+   */
+  it('is still readable after the page teardown, so a late error screen can name the cause', () => {
+    const answer: RenderCapability = { webgl2: false, failure: 'probe-failed' };
+    const { shell } = build('production', answer);
+    shell.dispose();
+    expect(shell.render).toBe(answer);
   });
 });
