@@ -113,7 +113,13 @@ describe('probeRenderCapability: which context it asks for', () => {
     const source = readFileSync(entry, 'utf8');
     // The single acquisition site: `const contextName = 'webgl2';` with no sibling
     // assignment for a fallback level.
-    const names = [...source.matchAll(/const contextName = '([a-z0-9]+)'/g)].map((m) => m[1]);
+    //
+    // EITHER quote style (PR #474 review). The claim is about the context ID three asks
+    // for, not about how its bundler happens to emit string literals -- a single-quote-only
+    // pattern would fail this test on a formatting change that left the id untouched, which
+    // is a false report about the one fact the module is built on. A build that dropped the
+    // line entirely still fails, because the match list is then empty.
+    const names = [...source.matchAll(/const contextName = ['"]([a-z0-9]+)['"]/g)].map((m) => m[1]);
     expect(names).toEqual([WEBGL2_CONTEXT_ID]);
   });
 
