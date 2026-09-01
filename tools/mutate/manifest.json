@@ -3186,8 +3186,8 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 32,
+    "why": "The whole of issue #428, put back. A page that has shown nobody anything owns a canvas, a renderer, a GL context, a simulation world, a gameplay seed and a frame loop again, and a player who opens the game and walks away pays for a match they never asked for. 32 of 55 in the scoped run, and the breadth is the point rather than a nuisance: the eager start is not one behaviour but the premise every session-shaped assertion in boot.test.ts used to rest on, so re-adding it breaks the empty-boot counts, every start-gesture count (each reads one session too many), and the whole reboot ledger. The narrow half is 'reaches the application UI with no session, no canvas and no world', which is the one that would fail even if every other case were rewritten around it."
   },
   {
     "id": "boot-start-failure-escapes-the-page",
@@ -3198,8 +3198,8 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 8,
+    "why": "Drops the try/catch around the start request, so a `WebGLRenderer` that gets its context and then fails to initialise throws out of a HUD click handler with nobody listening. The player sits on a menu whose buttons silently do nothing -- no error page, no report, no clue. This guard is NEW WORK rather than a copy of `boot()`'s own: while the eager start existed, that same failure threw inside `boot()`'s try. Issue #428 turns a documented edge case ('a REPLACEMENT that throws does not arrive here') into the ordinary path. 8 of 55 in the scoped run: the five no-WebGL cases that now drive the failure through a start request, plus the capability suite's 'still catches a session that fails for a reason the probe cannot see' and the #428 suite's own 'a failed start reaches the same message page'."
   },
   {
     "id": "route-host-start-request-fires-with-a-session-running",
@@ -3211,7 +3211,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "Removes the empty-slot guard, so New Game asks for a whole new session WHILE one is running -- on top of the in-session New Game the slot also receives. Two runs from one click, and the second discards the first's world mid-frame. Silent in a browser: the screen ends up on a level-one board either way, which is what the click asked for. 1 of 25 -- 'none of the three asks for a session while one is attached', the only case that asserts the request seam stays EMPTY with a session live. Its siblings all drive an empty host and keep passing, which is what makes this a real two-way discrimination rather than a restatement of them."
   },
   {
     "id": "route-host-continue-asks-for-a-new-run",
@@ -3223,7 +3223,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "Continue asks for a FRESH run. The most destructive single-token defect in this issue: a player resuming a campaign at level 8 silently has their run replaced with a level-one one, and the persistence write happens at the start boundary before anything is on screen to warn them. Both intents land on a playable campaign board, so nothing about the transition looks wrong. 1 of 25 -- 'Continue asks for the active campaign run'. The New Game case asserts the value this mutation hardcodes and keeps passing, which is the pair that makes either assertion mean anything."
   },
   {
     "id": "route-host-level-pick-drops-the-level",
@@ -3235,7 +3235,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "Every Levels pick starts level one. The index is carried through three layers -- HUD callback, start request, start boundary -- and this is the join where losing it produces a working game on the wrong board rather than an error. 1 of 25 -- 'a Levels pick asks for that level, carrying the index', which drives index 3 specifically. A fixture that happened to pick level 0 could not see this, which is why that case does not."
   },
   {
     "id": "start-boundary-new-game-stays-on-the-run-board",
@@ -3247,7 +3247,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes."
   },
   {
     "id": "start-boundary-new-game-never-writes-the-run",
@@ -3259,7 +3259,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "The opposite half: New Game lands on level one and never touches the run, so the board is right and the campaign the player thinks they restarted is still sitting at level 8 with its old lives. Invisible until they quit and press Continue. Paired with the entry above so both halves of the one write this issue makes are pinned separately -- neither can stand in for the other. `void startsCampaignRun;` rather than a deletion so the guard is still read and a tsc failure cannot be mistaken for coverage. 1 of 412."
   },
   {
     "id": "start-boundary-practice-keeps-the-campaign-identity",
@@ -3271,7 +3271,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "A Practice pick that keeps the CAMPAIGN identity. `campaignActive()` reads that identity and is what stops practice consuming, restoring, advancing or ending the run -- so an isolated look at level 2 starts writing the player's real campaign progress. Exactly the class the project's game rules name ('Practice/level-select state must not create or mutate a campaign run'), reintroduced at the new boundary rather than at the in-session handler that already had it. 1 of 412 -- 'practice lands on the picked level and leaves the run untouched', which is the only case that reads the run store after a pick."
   },
   {
     "id": "start-boundary-accepts-an-out-of-range-level",
@@ -3282,8 +3282,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 2,
+    "why": "Removes the bounds check, so `deps.levels.levels[7]` on a five-level sequence is `undefined` and the world build reads properties off it. Since #428 this throws out of a HUD click handler -- into `boot.ts`'s start guard, which paints the no-WebGL message for a defect that has nothing to do with WebGL. `if (true)` rather than a deletion so the branch body still runs and the entry measures the CHECK rather than the assignment. 2 of 412: the out-of-range case and the non-integer one, which is the pair that separates the range test from the integer test -- a check that kept only `picked < length` would still pass the first."
   },
   {
     "id": "route-host-never-paints-the-surface",
@@ -3295,8 +3295,8 @@
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 9,
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 437 across both scoped files. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -3308,7 +3308,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "Drops the early return, so the key that dismisses the splash ALSO reaches the session's hotkeys. 'Press any key or tap to begin' then includes M, which mutes: the one key most likely to be pressed by someone checking whether the game has sound silences the menu bed the screen exists to make audible, with only the Mute button's label left to explain why. This is why the page owns ONE keydown listener and trampolines it rather than adding a second beside the session's -- two listeners would race, whichever ran first moving the route out from under the other's guard. 1 of 412 -- 'the key that dismisses it does nothing else'."
   },
   {
     "id": "session-host-campaign-return-replaces-instead-of-stopping",
@@ -3320,7 +3320,7 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 14,
+    "why": "Puts back the pre-#428 Campaign button: returning to the campaign title builds a whole session -- canvas, renderer, world, seed -- for the sole purpose of showing a title screen the page has owned since #468. That is eager creation wearing a different hat, and it is the one path that would have kept it after the eager boot was removed. 14 of 79 across both scoped files, because the session ledger, the canvas count and the empty-host state all move together on this path. The narrow case is session-host.test.ts's 'a campaign request stops the versus session and starts nothing', which asserts `hasSession()` is false and the root holds no canvas."
   }
 ]
