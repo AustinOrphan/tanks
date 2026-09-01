@@ -6,16 +6,30 @@ import type { VersusConfig } from './game/versus-config';
 import { boot, NO_WEBGL_MESSAGE, UnsupportedRenderError, type BootDeps } from './boot';
 import type { AppShell } from './game/app-shell';
 import { RENDER_CAPABILITY_SUPPORTED, type RenderCapability } from './game/render-capability';
-import type { RouteHost, SessionRequests } from './game/route-host';
+import type { RouteHost, SessionRequests, StartIntent } from './game/route-host';
 
 type StartArgs = [
   HTMLCanvasElement,
-  { config: VersusConfig } | null,
+  StartIntent,
   (config: VersusConfig) => void,
   () => void,
   AppShell,
   RouteHost,
 ];
+
+
+/**
+ * The versus config a start intent carries, or `null` for the three campaign/practice
+ * kinds (issue #428).
+ *
+ * The `versus: {config} | null` argument these suites used to read became a four-kind
+ * `StartIntent`, so "this start was for a versus match with THIS config" and "this start
+ * was not a versus one" are both asked through here rather than by pattern-matching at
+ * each of the eight sites.
+ */
+function versusConfigOf(intent: StartIntent): VersusConfig | null {
+  return intent.kind === 'versus' ? intent.config : null;
+}
 
 function harness(
   opts: {
@@ -530,11 +544,11 @@ describe('boot: the page-scoped route UI (issue #468)', () => {
 
     h.sessionRequests[0].requestVersusSession(CONFIG_A);
     expect(h.startArgs, 'a Versus Start from the route UI started nothing').toHaveLength(2);
-    expect(h.startArgs[1][1]!.config).toBe(CONFIG_A);
+    expect(versusConfigOf(h.startArgs[1][1])).toBe(CONFIG_A);
 
     h.sessionRequests[0].requestCampaignSession();
     expect(h.startArgs).toHaveLength(3);
-    expect(h.startArgs[2][1], 'the campaign request carried a versus config').toBeNull();
+    expect(versusConfigOf(h.startArgs[2][1]), 'the campaign request carried a versus config').toBeNull();
   });
 
   it('builds no route UI at all when the capability probe says no', () => {
@@ -597,8 +611,8 @@ describe('boot: versus session reboot', () => {
     requestVersusSession(CONFIG_A);
     expect(h.disposedIds).toEqual([0]);
     expect(h.startArgs).toHaveLength(2);
-    expect(h.startArgs[1][1]).not.toBeNull();
-    expect(h.startArgs[1][1]!.config).toBe(CONFIG_A);
+    expect(versusConfigOf(h.startArgs[1][1])).not.toBeNull();
+    expect(versusConfigOf(h.startArgs[1][1])).toBe(CONFIG_A);
   });
 
   it('a second request disposes the SECOND handle, not the first -- the stale-capture control', () => {
@@ -611,7 +625,7 @@ describe('boot: versus session reboot', () => {
     h.startArgs[1][2](CONFIG_B);
     expect(h.disposedIds).toEqual([0, 1]);
     expect(h.startArgs).toHaveLength(3);
-    expect(h.startArgs[2][1]!.config).toBe(CONFIG_B);
+    expect(versusConfigOf(h.startArgs[2][1])).toBe(CONFIG_B);
   });
 
   it('pagehide after a reboot disposes the CURRENT handle, not the original one', () => {
@@ -682,7 +696,7 @@ describe('boot: campaign session reboot (Task 5b)', () => {
     requestCampaignSession();
     expect(h.disposedIds).toEqual([0, 1]);
     expect(h.startArgs).toHaveLength(3);
-    expect(h.startArgs[2][1]).toBeNull();
+    expect(versusConfigOf(h.startArgs[2][1])).toBeNull();
   });
 
   it('threads the SAME requestVersusSession/requestCampaignSession functions through to the new campaign session', () => {
@@ -711,7 +725,7 @@ describe('boot: campaign session reboot (Task 5b)', () => {
     requestCampaignSession(); // handle #4: campaign
     expect(h.disposedIds).toEqual([0, 1, 2, 3]);
     expect(h.startArgs).toHaveLength(5);
-    expect(h.startArgs[4][1]).toBeNull();
+    expect(versusConfigOf(h.startArgs[4][1])).toBeNull();
   });
 
   it('pagehide after a campaign reboot disposes the CURRENT handle, not an earlier one', () => {
@@ -765,6 +779,6 @@ describe('boot: campaign session reboot (Task 5b)', () => {
     const requestVersusSession = h.startArgs[2][2];
     requestVersusSession(CONFIG_B);
     expect(h.startArgs).toHaveLength(4);
-    expect(h.startArgs[3][1]!.config).toBe(CONFIG_B);
+    expect(versusConfigOf(h.startArgs[3][1])).toBe(CONFIG_B);
   });
 });

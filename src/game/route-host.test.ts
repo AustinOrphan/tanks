@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { createRouteHost, type RouteHost, type RouteHostDeps } from './route-host';
+import { createRouteHost, type RouteHost, type RouteHostDeps, type StartIntent } from './route-host';
 import { createAppSettings } from './app-settings';
 import { createMemoryStorage, createStores } from './storage';
 import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIES } from './capabilities';
@@ -93,6 +93,8 @@ function recordingHud(): {
 
 interface Fixture {
   host: RouteHost;
+  /** Every application-level start request the routes made (issue #428), in order. */
+  startRequests: StartIntent[];
   hud: ReturnType<typeof recordingHud>;
   root: HTMLElement;
   versusStarts: VersusConfig[];
@@ -114,6 +116,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
   const hud = recordingHud();
   const root = document.createElement('div');
   const box = {
+    startRequests: [] as StartIntent[],
     versusStarts: [] as VersusConfig[],
     campaignRequests: 0,
     previewDisposals: 0,
@@ -168,6 +171,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
   };
 
   const host = createRouteHost(root, deps, {
+    requestStart: (intent) => box.startRequests.push(intent),
     requestVersusSession: (config) => box.versusStarts.push(config),
     requestCampaignSession: () => {
       box.campaignRequests += 1;
@@ -178,6 +182,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
     host,
     hud,
     root,
+    startRequests: box.startRequests,
     versusStarts: box.versusStarts,
     campaignRequests: () => box.campaignRequests,
     previewDisposals: () => box.previewDisposals,

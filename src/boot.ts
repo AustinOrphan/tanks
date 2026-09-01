@@ -187,6 +187,10 @@ export function boot(deps: BootDeps): void {
      */
     let sessions: GameSessionHost | null = null;
     const routeHost = deps.createRouteHost(deps.root, shell, {
+      // THE ONE PLACE a gameplay session comes into existence (issue #428). Four gestures
+      // reach it -- Continue, New Game, a Practice level pick, Versus Start -- and nothing
+      // else in the page can produce a world, a seed or a renderer.
+      requestStart: (intent) => sessions?.start(intent),
       requestVersusSession: (config) => sessions?.requestVersusSession(config),
       requestCampaignSession: () => sessions?.requestCampaignSession(),
     });
@@ -211,7 +215,20 @@ export function boot(deps: BootDeps): void {
     // `sessions` in this function is on the assigned value, so the `?.`s are for the
     // construction window only.
     const host = sessions;
-    host.start();
+
+    // ...and NOTHING is started (issue #428).
+    //
+    // This is where `sessions.start()` used to be. Every page load built a canvas, a
+    // renderer, a GL context, a simulation world, a gameplay seed and a frame loop before
+    // the player had seen the title screen, let alone chosen anything -- and a player who
+    // opened the game and walked away paid for a running match they never asked for. The
+    // page now boots into the shell-owned application UI (issue #468) with an EMPTY host,
+    // and the four start gestures above are the only things that fill it.
+    //
+    // What made this removable, and why it could not be done alone: #468 moved the HUD,
+    // the state machine and the route handlers above the session, so there is a Main Menu
+    // to boot into; #470 moved the WebGL capability answer off `WEBGLRenderer`'s
+    // constructor, so the support check above no longer needs a session to exist.
 
     // startGame's teardown was once unreachable: nothing called it, so the
     // frame loop, the window listeners and the GL context outlived the page.

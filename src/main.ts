@@ -17,11 +17,23 @@ boot({
   // with, and threads the reboot callback boot.ts hands back on every call. No
   // branching here -- that logic lives in versusAwareDeps/applyVersusToDeps, which
   // a test can reach directly.
-  startGame: (canvas, versus, requestVersusSession, requestCampaignSession, shell, routeHost) =>
+  startGame: (canvas, intent, requestVersusSession, requestCampaignSession, shell, routeHost) =>
     startGameWith(
       canvas,
-      versusAwareDeps(versus, requestVersusSession, requestCampaignSession, shell),
+      // The versus half of the intent, in the shape `applyVersusToDeps` has always taken:
+      // a config swaps in the versus level system and the Versus identity, and every other
+      // intent is a campaign-level-system session that `startGameWith` then lands on the
+      // board the intent names. No branching here beyond that translation -- issue #428's
+      // start policy lives in `startGameWith`'s own START BOUNDARY block, which a test can
+      // reach directly.
+      versusAwareDeps(
+        intent.kind === 'versus' ? { config: intent.config } : null,
+        requestVersusSession,
+        requestCampaignSession,
+        shell,
+      ),
       routeHost,
+      intent,
     ),
   host: window,
   reportError: (err) => console.error('Tanks! failed to start:', err),

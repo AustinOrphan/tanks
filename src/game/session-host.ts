@@ -1,7 +1,7 @@
 import type { GameHandle } from './loop';
 import type { VersusConfig } from './versus-config';
 import type { AppShell } from './app-shell';
-import type { RouteHost } from './route-host';
+import type { RouteHost, StartIntent } from './route-host';
 
 /**
  * The replaceable half of issue #317's ownership split.
@@ -21,13 +21,20 @@ import type { RouteHost } from './route-host';
  */
 export interface GameSessionHost {
   /**
-   * Create and run the FIRST session, on a canvas built into the root.
+   * Create and run a session for one explicit match-start request (issue #428).
    *
-   * Separate from construction because `boot.ts` builds the host inside its try/catch and
-   * a `WebGLRenderer` with no WebGL support throws out of `startGame` -- so the throw has
-   * to happen at a call the caller can put inside that catch, not at construction.
+   * Until #428 this took no argument and `boot.ts` called it EAGERLY, so a page that had
+   * shown nobody anything already owned a world, a seed, a driver and a GL context. It is
+   * now called only from the four gestures that genuinely start a match -- Continue, New
+   * Game, a Practice level pick and Versus Start -- and the intent is what decides which
+   * board gets built.
+   *
+   * Still separate from construction, and still for the original reason: `boot.ts` builds
+   * the host inside its try/catch, and a `WebGLRenderer` that fails to initialise throws
+   * out of `startGame`, so the throw has to happen at a call rather than at construction.
+   * Since #470 the ordinary no-WebGL case is answered before any of this.
    */
-  start(): void;
+  start(intent: StartIntent): void;
   /**
    * Is a gameplay session running right now? (issue #427)
    *
@@ -87,7 +94,7 @@ export interface GameSessionHostDeps {
    */
   readonly startGame: (
     canvas: HTMLCanvasElement,
-    versus: { config: VersusConfig } | null,
+    intent: StartIntent,
     requestVersusSession: (config: VersusConfig) => void,
     requestCampaignSession: () => void,
     shell: AppShell,
@@ -136,11 +143,11 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
    * naming it `create` alone would advertise a session that exists but is not running,
    * which is not a state this host can produce.
    */
-  const create = (versus: { config: VersusConfig } | null): void => {
+  const create = (intent: StartIntent): void => {
     canvas = deps.bootCanvas(deps.root);
     handle = deps.startGame(
       canvas,
-      versus,
+      intent,
       requestVersusSession,
       requestCampaignSession,
       deps.shell,
@@ -167,11 +174,11 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
    * the next teardown and leave the live session's loop, listeners and GL context all
    * still running.
    */
-  const replace = (versus: { config: VersusConfig } | null): void => {
+  const replace = (intent: StartIntent): void => {
     if (spent) return;
     stop();
     canvas?.remove();
-    create(versus);
+    create(intent);
   };
 
   function stop(): void {
@@ -184,24 +191,36 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
     // `lastVersusConfig`, not the bare `config` parameter: the next session is handed
     // exactly what was just recorded, one write ago -- not a second, independent
     // reference to the same object that a later refactor could split in two.
-    replace({ config: lastVersusConfig });
+    replace({ kind: 'versus', config: lastVersusConfig });
   };
 
+  /**
+   * A versus session's Campaign button: back to the campaign title.
+   *
+   * Since issue #428 this STOPS rather than replaces. Building a fresh campaign session
+   * to show a title screen is precisely the eager creation #428 removes -- the page has
+   * owned its own menu since #468, so returning to it needs no session at all. The exact
+   * disposal accounting, and the other gameplay-to-route exits, are #429's.
+   */
   const requestCampaignSession = (): void => {
-    replace(null);
+    if (spent) return;
+    stop();
+    canvas?.remove();
+    canvas = null;
   };
 
   return {
     hasSession: () => handle !== null,
-    start(): void {
-      // `replace`, not `create`: routing the first session through the same path as every
-      // later one is what makes `start()` obey the `spent` latch and dispose a predecessor.
-      // Calling `create` directly -- the shape this had first -- meant a `start()` after
-      // `dispose()` built a session onto a dying page, and a second `start()` orphaned the
-      // first session's loop, renderer and GL context with nothing left holding its handle.
-      // On the ONLY call boot.ts makes, with no handle and no canvas yet, the two are
-      // identical: `stop()` no-ops and there is nothing to remove.
-      replace(null);
+    start(intent): void {
+      // `replace`, not `create`: routing every start through the same path is what makes
+      // `start()` obey the `spent` latch and dispose a predecessor. Calling `create`
+      // directly -- the shape this had first -- meant a `start()` after `dispose()` built
+      // a session onto a dying page, and a second `start()` orphaned the first session's
+      // loop, renderer and GL context with nothing left holding its handle. That second
+      // case stopped being hypothetical in issue #428: `start()` is now called from a HUD
+      // button rather than once from `boot()`, so a player who presses New Game twice
+      // takes exactly this path.
+      replace(intent);
     },
     requestVersusSession,
     requestCampaignSession,

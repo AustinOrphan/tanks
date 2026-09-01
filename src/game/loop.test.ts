@@ -110,7 +110,7 @@ import { boot as bootPage } from '../boot';
 import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
 import { createAppShell, type AppShell } from './app-shell';
-import { createRouteHost, type RouteHost } from './route-host';
+import { createRouteHost, type RouteHost, type StartIntent } from './route-host';
 import { RENDER_CAPABILITY_SUPPORTED } from './render-capability';
 import type { GameHandle } from './loop';
 import { createMemoryStorage, type StorageNamespace } from './storage';
@@ -363,6 +363,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   routeHost: RouteHost;
   /** The element the route host built its HUD in. Sessions no longer take a root. */
   uiRoot: HTMLElement;
+  /** Every application-level start request the routes made (issue #428), in order. */
+  startRequests: StartIntent[];
   /**
    * Point the PAGE-level start requests at a spy (issue #468).
    *
@@ -1565,7 +1567,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
   // The real route host over the harness's fakes. `deps` is a full `GameDeps`, which
   // structurally satisfies `RouteHostDeps`, so nothing here has to restate the subset.
+  const startRequests: StartIntent[] = [];
   const routeHost = createRouteHost(uiRoot, deps, {
+    // RECORDED, not serviced (issue #428). These suites call `startGameWith`
+    // themselves, so a seam that started a session here would leave two live and make
+    // every count below ambiguous. `bootPageOn` is where the request is honoured.
+    requestStart: (intent) => startRequests.push(intent),
     requestVersusSession: (config) => pageRequests.versus(config),
     requestCampaignSession: () => pageRequests.campaign(),
   });
@@ -1574,6 +1581,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     deps,
     routeHost,
     uiRoot,
+    startRequests,
     setPageRequests(next): void {
       Object.assign(pageRequests, next);
     },
@@ -1730,6 +1738,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
  *
  * Use `bootAtSplash()` when the title screen itself is the subject.
  */
+/** The intent the eager boot used to be: resume the run on whatever board it reached. */
+const CONTINUE: StartIntent = { kind: 'campaign-continue' };
+
 function boot(h = makeDeps()): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
   const booted = bootAtSplash(h);
   booted.pointerdown(); // splash -> title, the way a player leaves it
@@ -1740,7 +1751,7 @@ function bootAtSplash(
   h = makeDeps(),
 ): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
   const canvas = document.createElement('canvas');
-  const handle = startGameWith(canvas, h.deps, h.routeHost);
+  const handle = startGameWith(canvas, h.deps, h.routeHost, CONTINUE);
   return Object.assign(h, { handle });
 }
 
@@ -1905,9 +1916,9 @@ describe('startGameWith: construction', () => {
     const h = makeDeps();
     expect(h.rec.hudRoots).toEqual([h.uiRoot]);
 
-    const first = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+    const first = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, CONTINUE);
     first.dispose();
-    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, CONTINUE);
     second.dispose();
 
     expect(h.rec.hudRoots, 'a session built its own HUD').toEqual([h.uiRoot]);
@@ -2827,7 +2838,7 @@ describe('startGameWith: the gameplay slot is given back (issue #468)', () => {
     expect(h.rec.minePresses, 'the first session did not receive its own tap').toBe(1);
 
     first.handle.dispose();
-    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, CONTINUE);
 
     h.hud.mineTap();
     expect(h.rec.minePresses, 'the retired session was still receiving taps').toBe(2);
@@ -2862,7 +2873,7 @@ describe('startGameWith: settings survive internal session replacement', () => {
 
     const canvas = document.createElement('canvas');
     // The SAME route host the first session used -- boot.ts's reboot path in miniature.
-    const second = startGameWith(canvas, h.deps, h.routeHost);
+    const second = startGameWith(canvas, h.deps, h.routeHost, CONTINUE);
     expect(h.rec.audioMuted.at(-1), 'the replacement session unmuted').toBe(true);
     expect(h.rec.volumes.at(-1), 'the replacement session restored DEFAULT_VOLUME').toBe(0.2);
     expect(h.rec.schemeSets.at(-1)).toBe('point');
@@ -2879,7 +2890,7 @@ describe('startGameWith: settings survive internal session replacement', () => {
     first.handle.dispose();
     const canvas = document.createElement('canvas');
     // The SAME route host the first session used -- boot.ts's reboot path in miniature.
-    const second = startGameWith(canvas, h.deps, h.routeHost);
+    const second = startGameWith(canvas, h.deps, h.routeHost, CONTINUE);
     const before = h.rec.audioMuted.length;
     h.settingsStore.setMuted(true);
     expect(h.rec.audioMuted.length - before, 'the dead session was still listening').toBe(1);
@@ -7953,14 +7964,19 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
         },
         requests,
       ),
-    startGame: (canvas, versus, reqVersus, reqCampaign, _appShell, routeHost): GameHandle => {
+    startGame: (canvas, intent, reqVersus, reqCampaign, _appShell, routeHost): GameHandle => {
       sessions += 1;
       requestVersus = reqVersus;
       requestCampaign = reqCampaign;
       return startGameWith(
         canvas,
         {
-          ...applyVersusToDeps(h.deps, versus, reqVersus, reqCampaign),
+          ...applyVersusToDeps(
+            h.deps,
+            intent.kind === 'versus' ? { config: intent.config } : null,
+            reqVersus,
+            reqCampaign,
+          ),
           // `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
           // harness's own default is session-owned (`releaseAudio` disposes), which would
           // hand the second session an engine the first one had already latched shut.
@@ -7972,6 +7988,7 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
           },
         },
         routeHost,
+        intent,
       );
     },
     host: {

@@ -84,7 +84,7 @@ import {
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from './devflags';
-import type { RouteHost } from './route-host';
+import type { RouteHost, StartIntent } from './route-host';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
@@ -1133,6 +1133,16 @@ export function startGameWith(
    * so keeping the argument would have left every caller passing an element nothing read.
    */
   routeHost: RouteHost,
+  /**
+   * WHICH match the player just asked for (issue #428).
+   *
+   * Required, and the reason it is: `boot.ts` no longer starts a session eagerly, so
+   * every call to this function now answers a deliberate gesture. A default would put
+   * back the one thing #428 removes -- a session that exists because the page loaded.
+   *
+   * See the START BOUNDARY block below for what each intent moves.
+   */
+  intent: StartIntent,
 ): GameHandle {
   // The STARTING level's board, not a fixed arena: a dev-flag jump may open on a
   // different-sized level, and the renderer must be born fitting it.
@@ -1351,6 +1361,59 @@ export function startGameWith(
   let sessionIdentity: SessionIdentity = bootContext.identity;
 
   /**
+   * THE START BOUNDARY (issue #428).
+   *
+   * `bootContext` above answers "what kind of session do this page's developer flags and
+   * retained versus config describe" -- a question about the PAGE, and the only question
+   * there was while `boot.ts` started a session eagerly. This answers the one #428 adds:
+   * which board did the player just ask for, and does that request own the campaign run.
+   *
+   * Three of the four intents move something here, and each moves the minimum:
+   *
+   *  - `campaign-continue` moves NOTHING. `deps.levels.start` already resolves to the
+   *    run's own level (levels.ts) and `bootLives` already adopts its lives, which is
+   *    exactly what Continue means -- so the intent that used to be the eager boot is
+   *    still, byte for byte, the eager boot's behaviour.
+   *  - `campaign-new` writes the run ONCE, here, and lands on level one. The write is
+   *    guarded the same way the in-session New Game button's is: a session that does not
+   *    own the run (practice, sandbox, a developer jump, versus) gets the fresh board
+   *    without the run mutation. `startNewRun` is the only persistence write any start
+   *    request makes.
+   *  - `practice` switches the identity to `practice-level` and lands on the picked
+   *    level, so the run is never read or written -- `campaignActive()` below reads this
+   *    identity and is what enforces it.
+   *  - `versus` moves nothing here: the config reached `applyVersusToDeps` before this
+   *    function was called, so `deps.levels` is already the versus level system and
+   *    `bootContext.identity` is already Versus.
+   *
+   * REJECTED BEFORE ANYTHING IS CONSUMED. The level-bounds check is the same one the
+   * in-session Levels handler makes, moved to the boundary that now runs first: a request
+   * naming a level this session's sequence does not have falls back to the run's own
+   * board rather than building an undefined one. No seed is drawn and no run is written
+   * on the way to that decision, which is #428's "invalid or cancelled starts create no
+   * session, world, seed, or persistence mutation" -- for the world specifically, the
+   * caller is what declines to start, and this is the half that declines to MUTATE.
+   */
+  const startsCampaignRun =
+    bootContext.identity.kind === 'campaign' && deps.levels.tracksProgress && !deps.levels.isDevJump;
+  let newRunLives: number | undefined;
+  if (intent.kind === 'campaign-new') {
+    level = deps.levels.levels[0];
+    if (startsCampaignRun) newRunLives = deps.run.startNewRun(level.id).livesRemaining;
+  } else if (intent.kind === 'practice') {
+    const picked = intent.level;
+    if (Number.isInteger(picked) && picked >= 0 && picked < deps.levels.levels.length) {
+      // `identityForLevelPick`, not an unconditional Practice, for the reason the
+      // in-session handler gives: the Levels button is genuinely reachable on a
+      // developer-flag versus session, and calling that match Practice would drop its
+      // stock strip and report `practice-result` for a match the sim decided by
+      // last-slot-standing.
+      sessionIdentity = identityForLevelPick(bootContext.identity);
+      level = deps.levels.levels[picked];
+    }
+  }
+
+  /**
    * WHAT THE MENU AND OUTCOME BUTTONS DO -- decided once, from the canonical
    * model, and read by BOTH consumers: the HUD's title/outcome affordances and
    * `onStartRestart`'s own branch. One source of truth on purpose; the branch
@@ -1370,11 +1433,15 @@ export function startGameWith(
   // multiplayer session opened mid-campaign would silently inherit whatever life count
   // the solo run happened to be sitting on, which has no decided meaning for a shared
   // pool.
-  const bootLives = bootContext.identity.kind === 'campaign'
+  const bootLives = sessionIdentity.kind === 'campaign'
       && deps.levels.tracksProgress
       && !deps.levels.isDevJump
       && playerCount === 1
-    ? deps.run.active()?.livesRemaining
+    // The fresh run's lives when this start CREATED one (issue #428), and the active
+    // run's otherwise. Read from `newRunLives` rather than re-reading `run.active()`,
+    // so New Game's board shows the lives the write above actually returned rather
+    // than a second read that a failed write would leave stale.
+    ? newRunLives ?? deps.run.active()?.livesRemaining
     : undefined;
   let world = buildWorld(level, bootLives);
   /**
