@@ -86,6 +86,7 @@ const ATOMIC = {
   'test:gl': 'node tools/gl/run.mjs',
   'trace:browser': 'node tools/baseline/run.mjs',
   visual: 'node tools/visual/verify.mjs dist --check',
+  roundtrip: 'node tools/visual/roundtrip.mjs dist',
   mutate: 'node tools/mutate/run.mjs',
   'audit:prod': 'npm audit --omit=dev --audit-level=high',
   'issues:audit': 'node tools/issues/run.mjs audit',
@@ -98,11 +99,12 @@ const COMPOSITES = {
   'mutate:smoke': 'npm run mutate -- --only capture-prerequisite-error-drops-the-ci-pin',
   'verify:quick': 'npm run typecheck && npm run test:unit --',
   'verify:build': 'npm run build && npm run portability',
-  'verify:visual': 'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual',
+  'verify:visual':
+    'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual && npm run roundtrip',
   'verify:full': 'npm run verify:quick && npm run mutate && npm run verify:build && npm run audit:prod',
 } as const;
 
-const BROWSER_LEAVES = ['test:gl', 'trace:browser', 'visual'] as const;
+const BROWSER_LEAVES = ['test:gl', 'trace:browser', 'visual', 'roundtrip'] as const;
 const DIRECT_BEACON_COMMAND = 'node tools/baseline/run.mjs --beacon --timeout 300000';
 
 const referencedScripts = (command: string): string[] =>
@@ -242,10 +244,20 @@ describe('the canonical verification scripts', () => {
       'test:gl',
       'trace:browser',
       'visual',
+      // The session-lifecycle census (issue #480). A BROWSER leaf like the three above it,
+      // so `browserLeaks` below has to know about it or `verify:full` could quietly acquire
+      // a chromium dependency the "complete core, non-browser composite" promises it has not.
+      'roundtrip',
     ]);
     expect(browserLeaks(expandScript('verify:full', SCRIPTS))).toEqual([]);
     expect(browserLeaks(['typecheck', 'visual'])).toEqual(['visual']);
     expect(browserLeaks(['test:gl', 'audit:prod'])).toEqual(['test:gl']);
+    // The known-bad control for the newest leaf. Without it, dropping 'roundtrip' from
+    // BROWSER_LEAVES would change nothing any assertion here can see -- `verify:full` does
+    // not contain it, so the two sweeps above stay green either way, and the guard would
+    // advertise a protection it had stopped providing. Verified by deleting that entry:
+    // this line fails and nothing else does.
+    expect(browserLeaks(['typecheck', 'roundtrip'])).toEqual(['roundtrip']);
     expect(COMMAND_REFERENCE).toMatch(/`verify:full` is the complete core, non-browser composite/);
   });
 
@@ -393,6 +405,7 @@ describe('canonical verification commands in workflows', () => {
       'GL tests (scene.ts)': 'npm run test:gl',
       'Baseline trace (chromium)': 'npm run trace:browser',
       'Visual check': 'npm run visual -- --out visual-out',
+      'Session lifecycle round trip': 'npm run roundtrip',
     };
     for (const [name, command] of Object.entries(visualExpected)) {
       expect(namedStep(ciVisual, name), name).toContain(`run: ${command}`);
