@@ -3075,12 +3075,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 96,
+    "expectFailures": 100,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -3184,11 +3184,11 @@
     "find": "      routeHost.dispose();",
     "replace": "      void routeHost;",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "tests": [
       "src/boot.test.ts"
     ],
-    "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one. COUNT RE-MEASURED for issue #428: 1 -> 3, because the #428 suite asserts the route UI is built exactly once on an empty boot and after a failed start, both of which also fail when it is never disposed. The failing SET was compared, not the number renumbered."
+    "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one. COUNT RE-MEASURED for issue #428: 1 -> 3, because the #428 suite asserts the route UI is built exactly once on an empty boot and after a failed start, both of which also fail when it is never disposed. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 3 -> 4, because boot.test.ts gained the round-trip suite, one of whose cases asserts the page route UI is disposed exactly once by the teardown after a return. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "session-start-clears-the-retained-versus-config",
@@ -3212,8 +3212,8 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 32,
-    "why": "The whole of issue #428, put back. A page that has shown nobody anything owns a canvas, a renderer, a GL context, a simulation world, a gameplay seed and a frame loop again, and a player who opens the game and walks away pays for a match they never asked for. 32 of 55 in the scoped run, and the breadth is the point rather than a nuisance: the eager start is not one behaviour but the premise every session-shaped assertion in boot.test.ts used to rest on, so re-adding it breaks the empty-boot counts, every start-gesture count (each reads one session too many), and the whole reboot ledger. The narrow half is 'reaches the application UI with no session, no canvas and no world', which is the one that would fail even if every other case were rewritten around it."
+    "expectFailures": 39,
+    "why": "The whole of issue #428, put back. A page that has shown nobody anything owns a canvas, a renderer, a GL context, a simulation world, a gameplay seed and a frame loop again, and a player who opens the game and walks away pays for a match they never asked for. 32 of 55 in the scoped run, and the breadth is the point rather than a nuisance: the eager start is not one behaviour but the premise every session-shaped assertion in boot.test.ts used to rest on, so re-adding it breaks the empty-boot counts, every start-gesture count (each reads one session too many), and the whole reboot ledger. The narrow half is 'reaches the application UI with no session, no canvas and no world', which is the one that would fail even if every other case were rewritten around it. COUNT RE-MEASURED for issue #429: 32 -> 39, because boot.test.ts gained the round-trip suite, and every one of its ledger assertions reads one session too many when the page starts one on load. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "boot-start-failure-escapes-the-page",
@@ -3339,7 +3339,7 @@
   {
     "id": "session-host-campaign-return-replaces-instead-of-stopping",
     "file": "src/game/session-host.ts",
-    "find": "  const requestCampaignSession = (): void => {\n    if (spent) return;\n    stop();\n    canvas?.remove();\n    canvas = null;\n  };",
+    "find": "  const requestCampaignSession = (): void => {\n    stopSession();\n  };",
     "replace": "  const requestCampaignSession = (): void => {\n    replace({ kind: 'campaign-continue' });\n  };",
     "tests": [
       "src/game/session-host.test.ts",
@@ -3347,7 +3347,7 @@
     ],
     "expect": "killed",
     "expectFailures": 14,
-    "why": "Puts back the pre-#428 Campaign button: returning to the campaign title builds a whole session -- canvas, renderer, world, seed -- for the sole purpose of showing a title screen the page has owned since #468. That is eager creation wearing a different hat, and it is the one path that would have kept it after the eager boot was removed. 14 of 79 across both scoped files, because the session ledger, the canvas count and the empty-host state all move together on this path. The narrow case is session-host.test.ts's 'a campaign request stops the versus session and starts nothing', which asserts `hasSession()` is false and the root holds no canvas."
+    "why": "Puts back the pre-#428 Campaign button: returning to the campaign title builds a whole session -- canvas, renderer, world, seed -- for the sole purpose of showing a title screen the page has owned since #468. That is eager creation wearing a different hat, and it is the one path that would have kept it after the eager boot was removed. 14 of 79 across both scoped files, because the session ledger, the canvas count and the empty-host state all move together on this path. The narrow case is session-host.test.ts's 'a campaign request stops the versus session and starts nothing', which asserts `hasSession()` is false and the root holds no canvas. RE-ANCHORED by issue #429: the inline body this mutated became a call to the one session-stop boundary (`stopSession`), so the find string moved with it. The defect and the mutation are identical -- the Campaign button building a session to show a title screen -- and the count was re-measured on the post-move tree."
   },
   {
     "id": "route-host-never-disposes-on-leaving-gameplay",
