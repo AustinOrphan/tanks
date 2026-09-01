@@ -273,8 +273,12 @@ async function main() {
       } catch (e) {
         // LOUD, and it does not stop the sweep: one unreachable control must not hide
         // whether the other three gestures leak.
-        console.log(`${tag}: FAILED -- ${e instanceof Error ? e.message : String(e)}`);
-        problems.push(`${tag}: ${e instanceof Error ? e.message : String(e)}`);
+        // The error already names the gesture, so `tag` is prepended only when a repeat
+        // count makes "versus" ambiguous -- otherwise this printed "versus: versus: ...".
+        const why = e instanceof Error ? e.message : String(e);
+        const line = cycles > 1 ? `cycle ${cycle}: ${why}` : why;
+        console.log(`FAILED -- ${line}`);
+        problems.push(line);
         continue;
       }
       ran += 1;

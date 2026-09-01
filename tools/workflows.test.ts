@@ -252,6 +252,12 @@ describe('the canonical verification scripts', () => {
     expect(browserLeaks(expandScript('verify:full', SCRIPTS))).toEqual([]);
     expect(browserLeaks(['typecheck', 'visual'])).toEqual(['visual']);
     expect(browserLeaks(['test:gl', 'audit:prod'])).toEqual(['test:gl']);
+    // The known-bad control for the newest leaf. Without it, dropping 'roundtrip' from
+    // BROWSER_LEAVES would change nothing any assertion here can see -- `verify:full` does
+    // not contain it, so the two sweeps above stay green either way, and the guard would
+    // advertise a protection it had stopped providing. Verified by deleting that entry:
+    // this line fails and nothing else does.
+    expect(browserLeaks(['typecheck', 'roundtrip'])).toEqual(['roundtrip']);
     expect(COMMAND_REFERENCE).toMatch(/`verify:full` is the complete core, non-browser composite/);
   });
 
