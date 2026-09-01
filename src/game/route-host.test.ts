@@ -337,9 +337,13 @@ describe('createRouteHost: the application-level start requests (issue #468)', (
   it('Versus Start reaches the page seam, with no session attached', () => {
     // The criterion in the issue's own words: a gameplay-starting route action must not
     // require dereferencing an existing gameplay session.
+    //
+    // Since issue #428 it arrives as a `StartIntent` on `requestStart` -- the ONE boundary
+    // that creates a session -- rather than on its own callback, so Versus Start and the
+    // three campaign/practice gestures are one seam rather than two.
     const f = fixture();
     f.hud.fire('onVersusStart', CONFIG);
-    expect(f.versusStarts).toEqual([CONFIG]);
+    expect(f.startRequests).toEqual([{ kind: 'versus', config: CONFIG }]);
     expect(f.host.hasSession(), 'the request created a session').toBe(false);
   });
 
@@ -356,7 +360,71 @@ describe('createRouteHost: the application-level start requests (issue #468)', (
     f.hud.fire('onVersusStart', CONFIG);
     slot.detach();
     f.hud.fire('onVersusStart', CONFIG);
-    expect(f.versusStarts).toEqual([CONFIG, CONFIG]);
+    expect(f.startRequests).toEqual([
+      { kind: 'versus', config: CONFIG },
+      { kind: 'versus', config: CONFIG },
+    ]);
+  });
+});
+
+/**
+ * The four gestures that create a session (issue #428).
+ *
+ * Three of the seven trampolines branch on whether a session exists, and this is the
+ * empty-host half of that branch -- the state the page now BOOTS into, since `boot.ts` no
+ * longer starts anything. Each assertion is a count of one, at the seam that is the only
+ * thing in the page able to produce a world.
+ */
+describe('createRouteHost: starting a match from an empty host (issue #428)', () => {
+  it('Continue asks for the active campaign run', () => {
+    const f = fixture();
+    f.hud.fire('onStartRestart');
+    expect(f.startRequests).toEqual([{ kind: 'campaign-continue' }]);
+  });
+
+  it('New Game asks for a fresh run', () => {
+    const f = fixture();
+    f.hud.fire('onNewGame');
+    expect(f.startRequests).toEqual([{ kind: 'campaign-new' }]);
+  });
+
+  it('a Levels pick asks for that level, carrying the index', () => {
+    const f = fixture();
+    f.hud.fire('onLevelSelect', 3);
+    expect(f.startRequests).toEqual([{ kind: 'practice', level: 3 }]);
+  });
+
+  /**
+   * With a session attached the same three buttons mean Resume, Play Again and a
+   * mid-session Levels pick, and must NOT create a second session.
+   *
+   * This is the half a count alone would miss: "one session per Start" is satisfied by a
+   * page that also starts one on every Retry, and only asserting that the request seam
+   * stays EMPTY here can tell the two apart.
+   */
+  it('none of the three asks for a session while one is attached', () => {
+    const f = fixture();
+    const { fired } = fillSlot(f.host);
+    f.hud.fire('onStartRestart');
+    f.hud.fire('onNewGame');
+    f.hud.fire('onLevelSelect', 3);
+    expect(f.startRequests, 'a running match asked for a second session').toEqual([]);
+    expect(fired.map(([n]) => n)).toEqual(['onStartRestart', 'onNewGame', 'onLevelSelect']);
+  });
+
+  /**
+   * The other four have no meaning without a match and stay pure no-ops. Worth stating
+   * rather than assuming: a Mine tap that reached the start boundary would create a whole
+   * session from a touch control that is not even on screen at the title.
+   */
+  it('the four gameplay-only controls ask for nothing at all', () => {
+    const f = fixture();
+    f.hud.fire('onMineTap');
+    f.hud.fire('onFireTap');
+    f.hud.fire('onQuitToTitle');
+    f.hud.fire('onReassignSlot', 1, 'keyboard');
+    expect(f.startRequests).toEqual([]);
+    expect(f.host.hasSession()).toBe(false);
   });
 });
 

@@ -120,6 +120,24 @@ const MESSAGE_CSS =
   'padding:2rem;color:#d8dde6;font:16px/1.6 system-ui,sans-serif;text-align:center';
 
 export function boot(deps: BootDeps): void {
+  /**
+   * Replace the page with the readable explanation, and report why.
+   *
+   * A named function since issue #428 rather than the tail of one `catch`, because there
+   * are now TWO ways to reach it and they no longer share a stack. Boot's own failures
+   * still arrive at the `catch` below; a failure while CREATING a match arrives from
+   * inside a HUD click handler, long after `boot()` returned, which is a boundary that
+   * did not have to exist while the only session was the eager one.
+   */
+  const showFailure = (err: unknown): void => {
+    deps.root.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.style.cssText = MESSAGE_CSS;
+    msg.textContent = NO_WEBGL_MESSAGE;
+    deps.root.appendChild(msg);
+    deps.reportError(err);
+  };
+
   // Without this the visitor stares at the page background with the reason visible only
   // in devtools -- indistinguishable from a broken deploy.
   //
@@ -190,7 +208,24 @@ export function boot(deps: BootDeps): void {
       // THE ONE PLACE a gameplay session comes into existence (issue #428). Four gestures
       // reach it -- Continue, New Game, a Practice level pick, Versus Start -- and nothing
       // else in the page can produce a world, a seed or a renderer.
-      requestStart: (intent) => sessions?.start(intent),
+      //
+      // Guarded, and this guard is NEW WORK rather than a copy of the one below. While
+      // `boot()` started the only session, a `WebGLRenderer` that got its context and then
+      // failed to initialise threw INSIDE `boot()`'s try, and the player got the message
+      // page. With the eager start gone that same failure would throw out of a HUD click
+      // handler with nobody listening: the game would simply not start, silently, and the
+      // page would sit on a menu whose buttons did nothing. `boot.ts` has always recorded
+      // that hole for the REPLACEMENT path; issue #428 turns it into the ordinary path, so
+      // it is closed here rather than left. WHAT the player should see when a match fails
+      // to start is still issue #325's to design -- this only guarantees they see
+      // something, and that it is the same something a failed boot has always shown.
+      requestStart: (intent) => {
+        try {
+          sessions?.start(intent);
+        } catch (err) {
+          showFailure(err);
+        }
+      },
       requestVersusSession: (config) => sessions?.requestVersusSession(config),
       requestCampaignSession: () => sessions?.requestCampaignSession(),
     });
@@ -268,11 +303,6 @@ export function boot(deps: BootDeps): void {
     };
     deps.host.addEventListener('pagehide', onPageHide);
   } catch (err) {
-    deps.root.innerHTML = '';
-    const msg = document.createElement('div');
-    msg.style.cssText = MESSAGE_CSS;
-    msg.textContent = NO_WEBGL_MESSAGE;
-    deps.root.appendChild(msg);
-    deps.reportError(err);
+    showFailure(err);
   }
 }
