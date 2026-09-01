@@ -79,6 +79,22 @@ describe('cloneWorld', () => {
     expect(c.corpseBlocksShells).toBe(true);
     expect(c.muzzleClearsTanks).toBe(false);
   });
+
+  it('carries the OPTIONAL aiTargetPerception across the clone', () => {
+    // The most dangerous of the world rules on this clone, precisely because it is optional:
+    // ai/targeting.ts reads it as `?? 'full'`, so a dropped value does not surface as
+    // `undefined` at the use site -- it surfaces as the SHIPPED DEFAULT. game/loop.ts set the
+    // field for `?dev=1&aiPerception=los` on the world it built, and it was gone by tick 1
+    // with nothing in the tree reporting the difference.
+    const tanks = [makeTank(5, 2, 3)];
+    const walls = [makeWall(9)];
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
+    const w = createWorld({
+      walls, tanks, spawns, lives: 3, aiTargetPerception: 'line-of-sight',
+    });
+    const c = cloneWorld(w);
+    expect(c.aiTargetPerception).toBe('line-of-sight');
+  });
 });
 
 describe('step (skeleton)', () => {
@@ -118,6 +134,20 @@ describe('step (skeleton)', () => {
     for (let i = 0; i < 5; i++) w = step(w, noInput).world;
     expect(w.corpseBlocksShells).toBe(true);
     expect(w.muzzleClearsTanks).toBe(false);
+  });
+
+  it('does not let aiTargetPerception decay across repeated real ticks', () => {
+    // Same hazard as the pair above, on the field whose drop is invisible: from tick 1 the
+    // selected 'line-of-sight' policy would read back as the shipped 'full', so the dev
+    // experiment would silently measure the default it was set up to compare against.
+    const tanks = [makeTank(5, 2, 3)];
+    const walls = [makeWall(9)];
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
+    let w = createWorld({
+      walls, tanks, spawns, lives: 3, aiTargetPerception: 'line-of-sight',
+    });
+    for (let i = 0; i < 5; i++) w = step(w, noInput).world;
+    expect(w.aiTargetPerception).toBe('line-of-sight');
   });
 });
 

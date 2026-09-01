@@ -12,7 +12,8 @@ import { stepAi } from './index';
 import { configFor } from '../config';
 import { TICK_HZ, AI_TARGET_SWITCH_MARGIN } from '../constants';
 import { TANK_KINDS } from '../config/validate';
-import type { Tank, Vec2 } from '../types';
+import type { InputState, Tank, Vec2 } from '../types';
+import { stepInputs } from '../world';
 import type { World } from '../world';
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
@@ -35,6 +36,8 @@ const wall = (minX: number, minY: number, maxX: number, maxY: number) =>
   ({ id: 1, aabb: { minX, minY, maxX, maxY }, kind: 'solid' as const, destroyed: false });
 
 const span = (kind: Tank['kind']) => Math.round(configFor(kind).ai.targetCommitmentTime * TICK_HZ);
+/** One neutral input for the single player tank stepInputs pairs by position. */
+const noInput: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false };
 
 describe('committed opponent selection', () => {
   it('every shipped profile resolves a validated commitment span', () => {
@@ -112,6 +115,34 @@ describe('committed opponent selection', () => {
       aiTargetPerception: 'line-of-sight',
     });
     expect(commitTarget(w, grey)).toBe('acquired');
+  });
+
+  it('under the dev flag, the bound survives a REAL TICK -- the clone has to carry it', () => {
+    // The direct-call cases above enter through commitTarget, so they never touch the clone
+    // that every shipped tick goes through: `stepInputs` opens with `cloneWorld(world)`, and
+    // cloneWorld reconstructs World field by field. Omitting `aiTargetPerception` there did
+    // not fail loudly, because ai/targeting.ts reads it as `?? 'full'` -- the selected policy
+    // silently became the shipped default from tick 1, and `?dev=1&aiPerception=los` chose a
+    // bound that lasted zero ticks. The clone runs BEFORE stepAi, so one tick shows it.
+    const blind = world([tank(1, 'brown', { x: 0, y: 0 }), tank(2, 'player', { x: 9, y: 0 })], {
+      walls: [wall(3, -3, 4, 3)],
+      aiTargetPerception: 'line-of-sight',
+    });
+    expect(stepInputs(blind, [noInput]).world.tanks[0].aiTargetId).toBeUndefined();
+
+    // TWO positive controls, because "acquired nobody" equally describes an AI that never
+    // ran at all. One thing changes in each, against the same tick and the same fixture.
+    // The WALL: brown does acquire, through this same clone, when it can actually see.
+    const seeing = world([tank(1, 'brown', { x: 0, y: 0 }), tank(2, 'player', { x: 9, y: 0 })], {
+      aiTargetPerception: 'line-of-sight',
+    });
+    expect(stepInputs(seeing, [noInput]).world.tanks[0].aiTargetId).toBe(2);
+    // The RULE: shipped full awareness is untouched -- and this is exactly what a dropped
+    // field made the blind case above look like, which is why that assertion discriminates.
+    const full = world([tank(1, 'brown', { x: 0, y: 0 }), tank(2, 'player', { x: 9, y: 0 })], {
+      walls: [wall(3, -3, 4, 3)],
+    });
+    expect(stepInputs(full, [noInput]).world.tanks[0].aiTargetId).toBe(2);
   });
 
   it('holds one opponent for the whole span, THROUGH a sight break', () => {
