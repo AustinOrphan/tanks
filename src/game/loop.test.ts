@@ -2738,6 +2738,47 @@ describe('startGameWith: the persistence notice (issue #320)', () => {
   });
 });
 
+describe('startGameWith: the gameplay slot is given back (issue #468)', () => {
+  /**
+   * The production half of `route-host.test.ts`'s slot mechanics: that `startGameWith`
+   * actually TAKES the slot and its teardown actually GIVES IT BACK.
+   *
+   * Counted as an EFFECT, not as a registration. `hud.ts` appends every `on*` callback
+   * and has no unregister, so before this issue a page-scoped HUD would hold one Mine
+   * handler per session and one tap would press the mine twice -- silently, and in a way
+   * no registration count can distinguish from a trampoline that dispatched twice.
+   *
+   * Its negative control is `slot.detach()` in `startGameWith`'s `dispose()`: delete that
+   * line and the second assertion reads 2. Measured, not asserted -- see the manifest
+   * entry `session-teardown-keeps-the-gameplay-slot`.
+   */
+  it('a tap reaches the LIVE session once, after a stop and a start', () => {
+    const h = makeDeps();
+    const first = boot(h);
+    h.hud.mineTap();
+    expect(h.rec.minePresses, 'the first session did not receive its own tap').toBe(1);
+
+    first.handle.dispose();
+    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+
+    h.hud.mineTap();
+    expect(h.rec.minePresses, 'the retired session was still receiving taps').toBe(2);
+    second.dispose();
+  });
+
+  it('a tap after the LAST session reaches nobody, rather than a disposed one', () => {
+    // The empty-host state, driven through production: the trampolines are still live
+    // and the slot is empty. A session that never detached would push its now-disposed
+    // input controller here instead.
+    const h = makeDeps();
+    const first = boot(h);
+    first.handle.dispose();
+    const before = h.rec.minePresses;
+    h.hud.mineTap();
+    expect(h.rec.minePresses, 'a tap reached a disposed session').toBe(before);
+  });
+});
+
 describe('startGameWith: settings survive internal session replacement', () => {
   it('a second session on the SAME deps comes up with the first session\'s settings', () => {
     // boot.ts's reboot path in miniature: dispose the handle, build another session on
