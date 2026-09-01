@@ -738,6 +738,123 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
   });
 });
 
+/**
+ * Match, return, match again -- counted at the production boundary (issue #429).
+ *
+ * The issue asks for "exact live-owner and disposal counters", and these are them: how
+ * many sessions were built (`startArgs`), how many canvases (`canvases`), which handle
+ * each disposal belonged to (`disposedIds`), and whether the page's own owners survived
+ * (`routeHostDisposals`, `appSettingsDisposals`). A bare count cannot tell "disposed each
+ * once" from "disposed the first one twice", which is why the ledger is by id.
+ */
+describe('boot: returning to an application route (issue #429)', () => {
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+
+  /** Start a match, then ask the route UI to return -- the round trip a player makes. */
+  function roundTrip(h: ReturnType<typeof harness>, intent: StartIntent): void {
+    h.sessionRequests[0].requestStart(intent);
+    h.sessionRequests[0].requestStop();
+  }
+
+  it('disposes the session exactly once and leaves the host empty', () => {
+    const h = harness();
+    boot(h.deps);
+    roundTrip(h, { kind: 'campaign-continue' });
+
+    expect(h.disposedIds, 'the session was not disposed exactly once').toEqual([0]);
+    expect(h.root.querySelectorAll('canvas'), 'a dead canvas was left under the menu').toHaveLength(0);
+  });
+
+  it('creates no replacement session, world or canvas on the way back', () => {
+    // The criterion in its own words. Before #429 the Campaign return built a whole
+    // session to show a title screen; this is the assertion that says it does not.
+    const h = harness();
+    boot(h.deps);
+    roundTrip(h, { kind: 'campaign-continue' });
+
+    expect(h.startArgs, 'the return built a replacement session').toHaveLength(1);
+    expect(h.canvases, 'the return built a replacement canvas').toHaveLength(1);
+  });
+
+  it('leaves the page owners alone -- shell and route UI both survive', () => {
+    const h = harness();
+    boot(h.deps);
+    roundTrip(h, { kind: 'campaign-continue' });
+
+    expect(h.appSettingsDisposals, 'the return disposed the page shell').toBe(0);
+    expect(h.routeHostDisposals, 'the return disposed the page route UI').toBe(0);
+    expect(h.routeHostBuilds, 'the return rebuilt the page route UI').toBe(1);
+  });
+
+  it('repeated stop requests dispose once, not once each', () => {
+    // Idempotence at the production boundary, on top of the route host's own guard: a
+    // double disposal releases an audio bed and unregisters listeners a LATER session may
+    // already own.
+    const h = harness();
+    boot(h.deps);
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+    h.sessionRequests[0].requestStop();
+    h.sessionRequests[0].requestStop();
+    h.sessionRequests[0].requestStop();
+
+    expect(h.disposedIds).toEqual([0]);
+  });
+
+  it('a stop with no session running disposes nothing', () => {
+    const h = harness();
+    boot(h.deps);
+    h.sessionRequests[0].requestStop();
+    expect(h.disposedIds).toEqual([]);
+    expect(h.canvases).toEqual([]);
+  });
+
+  /**
+   * Four round trips across all three modes, each disposing its OWN session.
+   *
+   * The ledger by id is what makes this more than a count: a host that captured the first
+   * handle and disposed it four times reports the same total.
+   */
+  it('round-trips repeatedly across modes, disposing each session exactly once', () => {
+    const h = harness();
+    boot(h.deps);
+    roundTrip(h, { kind: 'campaign-continue' });
+    roundTrip(h, { kind: 'versus', config: VS });
+    roundTrip(h, { kind: 'practice', level: 1 });
+    roundTrip(h, { kind: 'campaign-new' });
+
+    expect(h.startArgs).toHaveLength(4);
+    expect(h.disposedIds, 'a session was disposed twice, or one never was').toEqual([0, 1, 2, 3]);
+    expect(h.canvases, 'a round trip reused or leaked a canvas').toHaveLength(4);
+    expect(h.root.querySelectorAll('canvas')).toHaveLength(0);
+    expect(h.routeHostBuilds).toBe(1);
+    expect(h.routeHostDisposals).toBe(0);
+  });
+
+  it('a later start after a return builds one clean session', () => {
+    // The other half of the round trip: the host must not latch itself shut on the way
+    // back, or the player is left on a menu whose buttons do nothing.
+    const h = harness();
+    boot(h.deps);
+    roundTrip(h, { kind: 'campaign-continue' });
+
+    h.sessionRequests[0].requestStart({ kind: 'versus', config: VS });
+    expect(h.startArgs).toHaveLength(2);
+    expect(h.startArgs[1][1]).toEqual({ kind: 'versus', config: VS });
+    expect(h.disposedIds, 'starting again disposed something already gone').toEqual([0]);
+  });
+
+  it('the page teardown after a return disposes nothing a second time', () => {
+    const h = harness();
+    boot(h.deps);
+    roundTrip(h, { kind: 'campaign-continue' });
+
+    h.firePagehide();
+    expect(h.disposedIds, 'the teardown re-disposed a session the return already took').toEqual([0]);
+    expect(h.routeHostDisposals, 'the teardown skipped the route UI').toBe(1);
+    expect(h.appSettingsDisposals).toBe(1);
+  });
+});
+
 describe('boot: the message itself', () => {
   it('names WebGL and offers a way forward', () => {
     // It is the only thing a visitor on an unsupported browser ever sees.

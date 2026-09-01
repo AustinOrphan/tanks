@@ -560,6 +560,107 @@ describe('createRouteHost: the route on attach', () => {
   });
 });
 
+/**
+ * Returning to an application route disposes the session (issue #429).
+ *
+ * The rule is "a handler that ran while the machine was in gameplay and left it", so
+ * every case here drives the machine into gameplay first and then fires a real HUD
+ * handler. Counting the STOP REQUESTS rather than inspecting a flag is what makes these
+ * about the boundary `boot.ts` actually wires, not about an internal.
+ */
+describe('createRouteHost: leaving gameplay (issue #429)', () => {
+  /** Attach a session and put the machine into gameplay, the way a real start does. */
+  function inGameplay(f: Fixture): ReturnType<RouteHost['attach']> {
+    const slot = f.host.attach();
+    f.host.sm.enterGameplay({
+      descriptor: { kind: 'campaign', level: 0 },
+      level: 0,
+      seed: 1,
+    } as never);
+    expect(f.host.sm.inGameplay).toBe(true);
+    return slot;
+  }
+
+  it('Quit disposes exactly once', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    slot.onQuitToTitle(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests(), 'the session outlived the return to Main Menu').toBe(1);
+  });
+
+  /**
+   * The action button is an exit TOO, on one of its branches: a finished versus match's
+   * reads "Versus Setup" and returns to the retained pane. Same rule, no second list.
+   */
+  it('an action-button branch that returns to a route disposes too', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    slot.onStartRestart(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onStartRestart');
+    expect(f.stopRequests()).toBe(1);
+  });
+
+  /**
+   * ...and a branch that STAYS in gameplay disposes nothing. This is the half a
+   * one-sided rule gets wrong: Resume, Retry, Play Again and Next Level all run the same
+   * handler and must leave the session alone.
+   *
+   * Would fail if `leavingGameplay` read only the after-state, or dropped the
+   * `wasInGameplay` half.
+   */
+  it('a handler that stays in gameplay disposes nothing', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    let ran = 0;
+    slot.onStartRestart(() => {
+      ran += 1; // Resume: the machine stays where it is.
+    });
+
+    f.hud.fire('onStartRestart');
+    expect(ran, 'the handler did not run at all').toBe(1);
+    expect(f.stopRequests(), 'a click that stayed in gameplay disposed the session').toBe(0);
+  });
+
+  /**
+   * A click made AT an application route disposes nothing either -- the other direction of
+   * the same mistake, and the one that would fire on every menu button.
+   */
+  it('a click at an application route disposes nothing', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach();
+    slot.onQuitToTitle(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests()).toBe(0);
+  });
+
+  it('a Quit with no session attached asks for nothing', () => {
+    // The empty host is the page's normal state since #428; a stop request from it would
+    // be a disposal of something that does not exist.
+    const f = fixture({ launchDismissed: true });
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests()).toBe(0);
+  });
+
+  /**
+   * Repeated Quits ask once, because the second finds the machine already out of
+   * gameplay. The criterion "repeated stop requests cannot duplicate cleanup" is answered
+   * twice over -- here, and by `stopSession` being idempotent in `session-host.ts`.
+   */
+  it('a second Quit does not ask again', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    slot.onQuitToTitle(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onQuitToTitle');
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests(), 'the second Quit disposed again').toBe(1);
+  });
+});
+
 describe('createRouteHost: disposal', () => {
   it('disposes the HUD and the live preview, and only from here', () => {
     const f = fixture();
