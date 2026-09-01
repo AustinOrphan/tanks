@@ -3434,6 +3434,36 @@
     ],
     "expect": "killed",
     "expectFailures": 6,
-    "why": "Disposes the session but leaves its canvas in the DOM. `startGameWith`'s teardown calls `renderer.forceContextLoss()` (`render/scene.ts`) and a WebGL context does not come back from that -- so the dead element sits under the menu forever, and every later match stacks another behind it. Nothing throws and nothing looks wrong until enough have accumulated to exhaust the browser's context budget. This is the same failure `session-host-keeps-the-dead-canvas` pins for the REPLACE path; #429 adds a second path that has to remove it, and `stop()` -- the page teardown's -- deliberately does not, which is why `stopSession` is a separate function rather than a call to it. 6 of 87 across both scoped files."
+    "why": "Disposes the session but leaves its canvas in the DOM. `startGameWith`'s teardown calls `renderer.forceContextLoss()` (`render/scene.ts`) and a WebGL context does not come back from that -- so the dead element sits under the menu forever, and every later match stacks another behind it. Nothing throws and nothing looks wrong until enough have accumulated to exhaust the browser's context budget. This is the same failure `session-host-keeps-the-dead-canvas` pins for the REPLACE path; #429 adds a second path that has to remove it, and `stop()` -- the page teardown's -- deliberately does not, which is why `stopSession` is a separate function rather than a call to it. 6 of 90 across both scoped files."
+  },
+  {
+    "id": "roundtrip-probe-crashes-on-a-malformed-url",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "  let path;\n  try {\n    path = decodeURIComponent((url ?? '/').split('?')[0]);\n  } catch {\n    return null;\n  }\n",
+    "replace": "  const path = decodeURIComponent((url ?? '/').split('?')[0]);\n",
+    "tests": ["tools/visual/serve-path.test.ts"],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Puts the decode back outside a try, which is how the probe's handler shipped. decodeURIComponent throws URIError on malformed percent-encoding, and GET /% was measured killing the process with exit 1: nothing awaits an async request handler, so the rejection is unhandled rather than answered with a 500. The cost is not a security one -- it is a probe that answers a canvas census with a bare stack, at the moment someone is debugging a disposal leak. Exactly 1 of 9 fails, the malformed-encoding case; the traversal assertions are indifferent to this mutation, which is why they are separate entries."
+  },
+  {
+    "id": "roundtrip-probe-serves-files-outside-dist",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "  if (file !== root && !file.startsWith(root + sep)) return null;\n",
+    "replace": "  // the resolved path is trusted\n",
+    "tests": ["tools/visual/serve-path.test.ts"],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "Drops the containment check entirely, leaving the resolve to escape the root the way the original join did. A raw socket sending GET /../outside.txt was measured being answered 200 with a file from outside dist. Reachability is the part worth writing down: a normalising client CANNOT get there, because WHATWG URL resolution collapses both .. and %2e%2e before the request leaves, so fetch('/../x') arrives as /x. A test driven through fetch would therefore pass against the unhardened handler and prove nothing -- the assertions sit on the resolver directly for that reason. 4 of 9 fail, the four escape shapes."
+  },
+  {
+    "id": "roundtrip-probe-containment-drops-the-separator",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "if (file !== root && !file.startsWith(root + sep)) return null;",
+    "replace": "if (file !== root && !file.startsWith(root)) return null;",
+    "tests": ["tools/visual/serve-path.test.ts"],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The containment check kept but weakened to a bare prefix, which is the shape it is easiest to write by accident. A sibling directory whose name merely begins with the root's -- dist-evil next to dist -- then passes. This entry proves the SHAPE of the guard rather than its presence: measured, it fails exactly 1 of 9, and every other assertion in the file, including all three .. escapes, still passes under it. Without that one case the two forms are indistinguishable and the weaker one would survive."
   }
 ]

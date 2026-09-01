@@ -22,6 +22,8 @@ import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
+import { resolveRequestPath } from './serve-path.mjs';
+
 const TYPES = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -51,8 +53,11 @@ async function loadChromium() {
 
 function serve(dist) {
   const server = createServer(async (req, res) => {
-    const path = decodeURIComponent((req.url ?? '/').split('?')[0]);
-    const file = join(dist, path === '/' ? 'index.html' : path.replace(/^\/+/, ''));
+    const file = resolveRequestPath(dist, req.url);
+    if (file === null) {
+      res.writeHead(400).end('bad request');
+      return;
+    }
     try {
       const body = await readFile(file);
       res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
