@@ -3012,11 +3012,11 @@
     "find": "\n    return Object.freeze({ webgl2: false, failure: 'probe-failed' });",
     "replace": "\n    return Object.freeze({ webgl2: false, failure: 'no-webgl2' });",
     "expect": "killed",
-    "expectFailures": 2,
+    "expectFailures": 3,
     "tests": [
       "src/game/render-capability.test.ts"
     ],
-    "why": "Collapses 'could not ask' into 'asked and was told no'. Both are `webgl2: false`, so a consumer that does not care keeps one branch and nothing about the gameplay decision changes -- which is what makes this silent. What it destroys is the cause issue #325's branded screen would render: a locked-down document, or a host whose `createElement`/`getContext` throws, gets blamed on the GPU. Anchored on the catch-site return by its leading newline and indentation, because the identical text also appears inside the `if (canvas == null)` return one line up and an unanchored find would be refused as ambiguous -- so this entry mutates the THROWN branch only. 2 of 14 in the scoped run: 'reports probe-failed, not no-webgl2, when getContext throws' and 'reports probe-failed when createElement itself throws'. The third `probe-failed` case, 'reports probe-failed when the host produces no canvas at all', returns from the un-mutated site one line up and keeps passing -- which is what shows this mutation is site-specific rather than that case failing as collateral. THAT site has its own entry, `render-capability-no-canvas-reads-as-no-webgl2`; the two are pinned separately because neither can stand in for the other. expectFailures counts that scoped run only."
+    "why": "Collapses 'could not ask' into 'asked and was told no'. Both are `webgl2: false`, so a consumer that does not care keeps one branch and nothing about the gameplay decision changes -- which is what makes this silent. What it destroys is the cause issue #325's branded screen would render: a locked-down document, or a host whose `createElement`/`getContext` throws, gets blamed on the GPU. Anchored on the catch-site return by its leading newline and indentation, because the identical text also appears inside the `if (canvas == null)` return one line up and an unanchored find would be refused as ambiguous -- so this entry mutates the THROWN branch only. 2 of 14 in the scoped run: 'reports probe-failed, not no-webgl2, when getContext throws' and 'reports probe-failed when createElement itself throws'. The third `probe-failed` case, 'reports probe-failed when the host produces no canvas at all', returns from the un-mutated site one line up and keeps passing -- which is what shows this mutation is site-specific rather than that case failing as collateral. THAT site has its own entry, `render-capability-no-canvas-reads-as-no-webgl2`; the two are pinned separately because neither can stand in for the other. expectFailures counts that scoped run only. COUNT RE-MEASURED after PR #474's review fix: 2 -> 3. The new 'reading the default document throws' case routes to this same catch site, so it fails here too. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "app-shell-reprobes-the-render-capability-per-read",
@@ -3041,5 +3041,17 @@
       "src/game/render-capability.test.ts"
     ],
     "why": "The OTHER site that answers `probe-failed`, and the sibling of `render-capability-could-not-ask-reads-as-no-webgl2`. A host that produced no canvas has said nothing about WebGL, so it is the same 'could not ask' case as a throw -- reporting `no-webgl2` here blames the GPU for a host that never handed over an element to ask with. The two sites are one line apart and return byte-identical text, which is why the sibling entry has to anchor on its leading newline and indentation to stay unambiguous, and why neither entry can stand in for the other: this pair exists so that BOTH classification sites carry coverage rather than one being assumed from the other. 1 of 14 in the scoped run -- 'reports probe-failed when the host produces no canvas at all'. The other two `probe-failed` cases keep passing: 'reports probe-failed when createElement itself throws' and 'reports probe-failed, not no-webgl2, when getContext throws' both route to the catch site this entry does not touch. expectFailures counts that scoped run only."
+  },
+  {
+    "id": "render-capability-resolves-its-host-outside-the-try",
+    "file": "src/game/render-capability.ts",
+    "find": "export function probeRenderCapability(host?: RenderCapabilityHost): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host ?? (globalThis.document as RenderCapabilityHost | undefined);",
+    "replace": "export function probeRenderCapability(\n  host: RenderCapabilityHost = globalThis.document,\n): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The defect raised by review on PR #474, as the exact code that was there. A default PARAMETER is evaluated in the parameter list, before the function body and therefore outside the try -- so a locked-down context whose `document` getter throws throws out of the probe instead of reporting `probe-failed`, defeating the one distinction this module's return type exists to make. Every other property access here is wrapped for exactly that case, and this was the one that was not. Invisible to every injected-host test by construction: the default is what an injected host BYPASSES, so only a case that drives the real `globalThis.document` through a throwing getter can see it. 1 of 16 -- 'reports probe-failed when reading the default document throws', which was written for this and confirmed to fail against the reverted code before the fix landed. Its sibling 'when there is no document at all' keeps passing under this mutation, because an ABSENT property yields undefined rather than throwing; the two guard different halves and neither stands in for the other.",
+    "tests": [
+      "src/game/render-capability.test.ts"
+    ]
   }
 ]
