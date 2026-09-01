@@ -1789,14 +1789,15 @@
   },
   {
     "id": "splash-gesture-not-reported-to-the-page",
-    "file": "src/game/loop.ts",
-    "find": "    deps.launchGate.dismiss();\n  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
-    "replace": "  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
+    "file": "src/game/route-host.ts",
+    "find": "    sm.dismissLaunch();\n    deps.launchGate.dismiss();\n  };",
+    "replace": "    sm.dismissLaunch();\n  };",
     "expect": "killed",
     "expectFailures": 2,
-    "why": "Dismisses the splash in THIS session's state machine but never tells the page, so the gate stays closed and the next session opens on the splash again. The read half (launch-gate-ignored-on-reboot) and this write half fail independently and neither implies the other. Both the pointer and keyboard handlers route through onSplashGesture, so this kills both of the seam's dismissal tests. 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered. RE-MEASURED for issue #468, and the failing SET changed rather than merely the count. The hoist made the page state machine outlive a reboot, so the three cases this used to kill -- all of which read what the HUD was PAINTED -- went green: a session that dismissed only its own splash now produces an identical screen. Re-measured on the post-hoist tree it SURVIVED at 0 of 405. The two that kill it now are the pair written for exactly that gap, which read launchDismissed() off the real shell instead of off the screen. The page write is not dead: route-host.ts attach() resets the route only when the gate is down, and issue #428 boots from it with no session at all.",
+    "why": "Dismisses the splash in THIS session's state machine but never tells the page, so the gate stays closed and the next session opens on the splash again. The read half (launch-gate-ignored-on-reboot) and this write half fail independently and neither implies the other. Both the pointer and keyboard handlers route through onSplashGesture, so this kills both of the seam's dismissal tests. 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered. RE-MEASURED for issue #468, and the failing SET changed rather than merely the count. The hoist made the page state machine outlive a reboot, so the three cases this used to kill -- all of which read what the HUD was PAINTED -- went green: a session that dismissed only its own splash now produces an identical screen. Re-measured on the post-hoist tree it SURVIVED at 0 of 405. The two that kill it now are the pair written for exactly that gap, which read launchDismissed() off the real shell instead of off the screen. The page write is not dead: route-host.ts attach() resets the route only when the gate is down, and issue #428 boots from it with no session at all. RE-ANCHORED AGAIN by issue #428: the handler moved from `startGameWith` to `route-host.ts`, because a splash only a session could dismiss can never be got past on a page that boots with no session. The defect is unchanged -- the route is dismissed and the PAGE is never told -- and it matters more now, since `attach()`'s route reset and #428's session-less boot both read the gate. Count re-measured on the post-move tree.",
     "tests": [
-      "src/game/loop.test.ts"
+      "src/game/loop.test.ts",
+      "src/game/route-host.test.ts"
     ]
   },
   {
@@ -2090,11 +2091,11 @@
   {
     "id": "session-host-keeps-the-dead-canvas",
     "file": "src/game/session-host.ts",
-    "find": "    stop();\n    canvas?.remove();\n    create(versus);",
-    "replace": "    stop();\n    create(versus);",
+    "find": "    stop();\n    canvas?.remove();\n    create(intent);",
+    "replace": "    stop();\n    create(intent);",
     "expect": "killed",
     "expectFailures": 6,
-    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`. COUNT MOVED 5 -> 6 for issue #427: the empty-host cases added to session-host.test.ts include one that walks start -> replace -> replace asserting exactly one canvas is alive throughout, so a host that leaves the dead element behind fails there as well. Re-measured on the tree, not predicted.",
+    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`. COUNT MOVED 5 -> 6 for issue #427: the empty-host cases added to session-host.test.ts include one that walks start -> replace -> replace asserting exactly one canvas is alive throughout, so a host that leaves the dead element behind fails there as well. Re-measured on the tree, not predicted. RE-ANCHORED by issue #428: `replace` takes a `StartIntent` rather than a versus config, so the parameter name in the find string changed. The mutation and the defect are identical.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2103,11 +2104,11 @@
   {
     "id": "session-host-first-session-bypasses-replace",
     "file": "src/game/session-host.ts",
-    "find": "      replace(null);\n    },\n    requestVersusSession,",
-    "replace": "      create(null);\n    },\n    requestVersusSession,",
+    "find": "      replace(intent);\n    },\n    requestVersusSession,",
+    "replace": "      create(intent);\n    },\n    requestVersusSession,",
     "expect": "killed",
     "expectFailures": 2,
-    "why": "Starts the first session by calling `create` directly instead of routing it through `replace`, which is the shape this module had first. On the ONE call boot.ts makes the two are identical -- there is no handle to stop and no canvas to remove -- so the production path is unchanged and every route-level test stays green. What it drops is both of `replace`'s guards: a second `start()` orphans the first session's frame loop, renderer and GL context with nothing left holding its handle, and a `start()` after `dispose()` builds a whole session onto a document already on its way out. Killed by session-host.test.ts's 'a SECOND start() replaces the first session rather than orphaning it' and 'start() after dispose() starts nothing'.",
+    "why": "Starts the first session by calling `create` directly instead of routing it through `replace`, which is the shape this module had first. On the ONE call boot.ts makes the two are identical -- there is no handle to stop and no canvas to remove -- so the production path is unchanged and every route-level test stays green. What it drops is both of `replace`'s guards: a second `start()` orphans the first session's frame loop, renderer and GL context with nothing left holding its handle, and a `start()` after `dispose()` builds a whole session onto a document already on its way out. Killed by session-host.test.ts's 'a SECOND start() replaces the first session rather than orphaning it' and 'start() after dispose() starts nothing'. RE-ANCHORED by issue #428, and the defect got MORE reachable rather than less: `start()` is no longer a single call from `boot()` but a HUD button, so a player who presses New Game twice takes exactly the path this bypasses -- the second start orphaning the first session's loop, renderer and GL context. Count re-measured.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -3144,14 +3145,14 @@
   {
     "id": "route-host-passes-session-scoped-request-seams-to-the-routes",
     "file": "src/game/route-host.ts",
-    "find": "    requestVersusSession: requests.requestVersusSession,\n    requestCampaignSession: requests.requestCampaignSession,",
+    "find": "    requestVersusSession: (config) => requests.requestStart({ kind: 'versus', config }),\n    requestCampaignSession: requests.requestCampaignSession,",
     "replace": "    requestVersusSession: deps.requestVersusSession,\n    requestCampaignSession: deps.requestCampaignSession,",
     "expect": "killed",
     "expectFailures": 3,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "The route UI's Versus Start and Campaign buttons wired to a SESSION's request callbacks instead of the page-level seam. That is the coupling issue #468 exists to remove -- 'gameplay-starting route actions become explicit application-level requests that do not require dereferencing an existing gameplay session' -- and with eager startup still in place it would look fine in a browser, because a session always happens to exist. It stops working the moment #428 boots into an empty host, which is the point at which it would be hardest to attribute. 3 of 18: the two empty-host request cases and 'keeps reaching the page seam across a session lifecycle'. The fixture makes this loud on purpose -- its session-scoped `requestVersusSession`/`requestCampaignSession` THROW, so a host that forwarded `deps` straight into `createRouteUi` fails rather than quietly recording nothing."
+    "why": "The route UI's Versus Start and Campaign buttons wired to a SESSION's request callbacks instead of the page-level seam. That is the coupling issue #468 exists to remove -- 'gameplay-starting route actions become explicit application-level requests that do not require dereferencing an existing gameplay session' -- and with eager startup still in place it would look fine in a browser, because a session always happens to exist. It stops working the moment #428 boots into an empty host, which is the point at which it would be hardest to attribute. 3 of 18: the two empty-host request cases and 'keeps reaching the page seam across a session lifecycle'. The fixture makes this loud on purpose -- its session-scoped `requestVersusSession`/`requestCampaignSession` THROW, so a host that forwarded `deps` straight into `createRouteUi` fails rather than quietly recording nothing. RE-ANCHORED by issue #428: Versus Start now travels as a `StartIntent` on the single `requestStart` boundary rather than on its own callback, so the line the mutation replaces changed shape. What it destroys is unchanged and is now strictly worse: with the eager boot gone, a route UI wired to a session's seams cannot start the FIRST match at all."
   },
   {
     "id": "route-host-disposal-leaves-the-preview-context-alive",
