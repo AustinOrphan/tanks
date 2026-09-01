@@ -63,6 +63,15 @@ export interface SessionRequests {
   readonly requestStart: (intent: StartIntent) => void;
   readonly requestVersusSession: (config: VersusConfig) => void;
   readonly requestCampaignSession: () => void;
+  /**
+   * Return to the application routes (issue #429). The ONE boundary that disposes a
+   * gameplay session.
+   *
+   * Called by the page, not by the session: a session cannot be trusted to dispose itself
+   * on the way out, and four separate handlers each remembering to would be four places
+   * for one to stop. See `leavingGameplay` below for the single rule that decides when.
+   */
+  readonly requestStop: () => void;
 }
 
 /**
@@ -285,9 +294,33 @@ export function createRouteHost(
    * button. The other four (`onMineTap`, `onFireTap`, `onQuitToTitle`, `onReassignSlot`)
    * have no meaning without a match and stay pure no-ops when the slot is empty.
    */
+  /**
+   * THE RULE (issue #429): a click that LEAVES gameplay disposes the session.
+   *
+   * One rule rather than a list of exits, because the list is what goes stale. Quit,
+   * Return to Main Menu, Change Setup and the campaign/practice exits are all just
+   * "handler ran, and afterwards the machine is no longer in gameplay" -- and so is any
+   * exit a later issue adds, without this file having to hear about it.
+   *
+   * Asked on BOTH sides of the handler, not just after. `onQuitToTitle` early-returns
+   * unless the session is paused or on a cleared-level panel, and Resume, Retry, Play
+   * Again and Next Level all stay in gameplay; comparing before with after is what tells
+   * a real exit from a click that changed nothing. Reading only the after-state would
+   * dispose the session on every click made at an application route.
+   */
+  const leavingGameplay = (handler: () => void): void => {
+    const wasInGameplay = sm.inGameplay;
+    handler();
+    if (wasInGameplay && !sm.inGameplay) requests.requestStop();
+  };
+
   hud.onStartRestart(() => {
     if (live) {
-      live.startRestart?.();
+      // Wrapped because this button is ALSO an exit: a finished versus match's action
+      // button reads "Versus Setup" and returns to the retained pane (`loop.ts`'s
+      // `relaunchTarget` branch). Its other branches -- Resume, Retry, Play Again, Next
+      // Level -- all stay in gameplay and so dispose nothing.
+      leavingGameplay(() => live?.startRestart?.());
       return;
     }
     requests.requestStart({ kind: 'campaign-continue' });
@@ -308,7 +341,7 @@ export function createRouteHost(
   });
   hud.onMineTap(() => live?.mineTap?.());
   hud.onFireTap(() => live?.fireTap?.());
-  hud.onQuitToTitle(() => live?.quitToTitle?.());
+  hud.onQuitToTitle(() => leavingGameplay(() => live?.quitToTitle?.()));
   hud.onReassignSlot((slot, source) => live?.reassignSlot?.(slot, source));
 
   /**

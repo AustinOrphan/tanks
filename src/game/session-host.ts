@@ -71,6 +71,15 @@ export interface GameSessionHost {
    */
   stop(): void;
   /**
+   * Return to the application routes (issue #429): dispose the running session and remove
+   * its canvas, leaving the host EMPTY and the page usable.
+   *
+   * Distinct from `stop()`, which the page teardown calls and which deliberately leaves
+   * the canvas in a document that is going away. Idempotent: calling it with no session
+   * disposes nothing rather than being guarded against doing so.
+   */
+  stopSession(): void;
+  /**
    * The page teardown. `stop()` plus a latch, so nothing can start a session afterwards.
    *
    * The latch is what makes a late reboot request harmless. Both seams are already in the
@@ -200,18 +209,34 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
   };
 
   /**
-   * A versus session's Campaign button: back to the campaign title.
+   * THE ONE SESSION-STOP BOUNDARY (issue #429).
    *
-   * Since issue #428 this STOPS rather than replaces. Building a fresh campaign session
-   * to show a title screen is precisely the eager creation #428 removes -- the page has
-   * owned its own menu since #468, so returning to it needs no session at all. The exact
-   * disposal accounting, and the other gameplay-to-route exits, are #429's.
+   * Every gameplay-to-application transition ends here -- Quit, Return to Main Menu,
+   * Change Setup, a campaign or practice exit, and a versus session's Campaign button.
+   * Issue #428 gave the Campaign button its own inline body; #429 makes that body the
+   * boundary and routes the rest through it, so "disposed exactly once" is a property of
+   * one function rather than a convention four call sites have to keep.
+   *
+   * IDEMPOTENT BY CONSTRUCTION, which is the criterion "repeated or racing stop requests
+   * cannot duplicate cleanup or underflow ownership counters": `stop()` nulls `handle`
+   * before returning, `canvas?.remove()` is a no-op on an element already detached, and
+   * `canvas = null` means a second call finds nothing to remove. A second stop therefore
+   * disposes nothing a second time rather than being guarded against doing so.
+   *
+   * Removes the canvas, unlike `stop()`. `stop()` is the PAGE teardown's, where the
+   * document is going away and taking the element with it; this one leaves a live page
+   * that must not have a dead canvas sitting under its menu.
    */
-  const requestCampaignSession = (): void => {
+  const stopSession = (): void => {
     if (spent) return;
     stop();
     canvas?.remove();
     canvas = null;
+  };
+
+  /** A versus session's Campaign button: back to the campaign title, building nothing. */
+  const requestCampaignSession = (): void => {
+    stopSession();
   };
 
   return {
@@ -230,6 +255,7 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
     requestVersusSession,
     requestCampaignSession,
     stop,
+    stopSession,
     dispose(): void {
       stop();
       spent = true;

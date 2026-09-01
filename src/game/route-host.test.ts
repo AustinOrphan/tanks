@@ -95,6 +95,8 @@ interface Fixture {
   host: RouteHost;
   /** Every application-level start request the routes made (issue #428), in order. */
   startRequests: StartIntent[];
+  /** How many times the routes asked the page to dispose the session (issue #429). */
+  stopRequests(): number;
   hud: ReturnType<typeof recordingHud>;
   root: HTMLElement;
   versusStarts: VersusConfig[];
@@ -117,6 +119,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
   const root = document.createElement('div');
   const box = {
     startRequests: [] as StartIntent[],
+    stopRequests: 0,
     versusStarts: [] as VersusConfig[],
     campaignRequests: 0,
     previewDisposals: 0,
@@ -172,6 +175,9 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
 
   const host = createRouteHost(root, deps, {
     requestStart: (intent) => box.startRequests.push(intent),
+    requestStop: () => {
+      box.stopRequests += 1;
+    },
     requestVersusSession: (config) => box.versusStarts.push(config),
     requestCampaignSession: () => {
       box.campaignRequests += 1;
@@ -183,6 +189,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
     hud,
     root,
     startRequests: box.startRequests,
+    stopRequests: () => box.stopRequests,
     versusStarts: box.versusStarts,
     campaignRequests: () => box.campaignRequests,
     previewDisposals: () => box.previewDisposals,

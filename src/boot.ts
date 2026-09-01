@@ -228,6 +228,12 @@ export function boot(deps: BootDeps): void {
       },
       requestVersusSession: (config) => sessions?.requestVersusSession(config),
       requestCampaignSession: () => sessions?.requestCampaignSession(),
+      // Returning to an application route (issue #429). Unguarded by a try/catch, unlike
+      // `requestStart` above, and deliberately: a START builds a renderer and a GL context
+      // and can genuinely fail, while a STOP only releases what already exists. A throw
+      // here would mean a disposal path is itself broken, which is a defect to surface
+      // rather than paint over with the no-WebGL page.
+      requestStop: () => sessions?.stopSession(),
     });
 
 
