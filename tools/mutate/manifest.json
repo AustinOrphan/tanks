@@ -3075,12 +3075,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 96,
+    "expectFailures": 100,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -3184,11 +3184,11 @@
     "find": "      routeHost.dispose();",
     "replace": "      void routeHost;",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "tests": [
       "src/boot.test.ts"
     ],
-    "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one. COUNT RE-MEASURED for issue #428: 1 -> 3, because the #428 suite asserts the route UI is built exactly once on an empty boot and after a failed start, both of which also fail when it is never disposed. The failing SET was compared, not the number renumbered."
+    "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one. COUNT RE-MEASURED for issue #428: 1 -> 3, because the #428 suite asserts the route UI is built exactly once on an empty boot and after a failed start, both of which also fail when it is never disposed. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 3 -> 4, because boot.test.ts gained the round-trip suite, one of whose cases asserts the page route UI is disposed exactly once by the teardown after a return. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "session-start-clears-the-retained-versus-config",
@@ -3212,8 +3212,8 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 34,
-    "why": "The whole of issue #428, put back. A page that has shown nobody anything owns a canvas, a renderer, a GL context, a simulation world, a gameplay seed and a frame loop again, and a player who opens the game and walks away pays for a match they never asked for. 32 of 55 in the scoped run, and the breadth is the point rather than a nuisance: the eager start is not one behaviour but the premise every session-shaped assertion in boot.test.ts used to rest on, so re-adding it breaks the empty-boot counts, every start-gesture count (each reads one session too many), and the whole reboot ledger. The narrow half is 'reaches the application UI with no session, no canvas and no world', which is the one that would fail even if every other case were rewritten around it. COUNT RE-MEASURED after the reveal fix: 32 -> 34. `boot.test.ts` gained the three `enteredIds` cases, two of which also fail under this mutation -- an eager boot reveals a session the page load produced, so the ledger reads one entry too many. The failing SET was compared, not the number renumbered."
+    "expectFailures": 41,
+    "why": "The whole of issue #428, put back. A page that has shown nobody anything owns a canvas, a renderer, a GL context, a simulation world, a gameplay seed and a frame loop again, and a player who opens the game and walks away pays for a match they never asked for. 41 of 66 in the scoped run, and the breadth is the point rather than a nuisance: the eager start is not one behaviour but the premise every session-shaped assertion in boot.test.ts used to rest on, so re-adding it breaks the empty-boot counts, every start-gesture count (each reads one session too many), and the whole reboot ledger. The narrow half is 'reaches the application UI with no session, no canvas and no world', which is the one that would fail even if every other case were rewritten around it. COUNT RE-MEASURED for issue #429 on the final tree: main's 34 of 58 -> 41 of 66. boot.test.ts gains the eight-test return-to-routes suite, and seven of those eight fail under an eager start; the eighth asserts only that the page owners survive, which the mutation does not touch. The failing set was decomposed, not renumbered: 34 of the 41 name tests that exist unchanged on main, and 7 are the new suite's. main declares 34, so the pre-existing count is unchanged; individual pre-existing verdicts were not re-measured on main's tree. An earlier 39 recorded on this branch matched no tree it shipped on -- CI and a local re-run both measure 41."
   },
   {
     "id": "boot-start-failure-escapes-the-page",
@@ -3339,7 +3339,7 @@
   {
     "id": "session-host-campaign-return-replaces-instead-of-stopping",
     "file": "src/game/session-host.ts",
-    "find": "  const requestCampaignSession = (): void => {\n    if (spent) return;\n    stop();\n    canvas?.remove();\n    canvas = null;\n  };",
+    "find": "  const requestCampaignSession = (): void => {\n    stopSession();\n  };",
     "replace": "  const requestCampaignSession = (): void => {\n    replace({ kind: 'campaign-continue' });\n  };",
     "tests": [
       "src/game/session-host.test.ts",
@@ -3347,7 +3347,7 @@
     ],
     "expect": "killed",
     "expectFailures": 14,
-    "why": "Puts back the pre-#428 Campaign button: returning to the campaign title builds a whole session -- canvas, renderer, world, seed -- for the sole purpose of showing a title screen the page has owned since #468. That is eager creation wearing a different hat, and it is the one path that would have kept it after the eager boot was removed. 14 of 79 across both scoped files, because the session ledger, the canvas count and the empty-host state all move together on this path. The narrow case is session-host.test.ts's 'a campaign request stops the versus session and starts nothing', which asserts `hasSession()` is false and the root holds no canvas."
+    "why": "Puts back the pre-#428 Campaign button: returning to the campaign title builds a whole session -- canvas, renderer, world, seed -- for the sole purpose of showing a title screen the page has owned since #468. That is eager creation wearing a different hat, and it is the one path that would have kept it after the eager boot was removed. 14 of 79 across both scoped files, because the session ledger, the canvas count and the empty-host state all move together on this path. The narrow case is session-host.test.ts's 'a campaign request stops the versus session and starts nothing', which asserts `hasSession()` is false and the root holds no canvas. RE-ANCHORED by issue #429: the inline body this mutated became a call to the one session-stop boundary (`stopSession`), so the find string moved with it. The defect and the mutation are identical -- the Campaign button building a session to show a title screen -- and the count was re-measured on the post-move tree."
   },
   {
     "id": "session-start-never-reveals-the-match",
@@ -3360,5 +3360,110 @@
       "src/boot.test.ts"
     ],
     "why": "The defect this issue actually shipped before a browser caught it: a start builds the session, the canvas, the world and the seed, and then leaves the player on the Main Menu with the match running invisibly behind it. Pressing Continue appears to do nothing. WHY EVERY UNIT ASSERTION MISSED IT is the reason this entry is worth its slot -- the whole suite counted what was BUILT (one session, one canvas, one world, the right intent) and every count was correct. Nothing asked whether the thing built was ever SHOWN. `tools/visual/roundtrip.mjs` reported `canvases: 1` with the title buttons still on screen, and a follow-up probe found the pause panel unreachable because the machine had never left the menu. The cases that kill it read `enteredIds`, a ledger BY SESSION ID rather than a count: a boundary that revealed the first handle every time would report the same total as one that advances, which is the same stale-capture shape the disposal ledger beside it exists to catch. 2 of 58 in the scoped run: the single-start case and the repeated-start ledger. The third case in that group -- \"reveals nothing when the capability probe refused the start\" -- asserts an EMPTY ledger and so keeps passing, which is what makes the trio a real two-way discrimination rather than three restatements of one fact."
+  },
+  {
+    "id": "route-host-never-disposes-on-leaving-gameplay",
+    "file": "src/game/route-host.ts",
+    "find": "    if (wasInGameplay && !sm.inGameplay) requests.requestStop();",
+    "replace": "    void wasInGameplay;",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/boot.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "The whole of issue #429, deleted: a Quit or a Change Setup returns to the menu and the session keeps running behind it -- its frame loop advancing, its renderer holding a GL context, its input poller reading, its audio bed borrowed. Nothing on screen says so, because the page has owned the menu since #468 and paints it over the top. The next Start then runs a SECOND session beside the first. 3 of 95 across both scoped files: route-host.test.ts's Quit and action-button exits, and boot.test.ts's round-trip ledger, which is the one that reads it as a disposal COUNT at the production boundary rather than as a request. `void wasInGameplay;` rather than a deletion, so the variable is still read and a tsc failure cannot be mistaken for coverage."
+  },
+  {
+    "id": "route-host-disposes-on-every-click-at-a-route",
+    "file": "src/game/route-host.ts",
+    "find": "    if (wasInGameplay && !sm.inGameplay) requests.requestStop();",
+    "replace": "    if (!sm.inGameplay) requests.requestStop();",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "Drops the `wasInGameplay` half, so the rule reads only the after-state: every click made AT an application route disposes. With no session that is a stop request for something that does not exist; with one attached -- the window between a start request and the machine entering gameplay -- it disposes the session that is being set up. This is why the rule is asked on BOTH sides of the handler rather than after it, and the mutation is the reason that is written down. 3 of 32: 'a click at an application route disposes nothing', 'a Quit with no session attached asks for nothing', and 'a handler that stays in gameplay disposes nothing'."
+  },
+  {
+    "id": "route-host-disposes-even-when-gameplay-continues",
+    "file": "src/game/route-host.ts",
+    "find": "    if (wasInGameplay && !sm.inGameplay) requests.requestStop();",
+    "replace": "    if (wasInGameplay) requests.requestStop();",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The opposite half, and the more destructive one: keeps `wasInGameplay` and drops the `!sm.inGameplay` test, so a click that STAYED in gameplay disposes anyway. Resume, Retry, Play Again and Next Level all run the same handler -- so pausing and resuming would tear down the match the player is in the middle of. 1 of 32 -- 'a handler that stays in gameplay disposes nothing', which is the only case that fires a gameplay handler with a gameplay outcome. Paired with the entry above: one per direction, because a single test cannot fail both ways."
+  },
+  {
+    "id": "route-host-action-button-is-not-an-exit",
+    "file": "src/game/route-host.ts",
+    "find": "      leavingGameplay(() => live?.startRestart?.());",
+    "replace": "      live?.startRestart?.();",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Unwraps the action button, leaving only Quit as an exit. The branch this loses is a finished versus match's 'Versus Setup', which returns to the retained pane (`loop.ts`'s `relaunchTarget`) -- so a player who finishes a match and goes back to change the map leaves a whole session running behind the setup screen, and the next Start adds a second. Invisible: the pane opens correctly and the match is over. 1 of 32 -- 'an action-button branch that returns to a route disposes too'. The Quit cases keep passing, which is what shows the two exits are covered separately rather than one standing in for the other."
+  },
+  {
+    "id": "route-host-quit-is-not-an-exit",
+    "file": "src/game/route-host.ts",
+    "find": "  hud.onQuitToTitle(() => leavingGameplay(() => live?.quitToTitle?.()));",
+    "replace": "  hud.onQuitToTitle(() => live?.quitToTitle?.());",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/boot.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The same unwrapping on the other handler: Quit stops disposing. The most-travelled exit in the game -- pause, Quit, back to the menu -- leaves the session running. 2 of 95 across both scoped files, which is the pair worth having: route-host.test.ts sees the missing REQUEST and boot.test.ts sees the missing DISPOSAL, and only the second says the session actually outlived the transition."
+  },
+  {
+    "id": "session-stop-leaves-the-dead-canvas-under-the-menu",
+    "file": "src/game/session-host.ts",
+    "find": "  const stopSession = (): void => {\n    if (spent) return;\n    stop();\n    canvas?.remove();\n    canvas = null;\n  };",
+    "replace": "  const stopSession = (): void => {\n    if (spent) return;\n    stop();\n  };",
+    "tests": [
+      "src/game/session-host.test.ts",
+      "src/boot.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 6,
+    "why": "Disposes the session but leaves its canvas in the DOM. `startGameWith`'s teardown calls `renderer.forceContextLoss()` (`render/scene.ts`) and a WebGL context does not come back from that -- so the dead element sits under the menu forever, and every later match stacks another behind it. Nothing throws and nothing looks wrong until enough have accumulated to exhaust the browser's context budget. This is the same failure `session-host-keeps-the-dead-canvas` pins for the REPLACE path; #429 adds a second path that has to remove it, and `stop()` -- the page teardown's -- deliberately does not, which is why `stopSession` is a separate function rather than a call to it. 6 of 90 across both scoped files."
+  },
+  {
+    "id": "roundtrip-probe-crashes-on-a-malformed-url",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "  let path;\n  try {\n    path = decodeURIComponent((url ?? '/').split('?')[0]);\n  } catch {\n    return null;\n  }\n",
+    "replace": "  const path = decodeURIComponent((url ?? '/').split('?')[0]);\n",
+    "tests": ["tools/visual/serve-path.test.ts"],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Puts the decode back outside a try, which is how the probe's handler shipped. decodeURIComponent throws URIError on malformed percent-encoding, and GET /% was measured killing the process with exit 1: nothing awaits an async request handler, so the rejection is unhandled rather than answered with a 500. The cost is not a security one -- it is a probe that answers a canvas census with a bare stack, at the moment someone is debugging a disposal leak. Exactly 1 of 9 fails, the malformed-encoding case; the traversal assertions are indifferent to this mutation, which is why they are separate entries."
+  },
+  {
+    "id": "roundtrip-probe-serves-files-outside-dist",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "  if (file !== root && !file.startsWith(root + sep)) return null;\n",
+    "replace": "  // the resolved path is trusted\n",
+    "tests": ["tools/visual/serve-path.test.ts"],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "Drops the containment check entirely, leaving the resolve to escape the root the way the original join did. A raw socket sending GET /../outside.txt was measured being answered 200 with a file from outside dist. Reachability is the part worth writing down: a normalising client CANNOT get there, because WHATWG URL resolution collapses both .. and %2e%2e before the request leaves, so fetch('/../x') arrives as /x. A test driven through fetch would therefore pass against the unhardened handler and prove nothing -- the assertions sit on the resolver directly for that reason. 4 of 9 fail, the four escape shapes."
+  },
+  {
+    "id": "roundtrip-probe-containment-drops-the-separator",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "if (file !== root && !file.startsWith(root + sep)) return null;",
+    "replace": "if (file !== root && !file.startsWith(root)) return null;",
+    "tests": ["tools/visual/serve-path.test.ts"],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The containment check kept but weakened to a bare prefix, which is the shape it is easiest to write by accident. A sibling directory whose name merely begins with the root's -- dist-evil next to dist -- then passes. This entry proves the SHAPE of the guard rather than its presence: measured, it fails exactly 1 of 9, and every other assertion in the file, including all three .. escapes, still passes under it. Without that one case the two forms are indistinguishable and the weaker one would survive."
   }
 ]

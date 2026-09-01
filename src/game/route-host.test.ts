@@ -95,6 +95,8 @@ interface Fixture {
   host: RouteHost;
   /** Every application-level start request the routes made (issue #428), in order. */
   startRequests: StartIntent[];
+  /** How many times the routes asked the page to dispose the session (issue #429). */
+  stopRequests(): number;
   hud: ReturnType<typeof recordingHud>;
   root: HTMLElement;
   versusStarts: VersusConfig[];
@@ -117,6 +119,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
   const root = document.createElement('div');
   const box = {
     startRequests: [] as StartIntent[],
+    stopRequests: 0,
     versusStarts: [] as VersusConfig[],
     campaignRequests: 0,
     previewDisposals: 0,
@@ -172,6 +175,9 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
 
   const host = createRouteHost(root, deps, {
     requestStart: (intent) => box.startRequests.push(intent),
+    requestStop: () => {
+      box.stopRequests += 1;
+    },
     requestVersusSession: (config) => box.versusStarts.push(config),
     requestCampaignSession: () => {
       box.campaignRequests += 1;
@@ -183,6 +189,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
     hud,
     root,
     startRequests: box.startRequests,
+    stopRequests: () => box.stopRequests,
     versusStarts: box.versusStarts,
     campaignRequests: () => box.campaignRequests,
     previewDisposals: () => box.previewDisposals,
@@ -550,6 +557,107 @@ describe('createRouteHost: the route on attach', () => {
     first.detach();
     f.host.attach();
     expect(f.host.sm.atMainMenu, 'the replacement session inherited a gameplay route').toBe(true);
+  });
+});
+
+/**
+ * Returning to an application route disposes the session (issue #429).
+ *
+ * The rule is "a handler that ran while the machine was in gameplay and left it", so
+ * every case here drives the machine into gameplay first and then fires a real HUD
+ * handler. Counting the STOP REQUESTS rather than inspecting a flag is what makes these
+ * about the boundary `boot.ts` actually wires, not about an internal.
+ */
+describe('createRouteHost: leaving gameplay (issue #429)', () => {
+  /** Attach a session and put the machine into gameplay, the way a real start does. */
+  function inGameplay(f: Fixture): ReturnType<RouteHost['attach']> {
+    const slot = f.host.attach();
+    f.host.sm.enterGameplay({
+      descriptor: { kind: 'campaign', level: 0 },
+      level: 0,
+      seed: 1,
+    } as never);
+    expect(f.host.sm.inGameplay).toBe(true);
+    return slot;
+  }
+
+  it('Quit disposes exactly once', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    slot.onQuitToTitle(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests(), 'the session outlived the return to Main Menu').toBe(1);
+  });
+
+  /**
+   * The action button is an exit TOO, on one of its branches: a finished versus match's
+   * reads "Versus Setup" and returns to the retained pane. Same rule, no second list.
+   */
+  it('an action-button branch that returns to a route disposes too', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    slot.onStartRestart(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onStartRestart');
+    expect(f.stopRequests()).toBe(1);
+  });
+
+  /**
+   * ...and a branch that STAYS in gameplay disposes nothing. This is the half a
+   * one-sided rule gets wrong: Resume, Retry, Play Again and Next Level all run the same
+   * handler and must leave the session alone.
+   *
+   * Would fail if `leavingGameplay` read only the after-state, or dropped the
+   * `wasInGameplay` half.
+   */
+  it('a handler that stays in gameplay disposes nothing', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    let ran = 0;
+    slot.onStartRestart(() => {
+      ran += 1; // Resume: the machine stays where it is.
+    });
+
+    f.hud.fire('onStartRestart');
+    expect(ran, 'the handler did not run at all').toBe(1);
+    expect(f.stopRequests(), 'a click that stayed in gameplay disposed the session').toBe(0);
+  });
+
+  /**
+   * A click made AT an application route disposes nothing either -- the other direction of
+   * the same mistake, and the one that would fire on every menu button.
+   */
+  it('a click at an application route disposes nothing', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach();
+    slot.onQuitToTitle(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests()).toBe(0);
+  });
+
+  it('a Quit with no session attached asks for nothing', () => {
+    // The empty host is the page's normal state since #428; a stop request from it would
+    // be a disposal of something that does not exist.
+    const f = fixture({ launchDismissed: true });
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests()).toBe(0);
+  });
+
+  /**
+   * Repeated Quits ask once, because the second finds the machine already out of
+   * gameplay. The criterion "repeated stop requests cannot duplicate cleanup" is answered
+   * twice over -- here, and by `stopSession` being idempotent in `session-host.ts`.
+   */
+  it('a second Quit does not ask again', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = inGameplay(f);
+    slot.onQuitToTitle(() => f.host.sm.toMainMenu());
+
+    f.hud.fire('onQuitToTitle');
+    f.hud.fire('onQuitToTitle');
+    expect(f.stopRequests(), 'the second Quit disposed again').toBe(1);
   });
 });
 

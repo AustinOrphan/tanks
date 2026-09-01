@@ -365,6 +365,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   uiRoot: HTMLElement;
   /** Every application-level start request the routes made (issue #428), in order. */
   startRequests: StartIntent[];
+  /** How many times the routes asked the page to dispose the session (issue #429). */
+  stopRequests(): number;
   /**
    * Point the PAGE-level start requests at a spy (issue #468).
    *
@@ -1568,6 +1570,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   // The real route host over the harness's fakes. `deps` is a full `GameDeps`, which
   // structurally satisfies `RouteHostDeps`, so nothing here has to restate the subset.
   const startRequests: StartIntent[] = [];
+  const stopRequests = { count: 0 };
   /**
    * BUILT ON FIRST READ, not eagerly.
    *
@@ -1585,6 +1588,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       requestStart: (intent) => startRequests.push(intent),
       requestVersusSession: (config) => pageRequests.versus(config),
       requestCampaignSession: () => pageRequests.campaign(),
+      // RECORDED, not serviced (issue #429), for the same reason `requestStart` is:
+      // these suites own their session handles and dispose them themselves, so a seam
+      // that disposed here too would double-dispose and make every ledger ambiguous.
+      requestStop: () => {
+        stopRequests.count += 1;
+      },
     }));
 
   return {
@@ -1593,6 +1602,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       return buildRouteHost();
     },
     uiRoot,
+    stopRequests: () => stopRequests.count,
     startRequests,
     setPageRequests(next): void {
       Object.assign(pageRequests, next);
