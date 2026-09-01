@@ -109,7 +109,7 @@ import { versusMapChoices, type VersusConfig } from './versus-config';
 import { boot as bootPage } from '../boot';
 import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
-import { createAppShell } from './app-shell';
+import { createAppShell, type AppShell } from './app-shell';
 import { createRouteHost, type RouteHost } from './route-host';
 import { RENDER_CAPABILITY_SUPPORTED } from './render-capability';
 import type { GameHandle } from './loop';
@@ -7828,6 +7828,8 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
   requestCampaign(): void;
   pagehide(): void;
   sessions(): number;
+  /** The page's real shell, for reading the PAGE-level Launch gate directly. */
+  shell: AppShell;
 } {
   const root = document.createElement('div');
   let requestVersus: ((config: VersusConfig) => void) | null = null;
