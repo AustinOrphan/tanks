@@ -32,6 +32,11 @@ focused test without an implicit typecheck, use `npm run test:unit -- <Vitest ar
 local reproduction of the core CI scope, but it is not the routine local candidate gate or
 proof that a change is merge-ready. It deliberately does not silently skip or install
 browser prerequisites. Run `verify:visual` when a change affects user-visible rendering or
+renderer/WebGL infrastructure. Playwright is not a repository dependency: install the
+version pinned in `.github/workflows/ci.yml` and its Chromium browser before running the
+visual composite locally. Safari and the cross-OS/architecture engine matrix remain
+separate because Linux cannot reproduce them.
+
 `npm run roundtrip` (`tools/visual/roundtrip.mjs`) is the session-lifecycle half of the
 visual composite and the only check that can see it. It drives all four of #428's match-start
 gestures -- Continue, New Game, a Practice level pick and Versus Start -- through the built
@@ -40,12 +45,9 @@ WebGL-context census off the document at every step. `renderer.forceContextLoss(
 leaked gameplay canvas is indistinguishable from a live one in the unit fakes, so a
 disposal regression is invisible to Vitest and to every screenshot. It prints each census
 and then returns a verdict; the required `visual` CI job runs it after the screenshot check.
-Measured at **23.1 s on the CI runner** (ubuntu-latest, 2026-09-01) and 40.0/40.3/40.8 s over three consecutive local runs (Linux, swiftshader, n=3) — the software renderer locally is the slower of the two.
-
-renderer/WebGL infrastructure. Playwright is not a repository dependency: install the
-version pinned in `.github/workflows/ci.yml` and its Chromium browser before running the
-visual composite locally. Safari and the cross-OS/architecture engine matrix remain
-separate because Linux cannot reproduce them.
+Measured at **23.1 s on the CI runner** (ubuntu-latest, 2026-09-01) and 40.0/40.3/40.8 s
+over three consecutive local runs (Linux, swiftshader, n=3) -- the software renderer
+locally is the slower of the two.
 
 ### Constrained-machine escape hatches
 

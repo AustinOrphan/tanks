@@ -92,12 +92,6 @@ const CENSUS = () => {
   return { canvases: all.length, gameplay: gameplay.length, liveContexts: live.length };
 };
 
-const visible = (page, sel) =>
-  page.evaluate((s) => {
-    const el = document.querySelector(s);
-    return !!el && el.offsetParent !== null && !el.disabled;
-  }, sel);
-
 /**
  * The four gestures #428 admits, and the clicks each one takes.
  *
