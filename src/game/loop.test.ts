@@ -2836,6 +2836,9 @@ describe('startGameWith: the retained Versus config across sessions (issue #468)
     base.hud.openVersus();
     expect(base.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: other });
     second.dispose();
+  });
+});
+
 /**
  * THE START BOUNDARY (issue #428).
  *
