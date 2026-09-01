@@ -110,7 +110,7 @@ import { boot as bootPage } from '../boot';
 import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
 import { createAppShell, type AppShell } from './app-shell';
-import { createRouteHost, type RouteHost, type StartIntent } from './route-host';
+import { createRouteHost, type RouteHost, type SessionRequests, type StartIntent } from './route-host';
 import { RENDER_CAPABILITY_SUPPORTED } from './render-capability';
 import type { GameHandle } from './loop';
 import { createMemoryStorage, type StorageNamespace } from './storage';
@@ -1568,18 +1568,30 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   // The real route host over the harness's fakes. `deps` is a full `GameDeps`, which
   // structurally satisfies `RouteHostDeps`, so nothing here has to restate the subset.
   const startRequests: StartIntent[] = [];
-  const routeHost = createRouteHost(uiRoot, deps, {
-    // RECORDED, not serviced (issue #428). These suites call `startGameWith`
-    // themselves, so a seam that started a session here would leave two live and make
-    // every count below ambiguous. `bootPageOn` is where the request is honoured.
-    requestStart: (intent) => startRequests.push(intent),
-    requestVersusSession: (config) => pageRequests.versus(config),
-    requestCampaignSession: () => pageRequests.campaign(),
-  });
+  /**
+   * BUILT ON FIRST READ, not eagerly.
+   *
+   * A route host registers a keydown listener on `deps.host` and builds a HUD in its root
+   * (issue #428), so a harness that always built one would put a second of each on every
+   * page that `bootPageOn` sets up -- and the listener/HUD counts those suites assert are
+   * the whole point of them. Lazy means a suite gets exactly the route hosts it uses.
+   */
+  let lazyRouteHost: RouteHost | null = null;
+  const buildRouteHost = (): RouteHost =>
+    (lazyRouteHost ??= createRouteHost(uiRoot, deps, {
+      // RECORDED, not serviced (issue #428). These suites call `startGameWith`
+      // themselves, so a seam that started a session here would leave two live and make
+      // every count below ambiguous. `bootPageOn` is where the request is honoured.
+      requestStart: (intent) => startRequests.push(intent),
+      requestVersusSession: (config) => pageRequests.versus(config),
+      requestCampaignSession: () => pageRequests.campaign(),
+    }));
 
   return {
     deps,
-    routeHost,
+    get routeHost(): RouteHost {
+      return buildRouteHost();
+    },
     uiRoot,
     startRequests,
     setPageRequests(next): void {
@@ -1710,15 +1722,23 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       if (!entry) throw new Error('no blur listener');
       (entry[1] as () => void)();
     },
+    /**
+     * Fire EVERY registered keydown listener, the way a real host does.
+     *
+     * `find` -- the first one -- was correct while a session was the only thing that
+     * listened. Since issue #428 the page has its own (`route-host.ts`'s Launch gesture,
+     * registered before any session exists), so taking the first would deliver every key
+     * in this file to the splash handler and none to the session.
+     */
     keydown(e): void {
-      const entry = rec.listeners.find(([t]) => t === 'keydown');
-      if (!entry) throw new Error('no keydown listener');
-      (entry[1] as (ev: Partial<KeyboardEvent>) => void)(e);
+      const entries = rec.listeners.filter(([t]) => t === 'keydown');
+      if (entries.length === 0) throw new Error('no keydown listener');
+      for (const [, fn] of entries) (fn as (ev: Partial<KeyboardEvent>) => void)(e);
     },
     pointerdown(): void {
-      const entry = rec.listeners.find(([t]) => t === 'pointerdown');
-      if (!entry) throw new Error('no pointerdown listener');
-      (entry[1] as () => void)();
+      const entries = rec.listeners.filter(([t]) => t === 'pointerdown');
+      if (entries.length === 0) throw new Error('no pointerdown listener');
+      for (const [, fn] of entries) (fn as () => void)();
     },
     resize(): void {
       const entry = rec.listeners.find(([t]) => t === 'resize');
@@ -1914,11 +1934,14 @@ describe('startGameWith: construction', () => {
    */
   it('builds ONE HUD, in the route host\'s root, however many sessions run', () => {
     const h = makeDeps();
+    // Reading `h.routeHost` is what builds it (the harness is lazy since #428), so the
+    // HUD count is taken after the read rather than before.
+    const routeHost = h.routeHost;
     expect(h.rec.hudRoots).toEqual([h.uiRoot]);
 
-    const first = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, CONTINUE);
+    const first = startGameWith(document.createElement('canvas'), h.deps, routeHost, CONTINUE);
     first.dispose();
-    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, CONTINUE);
+    const second = startGameWith(document.createElement('canvas'), h.deps, routeHost, CONTINUE);
     second.dispose();
 
     expect(h.rec.hudRoots, 'a session built its own HUD').toEqual([h.uiRoot]);
@@ -3018,12 +3041,12 @@ describe('startGameWith: listeners and teardown', () => {
     // The TYPES as a set, not just a count with an each-was-added check: review showed
     // that form passes when one type is removed twice and another never at all, which
     // is exactly how the new pointerdown listener would have leaked unnoticed.
-    expect(h.rec.removed.map(([t]) => t).sort()).toEqual([
-      'blur',
-      'keydown',
-      'pointerdown',
-      'resize',
-    ]);
+    //
+    // TWO types now, not four (issue #428). `keydown` and `pointerdown` belong to the
+    // PAGE -- `route-host.ts` owns the one keydown listener and the Launch gesture -- and
+    // a session that still unregistered either would take the splash dismissal and every
+    // hotkey down with it on the way out of the first match.
+    expect(h.rec.removed.map(([t]) => t).sort()).toEqual(['blur', 'resize']);
     for (const [type, fn] of h.rec.removed) {
       expect(h.rec.listeners).toContainEqual([type, fn]);
     }
@@ -6329,12 +6352,18 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       // Re-anchored by issue #468: the spy goes on the PAGE-level request seam, not on
       // a session's deps. Start is an application-level request now -- it must work
       // with no session at all, which is why nothing here dereferences one.
-      const calls: VersusConfig[] = [];
+      // Re-anchored again by issue #428: Versus Start is one of the four gestures that
+      // reach `requestStart`, so it arrives as a `StartIntent` on the single start
+      // boundary rather than on a callback of its own. The claim is unchanged -- the
+      // config the pane handed back, by identity, not a rebuilt lookalike.
       const base = makeDeps();
-      base.setPageRequests({ versus: (c) => calls.push(c) });
       const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
       h.hud.startVersus(REMATCH_CONFIG);
-      expect(calls).toEqual([REMATCH_CONFIG]);
+      expect(base.startRequests).toEqual([{ kind: 'versus', config: REMATCH_CONFIG }]);
+      expect(
+        base.startRequests[0].kind === 'versus' && base.startRequests[0].config,
+        'the pane\'s own config was rebuilt on the way',
+      ).toBe(REMATCH_CONFIG);
       h.handle.dispose();
     });
 
@@ -6510,12 +6539,19 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     // FUTURE hud.ts that snapshotted sessionKind only at setState-time would need it,
     // and this fails immediately if setSessionKind is ever moved after the constructor's
     // first hud.setState/showVersusSetup calls.
+    //
+    // Re-anchored by issue #428: the FIRST `state:` in the log is now the PAGE's, pushed
+    // when the route host paints the opening surface before any session exists. The claim
+    // is about a SESSION's pushes, so the search starts after that one -- comparing
+    // against the page's would pin an ordering no session can affect.
     const base = makeDeps();
     const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
-    const kindIndex = h.rec.hudCallLog.findIndex((e) => e.startsWith('sessionKind:'));
-    const stateIndex = h.rec.hudCallLog.findIndex((e) => e.startsWith('state:'));
+    const log = h.rec.hudCallLog;
+    expect(log.findIndex((e) => e.startsWith('state:')), 'the page did not paint first').toBe(0);
+    const kindIndex = log.findIndex((e) => e.startsWith('sessionKind:'));
+    const stateIndex = log.findIndex((e, i) => i > 0 && e.startsWith('state:'));
     expect(kindIndex).toBeGreaterThanOrEqual(0);
-    expect(stateIndex).toBeGreaterThan(kindIndex);
+    expect(stateIndex, 'the session changed the screen before announcing its kind').toBeGreaterThan(kindIndex);
     h.handle.dispose();
   });
 
@@ -7892,8 +7928,13 @@ describe('versusResultFromWorld', () => {
  * is therefore the thing under test, not a stand-in for it: `requestVersusSession` disposes
  * the live handle and starts a second real session, exactly as it does on the page.
  */
-function bootPageOn(h: ReturnType<typeof makeDeps>): {
+function bootPageOn(
+  h: ReturnType<typeof makeDeps>,
+  opts: { startEmpty?: boolean } = {},
+): {
   h: ReturnType<typeof makeDeps>;
+  /** Ask for a match the way the route UI does (issue #428). */
+  start(intent?: StartIntent): void;
   /** Fire the CURRENT session's listener -- see `liveListener`. */
   pointerdown(): void;
   keydown(e: Partial<KeyboardEvent>): void;
@@ -7907,6 +7948,14 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
   const root = document.createElement('div');
   let requestVersus: ((config: VersusConfig) => void) | null = null;
   let requestCampaign: (() => void) | null = null;
+  /**
+   * The application-level start seam `boot()` hands the route UI (issue #428).
+   *
+   * Captured because since #428 `boot()` starts NOTHING: every suite below whose subject
+   * is a running session has to ask for one the way a player does, and this is the seam
+   * that request travels through in production.
+   */
+  let pageRequestsSeam: SessionRequests | undefined;
   let sessions = 0;
   const pagehideFns: Array<(e: { persisted: boolean }) => void> = [];
 
@@ -7951,8 +8000,9 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
      * Since issue #468 the machine, the HUD and the route handlers belong to the route
      * host rather than the session, which is why these two overrides moved here.
      */
-    createRouteHost: (hostRoot, appShell, requests) =>
-      createRouteHost(
+    createRouteHost: (hostRoot, appShell, requests) => {
+      pageRequestsSeam = requests;
+      return createRouteHost(
         hostRoot,
         {
           ...h.deps,
@@ -7963,7 +8013,8 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
           },
         },
         requests,
-      ),
+      );
+    },
     startGame: (canvas, intent, reqVersus, reqCampaign, _appShell, routeHost): GameHandle => {
       sessions += 1;
       requestVersus = reqVersus;
@@ -8003,8 +8054,16 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
     },
   });
 
+  // The Continue gesture, which is what `boot()` itself used to do. Driven through the
+  // real seam rather than by reaching for the session host, so the wiring under test is
+  // the wiring production uses. `startEmpty` skips it for the suites whose subject IS the
+  // empty host.
+  if (!opts.startEmpty) pageRequestsSeam?.requestStart({ kind: 'campaign-continue' });
+
   return {
     h,
+    /** Ask for a match the way the route UI does (issue #428). */
+    start: (intent: StartIntent = { kind: 'campaign-continue' }) => pageRequestsSeam?.requestStart(intent),
     pointerdown: () => liveListener<void>(h, 'pointerdown')(undefined),
     keydown: (e) => liveListener<Partial<KeyboardEvent>>(h, 'keydown')(e),
     requestVersus: (config) => requestVersus!(config),
@@ -8177,15 +8236,27 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
    * acceptance criterion names, plus the repetition that turns a one-off leak into a
    * growing one. Five sessions in total, four of them retired.
    */
+  /**
+   * Five sessions over a realistic route.
+   *
+   * Re-anchored by issue #428: the page boots EMPTY, so the route now opens with an
+   * explicit Continue rather than with a session the page load produced, and the
+   * Main Menu -> Campaign step is a Continue too rather than a `requestCampaign` that
+   * used to build one as a side effect of showing a title screen.
+   *
+   * The count is deliberately unchanged at five. That matters: the same number of
+   * sessions over the same journey, none of them created by anything but a gesture.
+   */
   function runTheRoute(h: ReturnType<typeof makeDeps>): ReturnType<typeof bootPageOn> {
-    const page = bootPageOn(h);
+    const page = bootPageOn(h, { startEmpty: true });
     page.pointerdown(); // dismiss the splash, as a first-time player does
+    page.start(); // Continue -- session 1
     h.hud.quitToTitle(); // Campaign -> Main Menu
-    page.requestVersus(VS); // Main Menu -> Versus
+    page.requestVersus(VS); // Main Menu -> Versus -- session 2
     h.hud.quitToTitle(); // Versus -> Main Menu
-    page.requestCampaign(); // Main Menu -> Campaign
-    page.requestVersus(VS); // rematch
-    page.requestVersus(VS); // rematch again
+    page.start(); // Continue again -- session 3
+    page.requestVersus(VS); // rematch -- session 4
+    page.requestVersus(VS); // rematch again -- session 5
     return page;
   }
 
@@ -8196,11 +8267,10 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     const h = makeDeps();
     const page = runTheRoute(h);
     expect(page.sessions()).toBe(5);
-    // ...and exactly TWO HUDs over those five sessions, which is the whole of issue
-    // #468 measured at the production boundary. `makeDeps` builds one route host of
-    // its own (unused here) and `bootPageOn` builds the one this page runs on; what
-    // matters is that five sessions added none. Before this issue it was five.
-    expect(h.rec.hudRoots, 'a session built its own HUD').toHaveLength(2);
+    // ...and exactly ONE HUD over those five sessions, which is the whole of issue #468
+    // measured at the production boundary. Before it, `hudRoots` grew per session and
+    // this read five.
+    expect(h.rec.hudRoots, 'a session built its own HUD').toHaveLength(1);
   });
 
   it('leaves exactly one live host listener of each kind, not one per session', () => {

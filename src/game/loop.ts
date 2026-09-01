@@ -2675,7 +2675,10 @@ export function startGameWith(
   }
 
   sm.onChange((location) => {
-    hud.setState(locationToHudSurface(location));
+    // No `hud.setState` here: since issue #428 the PAGE paints which screen is showing
+    // (`route-host.ts`), because a HUD only a session ever painted would leave a page with
+    // no session showing nothing at all. What stays is everything that needs a world.
+    //
     // The splash covers the toast rail, so a notice raised at boot is held until the
     // player has left it -- see `flushSettingsNotice`. Called on EVERY change rather
     // than only on the launch->main-menu edge: the notice can also arrive later (a
@@ -2758,8 +2761,9 @@ export function startGameWith(
     if (!nowPlaying) input.clearQueuedPresses();
   });
 
-  hud.setState(locationToHudSurface(sm.location)); // initial launch panel
-  followMusic(sm.location); // ...and its music: this path bypasses sm.onChange
+  // The initial surface paint moved to `route-host.ts` with the subscription above; the
+  // music did not, because it needs this session's audio engine.
+  followMusic(sm.location); // this path bypasses sm.onChange
   hud.setLevel(ordinalOf(level), deps.levels.levels.length);
   hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
   // Boot is an arrival at the title screen too (splash precedes it, but the button
@@ -2788,14 +2792,6 @@ export function startGameWith(
   // `audio/engine.ts` already resumes the context from its own document-level gesture
   // handler, and did before this screen existed. What changes is that the gesture is
   // now guaranteed to have happened before the menu is on screen.
-  const onSplashGesture = (): void => {
-    sm.dismissLaunch();
-    // The PAGE remembers, not just this state machine: the next session is a different
-    // one entirely (boot.ts rebuilds everything on a Campaign<->Versus switch), and it is
-    // this call that stops it opening on the splash again.
-    deps.launchGate.dismiss();
-  };
-  deps.host.addEventListener('pointerdown', onSplashGesture);
 
   const onKey = (e: KeyboardEvent): void => {
     // A key that dismisses the title screen does that and NOTHING ELSE.
@@ -2806,13 +2802,9 @@ export function startGameWith(
     // the Mute button's label left to explain why. Escape and P were harmless by luck
     // alone -- pause() no-ops from 'title' -- which is not a property to rely on as
     // more hotkeys arrive.
-    if (sm.atLaunch) {
-      // The SAME handler the pointer path uses, not a second `sm.dismissLaunch()`: both
-      // must also report the dismissal to the page (issue #317), and two call sites that
-      // each had to remember to is how one of them stops doing it.
-      onSplashGesture();
-      return;
-    }
+    // No `atLaunch` branch: since issue #428 the PAGE owns the keydown listener
+    // (`route-host.ts`'s `onHostKey`) and never forwards a key that dismissed the splash.
+    // A second guard here would be dead code that read as the live one.
     if (isMuteHotkey(e)) routeUi.toggleMute();
     if (isPauseHotkey(e)) {
       // Toggle, guarded by the state machine: pause() acts only from `playing`
@@ -2822,7 +2814,9 @@ export function startGameWith(
       else sm.pause();
     }
   };
-  deps.host.addEventListener('keydown', onKey);
+  // Through the slot, not the host: `route-host.ts` owns the one keydown listener and
+  // hands on only the keys that are not the Launch gesture.
+  slot.onKey(onKey);
 
   // A blurred tab must not keep eating lives. Focus deliberately does NOT
   // auto-resume: coming back to a firefight you cannot see yet is worse than
@@ -2872,10 +2866,13 @@ export function startGameWith(
       // unconditionally would remove whatever a second instance -- or a
       // neighbouring page on this shared origin -- had put there.
       if (publishedDevApi) delete deps.devConsole[DEV_CONSOLE_KEY];
-      deps.host.removeEventListener('keydown', onKey);
+      // No `keydown`: the page owns that listener since issue #428, and `slot.detach()`
+      // below is what stops this session receiving from it.
       deps.host.removeEventListener('resize', onResize);
       deps.host.removeEventListener('blur', onBlur);
-      deps.host.removeEventListener('pointerdown', onSplashGesture);
+      // No `pointerdown`: the Launch gesture belongs to the page since issue #428
+      // (`route-host.ts`), and a session that unregistered it would take the splash
+      // dismissal down with it on the way to the very first match.
       // The two settings registrations this SESSION made. The store, the effective
       // handle and the notice latch all outlive it (they belong to the page -- see
       // app-settings.ts), so what is released here is this session's listeners, holding
