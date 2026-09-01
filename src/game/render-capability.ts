@@ -119,13 +119,21 @@ function isLoseContext(ext: unknown): ext is LoseContextLike {
  * @param host injected so a test can return a null context, a throwing `getContext`, or a
  * context whose `getExtension` is absent -- none of which jsdom can produce, since jsdom
  * has no WebGL at all and would make every run take the unsupported branch.
+ *
+ * OPTIONAL, not defaulted. `host: RenderCapabilityHost = globalThis.document` reads that
+ * property in the PARAMETER LIST, which is evaluated before the function body and
+ * therefore outside the try below -- so a locked-down context whose `document` getter
+ * throws would throw out of this function instead of reporting `probe-failed`, defeating
+ * the one distinction the return type exists to make. Resolved inside the try instead.
+ * (Raised by review on PR #474; the failure is the same class as the property-access
+ * throws every probe in `capabilities.ts` is already wrapped for.)
  */
-export function probeRenderCapability(
-  host: RenderCapabilityHost = globalThis.document,
-): RenderCapability {
+export function probeRenderCapability(host?: RenderCapabilityHost): RenderCapability {
   let gl: ProbeContextLike | null | undefined;
   try {
-    const canvas = host.createElement('canvas');
+    const resolved = host ?? (globalThis.document as RenderCapabilityHost | undefined);
+    if (resolved == null) return Object.freeze({ webgl2: false, failure: 'probe-failed' });
+    const canvas = resolved.createElement('canvas');
     // `probe-failed`, not `no-webgl2`: a host that produced no canvas has not told us
     // anything about WebGL, so it is the same "could not ask" case as a throw.
     if (canvas == null) return Object.freeze({ webgl2: false, failure: 'probe-failed' });

@@ -171,6 +171,48 @@ describe('probeRenderCapability: the answer', () => {
     expect(probeRenderCapability(h.host)).toEqual({ webgl2: false, failure: 'probe-failed' });
   });
 
+  /**
+   * The host resolution itself is inside the try (PR #474 review).
+   *
+   * `host: RenderCapabilityHost = globalThis.document` would read that property in the
+   * PARAMETER LIST, which is evaluated before the body and therefore outside the try -- so
+   * a locked-down context whose `document` getter throws would throw out of the probe
+   * instead of reporting `probe-failed`. That is the exact distinction the return type
+   * exists to make, defeated by the one property access not covered.
+   *
+   * Driven against a real throwing getter on `globalThis` rather than through the injected
+   * host, because the injected host is what the parameter default BYPASSES: a test that
+   * passed one could not see this at all.
+   */
+  it('reports probe-failed when reading the default document throws', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      get() {
+        throw new Error('document is not available in this context');
+      },
+    });
+    try {
+      expect(() => probeRenderCapability()).not.toThrow();
+      expect(probeRenderCapability()).toEqual({ webgl2: false, failure: 'probe-failed' });
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'document', original);
+      else delete (globalThis as { document?: unknown }).document;
+    }
+  });
+
+  it('reports probe-failed when there is no document at all', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    // `delete` rather than `undefined`: a non-DOM host does not have the property, and
+    // `??` has to cover its absence as well as an explicit undefined.
+    delete (globalThis as { document?: unknown }).document;
+    try {
+      expect(probeRenderCapability()).toEqual({ webgl2: false, failure: 'probe-failed' });
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'document', original);
+    }
+  });
+
   it('reports probe-failed when createElement itself throws', () => {
     const host: RenderCapabilityHost = {
       createElement: () => {
