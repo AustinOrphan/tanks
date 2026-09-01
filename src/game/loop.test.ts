@@ -363,6 +363,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   routeHost: RouteHost;
   /** The element the route host built its HUD in. Sessions no longer take a root. */
   uiRoot: HTMLElement;
+  /**
+   * Point the PAGE-level start requests at a spy (issue #468).
+   *
+   * The Versus Start and Campaign buttons are application-level requests now, so this --
+   * not a per-session `deps.requestVersusSession` -- is what a click reaches.
+   */
+  setPageRequests(next: Partial<{ versus: (config: VersusConfig) => void; campaign: () => void }>): void;
   rec: Recorder;
   storage: Storage;
   settingsStore: PlayerSettingsStore;
@@ -1539,17 +1546,37 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 
   const uiRoot = document.createElement('div');
+  /**
+   * The PAGE-level start requests (issue #468).
+   *
+   * Mutable, and read at click time, because that is the production shape: `boot.ts`
+   * wires these to the session host, which does not exist when the route host is built.
+   * Since #468 the Versus Start and Campaign buttons reach THESE rather than whichever
+   * session happens to be live, so a test that wants to observe a click sets them here
+   * -- setting `deps.requestVersusSession` on a per-session deps object no longer has
+   * anything to do with what the button calls.
+   */
+  const pageRequests: {
+    versus: (config: VersusConfig) => void;
+    campaign: () => void;
+  } = {
+    versus: (config) => deps.requestVersusSession?.(config),
+    campaign: () => deps.requestCampaignSession?.(),
+  };
   // The real route host over the harness's fakes. `deps` is a full `GameDeps`, which
   // structurally satisfies `RouteHostDeps`, so nothing here has to restate the subset.
   const routeHost = createRouteHost(uiRoot, deps, {
-    requestVersusSession: (config) => deps.requestVersusSession?.(config),
-    requestCampaignSession: () => deps.requestCampaignSession?.(),
+    requestVersusSession: (config) => pageRequests.versus(config),
+    requestCampaignSession: () => pageRequests.campaign(),
   });
 
   return {
     deps,
     routeHost,
     uiRoot,
+    setPageRequests(next): void {
+      Object.assign(pageRequests, next);
+    },
     rec,
     storage,
     /** The UNWRAPPED store, for asserting what was actually accepted and persisted. */
@@ -2882,10 +2909,32 @@ describe('startGameWith: listeners and teardown', () => {
     }
   });
 
-  it('disposes every collaborator it constructed', () => {
+  /**
+   * Re-anchored by issue #468: "constructed" is now a shorter list.
+   *
+   * The HUD is NOT here any more, and its absence is the assertion. It belongs to the
+   * page (`route-host.ts`), so a session that still disposed it would blank the shell on
+   * every Quit and every Campaign<->Versus switch -- while `boot.test.ts`'s pagehide
+   * suites stayed green, because the page is going away in those anyway. The route host
+   * disposes it, once, and only from the page teardown: `h.routeHost.dispose()` below is
+   * the other half of this pair.
+   */
+  it('disposes every collaborator it constructed -- and nothing the PAGE owns', () => {
     const h = boot();
     h.handle.dispose();
-    expect(h.rec.disposed.sort()).toEqual(['audio', 'hud', 'input', 'renderer']);
+    expect(h.rec.disposed.sort(), 'a session disposed something above it').toEqual([
+      'audio',
+      'input',
+      'renderer',
+    ]);
+
+    h.routeHost.dispose();
+    expect(h.rec.disposed.sort(), 'the page teardown left the HUD alive').toEqual([
+      'audio',
+      'hud',
+      'input',
+      'renderer',
+    ]);
   });
 
   it('stops the frame loop, so a queued callback cannot advance the world', () => {
@@ -5981,14 +6030,29 @@ describe('startGameWith: the live tank preview', () => {
     h.handle.dispose();
   });
 
-  it('is disposed on teardown if the panel is still open when the game tears down', () => {
-    // main.ts's pagehide path can call dispose() at any time, panel open or not --
-    // see loop.ts's own comment on this. Not covered by the "closes via the
-    // chokepoint" test above, which only exercises the Back/state-change path.
+  /**
+   * Re-anchored by issue #468: the teardown that reclaims a still-open preview is the
+   * PAGE's, not a session's.
+   *
+   * main.ts's pagehide path can fire at any time, panel open or not -- see route-host.ts's
+   * own comment on this. Not covered by the "closes via the chokepoint" test above, which
+   * only exercises the Back/state-change path.
+   *
+   * The first half is the half that moved, and is worth its own assertion: the Customize
+   * panel is an APPLICATION route, so quitting a match with it open must not tear its
+   * preview down. Before this issue it did, because the session owned the route UI.
+   */
+  it('survives a session teardown, and is disposed by the page teardown', () => {
     const h = boot(makeDeps());
     h.hud.openCustomize();
     expect(h.rec.disposed).not.toContain('preview');
+
     h.handle.dispose();
+    expect(h.rec.disposed, 'a session tore down an application route\'s preview').not.toContain(
+      'preview',
+    );
+
+    h.routeHost.dispose();
     expect(h.rec.disposed).toContain('preview');
   });
 
@@ -6139,11 +6203,16 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
   describe('Start: forwards the pane\'s own config to requestVersusSession', () => {
     it('invokes the spy with exactly the config the pane handed back', () => {
       // Fails if the handler ignores its argument (e.g. calls
-      // `deps.requestVersusSession?.(deps.initialVersusConfig)` instead of `(config)`),
-      // or drops the call, or calls it with something else.
+      // `requestVersusSession(deps.initialVersusConfig)` instead of `(config)`), or
+      // drops the call, or calls it with something else.
+      //
+      // Re-anchored by issue #468: the spy goes on the PAGE-level request seam, not on
+      // a session's deps. Start is an application-level request now -- it must work
+      // with no session at all, which is why nothing here dereferences one.
       const calls: VersusConfig[] = [];
       const base = makeDeps();
-      const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
+      base.setPageRequests({ versus: (c) => calls.push(c) });
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
       h.hud.startVersus(REMATCH_CONFIG);
       expect(calls).toEqual([REMATCH_CONFIG]);
       h.handle.dispose();
@@ -6333,9 +6402,13 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
   it('the Campaign button click invokes requestCampaignSession exactly once, with no arguments', () => {
     // Fails if onCampaignOpen's handler drops the call, calls something else, or
     // forwards an argument requestCampaignSession does not take.
+    //
+    // Re-anchored by issue #468, exactly as the Versus Start case above: the button is
+    // a page-level request, so the spy goes on the route host's seam.
     const calls: unknown[][] = [];
     const base = makeDeps();
-    const h = boot({ ...base, deps: versusDeps(base, CONFIG, (...args: unknown[]) => calls.push(args)) });
+    base.setPageRequests({ campaign: (...args: unknown[]) => calls.push(args) });
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
     h.hud.openCampaign();
     expect(calls).toEqual([[]]);
     h.handle.dispose();
@@ -7953,7 +8026,11 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     const h = makeDeps();
     const page = runTheRoute(h);
     expect(page.sessions()).toBe(5);
-    expect(h.rec.hudRoots).toHaveLength(5);
+    // ...and exactly TWO HUDs over those five sessions, which is the whole of issue
+    // #468 measured at the production boundary. `makeDeps` builds one route host of
+    // its own (unused here) and `bootPageOn` builds the one this page runs on; what
+    // matters is that five sessions added none. Before this issue it was five.
+    expect(h.rec.hudRoots, 'a session built its own HUD').toHaveLength(2);
   });
 
   it('leaves exactly one live host listener of each kind, not one per session', () => {
@@ -7999,18 +8076,26 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     expect(h.noticeListenerCount()).toBe(1);
   });
 
-  it('disposes each retired session exactly once -- input, renderer and HUD alike', () => {
+  it('disposes each retired session exactly once, and the page HUD not at all', () => {
     // Exactly once each, not at-least-once: a double dispose releases an audio bed and
     // unregisters listeners the INCOMING session may already own. Four, because the
     // fifth session is still live.
+    //
+    // The HUD moved OUT of this list in issue #468 and into the zero-assertion below,
+    // which is the sharper claim: five sessions over the route, four of them retired,
+    // and the menu the player is looking at was never torn down once.
     const h = makeDeps();
     runTheRoute(h);
-    for (const owner of ['input', 'renderer', 'hud']) {
+    for (const owner of ['input', 'renderer']) {
       expect(
         h.rec.disposed.filter((d) => d === owner),
         `${owner} was not disposed exactly once per retired session`,
       ).toHaveLength(4);
     }
+    expect(
+      h.rec.disposed.filter((d) => d === 'hud'),
+      'a session disposed the page HUD',
+    ).toHaveLength(0);
   });
 
   it('never lets a session dispose the page audio engine, and stops each outgoing bed', () => {

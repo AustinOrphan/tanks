@@ -104,10 +104,9 @@ describe('createGameSessionHost: start', () => {
     const h = harness();
     h.host.start();
     expect(h.startArgs).toHaveLength(1);
-    const [canvas, uiRoot, versus] = h.startArgs[0];
+    const [canvas, versus] = h.startArgs[0];
     expect(canvas).toBe(h.canvases[0]);
     expect(canvas.parentElement, 'the session was started on a canvas outside the root').toBe(h.root);
-    expect(uiRoot).toBe(h.root);
     // `null`, not a config: the page opens on campaign. A host that started the first
     // session from a retained versus config would put a returning player straight into
     // a match they did not ask for.
@@ -167,8 +166,8 @@ describe('createGameSessionHost: the reboot seams', () => {
     // its own UI must get the one the sessions hold, not a second entry point.
     const h = harness();
     h.host.start();
-    expect(h.startArgs[0][3]).toBe(h.host.requestVersusSession);
-    expect(h.startArgs[0][4]).toBe(h.host.requestCampaignSession);
+    expect(h.startArgs[0][2]).toBe(h.host.requestVersusSession);
+    expect(h.startArgs[0][3]).toBe(h.host.requestCampaignSession);
   });
 
   it('a versus request disposes the running session exactly once and starts one carrying the config', () => {
@@ -178,7 +177,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     h.host.requestVersusSession(vs);
     expect(h.disposedIds, 'the outgoing session was left running').toEqual([0]);
     expect(h.startArgs).toHaveLength(2);
-    expect(h.startArgs[1][2]).toEqual({ config: vs });
+    expect(h.startArgs[1][1]).toEqual({ config: vs });
   });
 
   it('a campaign request from a versus session starts with versus: null', () => {
@@ -187,7 +186,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestCampaignSession();
     expect(h.disposedIds).toEqual([0, 1]);
-    expect(h.startArgs[2][2], 'the campaign reboot carried the versus config forward').toBeNull();
+    expect(h.startArgs[2][1], 'the campaign reboot carried the versus config forward').toBeNull();
   });
 
   it('a versus request AFTER a campaign detour carries its OWN config', () => {
@@ -199,7 +198,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestCampaignSession();
     h.host.requestVersusSession(config('vs-duel-01'));
-    expect(h.startArgs[3][2]).toEqual({ config: config('vs-duel-01') });
+    expect(h.startArgs[3][1]).toEqual({ config: config('vs-duel-01') });
   });
 
   it('a SECOND replacement disposes the SECOND session, not the first -- the stale-capture control', () => {
@@ -373,8 +372,8 @@ describe('createGameSessionHost: the empty host (issue #427)', () => {
     h.host.start();
     h.host.requestVersusSession(config('vs-duel-01'));
     expect(h.startArgs).toHaveLength(2);
-    expect(h.startArgs[0][5]).toBe(h.shell);
-    expect(h.startArgs[1][5]).toBe(h.shell);
+    expect(h.startArgs[0][4]).toBe(h.shell);
+    expect(h.startArgs[1][4]).toBe(h.shell);
   });
 
   it('never leaves a session running through a replacement -- exactly one at a time', () => {
