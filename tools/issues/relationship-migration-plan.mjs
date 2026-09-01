@@ -22,7 +22,8 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     { parent: 241, children: [252, 253, 254] },
     { parent: 242, children: [255, 256] },
     { parent: 283, children: [284, 285, 286] },
-    { parent: 317, children: [427, 428, 429] },
+    { parent: 317, children: [427, 468, 428, 429] },
+    { parent: 325, children: [470] },
     { parent: 341, children: [335, 342, 343] },
     {
       parent: 355,
@@ -90,7 +91,8 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     { issue: 370, blockers: [369] },
     { issue: 371, blockers: [372] },
     { issue: 372, blockers: [359] },
-    { issue: 428, blockers: [427] },
+    { issue: 468, blockers: [427] },
+    { issue: 428, blockers: [468, 470] },
     { issue: 429, blockers: [427, 428] },
   ]),
 });
