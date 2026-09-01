@@ -2909,5 +2909,41 @@
       "src/render/ai-contact.test.ts"
     ],
     "why": "The overlay is the instrument #372's 'attentive, not omniscient' judgement is made through, so a wrong state here produces a wrong ruling rather than a cosmetic defect. Dropping the expiry makes a tank that has given up and started searching still read as 'remembering', which collapses two of the three states the issue asks the trace to distinguish. MEASURED: tools/gl/harness.ts does NOT catch this -- its three-state frames still differ, because the label text carries the difference (m55 against m0) even when the classification is wrong. The jsdom test is the only coverage that does."
+  },
+  {
+    "id": "blocked-fire-ring-drops-its-paired-audio-arm",
+    "file": "src/render/blocked-fire-ring.ts",
+    "find": "    if (cue !== 'ring' && cue !== 'ring+audio') return;",
+    "replace": "    if (cue !== 'ring') return;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/blocked-fire-ring.test.ts"
+    ],
+    "why": "blocked-fire-ring.ts's own cue gate, narrowed to the single `ring` arm so the paired `ring+audio` draws nothing. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 8 test(s) failed) against the tests this file had at the time, because `ring+audio` appeared nowhere in it -- not as a drawing case, not in the negative list. Same shape as the silent `ring+audio` the audio side shipped (see blocked-fire-audio-drops-the-ring-pairing), and pinned for the same reason: not a wrong branch but a MISSING one, which no assertion written per remembered case can fail on. Nothing else notices -- the flag still parses, renderer.ts still constructs the system for the paired cue, and every `ring` case still draws. #356's ruling is made by comparing arms, so a paired arm that silently drops half its channels produces a wrong ruling rather than a cosmetic defect. `draws for EVERY cue carrying `ring`, and for no other -- one row per cue` is the case that catches it; scoped to blocked-fire-ring.test.ts, and expectFailures counts that scoped run only."
+  },
+  {
+    "id": "blocked-fire-audio-drops-the-ring-pairing",
+    "file": "src/audio/director.ts",
+    "find": "            options.blockedFire === 'haptic+audio' ||\n            options.blockedFire === 'ring+audio') &&",
+    "replace": "            options.blockedFire === 'haptic+audio') &&",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/audio/director.test.ts"
+    ],
+    "why": "director.ts's audio enumeration returned to the two arms it shipped with. This is the defect the surrounding change repaired rather than a hypothetical: `ring+audio` was added to BLOCKED_FIRE_CUES and wired on the render side while this list stayed at `audio` and `haptic+audio`, so the flag advertised a multimodal treatment that drew a ring in silence. Nothing else notices -- the flag still parses, devflags.test.ts still accepts the value, the ring still spawns, the haptic arm is unaffected, and every other audio cue still plays. The two cases that fail are `plays it for BOTH multimodal arms` and `sounds for EVERY cue carrying `audio`, and for no other -- one row per cue`; the second is the one that would have caught it without anyone remembering to add a case. Scoped to director.test.ts; expectFailures counts that scoped run only."
+  },
+  {
+    "id": "blocked-fire-ring-freezes-instead-of-resting-under-reduced-motion",
+    "file": "src/render/blocked-fire-ring.ts",
+    "find": "      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + OVERSHOOT * (1 - k));",
+    "replace": "      if (!reducedMotion) r.mesh.scale.setScalar(1 + OVERSHOOT * (1 - k));",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/blocked-fire-ring.test.ts"
+    ],
+    "why": "Restores the guard the current shape deliberately replaced -- skipping the scale term under reduced motion instead of writing a rest scale -- which blocked-fire-ring.test.ts names as its negative control in prose; this entry is what makes that prose executable. The defect is only reachable when the preference flips MID-FLIGHT: the ring freezes at whatever scale it had reached and sits visibly oversized for the rest of its life instead of closing onto the hull. `reduced motion keeps the cue but removes the travel` sets the preference BEFORE spawning and so stays green under it, which is precisely why one case is not enough here; only `snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight` fails. Same policy as death-ring-ignores-the-reduced-motion-policy, pinning the live toggle that entry's effect does not have. Scoped to blocked-fire-ring.test.ts; expectFailures counts that scoped run only."
   }
 ]

@@ -397,9 +397,17 @@ const BACKDROP_TREATMENTS = new Set(['felt']);
 /**
  * Exported so each channel's suite can assert one row PER CUE rather than per remembered
  * case. A cue reaches a channel when its name carries that channel, but nothing enforces
- * that -- every consumer enumerates -- and `ring+audio` shipped silent because the audio
- * enumeration was the one not updated. The tables in director.test.ts and haptics.test.ts
- * are keyed off this set, so a sixth cue fails them until its channels are stated.
+ * that -- every consumer enumerates the members it acts on -- and `ring+audio` was added to
+ * the union twice over before a table caught either half: the audio enumeration in
+ * director.ts was left at two arms so the pair shipped silent, and blocked-fire-ring.ts's
+ * own gate then went un-asserted for the paired cue (measured: narrowing it to
+ * `cue !== 'ring'` left all 8 of that file's tests green).
+ *
+ * Three of the four consumers now key a table off this set -- director.test.ts (`audio`),
+ * haptics.test.ts (`haptic`), blocked-fire-ring.test.ts (`ring`) -- so a sixth cue fails
+ * them until its channels are stated. The fourth, renderer.ts's construction gate, is not
+ * among them: it has no sibling Vitest file by policy (.claude/rules/rendering.md) and is
+ * reached only through the GL harness, which exercises `ring` alone.
  */
 export const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio', 'ring', 'ring+audio']);
 export type BlockedFireCue = 'haptic' | 'audio' | 'haptic+audio' | 'ring' | 'ring+audio';
