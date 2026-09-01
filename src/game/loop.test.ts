@@ -110,6 +110,7 @@ import { boot as bootPage } from '../boot';
 import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
 import { createAppShell } from './app-shell';
+import { RENDER_CAPABILITY_SUPPORTED } from './render-capability';
 import type { GameHandle } from './loop';
 import { createMemoryStorage, type StorageNamespace } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
@@ -7691,6 +7692,9 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
   const shell = createAppShell({
     settings: { dispose(): void {} } as unknown as AppSettings,
     audio: shellAudio,
+    // Supported, so `boot()` takes the path this suite exists to drive: a real session,
+    // built and rebuilt. The unsupported branch is boot.test.ts's (issue #470).
+    render: RENDER_CAPABILITY_SUPPORTED,
   });
 
   bootPage({

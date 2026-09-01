@@ -3,8 +3,9 @@ import { defaultSlots } from './game/versus-setup';
 import { describe, it, expect, vi } from 'vitest';
 import type { GameHandle } from './game/loop';
 import type { VersusConfig } from './game/versus-config';
-import { boot, NO_WEBGL_MESSAGE, type BootDeps } from './boot';
+import { boot, NO_WEBGL_MESSAGE, UnsupportedRenderError, type BootDeps } from './boot';
 import type { AppShell } from './game/app-shell';
+import { RENDER_CAPABILITY_SUPPORTED, type RenderCapability } from './game/render-capability';
 
 type StartArgs = [
   HTMLCanvasElement,
@@ -16,7 +17,15 @@ type StartArgs = [
 ];
 
 function harness(
-  opts: { throwOnStart?: unknown; throwOnAppSettings?: unknown } = {},
+  opts: {
+    throwOnStart?: unknown;
+    throwOnAppSettings?: unknown;
+    /**
+     * What the shell's capability probe answered (issue #470). Defaults to supported, so
+     * every suite that predates the probe keeps driving the path it was written for.
+     */
+    render?: RenderCapability;
+  } = {},
 ): {
   deps: BootDeps;
   appSettingsBuilds: number;
@@ -59,6 +68,11 @@ function harness(
     dispose(): void {
       box.appSettingsDisposals += 1;
     },
+    // Carried on the fake rather than defaulted inside boot: `boot()` reads it on every
+    // call, so a shell that lacked it would make every suite in this file throw a
+    // TypeError on the line that asks -- which is the point. The field is not optional
+    // production state that boot can shrug off.
+    render: opts.render ?? RENDER_CAPABILITY_SUPPORTED,
   } as unknown as AppShell;
 
   const deps: BootDeps = {
@@ -305,6 +319,95 @@ describe('boot: no WebGL', () => {
     expect(() => boot(h.deps)).not.toThrow();
     expect(h.errors).toEqual(['a string, not an Error']);
     expect(h.root.textContent).toBe(NO_WEBGL_MESSAGE);
+  });
+});
+
+/**
+ * The capability probe, read BEFORE anything gameplay-shaped is built (issue #470).
+ *
+ * The suite above ("boot: no WebGL") drives the OLD route to the same screen: `startGame`
+ * throws, several frames into a session that has already cost a canvas. These pin the new
+ * one -- the shell answered, so none of that is built at all. Both routes still exist and
+ * both still land on `NO_WEBGL_MESSAGE`; what separates them is what got constructed on
+ * the way, which is exactly what issue #428 needs to be able to remove.
+ */
+describe('boot: the shell capability probe (issue #470)', () => {
+  const unsupported: RenderCapability = { webgl2: false, failure: 'no-webgl2' };
+
+  it('shows the same explanation when the probe says this browser has no WebGL 2', () => {
+    const h = harness({ render: unsupported });
+    boot(h.deps);
+    expect(h.root.textContent).toContain(NO_WEBGL_MESSAGE);
+  });
+
+  /**
+   * The whole point of the seam, asserted as COUNTS at the production boundary rather than
+   * inferred from the screen: a page that cannot render builds no canvas and no session.
+   *
+   * Would fail if the `shell.render.webgl2` check in boot.ts were deleted -- this
+   * harness's `startGame` does NOT throw, so boot would sail past it and both counts would
+   * be 1. That is the negative control for the entire issue.
+   */
+  it('builds no canvas and starts no session when the probe says no', () => {
+    const h = harness({ render: unsupported });
+    boot(h.deps);
+    expect(h.canvases).toEqual([]);
+    expect(h.startArgs).toEqual([]);
+  });
+
+  it('registers no teardown, because there is nothing to tear down', () => {
+    const h = harness({ render: unsupported });
+    boot(h.deps);
+    expect(h.pagehide).toEqual([]);
+  });
+
+  /**
+   * The typed result reaches the error reporter, so #325's branded screen has a cause to
+   * render rather than "something threw".
+   *
+   * Would fail if boot threw a bare `Error`, or passed `no-webgl2` for every failure.
+   */
+  it('reports a typed error carrying which probe branch answered', () => {
+    const h = harness({ render: { webgl2: false, failure: 'probe-failed' } });
+    boot(h.deps);
+    expect(h.errors).toHaveLength(1);
+    const err = h.errors[0];
+    expect(err).toBeInstanceOf(UnsupportedRenderError);
+    expect((err as UnsupportedRenderError).failure).toBe('probe-failed');
+    expect((err as UnsupportedRenderError).message).toContain('WebGL 2');
+  });
+
+  it('distinguishes the two failures rather than collapsing them', () => {
+    const h = harness({ render: unsupported });
+    boot(h.deps);
+    expect((h.errors[0] as UnsupportedRenderError).failure).toBe('no-webgl2');
+  });
+
+  /**
+   * The probe is not a second gate on the happy path. `hasSession()` is not reachable from
+   * here, so the session count stands in for it -- one session, exactly as before #470.
+   */
+  it('changes nothing when the probe says yes', () => {
+    const h = harness();
+    boot(h.deps);
+    expect(h.startArgs).toHaveLength(1);
+    expect(h.canvases).toHaveLength(1);
+    expect(h.errors).toEqual([]);
+    expect(h.root.textContent).not.toContain(NO_WEBGL_MESSAGE);
+  });
+
+  /**
+   * The probe answers ONE question, and the try/catch still covers the rest. A shell that
+   * says the browser can render, over a `startGame` that throws anyway, must still land on
+   * the error page -- otherwise #470 would have replaced a working boundary with a
+   * narrower one.
+   */
+  it('still catches a session that fails for a reason the probe cannot see', () => {
+    const h = harness({ throwOnStart: new Error('context lost during init') });
+    boot(h.deps);
+    expect(h.root.textContent).toContain(NO_WEBGL_MESSAGE);
+    expect(h.errors).toHaveLength(1);
+    expect(h.errors[0]).not.toBeInstanceOf(UnsupportedRenderError);
   });
 });
 

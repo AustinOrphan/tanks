@@ -1,6 +1,7 @@
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
 import { AUDIO_MANIFEST } from '../audio/manifest';
 import { createBrowserAppSettings, type AppSettings } from './app-settings';
+import { probeRenderCapability, type RenderCapability } from './render-capability';
 
 /**
  * PAGE-scoped ownership of everything that must outlive a game session (issue #317).
@@ -40,6 +41,20 @@ export interface AppShell {
    */
   readonly audio: AudioEngine;
   /**
+   * Whether this browser can give gameplay the WebGL level it needs (issue #470).
+   *
+   * PROBED ONCE, at shell construction, and retained -- not re-asked, because unlike the
+   * pad capabilities in `capabilities.ts` this one cannot change while the document is
+   * open. Retained HERE rather than derived per session for the same reason the audio
+   * engine and the Launch gate are: `boot.ts` rebuilds the session on every
+   * Campaign<->Versus switch, so anything a session owns is re-derived on each one.
+   *
+   * A FIELD rather than a method because there is nothing to recompute. Issue #325 owns
+   * what the player is SHOWN when this says no; all this promises is that the answer
+   * exists before any session does.
+   */
+  readonly render: RenderCapability;
+  /**
    * Has the page-level Launch handoff already happened this document load?
    *
    * Read when a session's state machine is built, to decide whether it opens on the
@@ -59,6 +74,13 @@ export interface AppShell {
 export interface AppShellDeps {
   readonly settings: AppSettings;
   readonly audio: AudioEngine;
+  /**
+   * The already-taken capability reading, injected rather than probed in here so a test
+   * can build a shell on either side of the answer without a GPU -- and so the probe runs
+   * exactly once per page, at the one wiring line below, rather than once per shell any
+   * caller happens to construct.
+   */
+  readonly render: RenderCapability;
 }
 
 export function createAppShell(deps: AppShellDeps): AppShell {
@@ -66,6 +88,7 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   return {
     settings: deps.settings,
     audio: deps.audio,
+    render: deps.render,
     launchDismissed: () => launchDone,
     dismissLaunch(): void {
       launchDone = true;
@@ -89,5 +112,9 @@ export function createBrowserAppShell(): AppShell {
   return createAppShell({
     settings: createBrowserAppSettings(),
     audio: createAudioEngine(AUDIO_MANIFEST),
+    // The one real probe on the page. It runs BEFORE the first session by construction --
+    // `boot.ts` builds the shell, then starts the host -- which is the ordering issue #470
+    // asks for and issue #428 will rely on once eager startup goes away.
+    render: probeRenderCapability(),
   });
 }

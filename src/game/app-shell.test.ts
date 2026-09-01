@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { createAppShell, type AppShell } from './app-shell';
+import { createAppShell, createBrowserAppShell, type AppShell } from './app-shell';
 import { createAppSettings, type AppSettings } from './app-settings';
 import { createMemoryStorage, createStores } from './storage';
 import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIES } from './capabilities';
+import {
+  probeRenderCapability,
+  RENDER_CAPABILITY_SUPPORTED,
+  type RenderCapability,
+} from './render-capability';
 import { createBrowserDeps } from './loop';
 import type { AudioEngine } from '../audio/engine';
 
@@ -28,7 +33,10 @@ function recordingAudio(): { engine: AudioEngine; calls: string[] } {
   return { engine, calls };
 }
 
-function build(namespace: 'production' | 'developer' = 'production'): { shell: AppShell; audio: string[]; settingsDisposals: () => number } {
+function build(
+  namespace: 'production' | 'developer' = 'production',
+  render: RenderCapability = RENDER_CAPABILITY_SUPPORTED,
+): { shell: AppShell; audio: string[]; settingsDisposals: () => number } {
   const { engine, calls } = recordingAudio();
   let settingsDisposals = 0;
   const settings = realSettings(namespace);
@@ -40,7 +48,7 @@ function build(namespace: 'production' | 'developer' = 'production'): { shell: A
     },
   } as AppSettings;
   return {
-    shell: createAppShell({ settings: wrapped, audio: engine }),
+    shell: createAppShell({ settings: wrapped, audio: engine, render }),
     audio: calls,
     settingsDisposals: () => settingsDisposals,
   };
@@ -127,5 +135,80 @@ describe('createBrowserDeps: the storage namespace reaches the save API (issue #
     const deps = createBrowserDeps(shell);
     expect(deps.storageNamespace).toBe(shell.settings.namespace);
     expect(deps.storage).toBe(shell.settings.storage);
+  });
+});
+
+/**
+ * The retained capability answer (issue #470).
+ *
+ * The shell RETAINS what the probe said; it does not take the reading itself. That split
+ * is what lets `boot.ts` decide before a session exists, and lets a test drive both sides
+ * without a GPU -- and it is why `createBrowserAppShell` is the one place the real probe
+ * runs.
+ */
+describe('createAppShell: the retained render capability (issue #470)', () => {
+  it('exposes exactly what it was handed, unchanged', () => {
+    expect(build().shell.render).toBe(RENDER_CAPABILITY_SUPPORTED);
+
+    const answer: RenderCapability = { webgl2: false, failure: 'no-webgl2' };
+    expect(build('production', answer).shell.render).toBe(answer);
+  });
+
+  /**
+   * A FIELD, not a live source: unlike a gamepad, WebGL 2 support does not arrive mid
+   * document, and a shell that re-probed would take a fresh reading per read.
+   *
+   * Would fail if `render` became a getter over a fresh probe -- two reads would still be
+   * `toEqual`, but no longer the same object.
+   */
+  it('answers with the same object every time it is asked', () => {
+    const { shell } = build();
+    expect(shell.render).toBe(shell.render);
+  });
+
+  /**
+   * Survives the whole shell lifecycle for the same reason settings and audio do: the page
+   * keeps it while sessions come and go.
+   */
+  it('is still readable after the page teardown, so a late error screen can name the cause', () => {
+    const answer: RenderCapability = { webgl2: false, failure: 'probe-failed' };
+    const { shell } = build('production', answer);
+    shell.dispose();
+    expect(shell.render).toBe(answer);
+  });
+});
+
+/**
+ * The one line in this module that runs the REAL probe (issue #470).
+ *
+ * Everything above injects the answer, which is what makes those cases readable without a
+ * GPU -- and is exactly why none of them can see whether `createBrowserAppShell` ever asks.
+ * `createBrowserAppShell` is production-only wiring: `main.ts` names it and
+ * `createBrowserDeps` defaults to it, and no other test in this repo constructs it, so
+ * before this case a shell that assumed support shipped with the whole suite green. That
+ * is the same class as `devflags-developer-mode-gate-always-off` -- a gate that goes
+ * permanently one way for the real browser while nothing fails.
+ */
+describe('createBrowserAppShell: the one real probe on the page (issue #470)', () => {
+  /**
+   * jsdom genuinely has no WebGL -- render-capability.test.ts's 'runs against a real
+   * document and reports this environment unsupported' establishes that against the same
+   * environment -- so a shell that really probed cannot report support here.
+   *
+   * Would fail if the wiring hardcoded an answer instead of calling the probe: a literal
+   * `{ webgl2: true, failure: null }` on that line reads as SUPPORTED in an environment
+   * that demonstrably is not, which in a real unsupported browser would sail past
+   * `boot.ts`'s gate and put the player back on the pre-#470 path -- a canvas, a session
+   * and a world built before `THREE.WebGLRenderer` throws.
+   */
+  it('takes a real reading rather than assuming the browser can render', () => {
+    const shell = createBrowserAppShell();
+    try {
+      expect(shell.render).toEqual(probeRenderCapability());
+      expect(shell.render.webgl2).toBe(false);
+      expect(shell.render.failure).toBe('no-webgl2');
+    } finally {
+      shell.dispose();
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { createGameSessionHost } from './game/session-host';
 import type { GameSessionHostDeps } from './game/session-host';
 import type { AppShell } from './game/app-shell';
+import type { RenderCapabilityFailure } from './game/render-capability';
 
 /**
  * Everything main.ts does, with its collaborators handed in.
@@ -78,23 +79,44 @@ export const NO_WEBGL_MESSAGE =
   'This game needs WebGL, which this browser is not providing. ' +
   'Try another browser, or enable hardware acceleration in its settings.';
 
+/**
+ * The capability probe said no, so boot stopped before building anything (issue #470).
+ *
+ * A distinct type, not a bare `Error`, because it is the one failure here whose CAUSE is
+ * known rather than inferred. Everything else that lands on the error page below arrives
+ * as "something threw during startup" and gets the WebGL message on the strength of that
+ * being the overwhelmingly likely reason; this one carries which probe branch answered.
+ * `reportError` receives it unchanged, and issue #325's branded screen can read `failure`
+ * without re-probing.
+ */
+export class UnsupportedRenderError extends Error {
+  constructor(readonly failure: RenderCapabilityFailure) {
+    super(`Gameplay needs WebGL 2 and this browser did not provide it (${failure}).`);
+    this.name = 'UnsupportedRenderError';
+  }
+}
+
 const MESSAGE_CSS =
   'display:flex;align-items:center;justify-content:center;height:100%;' +
   'padding:2rem;color:#d8dde6;font:16px/1.6 system-ui,sans-serif;text-align:center';
 
 export function boot(deps: BootDeps): void {
-  // A WebGLRenderer constructed without WebGL support throws out of startGame,
-  // which is why startGame must keep building it eagerly. Without this the
-  // visitor stares at the page background with the reason visible only in
-  // devtools -- indistinguishable from a broken deploy.
+  // Without this the visitor stares at the page background with the reason visible only
+  // in devtools -- indistinguishable from a broken deploy.
   //
-  // `sessions.start()` is inside it for that reason and no other: the host's
-  // constructor touches nothing that can fail, so the throw arrives at the call that
-  // builds the first canvas and renderer. A REPLACEMENT that throws does NOT arrive
-  // here -- it is raised inside a HUD click handler, long after boot() returned. That
-  // is a real hole in the recovery story, measured and left alone: "unrecoverable
-  // session creation failure" is issue #325's scope, and what the player should see
-  // when a rematch fails to start is a product decision, not a refactor's to make.
+  // Since issue #470 the ORDINARY no-WebGL case no longer reaches here by throwing: the
+  // shell's capability probe answers first, a few lines down, and the throw it raises is
+  // a typed `UnsupportedRenderError`. This boundary stays anyway, and stays wrapped
+  // around `sessions.start()`, because the probe answers ONE question -- can this browser
+  // give out a `webgl2` context -- and session construction can still fail for reasons it
+  // does not cover: `createAppShell` resolving storage, or a `WebGLRenderer` that gets its
+  // context and then fails initialising on it.
+  //
+  // A REPLACEMENT that throws does NOT arrive here -- it is raised inside a HUD click
+  // handler, long after boot() returned. That is a real hole in the recovery story,
+  // measured and left alone: "unrecoverable session creation failure" is issue #325's
+  // scope, and what the player should see when a rematch fails to start is a product
+  // decision, not a refactor's to make.
   try {
     // Built once, before the first session, and handed to every session after it.
     // See `BootDeps.startGame`'s own comment for why "once" is the whole point.
@@ -105,6 +127,27 @@ export function boot(deps: BootDeps): void {
     // both, and both land on the same error page below -- so it is stated here rather
     // than pinned as behaviour.
     const shell = deps.createAppShell();
+
+    // ASKED, rather than discovered by trying (issue #470).
+    //
+    // Until this line the only thing that knew whether the browser could render was
+    // `THREE.WebGLRenderer`'s constructor, several frames inside `sessions.start()` --
+    // so finding out COST a canvas, a session, a world and a seed, all of them thrown
+    // away microseconds later by the catch below. The shell now carries the answer
+    // (`app-shell.ts`'s `render`), taken from a detached canvas that is already gone.
+    //
+    // What this changes on the unsupported path: `bootCanvas` and `startGame` are no
+    // longer called at all, so nothing is appended to the root for `root.innerHTML = ''`
+    // to have to clear. What it deliberately does NOT change: the player still lands on
+    // exactly the same message. Issue #325 owns replacing it with a branded screen, and
+    // #428 owns removing the eager `sessions.start()` on the SUPPORTED path below -- both
+    // of which need this answer to exist first, which is all this line provides.
+    //
+    // `?? 'no-webgl2'` is unreachable through `probeRenderCapability`, which never reports
+    // `webgl2: false` with a null failure. It is here because `AppShell` is an interface
+    // any caller can implement, and the alternative -- a non-null assertion -- would turn
+    // a hand-built shell into a TypeError on the error path.
+    if (!shell.render.webgl2) throw new UnsupportedRenderError(shell.render.failure ?? 'no-webgl2');
 
     // The replaceable half (issue #317). It owns the canvas, the running session, and
     // the two reboot seams a session calls to ask for its successor -- all three of
