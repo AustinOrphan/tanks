@@ -84,6 +84,7 @@ import {
 } from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
+import type { BlockedFireCue } from './devflags';
 import { createRouteUi, type RouteUi } from './route-ui';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
@@ -145,6 +146,7 @@ export interface GameDeps {
       aimRay?: boolean;
       mineReach?: boolean;
       aiContact?: boolean;
+      blockedFire?: BlockedFireCue | null;
       mineTimer?: boolean;
       mineWarn?: import('../render/mine-warning').MineWarnStyle | null;
       playerColor?: string;
@@ -1457,6 +1459,7 @@ export function startGameWith(
     aimRay: deps.devFlags.aimRay,
     mineReach: deps.devFlags.mineReach,
     aiContact: deps.devFlags.aiContact,
+    blockedFire: deps.devFlags.blockedFire,
     mineTimer: deps.devFlags.mineTimer,
     mineWarn: deps.devFlags.mineWarn,
     // The paint shop's saved colour, skin and accent, applied from the first frame.

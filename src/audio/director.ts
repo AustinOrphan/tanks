@@ -21,7 +21,8 @@ const RICOCHET_RATE_STEP = 0.15;
 
 export interface AudioDirectorOptions {
   /**
-   * `?dev=1&blockedFire=audio` or `haptic+audio` (devflags.ts). Anything else -- including
+   * `?dev=1&blockedFire=audio`, `haptic+audio` or `ring+audio` (devflags.ts) -- every arm
+   * whose name carries the `audio` channel. Anything else -- including
    * the shipped default of null -- stays silent, because issue #356 requires its
    * treatments to be compared before one is adopted.
    */
@@ -98,8 +99,15 @@ export function createAudioDirector(
         // No rate limit, and that is measured: #451 made a cap-blocked attempt activate
         // the fire cooldown as if it were a real shot, so the longest unbroken burst is
         // ONE tick at every cap measured. See haptics.ts's note for the numbers.
+        // EVERY cue whose name carries `audio`, which is the trap this line already fell
+        // into once: `ring+audio` was added to the union and wired on the render side while
+        // this enumeration was left at two arms, so the pair was silent and still called
+        // multimodal. director.test.ts now asserts one row per cue in BLOCKED_FIRE_CUES, so
+        // a sixth cue fails there rather than shipping mislabelled.
         if (
-          (options.blockedFire === 'audio' || options.blockedFire === 'haptic+audio') &&
+          (options.blockedFire === 'audio' ||
+            options.blockedFire === 'haptic+audio' ||
+            options.blockedFire === 'ring+audio') &&
           e.ownerId === playerId
         ) {
           engine.play('fire-blocked');

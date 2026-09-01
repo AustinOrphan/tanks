@@ -1863,6 +1863,36 @@ check('the three contact states are distinguishable ON SCREEN, not just in the c
   return null;
 });
 
+function blockedFireFrame(cue: 'ring' | null): Uint8Array {
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY, { blockedFire: cue });
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const w = soloTankWorld(W / 2, H / 2);
+  const events = [{ type: 'fire-blocked', ownerId: 1, reason: 'shell-cap' }] as unknown as Parameters<typeof r.render>[3];
+  // One frame with the event, then a second so the ring has actually been through
+  // `update` -- a system that spawned correctly and never advanced would still differ here on
+  // the first frame alone, which would prove less than it appears to.
+  r.render(w, w, 1, events, 1 / 60);
+  r.render(w, w, 1, [] as unknown as Parameters<typeof r.render>[3], 1 / 60);
+  const px = grab(gl, c.width, c.height);
+  r.dispose();
+  c.remove();
+  return px;
+}
+
+check('the blocked-fire ring (#356) reaches the framebuffer through renderer.ts', () => {
+  // Vitest can assert the scene graph (blocked-fire-ring.test.ts) but cannot see a pixel,
+  // and this is flat geometry a hair above the ground plane -- the exact place a wrong Y
+  // or a z-fight hides. Same tank pose in both frames, so every differing byte is the cue.
+  const off = blockedFireFrame(null);
+  const on = blockedFireFrame('ring');
+  const moved = bytesDiffering(off, on);
+  if (moved < 500) {
+    return `only ${moved} of ${on.length} bytes changed with blockedFire=ring -- the cue did not reach the framebuffer`;
+  }
+  return null;
+});
+
 // __glResults is the runner's readiness signal, and it is assigned LAST on purpose: the
 // top-level awaits above suspend module evaluation, so publishing it any earlier would
 // report a pass for checks that had not run -- the same failure the runner's "no results

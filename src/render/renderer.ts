@@ -1,3 +1,4 @@
+import type { BlockedFireCue } from '../game/devflags';
 import * as THREE from 'three';
 import type { Vec2 } from '../sim/types';
 import type { World } from '../sim/world';
@@ -13,6 +14,7 @@ import { createAimRay, type AimRay } from './aimray';
 import type { SkinId } from '../game/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
 import { createAiContact, type AiContact } from './ai-contact';
+import { createBlockedFireRingSystem, type BlockedFireRingSystem } from './blocked-fire-ring';
 
 export interface Renderer3D {
   render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
@@ -76,6 +78,11 @@ export interface RendererOptions {
    * whether it can see it, is remembering it, or has nothing. See ai-contact.ts.
    */
   readonly aiContact?: boolean;
+  /**
+   * `?dev=1&blockedFire=ring` or `ring+audio` (devflags.ts): issue #356's tank-local
+   * visual candidate. Null/absent draws nothing. See blocked-fire-ring.ts.
+   */
+  readonly blockedFire?: BlockedFireCue | null;
 }
 
 export function createRenderer(
@@ -106,6 +113,10 @@ export function createRenderer(
       ? createMineDebug(ctx.scene, { reach: !!options.mineReach, timer: !!options.mineTimer })
       : null;
   const aiContact: AiContact | null = options.aiContact ? createAiContact(ctx.scene) : null;
+  const blockedFireRing: BlockedFireRingSystem | null =
+    options.blockedFire === 'ring' || options.blockedFire === 'ring+audio'
+      ? createBlockedFireRingSystem(ctx.scene)
+      : null;
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -126,6 +137,8 @@ export function createRenderer(
     particles.spawn(events);
     particles.update(dt);
     deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
+    blockedFireRing?.spawn(events, curr, options.blockedFire);
+    blockedFireRing?.update(dt);
     deathPulse.update(dt);
     treadTrails.sync(prev, curr);
     treadTrails.update(dt);
@@ -156,6 +169,7 @@ export function createRenderer(
     aimRay?.dispose();
     mineDebug?.dispose();
     aiContact?.dispose();
+    blockedFireRing?.dispose();
     entities.dispose();
     particles.dispose();
     deathPulse.dispose();
@@ -172,7 +186,10 @@ export function createRenderer(
     // Forwarded, not stored: every consumer of the policy owns its own reduced treatment,
     // so the renderer is a router here rather than a second source of truth. Today that is
     // the death ring; each effect added under issue #289 joins this line.
-    setReducedMotion: (on: boolean) => { deathPulse.setReducedMotion(on); },
+    setReducedMotion: (on: boolean) => {
+      deathPulse.setReducedMotion(on);
+      blockedFireRing?.setReducedMotion(on);
+    },
     dispose,
   };
 }
