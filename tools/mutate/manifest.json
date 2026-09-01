@@ -3359,8 +3359,8 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 3,
+    "why": "The whole of issue #429, deleted: a Quit or a Change Setup returns to the menu and the session keeps running behind it -- its frame loop advancing, its renderer holding a GL context, its input poller reading, its audio bed borrowed. Nothing on screen says so, because the page has owned the menu since #468 and paints it over the top. The next Start then runs a SECOND session beside the first. 3 of 95 across both scoped files: route-host.test.ts's Quit and action-button exits, and boot.test.ts's round-trip ledger, which is the one that reads it as a disposal COUNT at the production boundary rather than as a request. `void wasInGameplay;` rather than a deletion, so the variable is still read and a tsc failure cannot be mistaken for coverage."
   },
   {
     "id": "route-host-disposes-on-every-click-at-a-route",
@@ -3371,8 +3371,8 @@
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 3,
+    "why": "Drops the `wasInGameplay` half, so the rule reads only the after-state: every click made AT an application route disposes. With no session that is a stop request for something that does not exist; with one attached -- the window between a start request and the machine entering gameplay -- it disposes the session that is being set up. This is why the rule is asked on BOTH sides of the handler rather than after it, and the mutation is the reason that is written down. 3 of 32: 'a click at an application route disposes nothing', 'a Quit with no session attached asks for nothing', and 'a handler that stays in gameplay disposes nothing'."
   },
   {
     "id": "route-host-disposes-even-when-gameplay-continues",
@@ -3384,7 +3384,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "The opposite half, and the more destructive one: keeps `wasInGameplay` and drops the `!sm.inGameplay` test, so a click that STAYED in gameplay disposes anyway. Resume, Retry, Play Again and Next Level all run the same handler -- so pausing and resuming would tear down the match the player is in the middle of. 1 of 32 -- 'a handler that stays in gameplay disposes nothing', which is the only case that fires a gameplay handler with a gameplay outcome. Paired with the entry above: one per direction, because a single test cannot fail both ways."
   },
   {
     "id": "route-host-action-button-is-not-an-exit",
@@ -3396,7 +3396,7 @@
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "why": "Unwraps the action button, leaving only Quit as an exit. The branch this loses is a finished versus match's 'Versus Setup', which returns to the retained pane (`loop.ts`'s `relaunchTarget`) -- so a player who finishes a match and goes back to change the map leaves a whole session running behind the setup screen, and the next Start adds a second. Invisible: the pane opens correctly and the match is over. 1 of 32 -- 'an action-button branch that returns to a route disposes too'. The Quit cases keep passing, which is what shows the two exits are covered separately rather than one standing in for the other."
   },
   {
     "id": "route-host-quit-is-not-an-exit",
@@ -3408,8 +3408,8 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 2,
+    "why": "The same unwrapping on the other handler: Quit stops disposing. The most-travelled exit in the game -- pause, Quit, back to the menu -- leaves the session running. 2 of 95 across both scoped files, which is the pair worth having: route-host.test.ts sees the missing REQUEST and boot.test.ts sees the missing DISPOSAL, and only the second says the session actually outlived the transition."
   },
   {
     "id": "session-stop-leaves-the-dead-canvas-under-the-menu",
@@ -3421,7 +3421,7 @@
       "src/boot.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "PLACEHOLDER"
+    "expectFailures": 6,
+    "why": "Disposes the session but leaves its canvas in the DOM. `startGameWith`'s teardown calls `renderer.forceContextLoss()` (`render/scene.ts`) and a WebGL context does not come back from that -- so the dead element sits under the menu forever, and every later match stacks another behind it. Nothing throws and nothing looks wrong until enough have accumulated to exhaust the browser's context budget. This is the same failure `session-host-keeps-the-dead-canvas` pins for the REPLACE path; #429 adds a second path that has to remove it, and `stop()` -- the page teardown's -- deliberately does not, which is why `stopSession` is a separate function rather than a call to it. 6 of 87 across both scoped files."
   }
 ]
