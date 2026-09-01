@@ -7930,6 +7930,16 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
     requestCampaign: () => requestCampaign!(),
     pagehide: () => pagehideFns.forEach((fn) => fn({ persisted: false })),
     sessions: () => sessions,
+    /**
+     * The page's real shell, so a test can read the PAGE-level Launch gate rather than
+     * inferring it from what the HUD was painted.
+     *
+     * Needed since issue #468: the state machine now survives a reboot, so a session that
+     * dismissed its own splash and never told the page produces an identical screen. The
+     * page gate is still the input to `attach()`'s route reset and to what a #428 boot
+     * with no session would open on -- so it has to be read directly to be observed.
+     */
+    shell,
   };
 }
 
@@ -7968,6 +7978,38 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
       h.rec.hudStates.slice(before),
       'the reboot replayed the splash the player already dismissed',
     ).not.toContain('launch');
+  });
+
+  /**
+   * The gesture must reach the PAGE, not just this session's state machine.
+   *
+   * Read off the shell rather than off the screen, and that is the whole point since issue
+   * #468: the machine now survives a reboot, so a session that dismissed its own splash
+   * and never called `launchGate.dismiss()` paints exactly the same thing -- the two
+   * sibling cases below both stayed green with the page write deleted (measured: the
+   * manifest entry `splash-gesture-not-reported-to-the-page` SURVIVED at 0 of 405 before
+   * these two cases existed).
+   *
+   * What still depends on the write, and is why it is not dead code: `route-host.ts`'s
+   * `attach()` resets the route only when the gate is down, so without it a reboot hands
+   * the incoming session the outgoing one's route; and #428's session-less boot reads it
+   * to decide where the page opens at all.
+   */
+  it('a pointer dismissal is recorded on the PAGE, not only in the session', () => {
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    expect(page.shell.launchDismissed()).toBe(false);
+    page.pointerdown();
+    expect(page.shell.launchDismissed(), 'the session kept the dismissal to itself').toBe(true);
+  });
+
+  it('a KEYBOARD dismissal is recorded on the PAGE too', () => {
+    // The keyboard path is the one with an early return, which is where a second call is
+    // easiest to drop.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.keydown({ key: 'x', repeat: false, target: null });
+    expect(page.shell.launchDismissed(), 'a key dismissal never reached the page').toBe(true);
   });
 
   it('a KEYBOARD dismissal reports to the page too, not just the pointer one', () => {
