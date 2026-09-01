@@ -58,7 +58,6 @@ import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
 import {
   createGameStateMachine,
-  createOutcomeClassifier,
   type GameStateMachine,
   type GameStateMachineConfig,
 } from './state';
@@ -85,7 +84,7 @@ import {
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from './devflags';
-import { createRouteUi, type RouteUi } from './route-ui';
+import type { RouteHost } from './route-host';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
@@ -1119,8 +1118,21 @@ export function versusAwareDeps(
 
 export function startGameWith(
   canvas: HTMLCanvasElement,
-  uiRoot: HTMLElement,
   deps: GameDeps,
+  /**
+   * The page's route UI (issue #468), built once by `boot.ts` and handed to every
+   * session. REQUIRED, and a positional argument rather than a `GameDeps` field on
+   * purpose: `GameDeps` is the bag of injected seams a session builds its own world
+   * from, and this is the opposite -- the one collaborator a session BORROWS and must
+   * give back. Making it optional, with a fallback that built a private one, would leave
+   * the whole production wiring untested: deleting it from `boot.ts` would keep every
+   * test green while every real page silently went back to a per-session HUD.
+   *
+   * It also REPLACES the old `uiRoot` parameter. A session had no use for the root
+   * except to build a HUD in it, and the route host is built on that root one level up,
+   * so keeping the argument would have left every caller passing an element nothing read.
+   */
+  routeHost: RouteHost,
 ): GameHandle {
   // The STARTING level's board, not a fixed arena: a dev-flag jump may open on a
   // different-sized level, and the renderer must be born fitting it.
@@ -1638,11 +1650,23 @@ export function startGameWith(
   // exists. Re-reading on every world switch would be redundant with that.
   haptics.setEnabled(deps.effectiveSettings.current().deviceHaptics);
   /**
+   * This session's hold on the page's route UI (issue #468).
+   *
+   * The HUD, the state machine and the `RouteUi` are no longer built here -- they belong
+   * to `route-host.ts`, one per page, and outlive every session. What a session does now
+   * is TAKE the gameplay slot, fill it, and release it in `dispose()`. `attach()` is also
+   * what resets the visible route, which is the job the freshly-constructed state machine
+   * used to do on every Campaign<->Versus reboot.
+   */
+  const slot = routeHost.attach();
+  const { hud, sm, routeUi } = routeHost;
+
+  /**
    * THE PRODUCTION CLASSIFIER (issue #316's finding 1).
    *
    * Both facts a terminal event must be read against are owned here and
-   * nowhere else, so they are handed in at construction rather than left to a
-   * descriptor-only default:
+   * nowhere else, so they are handed in rather than left to a descriptor-only
+   * default:
    *
    *  - `isFinalCampaignLevel` is what separates Mission Clear from Campaign
    *    Complete. It reads the LIVE `level`, so it answers for whichever level
@@ -1654,18 +1678,19 @@ export function startGameWith(
    *
    * `driver` is referenced lazily: it is constructed below, and this closure
    * can only run from inside a driver frame, by which time it is assigned.
+   *
+   * Handed to the SLOT rather than to a constructor argument since #468: the machine is
+   * built once per page and both of these are facts about one session's driver, so the
+   * indirection is what lets the machine outlive them. `route-host.ts` documents why the
+   * empty-slot fallbacks are unreachable.
    */
-  const sm = deps.createStateMachine({
-    classifyOutcome: createOutcomeClassifier({
-      isFinalCampaignLevel: () => nextInSession(level) === null,
-      versusResult: () => versusResultFromWorld(driver.world),
-    }),
-    // Asked ONCE, here, rather than wired inside `createBrowserDeps`: this is the line
-    // that decides whether a reboot replays the splash, and `createBrowserDeps` is
-    // unpinned wiring no test enters. See `GameDeps.launchGate`.
-    initialRoute: deps.launchGate.dismissed() ? 'main-menu' : 'launch',
+  slot.setOutcomeContext({
+    isFinalCampaignLevel: () => nextInSession(level) === null,
+    versusResult: () => versusResultFromWorld(driver.world),
   });
-  const hud = deps.createHud(uiRoot);
+  // The config this session was built from, so the Versus Setup pane prefills from the
+  // player's own last match. Retained by the route host after this session is gone.
+  slot.setVersusConfig(deps.initialVersusConfig ?? null);
 
   /**
    * THE ONE PLACE a settings value reaches a runtime consumer.
@@ -2159,25 +2184,22 @@ export function startGameWith(
     hud.setControllers(assignment);
   }
   /**
-   * The application routes, wired above this session (issue #427).
+   * The one thing the application routes cannot do alone: the paint shop restyles the
+   * tank BEHIND the panel through the gameplay renderer, which exists only while a
+   * session does.
    *
-   * Built here rather than registered inline because these handlers do not need a world,
-   * a driver or a renderer to be correct -- `route-ui.ts` lists the measurement that
-   * decided which ones those are. Construction is what registers them, and `hud.ts`
-   * APPENDS callbacks rather than replacing them, so this must happen exactly once per
-   * HUD.
-   *
-   * The style sink is the one thing the routes cannot do alone: the paint shop restyles
-   * the tank behind the panel through the gameplay renderer, which exists only while a
-   * session does. Handing it over here is what keeps the Customize panel's behaviour
-   * identical to when these three handlers lived in this function.
+   * The routes themselves were extracted above this session by #427 and are now built
+   * above the PAGE by `route-host.ts` (#468), so all that is left here is handing over
+   * this session's renderer. The route host's own sink is a trampoline onto whatever the
+   * slot holds, so the panel keeps working with no session at all -- the store still
+   * records the pick and the live preview still shows it; only the arena tank, which is
+   * not on screen, goes unpushed.
    */
-  const routeUi: RouteUi = createRouteUi(hud, sm, deps);
-  routeUi.setStyleSink((hex, skin, accentHex) => {
+  slot.setStyleSink((hex, skin, accentHex) => {
     renderer.setPlayerStyle(hex, skin, accentHex);
   });
 
-  hud.onStartRestart(() => {
+  slot.onStartRestart(() => {
     // This click is the only guaranteed user gesture in the game, and Safari
     // will not open an AudioContext resumed from anywhere else. Sounds are
     // emitted from the frame loop, which never qualifies.
@@ -2366,7 +2388,7 @@ export function startGameWith(
     if (deps.levels.tracksProgress) hud.setContinueAvailable(deps.run.active() !== null);
   }
 
-  hud.onLevelSelect((picked) => {
+  slot.onLevelSelect((picked) => {
     // Panel-only control, guarded like Quit: CSS hiding is not the only defence --
     // and neither is the HUD's button rendering, for the index. `deps.levels.levels[7]`
     // is undefined on a shorter sequence, and a handler that rebuilds the world does
@@ -2427,7 +2449,7 @@ export function startGameWith(
   // ordering is defensive, not covering a reachable gap, so a future path to title that
   // skips `landOnCampaignBoard` still cannot leave `campaignActive()` reading a stale
   // practice identity.
-  hud.onNewGame(() => {
+  slot.onNewGame(() => {
     if (!sm.atMainMenu) return;
     // Identity transition 2 of 2 (issue #316): New Game is a deliberate return
     // to whatever this session IS. For a campaign boot that leaves practice for
@@ -2463,14 +2485,14 @@ export function startGameWith(
   // elsewhere would make a pause feel like leaving the level.
   // The touch-only Mine button, routed to the input controller's own latch so a mine
   // tapped is indistinguishable from a mine keyed: same sample(), same clear-on-pause.
-  hud.onMineTap(() => {
+  slot.onMineTap(() => {
     input.pressMine();
   });
 
   // The touch-only Fire button, routed the same way: a tap here is indistinguishable
   // from a click or a keypress once it reaches the latch. Touch aiming deliberately
   // never fires on its own -- see TouchScheme in input/touch.ts.
-  hud.onFireTap(() => {
+  slot.onFireTap(() => {
     input.pressFire();
   });
 
@@ -2483,7 +2505,7 @@ export function startGameWith(
   // the echo used to guarantee. The HUD never flips optimistically on its own (hud.ts's
   // toggles render only from `setTouchScheme`/`setFireMode`/`setHaptics`), which is what
   // makes "publish nothing" the correct response to a rejected value.
-  hud.onQuitToTitle(() => {
+  slot.onQuitToTitle(() => {
     // The HUD hides the Quit button outside pause and the level-cleared panel, but a
     // handler that rebuilds the world deserves its own guard, not a CSS class as its
     // only defence.
@@ -2547,7 +2569,7 @@ export function startGameWith(
   });
 
   // The controller assignment UI's one write path -- see reassignSlot's own doc comment.
-  hud.onReassignSlot(reassignSlot);
+  slot.onReassignSlot(reassignSlot);
 
   /**
    * The music follows the game rather than merely starting and stopping.
@@ -2800,12 +2822,22 @@ export function startGameWith(
         if (s !== input) s.dispose();
       });
       renderer.dispose();
-      // The panel can still be open at teardown (main.ts's pagehide path can fire
-      // any time) -- dispose whatever live preview context is holding, same as the
-      // main renderer just above.
-      routeUi.disposePreview();
+      /**
+       * Release the slot, and dispose NOTHING the page owns (issue #468).
+       *
+       * This used to be `routeUi.disposePreview()` and `hud.dispose()`. Both now belong
+       * to `route-host.ts`'s own `dispose()`, which only the page teardown calls. A
+       * session that still disposed them would blank the shell on every Quit and every
+       * Campaign<->Versus switch -- and `boot.test.ts`'s pagehide suites could not see
+       * it, because the page is going away in those anyway.
+       *
+       * Detaching is what stops this session's seven handlers being dispatched to after
+       * it is gone. It is inert if a replacement session has already taken the slot, so
+       * the ordering `replace()` uses -- stop the old, start the new -- is safe either
+       * way round.
+       */
+      slot.detach();
       deps.releaseAudio(audio);
-      hud.dispose();
     },
   };
 }

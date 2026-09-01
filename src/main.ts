@@ -1,7 +1,8 @@
 import { bootCanvas } from './render/canvas';
-import { startGameWith, versusAwareDeps } from './game/loop';
+import { createBrowserDeps, startGameWith, versusAwareDeps } from './game/loop';
 import { boot } from './boot';
 import { createBrowserAppShell } from './game/app-shell';
+import { createRouteHost } from './game/route-host';
 
 // Wiring only. Everything this file used to do -- the WebGL error page, the
 // teardown registration -- lives in boot.ts, which can be called with fakes.
@@ -16,17 +17,23 @@ boot({
   // with, and threads the reboot callback boot.ts hands back on every call. No
   // branching here -- that logic lives in versusAwareDeps/applyVersusToDeps, which
   // a test can reach directly.
-  startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession, shell) =>
+  startGame: (canvas, versus, requestVersusSession, requestCampaignSession, shell, routeHost) =>
     startGameWith(
       canvas,
-      uiRoot,
       versusAwareDeps(versus, requestVersusSession, requestCampaignSession, shell),
+      routeHost,
     ),
   host: window,
   reportError: (err) => console.error('Tanks! failed to start:', err),
-  // The page's one shell (issues #320, #317): settings/persistence, the audio engine and
-  // the Launch gate. boot.ts calls this exactly once and hands the result to every
-  // session, which is what keeps mute, volume, the resumed audio context and the
-  // already-dismissed splash alive across a campaign/versus reboot.
+  // The page's one shell (issues #320, #317): settings/persistence, the audio engine, the
+  // Launch gate and the WebGL capability reading (#470). boot.ts calls this exactly once
+  // and hands the result to every session, which is what keeps mute, volume, the resumed
+  // audio context and the already-dismissed splash alive across a campaign/versus reboot.
   createAppShell: createBrowserAppShell,
+  // The page's one application-route UI (issue #468): the HUD element tree, the state
+  // machine and the route controller, built once and outliving every session. The deps it
+  // reads are the SAME `createBrowserDeps` a session gets -- which matters, because the
+  // stores behind them (`shell.settings.stores`) are the page's, so the Main Menu and a
+  // running match are reading one set of preferences and one campaign run, not two.
+  createRouteHost: (root, shell, requests) => createRouteHost(root, createBrowserDeps(shell), requests),
 });

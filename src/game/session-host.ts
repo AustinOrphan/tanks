@@ -1,6 +1,7 @@
 import type { GameHandle } from './loop';
 import type { VersusConfig } from './versus-config';
 import type { AppShell } from './app-shell';
+import type { RouteHost } from './route-host';
 
 /**
  * The replaceable half of issue #317's ownership split.
@@ -86,11 +87,11 @@ export interface GameSessionHostDeps {
    */
   readonly startGame: (
     canvas: HTMLCanvasElement,
-    uiRoot: HTMLElement,
     versus: { config: VersusConfig } | null,
     requestVersusSession: (config: VersusConfig) => void,
     requestCampaignSession: () => void,
     shell: AppShell,
+    routeHost: RouteHost,
   ) => GameHandle;
   /**
    * The page's one shell, handed to every session unchanged.
@@ -101,6 +102,17 @@ export interface GameSessionHostDeps {
    * stopped reacting, with nothing thrown.
    */
   readonly shell: AppShell;
+  /**
+   * The page's application-route UI, handed to every session unchanged (issue #468).
+   *
+   * BORROWED exactly like `shell`, and for the same reason: `boot.ts` owns it and is the
+   * only caller of its `dispose()`. A session takes the gameplay slot in `startGameWith`
+   * and gives it back in its own teardown, so a `replace()` hands the incoming session a
+   * HUD that is still on screen -- which is what stops a Campaign<->Versus switch from
+   * rebuilding the whole menu, and what makes the empty state between the two a normal
+   * application-route state rather than a blank page.
+   */
+  readonly routeHost: RouteHost;
 }
 
 export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHost {
@@ -128,11 +140,11 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
     canvas = deps.bootCanvas(deps.root);
     handle = deps.startGame(
       canvas,
-      deps.root,
       versus,
       requestVersusSession,
       requestCampaignSession,
       deps.shell,
+      deps.routeHost,
     );
   };
 

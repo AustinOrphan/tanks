@@ -391,6 +391,9 @@ describe('the application routes work with no gameplay session behind them', () 
         throw new Error('the empty host started a session');
       },
       shell: {} as never,
+      // The page's route UI. `{}` for the same reason `shell` is: an empty host
+      // touches neither, and a host that DID reach into one would throw here.
+      routeHost: {} as never,
     });
 
     expect(host.hasSession()).toBe(false);

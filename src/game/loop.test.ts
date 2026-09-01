@@ -110,6 +110,7 @@ import { boot as bootPage } from '../boot';
 import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
 import { createAppShell } from './app-shell';
+import { createRouteHost, type RouteHost } from './route-host';
 import { RENDER_CAPABILITY_SUPPORTED } from './render-capability';
 import type { GameHandle } from './loop';
 import { createMemoryStorage, type StorageNamespace } from './storage';
@@ -348,6 +349,20 @@ interface Recorder {
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
   deps: GameDeps;
+  /**
+   * The page's route UI (issue #468), built ONCE per harness from `deps` -- the REAL
+   * `createRouteHost` over the fakes, not a fake of it.
+   *
+   * One per harness rather than one per `startGameWith` call because that is the
+   * production shape: `boot.ts` builds it before the first session and every later
+   * session borrows the same one. The reboot-in-miniature tests below (dispose, then
+   * start a second session on the same `h.deps`) are the ones this matters to -- passing
+   * a fresh route host there would hide exactly the double-registration this issue
+   * exists to prevent.
+   */
+  routeHost: RouteHost;
+  /** The element the route host built its HUD in. Sessions no longer take a root. */
+  uiRoot: HTMLElement;
   rec: Recorder;
   storage: Storage;
   settingsStore: PlayerSettingsStore;
@@ -1523,8 +1538,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     developerMode: opts.developerMode ?? Object.keys(opts.devFlags ?? {}).length > 0,
   };
 
+  const uiRoot = document.createElement('div');
+  // The real route host over the harness's fakes. `deps` is a full `GameDeps`, which
+  // structurally satisfies `RouteHostDeps`, so nothing here has to restate the subset.
+  const routeHost = createRouteHost(uiRoot, deps, {
+    requestVersusSession: (config) => deps.requestVersusSession?.(config),
+    requestCampaignSession: () => deps.requestCampaignSession?.(),
+  });
+
   return {
     deps,
+    routeHost,
+    uiRoot,
     rec,
     storage,
     /** The UNWRAPPED store, for asserting what was actually accepted and persisted. */
@@ -1688,8 +1713,7 @@ function bootAtSplash(
   h = makeDeps(),
 ): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
   const canvas = document.createElement('canvas');
-  const root = document.createElement('div');
-  const handle = startGameWith(canvas, root, h.deps);
+  const handle = startGameWith(canvas, h.deps, h.routeHost);
   return Object.assign(h, { handle });
 }
 
@@ -1841,13 +1865,25 @@ describe('startGameWith: construction', () => {
     h.handle.dispose();
   });
 
-  it('builds the HUD in the ui root it was given', () => {
-    const canvas = document.createElement('canvas');
-    const root = document.createElement('div');
+  /**
+   * Re-anchored by issue #468: the HUD is built in the root the ROUTE HOST was given, and
+   * a session no longer takes a root at all. What the assertion is worth is unchanged --
+   * a HUD built somewhere other than the page's root paints nothing a player can see.
+   *
+   * The second half is the part that is new, and the reason this is worth keeping: two
+   * sessions on one route host must not build two HUDs. Before this issue every session
+   * called `deps.createHud`, so `hudRoots` grew per session; now it must not.
+   */
+  it('builds ONE HUD, in the route host\'s root, however many sessions run', () => {
     const h = makeDeps();
-    const handle = startGameWith(canvas, root, h.deps);
-    expect(h.rec.hudRoots[0]).toBe(root);
-    handle.dispose();
+    expect(h.rec.hudRoots).toEqual([h.uiRoot]);
+
+    const first = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+    first.dispose();
+    const second = startGameWith(document.createElement('canvas'), h.deps, h.routeHost);
+    second.dispose();
+
+    expect(h.rec.hudRoots, 'a session built its own HUD').toEqual([h.uiRoot]);
   });
 });
 
@@ -2689,8 +2725,8 @@ describe('startGameWith: settings survive internal session replacement', () => {
     first.handle.dispose();
 
     const canvas = document.createElement('canvas');
-    const root = document.createElement('div');
-    const second = startGameWith(canvas, root, h.deps);
+    // The SAME route host the first session used -- boot.ts's reboot path in miniature.
+    const second = startGameWith(canvas, h.deps, h.routeHost);
     expect(h.rec.audioMuted.at(-1), 'the replacement session unmuted').toBe(true);
     expect(h.rec.volumes.at(-1), 'the replacement session restored DEFAULT_VOLUME').toBe(0.2);
     expect(h.rec.schemeSets.at(-1)).toBe('point');
@@ -2706,8 +2742,8 @@ describe('startGameWith: settings survive internal session replacement', () => {
     const first = boot(h);
     first.handle.dispose();
     const canvas = document.createElement('canvas');
-    const root = document.createElement('div');
-    const second = startGameWith(canvas, root, h.deps);
+    // The SAME route host the first session used -- boot.ts's reboot path in miniature.
+    const second = startGameWith(canvas, h.deps, h.routeHost);
     const before = h.rec.audioMuted.length;
     h.settingsStore.setMuted(true);
     expect(h.rec.audioMuted.length - before, 'the dead session was still listening').toBe(1);
@@ -7705,32 +7741,54 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
       return canvas;
     },
     createAppShell: () => shell,
-    startGame: (canvas, uiRoot, versus, reqVersus, reqCampaign): GameHandle => {
+    /**
+     * The REAL `createRouteHost`, over the harness's fakes -- and the REAL state machine,
+     * not `makeDeps`' fake.
+     *
+     * That override is the entire point of the seam. `makeDeps` fakes
+     * `createStateMachine` over a `currentSurface` variable that lives in ITS closure, so
+     * a second session built on the same deps inherits the first session's surface and
+     * "the reboot did not replay the splash" passes without production doing anything.
+     * Which location the page opens at is decided by `createGameStateMachine` alone
+     * (`state.ts`'s `locationAtRoute(launchRoute())`), so a test that replaces it cannot
+     * observe this defect at all.
+     *
+     * Since issue #468 the machine, the HUD and the route handlers belong to the route
+     * host rather than the session, which is why these two overrides moved here.
+     */
+    createRouteHost: (hostRoot, appShell, requests) =>
+      createRouteHost(
+        hostRoot,
+        {
+          ...h.deps,
+          createStateMachine: createGameStateMachine,
+          launchGate: {
+            dismissed: () => appShell.launchDismissed(),
+            dismiss: () => appShell.dismissLaunch(),
+          },
+        },
+        requests,
+      ),
+    startGame: (canvas, versus, reqVersus, reqCampaign, _appShell, routeHost): GameHandle => {
       sessions += 1;
       requestVersus = reqVersus;
       requestCampaign = reqCampaign;
-      return startGameWith(canvas, uiRoot, {
-        ...applyVersusToDeps(h.deps, versus, reqVersus, reqCampaign),
-        // The REAL state machine, not `makeDeps`' fake.
-        //
-        // This override is the entire point of the seam. `makeDeps` fakes
-        // `createStateMachine` over a `currentSurface` variable that lives in ITS closure,
-        // so a second session built on the same deps inherits the first session's surface
-        // and "the reboot did not replay the splash" passes without production doing
-        // anything. Which location a new session opens at is decided by
-        // `createGameStateMachine` alone (`state.ts`'s `locationAtRoute(launchRoute())`),
-        // so a test that replaces it cannot observe this defect at all.
-        createStateMachine: createGameStateMachine,
-        // ...and `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
-        // harness's own default is session-owned (`releaseAudio` disposes), which would
-        // hand the second session an engine the first one had already latched shut.
-        createAudio: () => shellAudio,
-        releaseAudio: (engine) => engine.stopMusic(),
-        launchGate: {
-          dismissed: () => shell.launchDismissed(),
-          dismiss: () => shell.dismissLaunch(),
+      return startGameWith(
+        canvas,
+        {
+          ...applyVersusToDeps(h.deps, versus, reqVersus, reqCampaign),
+          // `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
+          // harness's own default is session-owned (`releaseAudio` disposes), which would
+          // hand the second session an engine the first one had already latched shut.
+          createAudio: () => shellAudio,
+          releaseAudio: (engine) => engine.stopMusic(),
+          launchGate: {
+            dismissed: () => shell.launchDismissed(),
+            dismiss: () => shell.dismissLaunch(),
+          },
         },
-      });
+        routeHost,
+      );
     },
     host: {
       addEventListener: (_t, fn) => pagehideFns.push(fn),
