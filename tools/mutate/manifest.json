@@ -1805,7 +1805,7 @@
     "replace": "    releaseAudio: (engine) => engine.dispose(),",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. 1 of 6.",
+    "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. MEASURED 1 of 12 on this tree. The prose denominator was already stale at this entry's \"1 of 6\": app-shell.test.ts held 8 cases before issue #470 and holds 12 after it, while the FAILURE count never moved from 1 -- population recomputed, not the pinned count.",
     "tests": [
       "src/game/app-shell.test.ts"
     ]
@@ -2945,5 +2945,101 @@
       "src/render/blocked-fire-ring.test.ts"
     ],
     "why": "Restores the guard the current shape deliberately replaced -- skipping the scale term under reduced motion instead of writing a rest scale -- which blocked-fire-ring.test.ts names as its negative control in prose; this entry is what makes that prose executable. The defect is only reachable when the preference flips MID-FLIGHT: the ring freezes at whatever scale it had reached and sits visibly oversized for the rest of its life instead of closing onto the hull. `reduced motion keeps the cue but removes the travel` sets the preference BEFORE spawning and so stays green under it, which is precisely why one case is not enough here; only `snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight` fails. Same policy as death-ring-ignores-the-reduced-motion-policy, pinning the live toggle that entry's effect does not have. Scoped to blocked-fire-ring.test.ts; expectFailures counts that scoped run only."
+  },
+  {
+    "id": "render-capability-probe-never-runs-in-the-browser",
+    "file": "src/game/app-shell.ts",
+    "find": "    render: probeRenderCapability(),",
+    "replace": "    render: { webgl2: true, failure: null },",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/app-shell.test.ts"
+    ],
+    "why": "The one line on the page that runs the REAL probe, replaced by an assumed answer. `createBrowserAppShell` is production-only wiring -- `main.ts` names it and `createBrowserDeps` defaults to it -- so a hardcoded `{ webgl2: true, failure: null }` makes every unsupported browser sail past boot.ts's new gate and land back on the pre-#470 path: a canvas, a session, a world and a seed all built before `THREE.WebGLRenderer` throws, which is precisely what issue #470 exists to stop. THE GAP WAS PROVED BEFORE THE TEST, by this harness: against app-shell.test.ts as it stood, this mutation SURVIVED at 0 of 11 -- every other case in the file injects the capability, which is what makes them readable without a GPU and exactly why none of them could see whether the wiring ever asked. Same class as `devflags-developer-mode-gate-always-off`: a gate that goes permanently one way for the real browser while the suite stays green. Now 1 of 12, and the failing case is necessarily 'takes a real reading rather than assuming the browser can render' -- `createBrowserAppShell()` is constructed exactly once in the file. It kills because jsdom has no WebGL at all, so a shell that genuinely probes must report `no-webgl2` there while the literal reports support. expectFailures counts that scoped run only."
+  },
+  {
+    "id": "boot-skips-the-render-capability-gate",
+    "file": "src/boot.ts",
+    "find": "    if (!shell.render.webgl2) throw new UnsupportedRenderError(shell.render.failure ?? 'no-webgl2');",
+    "replace": "    void shell.render.webgl2;",
+    "expect": "killed",
+    "expectFailures": 5,
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The whole of issue #470's boot change, deleted. Without this line boot() never reads the shell's answer, so an unsupported browser gets a canvas, a session and a world before `THREE.WebGLRenderer` throws into the try/catch below -- the OLD route, which still exists and still lands on the same NO_WEBGL_MESSAGE. That is what makes this the negative control for the issue rather than a screen-level check: the message is identical on both routes, and only what got CONSTRUCTED on the way distinguishes them, which is the property issue #428 needs in order to remove the eager `sessions.start()`. `void shell.render.webgl2;` rather than a deletion so the mutation still reads the field and a tsc failure cannot be mistaken for test coverage. 5 of 43 in the scoped run: boot.test.ts's 'boot: the shell capability probe (issue #470)' block has 7 cases and the 5 unsupported-path ones all fail, because this file's fake `startGame` does NOT throw -- so with the gate gone boot completes normally, builds a canvas and a session, registers a teardown and reports no error. The 2 that still pass are the pair that pin the gate is not a SECOND gate: 'changes nothing when the probe says yes' and 'still catches a session that fails for a reason the probe cannot see'. expectFailures counts that scoped run only."
+  },
+  {
+    "id": "boot-collapses-the-probe-failure-cause",
+    "file": "src/boot.ts",
+    "find": "throw new UnsupportedRenderError(shell.render.failure ?? 'no-webgl2');",
+    "replace": "throw new UnsupportedRenderError('no-webgl2');",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Throws the right TYPE with the wrong CAUSE: every unsupported boot reports `no-webgl2`, including the `probe-failed` case where the probe could not even ask -- a locked-down or non-DOM host. This is the distinction issue #470 asks for, and issue #325's branded screen is the consumer that would read it, so collapsing it here tells that screen to blame the GPU for a document that never let the question be asked. Invisible to every count- and screen-level assertion around it: the same error class still reaches `reportError`, the same message still paints, and only a case that drives a NON-default failure and reads `.failure` back off the thrown error can see it. 1 of 43 in the scoped run -- 'reports a typed error carrying which probe branch answered', which is the only case in boot.test.ts that drives `{ webgl2: false, failure: 'probe-failed' }`. Its sibling 'distinguishes the two failures rather than collapsing them' keeps passing by construction, because it drives the `no-webgl2` side that this mutation hardcodes; the pair is what makes the assertion a real 2-way discrimination rather than a single-value echo. expectFailures counts that scoped run only."
+  },
+  {
+    "id": "render-capability-context-id-drifts-from-three",
+    "file": "src/game/render-capability.ts",
+    "find": "export const WEBGL2_CONTEXT_ID = 'webgl2';",
+    "replace": "export const WEBGL2_CONTEXT_ID = 'webgl';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/render-capability.test.ts"
+    ],
+    "why": "The claim the whole module rests on: `webgl2` is the ONLY context id three will accept, so probing for `'webgl'` would report SUPPORTED on a browser where `new THREE.WebGLRenderer` still throws -- the exact false negative the probe exists to prevent. What makes this entry worth its slot is WHICH assertion catches it. The probe's behavioural cases compare what the canvas was asked for against this same exported constant, so they move with it and stay green; the only thing that fails is the case that reads `const contextName = '...'` out of the SHIPPED three build (r169) and pins it against the constant. That is the module's own stated design -- the id is exported 'so the probe's own test can pin it against the string read out of the dependency, rather than the probe and its test agreeing on a typo' -- and this mutation is the production defect proving that unusual dependency-reading assertion can fail at all. 1 of 14 in the scoped run; `require.resolve('three')` appears exactly once in render-capability.test.ts, so the failing case is necessarily that one. NOTE the mutation is also a tsc error independently, because `ProbeCanvasLike.getContext` takes the literal `'webgl2'` -- vitest/esbuild transpiles without checking, so the entry measures what it says it measures, but read this as pinning THREE DRIFTING (a future version regaining a WebGL 1 fallback or moving the id) rather than as the only defence against a bare typo. expectFailures counts that scoped run only."
+  },
+  {
+    "id": "render-capability-keeps-the-probe-context-alive",
+    "file": "src/game/render-capability.ts",
+    "find": "    if (isLoseContext(ext)) ext.loseContext();",
+    "replace": "    void isLoseContext(ext);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/render-capability.test.ts"
+    ],
+    "why": "Takes a WebGL 2 context and never hands it back. The answer is unchanged, so every capability assertion in the file stays green -- what leaks is a live context held for as long as the detached canvas is reachable, against a browser ceiling in the low teens and route-ui.ts's documented claim that this page's 'peak is two live contexts, never three'. A probe that quietly added a permanent third would break that claim with nothing failing, which is why the acceptance bullet 'a successful probe leaves no persistent renderer, canvas, GL resource owner, or listener behind' is checked as a COUNT rather than trusted because the call returned. The mutation keeps the `getExtension` call and the `isLoseContext` read, so the extension is still requested and only the RELEASE is dropped: the entry pins the release specifically, not the lookup. 1 of 14 in the scoped run -- 'hands the context back through WEBGL_lose_context', the only case asserting `loseContextCalls` is 1. 'still reports supported when the release extension is missing' asserts it is 0 and is unaffected, which is what keeps this from being satisfied by a probe that never asks. expectFailures counts that scoped run only."
+  },
+  {
+    "id": "render-capability-could-not-ask-reads-as-no-webgl2",
+    "file": "src/game/render-capability.ts",
+    "find": "\n    return Object.freeze({ webgl2: false, failure: 'probe-failed' });",
+    "replace": "\n    return Object.freeze({ webgl2: false, failure: 'no-webgl2' });",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/game/render-capability.test.ts"
+    ],
+    "why": "Collapses 'could not ask' into 'asked and was told no'. Both are `webgl2: false`, so a consumer that does not care keeps one branch and nothing about the gameplay decision changes -- which is what makes this silent. What it destroys is the cause issue #325's branded screen would render: a locked-down document, or a host whose `createElement`/`getContext` throws, gets blamed on the GPU. Anchored on the catch-site return by its leading newline and indentation, because the identical text also appears inside the `if (canvas == null)` return one line up and an unanchored find would be refused as ambiguous -- so this entry mutates the THROWN branch only. 2 of 14 in the scoped run: 'reports probe-failed, not no-webgl2, when getContext throws' and 'reports probe-failed when createElement itself throws'. The third `probe-failed` case, 'reports probe-failed when the host produces no canvas at all', returns from the un-mutated site one line up and keeps passing -- which is what shows this mutation is site-specific rather than that case failing as collateral. THAT site has its own entry, `render-capability-no-canvas-reads-as-no-webgl2`; the two are pinned separately because neither can stand in for the other. expectFailures counts that scoped run only."
+  },
+  {
+    "id": "app-shell-reprobes-the-render-capability-per-read",
+    "file": "src/game/app-shell.ts",
+    "find": "    render: deps.render,",
+    "replace": "    get render(): RenderCapability { return probeRenderCapability(); },",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/app-shell.test.ts"
+    ],
+    "why": "Turns the retained answer into a getter that re-probes on every read. The shell is supposed to RETAIN what it was handed -- WebGL 2 support does not arrive mid-document, unlike the pad capabilities in capabilities.ts that need a live source with `refresh()` -- so a getter means a fresh detached canvas and a fresh GL context per read, which is the very leak render-capability.ts's `loseContext` release exists to avoid, and means boot.ts can decide on a different answer from the one a later error screen reports. 3 of 12 in the scoped run, all in 'createAppShell: the retained render capability (issue #470)'. Worth separating: 'answers with the same object every time it is asked' (`expect(shell.render).toBe(shell.render)`) fails on IDENTITY ALONE -- both reads return equal values under this mutation, so only `toBe` can see it, which is exactly what that case's own comment claims. The other two ('exposes exactly what it was handed, unchanged' and 'is still readable after the page teardown') compare against the INJECTED object, so under jsdom -- where a fresh probe answers `no-webgl2` rather than the injected supported value -- they would have failed on value too; do not read those two as identity coverage. DECLARED SCOPE IS app-shell.test.ts ONLY and the count is that run; the blast radius is wider, because loop.test.ts's `bootPageOn` builds a shell with `RENDER_CAPABILITY_SUPPORTED` and would take boot's unsupported branch under this mutation."
+  },
+  {
+    "id": "render-capability-no-canvas-reads-as-no-webgl2",
+    "file": "src/game/render-capability.ts",
+    "find": "    if (canvas == null) return Object.freeze({ webgl2: false, failure: 'probe-failed' });",
+    "replace": "    if (canvas == null) return Object.freeze({ webgl2: false, failure: 'no-webgl2' });",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/render-capability.test.ts"
+    ],
+    "why": "The OTHER site that answers `probe-failed`, and the sibling of `render-capability-could-not-ask-reads-as-no-webgl2`. A host that produced no canvas has said nothing about WebGL, so it is the same 'could not ask' case as a throw -- reporting `no-webgl2` here blames the GPU for a host that never handed over an element to ask with. The two sites are one line apart and return byte-identical text, which is why the sibling entry has to anchor on its leading newline and indentation to stay unambiguous, and why neither entry can stand in for the other: this pair exists so that BOTH classification sites carry coverage rather than one being assumed from the other. 1 of 14 in the scoped run -- 'reports probe-failed when the host produces no canvas at all'. The other two `probe-failed` cases keep passing: 'reports probe-failed when createElement itself throws' and 'reports probe-failed, not no-webgl2, when getContext throws' both route to the catch site this entry does not touch. expectFailures counts that scoped run only."
   }
 ]
