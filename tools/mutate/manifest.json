@@ -3482,7 +3482,7 @@
   {
     "id": "capture-workspace-containment-compares-paths-lexically",
     "file": "tools/capture/paths.mjs",
-    "find": "  const rel = relative(realpathSync(root), realpathSync(target));",
+    "find": "  const rel = relative(realpathSync.native(root), realpathSync.native(target));",
     "replace": "  const rel = relative(root, target);",
     "tests": [
       "tools/capture/args.test.ts",
@@ -3490,7 +3490,7 @@
     ],
     "expect": "killed",
     "expectFailures": 3,
-    "why": "The #346 original, and the defect #482 records. relativeInside compared the root exactly as the caller held it against a workspace createTemporaryWorkspace had already canonicalised, so any root reached through a symbolic link -- macOS's tmpdir sits behind /var -> /private/var, which is every fixture checkout there -- made path.relative answer `../../<real>/tmp/...` and the runner refuse its own workspace as an escape. The same lexical comparison also waved through a `tmp` that is itself a link out of the root, because its spelling is `tmp/capture-x`. Fails exactly 3 of the 21 in scope (population: args.test.ts 10 + runner.test.ts 11): the two symlink cases in `capture workspace containment` and `publishes through a symlinked checkout root`, which drives the whole runner through a symlinked root and reads the `tmp/capture-*/producer` the gallery adapter's argument check demands. The other 18 pass under it on every platform, which is the gap this entry closes: their fixture roots are pinned with realpath so a plain checkout never depends on the tmpdir symlink, matching what Linux CI saw on main while the bug existed and the 10 macOS-only failures that first surfaced it."
+    "why": "The #346 original, and the defect #482 records. relativeInside compared the root exactly as the caller held it against a workspace createTemporaryWorkspace had already canonicalised, so any root reached through a symbolic link -- macOS's tmpdir sits behind /var -> /private/var, which is every fixture checkout there -- made path.relative answer a `..`-led walk to the real location and the runner refuse its own workspace as an escape. Both sides go through realpathSync.native, the semantics of the fs/promises realpath that produced the workspace, so a root spelled in a different letter case on a case-insensitive filesystem lands in the same place too. The same lexical comparison also waved through a `tmp` that is itself a link out of the root, because its spelling is `tmp/capture-x`. Fails exactly 3 of the 21 in scope (population: args.test.ts 10 + runner.test.ts 11): the two symlink cases in `capture workspace containment` and `publishes through a symlinked checkout root`, which drives the whole runner through a symlinked root and reads the `tmp/capture-*/producer` the gallery adapter's argument check demands. The other 18 pass under it on every platform, which is the gap this entry closes: their fixture roots are pinned with realpath so a plain checkout never depends on the tmpdir symlink, matching what Linux CI saw on main while the bug existed and the 10 macOS-only failures that first surfaced it."
   },
   {
     "id": "capture-workspace-containment-only-rejects-an-empty-path",

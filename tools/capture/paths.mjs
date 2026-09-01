@@ -51,10 +51,12 @@ export function resolveOutputPath(root, raw) {
  * Root-relative POSIX path of a directory inside the checkout, decided by real location.
  * The caller's root may reach the checkout through a symbolic link (macOS's tmpdir does)
  * while the workspace it is compared against is already canonical, and a `tmp` that is
- * itself a link out of the root must not pass on its spelling.
+ * itself a link out of the root must not pass on its spelling. `native` matches the
+ * fs/promises realpath that produced the workspace: the JS realpath keeps the caller's
+ * letter case, which a case-insensitive filesystem would otherwise read as an escape.
  */
 export function relativeInside(root, target) {
-  const rel = relative(realpathSync(root), realpathSync(target));
+  const rel = relative(realpathSync.native(root), realpathSync.native(target));
   if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new Error('internal capture workspace escaped the repository');
   }

@@ -57,7 +57,8 @@ describe('capture command arguments', () => {
 describe('capture output paths', () => {
   it('resolves a safe relative path inside the checkout', async () => {
     // realpath pins this to a plain checkout: macOS's tmpdir sits behind the /var ->
-    // /private/var symlink, and the symlinked-root case has its own test below.
+    // /private/var symlink. Symlinked roots are exercised by 'capture workspace
+    // containment' below and by the runner's symlinked-checkout test.
     const root = await realpath(await mkdtemp(join(tmpdir(), 'capture-paths-')));
     cleanup.push(root);
     await mkdir(join(root, 'artifacts'));
