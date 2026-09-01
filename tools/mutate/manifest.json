@@ -3044,6 +3044,18 @@
     "why": "The OTHER site that answers `probe-failed`, and the sibling of `render-capability-could-not-ask-reads-as-no-webgl2`. A host that produced no canvas has said nothing about WebGL, so it is the same 'could not ask' case as a throw -- reporting `no-webgl2` here blames the GPU for a host that never handed over an element to ask with. The two sites are one line apart and return byte-identical text, which is why the sibling entry has to anchor on its leading newline and indentation to stay unambiguous, and why neither entry can stand in for the other: this pair exists so that BOTH classification sites carry coverage rather than one being assumed from the other. 1 of 14 in the scoped run -- 'reports probe-failed when the host produces no canvas at all'. The other two `probe-failed` cases keep passing: 'reports probe-failed when createElement itself throws' and 'reports probe-failed, not no-webgl2, when getContext throws' both route to the catch site this entry does not touch. expectFailures counts that scoped run only."
   },
   {
+    "id": "render-capability-resolves-its-host-outside-the-try",
+    "file": "src/game/render-capability.ts",
+    "find": "export function probeRenderCapability(host?: RenderCapabilityHost): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host ?? (globalThis.document as RenderCapabilityHost | undefined);",
+    "replace": "export function probeRenderCapability(\n  host: RenderCapabilityHost = globalThis.document,\n): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The defect raised by review on PR #474, as the exact code that was there. A default PARAMETER is evaluated in the parameter list, before the function body and therefore outside the try -- so a locked-down context whose `document` getter throws throws out of the probe instead of reporting `probe-failed`, defeating the one distinction this module's return type exists to make. Every other property access here is wrapped for exactly that case, and this was the one that was not. Invisible to every injected-host test by construction: the default is what an injected host BYPASSES, so only a case that drives the real `globalThis.document` through a throwing getter can see it. 1 of 16 -- 'reports probe-failed when reading the default document throws', which was written for this and confirmed to fail against the reverted code before the fix landed. Its sibling 'when there is no document at all' keeps passing under this mutation, because an ABSENT property yields undefined rather than throwing; the two guard different halves and neither stands in for the other.",
+    "tests": [
+      "src/game/render-capability.test.ts"
+    ]
+  },
+  {
     "id": "route-host-registers-the-gameplay-handlers-per-session",
     "file": "src/game/route-host.ts",
     "find": "      const mine = ++generation;",
@@ -3123,11 +3135,11 @@
     "find": "        detach(): void {\n          if (!current()) return;\n          live = null;\n        },",
     "replace": "        detach(): void {\n          if (!current()) return;\n          live = null;\n          versusConfig = null;\n        },",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "Clears the retained versus config when a session detaches, so quitting a match empties the Versus Setup form the player filled in. `session-host.ts` retains its own `lastVersusConfig` across a campaign detour for exactly this reason and says so; this is the same fact one layer up, where the pane can actually read it. Silent: the pane still opens, still works, and merely forgets. 1 of 18, 'survives the session that set it' -- the only case that reads the config back AFTER a detach."
+    "why": "Clears the retained versus config when a session detaches, so quitting a match empties the Versus Setup form the player filled in. `session-host.ts` retains its own `lastVersusConfig` across a campaign detour for exactly this reason and says so; this is the same fact one layer up, where the pane can actually read it. Silent: the pane still opens, still works, and merely forgets. 1 of 18, 'survives the session that set it' -- the only case that reads the config back AFTER a detach. COUNT RE-MEASURED after PR #475's review fix: 1 -> 2. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-snapshots-the-versus-config-instead-of-reading-it-live",
@@ -3135,11 +3147,11 @@
     "find": "    get initialVersusConfig(): VersusConfig | null {\n      return versusConfig;\n    },",
     "replace": "    initialVersusConfig: versusConfig,",
     "expect": "killed",
-    "expectFailures": 2,
+    "expectFailures": 3,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "Replaces the live getter with a value copied at construction. `route-ui.ts` reads `deps.initialVersusConfig` at CLICK time, and the route host is built before any session exists, so a snapshot is permanently `null`: the Versus Setup pane never prefills at all, for anyone, ever. Compiles cleanly and reads like a simplification, which is what makes it worth pinning. 2 of 18: 'is read LIVE, so a config set after construction reaches the pane' and 'survives the session that set it'. The third case, 'starts null, so a fresh page opens the pane on an empty form', keeps passing by construction -- it asserts the value this mutation hardcodes, which is what makes the trio a real discrimination rather than a single-value echo."
+    "why": "Replaces the live getter with a value copied at construction. `route-ui.ts` reads `deps.initialVersusConfig` at CLICK time, and the route host is built before any session exists, so a snapshot is permanently `null`: the Versus Setup pane never prefills at all, for anyone, ever. Compiles cleanly and reads like a simplification, which is what makes it worth pinning. 2 of 18: 'is read LIVE, so a config set after construction reaches the pane' and 'survives the session that set it'. The third case, 'starts null, so a fresh page opens the pane on an empty form', keeps passing by construction -- it asserts the value this mutation hardcodes, which is what makes the trio a real discrimination rather than a single-value echo. COUNT RE-MEASURED after PR #475's review fix: 2 -> 3. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-passes-session-scoped-request-seams-to-the-routes",
@@ -3184,7 +3196,7 @@
     "replace": "  slot.setVersusConfig(deps.initialVersusConfig as VersusConfig);",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "The defect review found on PR #475, as the exact code that was there. `applyVersusToDeps` stamps `initialVersusConfig: null` on every campaign session, so pushing it unconditionally makes a campaign start CLEAR the page-scoped retained config -- and the Versus Setup pane comes up blank on the one journey it exists for: play a match, go back to the menu, open Versus again to tweak it. Nothing about the match that just ran looks wrong, and the pane still opens; it has simply forgotten. WHERE THE COVERAGE HAD TO GO is the point of this entry: `route-host.test.ts` pins that the config survives a `detach()`, and that test PASSES under this mutation, because a route host on its own never calls `setVersusConfig` -- only a real second session does. The killing case is loop.test.ts's 'a campaign session started after a versus one does not empty the pane', which runs two real sessions on one route host. Its sibling 'a versus session still overwrites it with its OWN config' keeps passing, which is what stops the fix being 'never write it at all'. 1 of 412.",
+    "why": "The defect review found on PR #475, as the exact code that was there. `applyVersusToDeps` stamps `initialVersusConfig: null` on every campaign session, so pushing it unconditionally makes a campaign start CLEAR the page-scoped retained config -- and the Versus Setup pane comes up blank on the one journey it exists for: play a match, go back to the menu, open Versus again to tweak it. Nothing about the match that just ran looks wrong, and the pane still opens; it has simply forgotten. WHERE THE COVERAGE HAD TO GO is the point of this entry: `route-host.test.ts` pins that the config survives a `detach()`, and that test PASSES under this mutation, because a route host on its own never calls `setVersusConfig` -- only a real second session does. The killing case is loop.test.ts's 'a campaign session started after a versus one does not empty the pane', which runs two real sessions on one route host. Its sibling 'a versus session still overwrites it with its OWN config' keeps passing, which is what stops the fix being 'never write it at all'. 1 of 430 -- the scoped run covers both declared files.",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/route-host.test.ts"
