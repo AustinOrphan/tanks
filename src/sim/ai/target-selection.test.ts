@@ -36,7 +36,7 @@ const wall = (minX: number, minY: number, maxX: number, maxY: number) =>
   ({ id: 1, aabb: { minX, minY, maxX, maxY }, kind: 'solid' as const, destroyed: false });
 
 const span = (kind: Tank['kind']) => Math.round(configFor(kind).ai.targetCommitmentTime * TICK_HZ);
-/** One neutral input for the single player tank stepInputs pairs by position. */
+/** One idle input (no move/fire/mine); aim points at the origin, which is fine for these fixtures. */
 const noInput: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false };
 
 describe('committed opponent selection', () => {
