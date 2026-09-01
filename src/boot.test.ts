@@ -672,13 +672,26 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
    *
    * Driven through the route UI's own seams rather than by asserting on a screen: the
    * criterion is about what got BUILT, and the screen is identical either way.
+   *
+   * REPEATED CAMPAIGN NAVIGATION, which is the whole of what this seam can express.
+   * `SessionRequests` carries exactly one navigation request -- `requestCampaignSession`; the
+   * other methods are start/stop boundaries. `requestVersusSession` is
+   * `requests.requestStart({ kind: 'versus', config })` (route-host.ts): Versus START, not Versus navigation. Opening the VS SETUP PANE never
+   * reaches this seam at all -- `route-ui.ts` registers `onVersusOpen` as a bare
+   * `hud.showVersusSetup` passthrough, and since #468 that registration is page-owned, so
+   * the pane opens without anything crossing the session boundary. #317's "repeated
+   * Campaign <-> Versus menu switching before Start" is therefore asserted in two places
+   * rather than one, and neither half is this loop alone: the Campaign half is here, and
+   * the VS-pane half is loop.test.ts's 'opening the VS setup pane is FULLY
+   * navigation-only: no entry, no seed, no world, no run write', which counts the four
+   * signals that are invisible from out here.
    */
   it('opening and leaving application routes creates nothing', () => {
     const h = harness();
     boot(h.deps);
     const requests = h.sessionRequests[0];
     for (let i = 0; i < 4; i += 1) {
-      requests.requestCampaignSession(); // Campaign <-> Versus menu switching, repeatedly
+      requests.requestCampaignSession();
     }
     expect(h.startArgs).toEqual([]);
     expect(h.canvases).toEqual([]);
