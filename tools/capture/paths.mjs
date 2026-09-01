@@ -47,8 +47,14 @@ export function resolveOutputPath(root, raw) {
   return { absolute, relative: segments.join('/') };
 }
 
+/**
+ * Root-relative POSIX path of a directory inside the checkout, decided by real location.
+ * The caller's root may reach the checkout through a symbolic link (macOS's tmpdir does)
+ * while the workspace it is compared against is already canonical, and a `tmp` that is
+ * itself a link out of the root must not pass on its spelling.
+ */
 export function relativeInside(root, target) {
-  const rel = relative(root, target);
+  const rel = relative(realpathSync(root), realpathSync(target));
   if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new Error('internal capture workspace escaped the repository');
   }

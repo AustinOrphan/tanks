@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, open, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -26,7 +26,9 @@ async function missing(path: string): Promise<boolean> {
 }
 
 async function root(): Promise<string> {
-  const path = await mkdtemp(join(tmpdir(), 'capture-runner-'));
+  // realpath pins these fixtures to a plain checkout: macOS's tmpdir sits behind the
+  // /var -> /private/var symlink, and the symlinked-root case has its own test below.
+  const path = await realpath(await mkdtemp(join(tmpdir(), 'capture-runner-')));
   roots.push(path);
   return path;
 }
@@ -177,6 +179,29 @@ describe('capture runner publication and cleanup', () => {
     expect(manifest.status).toBe('success');
     expect(manifest.outputs.rawFrames).toMatchObject({ retained: false, frameCount: 1 });
     expect(await missing(`${result.output.absolute}.capture.lock`)).toBe(true);
+  });
+
+  it.skipIf(process.platform === 'win32')('publishes through a symlinked checkout root', async () => {
+    const real = await root();
+    const outer = await root();
+    const checkout = join(outer, 'checkout');
+    await symlink(real, checkout);
+    let seen: any = null;
+    const runProducer = vi.fn(async (context: any) => {
+      seen = context;
+      return stillProducer(context);
+    });
+    const result = await captureRecipe(CAPTURE_RECIPES[0], {
+      root: checkout,
+      out: 'artifacts/capture/still',
+      retainFrames: false,
+      sourceRef: null,
+    }, common(runProducer));
+
+    // What the gallery adapter's `tmp/...` argument check needs from the runner.
+    expect(seen.outputRelative).toMatch(/^tmp\/capture-[^/]+\/producer$/);
+    expect(await missing(dirname(seen.outputDirectory))).toBe(true);
+    expect(await readFile(join(result.output.absolute, 'capture.png'), 'utf8')).toBe('png');
   });
 
   it('retains numbered raw frames only when explicitly requested', async () => {

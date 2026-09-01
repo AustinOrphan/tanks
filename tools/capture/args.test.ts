@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import { CAPTURE_USAGE, parseCaptureArgs } from './args.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
-import { prepareTemporaryRoot, resolveOutputPath } from './paths.mjs';
+import { prepareTemporaryRoot, relativeInside, resolveOutputPath } from './paths.mjs';
 
 const cleanup: string[] = [];
 afterEach(async () => {
@@ -56,7 +56,9 @@ describe('capture command arguments', () => {
 
 describe('capture output paths', () => {
   it('resolves a safe relative path inside the checkout', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'capture-paths-'));
+    // realpath pins this to a plain checkout: macOS's tmpdir sits behind the /var ->
+    // /private/var symlink, and the symlinked-root case has its own test below.
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'capture-paths-')));
     cleanup.push(root);
     await mkdir(join(root, 'artifacts'));
     expect(resolveOutputPath(root, 'artifacts/capture')).toEqual({
@@ -97,5 +99,37 @@ describe('capture output paths', () => {
     cleanup.push(root, outside);
     await symlink(outside, join(root, 'tmp'));
     await expect(prepareTemporaryRoot(root)).rejects.toThrow(/tmp root must not be a symbolic link/);
+  });
+});
+
+describe('capture workspace containment', () => {
+  it.skipIf(process.platform === 'win32')('keeps a workspace under a symlinked root inside the checkout', async () => {
+    const real = await realpath(await mkdtemp(join(tmpdir(), 'capture-contain-real-')));
+    const outer = await realpath(await mkdtemp(join(tmpdir(), 'capture-contain-link-')));
+    cleanup.push(real, outer);
+    const link = join(outer, 'checkout');
+    await symlink(real, link);
+    const producer = join(real, 'tmp', 'capture-abc', 'producer');
+    await mkdir(producer, { recursive: true });
+    // The runner hands createTemporaryWorkspace's canonical path back against the root it
+    // was given; a lexical comparison sees `../../<real>/tmp/...` and calls it an escape.
+    expect(relativeInside(link, producer)).toBe('tmp/capture-abc/producer');
+  });
+
+  it.skipIf(process.platform === 'win32')('rejects a workspace that only looks inside the checkout', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'capture-contain-root-')));
+    const outside = await realpath(await mkdtemp(join(tmpdir(), 'capture-contain-outside-')));
+    cleanup.push(root, outside);
+    await symlink(outside, join(root, 'tmp'));
+    await mkdir(join(outside, 'capture-abc'));
+    // Lexically `tmp/capture-abc`; really a directory outside the checkout.
+    expect(() => relativeInside(root, join(root, 'tmp', 'capture-abc'))).toThrow(/escaped the repository/);
+  });
+
+  it('rejects a workspace outside the checkout', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'capture-contain-root-')));
+    const outside = await realpath(await mkdtemp(join(tmpdir(), 'capture-contain-outside-')));
+    cleanup.push(root, outside);
+    expect(() => relativeInside(root, outside)).toThrow(/escaped the repository/);
   });
 });

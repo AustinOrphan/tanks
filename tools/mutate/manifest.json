@@ -3478,5 +3478,30 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "The containment check kept but weakened to a bare prefix, which is the shape it is easiest to write by accident. A sibling directory whose name merely begins with the root's -- dist-evil next to dist -- then passes. This entry proves the SHAPE of the guard rather than its presence: measured, it fails exactly 1 of 9, and every other assertion in the file, including all three .. escapes, still passes under it. Without that one case the two forms are indistinguishable and the weaker one would survive."
+  },
+  {
+    "id": "capture-workspace-containment-compares-paths-lexically",
+    "file": "tools/capture/paths.mjs",
+    "find": "  const rel = relative(realpathSync(root), realpathSync(target));",
+    "replace": "  const rel = relative(root, target);",
+    "tests": [
+      "tools/capture/args.test.ts",
+      "tools/capture/runner.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "The #346 original, and the defect #482 records. relativeInside compared the root exactly as the caller held it against a workspace createTemporaryWorkspace had already canonicalised, so any root reached through a symbolic link -- macOS's tmpdir sits behind /var -> /private/var, which is every fixture checkout there -- made path.relative answer `../../<real>/tmp/...` and the runner refuse its own workspace as an escape. The same lexical comparison also waved through a `tmp` that is itself a link out of the root, because its spelling is `tmp/capture-x`. Fails exactly 3 of the 21 in scope (population: args.test.ts 10 + runner.test.ts 11): the two symlink cases in `capture workspace containment` and `publishes through a symlinked checkout root`, which drives the whole runner through a symlinked root and reads the `tmp/capture-*/producer` the gallery adapter's argument check demands. The other 18 pass under it on every platform, which is the gap this entry closes: their fixture roots are pinned with realpath so a plain checkout never depends on the tmpdir symlink, matching what Linux CI saw on main while the bug existed and the 10 macOS-only failures that first surfaced it."
+  },
+  {
+    "id": "capture-workspace-containment-only-rejects-an-empty-path",
+    "file": "tools/capture/paths.mjs",
+    "find": "  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {",
+    "replace": "  if (!rel) {",
+    "tests": [
+      "tools/capture/args.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The adversarial question canonicalising both sides invites: did comparing real locations weaken the check? This keeps the realpath calls and drops the parent-directory and absolute-path rejections, so any existing target is accepted. Fails exactly 2 of args.test.ts's 10: `rejects a workspace that only looks inside the checkout` (a `tmp` symlinked out of the root, which only the canonical comparison can see) and `rejects a workspace outside the checkout` (a plain sibling directory). The symlinked-root accept case and the other 7 pass under it, which is what makes the two rejection cases the guard's negative controls rather than decoration."
   }
 ]
