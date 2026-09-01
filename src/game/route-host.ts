@@ -84,14 +84,19 @@ export interface GameplaySlot {
   /** Point the paint shop at this session's renderer. See `RouteUi.setStyleSink`. */
   setStyleSink(sink: StyleSink): void;
   /**
-   * The versus config this session was built from, or `null` for a campaign one.
+   * The versus config this session was built from.
    *
    * RETAINED after detach, not cleared: it is what the Versus Setup pane prefills from,
    * and a player who quits a match and reopens the pane must find their own last match
    * there rather than an empty form. `session-host.ts` retains its `lastVersusConfig` for
    * the same reason and says so.
+   *
+   * Takes a config and NOT `| null`, so "I am a campaign session" cannot be expressed as
+   * "the last match played was nothing". That distinction is the whole of the defect
+   * review found on PR #475: a campaign session pushing its own absent config wiped the
+   * retained one. A caller with nothing to say now has nothing to call.
    */
-  setVersusConfig(config: VersusConfig | null): void;
+  setVersusConfig(config: VersusConfig): void;
   /**
    * Release the slot. Idempotent, and INERT once another session has taken it -- a late
    * detach from an outgoing session must not silently unhook the incoming one. That is

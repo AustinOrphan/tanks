@@ -395,6 +395,32 @@ describe('createRouteHost: the retained versus config', () => {
       [true, CONFIG],
     ]);
   });
+
+  /**
+   * ...and survives a CAMPAIGN session started after it, which is the half a detach-only
+   * test cannot see (raised by review on PR #475).
+   *
+   * `applyVersusToDeps` stamps `initialVersusConfig: null` on every campaign session, so a
+   * session that pushed its own value unconditionally would clear the retained one the
+   * moment the player left Versus for Campaign -- and the Setup pane would come up empty
+   * on the very journey it exists to serve: play a match, go back to the menu, open Versus
+   * again to tweak it.
+   */
+  it('survives a campaign session started after it', () => {
+    const f = fixture();
+    const versusSlot = f.host.attach();
+    versusSlot.setVersusConfig(CONFIG);
+    versusSlot.detach();
+
+    // A campaign session: it has no versus config of its own, and must not say so.
+    f.host.attach();
+
+    f.hud.fire('onVersusOpen');
+    expect(
+      f.hud.argsOf('showVersusSetup'),
+      'a campaign session cleared the retained versus config',
+    ).toEqual([[true, CONFIG]]);
+  });
 });
 
 describe('createRouteHost: where the page opens', () => {

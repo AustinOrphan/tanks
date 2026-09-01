@@ -3176,5 +3176,18 @@
       "src/boot.test.ts"
     ],
     "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one."
+  },
+  {
+    "id": "session-start-clears-the-retained-versus-config",
+    "file": "src/game/loop.ts",
+    "find": "  if (deps.initialVersusConfig) slot.setVersusConfig(deps.initialVersusConfig);",
+    "replace": "  slot.setVersusConfig(deps.initialVersusConfig as VersusConfig);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The defect review found on PR #475, as the exact code that was there. `applyVersusToDeps` stamps `initialVersusConfig: null` on every campaign session, so pushing it unconditionally makes a campaign start CLEAR the page-scoped retained config -- and the Versus Setup pane comes up blank on the one journey it exists for: play a match, go back to the menu, open Versus again to tweak it. Nothing about the match that just ran looks wrong, and the pane still opens; it has simply forgotten. WHERE THE COVERAGE HAD TO GO is the point of this entry: `route-host.test.ts` pins that the config survives a `detach()`, and that test PASSES under this mutation, because a route host on its own never calls `setVersusConfig` -- only a real second session does. The killing case is loop.test.ts's 'a campaign session started after a versus one does not empty the pane', which runs two real sessions on one route host. Its sibling 'a versus session still overwrites it with its OWN config' keeps passing, which is what stops the fix being 'never write it at all'. 1 of 412.",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/route-host.test.ts"
+    ]
   }
 ]

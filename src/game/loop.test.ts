@@ -2738,6 +2738,68 @@ describe('startGameWith: the persistence notice (issue #320)', () => {
   });
 });
 
+/**
+ * The retained Versus config across a REAL session change (raised by review on PR #475).
+ *
+ * `route-host.test.ts` pins that the config survives a `detach()`, which is the half a
+ * route-host test can see. It cannot see this half: `applyVersusToDeps` stamps
+ * `initialVersusConfig: null` on every campaign session, so it is `startGameWith` -- not
+ * the route host -- that decides whether starting Campaign after a Versus match wipes the
+ * pane. Only a test that runs two real sessions on one route host reaches that.
+ */
+describe('startGameWith: the retained Versus config across sessions (issue #468)', () => {
+  const RETAINED: VersusConfig = {
+    mode: 'teams',
+    players: 4,
+    arenaId: 'arena-01',
+    stock: 5,
+    friendlyFire: true,
+    slots: defaultSlots(4),
+  };
+
+  it('a campaign session started after a versus one does not empty the pane', () => {
+    // The journey this exists to serve: play a match, go back to the menu, open Versus
+    // again to tweak it. A session that pushed its own (absent) config unconditionally
+    // clears the retained one, and the form comes up blank on exactly that path.
+    const base = makeDeps();
+    const versus = startGameWith(
+      document.createElement('canvas'),
+      { ...base.deps, initialVersusConfig: RETAINED },
+      base.routeHost,
+    );
+    versus.dispose();
+
+    const campaign = startGameWith(document.createElement('canvas'), base.deps, base.routeHost);
+    base.hud.openVersus();
+    expect(
+      base.rec.versusSetupPushes.at(-1),
+      'the campaign session cleared the retained versus config',
+    ).toEqual({ show: true, initial: RETAINED });
+    campaign.dispose();
+  });
+
+  it('a versus session still overwrites it with its OWN config', () => {
+    // The other direction, so the fix cannot be "never write it": the pane must follow the
+    // most recent match, not the first one ever played.
+    const base = makeDeps();
+    const other: VersusConfig = { ...RETAINED, arenaId: 'arena-02', stock: 2 };
+    const first = startGameWith(
+      document.createElement('canvas'),
+      { ...base.deps, initialVersusConfig: RETAINED },
+      base.routeHost,
+    );
+    first.dispose();
+    const second = startGameWith(
+      document.createElement('canvas'),
+      { ...base.deps, initialVersusConfig: other },
+      base.routeHost,
+    );
+    base.hud.openVersus();
+    expect(base.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: other });
+    second.dispose();
+  });
+});
+
 describe('startGameWith: the gameplay slot is given back (issue #468)', () => {
   /**
    * The production half of `route-host.test.ts`'s slot mechanics: that `startGameWith`

@@ -1690,7 +1690,15 @@ export function startGameWith(
   });
   // The config this session was built from, so the Versus Setup pane prefills from the
   // player's own last match. Retained by the route host after this session is gone.
-  slot.setVersusConfig(deps.initialVersusConfig ?? null);
+  //
+  // ONLY WHEN THERE IS ONE. `applyVersusToDeps` stamps `initialVersusConfig: null` on
+  // every campaign session, so an unconditional push here would have a campaign start
+  // CLEAR the retained config -- and the pane would come up blank on the one journey it
+  // exists for: play a match, go back to the menu, open Versus again to tweak it. A
+  // session that has no versus config has said nothing about the last match played, which
+  // is the same reasoning `session-host.ts` gives for not clearing its own
+  // `lastVersusConfig` on a campaign replacement. (Raised by review on PR #475.)
+  if (deps.initialVersusConfig) slot.setVersusConfig(deps.initialVersusConfig);
 
   /**
    * THE ONE PLACE a settings value reaches a runtime consumer.
