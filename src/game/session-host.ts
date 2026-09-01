@@ -153,6 +153,11 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
       deps.shell,
       deps.routeHost,
     );
+    // Built, then SHOWN (issue #428). Every path into `create` is a deliberate start --
+    // the four gestures and the two reboot seams -- so there is no case here that builds
+    // a session the player is not about to be looking at. Separate from construction
+    // because they are different acts: one makes a world, the other changes the route.
+    handle.enterGameplay();
   };
 
   /**

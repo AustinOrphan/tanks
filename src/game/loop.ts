@@ -402,6 +402,25 @@ export interface LaunchGate {
 
 export interface GameHandle {
   dispose(): void;
+  /**
+   * Show this session (issue #428). Called by the start boundary, once, right after the
+   * session is built.
+   *
+   * NOT done inside `startGameWith` itself, and the distinction is the point: building a
+   * session and SHOWING it are different acts, and only the second one is a route change.
+   * Before #428 they were separable in production too -- the eager boot built a session
+   * and opened at the title, and `onStartRestart`'s main-menu branch was what entered
+   * gameplay later. That branch is unreachable now, because with no session attached the
+   * click goes to the start boundary instead of to the slot, which is how a session came
+   * to be built with nobody left to reveal it.
+   *
+   * FOUND IN A BROWSER, not by a unit test, and the gap is worth recording: every unit
+   * assertion was about how many sessions, canvases and worlds got built, and every one
+   * was right. The game still did not start. `tools/visual/roundtrip.mjs` reported
+   * `canvases: 1` with the title buttons still on screen -- which is what a player would
+   * have seen: a menu that builds a match behind itself and never shows it.
+   */
+  enterGameplay(): void;
 }
 
 /**
@@ -2860,6 +2879,14 @@ export function startGameWith(
   driver.start();
 
   return {
+    enterGameplay(): void {
+      // `audio.unlock()` rides here for the reason the old handlers gave: the start
+      // boundary runs inside the click that started the match, which is the only
+      // guaranteed user gesture, and Safari will not open an AudioContext resumed from
+      // anywhere else.
+      audio.unlock();
+      sm.enterGameplay(currentSession);
+    },
     dispose(): void {
       driver.stop();
       // Guarded on having published it: a teardown that deleted the key

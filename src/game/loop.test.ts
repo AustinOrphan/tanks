@@ -8194,14 +8194,19 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
   const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
 
   it('a Campaign -> Versus reboot does not replay the splash', () => {
+    // `startEmpty` since issue #428: a started match enters gameplay, and this case is
+    // about the SPLASH, which is only up while nothing has started.
     const h = makeDeps();
-    const page = bootPageOn(h);
+    const page = bootPageOn(h, { startEmpty: true });
     // What the HUD was actually TOLD to paint -- `rec.hudStates` -- not the harness's own
     // surface variable, which no longer tracks the real state machine driving this session.
-    expect(h.rec.hudStates[0], 'the first session should open on the splash').toBe('launch');
+    // No session yet (issue #428), so the SPLASH is what the HUD is showing.
+    expect(h.rec.hudStates[0], 'the page should open on the splash').toBe('launch');
     page.pointerdown();
     expect(h.rec.hudStates.at(-1), 'the gesture should have dismissed it').toBe('main-menu');
 
+    // Now a match, which is what gives the reboot seam something to reboot.
+    page.start();
     const before = h.rec.hudStates.length;
     page.requestVersus(VS);
 
@@ -8229,7 +8234,7 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
    */
   it('a pointer dismissal is recorded on the PAGE, not only in the session', () => {
     const h = makeDeps();
-    const page = bootPageOn(h);
+    const page = bootPageOn(h, { startEmpty: true });
     expect(page.shell.launchDismissed()).toBe(false);
     page.pointerdown();
     expect(page.shell.launchDismissed(), 'the session kept the dismissal to itself').toBe(true);
@@ -8237,9 +8242,9 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
 
   it('a KEYBOARD dismissal is recorded on the PAGE too', () => {
     // The keyboard path is the one with an early return, which is where a second call is
-    // easiest to drop.
+    // easiest to drop. `startEmpty` for the same reason as the pointer case above.
     const h = makeDeps();
-    const page = bootPageOn(h);
+    const page = bootPageOn(h, { startEmpty: true });
     page.keydown({ key: 'x', repeat: false, target: null });
     expect(page.shell.launchDismissed(), 'a key dismissal never reached the page').toBe(true);
   });
@@ -8250,10 +8255,11 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
     // path is the one with an early return, which is where a second call is easiest to
     // drop.
     const h = makeDeps();
-    const page = bootPageOn(h);
+    const page = bootPageOn(h, { startEmpty: true });
     page.keydown({ key: 'x', repeat: false, target: null });
     expect(h.rec.hudStates.at(-1), 'the key did not dismiss the splash').toBe('main-menu');
 
+    page.start();
     const before = h.rec.hudStates.length;
     page.requestVersus(VS);
     expect(
@@ -8451,7 +8457,9 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     const page = runTheRoute(h);
     expect(h.rec.hudStates[0], 'the first session should still open on the splash').toBe('launch');
     expect(h.rec.hudStates.slice(1), 'the splash replayed on a reboot').not.toContain('launch');
-    expect(h.rec.hudStates.at(-1)).toBe('main-menu');
+    // The route ENDS in a match since issue #428: its last step is a Versus Start, and a
+    // start now reveals the session it built rather than leaving it behind the menu.
+    expect(h.rec.hudStates.at(-1)).toBe('playing');
     expect(page.sessions()).toBe(5);
   });
 

@@ -37,6 +37,8 @@ function harness(): {
    * disposed each session once does. See the stale-capture controls below.
    */
   disposedIds: number[];
+  /** Which session (by construction order) was SHOWN, in order (issue #428). */
+  enteredIds: number[];
   shellDisposals: number;
   /** The page's route UI, borrowed by every session and disposed by neither. */
   routeHost: RouteHost;
@@ -46,6 +48,7 @@ function harness(): {
   const startArgs: StartArgs[] = [];
   const canvases: HTMLCanvasElement[] = [];
   const disposedIds: number[] = [];
+  const enteredIds: number[] = [];
   const box = { shellDisposals: 0, routeHostDisposals: 0 };
   let nextId = 0;
   const shell = {
@@ -73,6 +76,9 @@ function harness(): {
       startArgs.push([canvas, versus, reqVersus, reqCampaign, s, rh]);
       const id = nextId++;
       return {
+        enterGameplay(): void {
+          enteredIds.push(id);
+        },
         dispose(): void {
           disposedIds.push(id);
         },
@@ -93,6 +99,7 @@ function harness(): {
     startArgs,
     canvases,
     disposedIds,
+    enteredIds,
     get routeHostDisposals(): number {
       return box.routeHostDisposals;
     },

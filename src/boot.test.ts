@@ -54,6 +54,8 @@ function harness(
    * tell apart from correct behavior. See the "versus session reboot" suite below.
    */
   disposedIds: number[];
+  /** Which session (by construction order) was SHOWN, in order (issue #428). */
+  enteredIds: number[];
   /** How many times the page's route UI was built. Must be 1, however many sessions run. */
   routeHostBuilds: number;
   /** ...and disposed. Only the page teardown may. */
@@ -78,6 +80,7 @@ function harness(
   const canvasRoots: HTMLElement[] = [];
   const canvases: HTMLCanvasElement[] = [];
   const disposedIds: number[] = [];
+  const enteredIds: number[] = [];
   let nextId = 0;
   const routeHostRoots: HTMLElement[] = [];
   const sessionRequests: SessionRequests[] = [];
@@ -150,6 +153,12 @@ function harness(
       if ('throwOnStart' in opts) throw opts.throwOnStart;
       const id = nextId++;
       return {
+        // Recorded by id, like the disposals: "every session was revealed" and "the FIRST
+        // one was revealed four times" are different facts, and only the ledger separates
+        // them (issue #428).
+        enterGameplay(): void {
+          enteredIds.push(id);
+        },
         dispose(): void {
           box.disposals += 1;
           disposedIds.push(id);
@@ -188,6 +197,7 @@ function harness(
     routeHostRoots,
     sessionRequests,
     disposedIds,
+    enteredIds,
     pagehide,
     removed,
     errors,
@@ -672,6 +682,45 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
     }
     expect(h.startArgs).toEqual([]);
     expect(h.canvases).toEqual([]);
+  });
+
+/**
+   * A start SHOWS the match it built (issue #428).
+   *
+   * The gap this closes was found in a browser, not here, and that is the lesson worth
+   * keeping: every count in this suite was right -- one session, one canvas, one world,
+   * the correct intent -- and the game still did not start. `startGameWith` built the
+   * board and left the player on the Main Menu, because the branch that used to enter
+   * gameplay (`onStartRestart`'s main-menu arm) is unreachable once the click goes to the
+   * start boundary instead of to the slot.
+   *
+   * So the assertion is not another count of what was BUILT. It is that the thing built
+   * was revealed, by id, exactly once.
+   */
+  it('reveals the session it started, exactly once', () => {
+    const h = harness();
+    boot(h.deps);
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+    expect(h.enteredIds, 'the match was built and never shown').toEqual([0]);
+  });
+
+  it('reveals each session of a repeated start, never an earlier one twice', () => {
+    // By id, not by count: a boundary that revealed the FIRST handle every time reports
+    // the same total as one that advances -- the same stale-capture shape the disposal
+    // ledger exists to catch.
+    const h = harness();
+    boot(h.deps);
+    const requests = h.sessionRequests[0];
+    requests.requestStart({ kind: 'campaign-continue' });
+    requests.requestStart({ kind: 'campaign-new' });
+    requests.requestStart({ kind: 'versus', config: VS });
+    expect(h.enteredIds).toEqual([0, 1, 2]);
+  });
+
+  it('reveals nothing when the capability probe refused the start', () => {
+    const h = harness({ render: { webgl2: false, failure: 'no-webgl2' } });
+    boot(h.deps);
+    expect(h.enteredIds).toEqual([]);
   });
 
   it('a failed start reaches the same message page a failed boot always has', () => {
