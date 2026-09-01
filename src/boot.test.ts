@@ -674,9 +674,9 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
    * criterion is about what got BUILT, and the screen is identical either way.
    *
    * REPEATED CAMPAIGN NAVIGATION, which is the whole of what this seam can express.
-   * `SessionRequests` carries exactly one route request -- `requestCampaignSession` -- and
-   * its only sibling, `requestVersusSession`, is `requests.requestStart({kind: 'versus'})`
-   * (route-host.ts): Versus START, not Versus navigation. Opening the VS SETUP PANE never
+   * `SessionRequests` carries exactly one navigation request -- `requestCampaignSession`; the
+   * other methods are start/stop boundaries. `requestVersusSession` is
+   * `requests.requestStart({ kind: 'versus', config })` (route-host.ts): Versus START, not Versus navigation. Opening the VS SETUP PANE never
    * reaches this seam at all -- `route-ui.ts` registers `onVersusOpen` as a bare
    * `hud.showVersusSetup` passthrough, and since #468 that registration is page-owned, so
    * the pane opens without anything crossing the session boundary. #317's "repeated
