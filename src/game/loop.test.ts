@@ -2800,10 +2800,13 @@ describe('startGameWith: the retained Versus config across sessions (issue #468)
       document.createElement('canvas'),
       { ...base.deps, initialVersusConfig: RETAINED },
       base.routeHost,
+      { kind: 'versus', config: RETAINED },
     );
     versus.dispose();
 
-    const campaign = startGameWith(document.createElement('canvas'), base.deps, base.routeHost);
+    const campaign = startGameWith(document.createElement('canvas'), base.deps, base.routeHost, {
+      kind: 'campaign-continue',
+    });
     base.hud.openVersus();
     expect(
       base.rec.versusSetupPushes.at(-1),
@@ -2821,17 +2824,103 @@ describe('startGameWith: the retained Versus config across sessions (issue #468)
       document.createElement('canvas'),
       { ...base.deps, initialVersusConfig: RETAINED },
       base.routeHost,
+      { kind: 'versus', config: RETAINED },
     );
     first.dispose();
     const second = startGameWith(
       document.createElement('canvas'),
       { ...base.deps, initialVersusConfig: other },
       base.routeHost,
+      { kind: 'versus', config: other },
     );
     base.hud.openVersus();
     expect(base.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: other });
     second.dispose();
+/**
+ * THE START BOUNDARY (issue #428).
+ *
+ * `boot.ts` no longer starts anything, so `startGameWith`'s intent is what decides the
+ * board, the identity and whether the campaign run is written. These drive the four
+ * intents through the real function and read the run store and the built world, because
+ * the difference between them is invisible on screen: every one of them ends up on a
+ * board with a tank on it.
+ */
+describe('startGameWith: the start boundary (issue #428)', () => {
+  it('campaign-continue lands on the run\'s own level, with its lives', () => {
+    // The intent that REPLACED the eager boot, and it must reproduce it byte for byte:
+    // `deps.levels.start` already resolves to the run's level and `bootLives` already
+    // adopts its lives, so this intent moves nothing at all.
+    const h = makeDeps({ levelCount: 5, levelStart: 3, savedRun: { level: 3, lives: 2 }, tracksProgress: true });
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, {
+      kind: 'campaign-continue',
+    });
+    expect(h.rec.hudLevels.at(-1), 'Continue did not resume the run').toEqual([4, 5]);
+    expect(h.rec.lives.at(-1), 'Continue did not carry the run\'s lives').toBe(2);
+    expect(h.rec.runNewRuns, 'Continue wrote the run').toHaveLength(0);
+    handle.dispose();
   });
+
+  it('campaign-new lands on level one and writes the run exactly once', () => {
+    // The ONLY persistence write any start request makes. Counted, not asserted as
+    // "happened": a boundary that wrote twice would leave the run at level one either
+    // way, and only the count can tell that apart.
+    const h = makeDeps({ levelCount: 5, levelStart: 3, savedRun: { level: 3, lives: 2 }, tracksProgress: true });
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, {
+      kind: 'campaign-new',
+    });
+    expect(h.rec.hudLevels.at(-1), 'New Game did not land on level one').toEqual([1, 5]);
+    // `runNewRuns` records the id as a NUMBER (see the decorated store above), and level
+    // one's synthetic id is '0'. Exactly one entry: a boundary that wrote twice would
+    // land on level one either way, and only the count tells the two apart.
+    expect(h.rec.runNewRuns, 'New Game did not start exactly one fresh run').toEqual([0]);
+    handle.dispose();
+  });
+
+  /**
+   * A Practice pick never reads or writes the run. That is the campaign-run rule the
+   * project's own game rules state, and the start boundary is now a second place it can
+   * be broken -- the in-session Levels handler was the only one before.
+   */
+  it('practice lands on the picked level and leaves the run untouched', () => {
+    const h = makeDeps({ levelCount: 5, levelStart: 3, savedRun: { level: 3, lives: 2 }, tracksProgress: true });
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, {
+      kind: 'practice',
+      level: 1,
+    });
+    expect(h.rec.hudLevels.at(-1), 'the pick did not reach the board').toEqual([2, 5]);
+    expect(h.rec.runNewRuns, 'a Practice pick started a run').toHaveLength(0);
+    // Fresh lives, not the run's: practice is isolated play.
+    expect(h.rec.lives.at(-1), 'practice adopted the run\'s lives').not.toBe(2);
+    handle.dispose();
+  });
+
+  /**
+   * An out-of-range pick is REJECTED before anything is consumed, and falls back to the
+   * run's own board rather than building an undefined level.
+   *
+   * `levels[7]` is undefined on a five-level sequence, and a boundary that indexed
+   * straight into it would throw out of a HUD click handler -- which since #428 is a
+   * path with a user-visible failure page behind it, not a crash nobody sees.
+   */
+  it('rejects an out-of-range practice level without building it or writing the run', () => {
+    const h = makeDeps({ levelCount: 5, levelStart: 3, savedRun: { level: 3, lives: 2 }, tracksProgress: true });
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, {
+      kind: 'practice',
+      level: 7,
+    });
+    expect(h.rec.hudLevels.at(-1), 'an out-of-range pick built a level').toEqual([4, 5]);
+    expect(h.rec.runNewRuns, 'a rejected pick wrote the run').toHaveLength(0);
+    handle.dispose();
+  });
+
+  it('a non-integer level is rejected the same way', () => {
+    const h = makeDeps({ levelCount: 5, levelStart: 3, savedRun: { level: 3, lives: 2 }, tracksProgress: true });
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, {
+      kind: 'practice',
+      level: 1.5,
+    });
+    expect(h.rec.hudLevels.at(-1)).toEqual([4, 5]);
+    handle.dispose();  });
 });
 
 describe('startGameWith: the gameplay slot is given back (issue #468)', () => {

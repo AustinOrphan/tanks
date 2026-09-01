@@ -596,6 +596,99 @@ describe('boot: the page-scoped route UI (issue #468)', () => {
   });
 });
 
+/**
+ * The page boots EMPTY (issue #428).
+ *
+ * Counted at the production boundary rather than described: every criterion in the issue
+ * is of the form "opening X creates zero sessions/worlds/seeds", and the only honest way
+ * to say that is to count what the injected seams were asked to build. `bootCanvas` and
+ * `startGame` are those seams -- nothing downstream of them (a world, a seed, a driver, a
+ * GL context) can exist without one of the two having been called first.
+ */
+describe('boot: nothing starts until the player asks (issue #428)', () => {
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+
+  it('reaches the application UI with no session, no canvas and no world', () => {
+    // The whole issue in one assertion. Before #428 both counts read 1 on a page nobody
+    // had touched, and a player who opened the game and walked away paid for a running
+    // match they never asked for.
+    const h = harness();
+    boot(h.deps);
+    expect(h.routeHostBuilds, 'the application UI was not built').toBe(1);
+    expect(h.startArgs, 'a session was created by the page loading').toEqual([]);
+    expect(h.canvases, 'a canvas was created by the page loading').toEqual([]);
+  });
+
+  it('creates exactly one session per start gesture, and one per gesture only', () => {
+    const h = harness();
+    boot(h.deps);
+    const requests = h.sessionRequests[0];
+
+    requests.requestStart({ kind: 'campaign-continue' });
+    expect(h.startArgs).toHaveLength(1);
+    expect(h.startArgs[0][1]).toEqual({ kind: 'campaign-continue' });
+    expect(h.canvases, 'one start built more than one canvas').toHaveLength(1);
+  });
+
+  /**
+   * Each of the four intents reaches `startGame` unchanged, and each builds exactly one
+   * session -- "no discarded precursor", in the issue's words.
+   *
+   * The disposal ledger is the half that says "no precursor": a boundary that built a
+   * default session and then replaced it would show the same four `startArgs` and three
+   * extra disposals.
+   */
+  it('passes each of the four intents through, one session each', () => {
+    const h = harness();
+    boot(h.deps);
+    const requests = h.sessionRequests[0];
+    const intents: StartIntent[] = [
+      { kind: 'campaign-continue' },
+      { kind: 'campaign-new' },
+      { kind: 'practice', level: 2 },
+      { kind: 'versus', config: VS },
+    ];
+    for (const intent of intents) requests.requestStart(intent);
+
+    expect(h.startArgs.map((a) => a[1])).toEqual(intents);
+    expect(h.canvases, 'a start built a canvas it then threw away').toHaveLength(4);
+    // Three replacements, each disposing exactly its own predecessor -- not a fourth
+    // disposal from a precursor nobody asked for.
+    expect(h.disposedIds).toEqual([0, 1, 2]);
+  });
+
+  /**
+   * Navigating the application routes creates nothing.
+   *
+   * Driven through the route UI's own seams rather than by asserting on a screen: the
+   * criterion is about what got BUILT, and the screen is identical either way.
+   */
+  it('opening and leaving application routes creates nothing', () => {
+    const h = harness();
+    boot(h.deps);
+    const requests = h.sessionRequests[0];
+    for (let i = 0; i < 4; i += 1) {
+      requests.requestCampaignSession(); // Campaign <-> Versus menu switching, repeatedly
+    }
+    expect(h.startArgs).toEqual([]);
+    expect(h.canvases).toEqual([]);
+  });
+
+  it('a failed start reaches the same message page a failed boot always has', () => {
+    // The boundary that had to be added: with the eager start gone, a renderer that gets
+    // its context and then fails to initialise throws out of a HUD click handler, and
+    // without this guard the page would sit on a menu whose buttons silently did nothing.
+    const boom = new Error('context lost during init');
+    const h = harness({ throwOnStart: boom });
+    boot(h.deps);
+    expect(h.root.textContent, 'the page still showed a working menu').toBe('');
+
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+    expect(h.root.textContent).toContain(NO_WEBGL_MESSAGE);
+    expect(h.errors).toEqual([boom]);
+  });
+});
+
 describe('boot: the message itself', () => {
   it('names WebGL and offers a way forward', () => {
     // It is the only thing a visitor on an unsupported browser ever sees.
