@@ -397,6 +397,30 @@ describe('createRouteHost: the retained versus config', () => {
   });
 });
 
+describe('createRouteHost: where the page opens', () => {
+  it('opens on the splash when the Launch gate is still up', () => {
+    expect(fixture({ launchDismissed: false }).host.sm.atLaunch).toBe(true);
+  });
+
+  /**
+   * ...and on Main Menu when it is already down, read at CONSTRUCTION.
+   *
+   * Today no production path builds a route host with a dismissed gate -- `boot.ts` builds
+   * the shell and the route host one statement apart, before any gesture -- so this branch
+   * is currently reachable only from here. It is kept, and tested, because issue #428
+   * removes the eager `sessions.start()` that currently papers over it: with no session at
+   * boot there is no `attach()` to correct the route afterwards, and a page that hardcoded
+   * `'launch'` would show a returning player a splash they had already dismissed.
+   *
+   * Measured, not assumed: with this case absent, `initialRoute: 'launch'` SURVIVED at 0 of
+   * 423 -- the manifest entry `launch-gate-ignored-on-reboot`, which the ownership move had
+   * quietly emptied out.
+   */
+  it('opens on Main Menu when the gate was already dismissed', () => {
+    expect(fixture({ launchDismissed: true }).host.sm.atMainMenu).toBe(true);
+  });
+});
+
 describe('createRouteHost: the route on attach', () => {
   it('leaves the splash up for the FIRST session of a document load', () => {
     // The Launch gate is a page-level handoff. A host that reset to Main Menu here would
