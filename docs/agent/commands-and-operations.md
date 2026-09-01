@@ -17,7 +17,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run mutate:smoke` | One representative real mutation-harness path used by floor CI | under 5 seconds |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
-| `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, and the session-lifecycle round trip | roughly 70–130 seconds after browser setup |
+| `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, and the session-lifecycle round trip | roughly 55–130 seconds after browser setup |
 | `npm run verify:full` | Complete core composite: quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
 
 The figures are approximate measurements/bands from a warm Node 24 Linux checkout on
@@ -40,7 +40,7 @@ WebGL-context census off the document at every step. `renderer.forceContextLoss(
 leaked gameplay canvas is indistinguishable from a live one in the unit fakes, so a
 disposal regression is invisible to Vitest and to every screenshot. It prints each census
 and then returns a verdict; the required `visual` CI job runs it after the screenshot check.
-Measured at 40.0/40.3/40.8 s over three consecutive local runs (Linux, swiftshader, n=3).
+Measured at **23.1 s on the CI runner** (ubuntu-latest, 2026-09-01) and 40.0/40.3/40.8 s over three consecutive local runs (Linux, swiftshader, n=3) — the software renderer locally is the slower of the two.
 
 renderer/WebGL infrastructure. Playwright is not a repository dependency: install the
 version pinned in `.github/workflows/ci.yml` and its Chromium browser before running the
