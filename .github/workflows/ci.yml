@@ -169,6 +169,18 @@ jobs:
       - name: Visual check
         run: npm run visual -- --out visual-out
 
+      # The SESSION LIFECYCLE, which no screenshot can see (issues #429, #480). Every one of
+      # #428's four start gestures is started and quit, and the canvas/live-context census is
+      # read off the document after each. `renderer.forceContextLoss()` means a leaked
+      # gameplay canvas is indistinguishable from a live one in the unit fakes -- a real
+      # browser is the only place it shows. Runs here because this job already has chromium
+      # and a built `dist`, so it adds only its own runtime: 40.0/40.3/40.8 s over three
+      # consecutive local runs (Linux, swiftshader, n=3), against this job's ~130 MB browser
+      # install. Four real matches at 60 Hz is most of that, and the swiftshader software
+      # renderer here is slower than a runner's.
+      - name: Session lifecycle round trip
+        run: npm run roundtrip
+
       # The numbers alone do not tell you WHAT went wrong; the screenshots do.
       - name: Upload screenshots
         if: always()

@@ -17,7 +17,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run mutate:smoke` | One representative real mutation-harness path used by floor CI | under 5 seconds |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
-| `npm run verify:visual` | Build/portability, GL tests, Chromium trace, and screenshot checks | roughly 30–90 seconds after browser setup |
+| `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, and the session-lifecycle round trip | roughly 70–130 seconds after browser setup |
 | `npm run verify:full` | Complete core composite: quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
 
 The figures are approximate measurements/bands from a warm Node 24 Linux checkout on
@@ -32,6 +32,16 @@ focused test without an implicit typecheck, use `npm run test:unit -- <Vitest ar
 local reproduction of the core CI scope, but it is not the routine local candidate gate or
 proof that a change is merge-ready. It deliberately does not silently skip or install
 browser prerequisites. Run `verify:visual` when a change affects user-visible rendering or
+`npm run roundtrip` (`tools/visual/roundtrip.mjs`) is the session-lifecycle half of the
+visual composite and the only check that can see it. It drives all four of #428's match-start
+gestures -- Continue, New Game, a Practice level pick and Versus Start -- through the built
+app in Chromium, quits each back to an application route, and reads the canvas and live
+WebGL-context census off the document at every step. `renderer.forceContextLoss()` means a
+leaked gameplay canvas is indistinguishable from a live one in the unit fakes, so a
+disposal regression is invisible to Vitest and to every screenshot. It prints each census
+and then returns a verdict; the required `visual` CI job runs it after the screenshot check.
+Measured at 40.0/40.3/40.8 s over three consecutive local runs (Linux, swiftshader, n=3).
+
 renderer/WebGL infrastructure. Playwright is not a repository dependency: install the
 version pinned in `.github/workflows/ci.yml` and its Chromium browser before running the
 visual composite locally. Safari and the cross-OS/architecture engine matrix remain
@@ -132,6 +142,7 @@ npm run trace:browser -- --all                              # golden trace in th
 npm run trace:safari                                       # real Safari on supported macOS
 npm run portability                                        # inspect an existing dist/
 npm run visual                                             # inspect an existing dist/ in Chromium
+npm run roundtrip                                          # session lifecycle census in Chromium
 ```
 
 `npm run capture` (`tools/capture/`) wraps the gallery's deterministic moment path in a

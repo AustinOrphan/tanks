@@ -1,9 +1,10 @@
 /**
- * Repeated start/return cycles in a REAL browser (issue #429).
+ * Every match-start gesture, started and returned from, in a REAL browser (issues #429,
+ * #480).
  *
  * The unit tests count disposals through injected seams. This counts what the DOCUMENT is
- * actually left holding after the player starts a match, quits to the menu, and does it
- * again -- which is the only place the failure #429 exists to prevent becomes visible.
+ * actually left holding after the player starts a match and quits to the menu -- which is
+ * the only place the failure #429 exists to prevent becomes visible.
  *
  * WHY IT NEEDS A BROWSER. `startGameWith`'s teardown calls `renderer.forceContextLoss()`
  * (`render/scene.ts`), and a WebGL context does not come back from that. Nothing in the
@@ -11,8 +12,19 @@
  * DOM -- or a page that stacked one per match -- looks identical to a correct one there.
  * Here it does not: the canvas count and the live-context count are read off the document.
  *
- * Reports numbers rather than asserting a threshold: the interesting output is "1 canvas
- * after 3 round trips" versus "4", and a bare pass/fail would hide which.
+ * ALL FOUR GESTURES, NOT A GENERIC CYCLE. #428 admits exactly four things that may build a
+ * session -- Continue, New Game, a Practice level pick and Versus Start -- and each reaches
+ * `startGameWith` down a different path: two are one click on the title panel, one goes
+ * through the level-select pane, one through the VS setup pane and its validated config.
+ * An earlier version of this probe clicked whichever of Continue/New Game happened to be
+ * visible, so half the population was never exercised at all.
+ *
+ * IT NOW RETURNS A VERDICT, where the first version deliberately only reported numbers.
+ * The reason for that original choice still holds -- "1 canvas after 3 round trips" versus
+ * "4" is the interesting output and a bare pass/fail would hide it -- so every census is
+ * still printed in full. What changed is that nothing ran this: it was in no npm script and
+ * no workflow, so the evidence existed only when somebody remembered to go and look. A gate
+ * needs an exit code, and the numbers above it are what says WHICH gesture moved.
  *
  * Usage: node tools/visual/roundtrip.mjs <dist-dir> [--cycles N]
  */
@@ -83,23 +95,151 @@ const CENSUS = () => {
 const visible = (page, sel) =>
   page.evaluate((s) => {
     const el = document.querySelector(s);
-    return !!el && el.offsetParent !== null;
+    return !!el && el.offsetParent !== null && !el.disabled;
   }, sel);
 
-async function clickFirstVisible(page, selectors) {
-  for (const sel of selectors) {
-    if (await visible(page, sel)) {
-      await page.click(sel);
-      return sel;
-    }
+/**
+ * The four gestures #428 admits, and the clicks each one takes.
+ *
+ * ORDER IS LOAD-BEARING. `Continue` needs a campaign run to continue, and the only thing
+ * here that creates one is `New Game` -- so running Continue first would find its button
+ * hidden and report a probe failure for a game behaving correctly. The Practice pick reaches
+ * the same start boundary through the level-select pane, which is why its selector is a
+ * level TILE and not the pane's open button: opening the pane is navigation and builds
+ * nothing, and stopping there would have exercised no start at all.
+ *
+ * `:not([disabled])` on the two second-step selectors is the honest wait rather than a
+ * convenience. A locked level tile is `disabled` (hud.ts renders it that way so it cannot
+ * fire), and `.hud-versus-start` is `disabled` whenever the retained config has a problem --
+ * so without it this would click a dead control and then time out waiting for a canvas,
+ * reporting a disposal failure for what is really an invalid setup.
+ */
+const GESTURES = [
+  { id: 'new-game', clicks: ['.hud-new-game'] },
+  { id: 'continue', clicks: ['.hud-continue'] },
+  { id: 'practice', clicks: ['.hud-levelselect-open', '.hud-level-btn:not([disabled])'] },
+  { id: 'versus', clicks: ['.hud-versus-open', '.hud-versus-start:not([disabled])'] },
+];
+
+/** A control this gesture needs never became clickable. Named so the caller can say which. */
+class UnreachableControl extends Error {
+  constructor(gesture, selector) {
+    super(`${gesture}: "${selector}" never became visible and enabled`);
+    this.gesture = gesture;
+    this.selector = selector;
   }
-  return null;
+}
+
+/**
+ * Wait for a control, then click it.
+ *
+ * WAITS rather than checking once, for the same reason the pause-panel loop below does: a
+ * pane crossfades in, so a probe that asked "is Start visible?" the instant it clicked Versus
+ * would answer no for a pane that arrives 150ms later. A fixed sleep was tried for the Quit
+ * button and found the control on some cycles and not others -- which reads as a lifecycle
+ * failure when it is only a race in this file.
+ */
+async function clickWhenReady(page, gesture, sel, timeout = 10000) {
+  try {
+    await page.waitForFunction(
+      (s) => {
+        const el = document.querySelector(s);
+        return !!el && el.offsetParent !== null && !el.disabled;
+      },
+      sel,
+      { timeout },
+    );
+  } catch {
+    throw new UnreachableControl(gesture, sel);
+  }
+  await page.click(sel);
+}
+
+/**
+ * Return to the application routes the way a player does: pause, then Quit.
+ *
+ * RETRIES the Escape rather than sleeping on it. A fixed delay found the Quit button on some
+ * cycles and not others, which reads as a disposal failure when it is only a race here.
+ */
+async function quitToMenu(page, gesture) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await page.keyboard.press('Escape');
+    try {
+      await page.waitForFunction(
+        () => {
+          const b = document.querySelector('.hud-quit');
+          return !!b && b.offsetParent !== null;
+        },
+        undefined,
+        { timeout: 3000 },
+      );
+    } catch {
+      continue;
+    }
+    await page.click('.hud-quit');
+    return;
+  }
+  throw new UnreachableControl(gesture, '.hud-quit');
+}
+
+/** One gesture: census before, start, census in match, return, census after. */
+async function runGesture(page, gesture) {
+  const before = await page.evaluate(CENSUS);
+  for (const sel of gesture.clicks) await clickWhenReady(page, gesture.id, sel);
+
+  // The canvas has to be BUILT and SIZED, not merely present: #428's shipped defect was a
+  // start that built the board and left the player on the Main Menu, and a zero-width canvas
+  // is what that looked like from out here.
+  try {
+    await page.waitForFunction(
+      () => {
+        const c = document.querySelector('canvas:not(.hud-preview)');
+        return !!c && c.width > 0;
+      },
+      undefined,
+      { timeout: 20000 },
+    );
+  } catch {
+    throw new UnreachableControl(gesture.id, 'a sized gameplay canvas');
+  }
+  const inMatch = await page.evaluate(CENSUS);
+
+  await quitToMenu(page, gesture.id);
+  await page
+    .waitForFunction(() => !document.querySelector('canvas:not(.hud-preview)'), undefined, {
+      timeout: 5000,
+    })
+    .catch(() => {});
+  const after = await page.evaluate(CENSUS);
+  return { before, inMatch, after };
+}
+
+/**
+ * What each census has to say, stated once so the printed numbers and the exit code cannot
+ * drift apart.
+ *
+ * `canvases <= 2` on every reading, not just at the end: the second is the HUD's persistent
+ * Customize preview, which is page-owned and correct to keep, and a third at any point is a
+ * gameplay canvas nobody removed. Checking only the final reading would let a match stack a
+ * canvas and then have the LAST quit tidy up, which is the accumulation this exists to catch.
+ */
+function faults({ before, inMatch, after }, id) {
+  const out = [];
+  if (before.gameplay !== 0 || before.liveContexts !== 0)
+    out.push(`${id}: entered with ${before.gameplay} gameplay canvas(es), ${before.liveContexts} live context(s)`);
+  if (inMatch.gameplay !== 1 || inMatch.liveContexts !== 1)
+    out.push(`${id}: in match with ${inMatch.gameplay} gameplay canvas(es), ${inMatch.liveContexts} live context(s) -- expected exactly 1 of each`);
+  if (after.gameplay !== 0 || after.liveContexts !== 0)
+    out.push(`${id}: LEAKED ${after.gameplay} gameplay canvas(es) and ${after.liveContexts} live context(s) after the return`);
+  for (const [when, c] of [['before', before], ['in match', inMatch], ['after', after]])
+    if (c.canvases > 2) out.push(`${id}: ${c.canvases} canvases ${when} -- more than the gameplay canvas and the HUD preview`);
+  return out;
 }
 
 async function main() {
   const [distArg, ...rest] = process.argv.slice(2);
   const dist = resolve(distArg ?? 'dist');
-  const cycles = rest.includes('--cycles') ? Number(rest[rest.indexOf('--cycles') + 1]) : 3;
+  const cycles = rest.includes('--cycles') ? Number(rest[rest.indexOf('--cycles') + 1]) : 1;
   if (!existsSync(join(dist, 'index.html'))) {
     console.error(`no index.html in ${dist} -- build first`);
     process.exit(2);
@@ -117,61 +257,49 @@ async function main() {
   await page.keyboard.press('Space'); // leave the Launch splash
   await page.waitForTimeout(300);
 
-  console.log('after boot, before any match:', JSON.stringify(await page.evaluate(CENSUS)));
+  const problems = [];
+  const boot = await page.evaluate(CENSUS);
+  console.log('after boot, before any match:', JSON.stringify(boot));
+  if (boot.gameplay !== 0 || boot.liveContexts !== 0)
+    problems.push(`boot: the page loaded owning ${boot.gameplay} gameplay canvas(es) and ${boot.liveContexts} live context(s)`);
 
-  for (let i = 1; i <= cycles; i += 1) {
-    const started = await clickFirstVisible(page, ['.hud-continue', '.hud-new-game', '.hud-action']);
-    if (!started) {
-      console.error(`cycle ${i}: no start control visible`);
-      process.exitCode = 1;
-      break;
-    }
-    await page.waitForFunction(() => {
-      const c = document.querySelector('canvas:not(.hud-preview)');
-      return !!c && c.width > 0;
-    }, undefined, { timeout: 20000 });
-    const inMatch = await page.evaluate(CENSUS);
-
-    // Pause, then Quit -- the most-travelled exit in the game. WAITS for the pause panel
-    // rather than sleeping: a fixed delay found the Quit button on some cycles and not
-    // others, which reads as a disposal failure when it is only a race in this probe.
-    let quit = null;
-    for (let attempt = 1; attempt <= 3 && !quit; attempt += 1) {
-      await page.keyboard.press('Escape');
+  let ran = 0;
+  for (let cycle = 1; cycle <= cycles; cycle += 1) {
+    for (const gesture of GESTURES) {
+      const tag = cycles > 1 ? `cycle ${cycle} ${gesture.id}` : gesture.id;
+      let census;
       try {
-        await page.waitForFunction(
-          () => {
-            const b = document.querySelector('.hud-quit');
-            return !!b && b.offsetParent !== null;
-          },
-          undefined,
-          { timeout: 3000 },
-        );
-      } catch {
+        census = await runGesture(page, gesture);
+      } catch (e) {
+        // LOUD, and it does not stop the sweep: one unreachable control must not hide
+        // whether the other three gestures leak.
+        console.log(`${tag}: FAILED -- ${e instanceof Error ? e.message : String(e)}`);
+        problems.push(`${tag}: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
-      await page.click('.hud-quit');
-      quit = '.hud-quit';
+      ran += 1;
+      console.log(
+        `${tag}: before ${JSON.stringify(census.before)} | in match ${JSON.stringify(census.inMatch)} | after ${JSON.stringify(census.after)}`,
+      );
+      problems.push(...faults(census, tag));
     }
-    if (!quit) {
-      console.error(`cycle ${i}: never reached a pause panel with a Quit button`);
-      process.exitCode = 1;
-      break;
-    }
-    // Wait for the return to settle rather than sleeping on it.
-    await page.waitForFunction(
-      () => !document.querySelector('canvas:not(.hud-preview)'),
-      undefined,
-      { timeout: 5000 },
-    ).catch(() => {});
-    const afterQuit = await page.evaluate(CENSUS);
-
-    console.log(
-      `cycle ${i}: started via ${started} -> ${JSON.stringify(inMatch)} | quit via ${quit} -> ${JSON.stringify(afterQuit)}`,
-    );
   }
 
+  // The denominator, printed rather than implied: "4 ran" against a silent 2 is the whole
+  // difference between a sweep and a sample, and the earlier version of this probe could
+  // skip a gesture without ever saying so.
+  console.log(`gestures run: ${ran} of ${cycles * GESTURES.length}`);
   console.log('page errors:', errors.length ? errors : 'none');
+  if (errors.length) problems.push(`${errors.length} page error(s)`);
+
+  if (problems.length) {
+    console.error(`\nFAIL -- ${problems.length} problem(s):`);
+    for (const p of problems) console.error(`  - ${p}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`\nOK -- ${ran} gesture(s), no accumulation, no page errors`);
+  }
+
   await browser.close();
   server.close();
 }
