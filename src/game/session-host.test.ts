@@ -5,7 +5,10 @@ import { defaultSlots } from './versus-setup';
 import type { GameHandle } from './loop';
 import type { VersusConfig } from './versus-config';
 import type { AppShell } from './app-shell';
-import type { RouteHost } from './route-host';
+import type { RouteHost, StartIntent } from './route-host';
+
+/** The intent the eager boot used to be: resume the run on whatever board it reached. */
+const CONTINUE: StartIntent = { kind: 'campaign-continue' };
 
 function config(arenaId: string): VersusConfig {
   return { mode: 'ffa', players: 2, arenaId, stock: 3, friendlyFire: false, slots: defaultSlots(2) };
@@ -13,7 +16,7 @@ function config(arenaId: string): VersusConfig {
 
 type StartArgs = [
   HTMLCanvasElement,
-  { config: VersusConfig } | null,
+  StartIntent,
   (c: VersusConfig) => void,
   () => void,
   AppShell,
@@ -34,6 +37,8 @@ function harness(): {
    * disposed each session once does. See the stale-capture controls below.
    */
   disposedIds: number[];
+  /** Which session (by construction order) was SHOWN, in order (issue #428). */
+  enteredIds: number[];
   shellDisposals: number;
   /** The page's route UI, borrowed by every session and disposed by neither. */
   routeHost: RouteHost;
@@ -43,6 +48,7 @@ function harness(): {
   const startArgs: StartArgs[] = [];
   const canvases: HTMLCanvasElement[] = [];
   const disposedIds: number[] = [];
+  const enteredIds: number[] = [];
   const box = { shellDisposals: 0, routeHostDisposals: 0 };
   let nextId = 0;
   const shell = {
@@ -70,6 +76,9 @@ function harness(): {
       startArgs.push([canvas, versus, reqVersus, reqCampaign, s, rh]);
       const id = nextId++;
       return {
+        enterGameplay(): void {
+          enteredIds.push(id);
+        },
         dispose(): void {
           disposedIds.push(id);
         },
@@ -90,6 +99,7 @@ function harness(): {
     startArgs,
     canvases,
     disposedIds,
+    enteredIds,
     get routeHostDisposals(): number {
       return box.routeHostDisposals;
     },
@@ -102,15 +112,15 @@ function harness(): {
 describe('createGameSessionHost: start', () => {
   it('builds a canvas in the root and starts ONE campaign session on it', () => {
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     expect(h.startArgs).toHaveLength(1);
-    const [canvas, versus] = h.startArgs[0];
+    const [canvas, intent] = h.startArgs[0];
     expect(canvas).toBe(h.canvases[0]);
     expect(canvas.parentElement, 'the session was started on a canvas outside the root').toBe(h.root);
-    // `null`, not a config: the page opens on campaign. A host that started the first
-    // session from a retained versus config would put a returning player straight into
-    // a match they did not ask for.
-    expect(versus).toBeNull();
+    // The intent it was ASKED for, unchanged (issue #428). A host that substituted its
+    // own -- a retained versus config, say -- would put a player who pressed Continue
+    // straight into a match they did not ask for.
+    expect(intent).toEqual(CONTINUE);
   });
 
   it('a SECOND start() replaces the first session rather than orphaning it', () => {
@@ -118,8 +128,8 @@ describe('createGameSessionHost: start', () => {
     // path is the shape this had first, and it left the first session's frame loop,
     // renderer and GL context running with nothing holding its handle.
     const h = harness();
-    h.host.start();
-    h.host.start();
+    h.host.start(CONTINUE);
+    h.host.start(CONTINUE);
     expect(h.disposedIds, 'the first session was orphaned').toEqual([0]);
     expect(h.root.querySelectorAll('canvas')).toHaveLength(1);
   });
@@ -127,7 +137,7 @@ describe('createGameSessionHost: start', () => {
   it('start() after dispose() starts nothing -- the latch covers the first session too', () => {
     const h = harness();
     h.host.dispose();
-    h.host.start();
+    h.host.start(CONTINUE);
     expect(h.startArgs, 'a session started on a page that had already gone').toEqual([]);
   });
 
@@ -149,10 +159,13 @@ describe('createGameSessionHost: the reboot seams', () => {
     // fresh route UI (issue #468) would rebuild the whole menu on every switch, which is
     // the defect this host's route-UI argument exists to make impossible.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.startArgs[0][2](config('arena-02'));
+    // TWO sessions, not three: since issue #428 the Campaign button STOPS rather than
+    // replacing -- returning to the campaign title needs no session at all now that the
+    // page owns its own menu (issue #468).
     h.startArgs[1][3]();
-    expect(h.startArgs).toHaveLength(3);
+    expect(h.startArgs).toHaveLength(2);
     for (const [, , reqVersus, reqCampaign, shell, routeHost] of h.startArgs) {
       expect(reqVersus).toBe(h.startArgs[0][2]);
       expect(reqCampaign).toBe(h.startArgs[0][3]);
@@ -165,28 +178,38 @@ describe('createGameSessionHost: the reboot seams', () => {
     // boot.ts never reads these, but a caller that wired `host.requestVersusSession` to
     // its own UI must get the one the sessions hold, not a second entry point.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     expect(h.startArgs[0][2]).toBe(h.host.requestVersusSession);
     expect(h.startArgs[0][3]).toBe(h.host.requestCampaignSession);
   });
 
   it('a versus request disposes the running session exactly once and starts one carrying the config', () => {
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     const vs = config('vs-duel-01');
     h.host.requestVersusSession(vs);
     expect(h.disposedIds, 'the outgoing session was left running').toEqual([0]);
     expect(h.startArgs).toHaveLength(2);
-    expect(h.startArgs[1][1]).toEqual({ config: vs });
+    expect(h.startArgs[1][1]).toEqual({ kind: 'versus', config: vs });
   });
 
-  it('a campaign request from a versus session starts with versus: null', () => {
+  /**
+   * Re-anchored by issue #428: a campaign request STARTS NOTHING.
+   *
+   * It used to build a whole campaign session -- canvas, renderer, world, seed -- for the
+   * sole purpose of showing a title screen, which is exactly the eager creation #428
+   * removes. The page has owned that title screen since #468, so this now disposes the
+   * versus session and leaves the host empty.
+   */
+  it('a campaign request stops the versus session and starts nothing', () => {
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestCampaignSession();
     expect(h.disposedIds).toEqual([0, 1]);
-    expect(h.startArgs[2][1], 'the campaign reboot carried the versus config forward').toBeNull();
+    expect(h.startArgs, 'returning to the campaign title built a session').toHaveLength(2);
+    expect(h.host.hasSession()).toBe(false);
+    expect(h.root.querySelectorAll('canvas'), 'the dead canvas was left behind').toHaveLength(0);
   });
 
   it('a versus request AFTER a campaign detour carries its OWN config', () => {
@@ -194,11 +217,12 @@ describe('createGameSessionHost: the reboot seams', () => {
     // so a host that replayed a STALE retained config would put the player on the wrong
     // board -- and with one config in the fixture nothing would notice.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestCampaignSession();
     h.host.requestVersusSession(config('vs-duel-01'));
-    expect(h.startArgs[3][1]).toEqual({ config: config('vs-duel-01') });
+    // Index 2, not 3: the campaign detour no longer builds a session of its own.
+    expect(h.startArgs[2][1]).toEqual({ kind: 'versus', config: config('vs-duel-01') });
   });
 
   it('a SECOND replacement disposes the SECOND session, not the first -- the stale-capture control', () => {
@@ -206,7 +230,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     // session's loop, listeners and GL context all running. `disposedIds` is what tells
     // that apart from correct behaviour; a count of 2 cannot.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestVersusSession(config('vs-duel-01'));
     expect(h.disposedIds).toEqual([0, 1]);
@@ -218,7 +242,7 @@ describe('createGameSessionHost: the reboot seams', () => {
     // forever in a real browser, invisibly to every fake here. The removal is what stops
     // repeated switches stacking disconnected canvases behind the live one.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.requestVersusSession(config('arena-02'));
     expect(h.canvases).toHaveLength(2);
     expect(h.startArgs[1][0], 'the replacement reused the dead canvas').toBe(h.canvases[1]);
@@ -226,16 +250,20 @@ describe('createGameSessionHost: the reboot seams', () => {
     expect(h.root.querySelectorAll('canvas')).toHaveLength(1);
   });
 
-  it('leaves exactly one canvas in the root after repeated switches', () => {
+  it('leaves NO canvas in the root after repeated switches ending on campaign', () => {
+    // Re-anchored by issue #428. Nine sessions became five -- one Continue plus four
+    // Versus Starts, with each Campaign return building nothing -- and the root ends
+    // EMPTY rather than holding the ninth session's canvas, because the last thing that
+    // happened was a return to a title screen the page owns.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     for (let i = 0; i < 4; i += 1) {
       h.host.requestVersusSession(config('arena-02'));
       h.host.requestCampaignSession();
     }
-    expect(h.startArgs).toHaveLength(9);
-    expect(h.root.querySelectorAll('canvas')).toHaveLength(1);
-    expect(h.root.querySelector('canvas')).toBe(h.startArgs[8][0]);
+    expect(h.startArgs).toHaveLength(5);
+    expect(h.root.querySelectorAll('canvas'), 'a switch stacked a dead canvas').toHaveLength(0);
+    expect(h.host.hasSession()).toBe(false);
   });
 });
 
@@ -245,7 +273,7 @@ describe('createGameSessionHost: stop and dispose', () => {
     // teardown calls, and there is nothing to draw afterwards. Removing the canvas here
     // would make the last frame vanish before the document does.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.stop();
     expect(h.disposedIds).toEqual([0]);
     expect(h.root.querySelectorAll('canvas'), 'stop() removed the canvas').toHaveLength(1);
@@ -256,7 +284,7 @@ describe('createGameSessionHost: stop and dispose', () => {
     // twice, which double-releases the audio engine and unregisters listeners the NEXT
     // session may already own.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.stop();
     h.host.stop();
     expect(h.disposedIds).toEqual([0]);
@@ -270,7 +298,7 @@ describe('createGameSessionHost: stop and dispose', () => {
 
   it('dispose() disposes the CURRENT session after a replacement, not the original', () => {
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.requestVersusSession(config('arena-02'));
     h.host.dispose();
     expect(h.disposedIds).toEqual([0, 1]);
@@ -282,7 +310,7 @@ describe('createGameSessionHost: stop and dispose', () => {
     // frame loop -- onto a document on its way out, holding a GL context nothing will
     // ever dispose.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.dispose();
     const startsBefore = h.startArgs.length;
     const canvasesBefore = h.canvases.length;
@@ -300,7 +328,7 @@ describe('createGameSessionHost: stop and dispose', () => {
     // it, and the engine LATCHES (audio/engine.ts): a host that disposed it on a switch
     // would leave every later session silent with nothing thrown.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.requestVersusSession(config('arena-02'));
     h.host.requestCampaignSession();
     h.host.stop();
@@ -333,13 +361,13 @@ describe('createGameSessionHost: the empty host (issue #427)', () => {
     // assertion above would still pass -- which is the shape of a guard that pins nothing.
     const h = harness();
     expect(h.host.hasSession()).toBe(false);
-    h.host.start();
+    h.host.start(CONTINUE);
     expect(h.host.hasSession()).toBe(true);
   });
 
   it('returns to empty on stop, and stays empty after dispose', () => {
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.stop();
     expect(h.host.hasSession(), 'stop left a session behind').toBe(false);
     // `dispose` is `stop` plus the latch, so an already-stopped host stays empty and a
@@ -358,7 +386,7 @@ describe('createGameSessionHost: the empty host (issue #427)', () => {
     // audio engine with nothing thrown.
     const h = harness();
     expect(h.shellDisposals).toBe(0);
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.stop();
     h.host.dispose();
     expect(h.shellDisposals, 'the host disposed the page shell').toBe(0);
@@ -369,7 +397,7 @@ describe('createGameSessionHost: the empty host (issue #427)', () => {
     // Settings, audio and the dismissed Launch gate are identity-scoped -- a second
     // instance is how mute and the splash used to reset on a Campaign<->Versus switch.
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     h.host.requestVersusSession(config('vs-duel-01'));
     expect(h.startArgs).toHaveLength(2);
     expect(h.startArgs[0][4]).toBe(h.shell);
@@ -381,14 +409,22 @@ describe('createGameSessionHost: the empty host (issue #427)', () => {
     // and at no point are two sessions live. Read off the disposal ledger, which
     // distinguishes "disposed each once" from "disposed the first one twice".
     const h = harness();
-    h.host.start();
+    h.host.start(CONTINUE);
     expect(h.host.hasSession()).toBe(true);
     h.host.requestVersusSession(config('vs-duel-01'));
     expect(h.disposedIds, 'the campaign session outlived its replacement').toEqual([0]);
     expect(h.host.hasSession()).toBe(true);
+    // ...and the Campaign return leaves ZERO, since issue #428: an empty host at an
+    // application route is the normal state, not a gap between two sessions.
     h.host.requestCampaignSession();
     expect(h.disposedIds).toEqual([0, 1]);
+    expect(h.host.hasSession(), 'returning to the title left a session running').toBe(false);
+    expect(h.root.querySelectorAll('canvas'), 'a dead canvas was left behind').toHaveLength(0);
+
+    // And the host is not spent: a later Start still works. Without this the "exactly one
+    // at a time" claim would be satisfied by a host that could never start another.
+    h.host.start(CONTINUE);
     expect(h.host.hasSession()).toBe(true);
-    expect(h.root.querySelectorAll('canvas'), 'a dead canvas was left behind the live one').toHaveLength(1);
+    expect(h.disposedIds).toEqual([0, 1]);
   });
 });

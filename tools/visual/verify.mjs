@@ -406,6 +406,48 @@ function runChecks(results) {
  * that, because the checks downstream report the consequence more usefully than a
  * thrown error here would.
  */
+/**
+ * Press the button that starts a match, and wait for the board.
+ *
+ * NEW IN ISSUE #428, and the reason it is new: the page no longer creates a gameplay
+ * session on load. Booting now reaches the Main Menu with no world, no seed, no renderer
+ * and no canvas -- so every check below, all of which measure what the BOARD paints, has
+ * nothing to measure until a player asks for a match. Before #428 this function would
+ * have been dead code; without it, every board check reports 0.0% painted on a page that
+ * is working exactly as designed.
+ *
+ * Continue when a run exists, New Game otherwise -- whichever the HUD is actually
+ * offering, since `applyTitleAffordances` hides the other. Returns whether it managed to
+ * start one; the call site ignores that for the same reason `dismissSplash` is ignored:
+ * the checks downstream report the consequence more usefully than a throw here would.
+ */
+async function startMatch(page) {
+  const visible = (sel) =>
+    page.evaluate((s) => {
+      const el = document.querySelector(s);
+      return !!el && el.offsetParent !== null;
+    }, sel);
+
+  for (const sel of ['.hud-continue', '.hud-new-game', '.hud-action']) {
+    if (!(await visible(sel))) continue;
+    await page.click(sel);
+    try {
+      await page.waitForFunction(
+        () => {
+          const c = document.querySelector('canvas:not(.hud-preview)');
+          return !!c && c.width > 0 && c.height > 0;
+        },
+        undefined,
+        { timeout: 20000 },
+      );
+    } catch {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 async function dismissSplash(page) {
   const isShowing = () =>
     page.evaluate(() => {
@@ -443,11 +485,14 @@ async function settle(page) {
   try {
     await page.waitForFunction(
       () => {
-        // `:not(.hud-preview)` since issue #468: the route UI is now built BEFORE the
-        // gameplay canvas, so the HUD's Customize preview canvas is first in the
-        // document. A bare `canvas` selector reported that one's context instead --
-        // measured, not inferred: this check read a 300x150 buffer after the hoist and a
-        // full-viewport one before it, while every screenshot-based check was unaffected.
+        // `:not(.hud-preview)` since issue #468: the route UI is built BEFORE the gameplay
+        // canvas, so the HUD's Customize preview canvas is first in the document. A bare
+        // `canvas` selector reported that one's context instead -- measured, not inferred:
+        // this check read a 300x150 buffer after the hoist and a full-viewport one before
+        // it, while every screenshot-based check was unaffected. Since issue #428 it also
+        // has to be `:not`, for a second reason: on a page that has not started a match
+        // there is no gameplay canvas at all, and the preview would report a live context
+        // for one.
         const c = document.querySelector('canvas:not(.hud-preview)');
         if (!c || !c.width || !c.height) return false;
         if (!document.querySelector('.hud-topbar')) return false;
@@ -521,14 +566,19 @@ async function main() {
         errors = [];
         page.on('pageerror', (e) => errors.push(String(e)));
         await page.goto(base, { waitUntil: 'load' });
+        // ORDER CHANGED BY ISSUE #428. The splash and the Start button used to be things
+        // to clear out of the way of an already-running match; they are now the only way
+        // to reach one, so both happen BEFORE settle() rather than after it. Left in the
+        // old order, settle() would wait 20s for a gameplay canvas the page has correctly
+        // not built, twice, and then screenshot the Main Menu.
+        await dismissSplash(page);
+        await startMatch(page);
         gl = await settle(page);
         if (gl.hasContext && gl.contextLost === false) break;
         if (attempt < 2) {
           console.log(`  ${vp.name}: GL context lost on attempt ${attempt}, retrying once`);
         }
       }
-
-      await dismissSplash(page);
 
       const shot = await page.screenshot({ type: 'png' });
       await writeFile(join(outDir, `${vp.name}.png`), shot);

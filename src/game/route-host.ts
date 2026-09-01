@@ -2,7 +2,7 @@ import { createRouteUi, type RouteUi, type RouteUiDeps, type StyleSink } from '.
 import { createOutcomeClassifier, type GameStateMachine, type OutcomeContext } from './state';
 import { versusDraw } from './app-state';
 import type { Hud } from './hud';
-import type { GameDeps } from './loop';
+import { locationToHudSurface, type GameDeps } from './loop';
 import type { VersusConfig } from './versus-config';
 import type { SlotSource } from '../input/assignment';
 
@@ -52,9 +52,37 @@ export type RouteHostDeps = RouteUiDeps &
  * which is the temporary compatibility path the issue permits and #428 replaces.
  */
 export interface SessionRequests {
+  /**
+   * Start a match (issue #428). The ONE boundary that creates a gameplay session.
+   *
+   * Reached from the route UI when no session holds the slot, which since #428 is the
+   * state the page boots into: `boot.ts` no longer starts a session eagerly, so Continue,
+   * New Game, a Practice level pick and Versus Start are the only four things that can
+   * bring a world, a seed and a renderer into existence.
+   */
+  readonly requestStart: (intent: StartIntent) => void;
   readonly requestVersusSession: (config: VersusConfig) => void;
   readonly requestCampaignSession: () => void;
 }
+
+/**
+ * What the player asked to play (issue #428).
+ *
+ * Deliberately a REQUEST, not a resolved session: it names the gesture, and the start
+ * boundary in `boot.ts`/`loop.ts` is what turns it into a level, an identity, a seed and
+ * a world. Keeping the two apart is what lets an invalid request be rejected before any
+ * of that is consumed -- `session-intent.ts` makes the same split for a boot, and this is
+ * the per-gesture version of it.
+ */
+export type StartIntent =
+  /** Continue: resume the active campaign run on whatever level it reached. */
+  | { readonly kind: 'campaign-continue' }
+  /** New Game: start a fresh run at level one. The only intent that writes the run. */
+  | { readonly kind: 'campaign-new' }
+  /** A Practice level pick. Isolated play; never reads or writes the campaign run. */
+  | { readonly kind: 'practice'; readonly level: number }
+  /** Versus Start, on the validated retained configuration. */
+  | { readonly kind: 'versus'; readonly config: VersusConfig };
 
 /**
  * One session's hold on the gameplay-facing half of the route UI.
@@ -72,6 +100,17 @@ export interface GameplaySlot {
   onFireTap(cb: () => void): void;
   onQuitToTitle(cb: () => void): void;
   onReassignSlot(cb: (slot: number, source: SlotSource) => void): void;
+  /**
+   * This session's gameplay hotkeys -- mute, pause, the developer keys.
+   *
+   * On the SLOT rather than on the host directly (issue #428) because the page has to see
+   * the key first: the Launch route is dismissed by any key, and with two independent
+   * listeners the page's would dismiss and the session's would then see a route that was
+   * no longer `launch` and treat the same keystroke as a hotkey. "Press any key to begin"
+   * would include M, which mutes -- silencing the menu bed the screen exists to make
+   * audible. One listener, one decision, no ordering to get right.
+   */
+  onKey(cb: (e: KeyboardEvent) => void): void;
   /**
    * Where `classifyOutcome` reads its session-specific context.
    *
@@ -146,6 +185,7 @@ interface SlotState {
   fireTap?: () => void;
   quitToTitle?: () => void;
   reassignSlot?: (slot: number, source: SlotSource) => void;
+  key?: (e: KeyboardEvent) => void;
   outcome?: OutcomeContext;
   style?: StyleSink;
 }
@@ -189,7 +229,10 @@ export function createRouteHost(
    */
   const routeDeps: RouteUiDeps = {
     ...deps,
-    requestVersusSession: requests.requestVersusSession,
+    // Versus Start goes through the SAME start boundary as the other three (issue #428);
+    // `requestVersusSession` is kept on the seam because a session's own Rematch still
+    // reboots through it, and #429 owns collapsing the two.
+    requestVersusSession: (config) => requests.requestStart({ kind: 'versus', config }),
     requestCampaignSession: requests.requestCampaignSession,
     get initialVersusConfig(): VersusConfig | null {
       return versusConfig;
@@ -230,13 +273,109 @@ export function createRouteHost(
   // the slot at CLICK time, so it dispatches to whichever session is live and does
   // nothing at all when none is. See this module's doc comment for why the sessions
   // cannot register these themselves.
-  hud.onStartRestart(() => live?.startRestart?.());
-  hud.onLevelSelect((level) => live?.levelSelect?.(level));
-  hud.onNewGame(() => live?.newGame?.());
+  /**
+   * Three of the seven branch on whether a session exists (issue #428).
+   *
+   * With a session attached they mean what they always meant -- Resume, Retry, Play
+   * Again, a mid-session New Game -- and go to the slot. With NO session they are the
+   * gestures that create one, and go to the application-level start boundary instead.
+   *
+   * That branch is the whole of #428 at this layer, and it is here rather than inside
+   * each handler because "is a match running?" is a fact about the page, not about the
+   * button. The other four (`onMineTap`, `onFireTap`, `onQuitToTitle`, `onReassignSlot`)
+   * have no meaning without a match and stay pure no-ops when the slot is empty.
+   */
+  hud.onStartRestart(() => {
+    if (live) {
+      live.startRestart?.();
+      return;
+    }
+    requests.requestStart({ kind: 'campaign-continue' });
+  });
+  hud.onLevelSelect((level) => {
+    if (live) {
+      live.levelSelect?.(level);
+      return;
+    }
+    requests.requestStart({ kind: 'practice', level });
+  });
+  hud.onNewGame(() => {
+    if (live) {
+      live.newGame?.();
+      return;
+    }
+    requests.requestStart({ kind: 'campaign-new' });
+  });
   hud.onMineTap(() => live?.mineTap?.());
   hud.onFireTap(() => live?.fireTap?.());
   hud.onQuitToTitle(() => live?.quitToTitle?.());
   hud.onReassignSlot((slot, source) => live?.reassignSlot?.(slot, source));
+
+  /**
+   * THE LAUNCH GESTURE, moved to the page by issue #428.
+   *
+   * "Press any key or tap to begin" was dismissed by a listener a SESSION registered, and
+   * that was survivable only while `boot.ts` started one eagerly. With the page booting
+   * into an empty host, a listener that lives on a session means the splash can never be
+   * dismissed at all: the first thing a player ever sees would be the last, and no gesture
+   * could get past it.
+   *
+   * Both halves are page-level facts, which is why they belong together here:
+   *
+   *  - `sm.dismissLaunch()` acts ONLY from the Launch route (state.ts), so the listeners
+   *    are unconditional and the machine does the guarding -- a click during play falls
+   *    through to the session's own handlers unchanged.
+   *  - `launchGate.dismiss()` records it on the SHELL, which is what stops a later session
+   *    -- or, since #428, a page that has never had one -- reopening on the splash.
+   *
+   * The audio half of this is ORDERING, not unlocking (see `dismissLaunch` in state.ts):
+   * `audio/engine.ts` already resumes the context from its own document-level handler.
+   * What this guarantees is that a gesture has happened before the menu is on screen.
+   */
+  /**
+   * WHICH SCREEN IS SHOWING -- painted by the page, not by a session (issue #428).
+   *
+   * This subscription and the initial paint below it lived in `startGameWith`, which was
+   * survivable only while a session existed from the first frame. With the page booting
+   * into an empty host, a HUD that only a session ever painted would show the player
+   * nothing at all: no splash, no Main Menu, and therefore no button with which to start
+   * the session that would have painted them.
+   *
+   * ONLY the surface moved. The session's own `sm.onChange` still owns everything that
+   * needs a world -- the music context, clearing queued input, the run bookkeeping -- and
+   * still runs for every change this one sees.
+   *
+   * `locationToHudSurface` is imported from `loop.ts` as a VALUE while `loop.ts` imports
+   * this module's types only, so the dependency is one-directional at runtime.
+   */
+  sm.onChange((location) => hud.setState(locationToHudSurface(location)));
+  hud.setState(locationToHudSurface(sm.location));
+
+  const onLaunchGesture = (): void => {
+    sm.dismissLaunch();
+    deps.launchGate.dismiss();
+  };
+  deps.host.addEventListener('pointerdown', onLaunchGesture);
+
+  /**
+   * ONE keydown listener for the whole page, and it decides.
+   *
+   * A key at the Launch route dismisses the splash and does NOTHING ELSE -- that early
+   * return is the whole of "the key that begins the game must not also mute it". Every
+   * other key falls through to whatever session holds the slot, unchanged.
+   *
+   * Two independent listeners would not do: whichever ran first would move the route out
+   * from under the other's guard, and which one that is depends on registration order at
+   * a host neither of them owns.
+   */
+  const onHostKey = (e: KeyboardEvent): void => {
+    if (sm.atLaunch) {
+      onLaunchGesture();
+      return;
+    }
+    live?.key?.(e);
+  };
+  deps.host.addEventListener('keydown', onHostKey);
 
   // The paint shop's push at the gameplay renderer, same trampoline shape. `route-ui.ts`
   // owns the null case and documents it as the normal state of a session-less page, so
@@ -280,6 +419,9 @@ export function createRouteHost(
         onReassignSlot(cb): void {
           if (current()) state.reassignSlot = cb;
         },
+        onKey(cb): void {
+          if (current()) state.key = cb;
+        },
         setOutcomeContext(ctx): void {
           if (current()) state.outcome = ctx;
         },
@@ -298,7 +440,9 @@ export function createRouteHost(
       };
     },
     dispose(): void {
-      // The preview first, for the same reason `startGameWith` disposed it before the
+      deps.host.removeEventListener('pointerdown', onLaunchGesture);
+      deps.host.removeEventListener('keydown', onHostKey);
+      // The preview then, for the same reason `startGameWith` disposed it before the
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
       routeUi.disposePreview();
       hud.dispose();

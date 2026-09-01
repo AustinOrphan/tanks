@@ -84,7 +84,7 @@ import {
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from './devflags';
-import type { RouteHost } from './route-host';
+import type { RouteHost, StartIntent } from './route-host';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
@@ -402,6 +402,25 @@ export interface LaunchGate {
 
 export interface GameHandle {
   dispose(): void;
+  /**
+   * Show this session (issue #428). Called by the start boundary, once, right after the
+   * session is built.
+   *
+   * NOT done inside `startGameWith` itself, and the distinction is the point: building a
+   * session and SHOWING it are different acts, and only the second one is a route change.
+   * Before #428 they were separable in production too -- the eager boot built a session
+   * and opened at the title, and `onStartRestart`'s main-menu branch was what entered
+   * gameplay later. That branch is unreachable now, because with no session attached the
+   * click goes to the start boundary instead of to the slot, which is how a session came
+   * to be built with nobody left to reveal it.
+   *
+   * FOUND IN A BROWSER, not by a unit test, and the gap is worth recording: every unit
+   * assertion was about how many sessions, canvases and worlds got built, and every one
+   * was right. The game still did not start. `tools/visual/roundtrip.mjs` reported
+   * `canvases: 1` with the title buttons still on screen -- which is what a player would
+   * have seen: a menu that builds a match behind itself and never shows it.
+   */
+  enterGameplay(): void;
 }
 
 /**
@@ -1133,6 +1152,16 @@ export function startGameWith(
    * so keeping the argument would have left every caller passing an element nothing read.
    */
   routeHost: RouteHost,
+  /**
+   * WHICH match the player just asked for (issue #428).
+   *
+   * Required, and the reason it is: `boot.ts` no longer starts a session eagerly, so
+   * every call to this function now answers a deliberate gesture. A default would put
+   * back the one thing #428 removes -- a session that exists because the page loaded.
+   *
+   * See the START BOUNDARY block below for what each intent moves.
+   */
+  intent: StartIntent,
 ): GameHandle {
   // The STARTING level's board, not a fixed arena: a dev-flag jump may open on a
   // different-sized level, and the renderer must be born fitting it.
@@ -1351,6 +1380,59 @@ export function startGameWith(
   let sessionIdentity: SessionIdentity = bootContext.identity;
 
   /**
+   * THE START BOUNDARY (issue #428).
+   *
+   * `bootContext` above answers "what kind of session do this page's developer flags and
+   * retained versus config describe" -- a question about the PAGE, and the only question
+   * there was while `boot.ts` started a session eagerly. This answers the one #428 adds:
+   * which board did the player just ask for, and does that request own the campaign run.
+   *
+   * Three of the four intents move something here, and each moves the minimum:
+   *
+   *  - `campaign-continue` moves NOTHING. `deps.levels.start` already resolves to the
+   *    run's own level (levels.ts) and `bootLives` already adopts its lives, which is
+   *    exactly what Continue means -- so the intent that used to be the eager boot is
+   *    still, byte for byte, the eager boot's behaviour.
+   *  - `campaign-new` writes the run ONCE, here, and lands on level one. The write is
+   *    guarded the same way the in-session New Game button's is: a session that does not
+   *    own the run (practice, sandbox, a developer jump, versus) gets the fresh board
+   *    without the run mutation. `startNewRun` is the only persistence write any start
+   *    request makes.
+   *  - `practice` switches the identity to `practice-level` and lands on the picked
+   *    level, so the run is never read or written -- `campaignActive()` below reads this
+   *    identity and is what enforces it.
+   *  - `versus` moves nothing here: the config reached `applyVersusToDeps` before this
+   *    function was called, so `deps.levels` is already the versus level system and
+   *    `bootContext.identity` is already Versus.
+   *
+   * REJECTED BEFORE ANYTHING IS CONSUMED. The level-bounds check is the same one the
+   * in-session Levels handler makes, moved to the boundary that now runs first: a request
+   * naming a level this session's sequence does not have falls back to the run's own
+   * board rather than building an undefined one. No seed is drawn and no run is written
+   * on the way to that decision, which is #428's "invalid or cancelled starts create no
+   * session, world, seed, or persistence mutation" -- for the world specifically, the
+   * caller is what declines to start, and this is the half that declines to MUTATE.
+   */
+  const startsCampaignRun =
+    bootContext.identity.kind === 'campaign' && deps.levels.tracksProgress && !deps.levels.isDevJump;
+  let newRunLives: number | undefined;
+  if (intent.kind === 'campaign-new') {
+    level = deps.levels.levels[0];
+    if (startsCampaignRun) newRunLives = deps.run.startNewRun(level.id).livesRemaining;
+  } else if (intent.kind === 'practice') {
+    const picked = intent.level;
+    if (Number.isInteger(picked) && picked >= 0 && picked < deps.levels.levels.length) {
+      // `identityForLevelPick`, not an unconditional Practice, for the reason the
+      // in-session handler gives: the Levels button is genuinely reachable on a
+      // developer-flag versus session, and calling that match Practice would drop its
+      // stock strip and report `practice-result` for a match the sim decided by
+      // last-slot-standing.
+      sessionIdentity = identityForLevelPick(bootContext.identity);
+      level = deps.levels.levels[picked];
+    }
+  }
+
+  /**
    * WHAT THE MENU AND OUTCOME BUTTONS DO -- decided once, from the canonical
    * model, and read by BOTH consumers: the HUD's title/outcome affordances and
    * `onStartRestart`'s own branch. One source of truth on purpose; the branch
@@ -1370,11 +1452,15 @@ export function startGameWith(
   // multiplayer session opened mid-campaign would silently inherit whatever life count
   // the solo run happened to be sitting on, which has no decided meaning for a shared
   // pool.
-  const bootLives = bootContext.identity.kind === 'campaign'
+  const bootLives = sessionIdentity.kind === 'campaign'
       && deps.levels.tracksProgress
       && !deps.levels.isDevJump
       && playerCount === 1
-    ? deps.run.active()?.livesRemaining
+    // The fresh run's lives when this start CREATED one (issue #428), and the active
+    // run's otherwise. Read from `newRunLives` rather than re-reading `run.active()`,
+    // so New Game's board shows the lives the write above actually returned rather
+    // than a second read that a failed write would leave stale.
+    ? newRunLives ?? deps.run.active()?.livesRemaining
     : undefined;
   let world = buildWorld(level, bootLives);
   /**
@@ -2608,7 +2694,10 @@ export function startGameWith(
   }
 
   sm.onChange((location) => {
-    hud.setState(locationToHudSurface(location));
+    // No `hud.setState` here: since issue #428 the PAGE paints which screen is showing
+    // (`route-host.ts`), because a HUD only a session ever painted would leave a page with
+    // no session showing nothing at all. What stays is everything that needs a world.
+    //
     // The splash covers the toast rail, so a notice raised at boot is held until the
     // player has left it -- see `flushSettingsNotice`. Called on EVERY change rather
     // than only on the launch->main-menu edge: the notice can also arrive later (a
@@ -2691,8 +2780,9 @@ export function startGameWith(
     if (!nowPlaying) input.clearQueuedPresses();
   });
 
-  hud.setState(locationToHudSurface(sm.location)); // initial launch panel
-  followMusic(sm.location); // ...and its music: this path bypasses sm.onChange
+  // The initial surface paint moved to `route-host.ts` with the subscription above; the
+  // music did not, because it needs this session's audio engine.
+  followMusic(sm.location); // this path bypasses sm.onChange
   hud.setLevel(ordinalOf(level), deps.levels.levels.length);
   hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
   // Boot is an arrival at the title screen too (splash precedes it, but the button
@@ -2721,14 +2811,6 @@ export function startGameWith(
   // `audio/engine.ts` already resumes the context from its own document-level gesture
   // handler, and did before this screen existed. What changes is that the gesture is
   // now guaranteed to have happened before the menu is on screen.
-  const onSplashGesture = (): void => {
-    sm.dismissLaunch();
-    // The PAGE remembers, not just this state machine: the next session is a different
-    // one entirely (boot.ts rebuilds everything on a Campaign<->Versus switch), and it is
-    // this call that stops it opening on the splash again.
-    deps.launchGate.dismiss();
-  };
-  deps.host.addEventListener('pointerdown', onSplashGesture);
 
   const onKey = (e: KeyboardEvent): void => {
     // A key that dismisses the title screen does that and NOTHING ELSE.
@@ -2739,13 +2821,9 @@ export function startGameWith(
     // the Mute button's label left to explain why. Escape and P were harmless by luck
     // alone -- pause() no-ops from 'title' -- which is not a property to rely on as
     // more hotkeys arrive.
-    if (sm.atLaunch) {
-      // The SAME handler the pointer path uses, not a second `sm.dismissLaunch()`: both
-      // must also report the dismissal to the page (issue #317), and two call sites that
-      // each had to remember to is how one of them stops doing it.
-      onSplashGesture();
-      return;
-    }
+    // No `atLaunch` branch: since issue #428 the PAGE owns the keydown listener
+    // (`route-host.ts`'s `onHostKey`) and never forwards a key that dismissed the splash.
+    // A second guard here would be dead code that read as the live one.
     if (isMuteHotkey(e)) routeUi.toggleMute();
     if (isPauseHotkey(e)) {
       // Toggle, guarded by the state machine: pause() acts only from `playing`
@@ -2755,7 +2833,9 @@ export function startGameWith(
       else sm.pause();
     }
   };
-  deps.host.addEventListener('keydown', onKey);
+  // Through the slot, not the host: `route-host.ts` owns the one keydown listener and
+  // hands on only the keys that are not the Launch gesture.
+  slot.onKey(onKey);
 
   // A blurred tab must not keep eating lives. Focus deliberately does NOT
   // auto-resume: coming back to a firefight you cannot see yet is worse than
@@ -2799,16 +2879,27 @@ export function startGameWith(
   driver.start();
 
   return {
+    enterGameplay(): void {
+      // `audio.unlock()` rides here for the reason the old handlers gave: the start
+      // boundary runs inside the click that started the match, which is the only
+      // guaranteed user gesture, and Safari will not open an AudioContext resumed from
+      // anywhere else.
+      audio.unlock();
+      sm.enterGameplay(currentSession);
+    },
     dispose(): void {
       driver.stop();
       // Guarded on having published it: a teardown that deleted the key
       // unconditionally would remove whatever a second instance -- or a
       // neighbouring page on this shared origin -- had put there.
       if (publishedDevApi) delete deps.devConsole[DEV_CONSOLE_KEY];
-      deps.host.removeEventListener('keydown', onKey);
+      // No `keydown`: the page owns that listener since issue #428, and `slot.detach()`
+      // below is what stops this session receiving from it.
       deps.host.removeEventListener('resize', onResize);
       deps.host.removeEventListener('blur', onBlur);
-      deps.host.removeEventListener('pointerdown', onSplashGesture);
+      // No `pointerdown`: the Launch gesture belongs to the page since issue #428
+      // (`route-host.ts`), and a session that unregistered it would take the splash
+      // dismissal down with it on the way to the very first match.
       // The two settings registrations this SESSION made. The store, the effective
       // handle and the notice latch all outlive it (they belong to the page -- see
       // app-settings.ts), so what is released here is this session's listeners, holding

@@ -1789,14 +1789,15 @@
   },
   {
     "id": "splash-gesture-not-reported-to-the-page",
-    "file": "src/game/loop.ts",
-    "find": "    deps.launchGate.dismiss();\n  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
-    "replace": "  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
+    "file": "src/game/route-host.ts",
+    "find": "    sm.dismissLaunch();\n    deps.launchGate.dismiss();\n  };",
+    "replace": "    sm.dismissLaunch();\n  };",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Dismisses the splash in THIS session's state machine but never tells the page, so the gate stays closed and the next session opens on the splash again. The read half (launch-gate-ignored-on-reboot) and this write half fail independently and neither implies the other. Both the pointer and keyboard handlers route through onSplashGesture, so this kills both of the seam's dismissal tests. 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered. RE-MEASURED for issue #468, and the failing SET changed rather than merely the count. The hoist made the page state machine outlive a reboot, so the three cases this used to kill -- all of which read what the HUD was PAINTED -- went green: a session that dismissed only its own splash now produces an identical screen. Re-measured on the post-hoist tree it SURVIVED at 0 of 405. The two that kill it now are the pair written for exactly that gap, which read launchDismissed() off the real shell instead of off the screen. The page write is not dead: route-host.ts attach() resets the route only when the gate is down, and issue #428 boots from it with no session at all.",
+    "expectFailures": 14,
+    "why": "Dismisses the splash in THIS session's state machine but never tells the page, so the gate stays closed and the next session opens on the splash again. The read half (launch-gate-ignored-on-reboot) and this write half fail independently and neither implies the other. Both the pointer and keyboard handlers route through onSplashGesture, so this kills both of the seam's dismissal tests. 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered. RE-MEASURED for issue #468, and the failing SET changed rather than merely the count. The hoist made the page state machine outlive a reboot, so the three cases this used to kill -- all of which read what the HUD was PAINTED -- went green: a session that dismissed only its own splash now produces an identical screen. Re-measured on the post-hoist tree it SURVIVED at 0 of 405. The two that kill it now are the pair written for exactly that gap, which read launchDismissed() off the real shell instead of off the screen. The page write is not dead: route-host.ts attach() resets the route only when the gate is down, and issue #428 boots from it with no session at all. RE-ANCHORED AGAIN by issue #428: the handler moved from `startGameWith` to `route-host.ts`, because a splash only a session could dismiss can never be got past on a page that boots with no session. The defect is unchanged -- the route is dismissed and the PAGE is never told -- and it matters more now, since `attach()`'s route reset and #428's session-less boot both read the gate. Count re-measured on the post-move tree. COUNT RE-MEASURED after the reveal fix: 2 -> 14, and the JUMP is the informative part. Since a start now reveals the match it built, `route-host.ts`'s `attach()` route reset -- which is guarded on the launch gate being down -- decides where every started session opens. With the page write deleted the gate stays up, so the reset never runs and twelve further cases across the started-session suites see the wrong route. The defect did not widen; what widened is how much of the page now depends on the page-level gate, which is exactly what issues #428 and #468 moved onto it. The failing SET was compared, not the number renumbered.",
     "tests": [
-      "src/game/loop.test.ts"
+      "src/game/loop.test.ts",
+      "src/game/route-host.test.ts"
     ]
   },
   {
@@ -2090,11 +2091,11 @@
   {
     "id": "session-host-keeps-the-dead-canvas",
     "file": "src/game/session-host.ts",
-    "find": "    stop();\n    canvas?.remove();\n    create(versus);",
-    "replace": "    stop();\n    create(versus);",
+    "find": "    stop();\n    canvas?.remove();\n    create(intent);",
+    "replace": "    stop();\n    create(intent);",
     "expect": "killed",
-    "expectFailures": 6,
-    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`. COUNT MOVED 5 -> 6 for issue #427: the empty-host cases added to session-host.test.ts include one that walks start -> replace -> replace asserting exactly one canvas is alive throughout, so a host that leaves the dead element behind fails there as well. Re-measured on the tree, not predicted.",
+    "expectFailures": 7,
+    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`. COUNT MOVED 5 -> 6 for issue #427: the empty-host cases added to session-host.test.ts include one that walks start -> replace -> replace asserting exactly one canvas is alive throughout, so a host that leaves the dead element behind fails there as well. Re-measured on the tree, not predicted. RE-ANCHORED by issue #428: `replace` takes a `StartIntent` rather than a versus config, so the parameter name in the find string changed. The mutation and the defect are identical. COUNT RE-MEASURED for issue #428: 6 -> 7, because the suite gained the Campaign-return cases, which assert the root holds no canvas after a stop and so also fail when a dead one is left behind. The failing SET was compared, not the number renumbered.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2103,11 +2104,11 @@
   {
     "id": "session-host-first-session-bypasses-replace",
     "file": "src/game/session-host.ts",
-    "find": "      replace(null);\n    },\n    requestVersusSession,",
-    "replace": "      create(null);\n    },\n    requestVersusSession,",
+    "find": "      replace(intent);\n    },\n    requestVersusSession,",
+    "replace": "      create(intent);\n    },\n    requestVersusSession,",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Starts the first session by calling `create` directly instead of routing it through `replace`, which is the shape this module had first. On the ONE call boot.ts makes the two are identical -- there is no handle to stop and no canvas to remove -- so the production path is unchanged and every route-level test stays green. What it drops is both of `replace`'s guards: a second `start()` orphans the first session's frame loop, renderer and GL context with nothing left holding its handle, and a `start()` after `dispose()` builds a whole session onto a document already on its way out. Killed by session-host.test.ts's 'a SECOND start() replaces the first session rather than orphaning it' and 'start() after dispose() starts nothing'.",
+    "expectFailures": 3,
+    "why": "Starts the first session by calling `create` directly instead of routing it through `replace`, which is the shape this module had first. On the ONE call boot.ts makes the two are identical -- there is no handle to stop and no canvas to remove -- so the production path is unchanged and every route-level test stays green. What it drops is both of `replace`'s guards: a second `start()` orphans the first session's frame loop, renderer and GL context with nothing left holding its handle, and a `start()` after `dispose()` builds a whole session onto a document already on its way out. Killed by session-host.test.ts's 'a SECOND start() replaces the first session rather than orphaning it' and 'start() after dispose() starts nothing'. RE-ANCHORED by issue #428, and the defect got MORE reachable rather than less: `start()` is no longer a single call from `boot()` but a HUD button, so a player who presses New Game twice takes exactly the path this bypasses -- the second start orphaning the first session's loop, renderer and GL context. Count re-measured. COUNT RE-MEASURED for issue #428: 2 -> 3, because `start()` is a HUD button since #428 rather than one call from `boot()`, so a second start is now an ordinary player action and one more case reaches it. The failing SET was compared, not the number renumbered.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2119,8 +2120,8 @@
     "find": "      stop();\n      spent = true;",
     "replace": "      stop();",
     "expect": "killed",
-    "expectFailures": 3,
-    "why": "Disposes the running session on page teardown but never latches, so the host will still build another one. Both reboot seams are already in a HUD click handler's hands when `pagehide` fires, and a click that lands in the same task then constructs a canvas, renderer, input controller and frame loop onto a document that is going away -- holding a GL context nothing will ever dispose. The teardown itself still looks correct, which is why nothing else notices. 2 of 54, both in session-host.test.ts: 'dispose() latches: a late reboot request starts no session on a dying page' and 'start() after dispose() starts nothing', the second because `start()` routes through the same guard. COUNT MOVED 2 -> 3 for issue #427: the empty-host case that fires a late `requestCampaignSession` AFTER dispose -- asserting the host stays empty rather than building a session onto a dying page -- is exactly what the latch prevents, so it detects this too. Re-measured on the tree, not predicted.",
+    "expectFailures": 2,
+    "why": "Disposes the running session on page teardown but never latches, so the host will still build another one. Both reboot seams are already in a HUD click handler's hands when `pagehide` fires, and a click that lands in the same task then constructs a canvas, renderer, input controller and frame loop onto a document that is going away -- holding a GL context nothing will ever dispose. The teardown itself still looks correct, which is why nothing else notices. 2 of 54, both in session-host.test.ts: 'dispose() latches: a late reboot request starts no session on a dying page' and 'start() after dispose() starts nothing', the second because `start()` routes through the same guard. COUNT MOVED 2 -> 3 for issue #427: the empty-host case that fires a late `requestCampaignSession` AFTER dispose -- asserting the host stays empty rather than building a session onto a dying page -- is exactly what the latch prevents, so it detects this too. Re-measured on the tree, not predicted. COUNT RE-MEASURED for issue #428: 3 -> 2, because DOWN by one, and the reason is worth stating: a case that drove the latch through a Campaign return no longer builds a session there, so it stops discriminating on this mutation. The two that remain both drive `dispose()` directly. The failing SET was compared, not the number renumbered.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2180,8 +2181,8 @@
     "find": "    hud.setLives(w.lives);",
     "replace": "    hud.setLives(3);",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "The topbar LIVES readout is the only projection of `world.lives`, and the constant it is replaced with is LIVES itself (balance.json `lives: 3`) -- so this mutation is invisible to any fixture whose board carries full lives. That was EVERY synthetic build until issue #386: `loop.test.ts`'s fake `levels.world` recorded its `lives` argument into `rec.levelBuilds` and then dropped it, spreading `opts.world ?? createArenaWorld(seed)` without stamping it, while the real `createWorldFor` does stamp it. Measured on a88d39e, before the fake was fixed: this exact mutation left 4008 of 4008 tests green across 170 of 170 test files -- the readout was unpinned repository-wide. The fake now applies `lives: lives ?? base.lives`, and THE STATED RESIDUAL test reads the readout across two builds whose arguments differ (a practice board taking arena.ts's own default, then Continue's run board carrying 2), so a constant can no longer satisfy both. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "expectFailures": 2,
+    "why": "The topbar LIVES readout is the only projection of `world.lives`, and the constant it is replaced with is LIVES itself (balance.json `lives: 3`) -- so this mutation is invisible to any fixture whose board carries full lives. That was EVERY synthetic build until issue #386: `loop.test.ts`'s fake `levels.world` recorded its `lives` argument into `rec.levelBuilds` and then dropped it, spreading `opts.world ?? createArenaWorld(seed)` without stamping it, while the real `createWorldFor` does stamp it. Measured on a88d39e, before the fake was fixed: this exact mutation left 4008 of 4008 tests green across 170 of 170 test files -- the readout was unpinned repository-wide. The fake now applies `lives: lives ?? base.lives`, and THE STATED RESIDUAL test reads the readout across two builds whose arguments differ (a practice board taking arena.ts's own default, then Continue's run board carrying 2), so a constant can no longer satisfy both. Scoped to loop.test.ts; expectFailures counts that scoped run only. COUNT RE-MEASURED for issue #428: 1 -> 2, because the start-boundary suite reads the lives a fresh run was given, which is a second path through the same readout. The failing SET was compared, not the number renumbered.",
     "tests": [
       "src/game/loop.test.ts"
     ]
@@ -2564,8 +2565,8 @@
     "find": "    hasSession: () => handle !== null,",
     "replace": "    hasSession: () => true,",
     "expect": "killed",
-    "expectFailures": 4,
-    "why": "The host claims a gameplay session whether or not one exists -- so the EMPTY state, which is the entire point of issue #427, becomes unobservable. A shell asking 'should I offer Resume' gets yes on a page that has never started a match, and every criterion of the form 'X still works while the host has no active session' loses its second half: the assertions still run, they just stop distinguishing anything. Chosen over `() => false` deliberately, though both are killed: a stuck-false accessor is caught by the two positive cases and reads as an obvious omission, while stuck-TRUE passes the naive 'it reports a session after start()' check and fails only where the emptiness is the claim -- which is the harder shape to notice in review. Four failures across two files, MEASURED: the empty-host cases in session-host.test.ts and the combined route case in route-ui.test.ts, which asserts that driving every application route leaves the host empty. Scoped to those two files; expectFailures counts that scoped run only.",
+    "expectFailures": 7,
+    "why": "The host claims a gameplay session whether or not one exists -- so the EMPTY state, which is the entire point of issue #427, becomes unobservable. A shell asking 'should I offer Resume' gets yes on a page that has never started a match, and every criterion of the form 'X still works while the host has no active session' loses its second half: the assertions still run, they just stop distinguishing anything. Chosen over `() => false` deliberately, though both are killed: a stuck-false accessor is caught by the two positive cases and reads as an obvious omission, while stuck-TRUE passes the naive 'it reports a session after start()' check and fails only where the emptiness is the claim -- which is the harder shape to notice in review. Four failures across two files, MEASURED: the empty-host cases in session-host.test.ts and the combined route case in route-ui.test.ts, which asserts that driving every application route leaves the host empty. Scoped to those two files; expectFailures counts that scoped run only. COUNT RE-MEASURED for issue #428: 4 -> 7, because the empty host is the page's NORMAL state since #428 rather than a window between sessions, so three more cases assert `hasSession()` is false. The failing SET was compared, not the number renumbered.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/game/route-ui.test.ts"
@@ -2969,7 +2970,7 @@
     "tests": [
       "src/boot.test.ts"
     ],
-    "why": "The whole of issue #470's boot change, deleted. Without this line boot() never reads the shell's answer, so an unsupported browser gets a canvas, a session and a world before `THREE.WebGLRenderer` throws into the try/catch below -- the OLD route, which still exists and still lands on the same NO_WEBGL_MESSAGE. That is what makes this the negative control for the issue rather than a screen-level check: the message is identical on both routes, and only what got CONSTRUCTED on the way distinguishes them, which is the property issue #428 needs in order to remove the eager `sessions.start()`. `void shell.render.webgl2;` rather than a deletion so the mutation still reads the field and a tsc failure cannot be mistaken for test coverage. 5 of 43 in the scoped run: boot.test.ts's 'boot: the shell capability probe (issue #470)' block has 7 cases and the 5 unsupported-path ones all fail, because this file's fake `startGame` does NOT throw -- so with the gate gone boot completes normally, builds a canvas and a session, registers a teardown and reports no error. The 2 that still pass are the pair that pin the gate is not a SECOND gate: 'changes nothing when the probe says yes' and 'still catches a session that fails for a reason the probe cannot see'. expectFailures counts that scoped run only. COUNT RE-MEASURED on this branch: 5 -> 6. `boot.test.ts` grew from 43 cases to 50 when issue #468 added its page-scoped route-UI suite, and one of those -- 'builds no route UI at all when the capability probe says no' -- also fails under this mutation, because a boot that skips the gate goes on to build the route UI for a browser that cannot render. CI's `verify (current)` is what caught the drift: growing a test file moves expectFailures on entries anchored in files you never touched, and the local re-run list for this branch covered the 35 older entries but not the 8 issue #470 had just added."
+    "why": "The whole of issue #470's boot change, deleted. Without this line boot() never reads the shell's answer, so an unsupported browser gets a canvas, a session and a world before `THREE.WebGLRenderer` throws into the try/catch below -- the OLD route, which still exists and still lands on the same NO_WEBGL_MESSAGE. That is what makes this the negative control for the issue rather than a screen-level check: the message is identical on both routes, and only what got CONSTRUCTED on the way distinguishes them, which is the property issue #428 needs in order to remove the eager `sessions.start()`. `void shell.render.webgl2;` rather than a deletion so the mutation still reads the field and a tsc failure cannot be mistaken for test coverage. 5 of 43 in the scoped run: boot.test.ts's 'boot: the shell capability probe (issue #470)' block has 7 cases and the 5 unsupported-path ones all fail, because this file's fake `startGame` does NOT throw -- so with the gate gone boot completes normally, builds a canvas and a session, registers a teardown and reports no error. The 2 that still pass are the pair that pin the gate is not a SECOND gate: 'changes nothing when the probe says yes' and 'still catches a session that fails for a reason the probe cannot see'. expectFailures counts that scoped run only. COUNT RE-MEASURED on this branch: 5 -> 6. `boot.test.ts` grew from 43 cases to 50 when issue #468 added its page-scoped route-UI suite, and one of those -- 'builds no route UI at all when the capability probe says no' -- also fails under this mutation, because a boot that skips the gate goes on to build the route UI for a browser that cannot render. CI's `verify (current)` is what caught the drift: growing a test file moves expectFailures on entries anchored in files you never touched, and the local re-run list for this branch covered the 35 older entries but not the 8 issue #470 had just added. RE-MEASURED AGAIN for issue #428: still 6, now of 55 rather than 50, because boot.test.ts gained the empty-boot suite. The COUNT did not move and the denominator did, which is the case a bare number cannot express -- the failing set was compared on both sides rather than the total renumbered."
   },
   {
     "id": "boot-collapses-the-probe-failure-cause",
@@ -3074,12 +3075,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 91,
+    "expectFailures": 96,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -3156,14 +3157,14 @@
   {
     "id": "route-host-passes-session-scoped-request-seams-to-the-routes",
     "file": "src/game/route-host.ts",
-    "find": "    requestVersusSession: requests.requestVersusSession,\n    requestCampaignSession: requests.requestCampaignSession,",
+    "find": "    requestVersusSession: (config) => requests.requestStart({ kind: 'versus', config }),\n    requestCampaignSession: requests.requestCampaignSession,",
     "replace": "    requestVersusSession: deps.requestVersusSession,\n    requestCampaignSession: deps.requestCampaignSession,",
     "expect": "killed",
     "expectFailures": 3,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "The route UI's Versus Start and Campaign buttons wired to a SESSION's request callbacks instead of the page-level seam. That is the coupling issue #468 exists to remove -- 'gameplay-starting route actions become explicit application-level requests that do not require dereferencing an existing gameplay session' -- and with eager startup still in place it would look fine in a browser, because a session always happens to exist. It stops working the moment #428 boots into an empty host, which is the point at which it would be hardest to attribute. 3 of 18: the two empty-host request cases and 'keeps reaching the page seam across a session lifecycle'. The fixture makes this loud on purpose -- its session-scoped `requestVersusSession`/`requestCampaignSession` THROW, so a host that forwarded `deps` straight into `createRouteUi` fails rather than quietly recording nothing."
+    "why": "The route UI's Versus Start and Campaign buttons wired to a SESSION's request callbacks instead of the page-level seam. That is the coupling issue #468 exists to remove -- 'gameplay-starting route actions become explicit application-level requests that do not require dereferencing an existing gameplay session' -- and with eager startup still in place it would look fine in a browser, because a session always happens to exist. It stops working the moment #428 boots into an empty host, which is the point at which it would be hardest to attribute. 3 of 18: the two empty-host request cases and 'keeps reaching the page seam across a session lifecycle'. The fixture makes this loud on purpose -- its session-scoped `requestVersusSession`/`requestCampaignSession` THROW, so a host that forwarded `deps` straight into `createRouteUi` fails rather than quietly recording nothing. RE-ANCHORED by issue #428: Versus Start now travels as a `StartIntent` on the single `requestStart` boundary rather than on its own callback, so the line the mutation replaces changed shape. What it destroys is unchanged and is now strictly worse: with the eager boot gone, a route UI wired to a session's seams cannot start the FIRST match at all."
   },
   {
     "id": "route-host-disposal-leaves-the-preview-context-alive",
@@ -3183,11 +3184,11 @@
     "find": "      routeHost.dispose();",
     "replace": "      void routeHost;",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 3,
     "tests": [
       "src/boot.test.ts"
     ],
-    "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one."
+    "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one. COUNT RE-MEASURED for issue #428: 1 -> 3, because the #428 suite asserts the route UI is built exactly once on an empty boot and after a failed start, both of which also fail when it is never disposed. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "session-start-clears-the-retained-versus-config",
@@ -3201,5 +3202,163 @@
       "src/game/loop.test.ts",
       "src/game/route-host.test.ts"
     ]
+  },
+  {
+    "id": "boot-starts-a-session-eagerly-again",
+    "file": "src/boot.ts",
+    "find": "    const host = sessions;",
+    "replace": "    const host = sessions;\n    host.start({ kind: 'campaign-continue' });",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 34,
+    "why": "The whole of issue #428, put back. A page that has shown nobody anything owns a canvas, a renderer, a GL context, a simulation world, a gameplay seed and a frame loop again, and a player who opens the game and walks away pays for a match they never asked for. 32 of 55 in the scoped run, and the breadth is the point rather than a nuisance: the eager start is not one behaviour but the premise every session-shaped assertion in boot.test.ts used to rest on, so re-adding it breaks the empty-boot counts, every start-gesture count (each reads one session too many), and the whole reboot ledger. The narrow half is 'reaches the application UI with no session, no canvas and no world', which is the one that would fail even if every other case were rewritten around it. COUNT RE-MEASURED after the reveal fix: 32 -> 34. `boot.test.ts` gained the three `enteredIds` cases, two of which also fail under this mutation -- an eager boot reveals a session the page load produced, so the ledger reads one entry too many. The failing SET was compared, not the number renumbered."
+  },
+  {
+    "id": "boot-start-failure-escapes-the-page",
+    "file": "src/boot.ts",
+    "find": "      requestStart: (intent) => {\n        try {\n          sessions?.start(intent);\n        } catch (err) {\n          showFailure(err);\n        }\n      },",
+    "replace": "      requestStart: (intent) => sessions?.start(intent),",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 8,
+    "why": "Drops the try/catch around the start request, so a `WebGLRenderer` that gets its context and then fails to initialise throws out of a HUD click handler with nobody listening. The player sits on a menu whose buttons silently do nothing -- no error page, no report, no clue. This guard is NEW WORK rather than a copy of `boot()`'s own: while the eager start existed, that same failure threw inside `boot()`'s try. Issue #428 turns a documented edge case ('a REPLACEMENT that throws does not arrive here') into the ordinary path. 8 of 55 in the scoped run: the five no-WebGL cases that now drive the failure through a start request, plus the capability suite's 'still catches a session that fails for a reason the probe cannot see' and the #428 suite's own 'a failed start reaches the same message page'."
+  },
+  {
+    "id": "route-host-start-request-fires-with-a-session-running",
+    "file": "src/game/route-host.ts",
+    "find": "  hud.onNewGame(() => {\n    if (live) {\n      live.newGame?.();\n      return;\n    }\n    requests.requestStart({ kind: 'campaign-new' });\n  });",
+    "replace": "  hud.onNewGame(() => {\n    live?.newGame?.();\n    requests.requestStart({ kind: 'campaign-new' });\n  });",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Removes the empty-slot guard, so New Game asks for a whole new session WHILE one is running -- on top of the in-session New Game the slot also receives. Two runs from one click, and the second discards the first's world mid-frame. Silent in a browser: the screen ends up on a level-one board either way, which is what the click asked for. 1 of 25 -- 'none of the three asks for a session while one is attached', the only case that asserts the request seam stays EMPTY with a session live. Its siblings all drive an empty host and keep passing, which is what makes this a real two-way discrimination rather than a restatement of them."
+  },
+  {
+    "id": "route-host-continue-asks-for-a-new-run",
+    "file": "src/game/route-host.ts",
+    "find": "    requests.requestStart({ kind: 'campaign-continue' });",
+    "replace": "    requests.requestStart({ kind: 'campaign-new' });",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Continue asks for a FRESH run. The most destructive single-token defect in this issue: a player resuming a campaign at level 8 silently has their run replaced with a level-one one, and the persistence write happens at the start boundary before anything is on screen to warn them. Both intents land on a playable campaign board, so nothing about the transition looks wrong. 1 of 25 -- 'Continue asks for the active campaign run'. The New Game case asserts the value this mutation hardcodes and keeps passing, which is the pair that makes either assertion mean anything."
+  },
+  {
+    "id": "route-host-level-pick-drops-the-level",
+    "file": "src/game/route-host.ts",
+    "find": "    requests.requestStart({ kind: 'practice', level });",
+    "replace": "    requests.requestStart({ kind: 'practice', level: 0 });",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Every Levels pick starts level one. The index is carried through three layers -- HUD callback, start request, start boundary -- and this is the join where losing it produces a working game on the wrong board rather than an error. 1 of 25 -- 'a Levels pick asks for that level, carrying the index', which drives index 3 specifically. A fixture that happened to pick level 0 could not see this, which is why that case does not."
+  },
+  {
+    "id": "start-boundary-new-game-stays-on-the-run-board",
+    "file": "src/game/loop.ts",
+    "find": "    level = deps.levels.levels[0];\n    if (startsCampaignRun) newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+    "replace": "    if (startsCampaignRun) newRunLives = deps.run.startNewRun(deps.levels.levels[0].id).livesRemaining;",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes."
+  },
+  {
+    "id": "start-boundary-new-game-never-writes-the-run",
+    "file": "src/game/loop.ts",
+    "find": "    if (startsCampaignRun) newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+    "replace": "    void startsCampaignRun;",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The opposite half: New Game lands on level one and never touches the run, so the board is right and the campaign the player thinks they restarted is still sitting at level 8 with its old lives. Invisible until they quit and press Continue. Paired with the entry above so both halves of the one write this issue makes are pinned separately -- neither can stand in for the other. `void startsCampaignRun;` rather than a deletion so the guard is still read and a tsc failure cannot be mistaken for coverage. 1 of 412."
+  },
+  {
+    "id": "start-boundary-practice-keeps-the-campaign-identity",
+    "file": "src/game/loop.ts",
+    "find": "      sessionIdentity = identityForLevelPick(bootContext.identity);\n      level = deps.levels.levels[picked];",
+    "replace": "      level = deps.levels.levels[picked];",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "A Practice pick that keeps the CAMPAIGN identity. `campaignActive()` reads that identity and is what stops practice consuming, restoring, advancing or ending the run -- so an isolated look at level 2 starts writing the player's real campaign progress. Exactly the class the project's game rules name ('Practice/level-select state must not create or mutate a campaign run'), reintroduced at the new boundary rather than at the in-session handler that already had it. 1 of 412 -- 'practice lands on the picked level and leaves the run untouched', which is the only case that reads the run store after a pick."
+  },
+  {
+    "id": "start-boundary-accepts-an-out-of-range-level",
+    "file": "src/game/loop.ts",
+    "find": "    if (Number.isInteger(picked) && picked >= 0 && picked < deps.levels.levels.length) {",
+    "replace": "    if (true) {",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Removes the bounds check, so `deps.levels.levels[7]` on a five-level sequence is `undefined` and the world build reads properties off it. Since #428 this throws out of a HUD click handler -- into `boot.ts`'s start guard, which paints the no-WebGL message for a defect that has nothing to do with WebGL. `if (true)` rather than a deletion so the branch body still runs and the entry measures the CHECK rather than the assignment. 2 of 412: the out-of-range case and the non-integer one, which is the pair that separates the range test from the integer test -- a check that kept only `picked < length` would still pass the first."
+  },
+  {
+    "id": "route-host-never-paints-the-surface",
+    "file": "src/game/route-host.ts",
+    "find": "  sm.onChange((location) => hud.setState(locationToHudSurface(location)));\n  hud.setState(locationToHudSurface(sm.location));",
+    "replace": "  sm.onChange((location) => void location);",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 9,
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 437 across both scoped files. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
+  },
+  {
+    "id": "route-host-forwards-the-launch-key-to-the-session",
+    "file": "src/game/route-host.ts",
+    "find": "    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }\n    live?.key?.(e);",
+    "replace": "    if (sm.atLaunch) onLaunchGesture();\n    live?.key?.(e);",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Drops the early return, so the key that dismisses the splash ALSO reaches the session's hotkeys. 'Press any key or tap to begin' then includes M, which mutes: the one key most likely to be pressed by someone checking whether the game has sound silences the menu bed the screen exists to make audible, with only the Mute button's label left to explain why. This is why the page owns ONE keydown listener and trampolines it rather than adding a second beside the session's -- two listeners would race, whichever ran first moving the route out from under the other's guard. 1 of 412 -- 'the key that dismisses it does nothing else'."
+  },
+  {
+    "id": "session-host-campaign-return-replaces-instead-of-stopping",
+    "file": "src/game/session-host.ts",
+    "find": "  const requestCampaignSession = (): void => {\n    if (spent) return;\n    stop();\n    canvas?.remove();\n    canvas = null;\n  };",
+    "replace": "  const requestCampaignSession = (): void => {\n    replace({ kind: 'campaign-continue' });\n  };",
+    "tests": [
+      "src/game/session-host.test.ts",
+      "src/boot.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 14,
+    "why": "Puts back the pre-#428 Campaign button: returning to the campaign title builds a whole session -- canvas, renderer, world, seed -- for the sole purpose of showing a title screen the page has owned since #468. That is eager creation wearing a different hat, and it is the one path that would have kept it after the eager boot was removed. 14 of 79 across both scoped files, because the session ledger, the canvas count and the empty-host state all move together on this path. The narrow case is session-host.test.ts's 'a campaign request stops the versus session and starts nothing', which asserts `hasSession()` is false and the root holds no canvas."
+  },
+  {
+    "id": "session-start-never-reveals-the-match",
+    "file": "src/game/session-host.ts",
+    "find": "    handle.enterGameplay();",
+    "replace": "    void handle;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The defect this issue actually shipped before a browser caught it: a start builds the session, the canvas, the world and the seed, and then leaves the player on the Main Menu with the match running invisibly behind it. Pressing Continue appears to do nothing. WHY EVERY UNIT ASSERTION MISSED IT is the reason this entry is worth its slot -- the whole suite counted what was BUILT (one session, one canvas, one world, the right intent) and every count was correct. Nothing asked whether the thing built was ever SHOWN. `tools/visual/roundtrip.mjs` reported `canvases: 1` with the title buttons still on screen, and a follow-up probe found the pause panel unreachable because the machine had never left the menu. The cases that kill it read `enteredIds`, a ledger BY SESSION ID rather than a count: a boundary that revealed the first handle every time would report the same total as one that advances, which is the same stale-capture shape the disposal ledger beside it exists to catch. 2 of 58 in the scoped run: the single-start case and the repeated-start ledger. The third case in that group -- \"reveals nothing when the capability probe refused the start\" -- asserts an EMPTY ledger and so keeps passing, which is what makes the trio a real two-way discrimination rather than three restatements of one fact."
   }
 ]
