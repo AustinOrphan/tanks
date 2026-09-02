@@ -4987,6 +4987,54 @@ describe('startGameWith: invincibility (dev playtest mode)', () => {
   });
 });
 
+describe("startGameWith: the renderer is born fitting the STARTED level, not the level system's start", () => {
+  /**
+   * Until issue #428 a session could only open on `deps.levels.start`, so sizing the
+   * renderer from it was the same as sizing it from the level being built. A start gesture
+   * now names its own level -- New Game opens on level one while `start` is still the
+   * saved run's level; a Practice pick opens on the picked level -- and the boot build
+   * does not pass through `switchTo`, so nothing refits. Seen in the browser first: a run
+   * parked on a 15x11 level, New Game, and level one's 11x9 walls in the corner of a
+   * 15x11 floor.
+   */
+  const BOUNDS = [
+    { width: 22, height: 18, cellSize: 2 },
+    { width: 30, height: 18, cellSize: 2 },
+  ];
+  /** The board the renderer is fitted to right now: the last refit, else its birth. */
+  function fitted(h: ReturnType<typeof makeDeps>): [number, number, number] {
+    const [, w, hh, b] = h.rec.rendererArgs.at(-1)!;
+    return h.rec.refits.at(-1) ?? [w, hh, b];
+  }
+
+  it("New Game with a run parked on a wider level opens on level one's own board", () => {
+    const h = makeDeps({ levelCount: 2, levelStart: 1, savedRun: { level: 1, lives: 2 }, boundsByLevel: BOUNDS });
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, { kind: 'campaign-new' });
+    expect(h.rec.levelBuilds.at(-1)?.level, 'the world itself should be level one').toBe(0);
+    expect(fitted(h)).toEqual([22, 18, 2]);
+    expect(h.rec.refits, 'born fitting, not refit after the fact').toEqual([]);
+    handle.dispose();
+  });
+
+  it("a Practice pick opens on the picked level's board", () => {
+    const h = makeDeps({ levelCount: 2, progressHighest: 1, boundsByLevel: BOUNDS });
+    expect(h.deps.levels.bounds(h.deps.levels.start)).toEqual(BOUNDS[1]); // start is level two...
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, { kind: 'practice', level: 0 });
+    expect(h.rec.levelBuilds.at(-1)?.level).toBe(0); // ...and the pick is level one
+    expect(fitted(h)).toEqual([22, 18, 2]);
+    handle.dispose();
+  });
+
+  it("Continue still opens on the run's own level -- the negative control", () => {
+    // A fix that sized every session from level one would pass the two cases above.
+    const h = makeDeps({ levelCount: 2, levelStart: 1, savedRun: { level: 1, lives: 2 }, boundsByLevel: BOUNDS });
+    const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, CONTINUE);
+    expect(h.rec.levelBuilds.at(-1)?.level).toBe(1);
+    expect(fitted(h)).toEqual([30, 18, 2]);
+    handle.dispose();
+  });
+});
+
 describe('startGameWith: per-level renderer refit', () => {
   it('refits the renderer when a rebuild lands on a different board', () => {
     const h = boot(makeDeps({

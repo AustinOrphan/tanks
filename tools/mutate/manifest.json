@@ -3285,8 +3285,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes."
+    "expectFailures": 2,
+    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes. Re-measured at 2 of 417 in loop.test.ts once the renderer-fit case \"New Game with a run parked on a wider level opens on level one's own board\" joined the file: a New Game that stays on the run's board also leaves the renderer fitted to the run's board, so that case dies to this mutation too."
   },
   {
     "id": "start-boundary-new-game-never-writes-the-run",
@@ -3454,7 +3454,9 @@
     "file": "tools/visual/serve-path.mjs",
     "find": "  let path;\n  try {\n    path = decodeURIComponent((url ?? '/').split('?')[0]);\n  } catch {\n    return null;\n  }\n",
     "replace": "  const path = decodeURIComponent((url ?? '/').split('?')[0]);\n",
-    "tests": ["tools/visual/serve-path.test.ts"],
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
     "expect": "killed",
     "expectFailures": 1,
     "why": "Puts the decode back outside a try, which is how the probe's handler shipped. decodeURIComponent throws URIError on malformed percent-encoding, and GET /% was measured killing the process with exit 1: nothing awaits an async request handler, so the rejection is unhandled rather than answered with a 500. The cost is not a security one -- it is a probe that answers a canvas census with a bare stack, at the moment someone is debugging a disposal leak. Exactly 1 of 9 fails, the malformed-encoding case; the traversal assertions are indifferent to this mutation, which is why they are separate entries."
@@ -3464,7 +3466,9 @@
     "file": "tools/visual/serve-path.mjs",
     "find": "  if (file !== root && !file.startsWith(root + sep)) return null;\n",
     "replace": "  // the resolved path is trusted\n",
-    "tests": ["tools/visual/serve-path.test.ts"],
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
     "expect": "killed",
     "expectFailures": 4,
     "why": "Drops the containment check entirely, leaving the resolve to escape the root the way the original join did. A raw socket sending GET /../outside.txt was measured being answered 200 with a file from outside dist. Reachability is the part worth writing down: a normalising client CANNOT get there, because WHATWG URL resolution collapses both .. and %2e%2e before the request leaves, so fetch('/../x') arrives as /x. A test driven through fetch would therefore pass against the unhardened handler and prove nothing -- the assertions sit on the resolver directly for that reason. 4 of 9 fail, the four escape shapes."
@@ -3474,7 +3478,9 @@
     "file": "tools/visual/serve-path.mjs",
     "find": "if (file !== root && !file.startsWith(root + sep)) return null;",
     "replace": "if (file !== root && !file.startsWith(root)) return null;",
-    "tests": ["tools/visual/serve-path.test.ts"],
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
     "expect": "killed",
     "expectFailures": 1,
     "why": "The containment check kept but weakened to a bare prefix, which is the shape it is easiest to write by accident. A sibling directory whose name merely begins with the root's -- dist-evil next to dist -- then passes. This entry proves the SHAPE of the guard rather than its presence: measured, it fails exactly 1 of 9, and every other assertion in the file, including all three .. escapes, still passes under it. Without that one case the two forms are indistinguishable and the weaker one would survive."
@@ -3503,5 +3509,17 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "The adversarial question canonicalising both sides invites: did comparing real locations weaken the check? This keeps the realpath calls and drops the parent-directory and absolute-path rejections, so any existing target is accepted. Fails exactly 2 of args.test.ts's 10: `rejects a workspace that only looks inside the checkout` (a `tmp` symlinked out of the root, which only the canonical comparison can see) and `rejects a workspace outside the checkout` (a plain sibling directory). The symlinked-root accept case and the other 7 pass under it, which is what makes the two rejection cases the guard's negative controls rather than decoration."
+  },
+  {
+    "id": "renderer-sized-for-the-level-system-start",
+    "file": "src/game/loop.ts",
+    "find": "  let shownBounds = deps.levels.bounds(level);\n",
+    "replace": "  let shownBounds = deps.levels.bounds(deps.levels.start);\n",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The renderer is sized from the level system's own `start` instead of the level the START BOUNDARY chose. Those were the same level until issue #428; now New Game opens on level one while `start` is the saved run's level, and a Practice pick opens on the picked level, and the boot build never passes through `switchTo`'s refit. Seen in the browser as level one's 11x9 walls sitting in the corner of a 15x11 floor. 2 of 417 in loop.test.ts: the New Game and Practice-pick cases under \"born fitting the STARTED level\"; the Continue case is the negative control and passes either way."
   }
 ]
