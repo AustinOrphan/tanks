@@ -3182,8 +3182,8 @@
   {
     "id": "route-host-disposal-leaves-the-preview-context-alive",
     "file": "src/game/route-host.ts",
-    "find": "      routeUi.disposePreview();\n      hud.dispose();",
-    "replace": "      hud.dispose();",
+    "find": "      routeUi.disposePreview();\n      // The page's own subscription, released for the same reason a session releases its\n      // own: the machine and this host die together, but a reference kept past teardown\n      // must not keep painting a disposed HUD.\n      stopPainting();\n      hud.dispose();",
+    "replace": "      stopPainting();\n      hud.dispose();",
     "expect": "killed",
     "expectFailures": 1,
     "tests": [
