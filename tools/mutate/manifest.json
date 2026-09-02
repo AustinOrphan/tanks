@@ -3557,7 +3557,7 @@
       "src/game/hud.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 5,
     "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. COUNT_PLACEHOLDER"
   },
   {
@@ -3593,7 +3593,7 @@
       "src/game/hud.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. COUNT_PLACEHOLDER"
   },
   {
@@ -3631,5 +3631,29 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "A second open of the pane already on top runs a transition from the pane to itself, which is the pre-#318 `showVersusSetup(true)` twice: the one surface is marked LEAVING and then ENTERING, and the crossfade's settle hides it. The pane the player was looking at disappears a frame later. COUNT_PLACEHOLDER"
+  },
+  {
+    "id": "escape-back-leaks-to-the-session",
+    "file": "src/game/hud.ts",
+    "find": "      disarm();\n      e.preventDefault();\n      e.stopPropagation();\n      back();\n      return;",
+    "replace": "      disarm();\n      e.preventDefault();\n      back();\n      return;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. COUNT_PLACEHOLDER"
+  },
+  {
+    "id": "escape-back-fires-with-no-layer",
+    "file": "src/game/hud.ts",
+    "find": "      if (e.repeat || layers.depth === 0) return;",
+    "replace": "      if (e.repeat) return;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. COUNT_PLACEHOLDER"
   }
 ]

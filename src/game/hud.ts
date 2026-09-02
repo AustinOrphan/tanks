@@ -2137,6 +2137,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const onNavKeyDown = (e: KeyboardEvent): void => {
     if (e.target instanceof HTMLInputElement) return; // the two volume sliders keep all four arrows
     const key = e.key.toLowerCase();
+    /*
+     * Escape is Back while a layer is open (issue #318), and NOT otherwise. Claimed here,
+     * at window capture, for the same reason the arrows are: this runs before the page's
+     * bubble-phase listener regardless of registration order, and `stopPropagation` ends
+     * the dispatch, so the session's own `onKey` -- where Escape is the pause toggle --
+     * never sees a key that closed a pane. With nothing to close the key is not claimed
+     * and falls through untouched: Escape at Pause still resumes, Escape during play
+     * still pauses, and at Launch it still dismisses the splash, all through the code
+     * that always did that. P is never claimed here; hud.ts does not know it is Pause.
+     */
+    if (key === 'escape') {
+      if (e.repeat || layers.depth === 0) return;
+      disarm();
+      e.preventDefault();
+      e.stopPropagation();
+      back();
+      return;
+    }
     const isVertical = key === 'arrowdown' || key === 'arrowup' || key === 's' || key === 'w';
     const isLateral = key === 'arrowleft' || key === 'arrowright';
     if (!isVertical && !isLateral) return;

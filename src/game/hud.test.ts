@@ -4690,3 +4690,86 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
     }
   });
 });
+
+describe('hud: Escape is Back while a layer is open (issue #318)', () => {
+  const click = (el: Element): void => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+  };
+  const q = (root: HTMLElement, sel: string): HTMLElement => root.querySelector(sel) as HTMLElement;
+  /** A key pressed where the browser would deliver it: at the focused element, bubbling. */
+  const press = (key: string, init: KeyboardEventInit = {}): void => {
+    (document.activeElement ?? document.body).dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
+    );
+  };
+
+  it('Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface', () => {
+    // The bubble-phase window listener stands in for route-host's `onHostKey`, which
+    // forwards to the session's pause hotkey. An Escape that closed a pane and ALSO
+    // reached it would resume a paused round underneath the pane it just closed.
+    const seen: string[] = [];
+    const bubble = (e: KeyboardEvent): void => {
+      seen.push(e.key);
+    };
+    window.addEventListener('keydown', bubble);
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      const opener = q(root, '.hud-customize-open');
+      click(opener);
+      expect(document.activeElement).toBe(q(root, '.hud-customize'));
+      press('Escape', { repeat: true });
+      expect(q(root, '.hud-customize').classList.contains('ui-surface--leaving'), 'an auto-repeat Escape was claimed').toBe(false);
+      expect(seen, 'the repeat should fall through').toEqual(['Escape']);
+      press('Escape');
+      expect(q(root, '.hud-customize').classList.contains('ui-surface--leaving'), 'Escape did not close the pane').toBe(true);
+      expect(document.activeElement, 'Escape did not restore the opener').toBe(opener);
+      expect(seen, 'the Escape that closed a pane leaked to the bubble listener').toEqual(['Escape']);
+      press('Escape');
+      expect(seen, 'Escape with nothing to close must fall through').toEqual(['Escape', 'Escape']);
+      expect(q(root, '.hud-panel').classList.contains('hud-panel--hidden')).toBe(false);
+      expect(h.back(), 'a second Escape popped something').toBe(false);
+    } finally {
+      window.removeEventListener('keydown', bubble);
+    }
+  });
+
+  it('Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed', () => {
+    // The spec's "from Pause with no deeper overlay, resume": the first Escape consumes
+    // the layer, the second is the session's. Both halves through one chokepoint, so
+    // the close callback (route-ui's gamepad listeners) fires once, not twice and not
+    // never.
+    vi.useFakeTimers();
+    const seen: string[] = [];
+    const bubble = (e: KeyboardEvent): void => {
+      seen.push(e.key);
+    };
+    window.addEventListener('keydown', bubble);
+    try {
+      const { hud: h, root } = mount();
+      let closes = 0;
+      h.onControllersClose(() => {
+        closes += 1;
+      });
+      h.setState('main-menu');
+      h.setState('playing');
+      h.setState('paused');
+      const opener = q(root, '.hud-controllers-open');
+      click(opener);
+      press('Escape');
+      vi.advanceTimersByTime(1000);
+      expect(q(root, '.hud-controllers').classList.contains('hud-controllers--hidden')).toBe(true);
+      expect(q(root, '.hud-action').textContent, 'Escape abandoned the paused round').toBe('Resume');
+      expect(document.activeElement).toBe(opener);
+      expect(closes).toBe(1);
+      expect(seen).toEqual([]);
+      press('Escape');
+      expect(seen, 'the second Escape is the session\'s').toEqual(['Escape']);
+      expect(closes).toBe(1);
+      expect(q(root, '.hud-action').textContent).toBe('Resume');
+    } finally {
+      window.removeEventListener('keydown', bubble);
+      vi.useRealTimers();
+    }
+  });
+});
