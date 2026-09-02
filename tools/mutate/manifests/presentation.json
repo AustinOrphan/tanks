@@ -1,0 +1,67 @@
+[
+  {
+    "id": "third-team-falls-back-to-the-placeholder",
+    "file": "src/presentation/identity.ts",
+    "find": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];",
+    "replace": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0xffffff];",
+    "expect": "killed",
+    "why": "Team C loses its own hue and renders as the white fallback -- the state that shipped between issue #281's descriptor landing and TEAM_COLORS gaining a third entry. It is not a crash and not a blank: `teamColor` still returns a colour, the ring still draws, the shell still tints, the tread trail still blends, and the stock chip still paints. What is lost is that a 2v1v1 match renders one whole SIDE in the fallback white, which the player has no way to read as a team. Deliberately mutated to `0xffffff` -- the actual fallback -- rather than to a duplicate of team A or B: a duplicate is caught by the pairwise-distinctness sweep, which makes that the easy half, while the fallback is a DISTINCT colour and passes every distinctness assertion. It is caught instead by the stock-readout case that asserts team 2's chip is TEAM_COLORS[2] and is not the fallback, which is the one place the two are told apart. Scoped to entities.test.ts and hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/entities.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "killedBy": [
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) carries the TEAM as a letter beside the colour, all three teams (issue #281)"
+    ]
+  },
+  {
+    "id": "presentation-skin-scroll-never-animates",
+    "file": "src/presentation/customization.ts",
+    "find": "  return SKINS.find((s) => s.id === id)?.scroll ?? null;",
+    "replace": "  return null;",
+    "tests": [
+      "src/render/entities.test.ts",
+      "src/render/preview.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "skinScroll is THE place \"is this skin animated?\" is answered (its own doc comment), and issue #473 moved it from game/customization.ts to presentation/customization.ts. Returning null for every skin freezes flow's texture drift. 1 of 105 across entities.test.ts and preview.test.ts: entities.test.ts's flow-drift case (0.08 repeats/s over 0.5 s of dt) is the kill, which is the proof that the renderer reads the MOVED definition rather than a copy. Stated remainder: preview.ts's second consumer, `controls.setAnimating(skinScroll(skin) !== null)`, is not pinned by preview.test.ts and survives here."
+  },
+  {
+    "id": "presentation-blocked-fire-cue-set-drops-the-paired-arm",
+    "file": "src/presentation/blocked-fire.ts",
+    "find": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic-audio',\n  'ring',\n  'ring-audio',\n]);",
+    "replace": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic-audio',\n  'ring',\n]);",
+    "tests": [
+      "src/audio/director.test.ts",
+      "src/render/blocked-fire-ring.test.ts",
+      "src/game/haptics.test.ts",
+      "src/game/devflags.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "BLOCKED_FIRE_CUES moved from game/devflags.ts to presentation/blocked-fire.ts (issue #473) so the audio director and the ring no longer import the flag parser to name a cue. Dropping `ring-audio` from the SET while the TYPE union keeps it is the failure a stale copy would produce: each consumer's one-row-per-cue table still lists five cues and the set now names four. 4 of 147 across director.test.ts, blocked-fire-ring.test.ts, haptics.test.ts and devflags.test.ts: the three `... for EVERY cue carrying <channel>, and for no other -- one row per cue` cases (audio, haptic, ring), one per consumer, which is what proves all three key off the ONE definition, plus devflags.test.ts's paste-every-documented-cue case (issue #497), which now pins the parser's rejection of the dropped member."
+  },
+  {
+    "id": "presentation-blocked-fire-cue-spelled-with-a-plus",
+    "file": "src/presentation/blocked-fire.ts",
+    "find": "  'haptic-audio',\n  'ring',\n  'ring-audio',\n]);",
+    "replace": "  'haptic-audio',\n  'ring',\n  'ring+audio',\n]);",
+    "why": "A registered value carrying a reserved query character is the defect class #497 closed: `URLSearchParams` decodes the `+` to a space, so the documented value cannot be pasted as displayed. The registry-wide query-safety sweep in devflags.test.ts is the case written to fail on ANY such value, not only the one that shipped; the consumers' one-row-per-cue tables fail too because the set and the union no longer agree.",
+    "tests": [
+      "src/game/devflags.test.ts",
+      "src/audio/director.test.ts",
+      "src/render/blocked-fire-ring.test.ts",
+      "src/game/haptics.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "blocked-fire cue (issue #356) sounds for EVERY cue carrying `audio`, and for no other -- one row per cue",
+      "blocked-fire cue: the arms are separable (issue #356) vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue",
+      "blocked-fire ring (issue #356) draws for EVERY cue carrying `ring`, and for no other -- one row per cue",
+      "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 5 registered values",
+      "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) no registered value of ANY valued flag changes meaning under query decoding -- population: every value in the registry",
+      "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) the properly encoded legacy spellings stay accepted as aliases of the canonical cue"
+    ]
+  }
+]

@@ -655,7 +655,7 @@ checklist never knew it); the `demolition` threshold in `achievements.ts`
 (derived from the total destructible-cell count, which a new arena moves);
 `BASELINE_HASH` in `tools/baseline/trace.test.ts` (the trace runs over ALL
 shipped arenas); and the `framing-fit-bracket-4.5` entry's `expectFailures` in
-`tools/mutate/manifest.json`. Two items from arena-04's list dropped off: the
+`tools/mutate/manifests/render.json`. Two items from arena-04's list dropped off: the
 `variable arena dimensions` fixture block only moves if the new size collides
 with a fixture, and the "three size labels in `tools/gl/harness.ts`" no longer
 exist — grep at arena-05 found no arena-size prose there to update. The harness

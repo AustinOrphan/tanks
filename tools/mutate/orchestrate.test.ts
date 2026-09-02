@@ -44,18 +44,28 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries } from './lib.mjs';
+import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
 import {
   parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, dirtyReport, unreachableReport,
   resolveManifestPath, runTestsReal, classifySubprocessFailure, readReachabilityReport, relatedFilesForAll,
-  failedTestNames,
+  failedTestNames, readManifestFiles, readManifest,
 } from './run.mjs';
 import { scopeCosts } from './scope-costs.mjs';
 import { collectReachability } from './reachability.mjs';
 import type { ManifestEntry } from './lib.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
+
+// Several suites below spawn a REAL vitest subprocess (the end-to-end apply/run/restore
+// cases, the shared reachability graph, the real related-files worker). Alone they take
+// 1.5 to 2.5 s each; under the mutation pool, where up to nine harness workers each run
+// vitest at once (issue #502), the same subprocess can take longer than vitest's default
+// 5 s per-test budget, and the whole file then reads as BASELINE-RED for every entry
+// scoped to it -- seen on 2026-09-02 as 1 of 112 failing in one worker only. The budget
+// here is for contention, not for slowness in the code under test; a hang still trips
+// the harness's own 180 s subprocess kill first.
+vi.setConfig({ testTimeout: 60_000 });
 
 // ---------------------------------------------------------------------------
 // lib.mjs: pure text surgery and manifest validation
@@ -178,9 +188,25 @@ describe('validateManifest', () => {
     expect(() => validateManifest([])).toThrow(/non-empty/);
   });
 
-  it('the shipped manifest.json is itself well-formed', async () => {
-    const entries = JSON.parse(readFileSync(join(ROOT, 'tools/mutate/manifest.json'), 'utf8'));
+  it('the shipped manifests directory is itself well-formed, one file per area (issue #505)', async () => {
+    const files = readManifestFiles(join(ROOT, 'tools/mutate/manifests'));
+    expect(files.map((f) => f.path.split('/').pop()), 'one file per area, read in name order').toEqual(
+      ['app.json', 'audio.json', 'game.json', 'input.json', 'presentation.json', 'render.json', 'sim.json', 'tools.json'],
+    );
+    const entries = mergeManifestFiles(files);
     expect(() => validateManifest(entries)).not.toThrow();
+    // Every entry lives in the file of the area its mutated file belongs to.
+    const areaOf = (file: string): string => {
+      for (const [prefix, name] of [['src/sim/', 'sim'], ['src/game/', 'game'], ['src/render/', 'render'], ['src/input/', 'input'], ['src/presentation/', 'presentation'], ['src/audio/', 'audio'], ['tools/', 'tools']] as const) {
+        if (file.startsWith(prefix)) return name;
+      }
+      return 'app';
+    };
+    for (const f of files) {
+      for (const entry of f.entries) {
+        expect(`${areaOf(entry.file)}.json`, `${entry.id} (${entry.file}) is filed under ${f.path}`).toBe(f.path.split('/').pop());
+      }
+    }
     // Every path a real run would spawn vitest against must actually exist, or
     // "0 tests ran" becomes the failure mode instead of a clear manifest error.
     for (const entry of entries) {
@@ -617,7 +643,7 @@ describe('computeExitCode', () => {
 
 describe('parseArgs', () => {
   it('defaults to the shipped manifest, no --only filter, and root = process.cwd()', () => {
-    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1, report: null });
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null });
   });
 
   it('accepts --manifest, --only and --root overrides', () => {
@@ -1403,7 +1429,7 @@ describe('killedBy: the verdict through fake deps', () => {
 
 describe('the shipped manifest pins every killed entry by name or by count (issue #504)', () => {
   it('has no outcome-only killed entry -- the harness allows the form, the repository does not', () => {
-    const manifest: ManifestEntry[] = JSON.parse(readFileSync(join(ROOT, 'tools/mutate/manifest.json'), 'utf8'));
+    const manifest: ManifestEntry[] = readManifest(join(ROOT, 'tools/mutate/manifests'));
     const outcomeOnly = manifest.filter((e) => e.expect === 'killed' && e.expectFailures === undefined && e.killedBy === undefined).map((e) => e.id);
     expect(outcomeOnly, 'killed entries pinning neither killedBy nor expectFailures').toEqual([]);
     const byName = manifest.filter((e) => e.killedBy !== undefined).length;
@@ -1455,5 +1481,42 @@ describe('scope costs (issue #507)', () => {
       { id: 'l1', seconds: 2.04 }, { id: 'u1', seconds: null }, { id: 'ghost', seconds: 99 },
     ];
     expect(scopeCosts(report, manifest)).toEqual({ '["a.test.ts"]': 12, '["b.test.ts"]': 2 });
+  });
+});
+
+// The per-area manifest directory (issue #505): a pure merge that refuses an id in two
+// files, and the loader that reads a file or every *.json in a directory by name.
+describe('mergeManifestFiles', () => {
+  const e = (id: string) => ({ id, file: 'a.ts', find: 'a', replace: 'b', why: 'w', expect: 'killed', tests: ['a.test.ts'], killedBy: ['t'] });
+  it('concatenates files in the order given and keeps entry order within each', () => {
+    const merged = mergeManifestFiles([{ path: 'b.json', entries: [e('b1'), e('b2')] }, { path: 'a.json', entries: [e('a1')] }]);
+    expect(merged.map((x) => x.id)).toEqual(['b1', 'b2', 'a1']);
+  });
+  it('refuses an id present in two files, naming both -- a duplicate within ONE file is validateManifest\'s, the negative control', () => {
+    expect(() => mergeManifestFiles([{ path: 'x/game.json', entries: [e('dup')] }, { path: 'x/sim.json', entries: [e('dup')] }]))
+      .toThrow(/"dup" appears in both x\/game\.json and x\/sim\.json/);
+    const within = [{ path: 'one.json', entries: [e('dup'), e('dup')] }];
+    expect(() => mergeManifestFiles(within), 'the merge itself lets it through').not.toThrow();
+    expect(() => validateManifest(mergeManifestFiles(within))).toThrow(/duplicate id/);
+    expect(() => mergeManifestFiles([{ path: 'bad.json', entries: {} as unknown as never[] }])).toThrow(/must be a JSON array/);
+  });
+});
+
+describe('readManifestFiles / readManifest', () => {
+  it('reads every *.json in a directory sorted by name, ignores other files, and reads a single file as itself', () => {
+    const dir = join(tmpdir(), `manifests-${process.pid}-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      writeFileSync(join(dir, 'sim.json'), JSON.stringify([{ id: 's1' }]));
+      writeFileSync(join(dir, 'app.json'), JSON.stringify([{ id: 'a1' }, { id: 'a2' }]));
+      writeFileSync(join(dir, 'notes.md'), '# not a manifest');
+      expect(readManifestFiles(dir).map((f) => [f.path.split('/').pop(), f.entries.length])).toEqual([['app.json', 2], ['sim.json', 1]]);
+      expect(readManifest(dir).map((x) => x.id)).toEqual(['a1', 'a2', 's1']);
+      expect(readManifest(join(dir, 'sim.json')).map((x) => x.id), 'a single file').toEqual(['s1']);
+      mkdirSync(join(dir, 'empty'));
+      expect(() => readManifestFiles(join(dir, 'empty'))).toThrow(/holds no \*\.json file/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

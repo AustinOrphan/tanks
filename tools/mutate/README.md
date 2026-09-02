@@ -11,15 +11,20 @@ by reading them back, not by a zero exit code. See the doc comment at the top of
 `run.mjs` for the full contract, exit codes, and the false-positive failure mode this
 exists to catch.
 
-This package carries no manifest of its own: `manifest.json` is project data, not part
-of the tool, and lives in the project that uses it (in this repo, at
-`tools/mutate/manifest.json`, wired up by the root `mutate` npm script).
+This package carries no manifest of its own: the manifest is project data, not part of
+the tool, and lives in the project that uses it (in this repo, one file per area under
+`tools/mutate/manifests/` -- `sim.json`, `game.json`, `render.json`, `input.json`,
+`presentation.json`, `audio.json`, `app.json` for `src/` root files, `tools.json` -- read
+as one set in filename order, wired up by the root `mutate` npm script; issue #505). An
+entry lives in the file of the area its mutated `file` belongs to, so a PR appends to
+its own area's file and two PRs in different areas never conflict; an id present in two
+files is refused with both paths named.
 
 ## Usage
 
 ```
-mutate                                    # tools/mutate/manifest.json under --root, all entries
-mutate --manifest path/to/manifest.json   # a different manifest (absolute or --root-relative)
+mutate                                    # tools/mutate/manifests/*.json under --root, all entries
+mutate --manifest path/to/manifest.json   # a different manifest: one file, or a directory of *.json files
 mutate --only some-manifest-entry-id      # a single entry
 mutate --jobs auto                        # the worktree pool: N serial harnesses, one per detached worktree
 mutate --report out.json                  # per-entry outcomes and failed test names, for tooling

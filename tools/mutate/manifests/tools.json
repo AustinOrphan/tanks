@@ -1,0 +1,474 @@
+[
+  {
+    "id": "capture-playwright-module-becomes-an-override",
+    "file": "tools/capture/prerequisites.mjs",
+    "find": "  const candidates = [...new Set([env.PLAYWRIGHT_MODULE, 'playwright'].filter(Boolean))];",
+    "replace": "  const candidates = env.PLAYWRIGHT_MODULE ? [env.PLAYWRIGHT_MODULE] : ['playwright'];",
+    "expect": "killed",
+    "tests": [
+      "tools/capture/prerequisites.test.ts"
+    ],
+    "why": "The obvious \"make PLAYWRIGHT_MODULE an override\" edit, which prerequisites.test.ts already names in prose as this case's negative control. PLAYWRIGHT_MODULE is a PREFERENCE, not an override: a stale or mistyped value must not stop capture from finding a working install, and the aggregate failure must list every specifier it tried. Under the mutation a contributor whose PLAYWRIGHT_MODULE points at a moved install is told \"Playwright with Chromium is required\" with only that one dead path under `Tried:`, while a perfectly good ambient `playwright` is never attempted. Killed by `treats PLAYWRIGHT_MODULE as the first candidate and still tries the bare specifier` (#353), the only case that reads the second `Tried:` line -- 1 of the file's 4 cases; the other 3 pass under it, which is what expectFailures pins. First two manifest entries outside `src/`: the harness's own `vitest related` preflight relates tools/capture/prerequisites.test.ts to this file, so a tools/ target is measured exactly like a src/ one. Measured in both worlds this repo actually runs in, because Playwright is deliberately not a declared dependency: with node_modules/playwright{,-core} present (the documented local capture setup) and with them absent (CI's `verify` job, which installs Playwright only in the separate `visual` job). The second `Tried:` line's TEXT differs between them (`Chromium executable is missing at /missing/chromium` where playwright resolves, `ERR_MODULE_NOT_FOUND` where it does not); the line is PRESENT either way, which is why the assertion -- and this entry -- read the same in both.",
+    "killedBy": [
+      "capture prerequisites treats PLAYWRIGHT_MODULE as the first candidate and still tries the bare specifier"
+    ]
+  },
+  {
+    "id": "capture-prerequisite-error-drops-the-ci-pin",
+    "file": "tools/capture/prerequisites.mjs",
+    "find": "      + `  npm i --no-save playwright@${CI_PLAYWRIGHT_VERSION}\\n`",
+    "replace": "      + '  npm i --no-save playwright\\n'",
+    "expect": "killed",
+    "tests": [
+      "tools/capture/prerequisites.test.ts"
+    ],
+    "why": "The change issue #353's third acceptance criterion asks to be named: `loadPlaywright` stops naming the pinned version in its remediation. The message then tells a contributor to run `npm i --no-save playwright` unpinned, npm resolves whatever is latest, and the next capture run trips loadPlaywright's OWN version check a few lines up (`Playwright <x> is installed, but CI and capture require <CI_PLAYWRIGHT_VERSION>`) -- guidance that sends the reader in a circle instead of to the install CI uses. Killed by the rejection assertion in `ties capture documentation and errors to the canonical CI Playwright pin`, 1 of the file's 4 cases: that case's earlier assertions read ci.yml and README.md and still pass, and the other 3 cases never inspect the remediation text. The `\\n` in `find`/`replace` is two literal bytes inside a template literal, not a newline. First two manifest entries outside `src/`: the harness's own `vitest related` preflight relates tools/capture/prerequisites.test.ts to this file, so a tools/ target is measured exactly like a src/ one. Measured in both worlds this repo actually runs in, because Playwright is deliberately not a declared dependency: with node_modules/playwright{,-core} present (the documented local capture setup) and with them absent (CI's `verify` job, which installs Playwright only in the separate `visual` job). `playwright@<version>` appears nowhere else in the aggregate message in either world, so deleting it here is what makes the case fail rather than an environment fact -- which is the whole point of #353, where the same case passed or failed on whether Playwright happened to resolve.",
+    "killedBy": [
+      "capture prerequisites ties capture documentation and errors to the canonical CI Playwright pin"
+    ]
+  },
+  {
+    "id": "compare-compatibility-ignores-the-recipe-hash",
+    "file": "tools/compare/compatibility.mjs",
+    "find": "    compatible: base.hash === head.hash,",
+    "replace": "    compatible: differing.length === 0,",
+    "expect": "killed",
+    "tests": [
+      "tools/compare/refs.test.ts"
+    ],
+    "why": "Decides compatibility from the field table instead of the content hash, so a recipe differing only outside that table -- its title, budget, timeout, or any field added since the table was written -- is accepted as the same measuring instrument. The hash is what identifies the reviewed configuration; this is the plausible-looking implementation that silently compares against an unreviewed recipe.",
+    "killedBy": [
+      "checkRecipeCompatibility still refuses when the hash differs but every compared field matches"
+    ]
+  },
+  {
+    "id": "compare-pads-a-shorter-capture",
+    "file": "tools/compare/orchestrate.mjs",
+    "find": "  if (bs.frameCount !== hs.frameCount) {",
+    "replace": "  if (false) {",
+    "expect": "killed",
+    "tests": [
+      "tools/compare/orchestrate.test.ts"
+    ],
+    "why": "Drops the frame-count check, so two clips of different lengths are compared positionally and the surplus frames on the longer side are simply ignored. The issue rules this out by name: a comparison must not silently freeze, pad, truncate, or retime one side to conceal a mismatch, because the result looks exactly like a successful one.",
+    "killedBy": [
+      "compareRefs: comparability of the two captures refuses two captures that differ in frame count, rather than scaling or padding"
+    ]
+  },
+  {
+    "id": "compare-reports-cleanup-clean-before-it-ran",
+    "file": "tools/compare/orchestrate.mjs",
+    "find": "  return { ...result, cleanupFailures };",
+    "replace": "  return { ...result, cleanupFailures: [] };",
+    "expect": "killed",
+    "tests": [
+      "tools/compare/orchestrate.test.ts"
+    ],
+    "why": "Reports every run as having cleaned up. A leaked worktree needs a human and makes the command exit non-zero, so swallowing that is the failure mode this tool can least afford -- and it is the exact bug the original code had by returning from inside the try block, where the value was fixed before the finally block ran.",
+    "killedBy": [
+      "compareRefs: cleanup surfaces a cleanup failure to the caller instead of reporting a clean run"
+    ]
+  },
+  {
+    "id": "compare-worktree-cleanup-loses-its-ownership-guard",
+    "file": "tools/compare/worktrees.mjs",
+    "find": "        if (!inside(workspace, path)) {",
+    "replace": "        if (false) {",
+    "expect": "killed",
+    "tests": [
+      "tools/compare/worktrees.test.ts"
+    ],
+    "why": "Removes the backstop behind 'never delete or reuse an existing user worktree': any path in the owned set is force-removed, wherever it points. With fifteen live worktrees on a development box, a poisoned or stale entry then destroys another session's work rather than being reported.",
+    "killedBy": [
+      "createWorktreeManager: cleanup refuses to remove a tracked path that is not inside the run workspace"
+    ]
+  },
+  {
+    "id": "compare-label-truncation-eats-the-sha",
+    "file": "tools/compare/compose.mjs",
+    "find": "  const prefix = `${side}  ${sha.slice(0, 7)}  `;",
+    "replace": "  const prefix = `${side}  `;",
+    "expect": "killed",
+    "tests": [
+      "tools/compare/compose.test.ts"
+    ],
+    "why": "Puts the ref before the SHA again, so a long branch name pushes the commit identity off the right edge of the panel while the caption still looks plausible. Found by looking at a rendered frame rather than by reasoning about the code, which is why it is pinned rather than trusted to review.",
+    "killedBy": [
+      "fitLabel NEVER lets truncation reach the SHA",
+      "fitLabel degrades to just the side and SHA when the panel cannot fit a ref",
+      "fitLabel keeps a short caption intact"
+    ]
+  },
+  {
+    "id": "compare-differences-the-labelled-frames",
+    "file": "tools/compare/compose.mjs",
+    "find": "  await ffmpeg(['-i', basePng, '-i', headPng, '-filter_complex', '[0:v][1:v]blend=all_mode=difference', difference], deps);",
+    "replace": "  await ffmpeg(['-i', labelledBase, '-i', labelledHead, '-filter_complex', '[0:v][1:v]blend=all_mode=difference', difference], deps);",
+    "expect": "killed",
+    "tests": [
+      "tools/compare/compose.test.ts"
+    ],
+    "why": "Differences the captioned frames instead of the originals. The two captions always differ -- they name different refs -- so the brightest region of every difference image becomes the label text, burying whatever actually changed in the render.",
+    "killedBy": [
+      "composeStill stacks the LABELLED pair but differences the UNLABELLED originals"
+    ]
+  },
+  {
+    "id": "compare-capture-stops-retaining-its-frames",
+    "file": "tools/compare/capture-runner.mjs",
+    "find": "      ['run', 'capture', '--', '--recipe', recipeId, '--out', CAPTURE_OUT, '--retain-frames'],",
+    "replace": "      ['run', 'capture', '--', '--recipe', recipeId, '--out', CAPTURE_OUT],",
+    "expect": "killed",
+    "tests": [
+      "tools/compare/capture-runner.test.ts"
+    ],
+    "why": "Stops asking capture to keep its raw PNGs, which is what the entire comparison is computed from -- analyseFrames reads <dir>/frames/ and would find nothing. Pinned because it genuinely survived: capture-runner is the seam every orchestrator test replaces with a fake, so dropping this flag left all 100 other tests green until the module got a test of its own.",
+    "killedBy": [
+      "runCaptureAtRef ALWAYS asks capture to retain its frames"
+    ]
+  },
+  {
+    "id": "capture-prerequisites-probes-every-required-tool",
+    "file": "tools/capture/prerequisites.mjs",
+    "find": "  const [playwright, ffmpeg, ffprobe] = await Promise.all([\n    loadPlaywright(env, options),\n    toolVersion('ffmpeg', env, options),\n    toolVersion('ffprobe', env, options),\n  ]);\n  return { playwright, ffmpeg, ffprobe };",
+    "replace": "  const [playwright, ffmpeg] = await Promise.all([\n    loadPlaywright(env, options),\n    toolVersion('ffmpeg', env, options),\n  ]);\n  return { playwright, ffmpeg, ffprobe: ffmpeg };",
+    "expect": "killed",
+    "why": "`inspectPrerequisites` is the function capture and compare actually call, and until the broken-toolchain cases it had no test of its own: `prerequisites.test.ts` exercised `toolVersion` and `loadPlaywright` directly, while `orchestrate.test.ts` and `runner.test.ts` both replace `inspectPrerequisites` with a fake. The composition -- which tools get probed at all -- was the seam every caller stubs, so nothing covered it. Dropping the ffprobe probe and reporting FFmpeg's version in its place is what that hole looks like from the outside: the command claims to have verified an encoder it never ran. MEASURED: 2 of the 8 tests in prerequisites.test.ts fail -- 'names ffprobe specifically when that one is genuinely absent from PATH' (the mutant probes only ffmpeg, which the fixture PATH does supply, so nothing is rejected) and 'accepts the same toolchain once both encoders are on PATH, and reports what it found' (ffprobe comes back reading 'ffmpeg version 0.0-fixture'). Against the pre-existing tests for this file the same mutation SURVIVES.",
+    "tests": [
+      "tools/capture/prerequisites.test.ts"
+    ],
+    "killedBy": [
+      "capture prerequisites against a really broken toolchain accepts the same toolchain once both encoders are on PATH, and reports what it found",
+      "capture prerequisites against a really broken toolchain names ffprobe specifically when that one is genuinely absent from PATH"
+    ]
+  },
+  {
+    "id": "compare-checks-prerequisites-in-the-callers-environment",
+    "file": "tools/compare/orchestrate.mjs",
+    "find": "await io.inspectPrerequisites(deps.env ?? process.env, { signal: deps.signal })",
+    "replace": "await io.inspectPrerequisites(process.env, { signal: deps.signal })",
+    "expect": "killed",
+    "why": "Compare must check prerequisites in the environment it was HANDED, not the ambient one. In production those are the same object, which is exactly why dropping `deps.env ??` reads as a harmless simplification -- and why every test that injects a fake `inspectPrerequisites` is blind to it, since a fake ignores the argument. MEASURED: 1 of the 28 tests in orchestrate.test.ts fails, 'spends nothing when a real prerequisite check meets a genuinely missing FFmpeg'. That case stubs the AMBIENT PATH with working shims and passes a short-an-FFmpeg PATH through `deps.env`, so the two disagree deliberately: the mutant reads the working one, gets past the check, and reaches `resolveRef`. Stubbing the ambient PATH rather than trusting the real one is what makes this a measurement -- on a machine with no FFmpeg installed the mutant would refuse for the right reason by accident and survive. Against the pre-existing tests for this file it SURVIVES.",
+    "tests": [
+      "tools/compare/orchestrate.test.ts"
+    ],
+    "killedBy": [
+      "compareRefs against a really broken toolchain spends nothing when a real prerequisite check meets a genuinely missing FFmpeg"
+    ]
+  },
+  {
+    "id": "run-process-refuses-a-nonzero-exit",
+    "file": "tools/capture/process.mjs",
+    "find": "      else if (code !== 0) {",
+    "replace": "      else if (false) {",
+    "expect": "killed",
+    "why": "A subprocess that fails must not be read as a result. `toolVersion` returns the first line of STDOUT, so without this check an encoder that prints a plausible banner and then exits nonzero is accepted as an installed tool, and a decode or compose step that failed is treated as having produced its output file. Every pre-existing test of these paths replaced `runProcess` or the stage above it with a fake that resolves or throws on demand, so no test ran a real process that really failed. MEASURED: 3 of the 52 tests across the three listed files fail -- prerequisites' 'refuses a tool that is installed and broken, rather than reading its failure as a version', and the two orchestrate cases 'cleans up and removes the partial output when the real frame decode fails' and '... when the real still compositor fails', which then report an ENOENT on the file the failed shim never wrote instead of the tool's own failure. pixels' short-decode case is untouched: its shim exits 0 by design, and the byte-length guard is what catches it. Against the pre-existing tests for these three files the same mutation SURVIVES.",
+    "tests": [
+      "tools/capture/prerequisites.test.ts",
+      "tools/compare/orchestrate.test.ts",
+      "tools/compare/pixels.test.ts"
+    ],
+    "killedBy": [
+      "capture prerequisites against a really broken toolchain refuses a tool that is installed and broken, rather than reading its failure as a version",
+      "compareRefs against a really broken toolchain cleans up and removes the partial output when the real frame decode fails",
+      "compareRefs against a really broken toolchain cleans up and removes the partial output when the real still compositor fails"
+    ]
+  },
+  {
+    "id": "parser-span-cannot-cross-a-newline",
+    "file": "tools/issues/metadata.mjs",
+    "find": "        blank += 1;\n        if (blank >= 2) break;",
+    "replace": "        break;",
+    "expect": "killed",
+    "why": "Restores the exact defect issue #416 fixed: a code span that can only be seen when both backticks sit on one line. An opening backtick on one line and its closer on the next would again leave a `Parent: #N` mirror between them looking like prose, so an issue DOCUMENTING the form is audited as USING it -- a red required check whose remediation cannot be followed, because there is no parent to add. Nothing else observes it: the audit's other outputs are unchanged and the whole 181-issue corpus parses identically either way.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ],
+    "killedBy": [
+      "native relationship contract blanks a code span that OPENS and CLOSES on different lines (issue #416)"
+    ]
+  },
+  {
+    "id": "parser-stray-backtick-opens-a-span",
+    "file": "tools/issues/metadata.mjs",
+    "find": "      i += open; // unmatched: literal text, left exactly as written",
+    "replace": "      for (let k = i; k < chars.length; k += 1) if (chars[k] !== '\\n') chars[k] = ' ';\n      break;",
+    "expect": "killed",
+    "why": "The over-correction #416 invited and this change deliberately refused: treating an unmatched backtick as an open span and blanking the rest of the body. CommonMark says a backtick run with no equal-length closer is literal text, so this would make the parser disagree with how GitHub renders the body it is reading, and would silently DROP real parent mirrors that merely happen to sit after a stray backtick. Pins the decision, not just the code.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ],
+    "killedBy": [
+      "native relationship contract does not let a code span cross a blank line, the way a paragraph break does not (issue #416)",
+      "native relationship contract treats an UNMATCHED backtick as literal text, not as an open span (issue #416)"
+    ]
+  },
+  {
+    "id": "cycle-detector-reports-a-cycle-twice",
+    "file": "tools/issues/metadata.mjs",
+    "find": "      const key = [...cycle].sort((a, b) => a - b).join(':');\n      if (!cycleKeys.has(key)) {\n        cycleKeys.add(key);\n        cycles.push(cycle);\n      }",
+    "replace": "      cycles.push(cycle);",
+    "expect": "killed",
+    "why": "Deletes findDependencyCycles' de-duplication outright. Before issue #417 added its test this SURVIVED -- all 25 tests in metadata.test.ts stayed green -- so the whole block was unverified production logic. It is genuinely reachable, but only narrowly: a duplicated BACK-edge, where the same blocker is listed twice pointing at a node still on the stack, because `visiting.get()` is consulted before `visited.has()`. A duplicated forward edge does not reach it, and neither does any of the 4096 directed graphs on 4 distinct nodes. Without the guard the audit reports one cycle as two errors, telling a maintainer to break an edge that has already been reported.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ],
+    "killedBy": [
+      "native relationship contract reports a cycle ONCE when the same back-edge is listed twice (issue #417)"
+    ]
+  },
+  {
+    "id": "absent-native-parent-crashes-the-audit",
+    "file": "tools/issues/metadata.mjs",
+    "find": "        if (nativeParent === null || nativeParent === undefined) {",
+    "replace": "        if (nativeParent === null) {",
+    "expect": "killed",
+    "why": "Restores a real latent crash that typing this module under checkJs surfaced (issue #417). GitHub OMITS the parent key rather than sending null when an issue has none, so `parentLoaded: true` with no `parent` sent `auditOpenIssues` into `nativeParent.number` and threw TypeError. The audit runs on every issues event, so one such payload took down the required check for every issue in the run -- a stack trace instead of a remediation. Measured on the pre-fix tree: it threw; after, it reports declared-parent-missing-native.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ],
+    "killedBy": [
+      "native relationship contract treats an ABSENT native parent the same as a null one, instead of throwing (issue #417)"
+    ]
+  },
+  {
+    "id": "roundtrip-probe-crashes-on-a-malformed-url",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "  let path;\n  try {\n    path = decodeURIComponent((url ?? '/').split('?')[0]);\n  } catch {\n    return null;\n  }\n",
+    "replace": "  const path = decodeURIComponent((url ?? '/').split('?')[0]);\n",
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Puts the decode back outside a try, which is how the probe's handler shipped. decodeURIComponent throws URIError on malformed percent-encoding, and GET /% was measured killing the process with exit 1: nothing awaits an async request handler, so the rejection is unhandled rather than answered with a 500. The cost is not a security one -- it is a probe that answers a canvas census with a bare stack, at the moment someone is debugging a disposal leak. Exactly 1 of 9 fails, the malformed-encoding case; the traversal assertions are indifferent to this mutation, which is why they are separate entries."
+  },
+  {
+    "id": "roundtrip-probe-serves-files-outside-dist",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "  if (file !== root && !file.startsWith(root + sep)) return null;\n",
+    "replace": "  // the resolved path is trusted\n",
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "Drops the containment check entirely, leaving the resolve to escape the root the way the original join did. A raw socket sending GET /../outside.txt was measured being answered 200 with a file from outside dist. Reachability is the part worth writing down: a normalising client CANNOT get there, because WHATWG URL resolution collapses both .. and %2e%2e before the request leaves, so fetch('/../x') arrives as /x. A test driven through fetch would therefore pass against the unhardened handler and prove nothing -- the assertions sit on the resolver directly for that reason. 4 of 9 fail, the four escape shapes."
+  },
+  {
+    "id": "roundtrip-probe-containment-drops-the-separator",
+    "file": "tools/visual/serve-path.mjs",
+    "find": "if (file !== root && !file.startsWith(root + sep)) return null;",
+    "replace": "if (file !== root && !file.startsWith(root)) return null;",
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The containment check kept but weakened to a bare prefix, which is the shape it is easiest to write by accident. A sibling directory whose name merely begins with the root's -- dist-evil next to dist -- then passes. This entry proves the SHAPE of the guard rather than its presence: measured, it fails exactly 1 of 9, and every other assertion in the file, including all three .. escapes, still passes under it. Without that one case the two forms are indistinguishable and the weaker one would survive."
+  },
+  {
+    "id": "capture-workspace-containment-compares-paths-lexically",
+    "file": "tools/capture/paths.mjs",
+    "find": "  const rel = relative(realpathSync.native(root), realpathSync.native(target));",
+    "replace": "  const rel = relative(root, target);",
+    "tests": [
+      "tools/capture/args.test.ts",
+      "tools/capture/runner.test.ts"
+    ],
+    "expect": "killed",
+    "why": "The #346 original, and the defect #482 records. relativeInside compared the root exactly as the caller held it against a workspace createTemporaryWorkspace had already canonicalised, so any root reached through a symbolic link -- macOS's tmpdir sits behind /var -> /private/var, which is every fixture checkout there -- made path.relative answer a `..`-led walk to the real location and the runner refuse its own workspace as an escape. Both sides go through realpathSync.native, the semantics of the fs/promises realpath that produced the workspace, so a root spelled in a different letter case on a case-insensitive filesystem lands in the same place too. The same lexical comparison also waved through a `tmp` that is itself a link out of the root, because its spelling is `tmp/capture-x`. Fails exactly 3 of the 21 in scope (population: args.test.ts 10 + runner.test.ts 11): the two symlink cases in `capture workspace containment` and `publishes through a symlinked checkout root`, which drives the whole runner through a symlinked root and reads the `tmp/capture-*/producer` the gallery adapter's argument check demands. The other 18 pass under it on every platform, which is the gap this entry closes: their fixture roots are pinned with realpath so a plain checkout never depends on the tmpdir symlink, matching what Linux CI saw on main while the bug existed and the 10 macOS-only failures that first surfaced it.",
+    "killedBy": [
+      "capture runner publication and cleanup publishes through a symlinked checkout root",
+      "capture workspace containment keeps a workspace under a symlinked root inside the checkout",
+      "capture workspace containment rejects a workspace that only looks inside the checkout"
+    ]
+  },
+  {
+    "id": "capture-workspace-containment-only-rejects-an-empty-path",
+    "file": "tools/capture/paths.mjs",
+    "find": "  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {",
+    "replace": "  if (!rel) {",
+    "tests": [
+      "tools/capture/args.test.ts"
+    ],
+    "expect": "killed",
+    "why": "The adversarial question canonicalising both sides invites: did comparing real locations weaken the check? This keeps the realpath calls and drops the parent-directory and absolute-path rejections, so any existing target is accepted. Fails exactly 2 of args.test.ts's 10: `rejects a workspace that only looks inside the checkout` (a `tmp` symlinked out of the root, which only the canonical comparison can see) and `rejects a workspace outside the checkout` (a plain sibling directory). The symlinked-root accept case and the other 7 pass under it, which is what makes the two rejection cases the guard's negative controls rather than decoration.",
+    "killedBy": [
+      "capture workspace containment rejects a workspace outside the checkout",
+      "capture workspace containment rejects a workspace that only looks inside the checkout"
+    ]
+  },
+  {
+    "id": "mutate-pool-splits-a-scope-across-workers",
+    "file": "tools/mutate/run.mjs",
+    "find": "  for (const group of scopes) {\n    let lightest = slices[0];\n    for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;\n    lightest.entries.push(...group);\n    lightest.cost += costOfGroup(group);\n  }",
+    "replace": "  let turn = 0;\n  for (const group of scopes) {\n    for (const entry of group) slices[turn++ % slices.length].entries.push(entry);\n  }",
+    "why": "Dealing entries round-robin splits a test scope across workers, so the same scope is baselined once per worker instead of once per run and the hud scope's 41 entries cost 41 baselines' worth of extra vitest starts. The partition test's 'never splits an exact scope' assertion is the case.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "partitionByScope balances by entry count, largest scope first onto the lightest worker, and keeps manifest order within a worker",
+      "partitionByScope deals every entry exactly once and never splits an exact scope across workers",
+      "partitionByScope drops empty workers when there are fewer scopes than jobs, and --jobs 1 is one slice in manifest order"
+    ]
+  },
+  {
+    "id": "mutate-pool-stacks-scopes-on-one-worker",
+    "file": "tools/mutate/run.mjs",
+    "find": "    for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;",
+    "replace": "    for (const slice of slices) if (slice.cost > lightest.cost) lightest = slice;",
+    "why": "Placing each scope on the HEAVIEST worker serialises the whole manifest onto one worker while the others idle -- the pool then costs worktrees and saves nothing. The balance assertion (hud on one worker, loop and both on the other) is the case.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "partitionByScope balances by entry count, largest scope first onto the lightest worker, and keeps manifest order within a worker",
+      "partitionByScope drops empty workers when there are fewer scopes than jobs, and --jobs 1 is one slice in manifest order"
+    ]
+  },
+  {
+    "id": "mutate-pool-restore-failure-outranked",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const severity = [3, 130, 4, 2, 1];",
+    "replace": "  const severity = [130, 4, 2, 1, 3];",
+    "why": "A worker that could not restore its file (exit 3, a worktree left mutated and kept for inspection) must be the run's verdict even when another worker was interrupted; ranking it last hides the one outcome that needs a human.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "aggregateExitCodes folds worker exit codes worst-first: restore failure, interruption, mid-run error, refusal, mismatch, clean"
+    ]
+  },
+  {
+    "id": "mutate-pool-dead-worker-passes",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const seen = new Set(codes.map((c) => (c === null ? 4 : severity.includes(c) || c === 0 ? c : 4)));",
+    "replace": "  const seen = new Set(codes.map((c) => (c === null ? 0 : severity.includes(c) || c === 0 ? c : 0)));",
+    "why": "A worker that died without an exit code, or with one the harness never emits (an OOM kill's 137), ran an unknown number of its entries; folding that into a pass would let a silent crash green the gate.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "aggregateExitCodes a worker that died without a code, or with an unknown one, is a mid-run error -- never a pass"
+    ]
+  },
+  {
+    "id": "mutate-parse-jobs-accepts-zero",
+    "file": "tools/mutate/run.mjs",
+    "find": "  if (!Number.isInteger(n) || n < 1) throw new Error(",
+    "replace": "  if (!Number.isInteger(n) || n < 0) throw new Error(",
+    "why": "`--jobs 0` would parse and fall through to the serial path (pool mode is gated on `jobs > 1`, and the partitioner never yields zero slices), so a CI lane configured with 0 would look like the pool while running serially; the parser is the one place that refuses it.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "parseJobs reads a positive integer and \"auto\" (one core kept back), and refuses anything else"
+    ]
+  },
+  {
+    "id": "mutate-killed-by-never-reports-a-missing-test",
+    "file": "tools/mutate/orchestrate.mjs",
+    "find": "      : entry.killedBy.filter((name) => !(result.failedTests ?? []).includes(name));",
+    "replace": "      : [];",
+    "why": "A `killedBy` entry whose named test PASSED under the mutation must mismatch by name -- that rot is the one thing the named-test contract exists to catch; treating every name as satisfied turns killedBy into an outcome-only pin.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "end-to-end: real apply -> real vitest subprocess -> real restore a real killedBy entry matches when its named test fails, and a name that does not fail is a mismatch that names it (issue #504)",
+      "killedBy: the verdict through fake deps mismatches, naming the test, when the named test passed while others failed -- the rot case; the count-only entry is the negative control"
+    ]
+  },
+  {
+    "id": "mutate-killed-by-allowed-beside-a-count",
+    "file": "tools/mutate/lib.mjs",
+    "find": "    if (entry.expectFailures !== undefined) {\n      throw new Error(`manifest ${label}: \"killedBy\" and \"expectFailures\" are alternatives -- pin the named tests or the exact count, not both`);\n    }",
+    "replace": "    if (false) {\n      throw new Error(`manifest ${label}: \"killedBy\" and \"expectFailures\" are alternatives -- pin the named tests or the exact count, not both`);\n    }",
+    "why": "An entry carrying both contracts is ambiguous about what a reviewer must keep true when tests are added; the validator is the one place that refuses it.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "killedBy: manifest validation refuses an empty or non-string list, a survivor with a killer, and both contracts at once"
+    ]
+  },
+  {
+    "id": "mutate-failed-test-names-ignore-status",
+    "file": "tools/mutate/run.mjs",
+    "find": "      if (a.status === 'failed' && typeof a.fullName === 'string') names.push(a.fullName);",
+    "replace": "      if (typeof a.fullName === 'string') names.push(a.fullName);",
+    "why": "Naming every test in the report, passed or failed, would satisfy any killedBy list whatever the mutation did; only failed assertions are killers.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "failedTestNames lists the full names of failed assertions in report order and nothing else"
+    ]
+  },
+  {
+    "id": "mutate-pool-ignores-scope-cost",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const costOfGroup = (/** @type {T[]} */ group) => group.length * costOf(group[0].tests);",
+    "replace": "  const costOfGroup = (/** @type {T[]} */ group) => group.length;",
+    "why": "Dealing by entry count alone is what left the hud scope's worker running five minutes after the others had finished (issue #507); the cost-weighted partition test is the case that sees it.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "partitionByScope balances by COST when a cost is supplied: one expensive scope outweighs several cheap ones (issue #507)"
+    ]
+  },
+  {
+    "id": "mutate-scope-cost-unknown-scope-costs-nothing",
+    "file": "tools/mutate/run.mjs",
+    "find": "    return Number.isFinite(v) && v > 0 ? v : fallback;",
+    "replace": "    return Number.isFinite(v) && v > 0 ? v : 0;",
+    "why": "A scope the cost file does not know (a brand-new test file) must cost the median, not nothing: at zero the pool would stack every new scope onto one worker as if free.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "scope costs (issue #507) scopeCostLookup returns the measured seconds for a known scope and the median of the known ones otherwise"
+    ]
+  },
+  {
+    "id": "mutate-merge-allows-an-id-in-two-files",
+    "file": "tools/mutate/lib.mjs",
+    "find": "      if (typeof id === 'string' && seen.has(id) && seen.get(id) !== file.path) {",
+    "replace": "      if (false) {",
+    "why": "With the manifest split across area files (issue #505), the same id in two files would run twice and let `--only` pick either silently; the merge is the one place that sees both files.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "mergeManifestFiles refuses an id present in two files, naming both -- a duplicate within ONE file is validateManifest's, the negative control"
+    ]
+  },
+  {
+    "id": "mutate-manifest-dir-read-unsorted",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const names = readdirSync(path).filter((n) => n.endsWith('.json')).sort();",
+    "replace": "  const names = readdirSync(path).filter((n) => n.endsWith('.json')).reverse();",
+    "why": "Directory order is filesystem order, which differs between machines; the set must be read by name so the pool's partition, `--report` files and the log are the same everywhere.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "readManifestFiles / readManifest reads every *.json in a directory sorted by name, ignores other files, and reads a single file as itself"
+    ]
+  }
+]

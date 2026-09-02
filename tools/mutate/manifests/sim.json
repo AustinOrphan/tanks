@@ -1,0 +1,1375 @@
+[
+  {
+    "id": "versus-spawns-drop-los-hard-filter",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "  const pool = invisible.length > 0 ? invisible : eligible;",
+    "replace": "  const pool = eligible;",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "pickVersusSpawnCell's whole design is hard-filter-then-maximin: no line of sight to any already-chosen spawn beats every distance score, where achievable. Dropping the filter falls straight through to plain geodesic maximin over every candidate, which is a DIFFERENT function (it can and does pick a farther cell that is still in plain sight, whenever the farthest reachable cell happens to be visible). Caught by 3 of the 14 cases in versus-spawns.test.ts: the dedicated fixture built to make a visible cell strictly farther than any invisible one (picks (row0,col19) instead of the invisible (row2,col11)); the brute-force-gap fixture, whose own walls also gate LOS, so the greedy result it measures shifts too; and the real-shipped-arena sweep asserting 0 of 100 player pairs share mutual line of sight, which the mutation raises to 28.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "versus-spawns-chain-drops-accumulation",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize)), opts));",
+    "replace": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [cellCentre(cells[cells.length - 1], cellSize)], opts));",
+    "expect": "killed",
+    "expectFailures": 7,
+    "why": "Greedy farthest-point sampling must place each spawn against EVERY spawn already chosen, not just the most recent one. Avoiding only the last one lets the chain walk back and forth between two ends of the board, putting spawn 3 on top of spawn 1. This entry replaces `versus-spawns-wiring-drops-accumulation`, which targeted a `chosen.push(pos)` accumulator in arena.ts's versus branch; that variable became dead when pickVersusSpawnSet took over the picking, and the old entry silently degraded to SURVIVES because it was mutating code nothing read -- which is how the dead variable was found at all. The accumulation now lives here. Caught by 5 of 17 in versus-spawns.test.ts.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "versus-stock-ffa-counts-alive-not-eliminated",
+    "file": "src/sim/world.ts",
+    "find": "  const remaining = players.filter((t) => !isVersusEliminated(t));",
+    "replace": "  const remaining = players.filter((t) => t.alive);",
+    "expect": "killed",
+    "why": "resolveStatusFfa's win/lose decision must count players who are NOT ELIMINATED (dead AND out of stock), not players who are merely alive -- a player awaiting a scheduled respawn is dead this instant but still in the match. Reverting to a bare `alive` filter is exactly the pre-stock rule the FFA branch shipped with, and is the specific regression the task brief asked to be reviewed hardest for: it ends a stock match on the very first death. Caught by 2 of the 25 cases in versus-modes.test.ts: the N=2 regression test built specifically to discriminate the two rules (a 3+-player death leaves 2+ ALIVE tanks either way, so a larger N cannot tell them apart -- verified directly, an earlier N=3 draft of this same test passed under this mutation) and the mutual-kill-with-stock-remaining test, which this mutation reads as an immediate 'lose' instead of 'playing'.",
+    "tests": [
+      "src/sim/versus-modes.test.ts"
+    ],
+    "killedBy": [
+      "versus stock: a mid-stock death does not end the match the specific regression this feature is reviewed hardest for: a naive alive-count check ends the match on the FIRST death even with stock left -- ours must not",
+      "versus stock: elimination at zero stock a mutual kill where BOTH still have stock left is not a wipeout -- both respawn, still playing"
+    ]
+  },
+  {
+    "id": "versus-stock-teams-counts-alive-not-eliminated",
+    "file": "src/sim/world.ts",
+    "find": "  const teamsRemaining = new Set(players.filter((t) => !isVersusEliminated(t)).map((t) => t.team));",
+    "replace": "  const teamsRemaining = new Set(players.filter((t) => t.alive).map((t) => t.team));",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The teams analogue of versus-stock-ffa-counts-alive-not-eliminated, and a SEPARATE function with its own filter -- resolveStatusFfa's own fix does not cover this one, which is why it is a second entry rather than folded into the first. A 4-player teams fixture with one death per team does not discriminate the two rules either (2+ ALIVE members remain on the losing side's team regardless), which is why this is caught by only 1 of 25: the one-player-per-team (N=2) regression test built to force the same first-death-ends-it failure the FFA entry names.",
+    "tests": [
+      "src/sim/versus-modes.test.ts"
+    ]
+  },
+  {
+    "id": "versus-respawn-always-falls-back-to-authored-spawn",
+    "file": "src/sim/world.ts",
+    "find": "  if (mode === 'campaign-coop' || arenaGeometry === null) return { x: authored.x, y: authored.y };",
+    "replace": "  if (true) return { x: authored.x, y: authored.y };",
+    "expect": "killed",
+    "why": "respawnPos must actually reach pickVersusSpawnCell for ffa/teams -- forcing the fallback branch unconditionally (as if arenaGeometry were always absent) restores the campaign-coop-only behaviour for every mode. Caught by 5 of the 6 cases in versus-respawn.test.ts: every test that asserts a revived tank lands on the PICKED cell rather than its authored spawn. The one survivor is the dedicated fallback test itself (arenaGeometry genuinely absent), which asserts exactly the behaviour this mutation makes universal and so cannot tell the difference -- it is not blind to this mutation by accident, it is testing the state this mutation forces on every other case too.",
+    "tests": [
+      "src/sim/versus-respawn.test.ts"
+    ],
+    "killedBy": [
+      "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present avoid excludes a tank that is itself currently dead: only the living survivor constrains the pick",
+      "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present end to end through the full pipeline (stepInputs): the revived tank is alive and off its authored spawn",
+      "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present ffa N=2: the revived tank lands on the picked cell, not its own authored spawn",
+      "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present teams N=2: same wiring reaches the teams branch too",
+      "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present two same-tick revivals: the second sees the first as already alive at its NEW cell"
+    ]
+  },
+  {
+    "id": "spawn-protection-drops-action-lock-gate",
+    "file": "src/sim/world.ts",
+    "find": "  const canAct = phase === 'live' && !isActionLocked(player, world.tick);",
+    "replace": "  const canAct = phase === 'live';",
+    "expect": "killed",
+    "why": "driveTank is the ONE site every kind==='player' tank's fire/mine input is consumed, human or bot (a bot-claimed slot's InputState, from ai/player-profile.ts's decidePlayerInput, is fed through this exact same applyPlayerInputs path in game/loop.ts) -- so dropping the isActionLocked half of canAct here reopens fire/mine for every shielded tank regardless of input source. Caught by 5 of the 12 cases in spawn-protection.test.ts: both human-path refusal tests (fire, mine), both bot-path refusal tests (fire, mine -- each paired with its own 'control' test proving the SAME decision fires when unshielded, so the fixture is not merely inert), and the coop-POOL-mode reachability test, which shows the gate was never mode-specific to begin with. The movement/aim/invincible/no-shield/shield-expired tests all survive unchanged, which is the point: this mutation should touch fire/mine only.",
+    "tests": [
+      "src/sim/spawn-protection.test.ts"
+    ],
+    "killedBy": [
+      "spawn protection reaches coop POOL mode too, an existing per-tank respawn path the revived tank cannot fire on the very tick it revives",
+      "the bot input path: the sim gate blocks a shielded bot exactly as it blocks a human, at the same choke point shielded: mine-laying is refused the same way when the bot is inclined to lay one",
+      "the bot input path: the sim gate blocks a shielded bot exactly as it blocks a human, at the same choke point shielded: the SAME bot decision still wants to fire, but the sim refuses it",
+      "the human input path: a shielded tank cannot fire or lay a mine fire is refused while shielded: no bullet, no fire event, cooldown NOT spent",
+      "the human input path: a shielded tank cannot fire or lay a mine mine-laying is refused while shielded: no mine, no mine-dropped event, cooldown NOT spent"
+    ]
+  },
+  {
+    "id": "versus-board-drops-concealment-requirement",
+    "file": "src/sim/versus-board.ts",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && roomOk && egressOk,",
+    "expect": "killed",
+    "why": "suitable must require every spawn pair to lack mutual line of sight, not just distinct cells and enough floor -- dropping allPairsConcealed from the conjunction leaves a fully-visible board reading as suitable. Caught by 1 of the 12 cases in versus-board.test.ts: the 10x10-open-room fixture built specifically to isolate concealment (no interior walls, so separation and room both measure true while every spawn pair stays mutually visible at every N in {2,3,4}) asserts suitable=false at N=2 and fails immediately once the mutation makes it true. The 15-shipped-arena sweep does not catch this: every shipped arena already measures 0 of its pairs visible (pickVersusSpawnCell's own hard LOS filter succeeds on all of them), so allPairsConcealed is true regardless of whether the mutation is applied, and suitable's value is unchanged for every shipped (arena, N) combination.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ],
+    "killedBy": [
+      "evaluateVersusBoard: mutual concealment can fail, isolated from the other two measured: separation and room hold, concealment does not, at every N in {2, 3, 4}"
+    ]
+  },
+  {
+    "id": "versus-board-drops-room-requirement",
+    "file": "src/sim/versus-board.ts",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && allPairsConcealed && egressOk,",
+    "expect": "killed",
+    "why": "suitable must also require the open-floor-per-player ratio to clear MIN_OPEN_FLOOR_PER_PLAYER -- dropping roomOk from the conjunction leaves a board with plenty of separation and concealment but almost no floor space reading as suitable. Caught by 2 of the 12 cases in versus-board.test.ts: the 7x7 pillar-room fixture (39 open-floor cells, separation and concealment measuring true at every N while the ratio drops below the bound at N=3 and N=4) and the versusBoardCatalog test built against the same fixture at N=4. Equivalent to the concealment entry above in shape but not in effect -- this one changes a different conjunct and is caught by a different, deliberately non-overlapping fixture, so the two mutations cannot silently cover for each other. Count re-measured 2026-08-23: the pillar-room fixture's rescale to cellSize 2 (issue #225) consolidated the kill into 1 failing test. Count moved 1 -> 2 when the egress gate landed: the shipped sweep now asserts suitability per OFFERED combination as well, so dropping roomOk fails that assertion too.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ],
+    "killedBy": [
+      "evaluateVersusBoard: room can fail, isolated from the other two measured: 39 open-floor cells; room passes at N=2 (19.5) and fails at N=3 (13) and N=4 (9.75), separation and concealment hold throughout",
+      "versusBoardCatalog accepts an explicit arena/count list, for synthetic fixtures"
+    ]
+  },
+  {
+    "id": "versus-board-distinct-count-ignores-duplicates",
+    "file": "src/sim/versus-board.ts",
+    "find": "  const spawnCount = new Set(positions.map((p) => `${p.x},${p.y}`)).size;",
+    "replace": "  const spawnCount = positions.length;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "spawnCount must count DISTINCT positions, not merely how many players were placed -- using positions.length instead of a Set's size makes every co-located spawn look like a unique one. This mutates the field's own computation, deliberately not its participation in the suitable conjunction: dropping distinctSpawns from suitable is EQUIVALENT (not in this manifest -- see docs/superpowers/plans/2026-08-17-versus-board-rules.md for the analytic argument and the by-hand verification that all 12 cases in versus-board.test.ts stay green under that specific mutation), because MIN_OPEN_FLOOR_PER_PLAYER >= 1 already forces roomOk false on every fixture where distinctSpawns is false. This entry is caught instead by the pathological zero-open-floor fixture's DIRECT assertion on the spawnCount field (expected 1, the co-located fallback cell, at every N): the mutation reports spawnCount = playerCount regardless of the collision, so the field assertion fails 1 of 12 cases before suitable is ever consulted.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ]
+  },
+  {
+    "id": "versus-variants-guard-drops-mode-check",
+    "file": "src/sim/arena.ts",
+    "find": "  if ((mode === 'ffa' || mode === 'teams') && seed !== undefined) {",
+    "replace": "  if (seed !== undefined) {",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "loadArena must only ever pick a versus variant for mode 'ffa'/'teams' -- dropping the mode half of the guard means ANY call that passes a real seed gets a variant, including every campaign-coop load (which always passes a seed in real play and in the golden trace). Caught by 2 of 32 across the two scoped files: versus-variants.test.ts's own 'campaign-coop is BYTE-IDENTICAL... even when a real seed is passed' test, and tools/baseline/trace.test.ts's BASELINE_HASH, which moved from a5458ede... to 70dd6777... under this mutation -- verified by hand before this entry was written, then restored and re-verified clean.",
+    "tests": [
+      "src/sim/versus-variants.test.ts",
+      "tools/baseline/trace.test.ts"
+    ]
+  },
+  {
+    "id": "versus-variants-concealment-check-dropped",
+    "file": "src/sim/versus-variants.ts",
+    "find": "      if (lineOfSight(positions[i], positions[j], walls)) return false;",
+    "replace": "      lineOfSight(positions[i], positions[j], walls); // concealment check dropped",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "isVariantSuitable must reject a candidate where any spawn pair keeps mutual line of sight -- discarding the lineOfSight result instead of gating on it makes every candidate read as concealment-clean regardless of the real geometry, so pickVersusVariantGrid never retries and never falls back. Caught by 2 of 25 in versus-variants.test.ts: the seed-7920/arena-03/fraction-0.7 retry test (the first, unsuitable draw is now accepted immediately, so the picked grid never diverges from it) and the full-exhaustion fallback test (the always-unsuitable synthetic fixture is now accepted on attempt 0, so the result is no longer reference-equal to the authored grid).",
+    "tests": [
+      "src/sim/versus-variants.test.ts"
+    ]
+  },
+  {
+    "id": "versus-variants-retry-bound-forced-to-one",
+    "file": "src/sim/versus-variants.ts",
+    "find": "  for (let attempt = 0; attempt < VARIANT_RETRY_BOUND; attempt++) {",
+    "replace": "  for (let attempt = 0; attempt < 1; attempt++) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "pickVersusVariantGrid must actually RETRY, not just fall back on the first unsuitable draw -- forcing a single attempt removes the retry entirely. A first, weaker version of this entry's test (asserting only that the picked grid differs from the failed first draw, and is itself suitable) SURVIVED this mutation: arena-03's own authored board is suitable at N=4, so an immediate fallback to it satisfies both assertions for the wrong reason, which is exactly the kind of accidental pass this file's testing conventions warn about. The test was strengthened to also assert the picked grid is neither reference-equal to the authored grid nor free of removed cells, which is what a genuine second-attempt success looks like and a same-arena fallback does not. Caught by 1 of 25 in versus-variants.test.ts under the strengthened version.",
+    "tests": [
+      "src/sim/versus-variants.test.ts"
+    ]
+  },
+  {
+    "id": "versus-variants-includes-solid-cells",
+    "file": "src/sim/versus-variants.ts",
+    "find": "      if (legend[grid[r][c]] === 'destructible') cells.push({ row: r, col: c });",
+    "replace": "      if (legend[grid[r][c]] === 'destructible' || legend[grid[r][c]] === 'solid') cells.push({ row: r, col: c });",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "buildVariantGrid must only ever draw from DESTRUCTIBLE cells -- solid geometry defines the arena's shape and must never vary between playthroughs of the same board. Including solid cells in the draw pool means a variant can turn a load-bearing wall into open floor, changing the board's identity rather than varying it. Caught by 3 of 25 in versus-variants.test.ts: the 'every character that differs... was a destructible cell' invariant (a changed cell's authored legend entry is now 'solid', not 'destructible'), the 'removes exactly round(destructibleCount * fraction)' count (47 removed on arena-01 instead of 7, since the pool nearly quadruples), and the seed-7920/arena-03 retry test's own premise check (the much larger removal pool changes what that specific seed draws). Solid-versus geometry is otherwise unreachable from any test in this file at the ungated buildVariantGrid layer, which is why the wired-through-loadArena describe block exists separately.",
+    "tests": [
+      "src/sim/versus-variants.test.ts"
+    ]
+  },
+  {
+    "id": "versus-p1-not-relocated",
+    "file": "src/sim/arena.ts",
+    "find": "      for (let i = 0; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
+    "replace": "      for (let i = 1; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "versus-spawns-intact-graph",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "  return legend[ch] !== 'solid';",
+    "replace": "  return legend[ch] !== 'solid' && legend[ch] !== 'destructible';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The geodesic graph spawn separation is measured on must treat a DESTRUCTIBLE cell as traversable -- the breached phase, the same both-wall-phases discipline spawnBlockRobust already applies in arena-claims.ts. A destructible wall is temporary by construction, so two spawns separated only by one are not separated for the length of a match. Reverting to the intact graph is not merely a different-but-equivalent reading: measured over all 5 shipped arenas x counts 2/3/4, it puts arena-02's 4-player spawns 2.67 world units apart either side of the centre barrier that level is designed to blow open. Caught by 1 of 17 in versus-spawns.test.ts -- the separation floor collapses from 11.6619... to 2.67, failing both the exact pin and the greater-than-5-world-units guarantee. Note the LOS filter deliberately does NOT follow this rule and stays on intact geometry; see isWalkable's own doc comment for why the two questions differ.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "versus-spawns-drop-euclid-tiebreak",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else if (euclid !== bestEuclid) wins = euclid > bestEuclid;\n    else wins = isEarlier(cand, best);",
+    "replace": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else wins = isEarlier(cand, best);",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "Geodesic distance saturates at Infinity for every cell in a component the avoid set cannot reach, so on a partitioned board EVERY unreachable candidate ties and, without the Euclidean key, (row, col) order decides -- which picks the cell hard against the far side of the dividing wall. This mutation SURVIVED when first run (the gap was proved before the test was written, per this repo's rule); the dedicated tie-break fixture and the pickVersusSpawnSet pin were added because of it. Caught by 2 of 17 in versus-spawns.test.ts: the partitioned-board fixture returns {row:0,col:6} instead of {row:0,col:11}, and arena-04's 3-player set moves to (0,0) (32,44) (13,25).",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "versus-relax-rounds-one",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "export const VERSUS_RELAX_ROUNDS = 8;",
+    "replace": "export const VERSUS_RELAX_ROUNDS = 1;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The coordinate-ascent pass must be allowed to run to convergence. Greedy farthest-point sampling alone is anchor-sensitive and, measured over all 5 shipped arenas x counts 2/3/4, is WORSE than the pre-ruling placement on 2 of those 15 pairs; the relaxation is what turns that into 15 of 15 improved with no regressions. A cap of 1 stops it after a single sweep. This mutation also SURVIVED when first run, which is why the arena-04 N=3 exact-set pin exists at all. Caught by 1 of 17 in versus-spawns.test.ts: arena-04 at N=3 returns (0,30) (32,44) (23,0) instead of (0,26) (32,44) (24,0). Three further pairs move under the same mutation -- arena-01 and arena-03 at N=3, arena-05 at N=4 -- but only the arena-04 one is pinned, so the numerator is 1, not 4.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "versus-catalog-rules-variant-sweep-drops-concealment",
+    "file": "src/sim/versus-catalog-rules.ts",
+    "find": "        } else if (!v.allPairsConcealed) {",
+    "replace": "        } else if (false) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The seeded variant sweep must check BOTH criteria destructible removal can regress -- distinct spawn cells and opening concealment (the map-variants plan's proof covers why room cannot regress). Dropping the concealment arm lets a seeded draw that removes the one block hiding two spawns from each other validate clean, so a catalog entry could advertise seeded-destructible variants whose actual draws reopen opening sightlines. Invisible on the shipped catalog either way: its full sweep (75 draws: 5 entries x N in {2,3,4} x 5 pinned seeds) already measures 0 failures, so only a fixture whose sight blocker is itself destructible can discriminate. Caught by 1 of 13 in versus-catalog-rules.test.ts: the corridor fixture built for exactly this (two destructible cells, every removal of the corridor blocker reopens the P-to-spawn line) expects >= 1 variant-coverage failure naming a seed and gets 0 under this mutation.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ]
+  },
+  {
+    "id": "vs-clearance-wall-requirement-drops-radius",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);\n  const wallRequired = TANK_RADIUS + margin;",
+    "replace": "  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);\n  const wallRequired = margin;",
+    "expect": "killed",
+    "why": "versusSpawnClearanceFailures must require TANK_RADIUS + margin (0.65) of wall and boundary clearance, not the bare margin (0.15): a hull is 0.5 wide before any safety margin exists. Dropping the radius lets a centre 0.5 from a wall face -- a hull TOUCHING the wall -- validate clean. Killed by the clearance suite's wall fixture, whose position sits at exactly 0.5 and must fail with the 0.650 requirement named.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ],
+    "killedBy": [
+      "clearance-filtered candidate pools (issue #225) cramped corridor at cellSize 2/3: pool empties, picker degrades to the unfiltered pick, diagnostics stay loud",
+      "versusSpawnClearanceFailures a centre 0.5 from the arena edge fails as boundary; 0.65 or more in passes",
+      "versusSpawnClearanceFailures a position 0.5 from a wall AABB fails naming the wall distance; without the wall it passes",
+      "versusSpawnClearanceFailures an intact destructible fails a hull beside it; the match-start variant grid with it removed passes"
+    ]
+  },
+  {
+    "id": "vs-clearance-picker-drops-pairwise",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "      for (const a of avoid) if (Math.hypot(a.x - p.x, a.y - p.y) < pairRequired) return false;\n      return true;",
+    "replace": "      return true;",
+    "expect": "killed",
+    "why": "pickVersusSpawnCell's candidate eligibility must include pairwise clearance against every already-placed spawn, not only wall/boundary clearance. Without it, the 5x5 cellSize-0.6 fixture keeps an 8-cell eligible pool (all within 1.15 of avoid) and picks an eligible diagonal, where the real filter empties the pool and falls back to the unfiltered ranking's far-corner pick -- the fixture asserts that fallback equality.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ],
+    "killedBy": [
+      "clearance-filtered candidate pools (issue #225) pairwise clearance can empty the pool: every eligible cell sits within 1.15 of avoid, so the fallback engages"
+    ]
+  },
+  {
+    "id": "vs-clearance-set-anchor-unfiltered",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "    if (clear.length > 0) anchorCands = clear;",
+    "replace": "    // mutation: anchor ignores clearance",
+    "expect": "killed",
+    "why": "pickVersusSpawnSet's ANCHOR must honour the same wall/boundary clearance as every later pick -- it is the first spawn placed and the greedy chain never revisits it. Leaving the anchor unfiltered puts P1 back on arena-01's corner cell, 0.333 from two boundaries at cellSize 2/3, a hull overlapping the wall by 0.167 -- exactly the shipped clipping issue #225 exists to close. Killed by the shipped clearance sweep (0-violations pin) and the relax-convergence pin.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ],
+    "killedBy": [
+      "clearance-filtered candidate pools (issue #225) shipped sweep: every spawn on all 24 (arena, N) combinations is hull-clear -- 0 violations measured",
+      "clearance-filtered candidate pools (issue #225) variant sweep: the gated match-start draw measures 0 violations over 25 (arena, seed) draws at N=4",
+      "pickVersusSpawnCell wired through loadArena: before/after on every shipped arena AFTER: minimum pairwise Euclidean spawn distance clears 5 world units everywhere in the sweep -- comfortably above the pre-fix constant of 1.3333, with the actual floor pinned below",
+      "pickVersusSpawnSet: the relaxation pass runs to convergence, not one round arena-04 at 3 players lands on the set only multi-round coordinate ascent reaches"
+    ]
+  },
+  {
+    "id": "vs-catalog-clearance-default-dropped",
+    "file": "src/sim/versus-catalog-rules.ts",
+    "find": "    const clearance = (opts.clearanceRule ?? defaultClearanceRule)({",
+    "replace": "    const clearance = (opts.clearanceRule ?? (() => []))({",
+    "expect": "killed",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ],
+    "why": "Issue #312 wires #225's real versusSpawnClearanceFailures as the catalog sweep's DEFAULT clearance rule; silently reverting the default to an empty rule makes every declared combination validate clearance-blind again -- the exact gap the wiring closes. Killed by the cramped-corridor fixture, whose fallback spawns really are hull-clipped and must surface as spawn-clearance diagnostics with no opt-in.",
+    "killedBy": [
+      "spawn-clearance seam: an injected rule surfaces with full identification a cramped board fails the DEFAULT rule with full identification (issue #312)"
+    ]
+  },
+  {
+    "id": "mine-proximity-retrip-resets-countdown",
+    "file": "src/sim/mines.ts",
+    "find": "  if (mine.detonated || mine.proximityDelayLeft !== undefined) return",
+    "replace": "  if (mine.detonated) return",
+    "expect": "killed",
+    "tests": [
+      "src/sim/mines.test.ts"
+    ],
+    "why": "tripMineProximity's idempotency guard is the reaction window's contract (issue #275, owner-revised): staying in or re-entering the radius must not restart or shorten the countdown. Dropping the proximityDelayLeft check lets every in-radius tick re-stamp the delay, so the mine never detonates on schedule. Killed by the re-entry fixture, which pins ONE mine-triggered event and the original detonation call.",
+    "killedBy": [
+      "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity entry emits mine-triggered on that call and defers mine-detonate by exactly MINE_PROXIMITY_DELAY_TICKS calls",
+      "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity re-entry during the delay is idempotent: one mine-triggered, no countdown reset",
+      "stepMines detonates early when an enemy enters proximity",
+      "stepMines kills an enemy standing on the mine once the owner walks clear and the blast reaches him",
+      "stepMines kills the owner who walks back onto his own armed mine"
+    ]
+  },
+  {
+    "id": "mine-proximity-delay-consumed-as-one-tick",
+    "file": "src/sim/mines.ts",
+    "find": "  mine.proximityDelayLeft = MINE_PROXIMITY_DELAY_TICKS",
+    "replace": "  mine.proximityDelayLeft = 1",
+    "expect": "killed",
+    "tests": [
+      "src/sim/mines.test.ts"
+    ],
+    "why": "The proximity reaction window must last the named MINE_PROXIMITY_DELAY_TICKS -- the small opportunity to react IS the feature (owner direction on PR #311). Stamping 1 collapses trip-to-blast to one stepMines call. Killed by the exact tick-boundary pin (no detonation through call 29, detonation on call 30) and the drain-length fixtures.",
+    "killedBy": [
+      "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity entry emits mine-triggered on that call and defers mine-detonate by exactly MINE_PROXIMITY_DELAY_TICKS calls",
+      "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity re-entry during the delay is idempotent: one mine-triggered, no countdown reset"
+    ]
+  },
+  {
+    "id": "mine-fuse-warning-dropped",
+    "file": "src/sim/mines.ts",
+    "find": "    if (!mine.fuseWarned && mine.timer <= MINE_FUSE_WARNING_TICKS * DT) {",
+    "replace": "    if (false) {",
+    "expect": "killed",
+    "tests": [
+      "src/sim/mines.test.ts"
+    ],
+    "why": "The fuse's final-window warning is the whole fuse half of issue #275 (owner-revised): `mine-fuse-warning` must fire once as `timer` crosses into the last MINE_FUSE_WARNING_TICKS, with expiry timing untouched -- it is the event #276's time-is-running-out cue keys off. Suppressing the crossing is killed by the final-window fixture, which pins the event's exact call and its once-only count.",
+    "killedBy": [
+      "source-specific mine warnings (issue #275, owner-revised on PR #311) the fuse warning occupies the fuse's FINAL stretch: one event when timer crosses in, detonation exactly when it always was"
+    ]
+  },
+  {
+    "id": "ai-commit-no-hold",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "    return { move: held, nextIntent: held, nextIntentTicks: ticks - 1 };",
+    "replace": "    return { move: candidate, nextIntent: held, nextIntentTicks: ticks - 1 };",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "The hold IS issue #222's mechanism: while a commitment is live and no emergency has broken it, the tank moves on its committed heading and ignores the fresh candidate. Letting the candidate through restores exactly the per-tick re-decision the issue reports -- measured before the layer existed, grey's movement intent reversed by more than 90 degrees on 13.93% of adjacent live ticks under a shooting player (8712/62529 pairs, arena3), with a 95th-percentile turn of 180.0 degrees against a MEDIAN of 0.0.",
+    "killedBy": [
+      "commitMove does NOT break a BULLET dodge merely because the named perpendicular flipped sides",
+      "commitMove does NOT break the hold for an escape only mildly off the committed heading",
+      "commitMove holds the committed direction against an opposing candidate, and counts down by one"
+    ]
+  },
+  {
+    "id": "ai-commit-any-threat-breaks",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "  return vdot(held, avoid) < AI_COMMIT_EMERGENCY_DOT;",
+    "replace": "  return true;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "Issue #222 asks that emergencies interrupt a held decision 'without making every shell or wall contact an immediate full reversal'. Treating ANY required escape as an emergency is the plausible-looking version of the rule that silently reinstates per-tick re-deciding for the whole time a tank is near a hazard -- which is where most reversals were measured. This mutates the MINE branch (the one that keeps a signed test); it is killed by the mine-shaped 'mildly off' fixture, which is deliberately not a bullet fixture, because the bullet branch returns exact opposite perpendiculars whose dot is only ever ~+1 or ~-1 and could never exercise that middle band.",
+    "killedBy": [
+      "commitMove does NOT break the hold for an escape only mildly off the committed heading"
+    ]
+  },
+  {
+    "id": "ai-commit-no-hysteresis",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "    && (avoidKind === 'bullet' ? Math.abs(alignment) : alignment) >= AI_COMMIT_HYSTERESIS_DOT;",
+    "replace": "    && false;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "Hysteresis is the half of the fix aimed at the largest measured bucket: 40.6% of reversals under a shooting player (48.2% on arena3) were `bullet->bullet`, dangerAvoidMove's dodge perpendicular swapping sides as the tank crossed the shell's axis -- two equally good dodges 180 degrees apart. Without the cone the AI re-adopts the flipped candidate at every window expiry. Killed by the pair of cone tests, which assert both that an inside-cone candidate is refused AND that an outside-cone one is adopted.",
+    "killedBy": [
+      "commitMove does not let an expiring span adopt the flipped perpendicular either",
+      "commitMove keeps the held vector when an expiring span offers a near-equivalent candidate"
+    ]
+  },
+  {
+    "id": "ai-aim-jitter-step",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const eased = t * t * (3 - 2 * t);",
+    "replace": "  const eased = 0;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Pins issue #222 AC2. Forcing the easing factor to 0 holds each bucket's own draw for the whole bucket and teleports at the boundary -- byte-for-byte the pre-fix behaviour, whose measured signature was a median 4.0-5.4 degree aim-target move on boundary ticks against 0.11-0.18 degrees elsewhere (P95 boundary step 23.19 degrees, ~10 ticks of AI_TURRET_TURN_RATE slew to absorb). Killed by the adjacent-tick continuity bound.",
+    "killedBy": [
+      "aimJitter drift across a bucket (issue #222) never moves the aim offset by half a spread in one tick, across two whole buckets",
+      "aimJitter drifts within a bucket, arriving near the next bucket's draw by its last tick"
+    ]
+  },
+  {
+    "id": "ai-aim-jitter-overshoot",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const eased = t * t * (3 - 2 * t);",
+    "replace": "  const eased = t * 3;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "The negative control for the smoothing: an easing curve that leaves [0, 1] sends the interpolated offset outside the interval spanned by the two bucket draws, so the aim error exceeds the +/-spread envelope its profile's aimAccuracy is tuned for -- a silent difficulty change wearing a smoothing fix's clothes. Killed by the no-overshoot case, which without this mutation is the one assertion in that block the stepping implementation also satisfied.",
+    "killedBy": [
+      "aimJitter drift across a bucket (issue #222) never moves the aim offset by half a spread in one tick, across two whole buckets",
+      "aimJitter drift across a bucket (issue #222) travels between the two adjacent bucket draws without overshooting either",
+      "aimJitter drifts within a bucket, arriving near the next bucket's draw by its last tick"
+    ]
+  },
+  {
+    "id": "ai-commit-dodge-signed",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "  if (avoidKind === 'bullet') return Math.abs(vdot(held, avoid)) < AI_COMMIT_DODGE_ALIGN_DOT;",
+    "replace": "  if (avoidKind === 'bullet') return vdot(held, avoid) < AI_COMMIT_DODGE_ALIGN_DOT;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "Pins the mid-execution correction, and it is the single most valuable entry here because the bug it restores already shipped once in this branch and measured as a partial fix. dangerAvoidMove's bullet branch names one of two EXACT OPPOSITE perpendiculars, chosen by the side the tank sits on, so the name flips the instant the tank crosses the shell's axis while both remain equally good escapes. A SIGNED comparison scores that flip -1 and breaks the hold on precisely the oscillation the hold exists to stop: measured in that state, overall reversals fell but `bullet->bullet` ROSE from 40.6% to 68.5% of all reversals under a shooting player and grey's P95 turn stayed pinned at exactly 180.0 degrees. Killed by the flipped-perpendicular fixture.",
+    "killedBy": [
+      "commitMove does NOT break a BULLET dodge merely because the named perpendicular flipped sides"
+    ]
+  },
+  {
+    "id": "ai-wall-blocks-path-single-tick",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  for (let i = 1; i <= ticks; i++) {",
+    "replace": "  for (let i = 1; i <= 1; i++) {",
+    "expect": "killed",
+    "expectFailures": 4,
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Collapses wallBlocksPath's horizon loop to a single iteration REGARDLESS of the `ticks` argument any caller passes -- the actual pre-#224 defect (the probe establishes only that the very next step is legal), and a stricter target than mutating the AI_PATH_HORIZON_TICKS constant, which a caller passing an explicit tick count (targeting.test.ts's speed-scaling case) would launder. Measured at 4 of 107 scoped tests failing: targeting.test.ts's 'rejects a heading that is clear for one tick but walled a few ticks later' (the tick-8 hull position is never probed once i is capped at 1) and 'scales its reach with the speed it is handed, not with a hardcoded one' (its wall sits at the tick-10 position, unreachable once the loop stops after tick 1, regardless of speed), plus danger.test.ts's 'rejects a preferred side that is clear for one tick but walled within the horizon' and 'refuses a sidestep candidate that steps toward an armed mine' (both call wallBlocksPath directly in their own assertions, so the collapse also corrupts what those tests use to check the production result)."
+  },
+  {
+    "id": "ai-wall-blocks-path-ignores-speed",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const perTick = speed * DT;",
+    "replace": "  const perTick = 3 * DT;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Hardcodes the base movement speed (3 units/s) in place of the `speed` parameter, so a slower tank's probe over-states how far it actually travels in `ticks` ticks -- the exact silent-difficulty-change shape a dropped parameter takes. Killed by targeting.test.ts's 'scales its reach with the speed it is handed, not with a hardcoded one', whose slow-tank (0.2 units/s) case is built specifically so the hardcoded fast-tank reach (3 units/s) reports a wall in reach that the real, slower tank could never touch within the same tick count.",
+    "killedBy": [
+      "wallBlocksPath (issue #224) scales its reach with the speed it is handed, not with a hardcoded one"
+    ]
+  },
+  {
+    "id": "ai-sidestep-always-null",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return best;",
+    "replace": "  return null;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Makes sidestepAroundBlockage always report 'the whole wheel is blocked', so dangerAvoidMove's `?? preferred` fallback fires even when a navigable heading exists -- issue #224 AC3's exact defect, reintroduced. Measured at 2 of 107 scoped tests failing, both in the same corridor shape (north/south walled inside the horizon, east/west open): 'sidesteps onto a navigable heading when BOTH perpendiculars are walled' and 'refuses a sidestep candidate that steps toward an armed mine'. Both fixtures have a real navigable answer that this mutation discards, so the returned direction becomes the wall-blocked `preferred` heading in each case, failing their wallBlocksPath(..., dir!, AI_PATH_HORIZON_TICKS) === false assertions."
+  },
+  {
+    "id": "ai-sidestep-drops-mine-guard",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;\n    if (mines.some((m) => vdot(cand, vsub(m.pos, tank.pos)) > 0)) continue;\n    const score = 1 - Math.abs(vdot(cand, bulletDir));",
+    "replace": "    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;\n    if (false) continue;\n    const score = 1 - Math.abs(vdot(cand, bulletDir));",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Drops sidestepAroundBlockage's own mine-refusal guard, the constraint its doc comment claims mirrors dangerAvoidMove's two-perpendicular passes -- a dodge that solves the shell by walking onto a mine. No existing test reached this specific line before this PR's re-pin work: the two-perpendicular tests (danger.test.ts's 'picks the dodge side that does not step toward a nearby armed mine') never reach sidestepAroundBlockage at all (a wall-clear perpendicular returns before it is called), and the pre-existing 'sidesteps onto a navigable heading' fixture carries no mine. Closed here by 'refuses a sidestep candidate that steps toward an armed mine': a corridor where the wheel's only two navigable candidates (due east/west) tie at the worst possible lateral-clearance score, with an armed mine placed on the tie-winning (east) side. Measured directly by disambiguating this line's two occurrences with the full three-line context above (the guard also appears verbatim in dangerAvoidMove's own two-perpendicular loop) -- the `find` string is unique to this function because only here is it immediately followed by the lateral-clearance score line.",
+    "killedBy": [
+      "dodging near walls (issue #224) refuses a sidestep candidate that steps toward an armed mine"
+    ]
+  },
+  {
+    "id": "ai-turret-accel-no-limit",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  const nv = vel + Math.max(-aMax, Math.min(aMax, vDes - vel));",
+    "replace": "  const nv = vDes;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts",
+      "src/sim/ai/dispatch.test.ts",
+      "tools/gallery/moments.test.ts"
+    ],
+    "why": "This IS the change. Letting the velocity jump straight to vDes restores the bang-bang slew: the turret is stopped or at the rate cap with nothing in between, which measured an abrupt speed change on 0.84% (brown) / 1.84% (grey) / 2.85% (teal) of ticks over 60 seeds x 2 arenas, against 0.06/0.24/0.44% with the limit in place. expectFailures moved 9 -> 11 when tools/gallery/moments.test.ts (in this entry's declared scope) gained the ai-commitment block for issue #359; re-measured, not guessed.",
+    "killedBy": [
+      "accelSlew decelerates on approach so it can stop ON the target, not past it",
+      "accelSlew ramps in from rest: the first tick moves by the acceleration budget, not the speed cap",
+      "accelSlew reverses through zero rather than flipping direction in one tick",
+      "accelSlew takes the short way round the +/-pi seam",
+      "ai-commitment moment specifics nobody dies inside the clip, so no respawn moves a tank mid-measurement",
+      "ai-tracking moment specifics the stationary AI holds position and bodyAngle exactly still while its turret sweeps then reverses",
+      "every moment pins its events to exact ticks ai-commitment: each expected event fires on its declared tick \u2014 and on no other",
+      "stepAi round phases countdown: no AI tank moves or fires, even with a clear kill shot",
+      "stepAi turret slew SEARCHES rather than holding the last angle when it has no line of sight (issue #371)",
+      "stepAi turret slew an AI cannot instantly face a target that appears behind it: one tick advances by one acceleration budget",
+      "turret acceleration (issue #347) stepAi ramps the turret from rest instead of jumping straight to the rate cap"
+    ]
+  },
+  {
+    "id": "ai-turret-accel-no-decel",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  const vDes = Math.sign(err) * Math.min(vMax, vStop);",
+    "replace": "  const vDes = Math.sign(err) * vMax;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts"
+    ],
+    "why": "Ramping IN without ramping OUT is a half-fix that still slams the turret to a halt at the end of every sweep -- the same discontinuity at the other end of the motion. vStop is the fastest speed from which the remaining error can still be shed at aMax, so dropping it means the turret arrives at full tilt and stops dead.",
+    "killedBy": [
+      "accelSlew decelerates on approach so it can stop ON the target, not past it"
+    ]
+  },
+  {
+    "id": "ai-turret-accel-no-arrival-clamp",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  if (Math.abs(nv) >= Math.abs(err)) return { angle: target, vel: 0 };",
+    "replace": "  if (Math.abs(nv) >= Math.abs(err) && false) return { angle: target, vel: 0 };",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts"
+    ],
+    "why": "Without the clamp the final tick of a sweep lands PAST the target and the turret has to come back, which reads as a wobble on every arrival rather than a stop. The `&& false` keeps both operands evaluated so a tsc error cannot stand in for a real test failure.",
+    "killedBy": [
+      "accelSlew a target that jumps BEHIND a fast-moving turret is arrived at, not overshot -- and the discarded velocity is bounded by the speed cap, not the acceleration budget",
+      "accelSlew arrives ON the target instead of sailing past it, and stops there",
+      "accelSlew reaches the speed cap on a long sweep and never exceeds it"
+    ]
+  },
+  {
+    "id": "ai-turret-accel-raw-angle-difference",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  const err = angleDelta(current, target);",
+    "replace": "  const err = target - current;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts"
+    ],
+    "why": "The error must be the SHORTEST arc. A raw subtraction sends a turret tracking through due west most of a full turn the wrong way, because an angle a hair under +pi and one a hair over -pi read as 6.26 radians apart rather than 0.02.",
+    "killedBy": [
+      "accelSlew takes the short way round the +/-pi seam"
+    ]
+  },
+  {
+    "id": "ai-turret-accel-velocity-survives-respawn",
+    "file": "src/sim/world.ts",
+    "find": "    t.turretVel = undefined; // round restart (issue #347)",
+    "replace": "    t.turretVel = t.turretVel; // round restart (issue #347)",
+    "expect": "killed",
+    "tests": [
+      "src/sim/coop-attempts.test.ts"
+    ],
+    "why": "resetArena snaps every turret to its spawn angle; leaving the angular velocity behind opens the new round with a gun already swinging for no reason, which accelSlew then has to brake before it can track anything. The self-assignment keeps the field read so this is a behaviour change rather than a type error.",
+    "killedBy": [
+      "resolveStatusCoop: ATTEMPTS mode (world.coopAttempts, the default) a round reset clears the AI turret angular velocity (issue #347)"
+    ]
+  },
+  {
+    "id": "ai-aim-hold-no-hold",
+    "file": "src/sim/ai/aim-hold.ts",
+    "find": "    return { angle: held, nextHeld: held, nextHeldTicks: ticks - 1 };",
+    "replace": "    return { angle: solution, nextHeld: held, nextHeldTicks: ticks - 1 };",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/aim-hold.test.ts",
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "The hold IS issue #344's mechanism: while a span is live and the fresh solution has not drifted past AI_AIM_BREAK, the turret is sent to the angle the tank already committed to. Letting the fresh solution through restores exactly the per-tick re-solve the issue reports -- measured before the layer existed, the turret was perfectly still on only 42.53% of live ticks for teal and 72.93% for brown (arena1/pacifist, 60 seeds x 2 arenas x 2 player policies), micro-correcting on the rest at 60Hz.",
+    "killedBy": [
+      "aim hold (issue #344) a held aim does NOT suppress the firing solution: hasSolution still reads the fresh solve",
+      "aim hold (issue #344) decideAi returns the HELD aim angle, not the fresh solution, while the span is live",
+      "holdAim keeps the held angle and counts down while the span is live and the fresh solution is close",
+      "holdAim measures the break across the shortest arc, so a hold survives the +/-pi seam"
+    ]
+  },
+  {
+    "id": "ai-aim-hold-raw-break",
+    "file": "src/sim/ai/aim-hold.ts",
+    "find": "Math.abs(angleDelta(held, solution)) < breakRad",
+    "replace": "Math.abs(held - solution) < breakRad",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/aim-hold.test.ts"
+    ],
+    "why": "The break test must measure the SHORTEST arc. A raw subtraction reads an angle a hair under +pi and one a hair over -pi as most of a full turn rather than 0.06 rad apart, so every tank tracking through due west would break its hold every tick and the layer would silently stop working in exactly one bearing. angleDelta is the same helper slewAngle uses, so the two cannot disagree about what 'close' means.",
+    "killedBy": [
+      "holdAim measures the break across the shortest arc, so a hold survives the +/-pi seam"
+    ]
+  },
+  {
+    "id": "ai-aim-hold-no-countdown",
+    "file": "src/sim/ai/aim-hold.ts",
+    "find": "nextHeldTicks: ticks - 1 };",
+    "replace": "nextHeldTicks: ticks };",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/aim-hold.test.ts"
+    ],
+    "why": "Without the decrement the span never expires: a hold armed once is held for the rest of the round, so the tank stops re-solving entirely rather than dwelling and re-aiming. That is a far larger behaviour change than the one measured, and it would read as an AI that has stopped tracking rather than one that has stopped twitching.",
+    "killedBy": [
+      "holdAim keeps the held angle and counts down while the span is live and the fresh solution is close",
+      "holdAim measures the break across the shortest arc, so a hold survives the +/-pi seam"
+    ]
+  },
+  {
+    "id": "ai-aim-hold-not-wired-into-decideai",
+    "file": "src/sim/ai/index.ts",
+    "find": "    turretAngle: aim.angle,",
+    "replace": "    turretAngle: decision.turretAngle,",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "Pins the WIRING, not the helper: holdAimFor can be correct and fully unit-tested while decideAi quietly discards its result, which would leave every unit test in aim-hold.test.ts green and the shipped game completely unchanged. The write-back pair is deliberately left intact here so the mutation is a pure 'result ignored', not a type error. Failure count went 2 -> 3 when issue #371 added dispatch.test.ts's barrel-arrival case, which also depends on the held angle reaching the trigger.",
+    "killedBy": [
+      "aim hold (issue #344) a held aim does NOT suppress the firing solution: hasSolution still reads the fresh solve",
+      "aim hold (issue #344) decideAi returns the HELD aim angle, not the fresh solution, while the span is live",
+      "stepAi turret slew SEARCHES rather than holding the last angle when it has no line of sight (issue #371)"
+    ]
+  },
+  {
+    "id": "reaction-clock-banks-countdown-ticks",
+    "file": "src/sim/ai/index.ts",
+    "find": "    tank.aimTicks = phase === 'live' && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;",
+    "replace": "    tank.aimTicks = decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;",
+    "expect": "killed",
+    "why": "The shipped behaviour issue #367 reverses, restored exactly: countdown ticks bank toward the profile's reaction delay, so an enemy that watched the player through the announced fire-free phase fires on the first live tick. Measured over the golden trace's population under this mutation: in 12 of the 30 traced runs an enemy stood at or past its full authored span the moment the countdown ended. Not a subtle regression to leave to a reviewer's eye -- it is the difference between a telegraphed first shot and an instant one, and the player has no counterplay to the second.",
+    "tests": [
+      "src/sim/ai/reaction.test.ts",
+      "src/sim/arena.test.ts",
+      "tools/baseline/trace.test.ts"
+    ],
+    "killedBy": [
+      "baseline fingerprint",
+      "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) applies again after a full-arena restart, not only at the first round",
+      "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) holds the clock at zero through the whole countdown, with an unbroken solution",
+      "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) the first live tick is not a legal shot: the earliest one is reactionTicks into live",
+      "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) the same holds for a DIRECT shooter, not only the bank-shot profile"
+    ]
+  },
+  {
+    "id": "reaction-clock-gated-on-firing-rather-than-on-the-phase",
+    "file": "src/sim/ai/index.ts",
+    "find": "    tank.aimTicks = phase === 'live' && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;\n",
+    "replace": "    tank.aimTicks = canAct && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;\n",
+    "expect": "survives",
+    "expectFailures": 0,
+    "equivalent": true,
+    "why": "EQUIVALENT on the shipped tree, and the entry exists to say which fact makes it so. `canAct` is `phase === 'live'` while GRACE_TICKS is 0 (constants.ts), so today the two expressions are identical and no test can tell them apart -- this entry is the measurement that says so out loud instead of leaving the reader to wonder whether the choice was arbitrary. It stops being equivalent the moment grace is re-enabled, which that constant's own comment describes as a one-number change: grace is a phase in which tanks move and hunt but may not fire, and the rule this implements is 'start at LIVE acquisition', not 'start when firing is allowed'. A test that killed this today would have to fabricate a positive GRACE_TICKS, which pins a phase the game does not currently ship.",
+    "tests": [
+      "src/sim/ai/reaction.test.ts"
+    ]
+  },
+  {
+    "id": "scripted-player-clock-banks-countdown-ticks",
+    "file": "src/sim/ai/player-profile.ts",
+    "find": "  state.aimTicks = roundPhase(world) === 'live' && hasSolution ? state.aimTicks + 1 : 0;",
+    "replace": "  state.aimTicks = hasSolution ? state.aimTicks + 1 : 0;",
+    "expect": "killed",
+    "why": "The same defect at the mirror site. `applyPlayerInput` already refuses the shot during the countdown (world.ts), which is exactly why this clock needed gating separately: the refusal hides the banking, and the scripted player emerges from the countdown entitled to fire on the first live tick. Without an entry here the enemy half is pinned and the player half is not, which is the asymmetry issue #367's own acceptance criterion ('every shipped profile') rules out. Scoped to the countdown test's own file since issue #502: under this mutant the win-rate suite beside it simulates games to their tick cap (179 s in CI), and the verdict lives in the one test.",
+    "tests": [
+      "src/sim/ai/player-profile.countdown.test.ts"
+    ],
+    "killedBy": [
+      "scripted player: the countdown clock countdown ticks do not satisfy the scripted player's reaction delay either (#367)"
+    ]
+  },
+  {
+    "id": "teal-shot-plan-turns-over-without-a-lapsed-span",
+    "file": "src/sim/ai/teal.ts",
+    "find": "  const switching = lapsed && preferred === null;",
+    "replace": "  const switching = preferred === null;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "The SPAN is half the rule and the easiest half to drop, because dropping it leaves a tree that still holds a plan, still falls back, and still passes any test that only checks which angle came out. What it removes is the commitment: the plan would turn over on EVERY tick its preferred type has no solution, which is the churn issue #332 exists to stop -- teal would flip back and forth for as long as the player stayed behind cover. Deleting the `lapsed &&` term must fail a test, or the profile field is decorative.",
+    "killedBy": [
+      "teal shot-plan span (issue #332) an UNSOLVABLE plan inside a live span does NOT turn over -- the countdown is what gates it"
+    ]
+  },
+  {
+    "id": "teal-shot-plan-dropped-on-the-no-target-path",
+    "file": "src/sim/ai/teal.ts",
+    "find": "nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan: holdPlan, nextShotPlanTicks };",
+    "replace": "nextAimHeld: null, nextAimHeldTicks: 0 };",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "This is the defect found while shipping the issue, kept as a guard. stepAi writes the pair back only when the decision CARRIES one, so a return path that omits it does not error -- it silently freezes the countdown for every tick the arena has no live player, i.e. every countdown and every player death, making the real span longer than shotCommitmentTime authorises. The prototype shipped this bug and every measurement taken on it described a span the profile did not control.",
+    "killedBy": [
+      "teal shot-plan span (issue #332) carries the plan on the NO-TARGET path, so the countdown cannot freeze",
+      "teal shot-plan span (issue #332) holds the plan across a lapse with no target, rather than flipping on the clock alone"
+    ]
+  },
+  {
+    "id": "teal-shot-plan-span-not-read-from-the-profile",
+    "file": "src/sim/ai/teal.ts",
+    "find": "  const nextShotPlanTicks = lapsed ? Math.round(cfg.ai.shotCommitmentTime * TICK_HZ) : planTicks - 1;",
+    "replace": "  const nextShotPlanTicks = lapsed ? 120 : planTicks - 1;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "The shipped profile authorises 2.0s = 120 ticks, EXACTLY the value of the prototype constant the field replaced -- so a test that asserts 120 against the shipped roster cannot tell a live profile read from a pin, and every acceptance criterion about a validated per-profile field would be met on paper by a hardcoded number. Killing this requires a fixture that injects a DIFFERENT shotCommitmentTime, which is why one exists.",
+    "killedBy": [
+      "teal shot-plan span (issue #332) re-arms from the PROFILE FIELD, not from a constant that happens to equal it"
+    ]
+  },
+  {
+    "id": "teal-shot-plan-writeback-guard-inverted",
+    "file": "src/sim/ai/index.ts",
+    "find": "    if (decision.nextShotPlan !== undefined) {",
+    "replace": "    if (decision.nextShotPlan === undefined) {",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "Pins the WIRING and the polarity of 'no opinion' in one mutation, the way the aim-hold entry pins its own. Inverted, teal's plan is never persisted (the countdown never advances, so the span never elapses) while brown's and grey's decisions -- which never evaluate a plan -- would clear a plan the tank still holds. teal.test.ts probes tealDecision directly and stays entirely green either way, so only a dispatcher-level test can catch this.",
+    "killedBy": [
+      "shot-plan write-back (issue #332) a decision with NO shot plan leaves an existing one untouched",
+      "shot-plan write-back (issue #332) stepAi persists the shot plan and its countdown onto the tank"
+    ]
+  },
+  {
+    "id": "teal-shot-plan-default-is-direct-rather-than-bank",
+    "file": "src/sim/ai/teal.ts",
+    "find": "  const preferBank = heldPlan === null ? true : heldPlan === 'bank';",
+    "replace": "  const preferBank = heldPlan === null ? false : heldPlan === 'bank';",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "The never-held default is invisible on most geometry: where only one shot type solves, both defaults fall through to the same angle and the same stored plan, so an assertion taken on open ground passes under either value. It is only observable where BOTH types solve -- which is the fixture this entry forces to exist, and the reason that fixture does not reuse the open-field helper the neighbouring tests use.",
+    "killedBy": [
+      "teal shot-plan span (issue #332) a tank that has never held a plan starts on BANK, and arms a full span"
+    ]
+  },
+  {
+    "id": "shell-spawn-ignores-drawn-nose-reach",
+    "file": "src/sim/constants.ts",
+    "find": "  return SHELL_MUZZLE_FORWARD - bulletRadius * SHELL_NOSE_REACH_RADII;",
+    "replace": "  return SHELL_MUZZLE_FORWARD - bulletRadius;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/bullets.test.ts",
+      "src/render/entities.test.ts"
+    ],
+    "why": "Insets the shell by its COLLISION radius instead of its DRAWN nose reach -- the intuitive fix for issue #237, and the one that does not work: it leaves the visible nose 0.225 past the barrel opening, so the daylight pop the issue is about survives untouched. Worth pinning because the shell still spawns behind the plane, so every symbolic SHELL_SPAWN_FORWARD assertion in the tree stays green; only the two assertions that constrain the inset's SIZE can see it.",
+    "killedBy": [
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a fast shell, born inside its own hull",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a normal shell, born inside its own hull",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a ricochet shell, born inside its own hull",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) holds the nose on the plane at every firing angle, and off a moving tank",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) lands the shell nose on the plane for ANY shell radius, not just the shipped one",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) retreats for a wall that covers the shell but NOT the barrel opening",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) tests clearance where the SHELL will be, not at the barrel opening",
+      "tank geometry starts the shell nose flush with the drawn muzzle opening, not past it"
+    ]
+  },
+  {
+    "id": "muzzle-flash-collapses-onto-the-shell",
+    "file": "src/sim/bullets.ts",
+    "find": "  return { spawn, flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)) }",
+    "replace": "  return { spawn, flash: spawn }",
+    "expect": "killed",
+    "tests": [
+      "src/sim/bullets.test.ts",
+      "src/sim/step-contract.test.ts"
+    ],
+    "why": "Drags the muzzle flash inward with the shell, so the gun visibly discharges from inside itself -- particles.ts bursts on the fire event's pos and is the only consumer that reads it. Pinned because the event still carries a plausible point on the firing line, which no shape or type check can distinguish from the right one.",
+    "killedBy": [
+      "spawnBullet + ownerShellCount spawns a bullet with config speed/bounces and emits a fire event",
+      "step() hands its events back to the caller the player's own fire event reaches the caller, with its position"
+    ]
+  },
+  {
+    "id": "muzzle-clearance-tested-at-the-plane",
+    "file": "src/sim/bullets.ts",
+    "find": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))",
+    "replace": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD))",
+    "expect": "killed",
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "Asks whether the BARREL OPENING is clear rather than whether the region the shell will occupy is -- the exact confusion splitting the two constants introduced. It both refuses shots that fit and, worse, misses a wall sitting in the span the shell is actually born into, which spawns a live shell inside solid geometry.",
+    "killedBy": [
+      "spawnBullet + ownerShellCount spawns a bullet with config speed/bounces and emits a fire event",
+      "spawnBullet: muzzleClearsTanks (adopted ruling, 2026-08-14: \"spawn at hull centre\" switch) OFF: restores the old behaviour -- the shell spawns already inside the neighbour",
+      "spawnBullet: muzzleClearsTanks (adopted ruling, 2026-08-14: \"spawn at hull centre\" switch) ON, but the neighbour is already dead: a corpse never blocks a muzzle, switch or not",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) holds the nose on the plane at every firing angle, and off a moving tank",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) retreats for a wall that covers the shell but NOT the barrel opening",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) tests clearance where the SHELL will be, not at the barrel opening",
+      "spawnBullet: where the shell is born spawns at the muzzle, offset along the FIRING angle not the body",
+      "spawnBullet: where the shell is born still uses the muzzle when the wall is behind the tank"
+    ]
+  },
+  {
+    "id": "blocked-shot-leaves-its-flash-on-the-barrel",
+    "file": "src/sim/bullets.ts",
+    "find": "    flash: { x: owner.pos.x, y: owner.pos.y },",
+    "replace": "    flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)),",
+    "expect": "killed",
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "When the shell cannot be born at the barrel and retreats to the tank centre, this leaves the flash out on the opening -- bursting inside the wall that caused the retreat, off a gun that produced nothing there this tick. The retreat still happens and the shell still spawns safely, so only an assertion on the event's position sees it.",
+    "killedBy": [
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) drags the muzzle flash back to the tank when the shell could not be born at the barrel"
+    ]
+  },
+  {
+    "id": "owner-exempt-returning-instead-of-outbound",
+    "file": "src/sim/bullets.ts",
+    "find": "        if (vdot(b.vel, toOwner) <= 0) continue",
+    "replace": "        if (vdot(b.vel, toOwner) > 0) continue",
+    "expect": "killed",
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "Inverts resolveBulletHits' outbound exemption, so a tank is immune to its own returning ricochet and vulnerable to the shell it is currently firing. Load-bearing since issue #237: the spawn circle now overlaps the firer's own hull, and this guard is the only thing stopping a tank killing itself on the trigger pull.",
+    "killedBy": [
+      "resolveBulletHits does not self-destruct in the muzzle but can self-hit on a ricochet return",
+      "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a ricochet shell, born inside its own hull"
+    ]
+  },
+  {
+    "id": "duel-board-loses-its-rotational-symmetry",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"...#.........##....##xx....\"",
+    "replace": "\"...#.........##....###x....\"",
+    "expect": "killed",
+    "why": "One cell of vs-duel-01's flank turned from destructible to solid, breaking the 180-degree rotation its notes claim (issue #271). A single cell is the point: the board still loads, still validates, still has distinct and concealed spawns at N=2, still passes clearance and connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and a screenshot of a 27x21 board would not show one flipped cell. What breaks is the FAIRNESS claim, which before this branch was carried only by prose in arenas.json: one player now has a wall where the other has a breachable, so the two halves are no longer the same board turned around. `every cell has the same wall kind as its partner through the centre` is the case that measures it, comparing wall KIND rather than raw characters so the P/B spawn pair (partners by position, different letters by schema) does not have to be excluded by hand. Its sibling `is NOT symmetric under a plain mirror` is the negative control keeping the rotation claim from being satisfied by a board that is merely mirrored. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ],
+    "killedBy": [
+      "vs-duel-01: the duel board is its own 180-degree rotation every cell has the same wall kind as its partner through the centre"
+    ]
+  },
+  {
+    "id": "duel-board-offered-at-every-player-count",
+    "file": "src/sim/config/data/versus-catalog.json",
+    "find": "\"players\": [\n        2\n      ],",
+    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
+    "expect": "killed",
+    "why": "The curation undone: the duel board advertised wherever it mechanically passes. This is the mutation the shipped validators CANNOT catch, and that is the whole reason it is pinned here -- vs-duel-01 measures suitable at N=3 and N=4 (versus-board.test.ts sweeps all 18 combinations and finds 18), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. Before this branch the catalog's own test asserted every entry declared [2,3,4], so the widened form was the CONFORMING one. The ruling it breaks is that the offer is curated rather than derived: a board designed as a duel is withheld at counts where it is playable but not designed for. `declares the player counts each entry is CURATED for, not merely the ones it passes at` and `cross-check: everything offered is measured suitable, and what is withheld is named` are the cases that measure it, in two different files, from the catalog side and the menu side. Scoped to versus-catalog.test.ts; expectFailures counts that scoped run only. RE-ANCHORED for issue #272: this entry's find string used to run from `players` to the CLOSING BRACKETS OF THE FILE, which only matched while vs-duel-01 was the last catalog entry. Appending vs-tri-01 after it made the string absent and the harness reported failed-to-apply -- correctly, and it is the only thing that would have. The anchor is now the `players` block alone, which is unique to this entry (the five campaign boards declare [2,3,4] and vs-tri-01 declares [3]) and does not depend on position in the file.",
+    "tests": [
+      "src/sim/config/versus-catalog.test.ts"
+    ],
+    "killedBy": [
+      "VERSUS_CATALOG declares the player counts each entry is CURATED for, not merely the ones it passes at"
+    ]
+  },
+  {
+    "id": "tri-board-loses-its-mirror-symmetry",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"###...x.x...###...x.x...###\"",
+    "replace": "\"###...x.x...###...x.#...###\"",
+    "expect": "killed",
+    "why": "One cell of vs-tri-01's notch cheek turned from destructible to solid, breaking the mirror about column 13 that its notes claim (issue #272). RE-ANCHORED for issue #424's rework -- the previous find string named a row of a grid that no longer exists, which the harness reports as failed-to-apply, but only if someone runs it. Same shape as `duel-board-loses-its-rotational-symmetry` and for the same reason: the board still loads, still validates, and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for the two base players is carried entirely BY the mirror: one of them now has a wall where the other has a breachable. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ],
+    "killedBy": [
+      "vs-tri-01: mirrored for two players, measured for the third every cell has the same wall kind as its mirror partner about the axis"
+    ]
+  },
+  {
+    "id": "tri-board-lane-closed-behind-the-cell-metric",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"...........................\",\n        \"###...#.#...###...#.#...###\"",
+    "replace": "\".........#########.........\",\n        \"###...#.#...###...#.#...###\"",
+    "expect": "killed",
+    "why": "Bars vs-tri-01's row 11 across columns 9-17, closing the middle of the lower lateral lane. The point is NOT that a narrow gap appears -- narrow gaps are ordinary arena furniture and this board has them deliberately. The point is that closing a ROUTE is invisible to the cell metric and visible only to the tank one. MEASURED on this board: with the bar in place the authored cell distances stay at 26/26/26 and every cell-based claim -- mirror symmetry, the maximin spawn triangle, connectivity, spawn clearance, room, concealment and all ten seeded variants -- stays clean, while the distance a tank must actually drive changes. Exactly one assertion in the scoped file fails, and it is the tank-footprint lattice one. That gap between the two metrics is the defect issue #423 was opened for, and this entry is the proof the newer assertion is what closes it. RENAMED from `tri-board-passage-narrowed-to-one-cell`: the old name described the gap width, which is not the property being pinned. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ],
+    "killedBy": [
+      "vs-tri-01: mirrored for two players, measured for the third ...and equidistant on the TANK-FOOTPRINT lattice too, not just on the cell grid"
+    ]
+  },
+  {
+    "id": "quad-board-loses-its-mirror-symmetry",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"####.####...###...####.####\"",
+    "replace": "\"####.####...###...####.###.\"",
+    "expect": "killed",
+    "why": "One cell of vs-quad-01's right-hand rim block turned from solid to open floor, on the board's own row axis, breaking the column mirror its notes claim (issue #273). Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still validates, still has four distinct and mutually concealed spawns at N=4, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for four players is carried ENTIRELY by the two mirrors: without them the four corners stop being one orbit of the symmetry group, and 'every spawn holds the same multiset of distances' becomes a coincidence rather than a construction. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ],
+    "killedBy": [
+      "vs-quad-01: four corners, one orbit every cell has the same wall kind as its partner under BOTH mirrors"
+    ]
+  },
+  {
+    "id": "egress-not-gated-only-reported",
+    "file": "src/sim/versus-board.ts",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
+    "expect": "killed",
+    "why": "Drops the tank-egress rule out of the verdict while still computing and reporting it -- exactly the shape the defect took before issue #423. Keystone and Quarters passed clearance, connectivity, symmetry, path distance and scripted playtests and shipped unplayable: players could not leave their spawns. Every cell-based criterion stays green under this mutation, which is the point; only an assertion that a board with no tank-sized exit is UNSUITABLE catches it.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ],
+    "killedBy": [
+      "evaluateVersusBoard: the shipped-arena sweep every arena still offered is suitable at every N in {2, 3, 4}: 18 of 24 (arena, N) combinations",
+      "spawn egress: a tank, not a cell (issue #423) folds into `suitable`, which is what makes it a gate rather than a report",
+      "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
+    ]
+  },
+  {
+    "id": "egress-ignores-the-tank-footprint",
+    "file": "src/sim/versus-board.ts",
+    "find": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, TANK_RADIUS, b).hit) legal[k] = 0;",
+    "replace": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, 0, b).hit) legal[k] = 0;",
+    "expect": "killed",
+    "why": "Shrinks the tank to a POINT, which is precisely what every pre-existing check did by reasoning about cell centres. A one-cell gap is 0.667 wide against a 1.0-wide tank and admits no legal centre position, but admits a point trivially -- so under this mutation the minimum-width fixture's 1-cell passage reads as passable and the boards that shipped unplayable read as fine. Pins that the footprint, not the topology, is what the rule measures. RE-ANCHORED after the wall-rasterisation rewrite: the original find string named the per-point wall loop that rewrite replaced, and it went stale without failing anything locally -- CI's failed-to-apply is what said so.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ],
+    "killedBy": [
+      "evaluateVersusBoard: the shipped-arena sweep every arena still offered is suitable at every N in {2, 3, 4}: 18 of 24 (arena, N) combinations",
+      "spawn egress: a tank, not a cell (issue #423) a ONE-cell passage is impassable and a TWO-cell passage is not -- the minimum width, measured",
+      "spawn egress: a tank, not a cell (issue #423) a destructible seal is FATAL when the pocket is smaller than the mine blast",
+      "spawn egress: a tank, not a cell (issue #423) folds into `suitable`, which is what makes it a gate rather than a report",
+      "spawn egress: a tank, not a cell (issue #423) names the blocked slots and the region sizes, so a failure is actionable",
+      "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
+    ]
+  },
+  {
+    "id": "fatal-escape-not-gated",
+    "file": "src/sim/versus-board.ts",
+    "find": "    if ((intact.diameters[l] ?? 0) < MINE_KILL_RADIUS) fatal.push(s);",
+    "replace": "    void l;",
+    "expect": "killed",
+    "why": "Stops refusing a spawn sealed by destructibles in a pocket too small to survive blowing it. Only a mine clears a destructible (destructibleByBlast, mines.ts) and a mine kills within MINE_BLAST_RADIUS + TANK_RADIUS = 2.5, so the player pays a LIFE to leave the start line -- which is exactly how Keystone shipped, whose spawn pockets measure 1.18 to 1.72 across. The solid-connectivity half of the gate does NOT catch it: Keystone's spawns are reachable once the destructibles are gone, so without this line the board reads as suitable again.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ],
+    "killedBy": [
+      "spawn egress: a tank, not a cell (issue #423) a destructible seal is FATAL when the pocket is smaller than the mine blast",
+      "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
+    ]
+  },
+  {
+    "id": "bot-difficulty-normal-is-not-a-no-op",
+    "file": "src/sim/ai/bot-difficulty.ts",
+    "find": "  if (difficulty === 'normal') return cfg;",
+    "replace": "  if (difficulty === 'normal') return { ...cfg, ai: { ...cfg.ai } };",
+    "expect": "killed",
+    "why": "`normal` stops returning its INPUT and starts returning an equal copy. Both issues #267 and #223 require normal to be the exact no-op -- #223's criterion says 'Normal produces byte-identical/no-op profile resolution' -- and this mutation is the shape that quietly breaks it: every value is still identical, so any `toEqual` assertion passes, and a reader of the diff sees a harmless-looking spread. What it costs is the guarantee that a `normal` bot cannot differ from a pre-#267 bot even by object shape, which is what makes the whole feature additive over a config saved before difficulty existed. Killed by the identity case, which asserts `toBe` across every shipped tank kind AND for an omitted argument -- the form every existing `decidePlayerInput` caller uses. Scoped to bot-difficulty.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/ai/bot-difficulty.test.ts"
+    ],
+    "killedBy": [
+      "bot difficulty presets normal is the SAME object, not merely an equal one"
+    ]
+  },
+  {
+    "id": "bot-difficulty-hard-becomes-an-oracle",
+    "file": "src/sim/ai/bot-difficulty.ts",
+    "find": "export const MAX_COMPETENCE_ACCURACY = 0.95;",
+    "replace": "export const MAX_COMPETENCE_ACCURACY = 100;",
+    "expect": "killed",
+    "why": "The accuracy ceiling raised until it cannot bind, which is how `hard` becomes the oracle both issues forbid by name ('No preset may create oracle-perfect awareness or aim'). It is a SILENT defect on the shipped data: the player profile is STATIC_BASIC at aimAccuracy 0.55, so `hard` lands at 0.6875 and the clamp never fires -- every difficulty still behaves plausibly and no shipped configuration looks wrong. The clamp only matters for a profile near the bound, which is why the test exercises a synthetic one at 0.99 rather than only the shipped one; testing the shipped profile alone would leave the clamp itself unexercised and this mutation alive. Both spreads are an anchor DIVIDED by accuracy, so an unbounded accuracy drives the seeded error to nothing. Scoped to bot-difficulty.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/ai/bot-difficulty.test.ts"
+    ],
+    "killedBy": [
+      "bot difficulty presets never makes a bot an oracle, however hard the preset is applied"
+    ]
+  },
+  {
+    "id": "versus-roster-ignores-the-configured-team",
+    "file": "src/sim/arena.ts",
+    "find": "        if (mode === 'teams') tank.team = teams?.[i] ?? teamOf(i);",
+    "replace": "        if (mode === 'teams') tank.team = teamOf(i);",
+    "expect": "killed",
+    "why": "The versus roster falls back to the `slot % 2` derivation and ignores what the player chose -- which is issue #281's whole defect restored, and it goes SILENTLY: the board still loads, every tank still carries a team, and a 2v2 still looks like a 2v2. What breaks is that it is not the 2v2 the setup pane displayed. The mutation is invisible to any assertion that only checks `team` is defined, or that two teams exist, because the derivation produces exactly that. Killed by the pair in `arena.test.ts` that configures `[0, 0, 1, 2]` -- a THREE-team split the alternating derivation cannot produce at all, so agreement cannot be coincidental -- and by the sparse case, which pins that an unset slot still derives. Deliberately does NOT touch the campaign co-op stamp or the FFA path: FFA never stamps `Tank.team` (types.ts), which is why threading configured teams cannot move `BASELINE_HASH`, and a mutation that blurred that boundary would be testing a different claim. Scoped to arena.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/arena.test.ts"
+    ],
+    "killedBy": [
+      "loadArena: mode-aware (n-player arc PR 4 -- FFA + teams) a CONFIGURED team overrides the slot % 2 derivation, per slot (issue #281)",
+      "loadArena: mode-aware (n-player arc PR 4 -- FFA + teams) falls back to the derivation for any slot with no configured team"
+    ]
+  },
+  {
+    "id": "refused-shot-says-nothing",
+    "file": "src/sim/bullets.ts",
+    "find": "    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
+    "replace": "    // events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
+    "expect": "killed",
+    "why": "The shell-cap refusal goes back to emitting nothing, which is the state issue #356 opens against: `spawnBullet` returns `false` and a refused shot becomes indistinguishable from an input that never happened -- for the player AND for every consumer of the event stream. It is invisible to everything else by construction. No sim state changes, so `BASELINE_HASH` cannot see it; the shot is still correctly refused, so the cap's own assertions still pass; and nothing renders, plays or vibrates today, so no presentation test can see it either -- the audio and haptics cases for this event are deliberately silent until #356's comparison picks a treatment. That combination is exactly why the emit needs its own pin: every OTHER signal in the tree says the code is fine. Killed by the two cases asserting the event's full payload on a player and on a non-player owner, whose control is the third case -- a DEAD owner is also refused and must emit nothing, which is why `reason` is a discriminator rather than a boolean. Scoped to bullets.test.ts; expectFailures counts that scoped run only. The mutation COMMENTS the push out rather than deleting the line: the harness requires a non-empty `replace`, and a commented line is also the more realistic shape of the regression -- someone silencing a cue during debugging and not restoring it.",
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ],
+    "killedBy": [
+      "spawnBullet + ownerShellCount emits fire-blocked for a NON-player owner too, since the cap applies to every owner",
+      "spawnBullet + ownerShellCount rejects the player's 6th concurrent shell while 5 are live"
+    ]
+  },
+  {
+    "id": "idle-turret-never-searches",
+    "file": "src/sim/ai/index.ts",
+    "find": "    : (remembered ?? searchAim(world, tank));",
+    "replace": "    : (remembered ?? decision.turretAngle);",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "Pins the WIRING of issue #371's idle search, not searchAim itself. search.test.ts can pass in full while the dispatcher never calls it, which is exactly the shipped state before #371 -- every personality passes tank.turretAngle through and the gun sits still. Reverting to that pass-through must not be silent. One failure, not two: with no search the turret is perfectly still, so the anti-jitter case beside it counts zero reversals and still passes. The dormant-gun case is what carries this. Anchor moved by issue #372: the aim chain became three-way (solution, then remembered contact, then search), so the one-line ternary this entry was written against no longer exists. The mutation is unchanged in kind -- it removes SEARCH from the fallback and restores the pass-through -- and now sits on the arm #371 still owns.",
+    "killedBy": [
+      "stepAi turret slew SEARCHES rather than holding the last angle when it has no line of sight (issue #371)"
+    ]
+  },
+  {
+    "id": "fire-gate-ignores-barrel-arrival",
+    "file": "src/sim/ai/index.ts",
+    "find": "    const onTarget = Math.abs(angleDelta(tank.turretAngle, decision.turretAngle)) <= AI_AIM_BREAK;",
+    "replace": "    const onTarget = true;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "aimTicks measures how long a solution has EXISTED, never whether the gun got there, and the shot deliberately leaves along the barrel -- so without this gate a tank fires mid-slew into whatever is in front of it. Latent until idle search shipped: measured over pacifist.test.ts's 60 seeds, dropping this takes AI-on-AI shell kills from 43 to 51 on an unchanged shot count.",
+    "killedBy": [
+      "stepAi friendly-fire gate at the trigger does NOT fire while the barrel is still traversing to its solution (issue #371)"
+    ]
+  },
+  {
+    "id": "search-anchored-on-the-turret-not-the-hull",
+    "file": "src/sim/ai/search.ts",
+    "find": "  return tank.bodyAngle + draw * AI_SEARCH_SWEEP;",
+    "replace": "  return tank.turretAngle + draw * AI_SEARCH_SWEEP;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/search.test.ts"
+    ],
+    "why": "Anchoring on the turret makes the target chase the barrel: the aim-hold layer sees a solution that moves every tick as the turret slews toward it, breaks its hold and re-solves, reintroducing the per-tick chasing issue #344 removed. The bound also stops meaning anything, since it is then measured from a moving reference.",
+    "killedBy": [
+      "idle turret search heading does not move when only the TURRET moves",
+      "idle turret search heading stays inside the sweep of the HULL angle, at every tick of a long run"
+    ]
+  },
+  {
+    "id": "search-redrawn-every-tick",
+    "file": "src/sim/ai/search.ts",
+    "find": "  const span = Math.floor(world.tick / AI_SEARCH_HOLD_TICKS);",
+    "replace": "  const span = world.tick;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/search.test.ts"
+    ],
+    "why": "The hold is the difference between a search and jitter. Issue #371 asks for headings held for a decision span; a fresh draw every tick satisfies every bound in search.test.ts except the hold itself, and produces a barrel that shivers rather than looks.",
+    "killedBy": [
+      "idle turret search heading holds ONE heading for a whole span, and does not hold it forever"
+    ]
+  },
+  {
+    "id": "target-commitment-not-wired-into-stepai",
+    "file": "src/sim/ai/index.ts",
+    "find": "    commitTarget(world, tank);",
+    "replace": "    // commitTarget(world, tank);",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "why": "Pins the WIRING of issue #359's commitment, not the policy. target-selection.test.ts drives commitTarget directly and passes in full while stepAi never calls it, which would leave every AI on the pure fallback -- re-selecting from scratch every tick, with the stickiness the issue asks for present in the module and absent from the game. The golden trace is what notices, because five of its runs' timing depends on the commitment holding. Re-pointed 2026-08-31: the golden trace used to kill this (five runs's timing depended on the commitment holding), but the owner's full-awareness ruling made the commitment behaviourally invisible in single-player -- the trace reverted to its pre-#359 value and this entry started SURVIVING. Its value was always multi-player, so it is now pinned by a two-player stepAi case instead. Remeasured 2026-09-01 at 2 of the 16 tests now in target-selection.test.ts, up from a declared 1 -- the population changed, the contract did not. The file gained 'under the dev flag, the bound survives a REAL TICK -- the clone has to carry it' alongside the cloneWorld aiTargetPerception fix, and that test drives a real stepInputs tick, so an unwired commitTarget leaves its two acquired-target assertions unwritten as well. The pre-existing two-player 'stepAi writes and HOLDS a committed target across ticks' case is still the other failure.",
+    "killedBy": [
+      "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it",
+      "the commitment reaches the game, not just this file stepAi writes and HOLDS a committed target across ticks, with two players on the board"
+    ]
+  },
+  {
+    "id": "target-selection-tie-break-is-symmetric",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return tieBreak(world, subject, a) > tieBreak(world, subject, b);",
+    "replace": "  return a.id < b.id;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-selection.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Rule 3 by name: equivalent candidates must be separated by a seeded PER-AI draw, never by slot or array order. Falling back to id order is precisely the bias issue #359 exists to remove, and with one player -- the campaign and the whole golden trace -- it is invisible, so only the symmetric multi-player fixtures catch it. Replaces ai-opponent-selection-reverses-slot-order, removed with issue #359: that entry mutated first-alive-in-array-order selection, which no longer exists, so its find string could only ever report failed-to-apply.",
+    "killedBy": [
+      "committed opponent selection breaks a symmetric tie per-AI, rather than by slot order or in unison",
+      "committed opponent selection gives the same AI the same tie result every time it is asked",
+      "resolveOpponent: the one place an AI decides who it is fighting (issue #359) two AIs at the same spot no longer converge on one player by construction"
+    ]
+  },
+  {
+    "id": "target-selection-drops-the-perception-bound",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return cfg.ai.bankShotWeight > 0;",
+    "replace": "  return true;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "why": "Rule 1: an AI may select only from opponents it perceives. The shipped predicate is line of sight, widened to 'anything a banking profile could bank at' because indirect fire is that role's identity. Returning true outright restores full omniscience for every profile, including the non-banking ones the bound actually constrains. Remeasured 2026-09-01 at 2 of the 16 tests now in target-selection.test.ts, up from a declared 1, for the same reason and in the same file: 'the bound survives a REAL TICK -- the clone has to carry it' asserts this rule one tick deep, through stepInputs, where the pre-existing 'acquires only what it can SEE, for a profile that does not bank' asserts it at the direct call. Two depths of one rule, not a widened contract.",
+    "killedBy": [
+      "committed opponent selection under the dev flag, acquires only what it can SEE, for a profile that does not bank",
+      "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it"
+    ]
+  },
+  {
+    "id": "resolve-opponent-ignores-the-commitment",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "    if (held && isTargetable(world, tank, held)) return held;",
+    "replace": "    if (false && held && isTargetable(world, tank, held)) return held;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "The committed id must be READ BACK, not merely written. Skipping straight to the pure fallback leaves commitTarget writing state nothing consumes, so an AI would re-select every tick and 'movement and firing use the same committed opponent' would hold only by the fallback's determinism -- until the first selection input a decision can mutate.",
+    "killedBy": [
+      "resolveOpponent: the one place an AI decides who it is fighting (issue #359) prefers the COMMITTED target over anything the fallback would pick"
+    ]
+  },
+  {
+    "id": "target-switch-margin-ignored",
+    "file": "src/sim/ai/target-selection.ts",
+    "find": "      AI_TARGET_SWITCH_MARGIN",
+    "replace": "      -1",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "why": "Rule 6: at the end of a commitment span an AI keeps its opponent unless another is MATERIALLY better. A negative margin makes any improvement sufficient, so the AI flips target at every span boundary -- the per-tick-thrashing failure mode one span removed. Worth an entry because the first version of the matching test could not detect it: its challenger was further from preferred range than the held target, so no margin was ever crossed.",
+    "killedBy": [
+      "committed opponent selection does not switch at expiry for a trivially better candidate, but does for a material one"
+    ]
+  },
+  {
+    "id": "blocked-fire-announced-during-the-countdown",
+    "file": "src/sim/world.ts",
+    "find": "  if (canAct && input.fire && player.fireCooldown <= 0) {",
+    "replace": "  if (input.fire && player.fireCooldown <= 0) {",
+    "expect": "killed",
+    "tests": [
+      "src/sim/fire-refusal-paths.test.ts"
+    ],
+    "why": "Issue #356's cue must explain the active-shell cap and nothing else. Dropping the phase gate lets a tank that is already at its cap reach spawnBullet during the pre-round countdown, so the game announces a full magazine at a moment when firing was never on offer. The capacity check itself is untouched by this mutation -- only the order in which the two are consulted.",
+    "killedBy": [
+      "what a refused shot says, per refusal path (issue #356) COUNTDOWN: silent, even with every shell already in the air"
+    ]
+  },
+  {
+    "id": "blocked-fire-announced-on-cooldown",
+    "file": "src/sim/world.ts",
+    "find": "  if (canAct && input.fire && player.fireCooldown <= 0) {",
+    "replace": "  if (canAct && input.fire) {",
+    "expect": "killed",
+    "tests": [
+      "src/sim/fire-refusal-paths.test.ts"
+    ],
+    "why": "The other way the cue can start lying. With the cooldown out of the gate, every tick of a reload reaches spawnBullet, and a tank at its cap reports a capacity refusal 60 times a second for a shot the cooldown was holding anyway -- which is both the wrong reason and the unbounded output #356 forbids.",
+    "killedBy": [
+      "what a refused shot says, per refusal path (issue #356) COOLDOWN: silent -- a shot still reloading is not a capacity problem"
+    ]
+  },
+  {
+    "id": "fire-blocked-carries-the-wrong-owner",
+    "file": "src/sim/bullets.ts",
+    "find": "    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
+    "replace": "    events.push({ type: 'fire-blocked', ownerId: 0, reason: 'shell-cap' })",
+    "expect": "killed",
+    "tests": [
+      "src/sim/fire-refusal-paths.test.ts",
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "ownerId is what lets a consumer show the cue to the CONTROLLING player only, which is one of #356's acceptance criteria. The event is emitted for enemy owners too, so a treatment reading a wrong or constant owner would flash on every enemy's blocked shot -- visible only in a multi-tank fixture, never in a one-tank unit test.",
+    "killedBy": [
+      "spawnBullet + ownerShellCount emits fire-blocked for a NON-player owner too, since the cap applies to every owner",
+      "spawnBullet + ownerShellCount rejects the player's 6th concurrent shell while 5 are live",
+      "what a refused shot says, per refusal path (issue #356) CAPACITY: at the cap, the refusal is announced, with the owner and the reason"
+    ]
+  },
+  {
+    "id": "difficulty-never-reaches-hazard-judgment",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return AI_HAZARD_SPREAD / cfg.ai.estimationAccuracy;",
+    "replace": "  void cfg; return AI_HAZARD_SPREAD;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/hazard-competence.test.ts"
+    ],
+    "why": "Issue #223 criteria 4 and 5 live at the DECISION, not the profile. bot-difficulty.test.ts pins that the presets scale estimationAccuracy monotonically and stays entirely green against a build that then ignores it here -- every difficulty would judge mines identically while the preset table still looked correct. Measured at the time of writing: an easy bot believes it is safe inside the real kill radius on 18.79% of draws, normal 2.94%, hard 0.00%.",
+    "killedBy": [
+      "difficulty reaches hazard judgment makes an EASY bot misjudge a mine fatally more often than a HARD one",
+      "difficulty reaches hazard judgment narrows the band monotonically as difficulty rises"
+    ]
+  },
+  {
+    "id": "mine-slot-never-freed-on-detonation",
+    "file": "src/sim/mines.ts",
+    "find": "  if (owner) owner.activeMineIds = owner.activeMineIds.filter((id) => id !== mine.id)",
+    "replace": "  void owner",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ordnance-capacity.test.ts",
+      "src/sim/mines.test.ts"
+    ],
+    "why": "Mine capacity release has ONE mechanism, unlike shells: activeMineIds is an explicit array detonateMine has to prune, where a retired shell simply stops being counted. Drop the prune and a player silently loses a mine slot for the rest of the round -- until a death resets it, which is why the tick-boundary test has to stop at the first round reset to see this at all.",
+    "killedBy": [
+      "detonateMine frees a mine slot when a mine detonates so the player can drop again",
+      "standard ordnance limits, driven through step() never exceeds the mine limit, and reuses slots as mines detonate"
+    ]
+  },
+  {
+    "id": "last-seen-memory-tracks-the-live-target",
+    "file": "src/sim/ai/target-memory.ts",
+    "find": "  if (lineOfSight(tank.pos, target.pos, world.walls)) {",
+    "replace": "  if (true) {",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "The omniscience mutation, and the one thing issue #372 forbids outright: refreshing the remembered point without checking line of sight turns a memory of where the target WAS into a live read of where it IS. Invisible in any fixture where the target stands still, which is why the cases here move it while hidden.",
+    "killedBy": [
+      "last-seen contact memory EXPIRED: the contact is dropped after exactly its span, not before",
+      "last-seen contact memory NO CONTACT: a tank that has never seen anything remembers nothing",
+      "last-seen contact memory REACQUIRED: fresh sight replaces the remembered point outright and re-arms the span",
+      "last-seen contact memory REMEMBERED: the point FREEZES when sight breaks, and does not follow the target",
+      "last-seen contact memory the aim it produces points at the REMEMBERED place, not the target",
+      "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+    ]
+  },
+  {
+    "id": "last-seen-memory-never-expires",
+    "file": "src/sim/ai/target-memory.ts",
+    "find": "  tank.aiLastSeenTicks = Math.max(0, (tank.aiLastSeenTicks ?? 0) - 1);",
+    "replace": "  tank.aiLastSeenTicks = Math.max(1, (tank.aiLastSeenTicks ?? 0));",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "A memory that never ages is a permanent contact: the tank keeps its turret on a point it observed once and never hands off to issue #371's search, which is the 'bounded' half of #372's title.",
+    "killedBy": [
+      "last-seen contact memory EXPIRED: the contact is dropped after exactly its span, not before",
+      "last-seen contact memory REACQUIRED: fresh sight replaces the remembered point outright and re-arms the span",
+      "last-seen contact memory REMEMBERED: the point FREEZES when sight breaks, and does not follow the target",
+      "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+    ]
+  },
+  {
+    "id": "last-seen-memory-not-wired-into-stepai",
+    "file": "src/sim/ai/index.ts",
+    "find": "    updateTargetMemory(world, tank, resolveOpponent(world, tank, configFor(tank.kind)));",
+    "replace": "    void updateTargetMemory;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "Pins the WIRING, not the module. Every unit case in target-memory.test.ts drives updateTargetMemory directly and passes in full while stepAi never calls it, leaving the shipped game with no memory at all and every blind tank falling straight through to search.",
+    "killedBy": [
+      "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+    ]
+  },
+  {
+    "id": "clone-drops-the-remembered-contact",
+    "file": "src/sim/world.ts",
+    "find": "    ...(t.aiLastSeenPos ? { aiLastSeenPos: { ...t.aiLastSeenPos } } : {}),",
+    "replace": "    aiLastSeenPos: undefined,",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-memory.test.ts"
+    ],
+    "why": "step() clones the world every tick, so a field the clone drops is a field that cannot outlive one tick. Subtle because updateTargetMemory re-records immediately: a dropped memory looks present at any single instant, and only a tick count that has AGED below the full span proves it survived a tick without refresh.",
+    "killedBy": [
+      "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+    ]
+  },
+  {
+    "id": "clone-re-resolves-the-rules",
+    "file": "src/sim/world.ts",
+    "find": "    rules: world.rules,\n",
+    "replace": "    rules: resolveWorldRules(),\n",
+    "expect": "killed",
+    "tests": [
+      "src/sim/world.test.ts",
+      "src/sim/ai/target-selection.test.ts",
+      "src/sim/versus-respawn.test.ts",
+      "src/sim/versus-modes.test.ts",
+      "src/sim/coop-attempts.test.ts",
+      "src/sim/coop-respawn.test.ts"
+    ],
+    "why": "cloneWorld carries World.rules as ONE frozen reference (issue #472) -- never re-resolved, never enumerated. Dropping the line outright is loud (`draft.rules.mode` throws on the first read in stepInputs), so the SILENT form is modelled instead: a clone that re-resolves the rules from the shipped defaults every tick, which is exactly what #471's per-field omission looked like from outside -- a rule quietly back at its default from tick 1, with nothing thrown. Subsumes the two per-field clone entries it replaces, clone-drops-the-ai-target-perception and versus-respawn-clone-drops-arena-geometry: with one atomic reference there is no per-field line left to drop. Caught by 6 of the 103 cases across the six files: world.test.ts's reference-identity clone case and its 5-tick WORLD_RULE_KEYS sweep (the sweep is the one that grows on its own when a rule is added), target-selection.test.ts's 'the bound survives a REAL TICK' (aiTargetPerception back to 'full', so a wall-blind brown acquires through the wall), versus-modes.test.ts's 'cloneWorld carries both' (mode/friendlyFire back to campaign-coop/false), coop-attempts.test.ts's explicit-false pool-mode case (coopAttempts back to true) and versus-respawn.test.ts's end-to-end stepInputs respawn (arenaGeometry back to null, so the revived tank lands on its authored spawn). coop-respawn.test.ts contributes 0 of its cases by design -- its pool fixtures enter through resolveStatus/stepRespawns directly and never touch the clone, the same blind spot versus-respawn-always-falls-back-to-authored-spawn's own why names.",
+    "killedBy": [
+      "World.coopAttempts: defaults to true createWorld honors an explicit false (pool mode)",
+      "World.mode: defaults to campaign-coop, cloneWorld carries it createWorld honors an explicit mode/friendlyFire, cloneWorld carries both",
+      "cloneWorld carries the rules as ONE object: the same reference, every rule intact (population: all WORLD_RULE_KEYS)",
+      "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it",
+      "step (skeleton) preserves every resolved rule exactly across repeated real stepInputs ticks (population: all WORLD_RULE_KEYS, 5 ticks)",
+      "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present end to end through the full pipeline (stepInputs): the revived tank is alive and off its authored spawn"
+    ]
+  },
+  {
+    "id": "rules-boundary-skips-the-coop-attempts-default",
+    "file": "src/sim/rules.ts",
+    "find": "    coopAttempts: init.coopAttempts ?? true,",
+    "replace": "    coopAttempts: init.coopAttempts,",
+    "expect": "killed",
+    "tests": [
+      "src/sim/rules.test.ts",
+      "src/sim/world.test.ts",
+      "src/sim/coop-attempts.test.ts",
+      "src/game/levels.test.ts"
+    ],
+    "why": "resolveWorldRules (rules.ts) is the ONE place a rule's default is chosen (issue #472). Skipping a single `??` leaves every caller that does not state the rule -- which is every shipped call site -- with `undefined` in a required slot: the harness does not typecheck, no consumer has a fallback left to hide behind, and `!undefined` reads as POOL mode in resolveStatusCoop, so a whole win/lose model flips with nothing thrown. Caught by 6 of the 97 cases across the four files (97 since rules.test.ts gained its spread-derivation case; the six killers are unchanged): rules.test.ts's key-by-key default pin (the direct guard, and the one that catches the same omission on ANY key), coop-attempts.test.ts's 'defaults coopAttempts to true when omitted' and its N=4 survivor-carries case (attempts mode became pool mode: a single death now decrements), world.test.ts contributes 0 (its fixtures state every rule explicitly, so the skipped default is never reached -- which is the point of stating them), and levels.test.ts's 'builds level i ... the same walls, tanks and seed' (createLevelSystem passes `!flags.coopPool` explicitly while the bare createWorldFor it is compared against does not, so the two worlds stop being equal), its 'sandbox does NOT wire coopPool' default pin, and its issue-#154 reordered-campaign deep-equality for the same reason as the first.",
+    "killedBy": [
+      "World.coopAttempts: defaults to true createWorld defaults coopAttempts to true when omitted, cloneWorld carries it",
+      "createLevelSystem: resolves through campaign data, not ARENAS position (issue #154) a reordered campaign builds the level at position 0 from ITS OWN arenaId, not ARENAS[0]",
+      "createLevelSystem: the sandbox the sandbox branch does NOT wire coopPool -- always single-player, so createSandboxWorld never sees it and the world keeps the default",
+      "createLevelSystem: the shipped sequence builds level i from its own arenaId -- the same walls, tanks and seed",
+      "resolveStatusCoop: ATTEMPTS mode -- review insurance cases N=4: three dead, one survivor carries -- no decrement, no reset, corpses persist",
+      "resolveWorldRules: the shipped defaults with nothing stated resolves to the shipped rule set, key by key"
+    ]
+  },
+  {
+    "id": "perception-re-derived-from-the-old-field-with-a-fallback",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const bounded = world.rules.aiTargetPerception === 'line-of-sight';",
+    "replace": "  const bounded = ((world as unknown as { aiTargetPerception?: string }).aiTargetPerception ?? 'full') === 'line-of-sight';",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "why": "The consumer-side half of #471, kept as a regression class under #472: a consumer that reads a rule from where it USED to live (a top-level World field), through a fallback that turns the miss into the shipped default. The rule now lives only on World.rules, so this read always sees undefined, the line-of-sight bound is silently gone, and nothing throws -- which is the whole point of forbidding `??` at rule consumers. Caught by 2 of the 16 cases in target-selection.test.ts: 'acquires only what it can SEE, for a profile that does not bank' (direct commitTarget/resolveOpponent under the bound: wall-blind brown now acquires through the wall) and 'the bound survives a REAL TICK' (the same through stepInputs). The banking-profile case survives by construction (grey perceives what it could bank at, bound or no bound), and the 'full' control passes under the mutation because 'full' is exactly what the fallback produces -- it discriminates the other way.",
+    "killedBy": [
+      "committed opponent selection under the dev flag, acquires only what it can SEE, for a profile that does not bank",
+      "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it"
+    ]
+  },
+  {
+    "id": "remembered-contact-never-reaches-the-turret",
+    "file": "src/sim/ai/index.ts",
+    "find": "  const remembered = decision.hasSolution ? null : memoryAim(tank);",
+    "replace": "  const remembered = null;",
+    "expect": "killed",
+    "tests": [
+      "tools/gallery/moments.test.ts"
+    ],
+    "why": "Pins the CONSUMPTION of last-seen memory, which last-seen-memory-not-wired-into-stepai does not: that entry cuts the write, this one cuts the read. With the read gone the memory is still recorded and still expires on schedule, so every unit case in target-memory.test.ts stays green -- MEASURED, the whole of src/sim (1227 tests) passes with this line neutered. The only thing that changes is that a tank which has just lost sight sweeps immediately instead of looking where its target went, which is the entire behaviour issue #372 asks for. tools/gallery/moments.test.ts's ai-last-seen block is the only coverage that notices.",
+    "killedBy": [
+      "ai-last-seen moment specifics gives up after exactly AI_LAST_SEEN_TICKS and hands off to the search sweep",
+      "ai-last-seen moment specifics holds the bearing to the position it LAST OBSERVED, while the player moves somewhere else",
+      "ai-last-seen moment specifics the plateau is caused by the memory, not by the geometry"
+    ]
+  }
+]

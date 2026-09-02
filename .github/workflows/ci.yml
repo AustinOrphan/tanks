@@ -61,7 +61,7 @@ jobs:
         if: matrix.label == 'floor'
         run: npm run mutate:smoke
 
-      # tools/mutate/manifest.json is hand-verified against a specific commit, and this
+      # tools/mutate/manifests/*.json are hand-verified against a specific commit, and this
       # repo's own history has that go stale: a rebase onto a later main left two `find`
       # strings no longer matching and one declared outcome flipped. Node 24 is the
       # authoritative per-change full-manifest lane; mutation-floor.yml separately runs
