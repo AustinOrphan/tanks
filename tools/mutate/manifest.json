@@ -3285,8 +3285,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes."
+    "expectFailures": 2,
+    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes. Re-measured at 2 of 417 in loop.test.ts once the renderer-fit case \"New Game with a run parked on a wider level opens on level one's own board\" joined the file: a New Game that stays on the run's board also leaves the renderer fitted to the run's board, so that case dies to this mutation too."
   },
   {
     "id": "start-boundary-new-game-never-writes-the-run",
