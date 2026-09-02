@@ -92,6 +92,17 @@ describe('the resolved rules are immutable', () => {
     expect(rules.mode).toBe('campaign-coop');
   });
 
+  it('a variant derived through the resolver from a spread of existing rules comes back frozen', () => {
+    // The freeze is shallow and a spread is a fresh, unfrozen object; the documented idiom
+    // for "these rules, but ffa" is to re-enter the resolver, which re-freezes. Mutation
+    // that fails this: dropping the Object.freeze in resolveWorldRules.
+    const base = resolveWorldRules({ friendlyFire: true });
+    const variant = resolveWorldRules({ ...base, mode: 'ffa' });
+    expect(Object.isFrozen(variant)).toBe(true);
+    expect(variant).toEqual({ ...base, mode: 'ffa' });
+    expect(Object.isFrozen({ ...base })).toBe(false); // the spread alone is not
+  });
+
   it('type-level: a rules literal missing a required key does not typecheck', () => {
     // The acceptance criterion in one line: adding a rule to WorldRules makes every
     // incomplete construction a COMPILE error, never a runtime default after a clone.

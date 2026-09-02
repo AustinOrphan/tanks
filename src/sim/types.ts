@@ -69,6 +69,10 @@ export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
  * reverse import would close a cycle -- see `arena.ts`'s own comment on the analogous
  * `versus-spawns.ts` situation).
  *
+ * Every field is `readonly`: one object is shared by reference across every tick's clone
+ * (`resolveWorldRules`'s freeze is shallow and does not reach it), so the type states what
+ * the sharing already required.
+ *
  * Carried on `World.rules` (`null` when no grid exists -- see `WorldRules.arenaGeometry`) because
  * `pickVersusSpawnCell` (`versus-spawns.ts`) needs the grid CHARACTERS themselves to
  * find an open-floor cell; `World.walls` alone cannot answer that, since it only carries
@@ -77,11 +81,11 @@ export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
  * distinguishes "open floor" from "a letter that happens not to be a wall".
  */
 export interface ArenaGeometry {
-  cols: number;
-  rows: number;
-  cellSize: number;
-  grid: string[];
-  legend: Record<string, WallKind>;
+  readonly cols: number;
+  readonly rows: number;
+  readonly cellSize: number;
+  readonly grid: readonly string[];
+  readonly legend: Readonly<Record<string, WallKind>>;
 }
 
 export interface Spawn {

@@ -76,7 +76,7 @@ player can drive but a round with no enemies does not yet know how to end.
   twice: the default is shared ATTEMPTS (2026-08-16 ruling — a lone death costs nothing,
   a full wipe spends a life and resets the arena), with the original shared-pool
   respawn-in-place model behind `?dev=1&coopPool=1`. Versus (FFA + teams) is a THIRD and
-  FOURTH `World.mode`, dispatched at the same guard-first split: `loadArena` strips every
+  FOURTH `World.rules.mode`, dispatched at the same guard-first split: `loadArena` strips every
   enemy spawn rather than repurposing one as a bonus player slot, single life per round
   with no stock/lives system, FFA wins on exactly one player tank left alive, teams wins
   when one team is wiped and the other has a survivor, and a simultaneous final wipeout

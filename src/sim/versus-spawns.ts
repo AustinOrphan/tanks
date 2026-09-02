@@ -71,11 +71,11 @@ function cellOfPos(pos: Vec2, cellSize: number): Cell {
  * from it, rather than a cross-check between two independent copies.
  */
 export function wallsForQuery(
-  grid: string[],
+  grid: readonly string[],
   cols: number,
   rows: number,
   cellSize: number,
-  legend: Record<string, WallKind>,
+  legend: Readonly<Record<string, WallKind>>,
 ): Wall[] {
   const solid: boolean[][] = [];
   for (let r = 0; r < rows; r++) {
@@ -147,7 +147,7 @@ function isOpenFloor(ch: string): boolean {
  * (arena, count) pairs exactly one spawn pair becomes mutually visible once every
  * destructible is gone. The filter's guarantee is an at-spawn one, never a match-long one.
  */
-function isWalkable(ch: string, legend: Record<string, WallKind>): boolean {
+function isWalkable(ch: string, legend: Readonly<Record<string, WallKind>>): boolean {
   return legend[ch] !== 'solid';
 }
 
@@ -244,11 +244,11 @@ export interface SpawnPickOptions {
  * every shipped arena ships far more open floor than 4 players need.
  */
 export function pickVersusSpawnCell(
-  grid: string[],
+  grid: readonly string[],
   cols: number,
   rows: number,
   cellSize: number,
-  legend: Record<string, WallKind>,
+  legend: Readonly<Record<string, WallKind>>,
   avoid: Vec2[],
   opts: SpawnPickOptions = {},
 ): Cell {
@@ -421,11 +421,11 @@ function anchorCell(cands: Cell[], walkable: boolean[][], cols: number, rows: nu
  * throw, inheriting `pickVersusSpawnCell`'s own zero-candidate fallback.
  */
 export function pickVersusSpawnSet(
-  grid: string[],
+  grid: readonly string[],
   cols: number,
   rows: number,
   cellSize: number,
-  legend: Record<string, WallKind>,
+  legend: Readonly<Record<string, WallKind>>,
   count: number,
   opts: SpawnPickOptions = {},
 ): Cell[] {
@@ -526,11 +526,11 @@ function wallDistance(p: Vec2, w: Wall): number {
  * Deterministic and total: a pure function of its arguments; no throw on any input.
  */
 export function versusSpawnClearanceFailures(
-  grid: string[],
+  grid: readonly string[],
   cols: number,
   rows: number,
   cellSize: number,
-  legend: Record<string, WallKind>,
+  legend: Readonly<Record<string, WallKind>>,
   positions: readonly Vec2[],
   margin: number = VERSUS_SPAWN_CLEARANCE_MARGIN,
 ): string[] {

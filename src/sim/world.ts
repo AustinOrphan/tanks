@@ -15,21 +15,26 @@ import { pickVersusSpawnCell } from './versus-spawns';
  * One simulated match, as of one tick. Two kinds of field live here, and the split is a
  * contract rather than a tidiness (issue #472):
  *
- *  - `rules` is everything FIXED for the world's life -- mode, friendly fire, mine
+ *  - `rules` is every POLICY fixed for the world's life -- mode, friendly fire, mine
  *    trigger, AI perception, the corpse/muzzle switches, the coop model, the arena grid.
  *    Resolved once by `resolveWorldRules` (rules.ts) before the world exists, frozen, and
  *    carried through `cloneWorld` as ONE reference, so a rule cannot be individually
  *    forgotten by a copy path the way #471's `aiTargetPerception` was.
- *  - Everything else is the mutable snapshot -- entities, status, lives, the round clock
- *    -- which `cloneWorld` deep-copies field by field and a tick's stages write to.
- *
- * `seed` is the one field that is fixed for the world's life and NOT in `rules`: it is the
- * entropy key rather than a policy (see WorldRules's own doc comment).
+ *  - `tick`, `nextId`, `tanks`, `bullets`, `mines`, `blasts`, `walls`, `status`, `lives`
+ *    and `roundStartTick` are the mutable snapshot, which `cloneWorld` deep-copies field
+ *    by field and a tick's stages write to.
+ *  - `seed` and `spawns` are fixed for the world's life too, and deliberately NOT in
+ *    `rules`: neither is a policy (`seed` is the entropy key; `spawns` is immutable arena
+ *    data that `resetArena` and `stepRespawns` only ever read), and both are required
+ *    and typechecked already, so a clone cannot forget them the way it could an optional
+ *    rule. `seed` is `readonly` so the claim is enforced the way `rules` is; `spawns`
+ *    stays a deep-copied array because moving it is World-shape churn this issue's
+ *    boundaries exclude. See WorldRules's own doc comment.
  */
 export interface World {
   tick: number;
   nextId: number;
-  seed: number;
+  readonly seed: number;
   /** The immutable match rules. See WorldRules (rules.ts) for every field and its default. */
   readonly rules: WorldRules;
   tanks: Tank[];
@@ -414,19 +419,19 @@ function resetArena(world: World): void {
 }
 
 /**
- * Coop's win/lose rule, split on `world.coopAttempts` into two entirely separate
+ * Coop's win/lose rule, split on `world.rules.coopAttempts` into two entirely separate
  * bodies. Both share the same ~4-line win check up front (duplicated from the 1P body
  * below rather than shared, which is what keeps THAT body a literal byte-for-byte
  * no-diff) -- win is decided ahead of either branch's death handling, and holds
  * whether or not lives remain, exactly like 1P.
  *
- * `world.coopAttempts` TRUE (the default): the shared-attempts ruling (owner,
+ * `world.rules.coopAttempts` TRUE (the default): the shared-attempts ruling (owner,
  * 2026-08-16 -- "lives are more like shared attempts. If all players in co op die,
  * then a life/attempt is lost. If one player dies, the remaining can continue on and
  * if they clear the level, all players spawn in on the next level.") See the
  * ATTEMPTS MODE block below.
  *
- * `world.coopAttempts` FALSE (`?dev=1&coopPool=1`): the shipped POOL model this
+ * `world.rules.coopAttempts` FALSE (`?dev=1&coopPool=1`): the shipped POOL model this
  * replaces as default -- see docs/superpowers/plans/2026-08-15-coop-semantics.md.
  * The POOL MODE block below is that plan's `resolveStatusCoop` body, byte-untouched.
  */

@@ -2933,6 +2933,30 @@
     "why": "`?dev=1&aiPerception=los` used to be written onto the built world by loop.ts's buildWorld, after the fact, and no test on main pinned that write (measured: zero test lines on main mention aiPerception reaching a world). #472 froze World.rules, so the flag has to travel through levels.ts's closure into createWorldFor's trailing positional like corpseBlock/muzzleInside/coopPool/mode/friendlyFire already do -- the composition question target-selection.test.ts's unit cases on targeting.ts cannot see. Caught by 2 of the 56 cases in levels.test.ts: the campaign branch's 'aiPerception=los reaches world.rules.aiTargetPerception' and its two-player coop sibling. The 'unset (null) leaves full' control survives by design. The sandbox and versus builders carry the same threading and their own cases (dropping all three builders at once measured 4 of 56 while landing this); this entry mutates the campaign branch only, so those two stay green here and are not counted."
   },
   {
+    "id": "sandbox-levels-drop-the-ai-perception-flag",
+    "file": "src/game/levels.ts",
+    "find": "          !flags.muzzleInside,\n          flags.aiPerception ?? undefined,\n",
+    "replace": "          !flags.muzzleInside,\n          undefined,\n",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/levels.test.ts"
+    ],
+    "why": "The sandbox sibling of levels-drop-the-ai-perception-flag: createLevelSystem's sandbox branch threads `?dev=1&aiPerception=los` into createSandboxWorld's trailing positional (issue #472), the same composition the campaign entry pins for createWorldFor. One entry per builder because each is its own closure with its own argument list -- the campaign entry's mutation leaves this branch untouched and vice versa (measured: each kills exactly its own branch's cases and nothing else). Caught by 1 of the 56 cases in levels.test.ts: 'the sandbox branch wires aiPerception too', whose in-test unset control (`full`) survives the mutation by design. Asked for by the PR #491 review, which wanted the forward pinned per builder rather than for the campaign branch alone."
+  },
+  {
+    "id": "versus-levels-drop-the-ai-perception-flag",
+    "file": "src/game/levels.ts",
+    "find": "        flags.aiPerception ?? undefined,\n      ),\n    // That arena's own bounds",
+    "replace": "        undefined,\n      ),\n    // That arena's own bounds",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/levels.test.ts"
+    ],
+    "why": "The versus sibling of levels-drop-the-ai-perception-flag: createVersusLevelSystem threads the session's real dev flags' `aiPerception` into createWorldFor's trailing positional (issue #472), the same route its corpseBlock/muzzleInside already take through the DEV_FLAGS_OFF-defaulted third parameter. The find anchors on the close of the argument list plus the `bounds` comment that follows only in this builder, because the `flags.aiPerception ?? undefined,` line itself appears once per builder. Caught by 1 of the 56 cases in levels.test.ts: 'aiPerception reaches a versus world too', whose omitted-flags control (`full`) survives the mutation by design. Asked for by the PR #491 review alongside the sandbox entry."
+  },
+  {
     "id": "remembered-contact-never-reaches-the-turret",
     "file": "src/sim/ai/index.ts",
     "find": "  const remembered = decision.hasSolution ? null : memoryAim(tank);",

@@ -720,7 +720,7 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  * (`controlledBy`), the same array-as-accumulator shape `checkAchievements`'s callers
  * already use elsewhere in this file.
  *
- * `world.mode` dispatches two entirely separate rules:
+ * `world.rules.mode` dispatches two entirely separate rules:
  *
  *  - `'campaign-coop'`: TODAY'S rule, byte-for-byte. `e.kind === 'player'` is excluded
  *    -- only ENEMY kills count as a "kill" here, matching the results screen's existing
@@ -742,7 +742,7 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  *
  * Teams sums a per-team total from these same per-slot figures as a DERIVED reduction
  * at render/HUD time (Tank.team, no new storage here) -- this function stays unaware of
- * teams beyond dispatching on `world.mode`.
+ * teams beyond dispatching on `world.rules.mode`.
  *
  * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
  * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
@@ -1192,7 +1192,7 @@ export function startGameWith(
 
   /**
    * May a bot drive a player tank in THIS session -- see `botAssignmentAllowed`. Fixed
-   * for the session's life: `world.mode` never changes within one (see the versus-results
+   * for the session's life: `world.rules.mode` never changes within one (see the versus-results
    * dispatch below), and a dev flag cannot be set mid-session.
    *
    * The BOOT path already honours this without any help, since `botCount` is 0 whenever
@@ -1895,7 +1895,7 @@ export function startGameWith(
   });
   // THE TWO SEPARATE HUD PROJECTIONS (issue #316 review, finding 1), both
   // derived from the canonical model -- never from `deps.initialVersusConfig`,
-  // a URL read, or a `world.mode` check.
+  // a URL read, or a `world.rules.mode` check.
   //
   // `setRelaunchTarget` is WHAT THE BUTTONS DO, and is fixed for the session
   // (see `relaunchTarget` above). `setSessionKind` is WHAT IS BEING PLAYED, and
@@ -1923,7 +1923,7 @@ export function startGameWith(
   // versus session -- setup-pane OR developer-flag -- skips this and lets
   // `onSimulated`'s first 'playing' frame push real entries instead, exactly as
   // a setup-pane match already did. For a campaign or practice session
-  // `world.mode` is `'campaign-coop'`, so `onSimulated`'s `isVersusFrame`
+  // `world.rules.mode` is `'campaign-coop'`, so `onSimulated`'s `isVersusFrame`
   // branch never fires and this null really is the only call it will ever make.
   if (currentDescriptor.kind !== 'versus') hud.setVersusStocks(null);
 
@@ -1947,13 +1947,13 @@ export function startGameWith(
    * The results-screen kill tally, indexed by slot -- coop's own (coop semantics plan,
    * docs/superpowers/plans/2026-08-15-coop-semantics.md) generalized by n-player arc PR
    * 4's `tallyCoopKills` to also hold ffa/teams' player-vs-player kills: the two never
-   * coexist in one session (`world.mode` is fixed for its whole life), so one array
+   * coexist in one session (`world.rules.mode` is fixed for its whole life), so one array
    * safely serves both. `versusDeaths` is the PR 4 addition `tallyCoopKills` needs only
    * for its ffa/teams branch -- unused, always empty, in campaign-coop. Per-attempt
    * scope, mirroring `attempt`'s own lifecycle: both reset at every `startAttempt()`
    * call site below, since they feed the same win/lose panel. Fed to the HUD
    * unconditionally -- whether either line actually shows is the HUD's own gate
-   * (`setCoopKills`/`setVersusResults`, dispatched below on `driver.world.mode`).
+   * (`setCoopKills`/`setVersusResults`, dispatched below on `driver.world.rules.mode`).
    */
   let coopKills: number[] = [];
   let versusDeaths: number[] = [];

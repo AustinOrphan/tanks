@@ -127,7 +127,9 @@ export interface WorldRules {
    * pickVersusSpawnCell (versus-spawns.ts). `null` degrades to the tank's own authored
    * spawn -- see respawnPos's own comment -- rather than throwing. A reference, never
    * deep-cloned: the grid strings and legend never mutate after loadArena builds them
-   * (only Wall.destroyed, which lives on `World.walls`, changes mid-round).
+   * (only Wall.destroyed, which lives on `World.walls`, changes mid-round), and since #472
+   * ArenaGeometry's fields are `readonly` (types.ts), so that is enforced by the type --
+   * the freeze below is shallow and would not reach this object on its own.
    */
   readonly arenaGeometry: ArenaGeometry | null;
 }
@@ -183,6 +185,9 @@ export const WORLD_RULE_KEYS: readonly (keyof WorldRules)[] = Object.keys({
  * Frozen so that the object can be shared by reference across every tick's clone
  * (world.ts's cloneWorld) with nothing able to alias-mutate it: ES modules are strict
  * mode, so an assignment to a frozen property is a TypeError rather than a silent no-op.
+ * The freeze is SHALLOW, and a spread of `world.rules` is a fresh, UNFROZEN copy -- so
+ * derive a variant through this function, `resolveWorldRules({ ...world.rules, mode: 'ffa' })`,
+ * which re-freezes it (pinned in rules.test.ts).
  */
 export function resolveWorldRules(init: WorldRulesInit = {}): WorldRules {
   return Object.freeze({
