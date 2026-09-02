@@ -161,6 +161,28 @@ later one with nothing thrown. `GameDeps.releaseAudio` is what a session calls i
 required rather than defaulted precisely so a shared `createAudio` cannot be wired without
 it.
 
+**The state machine is page-scoped; a session's subscription to it is not.** Since issue
+#468 `route-host.ts` builds one `GameStateMachine` per document and every session
+subscribes to it in `startGameWith`. `onChange` returns the unsubscribe and a session's
+`dispose` calls it, because a subscriber left behind runs on every later change with the
+retired session's closures -- its level, its identity, its disposed input controller.
+Measured through loop.test.ts's page harness before the unsubscribe existed: a retired
+Practice session on level 3 recorded level 3 as cleared when the LIVE campaign session
+cleared level 1 (`rec.cleared` read `[3, 1]`), and a retired campaign session advanced the
+shared run with its own stale life count before the live one wrote the real value.
+`emit` walks a snapshot of the subscriber list so a mid-emit unsubscribe cannot skip the
+next subscriber. The same page/session split decides who paints the Main Menu: the page
+paints what it can read from its own stores at construction and re-reads Continue on every
+arrival at the Main Menu (`route-host.ts`), because with the host booting empty (#428) a
+session's own construction-time paints happened for nobody -- a returning player's first
+Main Menu had no Continue and no Levels grid. A session still pushes the same values at
+its own construction, and the page resets the session-shaped affordances
+(`setRelaunchTarget`, `setSessionKind`) when the slot is released, so an empty host never
+offers a "Start Match" that is a New Game in disguise. What the page still does NOT own is
+recorded in issue #485: menu music and the settings-driven controls, both of which run
+through the session's `applySettings`/`followMusic` and go silent or stale on the empty
+host.
+
 `tanks.touch.v1` is now a migration READ only (`readLegacyTouchSettings`). When there is no
 usable canonical payload, each legacy field is validated independently, merged over the
 current defaults, written canonically, and the legacy key is removed — in that order, so a
