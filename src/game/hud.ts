@@ -71,6 +71,7 @@ export type HudRelaunchTarget = 'campaign-levels' | 'versus-setup';
 import type { StatCounts } from './stats';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
+import { actionDirection, consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
 import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
@@ -588,6 +589,14 @@ export interface Hud {
    * fallback). The Back buttons, Escape and the browser's own Back all end here.
    */
   back(): boolean;
+  /**
+   * The semantic action dispatcher for the active layer (issue #494): a direction moves
+   * the roving focus, `confirm` activates the focused control, `back` is `back()`, and
+   * `pause` is reported unconsumed for the page to toggle. `true` when the HUD consumed
+   * the action. The gamepad menu poller in `route-host.ts` is the one caller today;
+   * the keyboard reaches the same verbs through the window-capture key handler.
+   */
+  act(action: UiAction): boolean;
   dispose(): void;
 }
 
@@ -1914,12 +1923,41 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * real Controllers panel below is now the only caller; nothing about its own
    * behaviour changes from this extraction.
    */
+  /**
+   * Remember which control inside `container` holds focus so a re-render can put it back
+   * (issue #494). The Controllers and Versus Setup rows are rebuilt from scratch on every
+   * hotplug and reassignment, and `replaceChildren` sends the focus of a removed button to
+   * `<body>` -- a gamepad player who pressed Confirm on a pad candidate then had nothing
+   * focused and nowhere to go. Controls are matched by their data attributes within their
+   * `data-slot` row: the same candidate on the same row when it still exists, else the
+   * first control of the same row (the pad whose button was focused just unplugged),
+   * else the first control in the container. Returns the restore step, so a renderer
+   * captures before its `replaceChildren` and restores after its loop with no wrapper.
+   */
+  function captureFocus(container: HTMLElement): () => void {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !container.contains(active)) return () => {};
+    const rowOf = (el: HTMLElement): string | null => el.closest<HTMLElement>('[data-slot]')?.dataset.slot ?? null;
+    const keyOf = (el: HTMLElement): string =>
+      `${rowOf(el)}|${JSON.stringify(Object.entries(el.dataset).sort())}`;
+    const row = rowOf(active);
+    const key = keyOf(active);
+    return () => {
+      const controls = focusableControls(container);
+      const same = controls.find((el) => keyOf(el) === key);
+      const sameRow = row === null ? undefined : controls.find((el) => rowOf(el) === row);
+      (same ?? sameRow ?? controls[0])?.focus();
+    };
+  }
+
   function renderControllerRowsInto(container: HTMLElement, assignment: Assignment): void {
+    const restoreFocus = captureFocus(container);
     container.replaceChildren();
     for (let slot = 0; slot < assignment.length; slot++) {
       const source = assignment[slot];
       const row = document.createElement('div');
       row.className = 'hud-controller-row';
+      row.dataset.slot = String(slot);
 
       const label = document.createElement('span');
       label.className = 'hud-controller-row-label';
@@ -1950,6 +1988,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         btn.type = 'button';
         btn.className = 'ui-btn ui-selectable hud-controller-source-btn';
         btn.textContent = candidateLabel(candidate);
+        btn.dataset.candidate = candidate.kind === 'gamepad' ? `gamepad-${candidate.padIndex}` : candidate.kind;
         setSelected(btn, sameSource(candidate, source));
         const forSlot = slot; // captured per-iteration, not the loop's shared binding
         btn.addEventListener('click', () => {
@@ -1959,6 +1998,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       }
       container.appendChild(row);
     }
+    restoreFocus();
   }
 
   function renderControllerRows(): void {
@@ -2117,6 +2157,44 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * The semantic dispatcher for the active layer (issue #494): every non-keyboard device
+   * ends here, and the keyboard handler below is the same three verbs spelled as keys.
+   *
+   * Directions walk the active panel's roving focus exactly as the arrows do. `confirm`
+   * activates the focused control through its own click handler -- `HTMLElement.click()`
+   * dispatches a click with `detail === 0`, which `blurIfPointer` treats as a keyboard
+   * activation, so focus survives the activation the way it does for Enter. With no
+   * control focused (a panel just arrived, focus on its container) `confirm` lands
+   * focus on the first control INSTEAD of activating it: a blind activation of whatever
+   * happens to be first is how a gamepad accidentally starts a New Game. `back` is
+   * `Hud.back()`. `pause` is never the HUD's -- the page's state machine owns it -- so
+   * it reports unconsumed and the page toggles.
+   *
+   * Returns whether the action was consumed here, so the page knows when to fall through
+   * to its own meaning (Back at Pause is Resume; a direction with nothing shown is
+   * nothing at all).
+   */
+  function act(action: UiAction): boolean {
+    if (action === 'back') return back();
+    if (action === 'pause') return false;
+    const container = activePanelContainer();
+    if (!container) return false;
+    const dir = actionDirection(action);
+    if (dir !== null) {
+      moveFocus(container, dir);
+      return true;
+    }
+    const controls = focusableControls(container);
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && controls.includes(active)) {
+      active.click();
+      return true;
+    }
+    if (controls.length > 0) controls[0].focus();
+    return true;
+  }
+
+  /**
    * The window-level keydown handler that drives roving focus. Bound at `window` in the
    * CAPTURE phase -- not on `el` -- for two reasons. Capture at `window` runs before the
    * event ever reaches its target, so it sees the key regardless of what currently holds
@@ -2137,8 +2215,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * claimed by the canvas at all, so they still move focus off it in either direction.
    */
   const onNavKeyDown = (e: KeyboardEvent): void => {
-    if (e.target instanceof HTMLInputElement) return; // the two volume sliders keep all four arrows
-    const key = e.key.toLowerCase();
+    // The one consume rule (issue #494): a volume slider keeps its arrows and Home/End,
+    // text entry keeps everything, and nothing keeps Escape -- so Back works with a
+    // slider focused, which `e.target instanceof HTMLInputElement` used to forbid.
+    if (consumesKey(e.target, e.key)) return;
+    const action = keyToUiAction(e.key);
     /*
      * Escape is Back while a layer is open (issue #318), and NOT otherwise. Claimed here,
      * at window capture, for the same reason the arrows are: this runs before the page's
@@ -2149,7 +2230,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      * still pauses, and at Launch it still dismisses the splash, all through the code
      * that always did that. P is never claimed here; hud.ts does not know it is Pause.
      */
-    if (key === 'escape') {
+    if (action === 'back') {
       if (e.repeat || layers.depth === 0) return;
       disarm();
       e.preventDefault();
@@ -2157,13 +2238,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       back();
       return;
     }
-    const isVertical = key === 'arrowdown' || key === 'arrowup' || key === 's' || key === 'w';
-    const isLateral = key === 'arrowleft' || key === 'arrowright';
-    if (!isVertical && !isLateral) return;
+    // Only the four directions are claimed from the keyboard. `confirm` is the browser's
+    // own Enter/Space activation of the focused button, and `pause` is the session's
+    // hotkey -- see `keyToUiAction`.
+    const dir = action === null ? null : actionDirection(action);
+    if (dir === null) return;
+    const isLateral = action === 'left' || action === 'right';
     if (isLateral && e.target === previewCanvasEl) return; // the preview owns its own scheme
     const container = activePanelContainer();
     if (!container) return; // nothing shown (splash/playing): let input.ts drive the tank
-    const dir: 1 | -1 = key === 'arrowup' || key === 'w' ? -1 : key === 'arrowleft' ? -1 : 1;
     // Claiming the key stops the WHOLE remaining dispatch -- including el's own
     // capture-phase `disarm` listener, which clears the pending drag-dismiss click
     // swallow on any key. Found by mutation in review: without this call, a player who
@@ -2931,6 +3014,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // `versusSetupProblem` defaults to `'ffa'`, under which it never runs.
     const problem = versusSetupProblem(slots, sources, versusConfigState.mode);
 
+    const restoreFocus = captureFocus(versusSlotRowsEl);
     versusSlotRowsEl.replaceChildren();
     for (let slot = 0; slot < slots.length; slot++) {
       const row = document.createElement('div');
@@ -3043,6 +3127,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
       versusSlotRowsEl.appendChild(row);
     }
+    restoreFocus();
 
     // `no-human` names no slot, so it is the one refusal that belongs to the pane
     // rather than to a card.
@@ -3884,6 +3969,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       appendToast(t);
     },
     back,
+    act,
     dispose(): void {
       // SETTLES the outstanding transition rather than dropping it -- see
       // `TransitionRunner.dispose`. A HUD torn down mid-crossfade would otherwise leave a

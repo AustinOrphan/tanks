@@ -181,6 +181,9 @@ interface Recorder {
   /** Every colour passed to signalPlayerDeath, in order -- death-pulse issue #200. */
   deathColors: number[];
   inputClears: number;
+  /** `resyncGamepad()` calls on slot 0's controller and on each co-player source, by pad index (issue #494). */
+  resyncs: number;
+  slotResyncs: Record<number, number>;
   minePresses: number;
   firePresses: number;
   /** Every scheme pushed to the INPUT controller's setTouchScheme, in order. */
@@ -533,6 +536,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     musicDucks: [],
     unlocks: 0,
     samples: 0,
+    /** `resyncGamepad()` calls on the page's slot-0 controller (issue #494). */
+    resyncs: 0,
+    slotResyncs: {},
     hudRoots: [],
     inputOptions: [],
     gamepadSourceBuilds: 0,
@@ -831,6 +837,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         fireNext = false; // latched, exactly as the real controller consumes it
         return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire, mine: false };
       },
+      resyncGamepad(): void {
+        rec.resyncs += 1;
+      },
       clearQueuedPresses(): void {
         rec.inputClears += 1;
       },
@@ -883,6 +892,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setPlayerPosition(pos: { x: number; y: number } | null): void {
           rec.slotPositions[padIndex]!.push(pos);
           if (padIndex === 1) rec.slot1Positions.push(pos);
+        },
+        resyncGamepad(): void {
+          rec.slotResyncs[padIndex] = (rec.slotResyncs[padIndex] ?? 0) + 1;
         },
         gamepadConnected(): boolean {
           return rec.slotConnectedNext[padIndex] ?? false;
@@ -1256,6 +1268,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // reports "nothing open" so a page-level caller falls through as it would on a
         // HUD with no layer up.
         back: () => false,
+        act: () => false,
         dispose: () => rec.disposed.push('hud'),
       };
     },
@@ -1590,7 +1603,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
    */
   let lazyRouteHost: RouteHost | null = null;
   const buildRouteHost = (): RouteHost =>
-    (lazyRouteHost ??= createRouteHost(uiRoot, deps, {
+    (lazyRouteHost ??= createRouteHost(uiRoot, { ...deps, menuGamepads: () => [], requestFrame: () => () => {} }, {
       // RECORDED, not serviced (issue #428). These suites call `startGameWith`
       // themselves, so a seam that started a session here would leave two live and make
       // every count below ambiguous. `bootPageOn` is where the request is honoured.
@@ -1829,13 +1842,30 @@ describe('isPauseHotkey', () => {
     );
   });
 
-  it('ignores keys aimed at a focused control, so Esc cannot yank a slider mid-drag', () => {
+  it('ignores keys aimed at text entry, which keeps every key', () => {
     const input = document.createElement('input');
     document.body.appendChild(input);
     expect(
       isPauseHotkey({ key: 'Escape', repeat: false, target: input } as unknown as KeyboardEvent),
     ).toBe(false);
     input.remove();
+  });
+
+  it('accepts Escape and P aimed at a focused SLIDER, which consumes only the keys that move it (issue #494)', () => {
+    // The consume model: a range input keeps its arrows and Home/End and nothing else, so
+    // Escape with the volume slider focused pauses instead of vanishing. The text-input
+    // case above is the negative control -- the same function, a control that DOES
+    // consume the key.
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    document.body.appendChild(slider);
+    for (const key of ['Escape', 'p']) {
+      expect(
+        isPauseHotkey({ key, repeat: false, target: slider } as unknown as KeyboardEvent),
+        key,
+      ).toBe(true);
+    }
+    slider.remove();
   });
 
   it('accepts a key aimed at a focused BUTTON, which consumes Space and Enter and nothing else (issue #318)', () => {
@@ -1876,14 +1906,20 @@ describe('isMuteHotkey', () => {
     input.remove();
   });
 
-  it('accepts M aimed at a focused button, and still refuses it aimed at a select or textarea', () => {
+  it('accepts M aimed at a focused button, slider or select, and still refuses it aimed at a textarea (issue #494)', () => {
+    // `consumesKey`: a button, a range slider and a select consume only the keys that
+    // operate them, and M is none of those; a textarea is text entry and keeps everything.
     const button = document.createElement('button');
+    const slider = document.createElement('input');
+    slider.type = 'range';
     const select = document.createElement('select');
     const textarea = document.createElement('textarea');
-    document.body.append(button, select, textarea);
+    document.body.append(button, slider, select, textarea);
     expect(isMuteHotkey({ key: 'm', repeat: false, target: button } as unknown as KeyboardEvent)).toBe(true);
-    expect(isMuteHotkey({ key: 'm', repeat: false, target: select } as unknown as KeyboardEvent)).toBe(false);
+    expect(isMuteHotkey({ key: 'm', repeat: false, target: slider } as unknown as KeyboardEvent)).toBe(true);
+    expect(isMuteHotkey({ key: 'm', repeat: false, target: select } as unknown as KeyboardEvent)).toBe(true);
     expect(isMuteHotkey({ key: 'm', repeat: false, target: textarea } as unknown as KeyboardEvent)).toBe(false);
+    slider.remove();
     button.remove();
     select.remove();
     textarea.remove();
@@ -8200,6 +8236,8 @@ function bootPageOn(
         hostRoot,
         {
           ...h.deps,
+          menuGamepads: () => [],
+          requestFrame: () => () => {},
           createStateMachine: (config) => {
             capturedMachine = createGameStateMachine(config);
             return capturedMachine;
@@ -8759,5 +8797,27 @@ describe('createBotSources binds each slot its configured competence (issue #267
     const b = createBotSources(11, new Set([3]), new Map([[3, 'hard']])).get(3);
     const draw = (s: typeof a): number[] => Array.from({ length: 8 }, () => s!.rnd());
     expect(draw(a)).toEqual(draw(b));
+  });
+});
+
+describe('startGameWith: the gamepad edge resync on entry into play (issue #494)', () => {
+  it('resyncs slot 0 and every co-player source on EACH entry into play, and on no exit', () => {
+    // The page's menu poller reads A and B as Confirm and Back while nothing simulates;
+    // the gameplay readers are not polled then, so the A that confirmed Resume would be
+    // a fresh fire edge on the first tick. The exit (pause) is the negative control: the
+    // resync belongs to entries only, beside -- not instead of -- the exit-side clear.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    const slot0 = h.rec.resyncs;
+    const slot1 = h.rec.slotResyncs[1] ?? 0;
+    h.setState('playing');
+    expect(h.rec.resyncs, 'slot 0 was not resynced on entry').toBe(slot0 + 1);
+    expect(h.rec.slotResyncs[1], 'the co-player source was not resynced on entry').toBe(slot1 + 1);
+    h.setState('paused');
+    expect(h.rec.resyncs, 'an exit from play resynced').toBe(slot0 + 1);
+    expect(h.rec.slotResyncs[1]).toBe(slot1 + 1);
+    h.setState('playing');
+    expect(h.rec.resyncs, 'the resume did not resync').toBe(slot0 + 2);
+    expect(h.rec.slotResyncs[1]).toBe(slot1 + 2);
+    h.handle.dispose();
   });
 });

@@ -3,6 +3,9 @@ import { createOutcomeClassifier, type GameStateMachine, type OutcomeContext } f
 import { versusDraw } from './app-state';
 import type { Hud } from './hud';
 import { locationToHudSurface, type GameDeps } from './loop';
+import { createGamepadMenuPoller } from '../input/gamepad-menu';
+import type { GetGamepads } from '../input/gamepad';
+import type { UiAction } from '../input/ui-actions';
 import type { VersusConfig } from './versus-config';
 import type { SlotSource } from '../input/assignment';
 
@@ -41,7 +44,17 @@ import type { SlotSource } from '../input/assignment';
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
 export type RouteHostDeps = RouteUiDeps &
-  Pick<GameDeps, 'createHud' | 'createStateMachine' | 'launchGate' | 'run'>;
+  Pick<GameDeps, 'createHud' | 'createStateMachine' | 'launchGate' | 'run'> & {
+    /**
+     * Menu-time gamepad input (issue #494): the pads the page's own poller reads -- the
+     * union of every connected pad, never the `pad[i] -> slot[i]` routing a session uses
+     * -- and the page frame loop it is sampled on. Injected like every other reader so
+     * jsdom drives menus through a fake pad and a fake frame clock.
+     */
+    readonly menuGamepads: GetGamepads;
+    /** Schedule one page frame; returns the cancel. `requestAnimationFrame` in the browser. */
+    readonly requestFrame: (cb: (now: number) => void) => () => void;
+  };
 
 /**
  * The two application-level start requests, threaded in rather than read off a session.
@@ -446,6 +459,46 @@ export function createRouteHost(
   };
   deps.host.addEventListener('keydown', onHostKey);
 
+  /**
+   * The gamepad's route into the same verbs (issue #494). One poller for the page, over
+   * the union of connected pads, on the page's own frame loop from construction to
+   * `dispose()` -- and DISPATCHING only while nothing simulates, except Start, which is
+   * how a pad pauses. A direction, Confirm or Back pressed mid-play is dropped here but
+   * still counted as held by the poller, so the A that was firing when Start landed does
+   * not confirm the Pause panel's first control on the next frame. The gameplay readers
+   * never see this poller's edges and it never sees theirs; `loop.ts` resyncs them on
+   * every entry into play.
+   *
+   * Any action at Launch dismisses the splash, exactly as a key or pointer does, so a
+   * controller-only player can navigate. Audio is not unlocked by it: the engine
+   * self-heals on the first pointer or key, and the spec's controller-only evidence row
+   * records that exception.
+   */
+  const onMenuAction = (action: UiAction): void => {
+    if (sm.atLaunch) {
+      onLaunchGesture();
+      return;
+    }
+    if (sm.isSimulating && action !== 'pause') return;
+    if (hud.act(action)) return;
+    if (action === 'pause') {
+      if (sm.isPaused) sm.resume();
+      else sm.pause();
+      return;
+    }
+    // Back with nothing open: at Pause it is Resume, the same meaning Escape has there.
+    if (action === 'back' && sm.isPaused) sm.resume();
+  };
+  const menuPoller = createGamepadMenuPoller(deps.menuGamepads, onMenuAction);
+  let cancelFrame: (() => void) | null = null;
+  let polling = true;
+  const pollFrame = (now: number): void => {
+    cancelFrame = null;
+    menuPoller.poll(now);
+    if (polling) cancelFrame = deps.requestFrame(pollFrame);
+  };
+  cancelFrame = deps.requestFrame(pollFrame);
+
   // The paint shop's push at the gameplay renderer, same trampoline shape. `route-ui.ts`
   // owns the null case and documents it as the normal state of a session-less page, so
   // this is handed over once and never withdrawn -- what changes is whether the slot
@@ -520,6 +573,12 @@ export function createRouteHost(
     dispose(): void {
       deps.host.removeEventListener('pointerdown', onLaunchGesture);
       deps.host.removeEventListener('keydown', onHostKey);
+      // The frame loop first: a frame already queued must find the poller disposed
+      // (its poll is then a no-op) and must not queue another.
+      polling = false;
+      cancelFrame?.();
+      cancelFrame = null;
+      menuPoller.dispose();
       // The preview then, for the same reason `startGameWith` disposed it before the
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
       routeUi.disposePreview();

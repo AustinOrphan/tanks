@@ -177,6 +177,32 @@ not implemented: no shipped flow returns to a pane a deeper layer covered, and t
 three scrollers rebuild their rows on reopen (issue #488 records the seam to add with the
 first covering layer).
 
+**Menu input is one action vocabulary; the gamepad never shares a gameplay reader (issue
+#494).** `src/input/ui-actions.ts` names seven `UiAction`s (`up`, `down`, `left`, `right`,
+`confirm`, `back`, `pause`) and the one consume rule, `consumesKey`: a focused control keeps
+only the keys it consumes (text entry everything; a slider or select Space, Enter, the
+arrows and Home/End; a button only Space and Enter, because the arrows are the roving
+focus's), and `input.ts`, the session's hotkey guards and the HUD's roving-focus handler
+all ask it, so Escape with a volume slider focused is Back or Pause, never lost. `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
+panel, `confirm` activates the focused control through its own click handler (or lands on
+the first control when only the container is focused, so a Confirm the instant a panel
+arrives cannot start a New Game blind), `back` is `Hud.back()`, and `pause` is reported
+unconsumed for the page to toggle on the state machine exactly as the Pause button's tap
+does. The keyboard reaches the same verbs through the window-capture key handler; a
+keyboard `confirm` is the browser's own Enter/Space activation and is never dispatched.
+`src/input/gamepad-menu.ts` turns the UNION of connected pads into actions with its own
+per-action edge state and a desktop-style repeat for directions only; `route-host.ts` owns
+one poller on the page's frame loop from construction to disposal, dispatches only `pause`
+while a session simulates (a direction, Confirm or Back pressed mid-play is dropped but
+still counted as held), and any action at Launch dismisses the splash. The gameplay readers
+in `gamepad.ts` keep their own fire/mine edges and are not polled while nothing simulates,
+which is why `loop.ts` calls `resyncGamepad()` on slot 0 and every co-player source on
+every entry into play: the A that confirmed Resume, still held on the first tick, is adopted
+as already-down rather than fired. The Controllers and Versus Setup rows re-render from
+scratch on hotplug and reassignment; `hud.ts`'s `captureFocus` puts focus back on the same
+candidate of the same `data-slot` row, or the row's first control when that candidate
+unplugged.
+
 **A developer session persists into its own key namespace (issue #245).**
 `selectStorageNamespace(location.search)` reads the `dev` GATE — `parseDeveloperMode`, not
 any individual flag, so a stray `?aimRay=1` cannot move a session off the player's keys —

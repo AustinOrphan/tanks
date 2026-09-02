@@ -3265,10 +3265,16 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     h.setState('main-menu');
 
     let active = document.activeElement as HTMLElement;
-    while (!(active instanceof HTMLElement && active.classList.contains('hud-levelselect-open'))) {
+    // Bounded like the other walks: a regression that stops the arrows moving focus must
+    // FAIL here, not spin a CI worker forever (it did, on 2026-09-02, when a unified
+    // key-consume rule briefly let a focused button keep the arrows).
+    let steps = 0;
+    while (!(active instanceof HTMLElement && active.classList.contains('hud-levelselect-open')) && steps < 40) {
       pressActive('ArrowDown');
       active = document.activeElement as HTMLElement;
+      steps += 1;
     }
+    expect(active.classList.contains('hud-levelselect-open'), 'the walk never reached the Levels opener').toBe(true);
     activate(active); // open Levels -- focuses the .hud-levelselect CONTAINER
 
     const levelSelectView = root.querySelector('.hud-levelselect') as HTMLElement;
@@ -4877,5 +4883,128 @@ describe('hud: the browser-history mirror (issue #318)', () => {
     } finally {
       window.history.replaceState(null, '', before);
     }
+  });
+});
+
+describe('hud: the semantic action dispatcher (issue #494)', () => {
+  const q = (root: HTMLElement, sel: string): HTMLElement => root.querySelector(sel) as HTMLElement;
+  const click = (el: Element): void => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+  };
+  /** A key pressed where the browser would deliver it: at the focused element, bubbling. */
+  const press = (key: string, init: KeyboardEventInit = {}): void => {
+    (document.activeElement ?? document.body).dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
+    );
+  };
+  const controls = (root: HTMLElement, sel: string): HTMLElement[] =>
+    Array.from(q(root, sel).querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
+      (el) => !(el instanceof HTMLButtonElement && el.disabled) && getComputedStyle(el).display !== 'none',
+    );
+
+  it('a direction walks the active panel like the arrows do, and reports unconsumed with nothing shown', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    const panelControls = controls(root, '.hud-panel');
+    expect(panelControls.length, 'the Main Menu has controls to walk').toBeGreaterThan(1);
+    expect(h.act('down')).toBe(true);
+    expect(document.activeElement).toBe(panelControls[0]);
+    expect(h.act('down')).toBe(true);
+    expect(document.activeElement).toBe(panelControls[1]);
+    expect(h.act('up')).toBe(true);
+    expect(document.activeElement).toBe(panelControls[0]);
+    expect(h.act('left'), 'Left walks backwards').toBe(true);
+    expect(document.activeElement, 'Left did not wrap to the last control').toBe(panelControls[panelControls.length - 1]);
+    expect(h.act('right')).toBe(true);
+    expect(document.activeElement).toBe(panelControls[0]);
+    h.setState('playing');
+    const before = document.activeElement;
+    expect(h.act('down'), 'a direction with nothing shown was consumed').toBe(false);
+    expect(document.activeElement).toBe(before);
+  });
+
+  it('confirm on a fresh panel lands on the first control instead of activating it; confirm on a focused control activates it once', () => {
+    // A gamepad Confirm the instant a panel arrives must not fire whatever happens to be
+    // first (New Game, on a Main Menu with no run). The activation half is the negative
+    // control: the same verb on a focused control DOES fire, exactly once.
+    const { hud: h, root } = mount();
+    let opens = 0;
+    h.onCustomizeOpen(() => {
+      opens += 1;
+    });
+    h.setState('main-menu');
+    expect(document.activeElement, 'a fresh panel focuses its container').toBe(q(root, '.hud-panel'));
+    expect(h.act('confirm')).toBe(true);
+    expect(document.activeElement).toBe(controls(root, '.hud-panel')[0]);
+    expect(q(root, '.hud-customize').classList.contains('hud-customize--hidden'), 'confirm on the container opened a pane').toBe(true);
+    q(root, '.hud-customize-open').focus();
+    expect(h.act('confirm')).toBe(true);
+    expect(opens, 'confirm on the focused opener did not activate it exactly once').toBe(1);
+    expect(q(root, '.hud-customize').classList.contains('hud-customize--hidden')).toBe(false);
+  });
+
+  it('back pops the layer and reports whether it did; pause is never the HUD\'s', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    click(q(root, '.hud-customize-open'));
+    expect(q(root, '.hud-customize').classList.contains('hud-customize--hidden')).toBe(false);
+    expect(h.act('pause'), 'pause was consumed by the HUD').toBe(false);
+    expect(q(root, '.hud-customize').classList.contains('hud-customize--hidden'), 'pause changed a surface').toBe(false);
+    expect(h.act('back')).toBe(true);
+    expect(q(root, '.hud-customize').classList.contains('ui-surface--leaving')).toBe(true);
+    expect(document.activeElement).toBe(q(root, '.hud-customize-open'));
+    expect(h.act('back'), 'back with nothing open was consumed').toBe(false);
+  });
+
+  it('Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)', () => {
+    // The product-visible half of issue #494's ruling: the slider consumes only the keys
+    // that move it. ArrowDown is the negative control -- the same handler, a key the
+    // slider DOES keep, so the roving focus must not take it.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    click(q(root, '.hud-customize-open'));
+    const slider = q(root, '.hud-panel-volume') as HTMLInputElement;
+    slider.focus();
+    expect(document.activeElement).toBe(slider);
+    press('ArrowDown');
+    expect(document.activeElement, 'the roving focus took an arrow the slider consumes').toBe(slider);
+    press('Escape');
+    expect(q(root, '.hud-customize').classList.contains('ui-surface--leaving'), 'Escape at a slider did not pop the layer').toBe(true);
+  });
+
+  it('focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not', () => {
+    const { hud: h, root } = mount();
+    h.setDetectedPads([{ padIndex: 3, id: 'Pad' }]);
+    h.setControllers([{ kind: 'keyboard' }, { kind: 'none' }]);
+    h.setState('main-menu');
+    click(q(root, '.hud-controllers-open'));
+    const row1 = (): HTMLElement => q(root, '.hud-controller-row[data-slot="1"]');
+    const padBtn = row1().querySelector('[data-candidate="gamepad-3"]') as HTMLElement;
+    expect(padBtn, 'the pad candidate is rendered').not.toBeNull();
+    padBtn.focus();
+    h.setDetectedPads([{ padIndex: 3, id: 'Pad' }]); // a hotplug event for the same pad: a full re-render
+    expect(document.activeElement, 'focus fell off the re-rendered row').not.toBe(padBtn);
+    expect(document.activeElement).toBe(row1().querySelector('[data-candidate="gamepad-3"]'));
+    h.setDetectedPads([]); // the focused pad unplugs: its button is gone
+    expect(row1().querySelector('[data-candidate="gamepad-3"]')).toBeNull();
+    expect(document.activeElement, 'focus did not stay on the same row').toBe(row1().querySelector('button'));
+    // Negative control: with focus outside the rows a re-render moves nothing.
+    (document.activeElement as HTMLElement).blur();
+    h.setDetectedPads([{ padIndex: 3, id: 'Pad' }]);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('focus survives a Versus Setup re-render on the same role button of the same row', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const rowBtn = (): HTMLElement | null =>
+      root.querySelector('.hud-versus-slot-row[data-slot="1"] button[data-role="bot"]');
+    const before = rowBtn();
+    expect(before, 'the role button is rendered').not.toBeNull();
+    before!.focus();
+    h.setDetectedPads([{ padIndex: 0, id: 'Pad' }]); // a hotplug repaints every row
+    expect(rowBtn(), 'the rows were not re-rendered').not.toBe(before);
+    expect(document.activeElement).toBe(rowBtn());
   });
 });

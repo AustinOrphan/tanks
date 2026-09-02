@@ -1768,7 +1768,7 @@
     "find": "    initialRoute: deps.launchGate.dismissed() ? 'main-menu' : 'launch',",
     "replace": "    initialRoute: 'launch',",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "why": "Opens every session on the Launch route, which is what production did before issue #317. boot.ts rebuilds the whole session on a Campaign<->Versus switch, so this re-shows 'press any key or tap to begin' to a player who already dismissed it -- the acceptance criterion 'the Launch gate appears at most once per document load'. Invisible to every session-level test in loop.test.ts, because one session in isolation SHOULD open at Launch, and invisible to boot.test.ts, which fakes startGame. Killed only by the boot+startGameWith seam, which composes the real boot() with the real startGameWith over the REAL state machine. Kills BOTH dismissal tests (pointer and keyboard), because neither session can reach a dismissed gate: 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered. RE-ANCHORED by issue #468, and the reachability of the defect changed with it. The line moved from `startGameWith` to `route-host.ts`, where it is evaluated ONCE PER PAGE rather than once per session -- so a reboot can no longer replay the splash by rebuilding a machine, because no machine is rebuilt. What this mutation now describes is a page that opens on the splash after a reload the gate should have been carried through, which is the surviving half of the original criterion. `route-host.test.ts` joins its scope because that is where the page-level route decision now lives; the count below is the re-measured one, not the pre-move one: 3 of the old scope became 1 of 425, because the reboot cases it used to kill are now covered by attach() rather than by rebuilding a machine. The surviving killer is route-host.test.ts s opens on Main Menu when the gate was already dismissed, which was written FOR this entry after the re-anchor showed it SURVIVING 0 of 423.",
     "tests": [
       "src/game/route-host.test.ts",
@@ -1990,7 +1990,7 @@
     "tests": [
       "src/game/hud.test.ts"
     ],
-    "expectFailures": 6
+    "expectFailures": 8
   },
   {
     "id": "contract-rules-hardcode-their-own-duration",
@@ -2050,7 +2050,7 @@
     "tests": [
       "src/game/hud.test.ts"
     ],
-    "expectFailures": 5
+    "expectFailures": 7
   },
   {
     "id": "close-all-cleanup-slams-a-fading-surface",
@@ -3143,7 +3143,7 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 101,
+    "expectFailures": 102,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
@@ -3389,7 +3389,7 @@
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 11,
+    "expectFailures": 14,
     "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause."
   },
   {
@@ -3668,28 +3668,28 @@
   {
     "id": "mute-hotkey-guard-treats-a-button-as-a-native-control",
     "file": "src/game/loop.ts",
-    "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {",
-    "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {",
+    "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+    "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) return false;",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/hud.test.ts"
     ],
-    "expect": "killed",
     "expectFailures": 2,
-    "why": "`isMuteHotkey` treats a focused button as a control that consumes M, which is the pre-#318 guard. Back now returns focus to the control that opened a layer, so after every Back the focused element IS a button, and this mutation makes M dead exactly there. 2 of 660 across both scoped files (loop.test.ts 416 + hud.test.ts 244): the predicate case in loop.test.ts and the re-stated hotkey-liveness case in hud.test.ts, where M must stay live on the restored Customize button."
+    "why": "`isMuteHotkey` treats a focused button as a control that consumes M, which is the pre-#318 guard. Back returns focus to the control that opened a layer, so after every Back the focused element IS a button, and this mutation makes M dead exactly there.",
+    "expect": "killed"
   },
   {
     "id": "pause-hotkey-guard-treats-a-button-as-a-native-control",
     "file": "src/game/loop.ts",
-    "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {",
-    "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {",
+    "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+    "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) return false;",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/hud.test.ts"
     ],
-    "expect": "killed",
-    "expectFailures": 2,
-    "why": "`isPauseHotkey` treats a focused button as a control that consumes Escape and P. With Back restoring focus to the Controllers button on the pause panel, this is the mutation under which the second Escape -- the one that should resume -- does nothing. 2 of 660 across both scoped files (loop.test.ts 416 + hud.test.ts 244): the predicate case in loop.test.ts and the Controllers-from-Pause case in hud.test.ts, where Escape must be accepted on the restored Controllers button."
+    "expectFailures": 3,
+    "why": "`isPauseHotkey` treats a focused button as a control that consumes Escape and P. With Back restoring focus to the Controllers button on the pause panel, this is the mutation under which the second Escape -- the one that should resume -- does nothing.",
+    "expect": "killed"
   },
   {
     "id": "back-lands-on-a-hardcoded-main-menu",
@@ -3712,7 +3712,7 @@
       "src/game/hud.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 9,
+    "expectFailures": 10,
     "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. 9 of 244 in hud.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener."
   },
   {
@@ -3748,7 +3748,7 @@
       "src/game/hud.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 5,
+    "expectFailures": 6,
     "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. 5 of 244 in hud.test.ts (244): the `hud.back()` and gameplay-entry cases, the first Escape case and both mirror cases, each of which asserts `back()` is false once nothing is open."
   },
   {
@@ -4006,5 +4006,372 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "GAME_WIRING gains a permission nothing uses: hud.ts is allowed audio/engine, which it does not import. The sweep over the real tree stays green under it -- an unused entry forbids nothing today -- and that is the problem: it is a standing licence for the next edit to pull the audio engine into the HUD without the review moment the list exists to force. Issue #324 will drop hud.ts's DEFAULT_VOLUME import, and this is the assertion that then makes the stale `audio/manifest` entry fail rather than linger. 1 of 84 in dependency-direction.test.ts: `every GAME_WIRING entry names a real file and an import that file actually makes`; every fixture and the layer-pair coverage test pass either way, because the mutation changes no rule, only the list."
+  },
+  {
+    "id": "hud-act-confirm-on-a-container-activates-blind",
+    "file": "src/game/hud.ts",
+    "find": "    if (controls.length > 0) controls[0].focus();\n    return true;",
+    "replace": "    if (controls.length > 0) controls[0].click();\n    return true;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "Confirm the instant a panel arrives must land focus on the first control, not activate it: a gamepad Confirm at a Main Menu with no run would otherwise start a New Game blind.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-act-claims-pause",
+    "file": "src/game/hud.ts",
+    "find": "    if (action === 'pause') return false;\n    const container = activePanelContainer();",
+    "replace": "    if (action === 'pause') return true;\n    const container = activePanelContainer();",
+    "tests": [
+      "src/game/hud.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 2,
+    "why": "The HUD does not own pause. Reporting it consumed stops the page from toggling the state machine, so Start on a pad could never pause or resume.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-act-every-direction-walks-forward",
+    "file": "src/game/hud.ts",
+    "find": "    if (dir !== null) {\n      moveFocus(container, dir);\n      return true;\n    }",
+    "replace": "    if (dir !== null) {\n      moveFocus(container, 1);\n      return true;\n    }",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "Up and Left walk backwards through the panel; a dispatcher that drops the sign turns every direction into Down.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-act-back-reports-consumed-with-nothing-open",
+    "file": "src/game/hud.ts",
+    "find": "    if (action === 'back') return back();\n    if (action === 'pause') return false;",
+    "replace": "    if (action === 'back') {\n      back();\n      return true;\n    }\n    if (action === 'pause') return false;",
+    "tests": [
+      "src/game/hud.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 2,
+    "why": "Back with nothing open must report unconsumed so the page can make it Resume at Pause; a Back that always claims strands a paused round.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-nav-keys-use-the-old-any-input-rule",
+    "file": "src/game/hud.ts",
+    "find": "    if (consumesKey(e.target, e.key)) return;\n    const action = keyToUiAction(e.key);",
+    "replace": "    if (e.target instanceof HTMLInputElement) return;\n    const action = keyToUiAction(e.key);",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "The roving-focus handler must ask the consume rule: the old any-input early return ate Escape at a focused volume slider, so Back never fired there (issue #494's product-visible ruling).",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-nav-keys-ignore-the-consume-rule",
+    "file": "src/game/hud.ts",
+    "find": "    if (consumesKey(e.target, e.key)) return;\n    const action = keyToUiAction(e.key);",
+    "replace": "    const action = keyToUiAction(e.key);",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 2,
+    "why": "Without the consume rule the roving focus takes ArrowDown away from a focused volume slider, which is the key the slider exists to consume.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-capture-focus-always-lands-on-the-first-control",
+    "file": "src/game/hud.ts",
+    "find": "      (same ?? sameRow ?? controls[0])?.focus();",
+    "replace": "      controls[0]?.focus();",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 2,
+    "why": "A re-render must put focus back on the SAME candidate on the SAME row; landing on the pane's first control loses the player's place on every hotplug.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-capture-focus-forgets-the-row",
+    "file": "src/game/hud.ts",
+    "find": "      (same ?? sameRow ?? controls[0])?.focus();",
+    "replace": "      (same ?? controls[0])?.focus();",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "When the focused candidate vanishes (its pad unplugged), focus must stay on that row rather than jump to the first row's first control.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-versus-rows-drop-focus-on-re-render",
+    "file": "src/game/hud.ts",
+    "find": "      versusSlotRowsEl.appendChild(row);\n    }\n    restoreFocus();",
+    "replace": "      versusSlotRowsEl.appendChild(row);\n    }",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "A hotplug repaints every Versus Setup row; without the restore the focused role button is gone and focus falls to body.",
+    "expect": "killed"
+  },
+  {
+    "id": "hud-controller-rows-drop-focus-on-re-render",
+    "file": "src/game/hud.ts",
+    "find": "      container.appendChild(row);\n    }\n    restoreFocus();",
+    "replace": "      container.appendChild(row);\n    }",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "A hotplug or reassignment rebuilds the Controllers rows; without the restore the focused candidate is gone and focus falls to body.",
+    "expect": "killed"
+  },
+  {
+    "id": "route-host-menu-actions-reach-a-simulating-session",
+    "file": "src/game/route-host.ts",
+    "find": "    if (sm.isSimulating && action !== 'pause') return;\n    if (hud.act(action)) return;",
+    "replace": "    if (hud.act(action)) return;",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "A direction, Confirm or Back pressed mid-play must be dropped by the page: reaching the live HUD would move focus under a simulating session.",
+    "expect": "killed"
+  },
+  {
+    "id": "route-host-start-cannot-pause",
+    "file": "src/game/route-host.ts",
+    "find": "    if (sm.isSimulating && action !== 'pause') return;\n    if (hud.act(action)) return;",
+    "replace": "    if (sm.isSimulating) return;\n    if (hud.act(action)) return;",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "Start is the one action dispatched while a session simulates; gating it with the rest means a pad can never pause a round.",
+    "expect": "killed"
+  },
+  {
+    "id": "route-host-pad-does-not-dismiss-launch",
+    "file": "src/game/route-host.ts",
+    "find": "  const onMenuAction = (action: UiAction): void => {\n    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }",
+    "replace": "  const onMenuAction = (action: UiAction): void => {\n    if (sm.atLaunch) return;",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "Any pad action at Launch must dismiss the splash exactly as a key does, or a controller-only player is stuck on it.",
+    "expect": "killed"
+  },
+  {
+    "id": "route-host-back-at-pause-does-not-resume",
+    "file": "src/game/route-host.ts",
+    "find": "    if (action === 'back' && sm.isPaused) sm.resume();\n  };",
+    "replace": "  };",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "Back with nothing open at Pause is Resume, the same meaning Escape has there.",
+    "expect": "killed"
+  },
+  {
+    "id": "route-host-disposal-keeps-the-frame-loop",
+    "file": "src/game/route-host.ts",
+    "find": "      polling = false;\n      cancelFrame?.();\n      cancelFrame = null;\n      menuPoller.dispose();",
+    "replace": "      cancelFrame?.();\n      cancelFrame = null;\n      menuPoller.dispose();",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "A frame already queued at disposal must not queue another; the loop would outlive the page.",
+    "expect": "killed"
+  },
+  {
+    "id": "route-host-disposal-leaves-the-poller-live",
+    "file": "src/game/route-host.ts",
+    "find": "      polling = false;\n      cancelFrame?.();\n      cancelFrame = null;\n      menuPoller.dispose();",
+    "replace": "      polling = false;\n      cancelFrame?.();\n      cancelFrame = null;",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "A frame that fires after disposal must find the poller disposed; otherwise a stray frame still dispatches into the machine.",
+    "expect": "killed"
+  },
+  {
+    "id": "route-host-frame-loop-never-continues",
+    "file": "src/game/route-host.ts",
+    "find": "    menuPoller.poll(now);\n    if (polling) cancelFrame = deps.requestFrame(pollFrame);",
+    "replace": "    menuPoller.poll(now);",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expectFailures": 6,
+    "why": "Each frame must queue its successor; a poller that reads once at construction never sees a pad.",
+    "expect": "killed"
+  },
+  {
+    "id": "loop-gamepad-resync-never-arms",
+    "file": "src/game/loop.ts",
+    "find": "    if (nowPlaying) for (const src of realSources.values()) src.resyncGamepad?.();",
+    "replace": "    if (nowPlaying) for (const src of realSources.values()) void src;",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "Every entry into play must resync slot 0 and each co-player source: the A that confirmed Resume, still held on the first tick, would otherwise read as a fresh fire edge.",
+    "expect": "killed"
+  },
+  {
+    "id": "loop-gamepad-resync-arms-on-exit-instead",
+    "file": "src/game/loop.ts",
+    "find": "    if (nowPlaying) for (const src of realSources.values()) src.resyncGamepad?.();",
+    "replace": "    if (!nowPlaying) for (const src of realSources.values()) src.resyncGamepad?.();",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "The resync belongs to ENTRIES into play, beside the exit-side clear; arming on exits leaves the resume unprotected.",
+    "expect": "killed"
+  },
+  {
+    "id": "mute-hotkey-guard-treats-a-slider-as-a-native-control",
+    "file": "src/game/loop.ts",
+    "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+    "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) return false;",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "M with the volume slider focused must mute: the consume rule keeps only the keys the slider operates on, and this is the pre-#494 `input,select,textarea` guard.",
+    "expect": "killed"
+  },
+  {
+    "id": "pause-hotkey-guard-treats-a-slider-as-a-native-control",
+    "file": "src/game/loop.ts",
+    "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+    "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) return false;",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expectFailures": 1,
+    "why": "Escape and P with the volume slider focused must pause: the slider consumes only its arrows and Home/End, and this is the pre-#494 `input,select,textarea` guard.",
+    "expect": "killed"
+  },
+  {
+    "id": "gamepad-menu-confirm-button-index",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "export const MENU_CONFIRM_BUTTON = 0;",
+    "replace": "export const MENU_CONFIRM_BUTTON = 2;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Confirm must be the bottom face button (A/Cross), the same index the gameplay reader calls fire; on another index a pad's A does nothing in menus.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ]
+  },
+  {
+    "id": "gamepad-menu-repeat-never-arms",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "held.set(action, repeats ? now + MENU_REPEAT_DELAY_MS : Infinity);",
+    "replace": "held.set(action, Infinity);",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "Directions must repeat while held after the initial delay; without the arm a held D-pad moves focus once.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ]
+  },
+  {
+    "id": "gamepad-menu-union-first-pad-only",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "for (let i = 0; i < pads.length; i++) {",
+    "replace": "for (let i = 0; i < Math.min(pads.length, 1); i++) {",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "The union of every connected pad drives menus; reading only pad 0 leaves a second player's pad dead at Versus Setup.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ]
+  },
+  {
+    "id": "gamepad-menu-dispose-keeps-polling",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "disposed = true;",
+    "replace": "disposed = false;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "A disposed poller must emit nothing; a late frame after page teardown would otherwise still dispatch actions.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ]
+  },
+  {
+    "id": "gamepad-resync-does-not-suppress-fire",
+    "file": "src/input/gamepad.ts",
+    "find": "const fire = firePressed && !prevFire && !resyncPending;",
+    "replace": "const fire = firePressed && !prevFire;",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The resync poll must adopt a held fire button as already-down; reporting the edge fires a shell on the first tick after a pad-confirmed Resume.",
+    "tests": [
+      "src/input/gamepad.test.ts",
+      "src/input/input.test.ts"
+    ]
+  },
+  {
+    "id": "ui-actions-widget-consumes-any-key",
+    "file": "src/input/ui-actions.ts",
+    "find": "  return widget instanceof HTMLButtonElement ? BUTTON_KEYS.has(key) : ADJUSTABLE_KEYS.has(key);",
+    "replace": "  return true;",
+    "expect": "killed",
+    "expectFailures": 16,
+    "why": "A button, slider or select keeps only the keys it operates on; consuming every key makes M, P and Escape vanish with a slider or a button focused.",
+    "tests": [
+      "src/input/ui-actions.test.ts",
+      "src/input/input.test.ts",
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "ui-actions-range-is-text-entry",
+    "file": "src/input/ui-actions.ts",
+    "find": "return TEXT_INPUT_TYPES.has(field.type.toLowerCase());",
+    "replace": "return TEXT_INPUT_TYPES.has(field.type.toLowerCase()) || field.type === 'range';",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "A range slider is not text entry; treating it as one swallows Escape and the hotkeys while the volume slider is focused.",
+    "tests": [
+      "src/input/ui-actions.test.ts",
+      "src/input/input.test.ts"
+    ]
+  },
+  {
+    "id": "ui-actions-escape-unmapped",
+    "file": "src/input/ui-actions.ts",
+    "find": "return 'back';",
+    "replace": "return null;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Escape must map to back: the HUD's key handler pops a layer only through that mapping.",
+    "tests": [
+      "src/input/ui-actions.test.ts"
+    ]
+  },
+  {
+    "id": "ui-actions-button-consumes-the-arrows",
+    "file": "src/input/ui-actions.ts",
+    "find": "  return widget instanceof HTMLButtonElement ? BUTTON_KEYS.has(key) : ADJUSTABLE_KEYS.has(key);",
+    "replace": "  return ADJUSTABLE_KEYS.has(key);",
+    "why": "A focused button must NOT keep the arrows: the roving-focus handler asks this rule first, and a button that consumed arrows froze keyboard navigation on the first focused menu button (found as a spinning walk test on 2026-09-02).",
+    "tests": [
+      "src/input/ui-actions.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 8
   }
 ]
