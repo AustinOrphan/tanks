@@ -3667,5 +3667,125 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. COUNT_PLACEHOLDER"
+  },
+  {
+    "id": "stack-back-pops-the-bottom",
+    "file": "src/game/navigation.ts",
+    "find": "      return entries.pop() ?? null;",
+    "replace": "      return entries.shift() ?? null;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "`pop()` reads from the bottom of the stack with `shift()`, so Back closes the layer UNDER the one on screen: with Records open over Settings the player's Back dismisses Settings while Records stays, and a confirmation's Back removes the route it was raised over while the confirmation stays up. A plain LIFO pop is the entire mechanism behind the issue's \"Back removes one overlay before one route\", so this is the mutation that breaks that guarantee directly. Fails 2 of 15 in navigation.test.ts: `back pops the topmost layer, LIFO: [route a, route b] pops b then a` and `an overlay above a route is removed before the route, and each pop carries its own recorded origin and restore`, each at its first `pop()` assertion."
+  },
+  {
+    "id": "stack-accepts-a-route-over-an-overlay",
+    "file": "src/game/navigation.ts",
+    "find": "      if (entry.kind === 'route' && top !== null && top.kind === 'overlay') return 'refused';",
+    "replace": "      void top;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The refusal that keeps a full-screen destination from opening under a modal is deleted, so a route push while a confirmation is up succeeds: the Levels grid opens over the dialog the player was answering, and the next Back closes the grid and drops the player back INTO a confirmation they had already navigated away from. The LIFO order the module claims by construction (an overlay is always above every route) stops being true. Fails 1 of 15 in navigation.test.ts: `a route pushed over an open overlay is refused and the stack is unchanged`, at its `'refused'` assertion. The overlay-over-overlay control in the same case still passes, which is what shows the assertion is about the route/overlay pairing and not about any push over an overlay."
+  },
+  {
+    "id": "stack-push-duplicates-the-top",
+    "file": "src/game/navigation.ts",
+    "find": "      if (top !== null && top.id === entry.id) return 'already-top';",
+    "replace": "      void top;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The already-top check is deleted, so re-opening the layer already on screen falls through to the open-lower-down scan and is reported `refused` instead of `already-top`. The owner branches on that result -- `already-top` re-renders the current layer in place, `refused` is a failed open -- so a second press of the control that opened the Records page would do nothing rather than refresh it. The stack is unchanged under either code, which is why only the result code can see this. Fails 1 of 15 in navigation.test.ts: `pushing the id already on top reports already-top and pushes nothing; an id open lower down is refused`."
+  },
+  {
+    "id": "history-mirror-pushes-per-layer",
+    "file": "src/game/navigation.ts",
+    "find": "      if (phase === 'absent') {",
+    "replace": "      if (phase === 'absent' || phase === 'present') {",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "`sync(d>0)` pushes the sentinel from `present` as well as from `absent`, which turns the single-entry design into an entry per layer AND a further entry per in-app pop that leaves layers open. The player then presses the browser's Back once per pushed entry to leave, and the traversals the design bounds to one at a time pile up. Fails 3 of 15 in navigation.test.ts: `the first layer pushes exactly one sentinel and a second layer pushes none`, `an in-app pop with a layer remaining touches history not at all; emptying the stack retires the sentinel with one back()`, and `a browser Back at depth 2 pops one layer and re-pushes the sentinel through the re-entrant sync; at depth 1 pops one and pushes nothing`, each at an exact `host.calls` list."
+  },
+  {
+    "id": "history-mirror-treats-its-own-landing-as-a-back",
+    "file": "src/game/navigation.ts",
+    "find": "    if (previous === 'leaving') return; // our own retirement landed",
+    "replace": "    // (mutation) our own retirement is treated as a browser Back",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The early return for `leaving` is deleted, so the landing of the mirror's own retirement is handled as a browser Back and pops whatever layer is open at that moment. With an owner that syncs synchronously after every stack change the stack is empty when its own retirement lands and the fallthrough is invisible, so the case that measures it opens a layer during the pending traversal whose `sync` has not yet run -- the 'pops a layer the player just opened' failure the per-layer design was rejected for -- and asserts the landing leaves it alone. Fails 1 of 15 in navigation.test.ts: `the popstate caused by our own retirement pops nothing; a base arrival while present pops one`, at its second `h.pops()` assertion."
+  },
+  {
+    "id": "history-mirror-drops-a-push-during-leaving",
+    "file": "src/game/navigation.ts",
+    "find": "      } else if (phase === 'leaving') {\n        phase = 'repush';\n      }",
+    "replace": "      } else if (phase === 'leaving') {\n        void phase;\n      }",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`sync(d>0)` during a pending retirement no longer records `repush`, so when the traversal lands it is treated as a plain retirement and nothing is pushed for the layer the player opened meanwhile. That layer is then on screen with no sentinel under it: the next browser Back leaves the page instead of closing it. Fails 1 of 15 in navigation.test.ts: `a push during a pending retirement is honoured when the traversal lands`, first at the `'repush'` phase assertion and again at the landing's `host.calls`."
+  },
+  {
+    "id": "history-mirror-keeps-a-stale-sentinel-at-boot",
+    "file": "src/game/navigation.ts",
+    "find": "    if (isLayerSentinel(host.state)) safe(() => host.replaceState(null));",
+    "replace": "    // (mutation) a stale sentinel on the loaded entry is left in place",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The constructor's re-stamp of a loaded sentinel entry is deleted. After a reload with a layer open the loaded entry keeps `{tanks:'layer'}` while the stack is empty; the first layer pushes a second sentinel above it, and when that one is retired the browser's Back lands on the stale sentinel -- a popstate the mirror reads as Forward-onto-our-entry and re-stamps -- so the player's Back press does nothing once before it leaves. Fails 1 of 15 in navigation.test.ts: `a stale sentinel on the loaded entry is re-stamped as base at construction; a null base is left alone`, at its first `stale.calls` assertion."
+  },
+  {
+    "id": "history-mirror-forward-pops-a-layer",
+    "file": "src/game/navigation.ts",
+    "find": "    if (isLayerSentinel(state)) {",
+    "replace": "    if ((false as boolean) && isLayerSentinel(state)) {",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The sentinel-arrival branch of `onPop` is short-circuited (`false && isLayerSentinel(state)` rather than a bare `false`, so `state` stays referenced under `noUnusedParameters`), and a Forward onto the mirror's own entry is handled as a base arrival. With no layer open the entry keeps its sentinel state instead of being re-stamped, so the next boot mistakes it for a reload-with-layer; with a layer open the arrival pops a layer the player did not ask to close. Fails 1 of 15 in navigation.test.ts: `Forward onto our sentinel with no layer re-stamps it; with a layer it becomes present`, at its first `empty.calls` assertion."
+  },
+  {
+    "id": "history-mirror-rethrows-the-host-error",
+    "file": "src/game/navigation.ts",
+    "find": "    try {\n      fn();\n    } catch {\n      active = false;\n      phase = 'absent';\n    }",
+    "replace": "    fn();",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`safe` becomes a bare call, so a `SecurityError` from a rate-limited `pushState` (Safari, Firefox) propagates out of `sync` into the owner's keydown or click handler as an uncaught page error, the layer being opened never finishes opening, and the mirror never latches off so every later layer throws again. Fails 1 of 15 in navigation.test.ts: `a host whose pushState throws disables the mirror, never rethrows, and later syncs and pops are inert`, at its `not.toThrow()`."
+  },
+  {
+    "id": "history-mirror-listener-outlives-the-hud",
+    "file": "src/game/navigation.ts",
+    "find": "      unsubscribe?.();\n      unsubscribe = null;",
+    "replace": "      unsubscribe = null;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`dispose` no longer unsubscribes from popstate, so a mirror the HUD has torn down keeps handling the browser's Back on behalf of an owner that no longer exists -- popping layers on a dead stack and re-pushing the sentinel through a `back` callback whose HUD is gone. Fails 1 of 15 in navigation.test.ts: `dispose unsubscribes popstate and never traverses; with no host every call is inert and active is false`, at its `host.listeners` length assertion."
   }
 ]
