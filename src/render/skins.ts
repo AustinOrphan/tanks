@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { SkinId } from '../game/customization';
+import type { SkinId } from '../presentation/customization';
 
 /**
  * Procedural skin textures, minted at runtime like every other texture in the game --

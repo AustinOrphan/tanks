@@ -9,7 +9,7 @@ import { resolveWorldRules } from '../sim/rules';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { QUALITY_PRESETS } from '../render/quality';
 import { ZERO_STATS } from './stats';
-import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
+import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import type { AchievementContext, AchievementId } from './achievements';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
@@ -136,7 +136,7 @@ import { createLevelSystem } from './levels';
 import type { SlotSource } from '../input/assignment';
 import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
 import { SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;

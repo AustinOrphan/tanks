@@ -3,7 +3,7 @@ import { createAudioDirector } from './director';
 import type { AudioEngine } from './engine';
 import { DEFAULT_VOLUME } from './manifest';
 import type { SimEvent } from '../sim/events';
-import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../game/devflags';
+import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../presentation/blocked-fire';
 
 interface PlayCall {
   key: string;

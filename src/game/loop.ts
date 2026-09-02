@@ -14,7 +14,8 @@ import { resolveVersusConfig, type VersusConfig } from './versus-config';
 import { botSlotsOf, resolveSources, type VersusSlotSetup } from './versus-setup';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
-import type { CustomizationStore, SkinId } from './customization';
+import type { CustomizationStore } from './customization';
+import type { SkinId } from '../presentation/customization';
 import type {
   PlayerSettings,
   PlayerSettingsStore,
@@ -84,9 +85,9 @@ import {
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { browserHistoryHost } from './navigation';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
-import type { BlockedFireCue } from './devflags';
+import type { BlockedFireCue } from '../presentation/blocked-fire';
 import type { RouteHost, StartIntent } from './route-host';
-import { resolveOwnerColor } from '../render/entities';
+import { resolveOwnerColor } from '../presentation/identity';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';

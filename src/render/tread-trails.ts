@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Tank, Vec2 } from '../sim/types';
 import type { World } from '../sim/world';
-import { HULL_WIDTH, TRACK_W, identityApplies, resolveOwnerColor } from './entities';
+import { HULL_WIDTH, TRACK_W } from './entities';
+import { identityApplies, resolveOwnerColor } from '../presentation/identity';
 
 /**
  * Fading tread-print decals left behind a moving tank (issue #231).

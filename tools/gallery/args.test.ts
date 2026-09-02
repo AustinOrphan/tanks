@@ -7,7 +7,7 @@ import {
   parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS, SPAWN_ANIM_IDS, MOMENT_IDS,
   GALLERY_VIEW_IDS,
 } from './args.mjs';
-import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/game/customization';
+import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/presentation/customization';
 import { MOMENTS } from './moments';
 import { VIEWS } from './subjects';
 

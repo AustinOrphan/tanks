@@ -53,7 +53,7 @@ import { createEntityViews, type EntityViews } from './entities';
 import { createEnvironmentMap } from './scene';
 import { fitCameraToArea } from './framing';
 import { createPreviewControls, type PreviewControls, type PreviewPose } from './preview-controls';
-import { skinScroll, type SkinId } from '../game/customization';
+import { skinScroll, type SkinId } from '../presentation/customization';
 import type { World } from '../sim/world';
 import { resolveWorldRules } from '../sim/rules';
 import type { Tank } from '../sim/types';

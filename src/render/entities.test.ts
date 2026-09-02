@@ -6,10 +6,9 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
-  STRIPE_TURRET_MODE, IDENTITY_RING_COLORS, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R,
-  TEAM_COLORS,
-  TEAM_LABELS,
+  STRIPE_TURRET_MODE, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R,
 } from './entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';

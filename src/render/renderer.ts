@@ -1,4 +1,4 @@
-import type { BlockedFireCue } from '../game/devflags';
+import type { BlockedFireCue } from '../presentation/blocked-fire';
 import * as THREE from 'three';
 import type { Vec2 } from '../sim/types';
 import type { World } from '../sim/world';
@@ -11,7 +11,7 @@ import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
 import { createAimRay, type AimRay } from './aimray';
-import type { SkinId } from '../game/customization';
+import type { SkinId } from '../presentation/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
 import { createAiContact, type AiContact } from './ai-contact';
 import { createBlockedFireRingSystem, type BlockedFireRingSystem } from './blocked-fire-ring';

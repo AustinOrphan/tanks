@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { SpawnAnimId } from '../game/customization';
+import type { SpawnAnimId } from '../presentation/customization';
 
 export type SpawnPhase = 'entrance' | 'invincible';
 

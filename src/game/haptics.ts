@@ -1,4 +1,4 @@
-import type { BlockedFireCue } from './devflags';
+import type { BlockedFireCue } from '../presentation/blocked-fire';
 import type { SimEvent } from '../sim/events';
 import type { Vec2 } from '../sim/types';
 import { MINE_BLAST_RADIUS, TANK_RADIUS } from '../sim/constants';

@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
-import { SKINS, ACCENTS } from './customization';
+import { SKINS, ACCENTS } from '../presentation/customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { versusMapChoices, type VersusConfig } from './versus-config';
@@ -12,7 +12,7 @@ import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
 import { configFor } from '../sim/config';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
 let hud: Hud | null = null;
 

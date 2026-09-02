@@ -9,7 +9,7 @@ import {
   AUTO_ACCENT_DELTA,
 } from './skins';
 import type { RGB } from './skins';
-import { SKINS, PALETTE, ACCENTS } from '../game/customization';
+import { SKINS, PALETTE, ACCENTS } from '../presentation/customization';
 
 const pixelsOf = (
   skin: Exclude<(typeof SKINS)[number]['id'], 'solid'>,

@@ -21,6 +21,30 @@ you change an event's shape, check all six.
 `step(world, input)` clones its input and returns `{ world, events }` — it never mutates
 what it is given.
 
+**Presentation contracts sit between the application and its projections (issue #473).**
+`src/presentation/` owns the renderer-independent vocabulary that more than one layer
+reads: `identity.ts` (player-slot and team colours, team letters, `resolveOwnerColor`,
+`identityApplies`), `customization.ts` (the hull/accent/skin/spawn-animation catalog and
+`skinScroll`) and `blocked-fire.ts` (the blocked-fire cue set). It carries no DOM, no
+Three.js, no package, no persistence and no session orchestration, and it may name
+simulation TYPES only. The direction rule: `main.ts`/`boot.ts` wire everything; `game/`
+imports `presentation/`, `input/` and `sim/`, and reaches `render/` or `audio/` only from
+the wiring modules listed in `GAME_WIRING` (loop, route-ui, devflags, app-shell, settings,
+hud), per target module; `render/`, `audio/` and `input/` never import `game/` or each
+other; `three` stays in `render/` and `howler` in `audio/`.
+`src/dependency-direction.test.ts` enforces it by resolving every module specifier under
+`src/` — the purity guard's shape, with hand-written fixtures on both sides of all 36
+ordered layer pairs so a widened rule fails its meta-test instead of shrinking it — and a
+reverse import fails naming the file. Before it, `render/entities.ts` was the
+authoritative source of the identity colours the HUD painted, five render modules
+imported `game/customization.ts` to name a skin, and the audio director imported the
+developer-flag parser to name a cue; all three compiled, because TypeScript is content
+with a cycle of type imports. What stays put on purpose: `QualityPreset` and
+`MineWarnStyle` are renderer-owned treatments only a developer flag selects, so
+`devflags.ts` validates against `render/` directly (if either becomes a Setting, its
+names move here), and `DEFAULT_VOLUME` is the audio engine's default, read by
+`settings.ts` and, until #324 moves the slider into Settings, `hud.ts`.
+
 **The step boundary takes a LIST.** `stepInputs(world, inputs: InputState[])` is the
 primitive and pairs `inputs[i]` with the i-th `kind === 'player'` tank in tank-array
 order; `step(world, input)` is a one-line adapter (`stepInputs(world, [input])`) and is

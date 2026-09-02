@@ -10,7 +10,8 @@ import {
   createTreadTrailSystem, EMIT_SPACING, LIFETIME_SECONDS, MAX_TRAILS,
   TREAD_COLOR, TREAD_IDENTITY_BLEND, blendHex, treadColorFor,
 } from './tread-trails';
-import { HULL_WIDTH, TRACK_W, IDENTITY_RING_COLORS, TEAM_COLORS } from './entities';
+import { HULL_WIDTH, TRACK_W } from './entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
 // Imported from the module rather than re-declared: a re-declared literal here
 // would silently stop matching the module's own constant the moment either one

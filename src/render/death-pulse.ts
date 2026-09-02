@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import { makeSpawnRing } from './spawn-anim';
-import { resolveOwnerColor } from './entities';
+import { resolveOwnerColor } from '../presentation/identity';
 
 /**
  * A detached, pooled, self-expiring world shockwave ring at a tank's death position,

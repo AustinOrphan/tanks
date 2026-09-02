@@ -1,8 +1,8 @@
 import { buildGallery } from './subjects';
 import { buildMomentScene } from './moment-scene';
 import { MOMENTS } from './moments';
-import type { SkinId, SpawnAnimId } from '../../src/game/customization';
-import { DEFAULT_SPAWN_ANIM } from '../../src/game/customization';
+import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
+import { DEFAULT_SPAWN_ANIM } from '../../src/presentation/customization';
 
 const params = new URLSearchParams(location.search);
 const W = Number(params.get('w') ?? 640);

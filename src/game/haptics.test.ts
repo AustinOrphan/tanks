@@ -15,7 +15,7 @@ import {
   BLOCKED_FIRE_PATTERN_MS,
 } from './haptics';
 import type { SimEvent } from '../sim/events';
-import { BLOCKED_FIRE_CUES, type BlockedFireCue } from './devflags';
+import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../presentation/blocked-fire';
 
 /** Records every call, and always reports success -- a fake device that never refuses. */
 function fakeVibrate(): { vibrate: VibrateFn; calls: Array<number | number[]> } {

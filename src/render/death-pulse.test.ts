@@ -6,7 +6,7 @@ import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import { createDeathPulseSystem } from './death-pulse';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from './entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 import { makeSpawnRing } from './spawn-anim';
 
 function makeTank(

@@ -1,5 +1,5 @@
 import type { TankPreview } from '../render/preview';
-import type { SkinId } from './customization';
+import type { SkinId } from '../presentation/customization';
 import type { GameStateMachine } from './state';
 import type { Hud } from './hud';
 import type { GameDeps } from './loop';

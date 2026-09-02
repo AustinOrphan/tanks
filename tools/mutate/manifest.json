@@ -2586,7 +2586,7 @@
   },
   {
     "id": "third-team-falls-back-to-the-placeholder",
-    "file": "src/render/entities.ts",
+    "file": "src/presentation/identity.ts",
     "find": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];",
     "replace": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0xffffff];",
     "expect": "killed",
@@ -3942,5 +3942,69 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "`dispose` no longer unsubscribes from popstate, so a mirror the HUD has torn down keeps handling the browser's Back on behalf of an owner that no longer exists -- popping layers on a dead stack and re-pushing the sentinel through a `back` callback whose HUD is gone. Fails 1 of 15 in navigation.test.ts: `dispose unsubscribes popstate and never traverses; with no host every call is inert and active is false`, at its `host.listeners` length assertion."
+  },
+  {
+    "id": "presentation-skin-scroll-never-animates",
+    "file": "src/presentation/customization.ts",
+    "find": "  return SKINS.find((s) => s.id === id)?.scroll ?? null;",
+    "replace": "  return null;",
+    "tests": [
+      "src/render/entities.test.ts",
+      "src/render/preview.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "skinScroll is THE place \"is this skin animated?\" is answered (its own doc comment), and issue #473 moved it from game/customization.ts to presentation/customization.ts. Returning null for every skin freezes flow's texture drift. 1 of 105 across entities.test.ts and preview.test.ts: entities.test.ts's flow-drift case (0.08 repeats/s over 0.5 s of dt) is the kill, which is the proof that the renderer reads the MOVED definition rather than a copy. Stated remainder: preview.ts's second consumer, `controls.setAnimating(skinScroll(skin) !== null)`, is not pinned by preview.test.ts and survives here."
+  },
+  {
+    "id": "presentation-blocked-fire-cue-set-drops-the-paired-arm",
+    "file": "src/presentation/blocked-fire.ts",
+    "find": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic+audio',\n  'ring',\n  'ring+audio',\n]);",
+    "replace": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic+audio',\n  'ring',\n]);",
+    "tests": [
+      "src/audio/director.test.ts",
+      "src/render/blocked-fire-ring.test.ts",
+      "src/game/haptics.test.ts",
+      "src/game/devflags.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "BLOCKED_FIRE_CUES moved from game/devflags.ts to presentation/blocked-fire.ts (issue #473) so the audio director and the ring no longer import the flag parser to name a cue. Dropping `ring+audio` from the SET while the TYPE union keeps it is the failure a stale copy would produce: each consumer's one-row-per-cue table still lists five cues and the set now names four. 3 of 143 across director.test.ts, blocked-fire-ring.test.ts, haptics.test.ts and devflags.test.ts: the three `... for EVERY cue carrying <channel>, and for no other -- one row per cue` cases (audio, haptic, ring), one per consumer, which is what proves all three key off the ONE definition. devflags.test.ts contributes 0: it does not parse `?blockedFire=ring+audio`, so the parser's own rejection of the dropped member is unpinned here."
+  },
+  {
+    "id": "dependency-direction-render-may-import-game",
+    "file": "src/dependency-direction.test.ts",
+    "find": "  render: new Set<Layer>(['render', 'presentation', 'sim']),",
+    "replace": "  render: new Set<Layer>(['render', 'presentation', 'sim', 'game']),",
+    "tests": [
+      "src/dependency-direction.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 6,
+    "why": "The layer table loses one direction: render is allowed to import game again, which is exactly the pre-#473 state (five render modules imported game/customization.ts). The sweep over the real tree stays green under it, because the tree is clean -- which is why the guard carries hand-written fixtures that are NOT derived from MAY_IMPORT. 6 of 84 in dependency-direction.test.ts: `flags render -> game`, `flags side-effect import`, `flags CommonJS require`, `flags import.meta.glob reaching another layer` and `flags a directory-index import of game` (all five plant a render -> game import, in a different syntax each, and are now reported clean) and `has a hand-written fixture on both sides of every layer pair` (a 16th allowed pair with no clean fixture and a forbidden one). The other 20 forbidden-pair fixtures pass, as they must -- the mutation opens one direction, not all of them."
+  },
+  {
+    "id": "dependency-direction-wiring-allowlist-admits-everything",
+    "file": "src/dependency-direction.test.ts",
+    "find": "      if (allowed.includes(target)) return null;",
+    "replace": "      if (allowed.includes(target) || allowed.length >= 0) return null;",
+    "tests": [
+      "src/dependency-direction.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "GAME_WIRING stops being an allowlist: any game module may import any render or audio module, so the check degrades to the pre-#473 world where hud.ts learned a colour from render/entities.ts. The real tree passes under it. 3 of 84 in dependency-direction.test.ts: `flags game -> render from a non-wiring import` (hud.ts, which IS listed -- for audio/manifest -- so this also pins that the list is per target module), `flags game -> audio from a file with no wiring entry` and `flags a wiring file reaching a render module it is not listed for` (loop.ts -> render/entities). The clean wiring fixtures and the layer-pair coverage test pass either way: the mutation widens the allowlist, not MAY_IMPORT."
+  },
+  {
+    "id": "dependency-direction-wiring-allowlist-carries-an-unused-entry",
+    "file": "src/dependency-direction.test.ts",
+    "find": "  './game/hud.ts': ['audio/manifest'],",
+    "replace": "  './game/hud.ts': ['audio/manifest', 'audio/engine'],",
+    "tests": [
+      "src/dependency-direction.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "GAME_WIRING gains a permission nothing uses: hud.ts is allowed audio/engine, which it does not import. The sweep over the real tree stays green under it -- an unused entry forbids nothing today -- and that is the problem: it is a standing licence for the next edit to pull the audio engine into the HUD without the review moment the list exists to force. Issue #324 will drop hud.ts's DEFAULT_VOLUME import, and this is the assertion that then makes the stale `audio/manifest` entry fail rather than linger. 1 of 84 in dependency-direction.test.ts: `every GAME_WIRING entry names a real file and an import that file actually makes`; every fixture and the layer-pair coverage test pass either way, because the mutation changes no rule, only the list."
   }
 ]

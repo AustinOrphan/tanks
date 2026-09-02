@@ -3,7 +3,7 @@ import { createEntityViews } from '../../src/render/entities';
 import { createParticleSystem } from '../../src/render/particles';
 import { createDeathPulseSystem } from '../../src/render/death-pulse';
 import { createTreadTrailSystem } from '../../src/render/tread-trails';
-import type { SkinId, SpawnAnimId } from '../../src/game/customization';
+import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
 import { MOMENTS, simulateMoment } from './moments';
 import { VIEWS, timelineDt } from './subjects';
 
