@@ -260,7 +260,7 @@ export type RelaunchTarget = 'campaign-levels' | 'versus-setup';
 /**
  * Decide a session's relaunch target from the canonical model -- the session
  * identity plus its developer provenance -- never from `initialVersusConfig`,
- * a URL read, or a `world.mode` check (issue #316's HUD-identity criterion).
+ * a URL read, or a `world.rules.mode` check (issue #316's HUD-identity criterion).
  *
  * `'versus-setup'` iff the SETUP PANE booted this session, which is exactly
  * `resolveBootSessionContext` branch 1 and exactly when

@@ -514,7 +514,7 @@ export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfi
 export function isTargetable(world: World, subject: Tank, other: Tank): boolean {
   if (!other.alive || other.kind !== 'player') return false;
   // Teams matter only once both tanks carry one; campaign-coop enemies carry none.
-  if (world.mode === 'teams' && other.team !== undefined && other.team === subject.team) return false;
+  if (world.rules.mode === 'teams' && other.team !== undefined && other.team === subject.team) return false;
   return true;
 }
 
@@ -612,7 +612,7 @@ export function selectPerceived(world: World, tank: Tank, cfg: ResolvedTankConfi
   //
   // Aiming is untouched either way: `hasSolution` still needs a real line of sight, so a tank
   // that knows who it is fighting still cannot shoot -- or track -- through a wall.
-  const bounded = (world.aiTargetPerception ?? 'full') === 'line-of-sight';
+  const bounded = world.rules.aiTargetPerception === 'line-of-sight';
   let chosen: Tank | undefined;
   for (const other of world.tanks) {
     if (!isTargetable(world, tank, other)) continue;

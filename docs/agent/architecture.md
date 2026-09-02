@@ -35,6 +35,42 @@ are unreachable from gameplay today and are pinned ONLY by
 `src/sim/step-inputs.test.ts` — the trace drives one player and cannot see them, measured:
 all 8 mutations swept there leave the hash unchanged.
 
+**Match rules are one frozen object on the world, `World.rules` (issue #472).**
+`src/sim/rules.ts` defines `WorldRules` — `mode`, `friendlyFire`, `unarmedTrigger`,
+`aiTargetPerception`, `corpseBlocksShells`, `muzzleClearsTanks`, `coopAttempts`,
+`arenaGeometry` — every value that is fixed for a world's life and read by the sim as a
+POLICY. A rule is resolved ONCE, before the world exists, by `resolveWorldRules` (the only
+place a default is chosen: `createWorld` calls it on its flat init, `render/preview.ts`'s
+prop calls it directly, hand-built test fixtures call it), frozen, and carried through
+`cloneWorld` as a single reference — never re-resolved, never enumerated. That last part is
+why it exists: #471 was `aiTargetPerception` living on `World` as an OPTIONAL field, read as
+`?? 'full'`, and omitted from the clone's field-by-field copy, so the loss surfaced as the
+shipped default from tick 1 — invisible to TypeScript (an optional field is legally absent)
+and to every consumer (the fallback hid it). Every rule is now required and `readonly`,
+consumers read `world.rules.x` with no fallback, and `arenaGeometry` is `null` rather than
+absent. `WORLD_RULE_KEYS` (a `satisfies Record<keyof WorldRules, true>` key manifest) lets
+`world.test.ts` sweep every rule through 5 real `stepInputs` ticks programmatically;
+measured while landing this: adding a ninth rule to the interface fails typecheck first in
+`resolveWorldRules` (where its default must be chosen), then in exactly three more places
+(the key manifest, and the non-default sample tables in `world.test.ts` and
+`rules.test.ts`) before any test runs. The freeze is shallow: `ArenaGeometry`'s fields are
+`readonly` by type (types.ts) so the one shared non-primitive rule is covered too, and a
+spread of `world.rules` is a fresh unfrozen copy — derive a variant through
+`resolveWorldRules({ ...world.rules, mode: 'ffa' })`, which re-freezes. `seed` and `spawns`
+are deliberately NOT rules: both are fixed for a world's life, but neither is a policy
+(`seed` is the entropy key, `spawns` is immutable arena data), and both are required and
+typechecked already, with none of the optional-field hazard — `seed` is `readonly` on
+`World` so the claim is enforced; `spawns` stays a deep-copied array because moving it is
+World-shape churn the issue's boundaries exclude. Dev flags that are rules — `aiPerception`
+since #472, like `corpseBlock`/`muzzleInside`/`coopPool`/`mode`/`friendlyFire` before it —
+reach the world through `levels.ts`'s closures and the trailing positionals of
+`createWorldFor` and `createSandboxWorld` (13 and 5 parameters now; #493 collapses the
+rule-shaped ones into one `WorldRulesInit`); `loop.ts`'s `buildWorld` applies only
+`invincible`, which marks a tank (mutable snapshot state), and a rule write on a built
+world throws. The golden trace is unmoved
+(`8584bf34…`, 7 of 7 at the landing tree): every shipped world resolves to the same defaults
+it carried before.
+
 **Persistence is one seam, `src/game/storage.ts`.** All six stores take an injected
 `Storage`; `resolveStorage()` picks the browser's or a complete in-memory shim (the old
 inline stand-in was `{getItem, setItem}` cast to `Storage`, so `removeItem`/`clear`/`key`

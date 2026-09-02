@@ -5,6 +5,7 @@
 // to tie-break and nothing to switch to. A single-player fixture would let all three ship as
 // dead code, so the symmetric two-player fixture below is the point rather than a detail.
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules, type WorldRulesInit } from '../rules';
 import { commitTarget, isTargetable } from './target-selection';
 import { resolveOpponent } from './targeting';
 import { brownDecision } from './brown';
@@ -23,12 +24,11 @@ function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {
     aiState: 'idle', aiTimer: 0, ...over,
   };
 }
-function world(tanks: Tank[], over: Partial<World> = {}): World {
+function world(tanks: Tank[], over: Partial<World> = {}, rules: WorldRulesInit = {}): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: -100000,
-    unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true,
-    coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+    rules: resolveWorldRules(rules), ...over,
   } as World;
 }
 /** A solid wall, for taking line of sight away. */
@@ -92,14 +92,13 @@ describe('committed opponent selection', () => {
     // rule ever bit on.
     expect(configFor('brown').ai.bankShotWeight).toBe(0);
     const seen = tank(1, 'brown', { x: 0, y: 0 });
-    const w = world([seen, tank(2, 'player', { x: 9, y: 0 })], { aiTargetPerception: 'line-of-sight' });
+    const w = world([seen, tank(2, 'player', { x: 9, y: 0 })], {}, { aiTargetPerception: 'line-of-sight' });
     expect(commitTarget(w, seen)).toBe('acquired');
 
     const blind = tank(1, 'brown', { x: 0, y: 0 });
     const w2 = world([blind, tank(2, 'player', { x: 9, y: 0 })], {
       walls: [wall(3, -3, 4, 3)],
-      aiTargetPerception: 'line-of-sight',
-    });
+    }, { aiTargetPerception: 'line-of-sight' });
     expect(commitTarget(w2, blind)).toBe(null);
     expect(resolveOpponent(w2, blind, configFor('brown'))).toBeUndefined();
   });
@@ -112,8 +111,7 @@ describe('committed opponent selection', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 });
     const w = world([grey, tank(2, 'player', { x: 9, y: 0 })], {
       walls: [wall(3, -3, 4, 3)],
-      aiTargetPerception: 'line-of-sight',
-    });
+    }, { aiTargetPerception: 'line-of-sight' });
     expect(commitTarget(w, grey)).toBe('acquired');
   });
 
@@ -126,14 +124,13 @@ describe('committed opponent selection', () => {
     // bound that lasted zero ticks. The clone runs BEFORE stepAi, so one tick shows it.
     const blind = world([tank(1, 'brown', { x: 0, y: 0 }), tank(2, 'player', { x: 9, y: 0 })], {
       walls: [wall(3, -3, 4, 3)],
-      aiTargetPerception: 'line-of-sight',
-    });
+    }, { aiTargetPerception: 'line-of-sight' });
     expect(stepInputs(blind, [noInput]).world.tanks[0].aiTargetId).toBeUndefined();
 
     // TWO positive controls, because "acquired nobody" equally describes an AI that never
     // ran at all. One thing changes in each, against the same tick and the same fixture.
     // The WALL: brown does acquire, through this same clone, when it can actually see.
-    const seeing = world([tank(1, 'brown', { x: 0, y: 0 }), tank(2, 'player', { x: 9, y: 0 })], {
+    const seeing = world([tank(1, 'brown', { x: 0, y: 0 }), tank(2, 'player', { x: 9, y: 0 })], {}, {
       aiTargetPerception: 'line-of-sight',
     });
     expect(stepInputs(seeing, [noInput]).world.tanks[0].aiTargetId).toBe(2);
@@ -262,7 +259,7 @@ describe('committed opponent selection', () => {
     const ai = tank(1, 'grey', { x: 0, y: 0 }, { team: 0 });
     const mate = tank(2, 'player', { x: 9, y: 0 }, { team: 0 });
     const foe = tank(3, 'player', { x: 9, y: 1 }, { team: 1 });
-    const w = world([ai, mate, foe], { mode: 'teams' });
+    const w = world([ai, mate, foe], {}, { mode: 'teams' });
     expect(isTargetable(w, ai, mate)).toBe(false);
     expect(isTargetable(w, ai, foe)).toBe(true);
     // Another enemy is never a target, in any mode.

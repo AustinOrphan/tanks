@@ -73,15 +73,15 @@ function destroyed(tankId: number, ownerId = 999): SimEvent {
 describe('World.coopAttempts: defaults to true', () => {
   it('createWorld defaults coopAttempts to true when omitted, cloneWorld carries it', () => {
     const w = createWorld({ walls: [], tanks: [], spawns: [], lives: 3 });
-    expect(w.coopAttempts).toBe(true);
+    expect(w.rules.coopAttempts).toBe(true);
     const r = stepInputs(w, []);
-    expect(r.world.coopAttempts).toBe(true);
+    expect(r.world.rules.coopAttempts).toBe(true);
   });
 
   it('createWorld honors an explicit false (pool mode)', () => {
     const w = createWorld({ walls: [], tanks: [], spawns: [], lives: 3, coopAttempts: false });
-    expect(w.coopAttempts).toBe(false);
-    expect(stepInputs(w, []).world.coopAttempts).toBe(false);
+    expect(w.rules.coopAttempts).toBe(false);
+    expect(stepInputs(w, []).world.rules.coopAttempts).toBe(false);
   });
 });
 

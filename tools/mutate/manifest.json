@@ -219,21 +219,9 @@
     ]
   },
   {
-    "id": "versus-respawn-clone-drops-arena-geometry",
-    "file": "src/sim/world.ts",
-    "find": "    arenaGeometry: world.arenaGeometry,\n",
-    "replace": "    // arenaGeometry dropped by mutation\n",
-    "expect": "killed",
-    "expectFailures": 1,
-    "why": "cloneWorld must carry World.arenaGeometry across every tick's clone, or a versus respawn silently falls back to the tank's own authored spawn from the very first stepInputs call onward -- exactly the near-miss this file's own test-writing notes describe finding while authoring versus-respawn.test.ts. Caught by only 1 of the 6 cases there: the direct-stepRespawns tests bypass cloneWorld entirely (by design -- see that file's own doc comment on why position-exactness is checked before stepMovement's physics can touch it) and so cannot see this mutation; only the end-to-end test that goes through the real stepInputs pipeline does.",
-    "tests": [
-      "src/sim/versus-respawn.test.ts"
-    ]
-  },
-  {
     "id": "versus-respawn-always-falls-back-to-authored-spawn",
     "file": "src/sim/world.ts",
-    "find": "  if (world.mode === 'campaign-coop' || !world.arenaGeometry) return { x: authored.x, y: authored.y };",
+    "find": "  if (mode === 'campaign-coop' || arenaGeometry === null) return { x: authored.x, y: authored.y };",
     "replace": "  if (true) return { x: authored.x, y: authored.y };",
     "expect": "killed",
     "expectFailures": 5,
@@ -2202,7 +2190,7 @@
   {
     "id": "tread-tint-ignores-the-campaign-gate",
     "file": "src/render/tread-trails.ts",
-    "find": "  if (world.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
+    "find": "  if (world.rules.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
     "replace": "  if (!identityApplies(world)) return TREAD_COLOR;",
     "expect": "killed",
     "expectFailures": 1,
@@ -2889,17 +2877,84 @@
     "why": "step() clones the world every tick, so a field the clone drops is a field that cannot outlive one tick. Subtle because updateTargetMemory re-records immediately: a dropped memory looks present at any single instant, and only a tick count that has AGED below the full span proves it survived a tick without refresh."
   },
   {
-    "id": "clone-drops-the-ai-target-perception",
+    "id": "clone-re-resolves-the-rules",
     "file": "src/sim/world.ts",
-    "find": "    aiTargetPerception: world.aiTargetPerception,\n",
-    "replace": "    // aiTargetPerception dropped by mutation\n",
+    "find": "    rules: world.rules,\n",
+    "replace": "    rules: resolveWorldRules(),\n",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 6,
     "tests": [
       "src/sim/world.test.ts",
+      "src/sim/ai/target-selection.test.ts",
+      "src/sim/versus-respawn.test.ts",
+      "src/sim/versus-modes.test.ts",
+      "src/sim/coop-attempts.test.ts",
+      "src/sim/coop-respawn.test.ts"
+    ],
+    "why": "cloneWorld carries World.rules as ONE frozen reference (issue #472) -- never re-resolved, never enumerated. Dropping the line outright is loud (`draft.rules.mode` throws on the first read in stepInputs), so the SILENT form is modelled instead: a clone that re-resolves the rules from the shipped defaults every tick, which is exactly what #471's per-field omission looked like from outside -- a rule quietly back at its default from tick 1, with nothing thrown. Subsumes the two per-field clone entries it replaces, clone-drops-the-ai-target-perception and versus-respawn-clone-drops-arena-geometry: with one atomic reference there is no per-field line left to drop. Caught by 6 of the 103 cases across the six files: world.test.ts's reference-identity clone case and its 5-tick WORLD_RULE_KEYS sweep (the sweep is the one that grows on its own when a rule is added), target-selection.test.ts's 'the bound survives a REAL TICK' (aiTargetPerception back to 'full', so a wall-blind brown acquires through the wall), versus-modes.test.ts's 'cloneWorld carries both' (mode/friendlyFire back to campaign-coop/false), coop-attempts.test.ts's explicit-false pool-mode case (coopAttempts back to true) and versus-respawn.test.ts's end-to-end stepInputs respawn (arenaGeometry back to null, so the revived tank lands on its authored spawn). coop-respawn.test.ts contributes 0 of its cases by design -- its pool fixtures enter through resolveStatus/stepRespawns directly and never touch the clone, the same blind spot versus-respawn-always-falls-back-to-authored-spawn's own why names."
+  },
+  {
+    "id": "rules-boundary-skips-the-coop-attempts-default",
+    "file": "src/sim/rules.ts",
+    "find": "    coopAttempts: init.coopAttempts ?? true,",
+    "replace": "    coopAttempts: init.coopAttempts,",
+    "expect": "killed",
+    "expectFailures": 6,
+    "tests": [
+      "src/sim/rules.test.ts",
+      "src/sim/world.test.ts",
+      "src/sim/coop-attempts.test.ts",
+      "src/game/levels.test.ts"
+    ],
+    "why": "resolveWorldRules (rules.ts) is the ONE place a rule's default is chosen (issue #472). Skipping a single `??` leaves every caller that does not state the rule -- which is every shipped call site -- with `undefined` in a required slot: the harness does not typecheck, no consumer has a fallback left to hide behind, and `!undefined` reads as POOL mode in resolveStatusCoop, so a whole win/lose model flips with nothing thrown. Caught by 6 of the 97 cases across the four files (97 since rules.test.ts gained its spread-derivation case; the six killers are unchanged): rules.test.ts's key-by-key default pin (the direct guard, and the one that catches the same omission on ANY key), coop-attempts.test.ts's 'defaults coopAttempts to true when omitted' and its N=4 survivor-carries case (attempts mode became pool mode: a single death now decrements), world.test.ts contributes 0 (its fixtures state every rule explicitly, so the skipped default is never reached -- which is the point of stating them), and levels.test.ts's 'builds level i ... the same walls, tanks and seed' (createLevelSystem passes `!flags.coopPool` explicitly while the bare createWorldFor it is compared against does not, so the two worlds stop being equal), its 'sandbox does NOT wire coopPool' default pin, and its issue-#154 reordered-campaign deep-equality for the same reason as the first."
+  },
+  {
+    "id": "perception-re-derived-from-the-old-field-with-a-fallback",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const bounded = world.rules.aiTargetPerception === 'line-of-sight';",
+    "replace": "  const bounded = ((world as unknown as { aiTargetPerception?: string }).aiTargetPerception ?? 'full') === 'line-of-sight';",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
       "src/sim/ai/target-selection.test.ts"
     ],
-    "why": "The sibling of versus-respawn-clone-drops-arena-geometry and clone-drops-the-remembered-contact, and the most dangerous of the three because World.aiTargetPerception is OPTIONAL: ai/targeting.ts reads it as `(world.aiTargetPerception ?? 'full')`, so a clone that omits it does not surface as `undefined` at the use site -- it surfaces as the shipped default, from tick 1 onward. game/loop.ts sets the field for `?dev=1&aiPerception=los` on the world it builds, stepInputs opens with cloneWorld, and the selected line-of-sight bound lasted zero ticks: the dev experiment silently measured the very default it was set up to compare against. TypeScript cannot see it either, because `aiTargetPerception?:` makes the object literal without the field a perfectly valid World -- which is why this shipped. Gap measured with this harness rather than argued: against the pre-assertion test files (this same world.ts, with src/sim/world.test.ts and src/sim/ai/target-selection.test.ts taken from main at f3ff4fc) the mutation SURVIVES, 0 of 24 scoped tests failing. Nothing outside that 24 was measured here, but the tree-wide gap is the shipped record rather than an inference: the required `verify (current)` check -- the complete mutation manifest plus the full unit suite under Node 24 -- is green on main at f3ff4fc, and f3ff4fc is the tree WITHOUT this clone copy. With this PR's tests the same mutation is killed by 3 of 27: world.test.ts's direct `cloneWorld` assertion, world.test.ts's five-tick 'does not let aiTargetPerception decay' case (the clone is per tick, so a single tick is the weakest possible probe), and target-selection.test.ts's 'the bound survives a REAL TICK', which is the only one of the three that shows the game-visible consequence -- a wall-blind brown acquiring the player through the wall it cannot see past."
+    "why": "The consumer-side half of #471, kept as a regression class under #472: a consumer that reads a rule from where it USED to live (a top-level World field), through a fallback that turns the miss into the shipped default. The rule now lives only on World.rules, so this read always sees undefined, the line-of-sight bound is silently gone, and nothing throws -- which is the whole point of forbidding `??` at rule consumers. Caught by 2 of the 16 cases in target-selection.test.ts: 'acquires only what it can SEE, for a profile that does not bank' (direct commitTarget/resolveOpponent under the bound: wall-blind brown now acquires through the wall) and 'the bound survives a REAL TICK' (the same through stepInputs). The banking-profile case survives by construction (grey perceives what it could bank at, bound or no bound), and the 'full' control passes under the mutation because 'full' is exactly what the fallback produces -- it discriminates the other way."
+  },
+  {
+    "id": "levels-drop-the-ai-perception-flag",
+    "file": "src/game/levels.ts",
+    "find": "        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,\n        flags.aiPerception ?? undefined,\n",
+    "replace": "        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,\n        undefined,\n",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/game/levels.test.ts"
+    ],
+    "why": "`?dev=1&aiPerception=los` used to be written onto the built world by loop.ts's buildWorld, after the fact, and no test on main pinned that write (measured: zero test lines on main mention aiPerception reaching a world). #472 froze World.rules, so the flag has to travel through levels.ts's closure into createWorldFor's trailing positional like corpseBlock/muzzleInside/coopPool/mode/friendlyFire already do -- the composition question target-selection.test.ts's unit cases on targeting.ts cannot see. Caught by 2 of the 56 cases in levels.test.ts: the campaign branch's 'aiPerception=los reaches world.rules.aiTargetPerception' and its two-player coop sibling. The 'unset (null) leaves full' control survives by design. The sandbox and versus builders carry the same threading and their own cases (dropping all three builders at once measured 4 of 56 while landing this); this entry mutates the campaign branch only, so those two stay green here and are not counted."
+  },
+  {
+    "id": "sandbox-levels-drop-the-ai-perception-flag",
+    "file": "src/game/levels.ts",
+    "find": "          !flags.muzzleInside,\n          flags.aiPerception ?? undefined,\n",
+    "replace": "          !flags.muzzleInside,\n          undefined,\n",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/levels.test.ts"
+    ],
+    "why": "The sandbox sibling of levels-drop-the-ai-perception-flag: createLevelSystem's sandbox branch threads `?dev=1&aiPerception=los` into createSandboxWorld's trailing positional (issue #472), the same composition the campaign entry pins for createWorldFor. One entry per builder because each is its own closure with its own argument list -- the campaign entry's mutation leaves this branch untouched and vice versa (measured: each kills exactly its own branch's cases and nothing else). Caught by 1 of the 56 cases in levels.test.ts: 'the sandbox branch wires aiPerception too', whose in-test unset control (`full`) survives the mutation by design. Asked for by the PR #491 review, which wanted the forward pinned per builder rather than for the campaign branch alone."
+  },
+  {
+    "id": "versus-levels-drop-the-ai-perception-flag",
+    "file": "src/game/levels.ts",
+    "find": "        flags.aiPerception ?? undefined,\n      ),\n    // That arena's own bounds",
+    "replace": "        undefined,\n      ),\n    // That arena's own bounds",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/levels.test.ts"
+    ],
+    "why": "The versus sibling of levels-drop-the-ai-perception-flag: createVersusLevelSystem threads the session's real dev flags' `aiPerception` into createWorldFor's trailing positional (issue #472), the same route its corpseBlock/muzzleInside already take through the DEV_FLAGS_OFF-defaulted third parameter. The find anchors on the close of the argument list plus the `bounds` comment that follows only in this builder, because the `flags.aiPerception ?? undefined,` line itself appears once per builder. Caught by 1 of the 56 cases in levels.test.ts: 'aiPerception reaches a versus world too', whose omitted-flags control (`full`) survives the mutation by design. Asked for by the PR #491 review alongside the sandbox entry."
   },
   {
     "id": "remembered-contact-never-reaches-the-turret",

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../sim/rules';
 import * as THREE from 'three';
 import {
   mineWarningFrame, FUSE_WARNING_SECONDS, RING_STEPS,
@@ -20,8 +21,7 @@ function fillWorld(left: number): World {
     tick: 0, nextId: 100, seed: 3, tanks: [], bullets: [],
     mines: [{ id: 1, ownerId: 2, pos: { x: 0, y: 0 }, timer: MINE_TIMER, armed: true, detonated: false, proximityDelayLeft: left }],
     blasts: [], walls: [], spawns: [], status: 'playing', lives: 3, roundStartTick: 0,
-    unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true,
-    coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+    rules: resolveWorldRules(),
   };
 }
 

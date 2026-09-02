@@ -107,7 +107,7 @@ export interface DevFlags {
    * instead of the shipped GHOST rule where the bullet passes straight through.
    *
    * Adopted ruling (2026-08-14): "Just-killed tank is a ghost for now. Flippable switch in
-   * the future to playtest." This turns `World.corpseBlocksShells` ON to playtest the
+   * the future to playtest." This turns `WorldRules.corpseBlocksShells` ON to playtest the
    * WALL alternative; off (the default) leaves today's ghost behaviour unchanged. See
    * `src/sim/bullets.ts`'s `resolveBulletHits`.
    */
@@ -118,7 +118,7 @@ export interface DevFlags {
    *
    * Adopted ruling (2026-08-14): "Spawn at hull center might be the way to go but im not
    * certain. Maybe set that up but also have it be flippable." The new clearance
-   * check (`World.muzzleClearsTanks`) is ON by default -- the adopted lean -- so this flag is
+   * check (`WorldRules.muzzleClearsTanks`) is ON by default -- the adopted lean -- so this flag is
    * the escape hatch: on, it turns the clearance back OFF for an A/B comparison
    * against the old feel. See `src/sim/bullets.ts`'s `muzzlePoint`.
    */
@@ -196,7 +196,7 @@ export interface DevFlags {
    * Default (this flag off) is the shared-ATTEMPTS ruling (owner, 2026-08-16, see
    * docs/superpowers/plans/2026-08-16-coop-attempts.md): a lone death costs nothing and
    * the survivor fights on; only a full wipe -- every player down at once -- spends a
-   * life and restarts the whole arena. See `World.coopAttempts`, which this sets to
+   * life and restarts the whole arena. See `WorldRules.coopAttempts`, which this sets to
    * `false` -- the sim never reads this flag itself, only the world switch it decided.
    *
    * Only meaningful once `players` >= 2: with a single player, `resolveStatusCoop` is
@@ -221,7 +221,7 @@ export interface DevFlags {
    */
   quality: QualityPreset | null;
   /**
-   * AI target-SELECTION perception. Null (the default) leaves `World.aiTargetPerception`
+   * AI target-SELECTION perception. Null (the default) leaves `WorldRules.aiTargetPerception`
    * at `'full'` -- the AI may pick any live opponent, exactly as the player can see any tank
    * on the board. `los` restores the bound issue #359 shipped and the owner then superseded.
    *
@@ -260,11 +260,11 @@ export interface DevFlags {
   bots: number | null;
   /**
    * Which VERSUS mode a session builds with -- 'ffa'/'teams' only; `null` (absent or
-   * unrecognised) leaves World.mode's own default, 'campaign-coop' -- see GameMode
+   * unrecognised) leaves WorldRules.mode's own default, 'campaign-coop' -- see GameMode
    * (sim/types.ts). Same reject-to-null idiom as `quality`/`mineTrigger`: an
    * unrecognised value (`?mode=ffa2`) leaves the shipped rule rather than guessing.
    *
-   * Resolved into World.mode at world construction (levels.ts's campaign branch,
+   * Resolved into World.rules.mode at world construction (levels.ts's campaign branch,
    * closed over like `corpseBlock`/`muzzleInside`/`coopPool`); the sim never reads this
    * flag itself, only the World field it decided -- see CLAUDE.md's flags-never-reach-
    * the-sim rule.
@@ -274,8 +274,8 @@ export interface DevFlags {
    * Whether a shell or mine blast harms a teammate -- meaningful only once `mode` is
    * 'teams'. Default off (this flag's off state, `false`): protect teammates by
    * default, the "Owner forks" call in the arc design. Resolved into
-   * World.friendlyFire the same way `mode` is; self-disabling outside 'teams' by
-   * construction (see World.friendlyFire's own doc comment), so this flag is inert
+   * World.rules.friendlyFire the same way `mode` is; self-disabling outside 'teams' by
+   * construction (see WorldRules.friendlyFire's own doc comment), so this flag is inert
    * whatever its value at `mode` unset/'campaign-coop'/'ffa'.
    */
   friendlyFire: boolean;
@@ -424,7 +424,7 @@ function asQuality(params: URLSearchParams): QualityPreset | null {
 /**
  * `los` restores issue #359's line-of-sight bound on AI target SELECTION; `full` states the
  * shipped default explicitly. Null when absent or unrecognised, resolving to
- * World.aiTargetPerception's own default -- same reject-to-null idiom as asQuality.
+ * WorldRules.aiTargetPerception's own default -- same reject-to-null idiom as asQuality.
  *
  * The URL token is `los`, not `line-of-sight`: a hyphen in a query value is legal but reads
  * badly next to the other flags, and the sim's own vocabulary stays the longer, clearer one.
@@ -437,7 +437,7 @@ function asAiPerception(params: URLSearchParams): AiTargetPerception | null {
 }
 
 /** 'ffa' or 'teams', or null when absent or unrecognised -- null resolves to
- *  World.mode's own default, 'campaign-coop', matching asQuality's idiom. */
+ *  WorldRules.mode's own default, 'campaign-coop', matching asQuality's idiom. */
 function asMode(params: URLSearchParams): Extract<GameMode, 'ffa' | 'teams'> | null {
   const raw = params.get('mode');
   if (raw === null) return null;

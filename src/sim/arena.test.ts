@@ -648,15 +648,15 @@ describe('loadArena: mode-aware (n-player arc PR 4 -- FFA + teams)', () => {
 describe('createWorldFor: mode/friendlyFire threading (n-player arc PR 4)', () => {
   it('defaults to campaign-coop / friendlyFire false when neither trailing arg is passed -- structurally unreachable by any existing call site', () => {
     const w = createWorldFor(ARENAS[0], 1);
-    expect(w.mode).toBe('campaign-coop');
-    expect(w.friendlyFire).toBe(false);
+    expect(w.rules.mode).toBe('campaign-coop');
+    expect(w.rules.friendlyFire).toBe(false);
     expect(w.tanks.some((t) => t.kind !== 'player')).toBe(true);
   });
 
   it('threads an explicit mode and friendlyFire onto the built world, and strips enemies to match', () => {
     const w = createWorldFor(ARENAS[0], 1, undefined, undefined, undefined, undefined, 4, undefined, 'teams', true);
-    expect(w.mode).toBe('teams');
-    expect(w.friendlyFire).toBe(true);
+    expect(w.rules.mode).toBe('teams');
+    expect(w.rules.friendlyFire).toBe(true);
     expect(w.tanks.every((t) => t.kind === 'player')).toBe(true);
     expect(w.tanks).toHaveLength(4);
   });

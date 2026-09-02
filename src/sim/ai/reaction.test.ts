@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import { stepAi } from './index';
 import { roundPhase } from '../round';
 import { configFor } from '../config';
@@ -26,7 +27,7 @@ function world(tanks: Tank[], over: Partial<World> = {}): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: -100000,
-    unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+    rules: resolveWorldRules(), ...over,
   };
 }
 const ticksFor = (kind: Tank['kind']) => Math.round(configFor(kind).ai.reactionTime * TICK_HZ);

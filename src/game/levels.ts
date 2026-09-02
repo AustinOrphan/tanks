@@ -99,6 +99,7 @@ export function createLevelSystem(
           // these are closed over rather than threaded as `world()` parameters.
           flags.corpseBlock,
           !flags.muzzleInside,
+          flags.aiPerception ?? undefined,
         ),
     };
   }
@@ -136,7 +137,7 @@ export function createLevelSystem(
     },
     tracksProgress: true,
     isDevJump: jump !== null,
-    // corpseBlock/muzzleInside/coopPool/mode/friendlyFire are closed over rather than
+    // corpseBlock/muzzleInside/coopPool/mode/friendlyFire/aiPerception are closed over rather than
     // added to the `world()` signature, the same treatment sandboxTanks/
     // sandboxDisarmed/sandboxWalls already get: they are devFlags-driven playtest
     // switches with one value for the whole session, not a per-call construction
@@ -147,13 +148,18 @@ export function createLevelSystem(
     // player exists; harmless (never read by resolveStatusCoop) at playerCount 1.
     // `flags.mode ?? 'campaign-coop'` (n-player arc PR 4): absent/unrecognised leaves
     // the shipped rule; `friendlyFire` defaults to createWorld's own false and is
-    // self-disabling outside 'teams' by construction (World.friendlyFire's own doc
+    // self-disabling outside 'teams' by construction (WorldRules.friendlyFire's own doc
     // comment) -- so passing it here whatever `mode` is set to is harmless.
+    // `flags.aiPerception ?? undefined` (issue #472): null, the flag's own "unset", means
+    // resolveWorldRules's default ('full'); `los` is the only value that ever reaches the
+    // world. It used to be written onto the built world by loop.ts's buildWorld, after
+    // the fact -- exactly the post-construction rule write a frozen `World.rules` forbids.
     world: (level, seed, unarmedTrigger, lives, playerCount) =>
       createWorldFor(
         arenaById(level.arenaId), seed, unarmedTrigger, lives,
         flags.corpseBlock, !flags.muzzleInside, playerCount, !flags.coopPool,
-        flags.mode ?? 'campaign-coop', flags.friendlyFire,
+        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,
+        flags.aiPerception ?? undefined,
       ),
     bounds: (level) => ({
       ...arenaBounds(arenaById(level.arenaId)),
@@ -250,6 +256,10 @@ export function createVersusLevelSystem(
         // falls back to `teamOf(slot)` for -- so a config saved before teams could be
         // chosen builds exactly the board it always did.
         config.slots.map((slot) => slot.team),
+        // `aiPerception` the same way `corpseBlock`/`muzzleInside` above reach a versus
+        // playtest: from the session's real dev flags (issue #472 moved it here from
+        // loop.ts's post-build write, which a frozen `World.rules` no longer permits).
+        flags.aiPerception ?? undefined,
       ),
     // That arena's own bounds -- same shape as the campaign branch above. Requires a
     // resolved `config.arenaId` for the same reason `world()` above does; see this

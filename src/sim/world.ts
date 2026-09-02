@@ -1,6 +1,7 @@
-import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger, AiTargetPerception, GameMode, Vec2, ArenaGeometry } from './types';
+import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, Vec2 } from './types';
 import { angleOf, slewAngle, vsub, isActionLocked } from './types';
 import type { SimEvent } from './events';
+import { resolveWorldRules, type WorldRules, type WorldRulesInit } from './rules';
 import { moveTank, separateTanks, resolveWalls } from './collision';
 import { spawnBullet, shellCapReached, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepBlasts, stepMines } from './mines';
@@ -10,108 +11,32 @@ import { configFor, hasAbility, TankAbility } from './config';
 import { roundPhase } from './round';
 import { pickVersusSpawnCell } from './versus-spawns';
 
+/**
+ * One simulated match, as of one tick. Two kinds of field live here, and the split is a
+ * contract rather than a tidiness (issue #472):
+ *
+ *  - `rules` is every POLICY fixed for the world's life -- mode, friendly fire, mine
+ *    trigger, AI perception, the corpse/muzzle switches, the coop model, the arena grid.
+ *    Resolved once by `resolveWorldRules` (rules.ts) before the world exists, frozen, and
+ *    carried through `cloneWorld` as ONE reference, so a rule cannot be individually
+ *    forgotten by a copy path the way #471's `aiTargetPerception` was.
+ *  - `tick`, `nextId`, `tanks`, `bullets`, `mines`, `blasts`, `walls`, `status`, `lives`
+ *    and `roundStartTick` are the mutable snapshot, which `cloneWorld` deep-copies field
+ *    by field and a tick's stages write to.
+ *  - `seed` and `spawns` are fixed for the world's life too, and deliberately NOT in
+ *    `rules`: neither is a policy (`seed` is the entropy key; `spawns` is immutable arena
+ *    data that `resetArena` and `stepRespawns` only ever read), and both are required
+ *    and typechecked already, so a clone cannot forget them the way it could an optional
+ *    rule. `seed` is `readonly` so the claim is enforced the way `rules` is; `spawns`
+ *    stays a deep-copied array because moving it is World-shape churn this issue's
+ *    boundaries exclude. See WorldRules's own doc comment.
+ */
 export interface World {
   tick: number;
   nextId: number;
-  seed: number;
-  /** What may detonate an UNARMED mine. See UnarmedTrigger. */
-  unarmedTrigger: UnarmedTrigger;
-  /**
-   * How much of the board an AI may consider when choosing WHO to fight (issue #359,
-   * owner ruling 2026-08-31 superseding rule 1's perception bound).
-   *
-   * `'full'` is the shipped default: an AI may select any live opponent, exactly as the
-   * PLAYER can see any tank on the board. The camera frames the whole playable area and
-   * nothing fogs or culls, so a line-of-sight bound on SELECTION gave the AI an
-   * information limit the human does not have -- and its counterplay was "stand behind a
-   * wall and be forgotten", which reads as exploitable rather than beatable.
-   *
-   * `'line-of-sight'` restores the bound, behind `?dev=1&aiPerception=los`, so the
-   * experiment stays runnable. Measured before the ruling: the bound was never once
-   * reached by a banking profile (grey and teal, 0.00% of live ticks) and left a
-   * non-banking one with no target for most of its life (brown 44.78%, olive 77.79%),
-   * because an LOS-only reading deletes bank shots and had to be widened for any profile
-   * with `bankShotWeight > 0`.
-   *
-   * SELECTION ONLY. Aiming and firing still require a real line of sight (`hasSolution`),
-   * so full awareness does not let a turret track a target through a wall -- it decides
-   * who the tank is fighting, not what it can shoot.
-   *
-   * OPTIONAL, unlike `unarmedTrigger` beside it, and read as `?? 'full'`. The shipped
-   * behaviour is the absent case, so every existing World literal -- a dozen render and sim
-   * fixtures included -- keeps meaning exactly what it meant, and only a test that wants the
-   * bound has to say so. `arenaGeometry` is the same shape for the same reason.
-   */
-  aiTargetPerception?: AiTargetPerception;
-  /**
-   * Whether a tank killed earlier in the SAME resolveBulletHits pass still blocks a
-   * later bullet aimed at it, instead of letting it pass through untouched.
-   *
-   * Default false: today's shipped rule, a GHOST -- resolveBulletHits skips any tank
-   * whose `alive` is already false, so a second shell in the same tick sails through
-   * the spot its target just vacated. Adopted ruling (2026-08-14): "Just-killed tank is a
-   * ghost for now. Flippable switch in the future to playtest." `true` is the WALL
-   * variant: resolveBulletHits snapshots which tanks were alive at the START of its
-   * pass, and a bullet that reaches one which died EARLIER IN THE SAME PASS is
-   * consumed right there -- `b.alive = false`, one 'explosion' event at the hit --
-   * without re-killing the tank or re-emitting 'tank-destroyed'. A corpse from an
-   * EARLIER stage (a mine kill from a prior tick, or from the shell-detonates-a-mine
-   * loop earlier in this same resolveBulletHits call) is not in that snapshot and
-   * keeps ghosting in BOTH positions -- this switch changes only the same-pass case.
-   * See bullets.ts's resolveBulletHits.
-   */
-  corpseBlocksShells: boolean;
-  /**
-   * Whether a shell's muzzle spawn point falls back to the owner's centre when it
-   * would land inside a LIVE non-owner tank's hit circle (TANK_RADIUS + BULLET_RADIUS
-   * -- resolveBulletHits' own collision threshold), the same fallback shape
-   * muzzlePoint already uses for a muzzle inside a wall.
-   *
-   * Default true -- the adopted lean (2026-08-14): "Spawn at hull center might be the
-   * way to go but im not certain. Maybe set that up but also have it be flippable."
-   * `false` restores today's shipped behaviour, where the muzzle can spawn already
-   * inside a neighbour's hit circle -- the triage that motivated this switch measured
-   * the harmful variant as a ~0.5-3 degree tangent-escape sliver at exact minimum
-   * separation. See bullets.ts's muzzlePoint.
-   */
-  muzzleClearsTanks: boolean;
-  /**
-   * Coop's win/lose model when two or more `kind === 'player'` tanks share the world.
-   * See resolveStatusCoop below for the full split; in one line: TRUE (the default) is
-   * the "shared attempts" ruling (owner, 2026-08-16) -- one player dying alone costs
-   * nothing and the survivor fights on, and only a full wipe (every player dead at
-   * once) spends a life and restarts the WHOLE arena via resetArena, exactly the 1P
-   * death experience generalized to "nobody is left standing." FALSE restores the
-   * shipped POOL model (docs/superpowers/plans/2026-08-15-coop-semantics.md): every
-   * player death drains the shared pool by one and schedules that one tank's own
-   * per-tank respawn, leaving the rest of the board untouched.
-   *
-   * Same pattern as corpseBlocksShells/muzzleClearsTanks: a World construction switch,
-   * never a runtime flag read inside src/sim/ -- see game/devflags.ts's `coopPool`,
-   * which is the ONLY thing that ever passes `false` here.
-   */
-  coopAttempts: boolean;
-  /**
-   * Which win/lose rule this world's `resolveStatus` dispatches to, and which spawn set
-   * `loadArena` built it from -- the n-player arc's PR 4 (FFA + teams). See GameMode
-   * (types.ts). Non-optional here (every World has one), optional on createWorld's own
-   * init -- the exact same shape as `corpseBlocksShells`/`muzzleClearsTanks` above.
-   * Default `'campaign-coop'`, the shipped rule: `resolveStatus`'s dispatch (below)
-   * routes this value into the ORIGINAL guard-first body, byte-untouched, which is the
-   * whole trace argument -- every existing call site that never passes `mode` keeps
-   * producing exactly today's world.
-   */
-  mode: GameMode;
-  /**
-   * Whether a shell or mine blast harms a teammate -- meaningful only in `'teams'` mode.
-   * Default false (protect teammates by default; see the arc design's "Owner forks"
-   * section for the rationale and the named absence of a settled genre convention).
-   * Self-disabling outside `'teams'` by construction: the friendly-fire gate in
-   * bullets.ts/mines.ts also requires both tanks to carry a `team`, which `loadArena`
-   * only ever stamps when `mode === 'teams'` -- so this field is inert in
-   * `'campaign-coop'`/`'ffa'` whatever its value, not merely unread.
-   */
-  friendlyFire: boolean;
+  readonly seed: number;
+  /** The immutable match rules. See WorldRules (rules.ts) for every field and its default. */
+  readonly rules: WorldRules;
   tanks: Tank[];
   bullets: Bullet[];
   mines: Mine[];
@@ -125,17 +50,6 @@ export interface World {
   // resetArena on every respawn so the opening-phase protection applies after every
   // life lost, not just at game start. See src/sim/round.ts's roundPhase().
   roundStartTick: number;
-  /**
-   * The grid this world's walls were built from -- see ArenaGeometry's own doc comment
-   * (types.ts). Populated by loadArena (arena.ts); OPTIONAL because most of this file's
-   * own test fixtures, and sandbox.ts's dev worlds, build a World straight from raw
-   * tanks/walls/spawns arrays with no grid behind them at all.
-   *
-   * Read only by stepRespawns' versus branch below, to pick a respawn cell with
-   * pickVersusSpawnCell (versus-spawns.ts). Absence degrades gracefully to the tank's
-   * own authored spawn -- see respawnPos's own comment -- rather than throwing.
-   */
-  arenaGeometry?: ArenaGeometry;
 }
 
 export interface StepResult {
@@ -143,29 +57,21 @@ export interface StepResult {
   events: SimEvent[];
 }
 
+/**
+ * The world-creation boundary. The rule keys of `init` (every `WorldRulesInit` field,
+ * all optional) are resolved into `World.rules` HERE, through `resolveWorldRules`, and
+ * nowhere later: a `World` this function returns carries a complete, frozen rule set,
+ * so no consumer downstream needs a fallback of its own. The init stays flat rather
+ * than nesting a `rules:` object so every existing caller -- createWorldFor, the
+ * sandbox, the gallery, every test -- keeps its shape.
+ */
 export function createWorld(init: {
   walls: Wall[];
   tanks: Tank[];
   spawns: Spawn[];
   lives: number;
   seed?: number;
-  /** Defaults to 'none', the shipped rule. */
-  unarmedTrigger?: UnarmedTrigger;
-  /** Defaults to 'full' -- see World.aiTargetPerception. */
-  aiTargetPerception?: AiTargetPerception;
-  /** Defaults to false, the shipped GHOST rule. See World.corpseBlocksShells. */
-  corpseBlocksShells?: boolean;
-  /** Defaults to true, the adopted lean. See World.muzzleClearsTanks. */
-  muzzleClearsTanks?: boolean;
-  /** Defaults to true, the shared-attempts ruling. See World.coopAttempts. */
-  coopAttempts?: boolean;
-  /** Defaults to 'campaign-coop', the shipped rule. See World.mode. */
-  mode?: GameMode;
-  /** Defaults to false. See World.friendlyFire. */
-  friendlyFire?: boolean;
-  /** Absent unless the caller went through loadArena. See World.arenaGeometry. */
-  arenaGeometry?: ArenaGeometry;
-}): World {
+} & WorldRulesInit): World {
   const maxId = Math.max(
     0,
     ...init.walls.map((w) => w.id),
@@ -175,13 +81,7 @@ export function createWorld(init: {
     tick: 0,
     nextId: maxId + 1,
     seed: init.seed ?? 1,
-    unarmedTrigger: init.unarmedTrigger ?? 'none',
-    aiTargetPerception: init.aiTargetPerception ?? 'full',
-    corpseBlocksShells: init.corpseBlocksShells ?? false,
-    muzzleClearsTanks: init.muzzleClearsTanks ?? true,
-    coopAttempts: init.coopAttempts ?? true,
-    mode: init.mode ?? 'campaign-coop',
-    friendlyFire: init.friendlyFire ?? false,
+    rules: resolveWorldRules(init),
     tanks: init.tanks,
     bullets: [],
     mines: [],
@@ -193,7 +93,6 @@ export function createWorld(init: {
     // 1, not 0: step() increments `tick` before evaluating the phase, so the
     // first simulated tick is tick 1. Anchoring at 0 cost the countdown a tick.
     roundStartTick: 1,
-    arenaGeometry: init.arenaGeometry,
   };
 }
 
@@ -216,17 +115,12 @@ export function cloneWorld(world: World): World {
     tick: world.tick,
     nextId: world.nextId,
     seed: world.seed,
-    unarmedTrigger: world.unarmedTrigger,
-    // Copied RAW, not through `?? 'full'` like ai/targeting.ts reads it: createWorld already
-    // normalises, and a raw World literal is entitled to omit the field (see its doc comment
-    // above), so normalising here would change a fixture's shape on its first tick. Same
-    // reason `arenaGeometry` below is a plain copy.
-    aiTargetPerception: world.aiTargetPerception,
-    corpseBlocksShells: world.corpseBlocksShells,
-    muzzleClearsTanks: world.muzzleClearsTanks,
-    coopAttempts: world.coopAttempts,
-    mode: world.mode,
-    friendlyFire: world.friendlyFire,
+    // The rules travel as ONE reference, never re-resolved and never enumerated: the
+    // object is frozen (rules.ts), so sharing it across every tick's clone is safe, and a
+    // rule added later rides along with no line here to forget. Enumerating them is
+    // exactly how #471 lost `aiTargetPerception` -- an optional field, omitted from this
+    // list, read back through a `?? 'full'` that made the loss look like the default.
+    rules: world.rules,
     status: world.status,
     lives: world.lives,
     roundStartTick: world.roundStartTick,
@@ -236,11 +130,6 @@ export function cloneWorld(world: World): World {
     blasts: world.blasts.map((b) => ({ ...b, pos: { ...b.pos } })),
     walls: world.walls.map((w) => ({ ...w, aabb: { ...w.aabb } })),
     spawns: world.spawns.map((s) => ({ ...s, pos: { ...s.pos } })),
-    // A reference copy, deliberately not deep-cloned like walls/spawns above: the grid
-    // strings and legend never mutate after loadArena builds them (only Wall.destroyed,
-    // which lives in `walls` above, changes mid-round), so sharing one object across
-    // every tick's clone is safe and free.
-    arenaGeometry: world.arenaGeometry,
   };
 }
 
@@ -417,17 +306,18 @@ export function countPlayerTanks(world: World): number {
  * directive this implements. That ranking is a documented APPROXIMATION of true
  * p-dispersion, not an optimum (see pickVersusSpawnCell's own doc comment); this
  * function does not claim otherwise. Falls back to the tank's own authored spawn --
- * campaign-coop's behaviour -- when world.arenaGeometry is absent: most of this file's
- * own test fixtures (and sandbox.ts's dev worlds) build a World from raw
+ * campaign-coop's behaviour -- when world.rules.arenaGeometry is null: most of this
+ * file's own test fixtures (and sandbox.ts's dev worlds) build a World from raw
  * tanks/walls/spawns with no grid behind it, so there is nothing for
  * pickVersusSpawnCell to search. Total, no-throw degradation, the same posture
  * pickVersusSpawnCell's own zero-candidate fallback already takes.
  */
 function respawnPos(world: World, tankIndex: number): Vec2 {
   const authored = world.spawns[tankIndex].pos;
-  if (world.mode === 'campaign-coop' || !world.arenaGeometry) return { x: authored.x, y: authored.y };
+  const { mode, arenaGeometry } = world.rules;
+  if (mode === 'campaign-coop' || arenaGeometry === null) return { x: authored.x, y: authored.y };
   const avoid: Vec2[] = world.tanks.filter((t) => t.alive).map((t) => ({ x: t.pos.x, y: t.pos.y }));
-  const { cols, rows, cellSize, grid, legend } = world.arenaGeometry;
+  const { cols, rows, cellSize, grid, legend } = arenaGeometry;
   const cell = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, avoid);
   return { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
 }
@@ -529,19 +419,19 @@ function resetArena(world: World): void {
 }
 
 /**
- * Coop's win/lose rule, split on `world.coopAttempts` into two entirely separate
+ * Coop's win/lose rule, split on `world.rules.coopAttempts` into two entirely separate
  * bodies. Both share the same ~4-line win check up front (duplicated from the 1P body
  * below rather than shared, which is what keeps THAT body a literal byte-for-byte
  * no-diff) -- win is decided ahead of either branch's death handling, and holds
  * whether or not lives remain, exactly like 1P.
  *
- * `world.coopAttempts` TRUE (the default): the shared-attempts ruling (owner,
+ * `world.rules.coopAttempts` TRUE (the default): the shared-attempts ruling (owner,
  * 2026-08-16 -- "lives are more like shared attempts. If all players in co op die,
  * then a life/attempt is lost. If one player dies, the remaining can continue on and
  * if they clear the level, all players spawn in on the next level.") See the
  * ATTEMPTS MODE block below.
  *
- * `world.coopAttempts` FALSE (`?dev=1&coopPool=1`): the shipped POOL model this
+ * `world.rules.coopAttempts` FALSE (`?dev=1&coopPool=1`): the shipped POOL model this
  * replaces as default -- see docs/superpowers/plans/2026-08-15-coop-semantics.md.
  * The POOL MODE block below is that plan's `resolveStatusCoop` body, byte-untouched.
  */
@@ -556,7 +446,7 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
     return;
   }
 
-  if (!world.coopAttempts) {
+  if (!world.rules.coopAttempts) {
     // POOL MODE -- docs/superpowers/plans/2026-08-15-coop-semantics.md, shipped
     // default before the shared-attempts ruling, now behind `?dev=1&coopPool=1`.
     // Byte-untouched from that plan's implementation: a SHARED life pool, drained per
@@ -732,11 +622,11 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
   // defaults to 'campaign-coop' at every call site that does not pass one (including
   // tools/baseline/trace.ts's), so BASELINE_HASH is unmoved by this PR (confirmed
   // empirically, not merely argued -- see tools/baseline/trace.test.ts).
-  if (world.mode === 'ffa') {
+  if (world.rules.mode === 'ffa') {
     resolveStatusFfa(world, events);
     return;
   }
-  if (world.mode === 'teams') {
+  if (world.rules.mode === 'teams') {
     resolveStatusTeams(world, events);
     return;
   }
@@ -821,9 +711,9 @@ export function stepInputs(world: World, inputs: InputState[]): StepResult {
     // arm still exists to make the mode boundary legible at every place it is checked,
     // not only inside resolveStatus -- see the arc design.
     if (
-      draft.mode === 'ffa' ||
-      draft.mode === 'teams' ||
-      (draft.mode === 'campaign-coop' && countPlayerTanks(draft) >= 2)
+      draft.rules.mode === 'ffa' ||
+      draft.rules.mode === 'teams' ||
+      (draft.rules.mode === 'campaign-coop' && countPlayerTanks(draft) >= 2)
     ) {
       stepRespawns(draft, events);
     }

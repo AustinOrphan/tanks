@@ -393,7 +393,7 @@ describe('n-player arc PR 4: isOpponent is mode-aware', () => {
     const player = makeTank('player', PLAYER_ID, 0, 0);
     const nearby = makeTank('player', 2, 0, -2);
     const world = createWorld({ walls: [], tanks: [player, nearby], spawns: [], lives: 3 });
-    expect(world.mode).toBe('campaign-coop'); // the fixture's own precondition
+    expect(world.rules.mode).toBe('campaign-coop'); // the fixture's own precondition
     const rnd = mulberry32(4); // same seed the retreat-draw fixtures above use
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);

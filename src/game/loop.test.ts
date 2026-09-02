@@ -5,6 +5,7 @@ import { defaultSlots, type VersusSlotSetup } from './versus-setup';
 // `instanceof HTMLElement` check and the dispose path hands real elements
 // around. frame.test.ts and driver.test.ts deliberately do NOT use jsdom.
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../sim/rules';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { QUALITY_PRESETS } from '../render/quality';
 import { ZERO_STATS } from './stats';
@@ -3364,13 +3365,13 @@ describe('deathVignetteColor', () => {
   it('is the classic red at playerCount 1, unconditionally -- even if the tank has a slot', () => {
     // playerCount 1 short-circuits before the tank is even looked up: single-player
     // behaviour must not move regardless of what controlledBy happens to hold.
-    const world = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0)] } as World;
+    const world = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player', 0)] } as World;
     expect(deathVignetteColor(world, 1, 1)).toBe(SINGLE_PLAYER_DEATH_VIGNETTE);
   });
 
   it('is the dying tank\'s own identity-ring colour at playerCount >= 2, by controlledBy', () => {
     const world = {
-      mode: 'campaign-coop',
+      rules: resolveWorldRules(),
       tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1)],
     } as World;
     // Derived from the exported palette, not a copied-out literal -- so retuning
@@ -3381,7 +3382,7 @@ describe('deathVignetteColor', () => {
 
   it('is the dying tank\'s TEAM colour in teams mode, not its identity-ring colour', () => {
     const world = {
-      mode: 'teams',
+      rules: resolveWorldRules({ mode: 'teams' }),
       tanks: [mkTank(1, 'player', 0, 0), mkTank(2, 'player', 1, 1)],
     } as World;
     expect(deathVignetteColor(world, 1, 2)).toBe(TEAM_COLORS[0]);
@@ -3392,12 +3393,12 @@ describe('deathVignetteColor', () => {
   });
 
   it('falls back to the classic red if the tankId cannot be found in world.tanks', () => {
-    const world = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0)] } as World;
+    const world = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player', 0)] } as World;
     expect(deathVignetteColor(world, 99, 2)).toBe(SINGLE_PLAYER_DEATH_VIGNETTE);
   });
 
   it('treats a missing controlledBy as slot 0, mirroring the render seam\'s own convention', () => {
-    const world = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', undefined)] } as World;
+    const world = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player', undefined)] } as World;
     expect(deathVignetteColor(world, 1, 2)).toBe(IDENTITY_RING_COLORS[0]);
   });
 });
@@ -3410,7 +3411,7 @@ describe('tallyCoopKills', () => {
     ({ type: 'tank-destroyed', tankId, kind: 'brown', by: { source: 'shell', ownerId: killedByOwnerId }, pos: { x: 0, y: 0 } }) as SimEvent;
 
   const twoPlayerWorld = () =>
-    ({ tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] }) as World;
+    ({ rules: resolveWorldRules(), tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] }) as World;
 
   it('an enemy killed by P2\'s shell increments coopKills[1], not coopKills[0]', () => {
     const into: number[] = [];
@@ -3456,7 +3457,7 @@ describe('tallyCoopKills', () => {
     const into: number[] = [];
     tallyCoopKills(
       [destroyedEnemy(3, 1), destroyedEnemy(4, 2), destroyedEnemy(3, 4) /* friendly fire, excluded */],
-      { tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] } as World,
+      { rules: resolveWorldRules(), tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] } as World,
       into,
       [],
     );
@@ -3466,7 +3467,7 @@ describe('tallyCoopKills', () => {
 
   it('a single-player world (no controlledBy) falls back to slot 0', () => {
     const into: number[] = [];
-    const world = { tanks: [mkTank(1, 'player'), mkTank(3, 'brown')] } as World;
+    const world = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player'), mkTank(3, 'brown')] } as World;
     tallyCoopKills([destroyedEnemy(3, 1)], world, into, []);
     expect(into[0]).toBe(1);
   });
@@ -3478,7 +3479,7 @@ describe('tallyCoopKills: ffa/teams player-vs-player attribution (n-player arc P
 
   const versusWorld = (mode: 'ffa' | 'teams') =>
     ({
-      mode,
+      rules: resolveWorldRules({ mode }),
       tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'player', 2)],
     }) as World;
 
@@ -3523,7 +3524,7 @@ describe('tallyCoopKills: ffa/teams player-vs-player attribution (n-player arc P
   it('campaign-coop ignores player-vs-player deaths entirely -- the dispatch does not leak the new rule into the old mode', () => {
     const kills: number[] = [];
     const deaths: number[] = [];
-    const coopWorld = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1)] } as World;
+    const coopWorld = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1)] } as World;
     tallyCoopKills([playerDestroyed(1, 2)], coopWorld, kills, deaths);
     expect(kills).toEqual([]);
     expect(deaths).toEqual([]);
@@ -4180,7 +4181,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       // REAL createWorldFor call -- if it silently built a campaign-coop world instead
       // (as it did before this test motivated extending the fake), every assertion below
       // would either fail confusingly or pass vacuously against the wrong dispatch branch.
-      expect(world.mode).toBe('ffa');
+      expect(world.rules.mode).toBe('ffa');
       const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
       world.bullets.push({
@@ -4236,7 +4237,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     it('a versus kill updates the readout, decrementing the victim\'s stock and leaving the killer\'s untouched', () => {
       const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
       const world = h.rec.builtWorlds[0];
-      expect(world.mode).toBe('ffa');
+      expect(world.rules.mode).toBe('ffa');
       const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
       // The negative control the advisor named: stockRemaining must actually be
@@ -4320,7 +4321,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     // Breaks if the fake's branch condition drops its mode term.
     const h = boot(makeDeps({ devFlags: { mode: 'ffa' } }));
     const world = h.rec.builtWorlds.at(-1)!;
-    expect(world.mode).toBe('ffa');
+    expect(world.rules.mode).toBe('ffa');
     expect(world.tanks.every((t: Tank) => t.kind === 'player')).toBe(true); // enemies stripped
     h.handle.dispose();
   });
@@ -4339,7 +4340,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     it('a cleared level with a dead P2 (attempts mode, the default) spawns BOTH players alive on the next board', () => {
       const h = boot(makeDeps({ devFlags: { players: 2 }, levelCount: 2 }));
       const world = h.rec.builtWorlds[0]; // level 1's real coop world
-      expect(world.coopAttempts).toBe(true); // the default -- nothing opted into coopPool
+      expect(world.rules.coopAttempts).toBe(true); // the default -- nothing opted into coopPool
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
       p2.alive = false; // P2 died mid-level; the survivor (P1) carried the level per the ruling
       h.setState('outcome-win'); // level 1 cleared, not final (levelCount 2)
@@ -4360,7 +4361,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       // still starts both players alive either way.
       const h = boot(makeDeps({ devFlags: { players: 2, coopPool: true }, levelCount: 2 }));
       const world = h.rec.builtWorlds[0];
-      expect(world.coopAttempts).toBe(false);
+      expect(world.rules.coopAttempts).toBe(false);
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
       p2.alive = false;
       p2.respawnAtTick = 99999; // a pool-mode corpse mid-respawn-wait when the level cleared
@@ -6952,7 +6953,7 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       // own DEV_FLAGS_OFF default), or with a fresh DevFlags object instead of deps.devFlags.
       const result = applyVersusToDeps(baseDeps({ corpseBlock: true }), { config: CONFIG }, noop);
       const world = result.levels.world(result.levels.start, 7, undefined, 3);
-      expect(world.corpseBlocksShells).toBe(true);
+      expect(world.rules.corpseBlocksShells).toBe(true);
     });
 
     it('negative control: corpseBlock=false (the default) keeps corpseBlocksShells false', () => {
@@ -6960,7 +6961,7 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       // `true` regardless of deps.devFlags.
       const result = applyVersusToDeps(baseDeps({ corpseBlock: false }), { config: CONFIG }, noop);
       const world = result.levels.world(result.levels.start, 7, undefined, 3);
-      expect(world.corpseBlocksShells).toBe(false);
+      expect(world.rules.corpseBlocksShells).toBe(false);
     });
   });
 
@@ -7066,8 +7067,8 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       // columns is the gap, back to its widest now that #424's rebuild returned vs-tri-01
       // to the N=3 offer.
       const quitRebuilt = result.levels.world(result.levels.start, 1, undefined, 3);
-      expect(initial.arenaGeometry?.cols).toBe(27); // vs-tri-01
-      expect(quitRebuilt.arenaGeometry?.cols).toBe(27); // still vs-tri-01, not arena-04
+      expect(initial.rules.arenaGeometry?.cols).toBe(27); // vs-tri-01
+      expect(quitRebuilt.rules.arenaGeometry?.cols).toBe(27); // still vs-tri-01, not arena-04
     });
   });
 });

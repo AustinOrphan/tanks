@@ -1,4 +1,4 @@
-import type { TankKind, UnarmedTrigger } from './types';
+import type { TankKind, UnarmedTrigger, AiTargetPerception } from './types';
 import { nextRng } from './types';
 import type { Arena } from './arena';
 import { ARENA_01, loadArena } from './arena';
@@ -214,6 +214,10 @@ export function createSandboxWorld(
   unarmedTrigger?: UnarmedTrigger,
   corpseBlocksShells?: boolean,
   muzzleClearsTanks?: boolean,
+  // Same trailing-and-optional shape as the three above (issue #472): the sandbox used
+  // to receive `?dev=1&aiPerception=los` as a post-build write from game/loop.ts, and
+  // `World.rules` is frozen now, so the rule arrives here before the world exists.
+  aiTargetPerception?: AiTargetPerception,
 ): World {
   const loaded = loadArena(sandboxArena(opts));
   const disarmed = opts.disarmed ?? true;
@@ -222,5 +226,7 @@ export function createSandboxWorld(
       if (t.kind !== 'player') t.disarmed = true;
     }
   }
-  return createWorld({ ...loaded, lives: LIVES, seed: opts.seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks });
+  return createWorld({
+    ...loaded, lives: LIVES, seed: opts.seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, aiTargetPerception,
+  });
 }

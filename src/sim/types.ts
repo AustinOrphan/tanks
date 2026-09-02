@@ -58,7 +58,7 @@ export type AiState = 'idle' | 'aim' | 'fire' | 'reposition';
  * "every non-player tank dead", `resolveStatusCoop` (world.ts) governs multi-player
  * life-sharing. `'ffa'` and `'teams'` strip enemies entirely (arena.ts's `loadArena`) and
  * replace win/lose with player-vs-player rules (world.ts's `resolveStatusFfa`/
- * `resolveStatusTeams`) -- see World.mode's own doc comment for the dispatch.
+ * `resolveStatusTeams`) -- see WorldRules.mode's own doc comment for the dispatch.
  */
 export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
 
@@ -69,7 +69,11 @@ export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
  * reverse import would close a cycle -- see `arena.ts`'s own comment on the analogous
  * `versus-spawns.ts` situation).
  *
- * Carried on `World` (optional -- see `World.arenaGeometry`) because
+ * Every field is `readonly`: one object is shared by reference across every tick's clone
+ * (`resolveWorldRules`'s freeze is shallow and does not reach it), so the type states what
+ * the sharing already required.
+ *
+ * Carried on `World.rules` (`null` when no grid exists -- see `WorldRules.arenaGeometry`) because
  * `pickVersusSpawnCell` (`versus-spawns.ts`) needs the grid CHARACTERS themselves to
  * find an open-floor cell; `World.walls` alone cannot answer that, since it only carries
  * already-merged solid rectangles and per-cell destructible boxes -- a former enemy
@@ -77,11 +81,11 @@ export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
  * distinguishes "open floor" from "a letter that happens not to be a wall".
  */
 export interface ArenaGeometry {
-  cols: number;
-  rows: number;
-  cellSize: number;
-  grid: string[];
-  legend: Record<string, WallKind>;
+  readonly cols: number;
+  readonly rows: number;
+  readonly cellSize: number;
+  readonly grid: readonly string[];
+  readonly legend: Readonly<Record<string, WallKind>>;
 }
 
 export interface Spawn {
@@ -256,7 +260,7 @@ export interface Tank {
    *
    * Read in three places, all gated on `!== undefined` so the field is self-disabling
    * outside `'teams'` by construction, the same idiom `isDamageImmune` already uses for
-   * `shieldUntilTick`: bullets.ts's and mines.ts's friendly-fire gate (`World.friendlyFire`
+   * `shieldUntilTick`: bullets.ts's and mines.ts's friendly-fire gate (`WorldRules.friendlyFire`
    * only matters once two tanks both carry a team), and `ai/player-profile.ts`'s
    * `isOpponent`.
    */

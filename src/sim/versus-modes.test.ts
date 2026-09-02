@@ -33,19 +33,19 @@ const tankById = (w: World, id: number) => w.tanks.find((t) => t.id === id)!;
 describe('World.mode: defaults to campaign-coop, cloneWorld carries it', () => {
   it('createWorld defaults mode to campaign-coop and friendlyFire to false when omitted', () => {
     const w = createWorld({ walls: [], tanks: [], spawns: [], lives: 3 });
-    expect(w.mode).toBe('campaign-coop');
-    expect(w.friendlyFire).toBe(false);
+    expect(w.rules.mode).toBe('campaign-coop');
+    expect(w.rules.friendlyFire).toBe(false);
     const r = stepInputs(w, []);
-    expect(r.world.mode).toBe('campaign-coop');
-    expect(r.world.friendlyFire).toBe(false);
+    expect(r.world.rules.mode).toBe('campaign-coop');
+    expect(r.world.rules.friendlyFire).toBe(false);
   });
 
   it('createWorld honors an explicit mode/friendlyFire, cloneWorld carries both', () => {
     const w = createWorld({ walls: [], tanks: [], spawns: [], lives: 3, mode: 'teams', friendlyFire: true });
-    expect(w.mode).toBe('teams');
-    expect(w.friendlyFire).toBe(true);
-    expect(stepInputs(w, []).world.mode).toBe('teams');
-    expect(stepInputs(w, []).world.friendlyFire).toBe(true);
+    expect(w.rules.mode).toBe('teams');
+    expect(w.rules.friendlyFire).toBe(true);
+    expect(stepInputs(w, []).world.rules.mode).toBe('teams');
+    expect(stepInputs(w, []).world.rules.friendlyFire).toBe(true);
   });
 });
 

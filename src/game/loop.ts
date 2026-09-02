@@ -730,7 +730,7 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  * (`controlledBy`), the same array-as-accumulator shape `checkAchievements`'s callers
  * already use elsewhere in this file.
  *
- * `world.mode` dispatches two entirely separate rules:
+ * `world.rules.mode` dispatches two entirely separate rules:
  *
  *  - `'campaign-coop'`: TODAY'S rule, byte-for-byte. `e.kind === 'player'` is excluded
  *    -- only ENEMY kills count as a "kill" here, matching the results screen's existing
@@ -752,7 +752,7 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  *
  * Teams sums a per-team total from these same per-slot figures as a DERIVED reduction
  * at render/HUD time (Tank.team, no new storage here) -- this function stays unaware of
- * teams beyond dispatching on `world.mode`.
+ * teams beyond dispatching on `world.rules.mode`.
  *
  * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
  * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
@@ -760,7 +760,7 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  * pair instead.
  */
 export function tallyCoopKills(events: SimEvent[], world: World, kills: number[], deaths: number[]): void {
-  if (world.mode === 'ffa' || world.mode === 'teams') {
+  if (world.rules.mode === 'ffa' || world.rules.mode === 'teams') {
     for (const e of events) {
       if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue; // player-vs-player only
       const victim = world.tanks.find((t) => t.id === e.tankId);
@@ -927,7 +927,7 @@ export function locationToHudSurface(location: AppLocation): HudSurface {
 export function versusResultFromWorld(world: World): VersusResult {
   const players = world.tanks.filter((t) => t.kind === 'player');
   const remaining = players.filter((t) => !isVersusEliminated(t));
-  if (world.mode === 'teams') {
+  if (world.rules.mode === 'teams') {
     const teams = new Set(remaining.map((t) => t.team));
     // Exactly one side left is that side's win; anything else is a draw --
     // matching resolveStatusTeams, which resolves a simultaneous double
@@ -1210,7 +1210,7 @@ export function startGameWith(
 
   /**
    * May a bot drive a player tank in THIS session -- see `botAssignmentAllowed`. Fixed
-   * for the session's life: `world.mode` never changes within one (see the versus-results
+   * for the session's life: `world.rules.mode` never changes within one (see the versus-results
    * dispatch below), and a dev flag cannot be set mid-session.
    *
    * The BOOT path already honours this without any help, since `botCount` is 0 whenever
@@ -1315,12 +1315,11 @@ export function startGameWith(
       const p = w.tanks.find((t) => t.kind === 'player');
       if (p) p.invincible = true;
     }
-    // Applied here rather than threaded through `levels.world`, for the same reason
-    // `invincible` is: this is the one chokepoint every world in this loop passes through,
-    // so a sixth parameter would buy nothing but two more signatures to keep in step. Absent
-    // leaves World.aiTargetPerception at its own 'full' default (issue #359's owner ruling);
-    // `?dev=1&aiPerception=los` restores the superseded line-of-sight bound.
-    if (deps.devFlags.aiPerception) w.aiTargetPerception = deps.devFlags.aiPerception;
+    // `invincible` is the only dev flag applied HERE, after the build: it marks one tank,
+    // which is mutable snapshot state. Every rule-shaped flag (`aiPerception` included,
+    // since issue #472) is resolved into `World.rules` by levels.ts BEFORE the world
+    // exists -- `rules` is frozen, so setting a rule on a built world is not merely
+    // discouraged, it throws.
     return w;
   }
 
@@ -1914,7 +1913,7 @@ export function startGameWith(
   });
   // THE TWO SEPARATE HUD PROJECTIONS (issue #316 review, finding 1), both
   // derived from the canonical model -- never from `deps.initialVersusConfig`,
-  // a URL read, or a `world.mode` check.
+  // a URL read, or a `world.rules.mode` check.
   //
   // `setRelaunchTarget` is WHAT THE BUTTONS DO, and is fixed for the session
   // (see `relaunchTarget` above). `setSessionKind` is WHAT IS BEING PLAYED, and
@@ -1942,7 +1941,7 @@ export function startGameWith(
   // versus session -- setup-pane OR developer-flag -- skips this and lets
   // `onSimulated`'s first 'playing' frame push real entries instead, exactly as
   // a setup-pane match already did. For a campaign or practice session
-  // `world.mode` is `'campaign-coop'`, so `onSimulated`'s `isVersusFrame`
+  // `world.rules.mode` is `'campaign-coop'`, so `onSimulated`'s `isVersusFrame`
   // branch never fires and this null really is the only call it will ever make.
   if (currentDescriptor.kind !== 'versus') hud.setVersusStocks(null);
 
@@ -1966,13 +1965,13 @@ export function startGameWith(
    * The results-screen kill tally, indexed by slot -- coop's own (coop semantics plan,
    * docs/superpowers/plans/2026-08-15-coop-semantics.md) generalized by n-player arc PR
    * 4's `tallyCoopKills` to also hold ffa/teams' player-vs-player kills: the two never
-   * coexist in one session (`world.mode` is fixed for its whole life), so one array
+   * coexist in one session (`world.rules.mode` is fixed for its whole life), so one array
    * safely serves both. `versusDeaths` is the PR 4 addition `tallyCoopKills` needs only
    * for its ffa/teams branch -- unused, always empty, in campaign-coop. Per-attempt
    * scope, mirroring `attempt`'s own lifecycle: both reset at every `startAttempt()`
    * call site below, since they feed the same win/lose panel. Fed to the HUD
    * unconditionally -- whether either line actually shows is the HUD's own gate
-   * (`setCoopKills`/`setVersusResults`, dispatched below on `driver.world.mode`).
+   * (`setCoopKills`/`setVersusResults`, dispatched below on `driver.world.rules.mode`).
    */
   let coopKills: number[] = [];
   let versusDeaths: number[] = [];
@@ -2138,7 +2137,7 @@ export function startGameWith(
       // relocation's scope) -- the two are the same world by the time either callback
       // runs (driver.ts assigns `curr` before calling either), but `w` is the value
       // this specific callback is actually given.
-      const isVersusFrame = w.mode === 'ffa' || w.mode === 'teams';
+      const isVersusFrame = w.rules.mode === 'ffa' || w.rules.mode === 'teams';
       if (isVersusFrame) {
         // One entry per player-kind tank still in the world (never spliced, even once
         // eliminated -- world.ts's own comment on `alive: false` tanks). `slot` =
@@ -2215,9 +2214,9 @@ export function startGameWith(
       // dispatch one layer up -- campaign-coop feeds ONLY the coop line (today's rule,
       // unchanged), ffa/teams feed ONLY the versus line, so a session's two results
       // lines are never both live at once.
-      const isVersus = driver.world.mode === 'ffa' || driver.world.mode === 'teams';
+      const isVersus = driver.world.rules.mode === 'ffa' || driver.world.rules.mode === 'teams';
       hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
-      hud.setVersusResults(isVersus ? { mode: driver.world.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
+      hud.setVersusResults(isVersus ? { mode: driver.world.rules.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
       // Task 6's in-match stock readout (spec §3a) is dispatched from `onSimulated`
       // below, NOT here -- see that callback's own comment for why. `onFrameEvents`
       // only fires `if (frameEvents.length > 0)` (driver.ts), so gating the readout on

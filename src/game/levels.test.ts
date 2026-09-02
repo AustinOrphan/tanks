@@ -64,29 +64,29 @@ describe('createLevelSystem: corpseBlock/muzzleInside reach the built world (com
   // for sim stages.
   it('corpseBlock off leaves the shipped GHOST default', () => {
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).corpseBlocksShells).toBe(false);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.corpseBlocksShells).toBe(false);
   });
 
   it('corpseBlock on reaches world.corpseBlocksShells', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, corpseBlock: true }, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).corpseBlocksShells).toBe(true);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.corpseBlocksShells).toBe(true);
   });
 
   it('muzzleInside off leaves the new clearance ON (the adopted default lean)', () => {
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).muzzleClearsTanks).toBe(true);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.muzzleClearsTanks).toBe(true);
   });
 
   it('muzzleInside on turns world.muzzleClearsTanks OFF, restoring the old spawn', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, muzzleInside: true }, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).muzzleClearsTanks).toBe(false);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.muzzleClearsTanks).toBe(false);
   });
 
   it('both flags are independent of each other', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, corpseBlock: true, muzzleInside: true }, noRun());
     const w = sys.world(CAMPAIGN_LEVELS[0], 42);
-    expect(w.corpseBlocksShells).toBe(true);
-    expect(w.muzzleClearsTanks).toBe(false);
+    expect(w.rules.corpseBlocksShells).toBe(true);
+    expect(w.rules.muzzleClearsTanks).toBe(false);
   });
 });
 
@@ -98,26 +98,53 @@ describe('createLevelSystem: coopPool reaches the built world (composition, not 
   // corpseBlock/muzzleInside get above.
   it('coopPool off leaves the shared-attempts default ON', () => {
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).coopAttempts).toBe(true);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.coopAttempts).toBe(true);
   });
 
   it('coopPool on reaches world.coopAttempts, turning it off (restores the shipped pool model)', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, coopPool: true }, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).coopAttempts).toBe(false);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.coopAttempts).toBe(false);
   });
 
   it('reaches a real two-player world the same way', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, players: 2, coopPool: true }, noRun());
     const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, undefined, 2);
-    expect(w.coopAttempts).toBe(false);
+    expect(w.rules.coopAttempts).toBe(false);
     expect(w.tanks.filter((t) => t.kind === 'player')).toHaveLength(2);
   });
 
   it('is independent of corpseBlock/muzzleInside', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, coopPool: true, corpseBlock: true }, noRun());
     const w = sys.world(CAMPAIGN_LEVELS[0], 42);
-    expect(w.coopAttempts).toBe(false);
-    expect(w.corpseBlocksShells).toBe(true);
+    expect(w.rules.coopAttempts).toBe(false);
+    expect(w.rules.corpseBlocksShells).toBe(true);
+  });
+});
+
+describe('createLevelSystem: aiPerception reaches the built world (issue #472, composition not unit)', () => {
+  // Unit tests on ai/targeting.ts (target-selection.test.ts) prove
+  // WorldRules.aiTargetPerception bounds selection. They cannot see whether the DEV FLAG
+  // reaches the rule through THIS closure -- the same composition question the blocks
+  // above ask for corpseBlock/muzzleInside/coopPool. Until #472 the flag was written onto
+  // the built world by loop.ts's buildWorld, after the fact, and no test anywhere pinned
+  // that write; the rules are frozen now, so the flag has to arrive before the world
+  // exists, and this is the block that would catch it being dropped on the way.
+  it('aiPerception unset (null) leaves the shipped full-awareness default', () => {
+    const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.aiTargetPerception).toBe('full');
+  });
+
+  it('aiPerception=los reaches world.rules.aiTargetPerception', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, aiPerception: 'line-of-sight' }, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.aiTargetPerception).toBe('line-of-sight');
+  });
+
+  it('reaches a real two-player coop world the same way, alongside the other rule flags', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, players: 2, aiPerception: 'line-of-sight', coopPool: true }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, undefined, 2);
+    expect(w.rules.aiTargetPerception).toBe('line-of-sight');
+    expect(w.rules.coopAttempts).toBe(false);
+    expect(w.tanks.filter((t) => t.kind === 'player')).toHaveLength(2);
   });
 });
 
@@ -129,14 +156,14 @@ describe('createLevelSystem: mode/friendlyFire reach the built world (n-player a
   it('mode absent leaves the campaign-coop default, enemies present', () => {
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
     const w = sys.world(CAMPAIGN_LEVELS[0], 42);
-    expect(w.mode).toBe('campaign-coop');
+    expect(w.rules.mode).toBe('campaign-coop');
     expect(w.tanks.some((t) => t.kind !== 'player')).toBe(true);
   });
 
   it('mode=ffa reaches world.mode and strips enemies from the built world', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'ffa', players: 4 }, noRun());
     const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, undefined, 4);
-    expect(w.mode).toBe('ffa');
+    expect(w.rules.mode).toBe('ffa');
     expect(w.tanks.every((t) => t.kind === 'player')).toBe(true);
     expect(w.tanks).toHaveLength(4);
   });
@@ -149,19 +176,19 @@ describe('createLevelSystem: mode/friendlyFire reach the built world (n-player a
 
   it('friendlyFire off leaves world.friendlyFire false (the default)', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'teams' }, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).friendlyFire).toBe(false);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.friendlyFire).toBe(false);
   });
 
   it('friendlyFire on reaches world.friendlyFire', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'teams', friendlyFire: true }, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).friendlyFire).toBe(true);
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).rules.friendlyFire).toBe(true);
   });
 
   it('is independent of corpseBlock/muzzleInside/coopPool', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'ffa', corpseBlock: true }, noRun());
     const w = sys.world(CAMPAIGN_LEVELS[0], 42);
-    expect(w.mode).toBe('ffa');
-    expect(w.corpseBlocksShells).toBe(true);
+    expect(w.rules.mode).toBe('ffa');
+    expect(w.rules.corpseBlocksShells).toBe(true);
   });
 });
 
@@ -199,21 +226,29 @@ describe('createLevelSystem: the sandbox', () => {
   it('the sandbox branch wires corpseBlock/muzzleInside too, the same as the campaign branch', () => {
     const sys = createLevelSystem({ ...sandboxFlags, corpseBlock: true, muzzleInside: true }, noRun());
     const w = sys.world(sys.start, 7);
-    expect(w.corpseBlocksShells).toBe(true);
-    expect(w.muzzleClearsTanks).toBe(false);
+    expect(w.rules.corpseBlocksShells).toBe(true);
+    expect(w.rules.muzzleClearsTanks).toBe(false);
   });
 
   it('the sandbox branch does NOT wire coopPool -- always single-player, so createSandboxWorld never sees it and the world keeps the default', () => {
     const sys = createLevelSystem({ ...sandboxFlags, coopPool: true }, noRun());
-    expect(sys.world(sys.start, 7).coopAttempts).toBe(true);
+    expect(sys.world(sys.start, 7).rules.coopAttempts).toBe(true);
   });
 
   it('the sandbox branch does NOT wire mode/friendlyFire either (n-player arc PR 4): always single-player campaign-coop, enemies present', () => {
     const sys = createLevelSystem({ ...sandboxFlags, mode: 'ffa', friendlyFire: true }, noRun());
     const w = sys.world(sys.start, 7);
-    expect(w.mode).toBe('campaign-coop');
-    expect(w.friendlyFire).toBe(false);
+    expect(w.rules.mode).toBe('campaign-coop');
+    expect(w.rules.friendlyFire).toBe(false);
     expect(w.tanks.some((t) => t.kind !== 'player')).toBe(true);
+  });
+
+  it('the sandbox branch wires aiPerception too (issue #472): the dev experiment used to reach the sandbox through loop.ts, so it still must', () => {
+    const sys = createLevelSystem({ ...sandboxFlags, aiPerception: 'line-of-sight' }, noRun());
+    expect(sys.world(sys.start, 7).rules.aiTargetPerception).toBe('line-of-sight');
+    // Negative control: unset stays at the shipped default, so the case above is the
+    // flag reaching the rule and not a sandbox that is always line-of-sight.
+    expect(createLevelSystem(sandboxFlags, noRun()).world(sys.start, 7).rules.aiTargetPerception).toBe('full');
   });
 
   it('the sandbox start ignores the active run entirely -- it is a test rig, not a level', () => {
@@ -389,9 +424,9 @@ describe('createVersusLevelSystem', () => {
   it('friendlyFire reaches world.friendlyFire -- fails if it is dropped before createWorldFor', () => {
     const teams: VersusConfig = { mode: 'teams', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: true, slots: defaultSlots(2) };
     const on = createVersusLevelSystem(teams, noRun());
-    expect(on.world(on.start, 1, undefined, 3).friendlyFire).toBe(true);
+    expect(on.world(on.start, 1, undefined, 3).rules.friendlyFire).toBe(true);
     const off = createVersusLevelSystem({ ...teams, friendlyFire: false }, noRun());
-    expect(off.world(off.start, 1, undefined, 3).friendlyFire).toBe(false);
+    expect(off.world(off.start, 1, undefined, 3).rules.friendlyFire).toBe(false);
   });
 
   describe('arenaId: \'random\' is a caller bug post-#278 -- world() fails loud rather than re-resolving per call', () => {
@@ -449,15 +484,22 @@ describe('createVersusLevelSystem', () => {
     it('omitted flags param keeps the shipped defaults (corpseBlocksShells false, muzzleClearsTanks true)', () => {
       const sys = createVersusLevelSystem(cfg, noRun());
       const w = sys.world(sys.start, 1, undefined, 3);
-      expect(w.corpseBlocksShells).toBe(false);
-      expect(w.muzzleClearsTanks).toBe(true);
+      expect(w.rules.corpseBlocksShells).toBe(false);
+      expect(w.rules.muzzleClearsTanks).toBe(true);
     });
 
     it('corpseBlock/muzzleInside flags reach the world exactly as the campaign branch\'s do', () => {
       const sys = createVersusLevelSystem(cfg, noRun(), { ...DEV_FLAGS_OFF, corpseBlock: true, muzzleInside: true });
       const w = sys.world(sys.start, 1, undefined, 3);
-      expect(w.corpseBlocksShells).toBe(true);
-      expect(w.muzzleClearsTanks).toBe(false);
+      expect(w.rules.corpseBlocksShells).toBe(true);
+      expect(w.rules.muzzleClearsTanks).toBe(false);
+    });
+
+    it('aiPerception reaches a versus world too (issue #472), with the omitted-flags default as its control', () => {
+      const on = createVersusLevelSystem(cfg, noRun(), { ...DEV_FLAGS_OFF, aiPerception: 'line-of-sight' });
+      expect(on.world(on.start, 1, undefined, 3).rules.aiTargetPerception).toBe('line-of-sight');
+      const off = createVersusLevelSystem(cfg, noRun());
+      expect(off.world(off.start, 1, undefined, 3).rules.aiTargetPerception).toBe('full');
     });
   });
 });

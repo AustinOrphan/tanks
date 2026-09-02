@@ -173,7 +173,7 @@ const PLAYER_MINE_CHANCE = 0.05;
  */
 function isOpponent(world: World, subject: Tank, other: Tank): boolean {
   if (!other.alive) return false;
-  switch (world.mode) {
+  switch (world.rules.mode) {
     case 'ffa':
       return other.kind === 'player' && other.id !== subject.id;
     case 'teams':
