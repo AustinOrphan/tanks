@@ -1992,32 +1992,47 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     expect(slotRows(root)).toHaveLength(4);
   });
 
-  it('Back hides the pane and returns to the TITLE menu -- hardcoded, unlike handleControllersBack\'s shownState routing', () => {
-    // The Versus button itself is visible only at 'title' (see its own test above),
-    // so Back has exactly one place to return to. Opened from 'paused' on purpose --
-    // a real user cannot (the open button is hidden there), but the point is to
-    // prove Back calls setState('main-menu') REGARDLESS of what state was current when
-    // the pane opened, not merely that it happens to already look right: starting
-    // from 'title' would leave every title-only marker already correct before Back
-    // ever ran, so dropping the setState('main-menu') call would go unnoticed -- verified
-    // by mutation (removing it from handleVersusBack) survived that shape of the test.
-    const { hud: h, root } = mount();
-    h.setState('paused');
-    h.showVersusSetup(true);
-    backBtn(root).dispatchEvent(new MouseEvent('click'));
-    expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
-    // Landed on TITLE, not back on 'paused': the pause panel's own action button
-    // (Resume) is exactly what would still be showing if setState('main-menu') were
-    // never called -- showVersusSetup(false) alone only un-hides .hud-panel, it does
-    // not touch which of actionBtn/Continue/New Game is visible.
-    expect(
-      (root.querySelector('.hud-action') as HTMLButtonElement).classList.contains('hud-action--hidden'),
-      "Back did not land on title -- the pause panel's own action button is still showing",
-    ).toBe(true);
-    expect(
-      openBtn(root).classList.contains('hud-versus-open--hidden'),
-      'Back did not land back on the title menu',
-    ).toBe(false);
+  it('Back hides the pane and returns to the surface it was opened OVER: paused when opened there, title from the title (issue #318)', () => {
+    // Until issue #318 this Back hard-coded setState('main-menu'); the layer now records
+    // the surface it was pushed over. Opened from 'paused' on purpose -- a real user
+    // cannot today (the open button is hidden there), but that is exactly the shape
+    // under which a Back that still hard-coded the title would show: starting from
+    // 'title' leaves every title-only marker already correct before Back ever runs, so
+    // a mutation back to setState('main-menu') survives that shape (measured when the
+    // hard-code was the behaviour under test).
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('paused');
+      h.showVersusSetup(true);
+      backBtn(root).dispatchEvent(new MouseEvent('click'));
+      vi.advanceTimersByTime(1000);
+      expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
+      // Landed back on PAUSED: the pause panel's own Resume is showing and the
+      // title-only Versus button is not.
+      expect((root.querySelector('.hud-action') as HTMLButtonElement).textContent).toBe('Resume');
+      expect(
+        (root.querySelector('.hud-action') as HTMLButtonElement).classList.contains('hud-action--hidden'),
+        'Back abandoned the paused round for the title',
+      ).toBe(false);
+      expect(openBtn(root).classList.contains('hud-versus-open--hidden')).toBe(true);
+
+      // ...and from the title, the title: the other half of "the surface it was opened
+      // over", so a Back that always re-rendered 'paused' would fail here.
+      h.setState('main-menu');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      h.showVersusSetup(true);
+      backBtn(root).dispatchEvent(new MouseEvent('click'));
+      vi.advanceTimersByTime(1000);
+      expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
+      expect(openBtn(root).classList.contains('hud-versus-open--hidden'), 'Back did not land back on the title menu').toBe(false);
+      expect(
+        (root.querySelector('.hud-action') as HTMLButtonElement).classList.contains('hud-action--hidden'),
+        'the title shows Continue/New Game, never the action button',
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('is closed unconditionally by ANY state change, same as every sibling subpanel', () => {
@@ -3167,14 +3182,14 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
           const subPanel = root.querySelector(`.${OPEN_TO_PANEL[openCls]}`) as HTMLElement;
           walk(subPanel);
           const back = root.querySelector(`.${BACK_OF_PANEL[OPEN_TO_PANEL[openCls]]}`) as HTMLButtonElement;
-          activate(back); // leave -- resets focus to THIS (title) panel's CONTAINER
+          activate(back); // leave -- restores focus to the control that opened it (issue #318)
           expect(
             document.activeElement,
-            'Back did not return focus to the panel container',
-          ).toBe(container);
-          // Container is index -1 again; replay i + 1 presses to resume exactly where
-          // this loop left off (control i), so the loop's own next ArrowDown reaches i+1.
-          for (let k = 0; k <= i; k++) pressActive('ArrowDown');
+            'Back did not return focus to the control that opened the subpanel',
+          ).toBe(active);
+          // Focus is on control i again, so the loop's own next ArrowDown reaches i+1
+          // with no replay. Until issue #318 Back landed on the CONTAINER (index -1)
+          // and this loop had to replay i + 1 presses to get back to where it was.
         }
       }
       // One more step proves the list is a closed CYCLE, not just a reachable line --
@@ -3350,24 +3365,21 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     );
   });
 
-  it('keeps the menu hotkeys alive returning to title via a subpanel\'s Back button too', () => {
-    // The existing 'leaves the menu hotkeys alive after the title screen is dismissed'
-    // test (createHud panel) covers splash -> title only. Back -> title is a SEPARATE
-    // code path (setState('main-menu') called from handleCustomizeBack, not from
-    // dismissSplash), and nothing else in this file proves it lands on the container
-    // rather than on Continue/New Game.
+  it('Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)', () => {
+    // Two contracts in one place, on purpose. Back lands on the Customize BUTTON now,
+    // not on the panel container -- which is only legal because loop.ts's hotkey guard
+    // stopped treating a button as a control that consumes M and Escape. Until #318
+    // this test pinned the container, as the workaround for that broader guard.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    (root.querySelector('.hud-customize-open') as HTMLButtonElement).dispatchEvent(
-      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
-    );
+    const opener = root.querySelector('.hud-customize-open') as HTMLButtonElement;
+    opener.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+    expect(document.activeElement, 'opening focuses the pane container').not.toBe(opener);
     (root.querySelector('.hud-customize-back') as HTMLButtonElement).dispatchEvent(
       new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
     );
     const active = document.activeElement as HTMLElement;
-    expect(active.className, 'Back left focus somewhere other than the panel container').toContain(
-      'hud-panel',
-    );
+    expect(active, 'Back left focus somewhere other than the control that opened the pane').toBe(opener);
     const ev = (key: string): KeyboardEvent =>
       ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
     expect(isMuteHotkey(ev('m')), 'M is dead at the menu after Back').toBe(true);
@@ -4444,5 +4456,237 @@ describe('standard VS ordnance limits (issue #268)', () => {
       (b) => (b.textContent ?? '').toLowerCase(),
     );
     expect(labels.some((l) => l.includes('shell') || l.includes('mine'))).toBe(false);
+  });
+});
+
+describe('hud: navigation layers -- origin, Back and focus restoration (issue #318)', () => {
+  const click = (el: Element, detail = 0): void => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail }));
+  };
+  const q = (root: HTMLElement, sel: string): HTMLElement => root.querySelector(sel) as HTMLElement;
+  const isHidden = (root: HTMLElement, sel: string, cls: string): boolean => q(root, sel).classList.contains(cls);
+  const cfg = (players: number): VersusConfig => ({
+    mode: 'ffa',
+    players,
+    arenaId: 'arena-02',
+    stock: 3,
+    friendlyFire: false,
+    slots: defaultSlots(players),
+  });
+  function mountWith(opts: Parameters<typeof createHud>[1]): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, opts);
+    return { hud, root };
+  }
+
+  it('Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target', () => {
+    // The one Back that could never hard-code its destination is now the ordinary case:
+    // the layer records the surface it was pushed over. And the control it returns focus
+    // to is a BUTTON, which is only a working place to leave a paused player because
+    // loop.ts's guard no longer treats a button as a control that consumes Escape.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      h.setState('playing');
+      h.setState('paused');
+      const opener = q(root, '.hud-controllers-open');
+      click(opener);
+      expect(isHidden(root, '.hud-controllers', 'hud-controllers--hidden')).toBe(false);
+      expect(document.activeElement, 'opening focuses the pane container').toBe(q(root, '.hud-controllers'));
+      click(q(root, '.hud-controllers-back'));
+      vi.advanceTimersByTime(1000);
+      expect(isHidden(root, '.hud-controllers', 'hud-controllers--hidden')).toBe(true);
+      expect(q(root, '.hud-action').textContent, 'Back abandoned the paused round').toBe('Resume');
+      expect(document.activeElement, 'Back did not return focus to the Controllers button').toBe(opener);
+      const escape = { key: 'Escape', repeat: false, target: opener } as unknown as KeyboardEvent;
+      expect(isPauseHotkey(escape), 'Escape is dead on the restored opener').toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pane opened programmatically (showVersusSetup(true) at the title) falls back to the panel container on Back', () => {
+    // The post-match "Versus Setup" reopen (loop.ts) invokes no control, so there is
+    // nothing to restore focus to: the destination container stands, as it always did.
+    // Kills an unguarded `opener.focus()` -- a null opener would throw there.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    expect(document.activeElement).toBe(q(root, '.hud-versus-setup'));
+    click(q(root, '.hud-versus-back'));
+    expect(document.activeElement).toBe(q(root, '.hud-panel'));
+  });
+
+  it('Back falls back to the panel container when the opener was hidden while the pane was up', () => {
+    // `setLevelSelect(1, 1)` hides the Levels button ("the sandbox is not a choice") and
+    // can land while the Levels pane is open. Focusing a hidden button would strand a
+    // keyboard player with no visible position, which is what the container rule
+    // exists to prevent.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(2, 3);
+    h.setState('main-menu');
+    const opener = q(root, '.hud-levelselect-open');
+    expect(opener.classList.contains('hud-levelselect-open--hidden')).toBe(false);
+    click(opener);
+    h.setLevelSelect(1, 1);
+    click(q(root, '.hud-levelselect-back'));
+    expect(opener.classList.contains('hud-levelselect-open--hidden'), 'the fixture no longer hides the opener').toBe(true);
+    expect(document.activeElement).toBe(q(root, '.hud-panel'));
+  });
+
+  it('hud.back() pops one layer and reports true; with nothing open it reports false and changes no class', () => {
+    // The controller seam (issue #319 maps gamepad B here). `false` is what lets the
+    // caller fall through to its own Back meaning, so a `back()` that reported true
+    // with nothing open would swallow every gamepad Back at the Main Menu.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    const surfaces = ['.hud-panel', '.hud-stats', '.hud-customize', '.hud-achievements', '.hud-levelselect', '.hud-controllers', '.hud-versus-setup'];
+    const snapshot = (): string[] => surfaces.map((sel) => q(root, sel).className);
+    const before = snapshot();
+    expect(h.back()).toBe(false);
+    expect(snapshot()).toEqual(before);
+    const opener = q(root, '.hud-stats-open');
+    click(opener);
+    expect(h.back()).toBe(true);
+    expect(q(root, '.hud-stats').classList.contains('ui-surface--leaving'), 'the pane is not on its way out').toBe(true);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('a pointer-initiated Back click still lands focus on the opener', () => {
+    // `blurIfPointer` blurs the clicked BACK button after its handler; the restore has
+    // already moved focus to the opener by then, so it survives. The spec names the
+    // invoking control without a modality.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    const opener = q(root, '.hud-achievements-open');
+    click(opener, 1);
+    click(q(root, '.hud-achievements-back'), 1);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('entering gameplay from an open pane empties the stack: hud.back() then has nothing to pop', () => {
+    // Every surface change resets the stack, so a layer can never outlive the surface it
+    // opened over -- a ghost layer here would swallow the first Escape of the match.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    click(q(root, '.hud-stats-open'));
+    expect(h.back(), 'the pane did not open').toBe(true);
+    click(q(root, '.hud-stats-open'));
+    h.setState('playing');
+    expect(isHidden(root, '.hud-stats', 'hud-stats--hidden')).toBe(true);
+    expect(h.back(), 'gameplay entry left a layer on the stack').toBe(false);
+  });
+
+  it('Back fires no start, pick, reset, quit, pause, setup or open callback, leaves no reset armed, and writes nothing to the retained VS store', () => {
+    // The HUD-level proof of "Back never resets a run or changes persisted settings":
+    // hud.ts reaches no store, run or state machine itself, so what it must not do is
+    // fire the callbacks through which the page does. Population: all six Back buttons
+    // and `hud.back()`. The two negative controls at the end prove the spies and the
+    // store counter are live.
+    const storage = createMemoryStorage();
+    const real = createVersusSetupStore(storage);
+    let writes = 0;
+    const { hud: h, root } = mountWith({
+      versusSetup: {
+        get: () => real.get(),
+        set: (setup) => {
+          writes += 1;
+          real.set(setup);
+        },
+        clear: () => real.clear(),
+      },
+    });
+    const fired: string[] = [];
+    h.onStartRestart(() => fired.push('start'));
+    h.onNewGame(() => fired.push('new-game'));
+    h.onLevelSelect((level) => fired.push(`pick:${level}`));
+    h.onResetStats(() => fired.push('reset-stats'));
+    h.onResetProgress(() => fired.push('reset-progress'));
+    h.onQuitToTitle(() => fired.push('quit'));
+    h.onPauseTap(() => fired.push('pause'));
+    h.onVersusStart(() => fired.push('versus-start'));
+    h.onVersusOpen(() => fired.push('versus-open'));
+    h.onCampaignOpen(() => fired.push('campaign-open'));
+    h.setLevelSelect(3, 3);
+    h.setState('main-menu');
+    const pairs: Array<[string, string]> = [
+      ['.hud-stats-open', '.hud-stats-back'],
+      ['.hud-customize-open', '.hud-customize-back'],
+      ['.hud-achievements-open', '.hud-achievements-back'],
+      ['.hud-levelselect-open', '.hud-levelselect-back'],
+      ['.hud-controllers-open', '.hud-controllers-back'],
+    ];
+    for (const [open, back] of pairs) {
+      click(q(root, open));
+      click(q(root, back));
+    }
+    h.showVersusSetup(true); // the sixth pane, opened without its passthrough button
+    click(q(root, '.hud-versus-back'));
+    h.showVersusSetup(true);
+    expect(h.back()).toBe(true);
+    expect(fired).toEqual([]);
+    expect(writes).toBe(0);
+    expect(root.querySelector('.hud-danger--armed')).toBeNull();
+    // Negative controls: a role click writes once, Start fires once.
+    h.showVersusSetup(true);
+    click(q(root, '.hud-versus-slot-row[data-slot="1"] .hud-versus-role-btn[data-role="bot"]'));
+    expect(writes).toBe(1);
+    click(q(root, '.hud-versus-start'));
+    expect(fired).toEqual(['versus-start']);
+  });
+
+  it('showVersusSetup(true, cfg) twice keeps the pane open and reseeds from the second config', () => {
+    // Before issue #318 the second call ran a transition from the pane to ITSELF, which
+    // marked the one surface LEAVING then ENTERING and hid it when the crossfade
+    // settled -- measured failing on the pre-#318 tree with exactly this case. The
+    // stack reports the pane as already on top, and the HUD re-renders in place.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      h.showVersusSetup(true, cfg(2));
+      h.showVersusSetup(true, cfg(4));
+      vi.advanceTimersByTime(1000);
+      expect(isHidden(root, '.hud-versus-setup', 'hud-versus-setup--hidden'), 'the second open hid the pane').toBe(false);
+      expect(root.querySelectorAll('.hud-versus-slot-row'), 'the second config did not reseed the pane').toHaveLength(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once", () => {
+    // Covering Customize would leave its live preview alive with no close callback;
+    // refusing would break the transition contract's "second navigation wins". Replacing
+    // does neither: the covered pane leaves through the same path its Back uses.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      let opens = 0;
+      let closes = 0;
+      h.onCustomizeOpen(() => {
+        opens += 1;
+      });
+      h.onCustomizeClose(() => {
+        closes += 1;
+      });
+      h.setState('main-menu');
+      click(q(root, '.hud-customize-open'));
+      expect(opens).toBe(1);
+      h.showVersusSetup(true);
+      vi.advanceTimersByTime(1000);
+      expect(closes, "the covered pane's close callback").toBe(1);
+      expect(isHidden(root, '.hud-customize', 'hud-customize--hidden')).toBe(true);
+      expect(isHidden(root, '.hud-versus-setup', 'hud-versus-setup--hidden')).toBe(false);
+      // ...and the replacement kept the ORIGINAL origin: Back lands on the title.
+      click(q(root, '.hud-versus-back'));
+      vi.advanceTimersByTime(1000);
+      expect(isHidden(root, '.hud-versus-setup', 'hud-versus-setup--hidden')).toBe(true);
+      expect(isHidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(false);
+      expect(closes, 'a second close fired for a pane that was already closed').toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

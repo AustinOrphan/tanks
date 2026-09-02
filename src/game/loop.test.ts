@@ -1247,6 +1247,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onCampaignOpen: (cb: () => void) => {
           onCampaignOpenCb = cb;
         },
+        // The HUD's semantic Back (issue #318). Nothing in loop.ts calls it; the fake
+        // reports "nothing open" so a page-level caller falls through as it would on a
+        // HUD with no layer up.
+        back: () => false,
         dispose: () => rec.disposed.push('hud'),
       };
     },

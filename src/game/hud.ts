@@ -16,6 +16,22 @@ export type HudSurface =
   | 'outcome-lose';
 
 /**
+ * The layers that open OVER a surface (issue #318): the six panes, by the name each has
+ * carried in its classes since it was added. Recorded on the HUD's layer stack together
+ * with the surface each was pushed over and the control that opened it, so Back returns
+ * to the true origin and restores the invoking control. #226 adds `settings`, #322
+ * `records`, #243 `developer-tools`: one member here and one `LAYERS` row each, and the
+ * exhaustive record makes a missing row a compile error.
+ */
+export type HudLayerId =
+  | 'stats'
+  | 'customize'
+  | 'achievements'
+  | 'levelselect'
+  | 'controllers'
+  | 'versus-setup';
+
+/**
  * WHAT IS BEING PLAYED -- the actual session kind, projected from the canonical
  * `SessionDescriptor.kind` (`app-state.ts`) by `loop.ts` at every world build.
  * Structurally the same three literals as `SessionDescriptorKind`, declared
@@ -59,6 +75,7 @@ import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../render/entities';
 import { createTransitionRunner } from './transitions';
+import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
@@ -562,6 +579,15 @@ export interface Hud {
    * counterpart to the versus reboot seam.
    */
   onCampaignOpen(cb: () => void): void;
+  /**
+   * Semantic Back (issue #318): pop exactly one layer -- close the pane on top, return
+   * to the surface it was opened over, and restore focus to the control that opened it
+   * when that control still exists. `true` when a layer was consumed; `false` when
+   * nothing was open, and the caller decides what Back means there (Escape falls through
+   * to the session's pause hotkey; issue #319's gamepad mapping supplies its own
+   * fallback). The Back buttons, Escape and the browser's own Back all end here.
+   */
+  back(): boolean;
   dispose(): void;
 }
 
@@ -633,6 +659,12 @@ export interface HudOptions {
    * (loop.ts) is the one production caller and always supplies it.
    */
   readonly versusSetup?: VersusSetupStore;
+  /**
+   * The browser-history mirror's host (issue #318). Absent -- every existing test -- means
+   * the in-app layer stack alone, with no History call ever made. `createBrowserDeps`
+   * passes `browserHistoryHost(window)`, which is `null` where `pushState` is missing.
+   */
+  readonly history?: HistoryHost | null;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -2182,22 +2214,170 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   actionBtn.addEventListener('click', blurIfPointer);
   quitBtn.addEventListener('click', handleQuit);
   quitBtn.addEventListener('click', blurIfPointer);
-  const handleStatsOpen = (): void => showStats(true);
+  // ---- Navigation layers (issue #318) --------------------------------------------
+  /**
+   * The layer stack, composed here because this file owns the DOM the layers are made of.
+   *
+   * Before this the six panes were six pairs of `showX(true)`/`showX(false)` toggles, and
+   * five of the six Back buttons hard-coded `setState('main-menu')` -- correct only while
+   * every opener lived on the Main Menu, and already wrong for Controllers, which is
+   * reachable from Pause and routed through the `shownState` proxy instead. Nothing
+   * recorded which control opened a pane, so a keyboard player lost their place on every
+   * Back. The stack records both: `origin` is the surface the layer was pushed over,
+   * `restore.opener` the control that pushed it.
+   *
+   * The stack is HUD-owned rather than a route on the state machine, deliberately: a
+   * machine route from gameplay drops the session (`state.ts`), so Controllers over Pause
+   * could never be one; and the page's painter closes every pane on every surface change,
+   * so a pane pushed as a route would be closed by the paint that announced it. The
+   * invariant that keeps the two in step is the other way round: after every `setState`
+   * the stack is EMPTY (`resetLayers` below), so a layer cannot outlive the surface it
+   * opened over.
+   */
+  interface HudRestore {
+    readonly opener: HTMLElement | null;
+  }
+  type HudLayer = LayerEntry<HudLayerId, HudSurface, HudRestore>;
+  interface LayerRow {
+    readonly container: HTMLElement;
+    /** Today's `showX(true)` body, unchanged: one transition, focus on the pane. */
+    open(initial?: VersusConfig | null): void;
+    /** Today's ANIMATED `showX(false)`, so close callbacks fire through their guards. */
+    close(): void;
+    /** `'already-top'`: re-render in place, no transition. */
+    refresh?(initial?: VersusConfig | null): void;
+  }
+  const LAYERS: Record<HudLayerId, LayerRow> = {
+    stats: { container: statsView, open: () => showStats(true), close: () => showStats(false) },
+    customize: { container: customizeView, open: () => showCustomize(true), close: () => showCustomize(false) },
+    achievements: { container: achView, open: () => showAchievements(true), close: () => showAchievements(false) },
+    levelselect: { container: levelSelectView, open: () => showLevelSelect(true), close: () => showLevelSelect(false) },
+    controllers: { container: controllersView, open: () => showControllers(true), close: () => showControllers(false) },
+    'versus-setup': {
+      container: versusSetupView,
+      open: (initial) => openVersusPane(initial),
+      close: () => closeVersusPane(),
+      refresh: (initial) => seedAndRenderVersus(initial),
+    },
+  };
+  const layers = createLayerStack<HudLayerId, HudSurface, HudRestore>();
+  /**
+   * The browser's Back, kept in step with the stack (issue #318). With no `opts.history`
+   * this is inert and the stack is the whole of navigation; with one, a layer open means
+   * exactly one history entry, and the browser's Back consumes that layer through the
+   * same `back()` the buttons use.
+   */
+  const mirror = createHistoryMirror(opts.history ?? null, {
+    depth: () => layers.depth,
+    back: () => {
+      back();
+    },
+  });
+  /**
+   * The Versus button, while its click is being dispatched -- and `null` at every other
+   * moment. `showVersusSetup(true)` is public and is also called from loop.ts for the
+   * post-match "Versus Setup" reopen, where no control invoked the pane; recording the
+   * opener only around the button's own callback loop is what keeps that reopen's Back
+   * landing on the container rather than on a button nobody pressed.
+   */
+  let versusOpener: HTMLElement | null = null;
+
+  /**
+   * Open a layer over the current surface.
+   *
+   * A DIFFERENT pane already open is REPLACED, not covered and not refused: it leaves
+   * through its own animated close -- so `onCustomizeClose`/`onControllersClose` fire and
+   * the preview and gamepad listeners they own are released -- and the new pane opens
+   * over the same origin. Covering it would keep those resources alive with no close
+   * callback (issue #327 owns the covering-layer contract for the overlays that will
+   * genuinely stack); refusing it would break issue #364's interrupt rule, under which a
+   * second navigation inside one transition window resolves to the second destination.
+   * Nothing in production reaches this today -- every opener lives in the panel the
+   * open pane hides -- so the rule is pinned by the transition contract's own test.
+   *
+   * `false` when the stack refused (an id already open lower down, a route over an
+   * overlay).
+   */
+  function openLayer(id: HudLayerId, opener: HTMLElement | null, initial?: VersusConfig | null): boolean {
+    const top = layers.top();
+    let origin = shownState;
+    if (top !== null && top.id !== id) {
+      layers.pop();
+      LAYERS[top.id].close();
+      origin = top.origin;
+    }
+    const result = layers.push({ id, kind: 'route', origin, restore: { opener } });
+    if (result === 'refused') return false;
+    disarmReset();
+    if (result === 'already-top') {
+      // Re-render only: a second open of the pane on top must not run a transition from
+      // the pane to itself, which marks the one surface LEAVING and then ENTERING and hides
+      // it when the crossfade settles.
+      LAYERS[id].refresh?.(initial);
+      return true;
+    }
+    LAYERS[id].open(initial);
+    mirror.sync(layers.depth);
+    return true;
+  }
+
+  /**
+   * Pop one layer: the pane's own animated close, the origin surface re-rendered, focus
+   * back on the opener. ONE crossfade: `setState`'s own transition hits the redundant-call
+   * no-op because the close is already on its way to the surface `setState` asks for, and
+   * its close-all skips the surface that is LEAVING.
+   */
+  function back(): boolean {
+    const popped = layers.pop();
+    if (popped === null) return false;
+    LAYERS[popped.id].close();
+    setState(popped.origin);
+    restoreFocus(popped);
+    mirror.sync(layers.depth);
+    return true;
+  }
+
+  /**
+   * Focus the control that opened the layer, when it still exists. Runs AFTER `setState`
+   * has already focused the destination container, so the container is the fallback for
+   * a programmatic open (no opener), a torn-down node, a disabled button, or an opener
+   * the surface no longer shows -- `applyTitleAffordances` and `setLevelSelect` hide
+   * openers, and a session's detach reshapes the menu.
+   */
+  function restoreFocus(layer: HudLayer): void {
+    const opener = layer.restore.opener;
+    if (opener === null) return;
+    if (!opener.isConnected) return;
+    if (opener instanceof HTMLButtonElement && opener.disabled) return;
+    if (isHiddenWithin(opener, el)) return;
+    opener.focus();
+  }
+
+  /** Every surface change empties the stack -- see the composition comment above. */
+  function resetLayers(): void {
+    layers.reset();
+    mirror.sync(0);
+  }
+
+  const handleStatsOpen = (): void => {
+    openLayer('stats', statsOpenBtn);
+  };
   const handleStatsBack = (): void => {
-    showStats(false);
-    setState('main-menu'); // re-render the title panel it covered
+    back();
   };
   const handleResetStats = (): void => handleDangerClick(resetStatsBtn, resetStatsCbs);
   const handleResetProgress = (): void => handleDangerClick(resetProgressBtn, resetProgressCbs);
-  const handleCustomizeOpen = (): void => showCustomize(true);
-  const handleCustomizeBack = (): void => {
-    showCustomize(false);
-    setState('main-menu');
+  const handleCustomizeOpen = (): void => {
+    openLayer('customize', customizeOpenBtn);
   };
-  const handleAchOpen = (): void => showAchievements(true);
+  const handleCustomizeBack = (): void => {
+    back();
+  };
+  const handleAchOpen = (): void => {
+    openLayer('achievements', achOpenBtn);
+  };
   const handleAchBack = (): void => {
-    showAchievements(false);
-    setState('main-menu');
+    back();
   };
   achOpenBtn.addEventListener('click', handleAchOpen);
   achOpenBtn.addEventListener('click', blurIfPointer);
@@ -2432,27 +2612,27 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (versusStocksVisible) renderVersusStocks();
   }
 
-  const handleLevelSelectOpen = (): void => showLevelSelect(true);
+  const handleLevelSelectOpen = (): void => {
+    openLayer('levelselect', levelSelectOpenBtn);
+  };
   const handleLevelSelectBack = (): void => {
-    showLevelSelect(false);
-    setState('main-menu'); // re-render the title panel it covered
+    back();
   };
   levelSelectOpenBtn.addEventListener('click', handleLevelSelectOpen);
   levelSelectOpenBtn.addEventListener('click', blurIfPointer);
   levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
   levelSelectBackBtn.addEventListener('click', blurIfPointer);
 
-  const handleControllersOpen = (): void => showControllers(true);
-  // Back must route to `shownState`, NOT a hardcoded 'title' -- unlike every sibling
-  // panel above, this one is reachable from 'paused' too (owner ruling: "in case
-  // controllers disconnect"). Hardcoding 'title' would abandon a paused round on Back
-  // and desync the HUD's panel from the state machine -- CLAUDE.md names this exact
-  // class of defect as one this repo has shipped green before. `shownState` is already
-  // 'paused' or 'title' at open time -- it is what gated the open button's own
-  // visibility in the first place.
+  const handleControllersOpen = (): void => {
+    openLayer('controllers', controllersOpenBtn);
+  };
+  // Reachable from 'paused' as well as the Main Menu (owner ruling: "in case controllers
+  // disconnect"), which is why this panel's Back was the one that could never hard-code
+  // its destination. The layer records the surface it was opened over, so Back from a
+  // paused round returns to the paused round -- the same rule every other pane now
+  // follows rather than a special case for this one.
   const handleControllersBack = (): void => {
-    showControllers(false);
-    setState(shownState);
+    back();
   };
   controllersOpenBtn.addEventListener('click', handleControllersOpen);
   controllersOpenBtn.addEventListener('click', blurIfPointer);
@@ -2956,19 +3136,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // A bare click passthrough -- see onVersusOpen's own doc comment on the Hud
   // interface for why this does NOT call showVersusSetup itself.
   const handleVersusOpen = (): void => {
-    for (const cb of versusOpenCbs) cb();
+    // The subscriber (route-ui.ts) calls `showVersusSetup(true, retained)` synchronously
+    // inside this loop, which is the one moment the pane's opener is this button.
+    versusOpener = versusOpenBtn;
+    try {
+      for (const cb of versusOpenCbs) cb();
+    } finally {
+      versusOpener = null;
+    }
   };
   const handleVersusStart = (): void => {
     // A snapshot, not the live state object -- see onVersusStart's own doc comment.
     for (const cb of versusStartCbs) cb({ ...versusConfigState });
   };
-  // TITLE ONLY (unlike handleControllersBack): the Versus button itself is visible
-  // only at 'title' (see setState below), so Back always has exactly one place to
-  // return to -- same shape as handleCustomizeBack/handleAchBack/handleStatsBack/
-  // handleLevelSelectBack just above, not handleControllersBack's shownState routing.
   const handleVersusBack = (): void => {
-    showVersusSetup(false);
-    setState('main-menu');
+    back();
   };
   versusOpenBtn.addEventListener('click', handleVersusOpen);
   versusOpenBtn.addEventListener('click', blurIfPointer);
@@ -3007,19 +3189,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function showVersusSetup(show: boolean, initial?: VersusConfig | null): void {
     if (!show) {
-      closeSurface(VERSUS_SETUP_SURFACE);
+      // A public close is a Back: the pane leaves through the same path its own button
+      // uses, so the origin is re-rendered and focus is restored.
+      if (layers.top()?.id === 'versus-setup') back();
       return;
     }
+    openLayer('versus-setup', versusOpener, initial);
+  }
+
+  function seedAndRenderVersus(initial?: VersusConfig | null): void {
+    if (initial) setVersusConfig({ ...initial });
+    renderVersusModeSelection();
+    renderVersusPlayersSelection();
+    renderVersusStockSelection();
+    renderVersusMapRow();
+    renderVersusFriendlyFireRow();
+    renderVersusSlotRows();
+  }
+
+  function openVersusPane(initial?: VersusConfig | null): void {
     swapSurface(openSurface(), VERSUS_SETUP_SURFACE, () => {
-      if (initial) setVersusConfig({ ...initial });
-      renderVersusModeSelection();
-      renderVersusPlayersSelection();
-      renderVersusStockSelection();
-      renderVersusMapRow();
-      renderVersusFriendlyFireRow();
-      renderVersusSlotRows();
+      seedAndRenderVersus(initial);
       versusSetupView.focus();
     });
+  }
+
+  function closeVersusPane(): void {
+    closeSurface(VERSUS_SETUP_SURFACE);
   }
 
   // Continue shares the Resume/Next Level/Play Again/Retry button's own handler: it IS
@@ -3085,6 +3281,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // plain toggle does not already give the stats/achievements/level-select siblings.
     cleanupHide(versusSetupView, 'hud-versus-setup--hidden');
     disarmReset();
+    // ...and the layer stack with them (issue #318): a surface change is never a Back,
+    // so every layer is dropped rather than popped, and the history mirror retires its
+    // entry. After this line the stack is empty on every path through this function.
+    resetLayers();
     const atLaunch = s === 'launch';
     const atMainMenu = s === 'main-menu';
     const isOutcome = s === 'outcome-win' || s === 'outcome-lose';
@@ -3665,6 +3865,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       t.textContent = message;
       appendToast(t);
     },
+    back,
     dispose(): void {
       // SETTLES the outstanding transition rather than dropping it -- see
       // `TransitionRunner.dispose`. A HUD torn down mid-crossfade would otherwise leave a
@@ -3675,6 +3876,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();
       window.removeEventListener('keydown', onNavKeyDown, true);
+      mirror.dispose(); // the popstate listener, on the same page-teardown path
       splashEl.removeEventListener('pointerdown', onSplashPointerDown);
       panel.removeEventListener('click', onPanelClickCapture, true);
       el.removeEventListener('pointerdown', disarm, true);
