@@ -2,7 +2,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   UI_ACTIONS,
-  actionDirection,
   keyToUiAction,
   isTextEntry,
   consumesKey,
@@ -14,25 +13,6 @@ describe('UI_ACTIONS', () => {
     // gamepad-menu.ts walks this array to order a multi-action frame, so the ORDER is a
     // contract, not a convenience: pinned as a literal rather than derived.
     expect(UI_ACTIONS).toEqual(['up', 'down', 'left', 'right', 'confirm', 'back', 'pause']);
-  });
-});
-
-describe('actionDirection', () => {
-  it('collapses the two axes onto one sign for every one of the seven actions', () => {
-    // A table over UI_ACTIONS rather than seven `it`s: the point is that the map is
-    // total (no action falls through to a wrong sign) and that up/left share -1 while
-    // down/right share +1. Swapping any sign, or returning a number for a one-shot,
-    // breaks the equality.
-    const table = Object.fromEntries(UI_ACTIONS.map((a) => [a, actionDirection(a)]));
-    expect(table).toEqual({
-      up: -1,
-      left: -1,
-      down: 1,
-      right: 1,
-      confirm: null,
-      back: null,
-      pause: null,
-    });
   });
 });
 

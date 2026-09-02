@@ -190,6 +190,14 @@ arrives cannot start a New Game blind), `back` is `Hud.back()`, and `pause` is r
 unconsumed for the page to toggle on the state machine exactly as the Pause button's tap
 does. The keyboard reaches the same verbs through the window-capture key handler; a
 keyboard `confirm` is the browser's own Enter/Space activation and is never dispatched.
+A direction is spatial (issue #495): `src/game/spatial-focus.ts` derives rows from the
+controls' rectangles at the moment of the move (vertical overlap makes a row, left edge
+orders it), Left/Right wrap within the row, Up/Down land on the nearest column of the
+adjacent row and wrap from the last row to the first, and with every rect empty -- jsdom,
+a hidden subtree -- Up/Down fall back to document order so the walk still closes. The HUD
+reads rectangles through `HudOptions.measure` (default `getBoundingClientRect`), which is
+how tests draw a layout; no CSS names a row, so a pane that wraps at a narrow width is a
+grid without any change here.
 `src/input/gamepad-menu.ts` turns the UNION of connected pads into actions with its own
 per-action edge state and a desktop-style repeat for directions only; `route-host.ts` owns
 one poller on the page's frame loop from construction to disposal, dispatches only `pause`

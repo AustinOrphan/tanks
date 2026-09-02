@@ -71,7 +71,8 @@ export type HudRelaunchTarget = 'campaign-levels' | 'versus-setup';
 import type { StatCounts } from './stats';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
-import { actionDirection, consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
+import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
+import { isDirection, spatialNext, type Direction, type Rect } from './spatial-focus';
 import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
@@ -674,6 +675,12 @@ export interface HudOptions {
    * passes `browserHistoryHost(window)`, which is `null` where `pushState` is missing.
    */
   readonly history?: HistoryHost | null;
+  /**
+   * How a control's on-screen rectangle is read for spatial focus movement (issue
+   * #495). Defaults to `getBoundingClientRect`; a test hands in a drawn layout, because
+   * jsdom reports every rect as empty and geometry then has nothing to follow.
+   */
+  readonly measure?: (el: HTMLElement) => Rect;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -2130,30 +2137,32 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     );
   }
 
+  const measure = opts.measure ?? ((el: HTMLElement): Rect => el.getBoundingClientRect());
+
   /**
-   * Move the roving-tabindex focus one step within whichever panel is showing.
-   * `dir` is +1 (the direction Down/Right/S move) or -1 (Up/Left/W). Factored out from
-   * the key handler so a gamepad D-pad -- issue #114, not built here -- can call this
-   * exact function later and inherit every panel's traversal for free.
+   * Move the roving-tabindex focus one step in `direction` within whichever panel is
+   * showing (issue #495): the geometrically nearest control that way, rows derived from
+   * the controls' rectangles at the moment of the move, wrapping within a row and from
+   * the last row back to the first -- see `spatial-focus.ts` for the model, including
+   * what happens with no layout to follow. Shared by the arrow keys and the gamepad's
+   * D-pad through `act`, so every panel inherits one traversal.
    *
-   * Wrapping, not clamping: with no "past the end" state to fall off, the exact same
-   * ArrowDown press that reaches the last control also proves the cycle closes, which
-   * is what the reachability test asserts.
-   *
-   * `idx < 0` covers two real starting points, not one: focus sitting on the panel
-   * CONTAINER itself (just after `panel.focus()`, tabindex -1, not in the control list)
-   * and focus sitting on something this sweep does not track at all (the topbar's own
-   * Mute button, reachable by Tab independently of the panel). Both land on the first
-   * control going forward and the last one going backward, which is a reasonable
-   * default for either case rather than a special error path.
+   * Focus on the panel CONTAINER (just after `panel.focus()`, tabindex -1) or on
+   * something this sweep does not track (the topbar's own Mute button) enters at the
+   * first control going forward and the last going backward -- a reasonable default for
+   * either case rather than a special error path.
    */
-  function moveFocus(container: HTMLElement, dir: 1 | -1): void {
+  function moveFocus(container: HTMLElement, direction: Direction): void {
     const list = focusableControls(container);
     if (list.length === 0) return;
     const active = document.activeElement;
-    const idx = active instanceof HTMLElement ? list.indexOf(active) : -1;
-    const next = idx < 0 ? (dir > 0 ? 0 : list.length - 1) : (idx + dir + list.length) % list.length;
-    list[next].focus();
+    const from = active instanceof HTMLElement && list.includes(active) ? active : null;
+    const next = spatialNext(
+      list.map((el) => ({ item: el, rect: measure(el) })),
+      from,
+      direction,
+    );
+    next?.focus();
   }
 
   /**
@@ -2179,9 +2188,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (action === 'pause') return false;
     const container = activePanelContainer();
     if (!container) return false;
-    const dir = actionDirection(action);
-    if (dir !== null) {
-      moveFocus(container, dir);
+    if (isDirection(action)) {
+      moveFocus(container, action);
       return true;
     }
     const controls = focusableControls(container);
@@ -2241,8 +2249,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // Only the four directions are claimed from the keyboard. `confirm` is the browser's
     // own Enter/Space activation of the focused button, and `pause` is the session's
     // hotkey -- see `keyToUiAction`.
-    const dir = action === null ? null : actionDirection(action);
-    if (dir === null) return;
+    if (action === null || !isDirection(action)) return;
     const isLateral = action === 'left' || action === 'right';
     if (isLateral && e.target === previewCanvasEl) return; // the preview owns its own scheme
     const container = activePanelContainer();
@@ -2256,7 +2263,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     disarm();
     e.preventDefault();
     e.stopPropagation();
-    moveFocus(container, dir);
+    moveFocus(container, action);
   };
   window.addEventListener('keydown', onNavKeyDown, true);
 
