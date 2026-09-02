@@ -8382,6 +8382,26 @@ describe('the page paints the Main Menu a returning player needs before any sess
   });
 });
 
+describe('quitting a versus match leaves a campaign-shaped Main Menu behind', () => {
+  it('the empty host offers Continue/New Game/Levels/Versus, not the versus session\'s "Start Match"', () => {
+    // Measured on `main` at b581d86: after a setup-pane versus match was quit, the last
+    // relaunch target the HUD had been told was still `versus-setup`, so the title kept a
+    // "Start Match" button that, with no session to dispatch to, requested a NEW campaign
+    // run -- replacing the player's own with no confirmation.
+    const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+    const h = makeDeps({ levelCount: 3, savedRun: { level: 1, lives: 2 } });
+    const page = bootPageOn(h, { startEmpty: true });
+    page.pointerdown();
+    page.start({ kind: 'versus', config: VS });
+    expect(h.rec.relaunchTargets.at(-1)).toBe('versus-setup');
+    page.sm.pause();
+    h.hud.quitToTitle();
+    expect(page.sessions()).toBe(1);
+    expect(h.rec.relaunchTargets.at(-1)).toBe('campaign-levels');
+    expect(h.rec.sessionKinds.at(-1)).toBe('campaign');
+  });
+});
+
 describe('boot + startGameWith: the Launch gate is once per document load (issue #317)', () => {
   const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
 

@@ -349,6 +349,35 @@ describe('createRouteHost: the gameplay slot', () => {
   });
 });
 
+describe('createRouteHost: releasing the slot gives the menu back its page shape', () => {
+  it('resets the relaunch target and session kind when the live session detaches', () => {
+    // A versus session shapes the title around itself ("Start Match", a Campaign
+    // button). The page has to take that back when the session goes, or an empty host
+    // keeps offering a "Start Match" that is a New Game in disguise.
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach();
+    f.hud.hud.setRelaunchTarget('versus-setup');
+    f.hud.hud.setSessionKind('versus');
+    slot.detach();
+    expect(f.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['campaign-levels']);
+    expect(f.hud.argsOf('setSessionKind').at(-1)).toEqual(['campaign']);
+  });
+
+  it('a stale detach does not reshape the menu under the session that replaced it', () => {
+    // The stale-capture control, same shape as the slot's own: an outgoing session's late
+    // detach must not undo what the incoming one just pushed.
+    const f = fixture({ launchDismissed: true });
+    const old = f.host.attach();
+    f.host.attach();
+    f.hud.hud.setRelaunchTarget('versus-setup');
+    f.hud.hud.setSessionKind('versus');
+    const before = f.hud.argsOf('setRelaunchTarget').length;
+    old.detach();
+    expect(f.hud.argsOf('setRelaunchTarget')).toHaveLength(before);
+    expect(f.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['versus-setup']);
+  });
+});
+
 describe('createRouteHost: the application-level start requests (issue #468)', () => {
   it('Versus Start reaches the page seam, with no session attached', () => {
     // The criterion in the issue's own words: a gameplay-starting route action must not

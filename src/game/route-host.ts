@@ -505,6 +505,15 @@ export function createRouteHost(
         detach(): void {
           if (!current()) return;
           live = null;
+          // The menu goes back to the PAGE's shape. `relaunchTarget` and the session kind
+          // are pushed only by a session, at its construction, and until this line nothing
+          // took them back: after a setup-pane versus match the empty host kept offering
+          // "Start Match" and "Campaign", and that "Start Match" -- with no session to
+          // dispatch to -- is a New Game, which replaced the player's campaign run with no
+          // confirmation. Reset on the way OUT rather than on the next attach, because the
+          // page can sit at the Main Menu with no session for as long as the player likes.
+          hud.setRelaunchTarget('campaign-levels');
+          hud.setSessionKind('campaign');
         },
       };
     },
