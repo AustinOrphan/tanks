@@ -38,5 +38,18 @@
  * among them: it has no sibling Vitest file by policy (.claude/rules/rendering.md) and is
  * reached only through the GL harness, which exercises `ring` alone.
  */
-export const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio', 'ring', 'ring+audio']);
 export type BlockedFireCue = 'haptic' | 'audio' | 'haptic+audio' | 'ring' | 'ring+audio';
+// Typed against the union rather than inferred as `Set<string>`, so iterating the set
+// yields `BlockedFireCue` and a member the union does not name is a compile error here.
+export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([
+  'haptic',
+  'audio',
+  'haptic+audio',
+  'ring',
+  'ring+audio',
+]);
+
+/** Narrow a raw string (a URL flag value) to a cue the union names. */
+export function isBlockedFireCue(raw: string): raw is BlockedFireCue {
+  return (BLOCKED_FIRE_CUES as ReadonlySet<string>).has(raw);
+}

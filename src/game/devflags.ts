@@ -13,7 +13,7 @@ import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import type { QualityPreset } from '../render/quality';
 import type { AiTargetPerception } from '../sim/types';
 import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
-import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../presentation/blocked-fire';
+import { BLOCKED_FIRE_CUES, isBlockedFireCue, type BlockedFireCue } from '../presentation/blocked-fire';
 
 export interface DevFlags {
   /**
@@ -421,7 +421,7 @@ function asMineTrigger(params: URLSearchParams): UnarmedTrigger | null {
 function asBlockedFireCue(params: URLSearchParams): BlockedFireCue | null {
   const raw = params.get('blockedFire');
   if (raw === null) return null;
-  return BLOCKED_FIRE_CUES.has(raw) ? (raw as BlockedFireCue) : null;
+  return isBlockedFireCue(raw) ? raw : null;
 }
 
 function asBackdrop(params: URLSearchParams): BackdropTreatment | null {

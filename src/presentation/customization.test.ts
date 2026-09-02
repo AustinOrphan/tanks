@@ -73,7 +73,7 @@ describe('the palette', () => {
 });
 
 describe('skins', () => {
-  it('offers the approved six, solid first as the default', () => {
+  it('offers the approved seven, solid first as the default', () => {
     // `clouds` is the newest and arrived by accident: unifying the `auto` accent briefly
     // gave camo a far larger delta, and the light blotch field that produced was better
     // as its own skin than as a broken camo. It shares camo's painter at a different
