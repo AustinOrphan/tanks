@@ -13,6 +13,7 @@ import { createHud, type Hud } from './hud';
 import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
 import type { RouteUiDeps } from './route-ui';
+import type { GamepadLike } from '../input/gamepad';
 
 /**
  * Issue #468's coverage, and the shape of it is the point.
@@ -104,6 +105,9 @@ interface Fixture {
   versusStarts: VersusConfig[];
   campaignRequests: () => number;
   previewDisposals: () => number;
+  /** The page menu poller's pads and queued frames (issue #494). */
+  pads: GamepadLike[];
+  frames: Array<(now: number) => void>;
   dismissLaunch(): void;
 }
 
@@ -134,6 +138,10 @@ function fixture(
     campaignRequests: 0,
     previewDisposals: 0,
     launchDismissed: opts.launchDismissed ?? false,
+    /** The pads the page's menu poller sees (issue #494); a test mutates this and runs a frame. */
+    pads: [] as GamepadLike[],
+    /** Page frames requested and not yet run or cancelled, oldest first. */
+    frames: [] as Array<(now: number) => void>,
   };
 
   const routeUiDeps: RouteUiDeps = {
@@ -172,6 +180,14 @@ function fixture(
   const deps: RouteHostDeps = {
     ...routeUiDeps,
     run: stores.run,
+    menuGamepads: () => box.pads,
+    requestFrame: (cb) => {
+      box.frames.push(cb);
+      return () => {
+        const at = box.frames.indexOf(cb);
+        if (at >= 0) box.frames.splice(at, 1);
+      };
+    },
     createHud: opts.realHud ? (r) => createHud(r) : () => hud.hud,
     // The REAL state machine. A fake over a surface variable cannot show that a
     // page-scoped machine resets its route on attach, which is one of this file's claims.
@@ -205,6 +221,8 @@ function fixture(
     versusStarts: box.versusStarts,
     campaignRequests: () => box.campaignRequests,
     previewDisposals: () => box.previewDisposals,
+    pads: box.pads,
+    frames: box.frames,
     dismissLaunch: () => {
       box.launchDismissed = true;
     },
@@ -814,5 +832,173 @@ describe('createRouteHost: disposal', () => {
     f.host.dispose();
     expect(f.hud.disposals()).toBe(1);
     expect(f.previewDisposals()).toBe(1);
+  });
+});
+
+describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
+  /** A standard-mapping pad with `pressed` buttons and centred sticks. */
+  const pad = (...pressed: number[]): GamepadLike => ({
+    axes: [0, 0, 0, 0],
+    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
+    id: 'Fake Pad',
+  });
+  /** Run the one queued page frame at `now`; the poller queues the next one itself. */
+  const frame = (f: Fixture, now: number): void => {
+    expect(f.frames.length, 'exactly one page frame should be queued').toBe(1);
+    f.frames.shift()!(now);
+  };
+  /** The first control hud.ts's roving walk would land on: enabled and not inside a hidden subtree. */
+  const firstControl = (container: HTMLElement): HTMLElement => {
+    const hidden = (el: HTMLElement): boolean => {
+      for (let n: HTMLElement | null = el; n && n !== container; n = n.parentElement) {
+        if (getComputedStyle(n).display === 'none') return true;
+      }
+      return false;
+    };
+    return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).find(
+      (el) => !(el instanceof HTMLButtonElement && el.disabled) && !hidden(el),
+    )!;
+  };
+
+  it('polls on a page frame loop from construction: one frame queued, and each frame queues the next', () => {
+    const f = fixture({ launchDismissed: true });
+    expect(f.frames).toHaveLength(1);
+    frame(f, 0);
+    expect(f.frames, 'the frame did not queue its successor').toHaveLength(1);
+  });
+
+  it('any button at Launch dismisses the splash, exactly as a key does', () => {
+    const f = fixture();
+    expect(f.host.sm.atLaunch).toBe(true);
+    f.pads.push(pad(0));
+    frame(f, 0);
+    expect(f.host.sm.atLaunch, 'Confirm did not dismiss Launch').toBe(false);
+    expect(f.host.sm.atMainMenu).toBe(true);
+  });
+
+  it('a direction walks the real HUD and Back pops its layer', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    const panel = f.root.querySelector('.hud-panel') as HTMLElement;
+    expect(document.activeElement).toBe(panel);
+    f.pads.push(pad(13)); // D-pad Down
+    frame(f, 0);
+    expect(document.activeElement, 'Down did not move focus into the panel').toBe(firstControl(panel));
+    f.pads[0] = pad(); // released
+    frame(f, 16);
+    (f.root.querySelector('.hud-customize-open') as HTMLElement).focus();
+    f.pads[0] = pad(0); // A: confirm
+    frame(f, 32);
+    const customize = f.root.querySelector('.hud-customize') as HTMLElement;
+    expect(customize.classList.contains('hud-customize--hidden'), 'Confirm did not open the pane').toBe(false);
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(1); // B: back
+    frame(f, 64);
+    expect(customize.classList.contains('ui-surface--leaving'), 'Back did not pop the pane').toBe(true);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('Start pauses a simulating session and resumes a paused one; every other action is dropped mid-play', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    f.host.attach();
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    expect(f.host.sm.isSimulating).toBe(true);
+    // The MACHINE decides, not the DOM. Today no panel is displayed while a session
+    // simulates, so the HUD's dispatcher would be inert anyway; a surface pushed here by
+    // hand stands in for a future gameplay HUD with focusable controls (issue #324), and
+    // a direction must still move nothing while the round runs.
+    f.host.hud.setState('main-menu');
+    const panel = f.root.querySelector('.hud-panel') as HTMLElement;
+    const focusBefore = document.activeElement;
+    expect(focusBefore, 'the pushed surface focused its container').toBe(panel);
+    f.pads.push(pad(13, 0, 1)); // Down, A and B all held mid-play
+    frame(f, 0);
+    expect(f.host.sm.isSimulating, 'a menu action reached a simulating session').toBe(true);
+    expect(document.activeElement, 'a direction moved focus mid-play').toBe(focusBefore);
+    f.pads[0] = pad(9); // Start
+    frame(f, 16);
+    expect(f.host.sm.isPaused, 'Start did not pause').toBe(true);
+    f.pads[0] = pad(9, 0); // Start still held, A pressed: no repeat, and A is a fresh press at Pause
+    frame(f, 32);
+    expect(f.host.sm.isPaused, 'a held Start repeated').toBe(true);
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(9);
+    frame(f, 64);
+    expect(f.host.sm.isPaused, 'a second Start did not resume').toBe(false);
+    expect(f.host.sm.isSimulating).toBe(true);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    f.host.attach();
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    f.host.sm.pause();
+    (f.root.querySelector('.hud-controllers-open') as HTMLElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }),
+    );
+    const controllers = f.root.querySelector('.hud-controllers') as HTMLElement;
+    expect(controllers.classList.contains('hud-controllers--hidden')).toBe(false);
+    f.pads.push(pad(1)); // B
+    frame(f, 0);
+    expect(controllers.classList.contains('ui-surface--leaving'), 'Back did not pop the pane').toBe(true);
+    expect(f.host.sm.isPaused, 'Back over a pane resumed the round underneath').toBe(true);
+    f.pads[0] = pad();
+    frame(f, 16);
+    f.pads[0] = pad(1);
+    frame(f, 32);
+    expect(f.host.sm.isPaused, 'Back with nothing open did not resume').toBe(false);
+    expect(f.stopRequests(), 'Back asked the page to dispose the session').toBe(0);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('a held A across a Resume does not confirm again, so the pad that resumed the round is silent at the next Pause', () => {
+    // The poller's own edge state: A pressed at Pause (Resume, via confirm on the focused
+    // action button) stays "held" through play, and the next Pause sees no fresh edge.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    const slot = f.host.attach();
+    // What a real session registers: the action button at Pause is Resume.
+    slot.onStartRestart(() => {
+      if (f.host.sm.isPaused) f.host.sm.resume();
+    });
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    f.host.sm.pause();
+    const action = f.root.querySelector('.hud-action') as HTMLElement;
+    expect(action.textContent).toBe('Resume');
+    action.focus();
+    f.pads.push(pad(0));
+    frame(f, 0);
+    expect(f.host.sm.isSimulating, 'Confirm on Resume did not resume').toBe(true);
+    f.host.sm.pause();
+    action.focus();
+    frame(f, 16); // A still held
+    expect(f.host.sm.isPaused, 'a held A re-confirmed at the next Pause').toBe(true);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('disposal cancels the queued frame, and a frame that fires anyway emits nothing', () => {
+    const f = fixture({ launchDismissed: true });
+    f.host.attach();
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    f.host.sm.pause();
+    // Negative control for the emission claim: a live frame with Start held resumes.
+    f.pads.push(pad(9));
+    frame(f, 0);
+    expect(f.host.sm.isPaused, 'the live poller did not resume').toBe(false);
+    f.pads[0] = pad();
+    frame(f, 16);
+    f.host.sm.pause();
+    const queued = f.frames[0]!;
+    f.host.dispose();
+    expect(f.frames, 'disposal left a frame queued').toHaveLength(0);
+    f.pads[0] = pad(9);
+    queued(32);
+    expect(f.frames, 'a post-disposal frame queued another').toHaveLength(0);
+    expect(f.host.sm.isPaused, 'a disposed poller still emitted').toBe(true);
   });
 });

@@ -142,6 +142,16 @@ export interface GamepadReader {
    * a real press.
    */
   connected(): boolean;
+  /**
+   * Arm a one-poll edge resync (issue #494): the NEXT `poll()` adopts whatever the fire and
+   * mine buttons are doing as the "previous" state without reporting an edge. The menu
+   * poller (`gamepad-menu.ts`) reads the same face buttons as Confirm and Back while
+   * nothing simulates, and this reader is not polled at all then -- so a Resume confirmed
+   * with A, still held on the first simulated tick, would otherwise read here as a fresh
+   * press and fire a shell. `loop.ts` calls this on every entry into play, beside
+   * `clearQueuedPresses()`.
+   */
+  resync(): void;
   /** No listeners are registered -- poll() only ever reads `getGamepads()` -- so there is
    * nothing to release. Present for symmetry with every other input collaborator, all of
    * which expose dispose(). */
@@ -162,6 +172,7 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
   let cachedConnected = false;
   let prevFire = false;
   let prevMine = false;
+  let resyncPending = false;
 
   return {
     poll(playerPos: Vec2 | null): GamepadPoll {
@@ -179,6 +190,7 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
       if (pad == null) {
         prevFire = false;
         prevMine = false;
+        resyncPending = false;
         return NEUTRAL_POLL;
       }
       // No "just connected" edge is computed here, deliberately: an earlier draft
@@ -200,15 +212,20 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
 
       const firePressed = pad.buttons[GAMEPAD_FIRE_BUTTON]?.pressed ?? false;
       const minePressed = pad.buttons[GAMEPAD_MINE_BUTTON]?.pressed ?? false;
-      const fire = firePressed && !prevFire;
-      const mine = minePressed && !prevMine;
+      // A resync poll reports no edge and only records what is held -- see `resync()`.
+      const fire = firePressed && !prevFire && !resyncPending;
+      const mine = minePressed && !prevMine && !resyncPending;
       prevFire = firePressed;
       prevMine = minePressed;
+      resyncPending = false;
 
       return { move, aim, fire, mine };
     },
     connected(): boolean {
       return cachedConnected;
+    },
+    resync(): void {
+      resyncPending = true;
     },
     dispose(): void {
       // Nothing registered; see the interface doc comment.
@@ -229,6 +246,12 @@ export interface PlayerInputSource {
   /** Same contract as `InputController.setPlayerPosition` -- see its doc comment. */
   setPlayerPosition(pos: Vec2 | null): void;
   gamepadConnected(): boolean;
+  /**
+   * Forwarded to the slot's gamepad reader's `resync()` (see `GamepadReader`), when the
+   * source has one. Optional because a held or bot source has no hardware edge to resync;
+   * `loop.ts` calls it on every real source on every entry into play.
+   */
+  resyncGamepad?(): void;
   dispose(): void;
 }
 
@@ -313,6 +336,9 @@ export function createGamepadInputSource(getGamepads: GetGamepads, padIndex: num
     },
     gamepadConnected(): boolean {
       return reader.connected();
+    },
+    resyncGamepad(): void {
+      reader.resync();
     },
     dispose(): void {
       reader.dispose();

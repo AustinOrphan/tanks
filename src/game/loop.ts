@@ -34,6 +34,7 @@ import {
   type RecordingInput,
   type ReplayTrace,
 } from './replay';
+import { consumesKey } from '../input/ui-actions';
 import { createInputController, type InputController } from '../input/input';
 import {
   createGamepadInputSource,
@@ -635,29 +636,27 @@ export function botSlotsFor(playerCount: number, botCount: number): Set<number> 
  * whichever state the repeat count's parity happened to pick. Keys aimed at a
  * focused control that CONSUMES them belong to that control, not to the game.
  *
- * `input,select,textarea`, not `button` (issue #318). A text or range input, a select
- * and a textarea take letters and Escape for themselves; a button consumes Space and
- * Enter and nothing else, so M, P and Escape on a focused button are the player's.
- * The guard used to name `button` too, and that one word is why every panel arrival
- * had to focus its CONTAINER rather than a control: a focused Resume killed
- * Escape-to-resume, a focused menu button killed M. Back now returns focus to the
- * control that opened the layer (spec: "restores the invoking control"), which is only
- * legal because a focused button no longer swallows the hotkeys.
+ * `consumesKey` (`input/ui-actions.ts`), the SAME rule `input.ts` drives the tank by
+ * (issues #318, #494): a control keeps only the keys it consumes. Text entry keeps
+ * everything; a button, slider or select keeps Space, Enter, the arrows and Home/End
+ * and nothing else -- so M, P and Escape on a focused button OR a focused volume slider
+ * are the player's. The guard used to name `button`, and that one word is why every
+ * panel arrival had to focus its CONTAINER rather than a control: a focused Resume
+ * killed Escape-to-resume, a focused menu button killed M. Then it named
+ * `input,select,textarea`, which still ate Escape on a focused slider. Back returns
+ * focus to the control that opened the layer (spec: "restores the invoking control"),
+ * which is only legal because a focused control no longer swallows the hotkeys.
  */
 export function isMuteHotkey(e: KeyboardEvent): boolean {
   if (e.repeat) return false;
-  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {
-    return false;
-  }
+  if (consumesKey(e.target, e.key)) return false;
   return e.key === 'm' || e.key === 'M';
 }
 
 /** Escape or P toggles pause, under the same repeat/focused-control guard as mute. */
 export function isPauseHotkey(e: KeyboardEvent): boolean {
   if (e.repeat) return false;
-  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {
-    return false;
-  }
+  if (consumesKey(e.target, e.key)) return false;
   return e.key === 'Escape' || e.key === 'p' || e.key === 'P';
 }
 
@@ -2804,6 +2803,12 @@ export function startGameWith(
     // key listeners keep running -- so a press completed on an outcome or Main Menu
     // screen latches and fires on the first sample() of the NEXT round.
     if (!nowPlaying) input.clearQueuedPresses();
+    // The gamepad half, on every ENTRY into play (issue #494): the page's menu poller
+    // reads A and B as Confirm and Back while nothing simulates, and the gameplay
+    // readers -- not polled at all then -- would otherwise see the A that confirmed
+    // Resume, still held on the first tick, as a fresh fire edge. Every real source,
+    // slot 0 and each co-player pad alike; a held or bot source has nothing to resync.
+    if (nowPlaying) for (const src of realSources.values()) src.resyncGamepad?.();
   });
 
   // The initial surface paint moved to `route-host.ts` with the subscription above; the

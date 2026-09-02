@@ -265,6 +265,98 @@ describe('createGamepadReader: fire and mine are edges, never held state', () =>
   });
 });
 
+describe('createGamepadReader: resync (issue #494)', () => {
+  // The menu poller (gamepad-menu.ts) reads buttons 0 and 1 as Confirm and Back while
+  // nothing simulates, and this reader is not polled at all then. Without a resync the
+  // A that confirmed Resume, still down on the first simulated tick, would read here as
+  // a fresh press and fire a shell. `resync()` arms ONE poll to adopt whatever is held
+  // as already-held, without reporting an edge.
+  const NEUTRAL = { move: { x: 0, y: 0 }, aim: null, fire: false, mine: false };
+
+  it('a button already DOWN on the resync poll is adopted as held, not reported -- twin reader over the same pad is the control', () => {
+    // Two readers, one pad, one differing call: the control reader proves the press is
+    // real and fires; the resynced reader proves resync() alone is what silences it.
+    const pads = [fakePad({ buttons: [true, true] })];
+    const control = createGamepadReader(() => pads);
+    const resynced = createGamepadReader(() => pads);
+    resynced.resync();
+    const c = control.poll(null);
+    const r = resynced.poll(null);
+    expect(c.fire).toBe(true); // negative control
+    expect(c.mine).toBe(true);
+    expect(r.fire).toBe(false);
+    expect(r.mine).toBe(false);
+    expect(resynced.connected()).toBe(true); // the resync poll still reads presence; it is not a skipped poll
+    // The adopted hold behaves as an ordinary hold on the polls after: still no edge.
+    const later = resynced.poll(null);
+    expect(later.fire).toBe(false);
+    expect(later.mine).toBe(false);
+  });
+
+  it('with fire held across polls, poll() reports fire once; a resync() mid-hold does not RE-ARM the held button', () => {
+    // A naive resync that reset prevFire to false would make the next poll fire again.
+    const reader = createGamepadReader(() => [fakePad({ buttons: [true, false] })]);
+    expect(reader.poll(null).fire).toBe(true); // the press edge, before any resync
+    reader.resync();
+    expect(reader.poll(null).fire).toBe(false); // the resync poll
+    expect(reader.poll(null).fire).toBe(false); // and the one after
+  });
+
+  it('a press that STARTS on the poll after the resync poll fires: resync consumes exactly one poll', () => {
+    // Resync must not eat a genuine press. The line is the poll: down ON the resync poll
+    // is adopted (previous test); down on the NEXT poll is a press.
+    let pressed = false;
+    const reader = createGamepadReader(() => [fakePad({ buttons: [pressed, false] })]);
+    reader.resync();
+    expect(reader.poll(null).fire).toBe(false); // the resync poll, button up: nothing to adopt
+    pressed = true;
+    expect(reader.poll(null).fire).toBe(true); // a genuine press one poll later
+    expect(reader.poll(null).fire).toBe(false); // ...and it is an edge like any other
+  });
+
+  it('a release then re-press after a resync fires again -- the adopted hold is an ordinary hold', () => {
+    let pressed = true;
+    const reader = createGamepadReader(() => [fakePad({ buttons: [pressed, false] })]);
+    reader.resync();
+    expect(reader.poll(null).fire).toBe(false); // adopted
+    pressed = false;
+    expect(reader.poll(null).fire).toBe(false); // released
+    pressed = true;
+    expect(reader.poll(null).fire).toBe(true); // re-pressed: a new press
+  });
+
+  it('resync() with no pad present is harmless, and is spent by that poll like the rest of the edge state', () => {
+    let present = false;
+    const reader = createGamepadReader(() => (present ? [fakePad({ buttons: [true, false] })] : []));
+    reader.resync();
+    expect(reader.poll(null)).toEqual(NEUTRAL);
+    expect(reader.connected()).toBe(false);
+    present = true;
+    // Mirrors 'a disconnect clears the held-button edge state' above: the no-pad poll
+    // reset everything, resync included, so a pad appearing with A down is a fresh press.
+    expect(reader.poll(null).fire).toBe(true);
+  });
+
+  it('createGamepadInputSource(...).resyncGamepad() forwards to its reader: a held A samples fire: false, and a re-press fires', () => {
+    let pressed = true;
+    const getGamepads: GetGamepads = () => [fakePad({ buttons: [pressed, false] })];
+    const control = createGamepadInputSource(getGamepads);
+    const resynced = createGamepadInputSource(getGamepads);
+    // Optional on PlayerInputSource (a held or bot source has nothing to resync); a
+    // gamepad source without it could never be resynced by loop.ts, so its presence is
+    // part of the contract.
+    expect(resynced.resyncGamepad).toBeDefined();
+    resynced.resyncGamepad?.();
+    expect(control.sample().fire).toBe(true); // negative control: the same pad fires without a resync
+    expect(resynced.sample().fire).toBe(false);
+    expect(resynced.sample().fire).toBe(false);
+    pressed = false;
+    resynced.sample();
+    pressed = true;
+    expect(resynced.sample().fire).toBe(true);
+  });
+});
+
 /**
  * `createGamepadInputSource` is production code today runs `gamepad.ts` detached
  * from `input.ts`'s merge -- this is co-op's slot 1, driven by NOTHING but a

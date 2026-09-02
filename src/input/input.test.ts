@@ -495,6 +495,56 @@ describe('createInputController — gamepad', () => {
     expect(() => c.dispose()).not.toThrow();
     controller = null;
   });
+
+  it('resyncGamepad(): an A already down on the resync sample is adopted as held and does not fire; a later fresh press does', () => {
+    // Issue #494: the menu poller consumed A as Confirm while this reader was not being
+    // sampled. loop.ts calls resyncGamepad() on every entry into play so that same A,
+    // still down on the first simulated tick, is not a shell.
+    const target = makeTarget();
+    let pressed = true;
+    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [pressed, false] })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    expect(controller.sample().fire).toBe(true); // negative control: the same held A fires with no resync
+    expect(controller.sample().fire).toBe(false); // ...once
+    pressed = false;
+    controller.sample(); // released; then the menu opens and sampling stops
+    controller.resyncGamepad();
+    pressed = true; // Confirm pressed on the menu, still down on the first tick back
+    expect(controller.sample().fire).toBe(false); // adopted as held: no shell
+    expect(controller.sample().fire).toBe(false); // and not re-armed
+    pressed = false;
+    controller.sample();
+    pressed = true;
+    expect(controller.sample().fire).toBe(true); // a genuine press after the resync fires
+  });
+
+  it('resyncGamepad() touches only the gamepad edge: a latched mouse shot survives it, where clearQueuedPresses() drops it', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad()];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    target.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
+    controller.resyncGamepad();
+    expect(controller.sample().fire).toBe(true);
+    // Negative control: the other reset on this interface, applied to the same latch.
+    target.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
+    controller.clearQueuedPresses();
+    expect(controller.sample().fire).toBe(false);
+  });
+
+  it('with gamepad: false, resyncGamepad() is a no-op that does not throw, and the controller keeps working', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [true, false] })];
+    controller = createInputController(target, echoGround, { gamepad: false, getGamepads });
+
+    expect(() => controller!.resyncGamepad()).not.toThrow();
+    key('keydown', 'd');
+    const s = controller.sample();
+    expect(s.move).toEqual({ x: 1, y: 0 }); // keyboard still drives
+    expect(s.fire).toBe(false); // the held pad A is still ignored: no reader was ever built
+    expect(controller.gamepadConnected()).toBe(false);
+  });
 });
 
 describe('createInputController — focus does not steal the tank', () => {

@@ -3,6 +3,7 @@ import { createBrowserDeps, startGameWith, versusAwareDeps } from './game/loop';
 import { boot } from './boot';
 import { createBrowserAppShell } from './game/app-shell';
 import { createRouteHost } from './game/route-host';
+import { readNavigatorGamepads } from './input/gamepad';
 
 // Wiring only. Everything this file used to do -- the WebGL error page, the
 // teardown registration -- lives in boot.ts, which can be called with fakes.
@@ -47,5 +48,18 @@ boot({
   // reads are the SAME `createBrowserDeps` a session gets -- which matters, because the
   // stores behind them (`shell.settings.stores`) are the page's, so the Main Menu and a
   // running match are reading one set of preferences and one campaign run, not two.
-  createRouteHost: (root, shell, requests) => createRouteHost(root, createBrowserDeps(shell), requests),
+  createRouteHost: (root, shell, requests) =>
+    createRouteHost(
+      root,
+      {
+        ...createBrowserDeps(shell),
+        // The page's menu poller (issue #494): the real pads and the real frame loop.
+        menuGamepads: readNavigatorGamepads,
+        requestFrame: (cb) => {
+          const id = requestAnimationFrame(cb);
+          return () => cancelAnimationFrame(id);
+        },
+      },
+      requests,
+    ),
 });

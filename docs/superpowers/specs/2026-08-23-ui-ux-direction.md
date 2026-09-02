@@ -504,7 +504,9 @@ the dedicated composition, offer a remembered suggestion rather than a blocking 
 Use 320×568, 390×844, 844×390, 768×1024, 1280×720/800, 1920×1080, and 2560×1440 where the
 composition differs; add 200% zoom, safe-area/notch, reduced-motion, physical phone,
 controller-only, and couch-distance TV review. Automated screenshots cannot replace physical TV
-legibility or touch reachability review.
+legibility or touch reachability review. Controller-only review starts from a splash dismissed
+by the pad; audio unlocks only on the first pointer or key (the engine self-heals), so a
+pad-only session is expected to be silent until then (issue #494).
 
 ## 8. Existing-issue reconciliation
 
