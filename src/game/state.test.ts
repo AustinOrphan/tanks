@@ -410,6 +410,45 @@ describe('onChange -- subscription', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
+  it('the returned unsubscribe stops delivery to that subscriber and to no other', () => {
+    // The page-scoped machine outlives every session (issue #468); this is what a
+    // session calls at disposal so its subscriber dies with it. The sibling is the
+    // negative control: an unsubscribe that emptied the whole list would pass a
+    // single-subscriber test.
+    const sm = makeMachine();
+    const retired = vi.fn();
+    const live = vi.fn();
+    const stop = sm.onChange(retired);
+    sm.onChange(live);
+    sm.dismissLaunch();
+    expect(retired).toHaveBeenCalledTimes(1);
+    stop();
+    sm.enterGameplay(buildCampaignSession());
+    expect(retired, 'still delivered to after unsubscribing').toHaveBeenCalledTimes(1);
+    expect(live, 'the sibling was unsubscribed too').toHaveBeenCalledTimes(2);
+  });
+
+  it('unsubscribing during an emit neither skips a sibling nor throws, and a second call is inert', () => {
+    // A subscriber that unsubscribes a sibling mid-emit is what a session disposing
+    // inside a state change looks like. The emit iterates a snapshot, so the sibling
+    // registered AFTER the one being removed still receives the change it was
+    // subscribed for -- splicing the live array under the loop would skip it.
+    const sm = makeMachine();
+    const seen: string[] = [];
+    let stopSecond: () => void = () => {};
+    sm.onChange(() => {
+      seen.push('first');
+      stopSecond();
+      stopSecond(); // inert the second time: nothing else is removed
+    });
+    stopSecond = sm.onChange(() => seen.push('second'));
+    sm.onChange(() => seen.push('third'));
+    sm.dismissLaunch();
+    expect(seen).toEqual(['first', 'second', 'third']);
+    sm.enterGameplay(buildCampaignSession());
+    expect(seen).toEqual(['first', 'second', 'third', 'first', 'third']);
+  });
+
   it('emits the new AppLocation payload to subscribers', () => {
     const sm = makeMachine();
     const seen: AppLocation[] = [];

@@ -107,7 +107,7 @@ import {
 } from './loop';
 import { versusMapChoices, type VersusConfig } from './versus-config';
 import { boot as bootPage } from '../boot';
-import { createGameStateMachine } from './state';
+import { createGameStateMachine, type GameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
 import { createAppShell, type AppShell } from './app-shell';
 import { createRouteHost, type RouteHost, type SessionRequests, type StartIntent } from './route-host';
@@ -1066,8 +1066,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       resume(): void {
         if (currentSurface === 'paused') setSurface('playing');
       },
-      onChange(cb): void {
+      onChange(cb): () => void {
         changeCbs.push(cb);
+        return () => {
+          const i = changeCbs.indexOf(cb);
+          if (i >= 0) changeCbs.splice(i, 1);
+        };
       },
     }),
     createHud: (root) => {
@@ -8094,8 +8098,15 @@ function bootPageOn(
   sessions(): number;
   /** The page's real shell, for reading the PAGE-level Launch gate directly. */
   shell: AppShell;
+  /**
+   * The page's REAL state machine, captured at construction. For driving a terminal
+   * event through `onEvents` the way the driver does, from a test that has no world
+   * to emit one.
+   */
+  sm: GameStateMachine;
 } {
   const root = document.createElement('div');
+  let capturedMachine: GameStateMachine | null = null;
   let requestVersus: ((config: VersusConfig) => void) | null = null;
   let requestCampaign: (() => void) | null = null;
   /**
@@ -8156,7 +8167,10 @@ function bootPageOn(
         hostRoot,
         {
           ...h.deps,
-          createStateMachine: createGameStateMachine,
+          createStateMachine: (config) => {
+            capturedMachine = createGameStateMachine(config);
+            return capturedMachine;
+          },
           launchGate: {
             dismissed: () => appShell.launchDismissed(),
             dismiss: () => appShell.dismissLaunch(),
@@ -8220,6 +8234,10 @@ function bootPageOn(
     requestCampaign: () => requestCampaign!(),
     pagehide: () => pagehideFns.forEach((fn) => fn({ persisted: false })),
     sessions: () => sessions,
+    get sm(): GameStateMachine {
+      if (capturedMachine === null) throw new Error('the route host built no state machine');
+      return capturedMachine;
+    },
     /**
      * The page's real shell, so a test can read the PAGE-level Launch gate rather than
      * inferring it from what the HUD was painted.
@@ -8247,6 +8265,122 @@ function liveListener<E = never>(h: ReturnType<typeof makeDeps>, type: string): 
   if (live.length === 0) throw new Error(`no live ${type} listener`);
   return live[live.length - 1] as unknown as (e: E) => void;
 }
+
+describe('a retired session stops observing the page state machine', () => {
+  /**
+   * The state machine is page-scoped since issue #468 and every session subscribes to
+   * it (`sm.onChange`, loop.ts). A session that is retired without unsubscribing keeps
+   * running its subscriber on every later location change -- with ITS closures: its
+   * level, its identity, its disposed input controller.
+   *
+   * The visible defect: a retired PRACTICE session on level 3 records level 3 as cleared
+   * when the LIVE campaign session clears level 1, unlocking level 4 for a player who
+   * cleared level 1. Every reading below is off the recorder the real stores are wrapped
+   * in, not off a fake that could be satisfied by the live session alone.
+   */
+  it('a retired practice session does not record the live session\'s clear against its own level', () => {
+    const h = makeDeps({ levelCount: 3, progressHighest: 0 });
+    const page = bootPageOn(h, { startEmpty: true });
+    page.pointerdown();
+    page.start({ kind: 'practice', level: 2 }); // session 1: practice on level 3
+    page.sm.pause();
+    h.hud.quitToTitle(); // retires session 1
+    expect(page.sessions()).toBe(1);
+    page.start({ kind: 'campaign-new' }); // session 2: a fresh run at level 1
+    expect(page.sessions()).toBe(2);
+    expect(h.rec.cleared).toEqual([]);
+
+    page.sm.onEvents([{ type: 'win' }]); // level 1 cleared, by the LIVE session
+
+    // ONE clear, level 1's. A retired subscriber still holding level 3 pushes a second.
+    expect(h.rec.cleared).toEqual([1]);
+    // ...and the run advanced exactly once, to level 2, from the live session.
+    expect(h.rec.runAdvances).toEqual([{ level: 1, lives: LIVES }]);
+  });
+
+  it('a retired campaign session does not advance the run a second time from stale state', () => {
+    // Session 1 quits at level 2 of an active run; a New Game restarts at level 1. When
+    // the new run clears level 1, the retired subscriber -- level 2, campaign identity,
+    // the SHARED run store -- advances the run to level 3 first, and the live one then
+    // overwrites it with level 2. Ordering hides the wrong value; the recorder does not.
+    const h = makeDeps({ levelCount: 3, savedRun: { level: 1, lives: 2 } });
+    const page = bootPageOn(h, { startEmpty: true });
+    page.pointerdown();
+    page.start({ kind: 'campaign-continue' }); // session 1: the run's level 2
+    page.sm.pause();
+    h.hud.quitToTitle();
+    page.start({ kind: 'campaign-new' }); // session 2: level 1, fresh run
+    const advancesBefore = h.rec.runAdvances.length;
+
+    page.sm.onEvents([{ type: 'win' }]);
+
+    expect(h.rec.runAdvances.slice(advancesBefore)).toEqual([{ level: 1, lives: LIVES }]);
+    expect(h.deps.run.active()?.currentLevelId).toBe('1');
+  });
+});
+
+describe('the page paints the Main Menu a returning player needs before any session exists', () => {
+  /**
+   * Since issue #428 the page boots into an EMPTY host, and the paints a session used to
+   * make at its own construction -- Continue for the active run, the Levels grid sized
+   * from the save, the Records page, the paint shop's selected swatches -- happened for
+   * nobody. Measured on `main` at b581d86 with this exact fixture: after the Launch
+   * gesture, `rec.continueAvailable` and `rec.levelSelects` were both `[]`, and the HUD
+   * had been told nothing but `state:launch`, `state:main-menu`.
+   *
+   * Read through the page harness (real route host, real state machine, empty host), so a
+   * session's own duplicate of these paints -- which the session-only `boot()` harness
+   * pins elsewhere -- cannot satisfy any of them.
+   */
+  it('Continue and the Levels grid reflect the save before the first session', () => {
+    const h = makeDeps({ levelCount: 3, savedRun: { level: 1, lives: 2 }, progressHighest: 2 });
+    const page = bootPageOn(h, { startEmpty: true });
+    expect(page.sessions()).toBe(0);
+    page.pointerdown();
+    expect(page.sessions(), 'the Launch gesture must not start a session').toBe(0);
+    expect(h.rec.continueAvailable.at(-1), 'no Continue for an active run').toBe(true);
+    // Two cleared of three: the grid offers those two plus the next one.
+    expect(h.rec.levelSelects.at(-1), 'the Levels grid was never sized').toEqual([3, 3]);
+  });
+
+  it('...and shows no Continue when there is no run to continue', () => {
+    // The negative control for the assertion above: a page that painted `true`
+    // unconditionally would pass it.
+    const h = makeDeps({ levelCount: 3 });
+    const page = bootPageOn(h, { startEmpty: true });
+    page.pointerdown();
+    expect(h.rec.continueAvailable.at(-1)).toBe(false);
+  });
+
+  it('Records and the paint shop are painted from the stores before the first session', () => {
+    const h = makeDeps({ levelCount: 2, savedHull: 'red', savedSkin: 'camo', savedAccent: 'gold', savedAchievements: ['petard'] });
+    const page = bootPageOn(h, { startEmpty: true });
+    page.pointerdown();
+    expect(h.rec.statPushes, 'the Records page was never given its numbers').toBeGreaterThan(0);
+    expect(h.rec.achPushes.at(-1), 'the achievements list was never painted').toEqual(['petard']);
+    expect(h.rec.hullEchoes.at(-1)).toBe('red');
+    expect(h.rec.skinEchoes.at(-1)).toBe('camo');
+    expect(h.rec.accentEchoes.at(-1)).toBe('gold');
+  });
+
+  it('Continue is re-read on every arrival at the Main Menu, including the ones no session sees', () => {
+    // Quit disposes the session (issue #429), so the NEXT arrival at the Main Menu has no
+    // live subscriber to refresh Continue. The run ends between the two arrivals through
+    // the store directly -- the page must read the store again rather than trust the
+    // value a session painted last.
+    const h = makeDeps({ levelCount: 3, savedRun: { level: 1, lives: 2 } });
+    const page = bootPageOn(h, { startEmpty: true });
+    page.pointerdown();
+    page.start();
+    page.sm.pause();
+    h.hud.quitToTitle(); // session disposed; Continue was painted true on the way out
+    expect(h.rec.continueAvailable.at(-1)).toBe(true);
+    h.deps.run.endRun();
+    page.sm.toRoute('settings');
+    page.sm.toMainMenu(); // an arrival with no session alive to paint it
+    expect(h.rec.continueAvailable.at(-1), 'the page trusted a value a dead session painted').toBe(false);
+  });
+});
 
 describe('boot + startGameWith: the Launch gate is once per document load (issue #317)', () => {
   const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
