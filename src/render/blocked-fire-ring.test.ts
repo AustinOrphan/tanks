@@ -9,7 +9,7 @@ import { createBlockedFireRingSystem } from './blocked-fire-ring';
 import { createWorld, type World } from '../sim/world';
 import type { Tank } from '../sim/types';
 import type { SimEvent } from '../sim/events';
-import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../game/devflags';
+import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../presentation/blocked-fire';
 
 function tank(id: number, kind: string, alive = true): Tank {
   return {

@@ -84,7 +84,7 @@ import {
 } from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
-import type { BlockedFireCue } from './devflags';
+import type { BlockedFireCue } from '../presentation/blocked-fire';
 import type { RouteHost, StartIntent } from './route-host';
 import { resolveOwnerColor } from '../presentation/identity';
 import { createDriver, type RafScheduler } from './driver';

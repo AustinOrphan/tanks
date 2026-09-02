@@ -1,4 +1,4 @@
-import type { BlockedFireCue } from '../game/devflags';
+import type { BlockedFireCue } from '../presentation/blocked-fire';
 import * as THREE from 'three';
 import type { Vec2 } from '../sim/types';
 import type { World } from '../sim/world';

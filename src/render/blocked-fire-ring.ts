@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { BlockedFireCue } from '../game/devflags';
+import type { BlockedFireCue } from '../presentation/blocked-fire';
 import { TANK_RADIUS } from '../sim/constants';
 
 /**

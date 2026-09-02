@@ -1,4 +1,4 @@
-import type { BlockedFireCue } from '../game/devflags';
+import type { BlockedFireCue } from '../presentation/blocked-fire';
 import type { AudioEngine } from './engine';
 import type { SimEvent } from '../sim/events';
 
