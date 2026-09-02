@@ -631,11 +631,20 @@ export function botSlotsFor(playerCount: number, botCount: number): Set<number> 
 /**
  * Holding M fires ~30 keydowns a second, so an unguarded toggle lands on
  * whichever state the repeat count's parity happened to pick. Keys aimed at a
- * focused control belong to that control, not to the game.
+ * focused control that CONSUMES them belong to that control, not to the game.
+ *
+ * `input,select,textarea`, not `button` (issue #318). A text or range input, a select
+ * and a textarea take letters and Escape for themselves; a button consumes Space and
+ * Enter and nothing else, so M, P and Escape on a focused button are the player's.
+ * The guard used to name `button` too, and that one word is why every panel arrival
+ * had to focus its CONTAINER rather than a control: a focused Resume killed
+ * Escape-to-resume, a focused menu button killed M. Back now returns focus to the
+ * control that opened the layer (spec: "restores the invoking control"), which is only
+ * legal because a focused button no longer swallows the hotkeys.
  */
 export function isMuteHotkey(e: KeyboardEvent): boolean {
   if (e.repeat) return false;
-  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {
+  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {
     return false;
   }
   return e.key === 'm' || e.key === 'M';
@@ -644,7 +653,7 @@ export function isMuteHotkey(e: KeyboardEvent): boolean {
 /** Escape or P toggles pause, under the same repeat/focused-control guard as mute. */
 export function isPauseHotkey(e: KeyboardEvent): boolean {
   if (e.repeat) return false;
-  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {
+  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {
     return false;
   }
   return e.key === 'Escape' || e.key === 'p' || e.key === 'P';

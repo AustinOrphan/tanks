@@ -3454,7 +3454,9 @@
     "file": "tools/visual/serve-path.mjs",
     "find": "  let path;\n  try {\n    path = decodeURIComponent((url ?? '/').split('?')[0]);\n  } catch {\n    return null;\n  }\n",
     "replace": "  const path = decodeURIComponent((url ?? '/').split('?')[0]);\n",
-    "tests": ["tools/visual/serve-path.test.ts"],
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
     "expect": "killed",
     "expectFailures": 1,
     "why": "Puts the decode back outside a try, which is how the probe's handler shipped. decodeURIComponent throws URIError on malformed percent-encoding, and GET /% was measured killing the process with exit 1: nothing awaits an async request handler, so the rejection is unhandled rather than answered with a 500. The cost is not a security one -- it is a probe that answers a canvas census with a bare stack, at the moment someone is debugging a disposal leak. Exactly 1 of 9 fails, the malformed-encoding case; the traversal assertions are indifferent to this mutation, which is why they are separate entries."
@@ -3464,7 +3466,9 @@
     "file": "tools/visual/serve-path.mjs",
     "find": "  if (file !== root && !file.startsWith(root + sep)) return null;\n",
     "replace": "  // the resolved path is trusted\n",
-    "tests": ["tools/visual/serve-path.test.ts"],
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
     "expect": "killed",
     "expectFailures": 4,
     "why": "Drops the containment check entirely, leaving the resolve to escape the root the way the original join did. A raw socket sending GET /../outside.txt was measured being answered 200 with a file from outside dist. Reachability is the part worth writing down: a normalising client CANNOT get there, because WHATWG URL resolution collapses both .. and %2e%2e before the request leaves, so fetch('/../x') arrives as /x. A test driven through fetch would therefore pass against the unhardened handler and prove nothing -- the assertions sit on the resolver directly for that reason. 4 of 9 fail, the four escape shapes."
@@ -3474,7 +3478,9 @@
     "file": "tools/visual/serve-path.mjs",
     "find": "if (file !== root && !file.startsWith(root + sep)) return null;",
     "replace": "if (file !== root && !file.startsWith(root)) return null;",
-    "tests": ["tools/visual/serve-path.test.ts"],
+    "tests": [
+      "tools/visual/serve-path.test.ts"
+    ],
     "expect": "killed",
     "expectFailures": 1,
     "why": "The containment check kept but weakened to a bare prefix, which is the shape it is easiest to write by accident. A sibling directory whose name merely begins with the root's -- dist-evil next to dist -- then passes. This entry proves the SHAPE of the guard rather than its presence: measured, it fails exactly 1 of 9, and every other assertion in the file, including all three .. escapes, still passes under it. Without that one case the two forms are indistinguishable and the weaker one would survive."
@@ -3503,5 +3509,31 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "The adversarial question canonicalising both sides invites: did comparing real locations weaken the check? This keeps the realpath calls and drops the parent-directory and absolute-path rejections, so any existing target is accepted. Fails exactly 2 of args.test.ts's 10: `rejects a workspace that only looks inside the checkout` (a `tmp` symlinked out of the root, which only the canonical comparison can see) and `rejects a workspace outside the checkout` (a plain sibling directory). The symlinked-root accept case and the other 7 pass under it, which is what makes the two rejection cases the guard's negative controls rather than decoration."
+  },
+  {
+    "id": "mute-hotkey-guard-treats-a-button-as-a-native-control",
+    "file": "src/game/loop.ts",
+    "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {",
+    "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`isMuteHotkey` treats a focused button as a control that consumes M, which is the pre-#318 guard. Back now returns focus to the control that opened a layer, so after every Back the focused element IS a button, and this mutation makes M dead exactly there. COUNT_PLACEHOLDER"
+  },
+  {
+    "id": "pause-hotkey-guard-treats-a-button-as-a-native-control",
+    "file": "src/game/loop.ts",
+    "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {",
+    "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`isPauseHotkey` treats a focused button as a control that consumes Escape and P. With Back restoring focus to the Controllers button on the pause panel, this is the mutation under which the second Escape -- the one that should resume -- does nothing. COUNT_PLACEHOLDER"
   }
 ]
