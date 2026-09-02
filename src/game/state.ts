@@ -187,7 +187,20 @@ export interface GameStateMachine {
    */
   onEvents(events: SimEvent[]): void;
 
-  onChange(cb: (location: AppLocation) => void): void;
+  /**
+   * Subscribe to location changes. Returns the unsubscribe.
+   *
+   * The RETURN VALUE is not optional for a subscriber that can die before the machine
+   * does. The machine is page-scoped since issue #468 while its main subscriber is
+   * session-scoped (`loop.ts`), so a session disposed without calling this keeps running
+   * its subscriber on every later change, with its own closures -- its level, its
+   * identity, its disposed input controller. Measured before the unsubscribe existed
+   * (loop.test.ts, "a retired session stops observing the page state machine"): a
+   * retired Practice session on level 3 recorded level 3 as cleared when the LIVE
+   * campaign session cleared level 1, and a retired campaign session advanced the shared
+   * run with its own stale life count before the live one wrote the real value.
+   */
+  onChange(cb: (location: AppLocation) => void): () => void;
 }
 
 /**
@@ -270,7 +283,10 @@ export function createGameStateMachine(config: GameStateMachineConfig): GameStat
   );
 
   function emit(): void {
-    for (const cb of subscribers) cb(current);
+    // Over a SNAPSHOT: a subscriber may unsubscribe itself or a sibling while this runs
+    // (a session disposing inside a state change), and splicing the live array under a
+    // `for...of` skips the element after the removed one.
+    for (const cb of [...subscribers]) cb(current);
   }
 
   function setLocation(next: AppLocation): void {
@@ -382,8 +398,14 @@ export function createGameStateMachine(config: GameStateMachineConfig): GameStat
       setLocation(locationInGameplay(current.session, outcomePhase(outcome)));
     },
 
-    onChange(cb: (location: AppLocation) => void): void {
+    onChange(cb: (location: AppLocation) => void): () => void {
       subscribers.push(cb);
+      return () => {
+        // By identity, once: a second call finds nothing and removes nothing, so a
+        // subscriber registered twice (which nothing does) would need two releases.
+        const i = subscribers.indexOf(cb);
+        if (i >= 0) subscribers.splice(i, 1);
+      };
     },
   };
 
