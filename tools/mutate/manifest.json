@@ -3559,8 +3559,8 @@
       "src/dependency-direction.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 4,
-    "why": "The layer table loses one direction: render is allowed to import game again, which is exactly the pre-#473 state (five render modules imported game/customization.ts). The sweep over the real tree stays green under it, because the tree is clean -- which is why the guard carries hand-written fixtures that are NOT derived from MAY_IMPORT. 4 of 74 in dependency-direction.test.ts: `flags render -> game`, `flags side-effect import`, `flags CommonJS require` (all three plant a render -> game import and are now reported clean) and `has a hand-written fixture on both sides of every layer pair` (a 16th allowed pair with no clean fixture and a forbidden one). The other 18 forbidden-pair fixtures pass, as they must -- the mutation opens one direction, not all of them."
+    "expectFailures": 6,
+    "why": "The layer table loses one direction: render is allowed to import game again, which is exactly the pre-#473 state (five render modules imported game/customization.ts). The sweep over the real tree stays green under it, because the tree is clean -- which is why the guard carries hand-written fixtures that are NOT derived from MAY_IMPORT. 6 of 84 in dependency-direction.test.ts: `flags render -> game`, `flags side-effect import`, `flags CommonJS require`, `flags import.meta.glob reaching another layer` and `flags a directory-index import of game` (all five plant a render -> game import, in a different syntax each, and are now reported clean) and `has a hand-written fixture on both sides of every layer pair` (a 16th allowed pair with no clean fixture and a forbidden one). The other 20 forbidden-pair fixtures pass, as they must -- the mutation opens one direction, not all of them."
   },
   {
     "id": "dependency-direction-wiring-allowlist-admits-everything",
@@ -3572,6 +3572,18 @@
     ],
     "expect": "killed",
     "expectFailures": 3,
-    "why": "GAME_WIRING stops being an allowlist: any game module may import any render or audio module, so the check degrades to the pre-#473 world where hud.ts learned a colour from render/entities.ts. The real tree passes under it. 3 of 74 in dependency-direction.test.ts: `flags game -> render from a non-wiring import` (hud.ts, which IS listed -- for audio/manifest -- so this also pins that the list is per target module), `flags game -> audio from a file with no wiring entry` and `flags a wiring file reaching a render module it is not listed for` (loop.ts -> render/entities). The clean wiring fixtures and the layer-pair coverage test pass either way: the mutation widens the allowlist, not MAY_IMPORT."
+    "why": "GAME_WIRING stops being an allowlist: any game module may import any render or audio module, so the check degrades to the pre-#473 world where hud.ts learned a colour from render/entities.ts. The real tree passes under it. 3 of 84 in dependency-direction.test.ts: `flags game -> render from a non-wiring import` (hud.ts, which IS listed -- for audio/manifest -- so this also pins that the list is per target module), `flags game -> audio from a file with no wiring entry` and `flags a wiring file reaching a render module it is not listed for` (loop.ts -> render/entities). The clean wiring fixtures and the layer-pair coverage test pass either way: the mutation widens the allowlist, not MAY_IMPORT."
+  },
+  {
+    "id": "dependency-direction-wiring-allowlist-carries-an-unused-entry",
+    "file": "src/dependency-direction.test.ts",
+    "find": "  './game/hud.ts': ['audio/manifest'],",
+    "replace": "  './game/hud.ts': ['audio/manifest', 'audio/engine'],",
+    "tests": [
+      "src/dependency-direction.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "GAME_WIRING gains a permission nothing uses: hud.ts is allowed audio/engine, which it does not import. The sweep over the real tree stays green under it -- an unused entry forbids nothing today -- and that is the problem: it is a standing licence for the next edit to pull the audio engine into the HUD without the review moment the list exists to force. Issue #324 will drop hud.ts's DEFAULT_VOLUME import, and this is the assertion that then makes the stale `audio/manifest` entry fail rather than linger. 1 of 84 in dependency-direction.test.ts: `every GAME_WIRING entry names a real file and an import that file actually makes`; every fixture and the layer-pair coverage test pass either way, because the mutation changes no rule, only the list."
   }
 ]
