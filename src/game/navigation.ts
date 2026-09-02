@@ -186,18 +186,22 @@ export function createHistoryMirror(host: HistoryHost | null, deps: HistoryMirro
 
   function sync(depth: number): void {
     if (host === null || !active) return;
+    // The phase moves BEFORE the History call it describes. A host whose traversal lands
+    // synchronously (a test's fake; no browser does this) would otherwise deliver the
+    // popstate while the phase still reads `present`, and the retirement it reports would
+    // be taken for a real Back. `safe` puts the phase back to `absent` if the call throws.
     if (depth > 0) {
       if (phase === 'absent') {
+        phase = 'present';
         safe(() => host.pushState(LAYER_SENTINEL));
-        if (active) phase = 'present';
       } else if (phase === 'leaving') {
         phase = 'repush';
       }
       return;
     }
     if (phase === 'present') {
+      phase = 'leaving';
       safe(() => host.back());
-      if (active) phase = 'leaving';
     } else if (phase === 'repush') {
       phase = 'leaving';
     }

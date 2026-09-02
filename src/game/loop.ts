@@ -82,6 +82,7 @@ import {
   resolveBootSessionContext,
 } from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { browserHistoryHost } from './navigation';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from './devflags';
 import type { RouteHost, StartIntent } from './route-host';
@@ -1000,7 +1001,15 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
     // The pane needs the retained VS setup (issue #260) and `GameDeps.createHud` is
     // deliberately still `(root) => Hud`: the store is a BROWSER-WIRING concern, so it
     // is bound here rather than widened into the injected seam that ~200 tests build.
-    createHud: (root) => createHud(root, { versusSetup: stores.versusSetup }),
+    createHud: (root) =>
+      createHud(root, {
+        versusSetup: stores.versusSetup,
+        // The browser's Back consumes an open layer before it leaves the page (issue
+        // #318). Bound here, the browser-only factory, for the same reason the store is:
+        // `null` where `history.pushState` is missing, and absent from every injected
+        // HUD, which is what keeps the ~230 HUD tests off the History API entirely.
+        history: browserHistoryHost(window),
+      }),
     levels: createLevelSystem(devFlags, run),
     progress,
     run,

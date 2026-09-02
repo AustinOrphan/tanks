@@ -2,6 +2,7 @@
 import { defaultSlots } from './versus-setup';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { SKINS, ACCENTS } from './customization';
 import { ACHIEVEMENTS } from './achievements';
@@ -4465,7 +4466,7 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
   };
   const q = (root: HTMLElement, sel: string): HTMLElement => root.querySelector(sel) as HTMLElement;
   const isHidden = (root: HTMLElement, sel: string, cls: string): boolean => q(root, sel).classList.contains(cls);
-  const cfg = (players: number): VersusConfig => ({
+  const cfg = (players: 2 | 3 | 4): VersusConfig => ({
     mode: 'ffa',
     players,
     arenaId: 'arena-02',
@@ -4770,6 +4771,111 @@ describe('hud: Escape is Back while a layer is open (issue #318)', () => {
     } finally {
       window.removeEventListener('keydown', bubble);
       vi.useRealTimers();
+    }
+  });
+});
+
+describe('hud: the browser-history mirror (issue #318)', () => {
+  const click = (el: Element): void => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+  };
+  const q = (root: HTMLElement, sel: string): HTMLElement => root.querySelector(sel) as HTMLElement;
+
+  /** A host whose `back()` lands synchronously, so the test needs no timers. */
+  function fakeHost(): HistoryHost & { calls: string[]; pop: (state: unknown) => void } {
+    const calls: string[] = [];
+    let listener: ((state: unknown) => void) | null = null;
+    let state: unknown = null;
+    return {
+      calls,
+      get state() {
+        return state;
+      },
+      pushState(next) {
+        calls.push('push');
+        state = next;
+      },
+      replaceState(next) {
+        calls.push('replace');
+        state = next;
+      },
+      back() {
+        calls.push('back');
+        state = null;
+        listener?.(null);
+      },
+      onPopState(cb) {
+        listener = cb;
+        return () => {
+          listener = null;
+        };
+      },
+      pop(next) {
+        listener?.(next);
+      },
+    };
+  }
+
+  it('opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint', () => {
+    // Kills a HUD that never syncs the mirror: the pane would open with no history
+    // entry, so the browser's Back would leave the page with a pane still up.
+    const host = fakeHost();
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, { history: host });
+    const h = hud;
+    let closes = 0;
+    h.onCustomizeClose(() => {
+      closes += 1;
+    });
+    h.setState('main-menu');
+    expect(host.calls, 'the mirror pushed with nothing open').toEqual([]);
+    const opener = q(root, '.hud-customize-open');
+    click(opener);
+    expect(host.calls).toEqual(['push']);
+    click(q(root, '.hud-customize-back'));
+    expect(host.calls, 'Back must retire the entry with exactly one back()').toEqual(['push', 'back']);
+    expect(closes).toBe(1);
+
+    // The browser's own Back: the host lands on the base entry and reports it.
+    click(opener);
+    expect(host.calls).toEqual(['push', 'back', 'push']);
+    host.pop(null);
+    expect(q(root, '.hud-customize').classList.contains('ui-surface--leaving'), 'the browser Back did not close the pane').toBe(true);
+    expect(closes, 'the close callback must fire once for a browser Back too').toBe(2);
+    expect(document.activeElement).toBe(opener);
+    expect(host.calls, 'a browser Back that emptied the stack must traverse nothing itself').toEqual(['push', 'back', 'push']);
+    expect(h.back()).toBe(false);
+  });
+
+  it('a real jsdom history: the browser\'s Back closes the open pane and restores its opener, and location.search survives', async () => {
+    // Through `browserHistoryHost(window)`, the adapter production wires. jsdom fires
+    // popstate asynchronously after two chained tasks, hence the two awaited turns.
+    // `?dev=1` selects developer mode and the storage namespace, so the entry the mirror
+    // pushes must never carry a URL of its own.
+    const before = window.location.href;
+    window.history.replaceState(null, '', `${window.location.pathname}?dev=1#top`);
+    try {
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      hud = createHud(root, { history: browserHistoryHost(window) });
+      const h = hud;
+      h.setState('main-menu');
+      const opener = q(root, '.hud-stats-open');
+      click(opener);
+      expect(window.history.state).toEqual({ tanks: 'layer' });
+      expect(window.location.search).toBe('?dev=1');
+      expect(window.location.hash).toBe('#top');
+      window.history.back();
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(q(root, '.hud-stats').classList.contains('ui-surface--leaving'), 'the browser Back did not close the pane').toBe(true);
+      expect(document.activeElement).toBe(opener);
+      expect(window.history.state).toBeNull();
+      expect(window.location.search).toBe('?dev=1');
+      expect(h.back()).toBe(false);
+    } finally {
+      window.history.replaceState(null, '', before);
     }
   });
 });

@@ -8,7 +8,7 @@ import { createGameStateMachine } from './state';
 import { createLevelSystem } from './levels';
 import { DEV_FLAGS_OFF } from './devflags';
 import { defaultSlots } from './versus-setup';
-import type { Hud } from './hud';
+import { createHud, type Hud } from './hud';
 import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
 import type { RouteUiDeps } from './route-ui';
@@ -105,7 +105,7 @@ interface Fixture {
   dismissLaunch(): void;
 }
 
-function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
+function fixture(opts: { launchDismissed?: boolean; realHud?: boolean } = {}): Fixture {
   const storage = createMemoryStorage();
   const appSettings = createAppSettings({
     storage,
@@ -117,6 +117,9 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
   const stores = appSettings.stores;
   const hud = recordingHud();
   const root = document.createElement('div');
+  // The REAL HUD, in the document, for the cases whose subject is a click travelling
+  // through hud.ts into this host -- the recorder cannot click itself.
+  if (opts.realHud) document.body.appendChild(root);
   const box = {
     startRequests: [] as StartIntent[],
     stopRequests: 0,
@@ -161,7 +164,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
 
   const deps: RouteHostDeps = {
     ...routeUiDeps,
-    createHud: () => hud.hud,
+    createHud: opts.realHud ? (r) => createHud(r) : () => hud.hud,
     // The REAL state machine. A fake over a surface variable cannot show that a
     // page-scoped machine resets its route on attach, which is one of this file's claims.
     createStateMachine: createGameStateMachine,
@@ -658,6 +661,39 @@ describe('createRouteHost: leaving gameplay (issue #429)', () => {
     f.hud.fire('onQuitToTitle');
     f.hud.fire('onQuitToTitle');
     expect(f.stopRequests(), 'the second Quit disposed again').toBe(1);
+  });
+});
+
+describe("createRouteHost: the HUD's own Back never leaves gameplay (issue #318)", () => {
+  it('a pointer Back on Controllers at paused leaves the machine paused and requests neither a stop nor a start', () => {
+    // The direct proof of issue #429's dispose rule against the new Back path: hud.ts's
+    // `back()` re-renders the origin surface through `setState` and never touches the
+    // state machine, so `leavingGameplay` sees no exit. A Back wired through
+    // `toMainMenu` would dispose the session the player was about to resume.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    f.host.attach();
+    f.host.sm.enterGameplay({
+      descriptor: { kind: 'campaign' },
+      seed: 1,
+      arenaId: 'arena-01',
+    });
+    f.host.sm.pause();
+    expect(f.host.sm.isPaused).toBe(true);
+    const click = (sel: string): void => {
+      (f.root.querySelector(sel) as HTMLElement).dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }),
+      );
+    };
+    click('.hud-controllers-open');
+    expect((f.root.querySelector('.hud-controllers') as HTMLElement).classList.contains('hud-controllers--hidden')).toBe(false);
+    click('.hud-controllers-back');
+    expect(f.host.sm.isPaused, 'Back moved the machine').toBe(true);
+    expect(f.host.sm.inGameplay).toBe(true);
+    expect(f.stopRequests(), 'Back asked the page to dispose the session').toBe(0);
+    expect(f.startRequests, 'Back asked the page for a match').toEqual([]);
+    expect((f.root.querySelector('.hud-action') as HTMLElement).textContent).toBe('Resume');
+    f.host.dispose();
+    f.root.remove();
   });
 });
 

@@ -3641,7 +3641,7 @@
       "src/game/hud.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. COUNT_PLACEHOLDER"
   },
   {
@@ -3653,7 +3653,19 @@
       "src/game/hud.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. COUNT_PLACEHOLDER"
+  },
+  {
+    "id": "hud-never-syncs-the-mirror",
+    "file": "src/game/hud.ts",
+    "find": "    LAYERS[id].open(initial);\n    mirror.sync(layers.depth);\n    return true;",
+    "replace": "    LAYERS[id].open(initial);\n    return true;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. COUNT_PLACEHOLDER"
   }
 ]
