@@ -70,14 +70,14 @@ export interface ReplayMeta {
   lives: number;
   unarmedTrigger: UnarmedTrigger;
   invincible: boolean;
-  /** See World.corpseBlocksShells. Read off the world, same as unarmedTrigger. */
+  /** See WorldRules.corpseBlocksShells. Read off the world, same as unarmedTrigger. */
   corpseBlocksShells: boolean;
-  /** See World.muzzleClearsTanks. Read off the world, same as unarmedTrigger. */
+  /** See WorldRules.muzzleClearsTanks. Read off the world, same as unarmedTrigger. */
   muzzleClearsTanks: boolean;
-  /** See World.coopAttempts. Read off the world, same as unarmedTrigger. */
+  /** See WorldRules.coopAttempts. Read off the world, same as unarmedTrigger. */
   coopAttempts: boolean;
   /**
-   * See World.mode. NOT derivable from the tank array the way playerCount is (a
+   * See WorldRules.mode. NOT derivable from the tank array the way playerCount is (a
    * campaign-coop, ffa and teams world can all hold the same tank count) -- a recorded
    * FFA session replayed without this would reconstruct at createWorld's default
    * ('campaign-coop') and resolveStatus would dispatch differently on playback than it
@@ -85,7 +85,7 @@ export interface ReplayMeta {
    * Read off the world, same as unarmedTrigger. n-player arc PR 4; REPLAY_SCHEMA 2 -> 3.
    */
   mode: GameMode;
-  /** See World.friendlyFire. Read off the world, same as unarmedTrigger. n-player arc PR 4. */
+  /** See WorldRules.friendlyFire. Read off the world, same as unarmedTrigger. n-player arc PR 4. */
   friendlyFire: boolean;
 }
 
@@ -304,13 +304,13 @@ export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
     arenaId,
     seed: world.seed,
     lives: world.lives,
-    unarmedTrigger: world.unarmedTrigger,
+    unarmedTrigger: world.rules.unarmedTrigger,
     invincible: world.tanks.find((t) => t.kind === 'player')?.invincible ?? false,
-    corpseBlocksShells: world.corpseBlocksShells,
-    muzzleClearsTanks: world.muzzleClearsTanks,
-    coopAttempts: world.coopAttempts,
-    mode: world.mode,
-    friendlyFire: world.friendlyFire,
+    corpseBlocksShells: world.rules.corpseBlocksShells,
+    muzzleClearsTanks: world.rules.muzzleClearsTanks,
+    coopAttempts: world.rules.coopAttempts,
+    mode: world.rules.mode,
+    friendlyFire: world.rules.friendlyFire,
   };
 }
 

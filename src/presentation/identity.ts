@@ -60,7 +60,7 @@ function identityColor(slot: number): number {
 /**
  * Team colours (n-player arc PR 4) -- 'teams' mode's alternative to IDENTITY_RING_COLORS
  * at the SAME lookup site (syncTanks' ring creation, shellTintFor), dispatched on
- * `world.mode === 'teams'`. Where per-slot identity answers "which of 4 players",
+ * `world.rules.mode === 'teams'`. Where per-slot identity answers "which of 4 players",
  * teams answers "which SIDE" -- knowing your teammate's shell apart from an
  * opponent's matters more than telling two teammates apart.
  *
@@ -122,7 +122,7 @@ function teamColor(team: number): number {
  * defensive fallbacks the three existing call sites already use.
  */
 export function resolveOwnerColor(world: World, tank: Tank): number {
-  return world.mode === 'teams' ? teamColor(tank.team ?? 0) : identityColor(tank.controlledBy ?? 0);
+  return world.rules.mode === 'teams' ? teamColor(tank.team ?? 0) : identityColor(tank.controlledBy ?? 0);
 }
 
 /**

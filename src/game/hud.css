@@ -1307,9 +1307,11 @@
    * The enclosing .hud-customize is `touch-action: pan-y`; this wins on the canvas
    * itself, which is the whole point of scoping touch-action per element. (An earlier
    * version of this comment said the pane was pan-y "because it scrolls". It does not:
-   * the only `overflow-y: auto` in this file is on .hud-achievement-list. That rule's
-   * own comment gives the real reason -- it keeps a two-finger gesture on a panel from
-   * becoming a zoom trap the board's `touch-action: none` then cannot undo.)
+   * the `overflow-y: auto` scrollers in this file are .hud-achievement-list,
+   * .hud-controller-rows and the whole .hud-versus-setup pane, and this pane is not one
+   * of them. The achievement list's own comment gives the real reason -- it keeps a
+   * two-finger gesture on a panel from becoming a zoom trap the board's
+   * `touch-action: none` then cannot undo.)
    *
    * user-select/tap-highlight: a drag on a canvas is otherwise a text selection on
    * desktop and a grey flash on mobile. */

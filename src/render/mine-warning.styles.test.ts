@@ -3,6 +3,7 @@
 // when the owner picks a winner the losers' tests are deleted with their code and the
 // winner's tests explain what must not regress.
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../sim/rules';
 import * as THREE from 'three';
 import {
   heatColor, heatIntensity, cookoffScale, slumpScale, frozenFuseGrowth,
@@ -23,8 +24,7 @@ function world(mines: Mine[]): World {
   return {
     tick: 0, nextId: 100, seed: 3, tanks: [], bullets: [], mines,
     blasts: [], walls: [], spawns: [], status: 'playing', lives: 3, roundStartTick: 0,
-    unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true,
-    coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+    rules: resolveWorldRules(),
   };
 }
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import { decideAi, stepAi } from './index';
 import { greyDecision } from './grey';
 import type { AiDecision } from './decision';
@@ -27,7 +28,7 @@ function world(tanks: Tank[], over: Partial<World> = {}): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: FAR_PAST,
-    unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+    rules: resolveWorldRules(), ...over,
   };
 }
 

@@ -283,6 +283,47 @@ async function main() {
     }
   }
 
+  // The browser's own Back with a pane open (issue #318): it must consume the pane and
+  // leave the page where it was, not leave the page. Only a real browser can answer this:
+  // jsdom's `history.back()` past the bottom of its stack is a silent no-op, so a unit
+  // test cannot tell "consumed the layer" from "left the site and nothing noticed". The
+  // wait is on BOTH surfaces -- the pane hidden AND the Versus button visible again -- so
+  // a Back that unloaded the document fails the wait rather than passing by leaving
+  // nothing to inspect. Census before and after, because a Back that reached the session
+  // host (a disposed session, a rebuilt canvas) would show up there and nowhere else.
+  try {
+    const beforeBack = await page.evaluate(CENSUS);
+    await clickWhenReady(page, 'browser-back', '.hud-versus-open');
+    await page.waitForFunction(
+      () => {
+        const pane = document.querySelector('.hud-versus-setup');
+        return !!pane && !pane.classList.contains('hud-versus-setup--hidden');
+      },
+      undefined,
+      { timeout: 5000 },
+    );
+    await page.goBack();
+    await page.waitForFunction(
+      () => {
+        const pane = document.querySelector('.hud-versus-setup');
+        const open = document.querySelector('.hud-versus-open');
+        return (
+          !!pane && pane.classList.contains('hud-versus-setup--hidden') && !!open && open.offsetParent !== null
+        );
+      },
+      undefined,
+      { timeout: 5000 },
+    );
+    const afterBack = await page.evaluate(CENSUS);
+    console.log(`browser back: pane consumed, page kept | before ${JSON.stringify(beforeBack)} | after ${JSON.stringify(afterBack)}`);
+    if (JSON.stringify(beforeBack) !== JSON.stringify(afterBack))
+      problems.push('browser back: the census changed -- Back reached the session host');
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    console.log(`FAILED -- browser back: ${why}`);
+    problems.push(`browser back: ${why}`);
+  }
+
   // The denominator, printed rather than implied: "4 ran" against a silent 2 is the whole
   // difference between a sweep and a sample, and the earlier version of this probe could
   // skip a gesture without ever saying so.

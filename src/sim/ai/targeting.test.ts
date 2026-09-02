@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import {
   lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter, shotHitsOwnSide,
   friendlyInMineBlast, mineThreatensPlayer, incomingThreats, dangerAvoidMove,
@@ -52,8 +53,7 @@ function wanderTank(id: number): Tank {
 function wanderWorld(seed: number, tick: number): World {
   return {
     tick, nextId: 100, seed, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(),
   };
 }
 
@@ -460,8 +460,7 @@ describe('shotHitsOwnSide', () => {
   function w(tanks: Tank[], walls: Wall[] = []): World {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls,
-      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(),
     };
   }
 
@@ -572,8 +571,7 @@ describe('friendlyInMineBlast', () => {
   function w(tanks: Tank[]): World {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
-      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(),
     };
   }
 
@@ -639,8 +637,7 @@ describe('mineThreatensPlayer', () => {
   function w(tanks: Tank[]): World {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
-      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(),
     };
   }
 
@@ -682,8 +679,7 @@ describe('incomingThreats: dangerCorridor is an optional, defaulted parameter (e
   function threatWorld(over: Partial<World>): World {
     return {
       tick: 0, nextId: 100, seed: 1, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
-      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(), ...over,
     };
   }
 
@@ -710,8 +706,7 @@ describe('dangerAvoidMove: fleeRadius/dangerCorridor are optional, defaulted par
   function hazardWorld(over: Partial<World>): World {
     return {
       tick: 0, nextId: 100, seed: 1, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
-      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(), ...over,
     };
   }
 
@@ -1110,8 +1105,7 @@ describe('resolveOpponent: the one place an AI decides who it is fighting (issue
   function w(tanks: Tank[]): World {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
-      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(),
     };
   }
 

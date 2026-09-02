@@ -141,7 +141,7 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
     // same way -- `!== undefined` on both sides makes this self-disabling outside
     // 'teams' by construction, the same idiom isDamageImmune already uses.
     if (isDamageImmune(t, world.tick)) continue
-    if (t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam && !world.friendlyFire) continue
+    if (t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam && !world.rules.friendlyFire) continue
     if (
       vdist(t.pos, blast.pos) <= radius + TANK_RADIUS &&
       blastReaches(world.walls, blast.pos, t.pos)
@@ -236,7 +236,7 @@ export function detonateMine(
  */
 export function shellMayDetonate(world: World, mine: Mine): boolean {
   if (mine.armed) return true
-  return world.unarmedTrigger === 'bullet' || world.unarmedTrigger === 'both'
+  return world.rules.unarmedTrigger === 'bullet' || world.rules.unarmedTrigger === 'both'
 }
 
 export function stepMines(world: World, dt: number, events: SimEvent[]): void {
@@ -293,7 +293,7 @@ export function stepMines(world: World, dt: number, events: SimEvent[]): void {
     // Unarmed mines are inert unless the world says otherwise. See
     // UnarmedTrigger: 'proximity' and 'both' reinstate the instant bomb on
     // purpose, for playtesting, including the AI mutual-wipeout above.
-    if (!mine.armed && world.unarmedTrigger !== 'proximity' && world.unarmedTrigger !== 'both') {
+    if (!mine.armed && world.rules.unarmedTrigger !== 'proximity' && world.rules.unarmedTrigger !== 'both') {
       continue
     }
     for (const t of world.tanks) {

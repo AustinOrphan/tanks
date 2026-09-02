@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-09-02
 scope: Spike -- should New Game confirm before abandoning an active run?
 implementation-issues: []
 implementation-prs: []
@@ -30,14 +30,17 @@ PR was not asked to design, and "is losing a life or two and several levels of
 progress expensive enough to warrant an extra click" is a product call, not
 something the code can answer.
 
-**What would answer it:** an owner decision on whether New Game should confirm when
-`RunStore.active()` is non-null with `livesRemaining < LIVES` or `currentLevelId !==
-'0'` at click time (a run genuinely in progress, as opposed to one just started and
-immediately restarted). If yes, the affordance is small -- a second click state on the
-existing button, or a native `confirm()` -- and belongs in `hud.ts` alongside the
-button it guards.
+**Answered in direction, not yet in code.** The active UI/UX specification
+(`docs/superpowers/specs/2026-08-23-ui-ux-direction.md`, "Full screen versus overlay"
+and the Main Menu section) rules that starting a replacement campaign requires
+confirmation only when an active run would be lost, and that the confirmation is a
+modal overlay that returns to its origin. Issue #318 shipped the overlay stack that
+confirmation lands on (`kind: 'overlay'` in `src/game/navigation.ts`, with Back
+proven to fire no destructive callback); the dialog itself is issue #327's, and the
+Main Menu that offers it is issue #226's. What remains open here is only the threshold
+-- whether a run at level one with full lives counts as "would be lost" -- which #226
+should settle when it wires the confirmation.
 
-**Not scheduled.** Recorded so it is not rediscovered while reviewing this PR's
-successors.
+**Not scheduled here.** Recorded so the threshold question is not rediscovered.
 
 ---

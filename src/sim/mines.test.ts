@@ -506,7 +506,7 @@ describe('what may set off an UNARMED mine', () => {
 
   it('defaults to the shipped rule when the world does not say', () => {
     const world = createWorld({ walls: [], tanks: [], spawns: [], lives: 3 });
-    expect(world.unarmedTrigger).toBe('none');
+    expect(world.rules.unarmedTrigger).toBe('none');
   });
 });
 

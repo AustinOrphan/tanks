@@ -26,7 +26,7 @@ the stock PR -- also struck below, same idiom.
    pair of constants -- versus's respawn timing and post-revival grace are not new feel
    values, they are coop's own.
 2. ~~**Respawn cell selection.**~~ -- CLOSED by the stock PR. `pickVersusSpawnCell` is
-   now wired to `stepRespawns` via `World.arenaGeometry`, scored against every currently
+   now wired to `stepRespawns` via `World.rules.arenaGeometry`, scored against every currently
    living tank's position.
 3. ~~**Spawn protection.**~~ -- CLOSED by the stock PR. A directive settled duration
    (reuses `RESPAWN_SHIELD_TICKS`, no new timer) and shape (`isActionLocked`: fire/mine

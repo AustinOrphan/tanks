@@ -135,7 +135,7 @@ export function treadColorFor(world: World, tank: Tank): number {
   // 1/5`) with tinted marks, which #284's "keep campaign trails neutral in the initial
   // implementation" does not allow. The rings staying identity-coloured there while the
   // trails do not is a deliberate asymmetry this issue asks for, not an oversight.
-  if (world.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;
+  if (world.rules.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;
   // `identityApplies` is kept alongside the mode check rather than dropped as redundant:
   // it is the SAME gate the rings hang on, so a trail can never be tinted on a board where
   // the ring it leans toward is not drawn.

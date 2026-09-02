@@ -55,6 +55,7 @@ import { fitCameraToArea } from './framing';
 import { createPreviewControls, type PreviewControls, type PreviewPose } from './preview-controls';
 import { skinScroll, type SkinId } from '../presentation/customization';
 import type { World } from '../sim/world';
+import { resolveWorldRules } from '../sim/rules';
 import type { Tank } from '../sim/types';
 
 export interface TankPreview {
@@ -188,10 +189,11 @@ export function previewWorld(): World {
     tick: 0,
     nextId: 2,
     seed: 1,
-    unarmedTrigger: 'none',
-    corpseBlocksShells: false,
-    muzzleClearsTanks: true,
-    coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
+    // The shipped defaults, resolved by the same boundary every real world goes through
+    // (issue #472) rather than restated here as a second literal that could drift. rules.ts
+    // imports only types, so this is a value import that still pulls none of the sim's
+    // stages into the render bundle -- the reason this prop avoids `createWorld` holds.
+    rules: resolveWorldRules(),
     tanks: [tank],
     bullets: [],
     mines: [],

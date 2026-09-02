@@ -12,6 +12,7 @@
 // `.x`/`.y`, so a held reference never observes a later move. The snapshot stays because the
 // alternative depends on a convention enforced nowhere near this file.
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import { updateTargetMemory, rememberedContact, memoryAim } from './target-memory';
 import { AI_LAST_SEEN_TICKS } from '../constants';
 import { angleOf, vsub } from '../types';
@@ -29,8 +30,7 @@ function world(tanks: Tank[], over: Partial<World> = {}): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: -100000,
-    unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true,
-    coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+    rules: resolveWorldRules(), ...over,
   } as World;
 }
 /** A solid slab between (0,0) and anything out at +x. */

@@ -1,9 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { createWorld, cloneWorld, step } from './world';
+import { createWorld, cloneWorld, step, stepInputs } from './world';
 import type { World } from './world';
+import { resolveWorldRules, WORLD_RULE_KEYS, type WorldRules } from './rules';
 import type { Tank, Wall, Spawn, InputState } from './types';
 import { angleOf, vsub, slewAngle } from './types';
 import { PLAYER_TURRET_TURN_RATE, DT } from './constants';
+
+/**
+ * One value per rule that is NOT its shipped default. Typed against WorldRules itself, so
+ * a rule added later is a compile error HERE until it has a non-default sample -- and the
+ * sweeps below then cover it with no edit of their own (issue #472: "a rule added later is
+ * covered without editing the test"). The control test proves each sample really differs
+ * from its default: a sample that equalled the default would let a clone that quietly
+ * re-resolves from defaults pass every assertion.
+ */
+const NON_DEFAULT_RULES: { [K in keyof WorldRules]: WorldRules[K] } = {
+  mode: 'ffa',
+  friendlyFire: true,
+  unarmedTrigger: 'both',
+  aiTargetPerception: 'line-of-sight',
+  corpseBlocksShells: true,
+  muzzleClearsTanks: false,
+  coopAttempts: false,
+  arenaGeometry: { cols: 1, rows: 1, cellSize: 1, grid: ['.'], legend: {} },
+};
 
 function makeTank(id: number, x: number, y: number): Tank {
   return {
@@ -51,6 +71,39 @@ describe('createWorld', () => {
   });
 });
 
+/** Two live players on an open floor, under every non-default rule at once. */
+function nonDefaultWorld(): World {
+  const tanks = [makeTank(5, 2, 3), makeTank(6, 12, 3)];
+  const walls = [makeWall(9)];
+  const spawns: Spawn[] = [
+    { kind: 'player', pos: { x: 2, y: 3 }, angle: 0 },
+    { kind: 'player', pos: { x: 12, y: 3 }, angle: 0 },
+  ];
+  return createWorld({ walls, tanks, spawns, lives: 3, ...NON_DEFAULT_RULES });
+}
+
+describe('createWorld resolves the rules through the one boundary', () => {
+  it('control: every NON_DEFAULT_RULES sample differs from the shipped default (population: all WORLD_RULE_KEYS)', () => {
+    // Without this, a sample that happened to equal its default would make the survival
+    // assertions below vacuous for that key. Swept, so a key added later is checked too.
+    expect(WORLD_RULE_KEYS.length).toBeGreaterThan(0);
+    const defaults = resolveWorldRules();
+    for (const key of WORLD_RULE_KEYS) {
+      expect(NON_DEFAULT_RULES[key], key).not.toEqual(defaults[key]);
+    }
+  });
+
+  it('an init that states no rule gets exactly resolveWorldRules() -- the same object shape, every key', () => {
+    expect(makeWorld().rules).toEqual(resolveWorldRules());
+  });
+
+  it('an init that states every rule gets every stated value, frozen (population: all WORLD_RULE_KEYS)', () => {
+    const w = nonDefaultWorld();
+    for (const key of WORLD_RULE_KEYS) expect(w.rules[key], key).toEqual(NON_DEFAULT_RULES[key]);
+    expect(Object.isFrozen(w.rules)).toBe(true);
+  });
+});
+
 describe('cloneWorld', () => {
   it('is a true deep copy', () => {
     const w = makeWorld();
@@ -63,37 +116,17 @@ describe('cloneWorld', () => {
     expect(w.lives).toBe(3);
   });
 
-  it('carries corpseBlocksShells/muzzleClearsTanks across the clone -- a dropped field would silently', () => {
-    // reset to false/true (the defaults) every tick, since stepInputs clones on every
-    // call. Neither the golden trace nor a direct resolveBulletHits/spawnBullet unit
-    // test can see that: the trace shows 0 reachability for the muzzle case and the
-    // corpse default IS false, so a drop reproduces both. This is the only place that
-    // proves the field survives the clone at all.
-    const tanks = [makeTank(5, 2, 3)];
-    const walls = [makeWall(9)];
-    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
-    const w = createWorld({
-      walls, tanks, spawns, lives: 3, corpseBlocksShells: true, muzzleClearsTanks: false,
-    });
+  it('carries the rules as ONE object: the same reference, every rule intact (population: all WORLD_RULE_KEYS)', () => {
+    // The clone used to copy each rule by name, and #471 was the field it forgot: an
+    // OPTIONAL `aiTargetPerception`, read downstream as `?? 'full'`, so the loss surfaced
+    // as the shipped default rather than as `undefined`. The rules are frozen, so one
+    // shared reference is both the cheapest copy and the one that cannot omit a key.
+    // Reference identity is asserted first because it is the stronger claim; the
+    // per-key sweep is what would localise a regression to a rule if that ever broke.
+    const w = nonDefaultWorld();
     const c = cloneWorld(w);
-    expect(c.corpseBlocksShells).toBe(true);
-    expect(c.muzzleClearsTanks).toBe(false);
-  });
-
-  it('carries the OPTIONAL aiTargetPerception across the clone', () => {
-    // The most dangerous of the world rules on this clone, precisely because it is optional:
-    // ai/targeting.ts reads it as `?? 'full'`, so a dropped value does not surface as
-    // `undefined` at the use site -- it surfaces as the SHIPPED DEFAULT. game/loop.ts set the
-    // field for `?dev=1&aiPerception=los` on the world it built, and it was gone by tick 1
-    // with nothing in the tree reporting the difference.
-    const tanks = [makeTank(5, 2, 3)];
-    const walls = [makeWall(9)];
-    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
-    const w = createWorld({
-      walls, tanks, spawns, lives: 3, aiTargetPerception: 'line-of-sight',
-    });
-    const c = cloneWorld(w);
-    expect(c.aiTargetPerception).toBe('line-of-sight');
+    expect(c.rules).toBe(w.rules);
+    for (const key of WORLD_RULE_KEYS) expect(c.rules[key], key).toEqual(NON_DEFAULT_RULES[key]);
   });
 });
 
@@ -121,33 +154,20 @@ describe('step (skeleton)', () => {
     expect(a).toEqual(b);
   });
 
-  it('does not let corpseBlocksShells/muzzleClearsTanks decay across repeated real ticks', () => {
-    // stepInputs clones every tick (cloneWorld) -- a field cloneWorld dropped would read
-    // as `undefined` (falsy) from tick 2 onward even though tick 1 was built correctly,
-    // which neither a single-clone test nor the golden trace would catch.
-    const tanks = [makeTank(5, 2, 3)];
-    const walls = [makeWall(9)];
-    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
-    let w = createWorld({
-      walls, tanks, spawns, lives: 3, corpseBlocksShells: true, muzzleClearsTanks: false,
-    });
-    for (let i = 0; i < 5; i++) w = step(w, noInput).world;
-    expect(w.corpseBlocksShells).toBe(true);
-    expect(w.muzzleClearsTanks).toBe(false);
-  });
-
-  it('does not let aiTargetPerception decay across repeated real ticks', () => {
-    // Same hazard as the pair above, on the field whose drop is invisible: from tick 1 the
-    // selected 'line-of-sight' policy would read back as the shipped 'full', so the dev
-    // experiment would silently measure the default it was set up to compare against.
-    const tanks = [makeTank(5, 2, 3)];
-    const walls = [makeWall(9)];
-    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
-    let w = createWorld({
-      walls, tanks, spawns, lives: 3, aiTargetPerception: 'line-of-sight',
-    });
-    for (let i = 0; i < 5; i++) w = step(w, noInput).world;
-    expect(w.aiTargetPerception).toBe('line-of-sight');
+  it('preserves every resolved rule exactly across repeated real stepInputs ticks (population: all WORLD_RULE_KEYS, 5 ticks)', () => {
+    // stepInputs clones every tick, so a rule the clone lost -- or re-resolved from its
+    // default -- would read back wrong from tick 1 even though tick 0 was built
+    // correctly. Neither a single-clone test nor the golden trace can see that: the trace
+    // runs every world on the shipped defaults, which is exactly the value a lost rule
+    // reverts to. Two live players keep an 'ffa' world in play for all 5 ticks, so this
+    // exercises the full stage pipeline and not only the clone-then-latch path.
+    const original = nonDefaultWorld();
+    let w = original;
+    for (let i = 0; i < 5; i++) w = stepInputs(w, [noInput, noInput]).world;
+    expect(w.tick).toBe(5);
+    expect(w.status).toBe('playing');
+    expect(w.rules).toBe(original.rules);
+    for (const key of WORLD_RULE_KEYS) expect(w.rules[key], key).toEqual(NON_DEFAULT_RULES[key]);
   });
 });
 

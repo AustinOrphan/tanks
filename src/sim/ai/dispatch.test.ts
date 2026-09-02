@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import { decideAi, stepAi } from './index';
 import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, DT, AI_SEARCH_HOLD_TICKS } from '../constants';
 import type { Tank, Vec2 } from '../types';
@@ -23,7 +24,7 @@ function world(tanks: Tank[], over: Partial<World> = {}): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: FAR_PAST,
-    unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+    rules: resolveWorldRules(), ...over,
   };
 }
 
@@ -356,7 +357,7 @@ describe('stepAi', () => {
 
       const lastGrace = world([buildGrey(), buildPlayer()], {
         tick: COUNTDOWN_TICKS + GRACE_TICKS - 1,
-        roundStartTick: 0, unarmedTrigger: 'none' as const,
+        roundStartTick: 0,
       });
       stepAi(lastGrace, []);
       expect(lastGrace.bullets.length).toBe(0);

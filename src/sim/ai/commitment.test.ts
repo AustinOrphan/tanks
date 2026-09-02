@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import { commitMove } from './commitment';
 import {
   AI_COMMIT_HYSTERESIS_DOT, AI_COMMIT_EMERGENCY_DOT, AI_COMMIT_DODGE_ALIGN_DOT, TICK_HZ, TANK_RADIUS,
@@ -19,9 +20,7 @@ function tank(over: Partial<Tank> = {}): Tank {
 function world(over: Partial<World> = {}): World {
   return {
     tick: 0, nextId: 100, seed: 7, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
-    mode: 'campaign-coop', friendlyFire: false, ...over,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(), ...over,
   };
 }
 
