@@ -33,4 +33,4 @@ jobs:
       # A red scheduled run is a floor-compatibility or manifest-contract failure that
       # requires investigation; GitHub Actions retains its mutation output for diagnosis.
       - name: Mutation manifest (full, floor)
-        run: npm run mutate
+        run: npm run mutate -- --jobs auto

@@ -301,7 +301,8 @@ do not stash or discard unrelated work merely to make the preflight pass.
 CI is the authoritative repository-wide merge gate:
 
 - `verify (current)` runs the complete mutation manifest under Node 24 on pull requests
-  and pushes to `main`
+  and pushes to `main`, over the worktree pool (`--jobs auto`, issue #502): the same
+  entries and outcomes as a serial run, three at a time
 - `verify (floor)` runs the normal typecheck, unit, build, portability, and production
   audit checks under exact Node 22.13.0 plus `npm run mutate:smoke`, one representative
   real mutation-harness path; it does not run every manifest entry on each change

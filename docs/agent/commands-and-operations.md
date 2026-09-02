@@ -112,7 +112,9 @@ worktree. Do not discard or stash unrelated work merely to satisfy the preflight
 ### CI and merge verification
 
 CI is authoritative for repository-wide verification. On pull requests and pushes to
-`main`, `verify (current)` runs the complete mutation manifest under Node 24. The exact
+`main`, `verify (current)` runs the complete mutation manifest under Node 24 through the
+worktree pool (`--jobs auto`, issue #502), so its entries run three at a time on the
+four-core runner and the step takes roughly a third of the serial time. The exact
 Node 22.13.0 `verify (floor)` lane runs typecheck, unit tests, build, portability,
 production audit, and `npm run mutate:smoke`: one representative real manifest entry,
 not the complete manifest. `visual` remains a required independent browser/rendering
@@ -138,6 +140,7 @@ Specialized commands remain directly available:
 npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
 npm run capture -- --list                                  # list reproducible media recipes
 npm run mutate -- --only <id>                              # run one mutation entry
+npm run mutate -- --jobs auto                              # the whole manifest over a worktree pool (committed tree only)
 npm run mutate:smoke                                      # floor CI's representative entry
 npm run test:gl                                            # renderer construction checks
 npm run trace:browser -- --all                              # golden trace in three Playwright engines
