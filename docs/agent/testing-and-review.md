@@ -38,11 +38,14 @@ because an earlier draft there conflated them and quoted a 483,695 hit count fro
 sweep had trials. That is catchable by reading alone, but only if the populations are on
 the page.
 
-**Counts are a property of the tree at the moment you ran them**, so measure them LAST:
-writing a test changes them. `tools/mutate/run.mjs:32` exists because of this — "fails 4
-of 12" quietly becoming "fails 5 of 13" when a test is added is `killed` both times, which
-is why the manifest carries `expectFailures` rather than an outcome alone. The same
-applies to any test total quoted in a PR body.
+**Name the killer; count only when the number is the claim.** A `killed` manifest entry
+pins `killedBy`, the vitest full names of the tests that must fail under the mutation
+(issue #504). Other failures are allowed, so adding a test to the scoped file changes
+nothing, and a named test that passes under the mutation is reported by name — the rot
+an outcome-only pin would miss. `expectFailures` remains for entries whose rationale
+states a population ("N of M across ..."): those counts are a property of the tree at
+the moment you ran them, so measure them LAST, since writing a test changes them. The
+same applies to any test total quoted in a PR body.
 
 **Every assertion must be able to fail.** Before adding one, name the production change
 that would break it. Watch for tautologies against the fixture: asserting `angle: 0` in a

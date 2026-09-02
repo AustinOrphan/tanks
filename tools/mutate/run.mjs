@@ -73,8 +73,8 @@ import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFaile
 
 /**
  * @typedef {import('./lib.mjs').ManifestEntry} ManifestEntry
- * @typedef {{ failed: number, total: number, failedSuites?: number }} TestRunResult
- * @typedef {{ id: string, status: string, matches: boolean, detail?: string, failed?: number, total?: number }} MutationResult
+ * @typedef {{ failed: number, total: number, failedSuites?: number, failedTests?: string[] }} TestRunResult
+ * @typedef {{ id: string, status: string, matches: boolean, detail?: string, failed?: number, total?: number, failedTests?: string[], missingKilledBy?: string[] }} MutationResult
  * @typedef {{ reason: 'interrupted' | 'timeout' | 'indeterminate', detail: string }} FailureVerdict
  * @typedef {{ status: number | null, signal: string | null, error?: Error }} SpawnResultLike
  * @typedef {{ id: string, file: string, tests: string[], related: string[] }} UnreachableProblem
@@ -120,15 +120,16 @@ const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
 const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.meta.url));
 
 /** @param {string[]} argv
- * @returns {{ manifest: string, only: string | null, root: string, jobs: number }} */
+ * @returns {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null }} */
 export function parseArgs(argv) {
-  /** @type {{ manifest: string, only: string | null, root: string, jobs: number }} */
-  const args = { manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1 };
+  /** @type {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null }} */
+  const args = { manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1, report: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--manifest') args.manifest = argv[++i];
     else if (argv[i] === '--only') args.only = argv[++i];
     else if (argv[i] === '--root') args.root = argv[++i];
     else if (argv[i] === '--jobs') args.jobs = parseJobs(argv[++i]);
+    else if (argv[i] === '--report') args.report = argv[++i];
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   return args;
@@ -442,16 +443,35 @@ export function runTestsReal(testFiles, root = process.cwd()) {
       failed: report.numFailedTests,
       total: report.numTotalTests,
       failedSuites: report.numFailedTestSuites,
+      failedTests: failedTestNames(report),
     };
   } finally {
     rmSync(outFile, { force: true });
   }
 }
 
+/**
+ * The vitest full names (`describe ... it` titles joined by spaces, as the JSON
+ * reporter's `fullName`) of every failed assertion in a report, in report order. Pure
+ * over the reporter's shape so a test can hand in a literal; a report with no
+ * `testResults` (a run that never collected) names nothing.
+ * @param {{ testResults?: { assertionResults?: { fullName?: string, status?: string }[] }[] }} report
+ * @returns {string[]}
+ */
+export function failedTestNames(report) {
+  const names = [];
+  for (const file of report.testResults ?? []) {
+    for (const a of file.assertionResults ?? []) {
+      if (a.status === 'failed' && typeof a.fullName === 'string') names.push(a.fullName);
+    }
+  }
+  return names;
+}
+
 /** Narrower than `ManifestEntry` for `entry` on purpose: `expect`/`expectFailures`/
  * `equivalent` are the only fields this reads.
  * @param {MutationResult} result @param {number} index @param {number} count
- * @param {{ expect: string, expectFailures?: number, equivalent?: boolean }} entry */
+ * @param {{ expect: string, expectFailures?: number, killedBy?: string[], equivalent?: boolean }} entry */
 export function formatResult(result, index, count, entry) {
   const head = `[${index}/${count}] ${result.id}`;
   if (NO_VERDICT_STATUSES.has(result.status)) {
@@ -459,13 +479,16 @@ export function formatResult(result, index, count, entry) {
   }
   let tag = 'matches declared outcome';
   if (!result.matches) {
-    // Two distinct ways to mismatch: the outcome itself (killed vs. survives), or --
-    // when the manifest pins expectFailures -- the SAME outcome with a drifted count.
-    // The second is the one an outcome-only check would miss: "fails 4 of 12" quietly
-    // becoming "fails 5 of 13" is `killed` both times.
-    tag = result.status.toLowerCase() === entry.expect
-      ? `MISMATCH: manifest declared ${entry.expectFailures} failure(s), got ${result.failed}`
-      : `MISMATCH: manifest declared "${entry.expect}"`;
+    // Three distinct ways to mismatch: the outcome itself (killed vs. survives); the
+    // SAME outcome with a drifted count when the manifest pins expectFailures ("fails 4
+    // of 12" quietly becoming "fails 5 of 13" is `killed` both times); or a `killedBy`
+    // test that did not fail, named so the reader knows which pin rotted (issue #504).
+    const missing = result.missingKilledBy ?? [];
+    tag = result.status.toLowerCase() !== entry.expect
+      ? `MISMATCH: manifest declared "${entry.expect}"`
+      : missing.length > 0
+        ? `MISMATCH: killedBy test(s) did not fail: ${missing.map((/** @type {string} */ m) => JSON.stringify(m)).join(', ')}`
+        : `MISMATCH: manifest declared ${entry.expectFailures} failure(s), got ${result.failed}`;
   }
   const equiv = result.status === STATUS.SURVIVES && entry.equivalent ? ' [equivalent mutant]' : '';
   return `${head} ... ${result.status}${equiv} (${result.detail}) -- ${tag}`;
@@ -534,9 +557,10 @@ function installSignalHandlers() {
  * are throwaways, which is what makes Ctrl+C safe here in a way it never was for the
  * serial harness mutating the checkout itself.
  * @param {ManifestEntry[]} entries @param {number} jobs @param {string} root
+ * @param {string | null} reportPath Where to write the merged per-entry report, if asked.
  * @returns {Promise<number>}
  */
-async function runParallel(entries, jobs, root) {
+async function runParallel(entries, jobs, root, reportPath) {
   const dirty = sh('git', ['status', '--porcelain', '--untracked-files=no'], root).trim();
   if (dirty) {
     console.error(`--jobs ${jobs} runs the COMMITTED tree in detached worktrees, and these tracked files are not committed:\n${dirty}\ncommit or stash them first.`);
@@ -547,7 +571,7 @@ async function runParallel(entries, jobs, root) {
   console.log(`[pool] ${entries.length} mutation(s), ${scopes} exact test scope(s), ${slices.length} worker(s)`);
 
   const thisFile = fileURLToPath(import.meta.url);
-  /** @type {{ index: number, dir: string, code: number | null, child: import('node:child_process').ChildProcess | null }[]} */
+  /** @type {{ index: number, dir: string, code: number | null, child: import('node:child_process').ChildProcess | null, report?: MutationResult[] | null }[]} */
   const workers = [];
   const cleanup = () => {
     for (const w of workers) {
@@ -583,7 +607,8 @@ async function runParallel(entries, jobs, root) {
     }
     await Promise.all(workers.map((w) => new Promise((resolve) => {
       const slicePath = join(w.dir, '..', `${basename(w.dir)}.manifest.json`);
-      const child = spawn(process.execPath, [thisFile, '--root', w.dir, '--manifest', slicePath], {
+      const workerReport = join(w.dir, '..', `${basename(w.dir)}.report.json`);
+      const child = spawn(process.execPath, [thisFile, '--root', w.dir, '--manifest', slicePath, '--report', workerReport], {
         cwd: root,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -607,6 +632,14 @@ async function runParallel(entries, jobs, root) {
       child.on('close', (code, signal) => {
         w.code = code === null ? (signal === 'SIGKILL' && interrupted ? 130 : null) : code;
         rmSync(slicePath, { force: true });
+        if (existsSync(workerReport)) {
+          try {
+            w.report = JSON.parse(readFileSync(workerReport, 'utf8')).entries;
+          } catch {
+            w.report = null; // a truncated worker report is a missing one, reported below
+          }
+          rmSync(workerReport, { force: true });
+        }
         resolve(undefined);
       });
     })));
@@ -617,6 +650,14 @@ async function runParallel(entries, jobs, root) {
   }
   const codes = workers.map((w) => w.code);
   console.log(`\n[pool] worker exit codes: ${codes.map((c, i) => `w${i + 1}=${c ?? 'none'}`).join(' ')}`);
+  if (reportPath) {
+    // Merged in manifest order, so the report reads like a serial run's would.
+    const byId = new Map(workers.flatMap((w) => (w.report ?? []).map((r) => [r.id, r])));
+    const merged = entries.map((e) => byId.get(e.id)).filter((r) => r !== undefined);
+    const missing = workers.filter((w) => w.report == null).map((w) => `w${w.index}`);
+    if (missing.length) console.error(`[pool] no report from ${missing.join(', ')}; the merged report covers ${merged.length} of ${entries.length} entries`);
+    writeReport(reportPath, /** @type {MutationResult[]} */ (merged));
+  }
   // An interruption is one more code to fold, not an override: a worker that could not
   // restore its file (3) still outranks the Ctrl+C that killed the others (130).
   return aggregateExitCodes(interrupted ? [...codes, 130] : codes);
@@ -682,7 +723,7 @@ async function run() {
   }
 
   if (args.jobs > 1) {
-    process.exitCode = await runParallel(entries, args.jobs, root);
+    process.exitCode = await runParallel(entries, args.jobs, root, args.report);
     return;
   }
 
@@ -755,7 +796,28 @@ async function run() {
     return;
   }
 
+  if (args.report) writeReport(args.report, results);
   process.exitCode = computeExitCode(results);
+}
+
+/**
+ * The machine-readable twin of the console lines (issue #504): one record per entry
+ * with the outcome, the counts and the vitest full names that failed, which is what the
+ * `killedBy` migration and any future selection tooling read. Written whole at the end
+ * rather than streamed, so a partial file never looks like a finished run.
+ * @param {string} path @param {MutationResult[]} results
+ */
+export function writeReport(path, results) {
+  const entries = results.map((r) => ({
+    id: r.id,
+    status: r.status,
+    matches: r.matches,
+    failed: r.failed ?? null,
+    total: r.total ?? null,
+    failedTests: r.failedTests ?? [],
+    missingKilledBy: r.missingKilledBy ?? [],
+  }));
+  writeFileSync(path, JSON.stringify({ version: 1, entries }, null, 2) + '\n');
 }
 
 async function main() {

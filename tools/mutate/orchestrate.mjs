@@ -44,9 +44,9 @@
  * @typedef {import('./lib.mjs').ManifestEntry} ManifestEntry
  * @typedef {import('./lib.mjs').ApplyResult} ApplyResult
  * @typedef {(content: string, find: string, replace: string, occurrence?: number) => ApplyResult} ApplyAt
- * @typedef {{ failed: number, total: number, failedSuites?: number }} TestRunResult
+ * @typedef {{ failed: number, total: number, failedSuites?: number, failedTests?: string[] }} TestRunResult
  * @typedef {(testFiles: string[]) => TestRunResult} BaselineLookup
- * @typedef {{ id: string, status: string, matches: boolean, detail?: string, failed?: number, total?: number }} MutationResult
+ * @typedef {{ id: string, status: string, matches: boolean, detail?: string, failed?: number, total?: number, failedTests?: string[], missingKilledBy?: string[] }} MutationResult
  * @typedef {{
  *   readFile: (file: string) => string,
  *   gitPorcelain: (file: string) => string,
@@ -257,12 +257,22 @@ export function runOne(entry, deps, applyAt, runBaseline = deps.runTests) {
     // stale count in a manifest entry (or a PR body copied from one) fail the tool
     // instead of being believed.
     const countOk = entry.expectFailures === undefined || result.failed === entry.expectFailures;
+    // `killedBy` (issue #504): every named test must be among the failures, by vitest
+    // full name. Failures the entry does not name are fine -- that is the whole point,
+    // a new test in the file cannot invalidate the pin -- but a named test that PASSED
+    // under the mutation is the rot this contract exists to catch, and it is reported by
+    // name whatever the other tests did.
+    const missingKilledBy = entry.killedBy === undefined
+      ? []
+      : entry.killedBy.filter((name) => !(result.failedTests ?? []).includes(name));
     return {
       id: entry.id,
       status: actual === 'killed' ? STATUS.KILLED : STATUS.SURVIVES,
-      matches: actual === entry.expect && countOk,
+      matches: actual === entry.expect && countOk && missingKilledBy.length === 0,
       failed: result.failed,
       total: result.total,
+      failedTests: result.failedTests,
+      missingKilledBy,
       detail: resultDetail(result),
     };
   } finally {

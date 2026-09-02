@@ -22,6 +22,7 @@ mutate                                    # tools/mutate/manifest.json under --r
 mutate --manifest path/to/manifest.json   # a different manifest (absolute or --root-relative)
 mutate --only some-manifest-entry-id      # a single entry
 mutate --jobs auto                        # the worktree pool: N serial harnesses, one per detached worktree
+mutate --report out.json                  # per-entry outcomes and failed test names, for tooling
 mutate --root /path/to/checkout           # explicit project root (default: process.cwd())
 ```
 
@@ -33,6 +34,22 @@ this workspace's declared Vitest dev dependency. `--root` defaults to `process.c
 which is already correct for the common case -- an `npm run` script's cwd is the
 directory holding the `package.json` that defines the script -- and exists as a flag
 for every other caller (a bin invoked from a subdirectory, a script that `cd`s first).
+
+## Naming the killer (`killedBy`)
+
+A `killed` entry pins its contract one of two ways (issue #504). `killedBy` lists the
+vitest full names (`describe` titles and the `it` title joined by spaces, exactly as the
+JSON reporter's `fullName`) of the tests that must fail under the mutation; other failures
+are allowed, so adding tests to the scoped file never invalidates the pin, and a named
+test that passes under the mutation is reported by name. `expectFailures` pins the exact
+failure count instead, for entries whose rationale states a population ("N of M across
+..."). An entry carries one or the other, never both; the harness also accepts neither
+(outcome-only) for fixtures, but the repository's own test refuses that form in the
+shipped manifest.
+
+`--report path.json` writes one record per entry (outcome, counts, the failed test
+names) after a run; `tools/mutate/migrate-killed-by.mjs` turns such a report into
+`killedBy` lists for every counted entry without a population claim.
 
 ## The worktree pool (`--jobs`)
 
