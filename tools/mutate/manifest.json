@@ -1998,11 +1998,11 @@
     "find": "    return !surface.el.classList.contains(surface.hidden) && !surface.el.classList.contains(LEAVING);",
     "replace": "    return !surface.el.classList.contains(surface.hidden);",
     "expect": "killed",
-    "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at 6 of 244 in hud.test.ts once #318's layer cases joined the file: both Escape cases and the fake-host mirror case also count a close callback that this mutation doubles.",
     "tests": [
       "src/game/hud.test.ts"
     ],
-    "expectFailures": 4
+    "expectFailures": 6
   },
   {
     "id": "contract-rules-hardcode-their-own-duration",
@@ -2058,11 +2058,11 @@
     "find": "    if (!desired.some(([surface, want]) => want !== isSurfaceOpen(surface))) {\n      onBegin?.();\n      return;\n    }\n    let leaving: Surface[] = [];",
     "replace": "    let leaving: Surface[] = [];",
     "expect": "killed",
-    "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at 5 of 244 in hud.test.ts once #318's layer cases joined the file: the `hud.back()`, first Escape and both mirror cases read the pane's LEAVING class right after a Back, which this mutation slams shut.",
     "tests": [
       "src/game/hud.test.ts"
     ],
-    "expectFailures": 1
+    "expectFailures": 5
   },
   {
     "id": "close-all-cleanup-slams-a-fading-surface",
@@ -2265,8 +2265,8 @@
     "find": "    opts.versusSetup?.set({ ...next });",
     "replace": "    void next;",
     "expect": "killed",
-    "expectFailures": 5,
-    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage.",
+    "expectFailures": 6,
+    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at 6 of 244 in hud.test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once.",
     "tests": [
       "src/game/hud.test.ts"
     ]
@@ -3334,8 +3334,8 @@
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 10,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint."
+    "expectFailures": 11,
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -3609,5 +3609,283 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "Page teardown leaves the route host's painter subscribed to the machine it built. The two die together in production, so nothing visible breaks -- which is exactly why the symmetry with a session's own unsubscribe is pinned rather than trusted: a reference kept past `pagehide` would keep painting a disposed HUD. 1 of 38 in route-host.test.ts: the disposal case that changes the route after `dispose()` and expects no paint."
+  },
+  {
+    "id": "mute-hotkey-guard-treats-a-button-as-a-native-control",
+    "file": "src/game/loop.ts",
+    "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {",
+    "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "`isMuteHotkey` treats a focused button as a control that consumes M, which is the pre-#318 guard. Back now returns focus to the control that opened a layer, so after every Back the focused element IS a button, and this mutation makes M dead exactly there. 2 of 660 across both scoped files (loop.test.ts 416 + hud.test.ts 244): the predicate case in loop.test.ts and the re-stated hotkey-liveness case in hud.test.ts, where M must stay live on the restored Customize button."
+  },
+  {
+    "id": "pause-hotkey-guard-treats-a-button-as-a-native-control",
+    "file": "src/game/loop.ts",
+    "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {",
+    "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "`isPauseHotkey` treats a focused button as a control that consumes Escape and P. With Back restoring focus to the Controllers button on the pause panel, this is the mutation under which the second Escape -- the one that should resume -- does nothing. 2 of 660 across both scoped files (loop.test.ts 416 + hud.test.ts 244): the predicate case in loop.test.ts and the Controllers-from-Pause case in hud.test.ts, where Escape must be accepted on the restored Controllers button."
+  },
+  {
+    "id": "back-lands-on-a-hardcoded-main-menu",
+    "file": "src/game/hud.ts",
+    "find": "    LAYERS[popped.id].close();\n    setState(popped.origin);",
+    "replace": "    LAYERS[popped.id].close();\n    setState('main-menu');",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Back re-renders the Main Menu whatever surface the layer was opened over -- the pre-#318 hard-code, restored. Controllers opened from Pause returns to the title and abandons the paused round on screen while the state machine still says paused; Versus Setup opened over Pause does the same. 1 of 244 in hud.test.ts (244): the Controllers-from-Pause case under \"navigation layers\", whose Back must re-render the paused panel."
+  },
+  {
+    "id": "back-focuses-the-container-not-the-opener",
+    "file": "src/game/hud.ts",
+    "find": "    if (isHiddenWithin(opener, el)) return;\n    opener.focus();",
+    "replace": "    if (isHiddenWithin(opener, el)) return;\n    void opener;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 9,
+    "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. 9 of 244 in hud.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener."
+  },
+  {
+    "id": "back-focuses-a-hidden-opener",
+    "file": "src/game/hud.ts",
+    "find": "    if (opener instanceof HTMLButtonElement && opener.disabled) return;\n    if (isHiddenWithin(opener, el)) return;",
+    "replace": "    if (opener instanceof HTMLButtonElement && opener.disabled) return;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Back focuses an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up, or any title-only opener after a detach reshaped the menu. A hidden focused element strands a keyboard player with no visible position, which is the case the container fallback exists for. 1 of 244 in hud.test.ts (244): \"Back falls back to the panel container when the opener was hidden while the pane was up\"."
+  },
+  {
+    "id": "close-all-leaves-the-layer-stack-populated",
+    "file": "src/game/hud.ts",
+    "find": "    disarmReset();\n    // ...and the layer stack with them (issue #318): a surface change is never a Back,\n    // so every layer is dropped rather than popped, and the history mirror retires its\n    // entry. After this line the stack is empty on every path through this function.\n    resetLayers();",
+    "replace": "    disarmReset();\n    // (mutation) the stack outlives the surface it opened over",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "A surface change closes every pane on screen but leaves the layer stack populated. The next Escape during play is claimed by the HUD for a pane that is no longer there, `hud.back()` re-renders a surface the state machine has left, and a later browser Back reopens nothing while consuming a history entry the page thinks it still owns. 1 of 244 in hud.test.ts (244): \"entering gameplay from an open pane empties the stack\"."
+  },
+  {
+    "id": "back-reports-consumed-with-an-empty-stack",
+    "file": "src/game/hud.ts",
+    "find": "    const popped = layers.pop();\n    if (popped === null) return false;",
+    "replace": "    const popped = layers.pop();\n    if (popped === null) return true;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. 5 of 244 in hud.test.ts (244): the `hud.back()` and gameplay-entry cases, the first Escape case and both mirror cases, each of which asserts `back()` is false once nothing is open."
+  },
+  {
+    "id": "pane-covers-the-open-pane",
+    "file": "src/game/hud.ts",
+    "find": "    if (top !== null && top.id !== id) {\n      layers.pop();\n      LAYERS[top.id].close();\n      origin = top.origin;\n    }",
+    "replace": "    if (top !== null && top.id !== id) {\n      layers.pop();\n      origin = top.origin;\n    }",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "A pane opened while a different pane is up covers it without closing it: the covered Customize pane keeps its live WebGL preview and the covered Controllers pane its window gamepad listeners, with no close callback ever firing for either, and the transition contract's second-destination rule is met only by accident of paint order. 1 of 244 in hud.test.ts (244): \"a pane opened while a different pane is up replaces it through that pane's own close\", which counts `onCustomizeClose`."
+  },
+  {
+    "id": "back-writes-the-retained-config",
+    "file": "src/game/hud.ts",
+    "find": "    setState(popped.origin);\n    restoreFocus(popped);",
+    "replace": "    setState(popped.origin);\n    restoreFocus(popped);\n    if (opts.versusSetup) opts.versusSetup.set({ ...versusConfigState });",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Back writes the retained Versus Setup store on its way out. The issue's own criterion is that Back never changes persisted settings; this is the smallest write a Back could make and the spies in the callback sweep must see it. 1 of 244 in hud.test.ts (244): the callback-and-store sweep under \"navigation layers\", whose spy on `versusSetup.set` counts the write."
+  },
+  {
+    "id": "hud-reopens-the-top-pane-with-a-transition",
+    "file": "src/game/hud.ts",
+    "find": "    if (result === 'already-top') {\n      // Re-render only: a second open of the pane on top must not run a transition from\n      // the pane to itself, which marks the one surface LEAVING and then ENTERING and hides\n      // it when the crossfade settles.\n      LAYERS[id].refresh?.(initial);\n      return true;\n    }",
+    "replace": "    if (result === 'already-top') {\n      LAYERS[id].open(initial);\n      return true;\n    }",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "A second open of the pane already on top runs a transition from the pane to itself, which is the pre-#318 `showVersusSetup(true)` twice: the one surface is marked LEAVING and then ENTERING, and the crossfade's settle hides it. The pane the player was looking at disappears a frame later. 1 of 244 in hud.test.ts (244): \"showVersusSetup(true, cfg) twice keeps the pane open\", measured failing on the pre-#318 tree with exactly this shape."
+  },
+  {
+    "id": "escape-back-leaks-to-the-session",
+    "file": "src/game/hud.ts",
+    "find": "      disarm();\n      e.preventDefault();\n      e.stopPropagation();\n      back();\n      return;",
+    "replace": "      disarm();\n      e.preventDefault();\n      back();\n      return;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. 2 of 244 in hud.test.ts (244): both Escape cases, each asserting the bubble-phase listener saw nothing for the Escape that closed a pane."
+  },
+  {
+    "id": "escape-back-fires-with-no-layer",
+    "file": "src/game/hud.ts",
+    "find": "      if (e.repeat || layers.depth === 0) return;",
+    "replace": "      if (e.repeat) return;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. 2 of 244 in hud.test.ts (244): both Escape cases, each pressing Escape once more with nothing open and expecting the session to see it."
+  },
+  {
+    "id": "hud-never-syncs-the-mirror",
+    "file": "src/game/hud.ts",
+    "find": "    LAYERS[id].open(initial);\n    mirror.sync(layers.depth);\n    return true;",
+    "replace": "    LAYERS[id].open(initial);\n    return true;",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. 2 of 244 in hud.test.ts (244): the fake-host and real-jsdom-history mirror cases."
+  },
+  {
+    "id": "stack-back-pops-the-bottom",
+    "file": "src/game/navigation.ts",
+    "find": "      return entries.pop() ?? null;",
+    "replace": "      return entries.shift() ?? null;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "`pop()` reads from the bottom of the stack with `shift()`, so Back closes the layer UNDER the one on screen: with Records open over Settings the player's Back dismisses Settings while Records stays, and a confirmation's Back removes the route it was raised over while the confirmation stays up. A plain LIFO pop is the entire mechanism behind the issue's \"Back removes one overlay before one route\", so this is the mutation that breaks that guarantee directly. Fails 2 of 15 in navigation.test.ts: `back pops the topmost layer, LIFO: [route a, route b] pops b then a` and `an overlay above a route is removed before the route, and each pop carries its own recorded origin and restore`, each at its first `pop()` assertion."
+  },
+  {
+    "id": "stack-accepts-a-route-over-an-overlay",
+    "file": "src/game/navigation.ts",
+    "find": "      if (entry.kind === 'route' && top !== null && top.kind === 'overlay') return 'refused';",
+    "replace": "      void top;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The refusal that keeps a full-screen destination from opening under a modal is deleted, so a route push while a confirmation is up succeeds: the Levels grid opens over the dialog the player was answering, and the next Back closes the grid and drops the player back INTO a confirmation they had already navigated away from. The LIFO order the module claims by construction (an overlay is always above every route) stops being true. Fails 1 of 15 in navigation.test.ts: `a route pushed over an open overlay is refused and the stack is unchanged`, at its `'refused'` assertion. The overlay-over-overlay control in the same case still passes, which is what shows the assertion is about the route/overlay pairing and not about any push over an overlay."
+  },
+  {
+    "id": "stack-push-duplicates-the-top",
+    "file": "src/game/navigation.ts",
+    "find": "      if (top !== null && top.id === entry.id) return 'already-top';",
+    "replace": "      void top;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The already-top check is deleted, so re-opening the layer already on screen falls through to the open-lower-down scan and is reported `refused` instead of `already-top`. The owner branches on that result -- `already-top` re-renders the current layer in place, `refused` is a failed open -- so a second press of the control that opened the Records page would do nothing rather than refresh it. The stack is unchanged under either code, which is why only the result code can see this. Fails 1 of 15 in navigation.test.ts: `pushing the id already on top reports already-top and pushes nothing; an id open lower down is refused`."
+  },
+  {
+    "id": "history-mirror-pushes-per-layer",
+    "file": "src/game/navigation.ts",
+    "find": "      if (phase === 'absent') {",
+    "replace": "      if (phase === 'absent' || phase === 'present') {",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "`sync(d>0)` pushes the sentinel from `present` as well as from `absent`, which turns the single-entry design into an entry per layer AND a further entry per in-app pop that leaves layers open. The player then presses the browser's Back once per pushed entry to leave, and the traversals the design bounds to one at a time pile up. Fails 3 of 15 in navigation.test.ts: `the first layer pushes exactly one sentinel and a second layer pushes none`, `an in-app pop with a layer remaining touches history not at all; emptying the stack retires the sentinel with one back()`, and `a browser Back at depth 2 pops one layer and re-pushes the sentinel through the re-entrant sync; at depth 1 pops one and pushes nothing`, each at an exact `host.calls` list."
+  },
+  {
+    "id": "history-mirror-treats-its-own-landing-as-a-back",
+    "file": "src/game/navigation.ts",
+    "find": "    if (previous === 'leaving') return; // our own retirement landed",
+    "replace": "    // (mutation) our own retirement is treated as a browser Back",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The early return for `leaving` is deleted, so the landing of the mirror's own retirement is handled as a browser Back and pops whatever layer is open at that moment. With an owner that syncs synchronously after every stack change the stack is empty when its own retirement lands and the fallthrough is invisible, so the case that measures it opens a layer during the pending traversal whose `sync` has not yet run -- the 'pops a layer the player just opened' failure the per-layer design was rejected for -- and asserts the landing leaves it alone. Fails 1 of 15 in navigation.test.ts: `the popstate caused by our own retirement pops nothing; a base arrival while present pops one`, at its second `h.pops()` assertion."
+  },
+  {
+    "id": "history-mirror-drops-a-push-during-leaving",
+    "file": "src/game/navigation.ts",
+    "find": "      } else if (phase === 'leaving') {\n        phase = 'repush';\n      }",
+    "replace": "      } else if (phase === 'leaving') {\n        void phase;\n      }",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`sync(d>0)` during a pending retirement no longer records `repush`, so when the traversal lands it is treated as a plain retirement and nothing is pushed for the layer the player opened meanwhile. That layer is then on screen with no sentinel under it: the next browser Back leaves the page instead of closing it. Fails 1 of 15 in navigation.test.ts: `a push during a pending retirement is honoured when the traversal lands`, first at the `'repush'` phase assertion and again at the landing's `host.calls`."
+  },
+  {
+    "id": "history-mirror-keeps-a-stale-sentinel-at-boot",
+    "file": "src/game/navigation.ts",
+    "find": "    if (isLayerSentinel(host.state)) safe(() => host.replaceState(null));",
+    "replace": "    // (mutation) a stale sentinel on the loaded entry is left in place",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The constructor's re-stamp of a loaded sentinel entry is deleted. After a reload with a layer open the loaded entry keeps `{tanks:'layer'}` while the stack is empty; the first layer pushes a second sentinel above it, and when that one is retired the browser's Back lands on the stale sentinel -- a popstate the mirror reads as Forward-onto-our-entry and re-stamps -- so the player's Back press does nothing once before it leaves. Fails 1 of 15 in navigation.test.ts: `a stale sentinel on the loaded entry is re-stamped as base at construction; a null base is left alone`, at its first `stale.calls` assertion."
+  },
+  {
+    "id": "history-mirror-forward-pops-a-layer",
+    "file": "src/game/navigation.ts",
+    "find": "    if (isLayerSentinel(state)) {",
+    "replace": "    if ((false as boolean) && isLayerSentinel(state)) {",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The sentinel-arrival branch of `onPop` is short-circuited (`false && isLayerSentinel(state)` rather than a bare `false`, so `state` stays referenced under `noUnusedParameters`), and a Forward onto the mirror's own entry is handled as a base arrival. With no layer open the entry keeps its sentinel state instead of being re-stamped, so the next boot mistakes it for a reload-with-layer; with a layer open the arrival pops a layer the player did not ask to close. Fails 1 of 15 in navigation.test.ts: `Forward onto our sentinel with no layer re-stamps it; with a layer it becomes present`, at its first `empty.calls` assertion."
+  },
+  {
+    "id": "history-mirror-rethrows-the-host-error",
+    "file": "src/game/navigation.ts",
+    "find": "    try {\n      fn();\n    } catch {\n      active = false;\n      phase = 'absent';\n    }",
+    "replace": "    fn();",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`safe` becomes a bare call, so a `SecurityError` from a rate-limited `pushState` (Safari, Firefox) propagates out of `sync` into the owner's keydown or click handler as an uncaught page error, the layer being opened never finishes opening, and the mirror never latches off so every later layer throws again. Fails 1 of 15 in navigation.test.ts: `a host whose pushState throws disables the mirror, never rethrows, and later syncs and pops are inert`, at its `not.toThrow()`."
+  },
+  {
+    "id": "history-mirror-listener-outlives-the-hud",
+    "file": "src/game/navigation.ts",
+    "find": "      unsubscribe?.();\n      unsubscribe = null;",
+    "replace": "      unsubscribe = null;",
+    "tests": [
+      "src/game/navigation.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`dispose` no longer unsubscribes from popstate, so a mirror the HUD has torn down keeps handling the browser's Back on behalf of an owner that no longer exists -- popping layers on a dead stack and re-pushing the sentinel through a `back` callback whose HUD is gone. Fails 1 of 15 in navigation.test.ts: `dispose unsubscribes popstate and never traverses; with no host every call is inert and active is false`, at its `host.listeners` length assertion."
   }
 ]

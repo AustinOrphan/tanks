@@ -82,6 +82,7 @@ import {
   resolveBootSessionContext,
 } from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { browserHistoryHost } from './navigation';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from './devflags';
 import type { RouteHost, StartIntent } from './route-host';
@@ -631,11 +632,20 @@ export function botSlotsFor(playerCount: number, botCount: number): Set<number> 
 /**
  * Holding M fires ~30 keydowns a second, so an unguarded toggle lands on
  * whichever state the repeat count's parity happened to pick. Keys aimed at a
- * focused control belong to that control, not to the game.
+ * focused control that CONSUMES them belong to that control, not to the game.
+ *
+ * `input,select,textarea`, not `button` (issue #318). A text or range input, a select
+ * and a textarea take letters and Escape for themselves; a button consumes Space and
+ * Enter and nothing else, so M, P and Escape on a focused button are the player's.
+ * The guard used to name `button` too, and that one word is why every panel arrival
+ * had to focus its CONTAINER rather than a control: a focused Resume killed
+ * Escape-to-resume, a focused menu button killed M. Back now returns focus to the
+ * control that opened the layer (spec: "restores the invoking control"), which is only
+ * legal because a focused button no longer swallows the hotkeys.
  */
 export function isMuteHotkey(e: KeyboardEvent): boolean {
   if (e.repeat) return false;
-  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {
+  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {
     return false;
   }
   return e.key === 'm' || e.key === 'M';
@@ -644,7 +654,7 @@ export function isMuteHotkey(e: KeyboardEvent): boolean {
 /** Escape or P toggles pause, under the same repeat/focused-control guard as mute. */
 export function isPauseHotkey(e: KeyboardEvent): boolean {
   if (e.repeat) return false;
-  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {
+  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) {
     return false;
   }
   return e.key === 'Escape' || e.key === 'p' || e.key === 'P';
@@ -991,7 +1001,15 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
     // The pane needs the retained VS setup (issue #260) and `GameDeps.createHud` is
     // deliberately still `(root) => Hud`: the store is a BROWSER-WIRING concern, so it
     // is bound here rather than widened into the injected seam that ~200 tests build.
-    createHud: (root) => createHud(root, { versusSetup: stores.versusSetup }),
+    createHud: (root) =>
+      createHud(root, {
+        versusSetup: stores.versusSetup,
+        // The browser's Back consumes an open layer before it leaves the page (issue
+        // #318). Bound here, the browser-only factory, for the same reason the store is:
+        // `null` where `history.pushState` is missing, and absent from every injected
+        // HUD, which is what keeps the ~230 HUD tests off the History API entirely.
+        history: browserHistoryHost(window),
+      }),
     levels: createLevelSystem(devFlags, run),
     progress,
     run,
@@ -2365,11 +2383,11 @@ export function startGameWith(
   });
 
   // The versus setup pane's own entry points -- both bare passthroughs, per the Hud
-  // interface's own doc comments on onVersusOpen/onVersusStart: the pane owns its
-  // config state and its own Back button, so loop.ts's only two jobs are handing it
-  // the retained config to prefill from (`?? null` for "no prior match this session",
-  // the same fallback applyVersusToDeps/versusAwareDeps use for a fresh campaign boot)
-  // and, on Start, forwarding the pane's chosen config to the reboot seam.
+  // interface's own doc comments on onVersusOpen/onVersusStart -- are subscribed by the
+  // PAGE (`route-ui.ts`, since issue #427), not here: the pane owns its config state and
+  // its own Back button, so the page's only two jobs are handing it the retained config
+  // to prefill from and, on Start, forwarding the pane's chosen config to the start
+  // boundary. What this session still does is the post-match reopen above.
   /**
    * Land on a level: build its world, rebind everything the old world owned, and
    * refit the renderer if the BOARD changed size. One path for advance, quit and

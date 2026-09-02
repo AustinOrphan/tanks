@@ -1251,6 +1251,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onCampaignOpen: (cb: () => void) => {
           onCampaignOpenCb = cb;
         },
+        // The HUD's semantic Back (issue #318). Nothing in loop.ts calls it; the fake
+        // reports "nothing open" so a page-level caller falls through as it would on a
+        // HUD with no layer up.
+        back: () => false,
         dispose: () => rec.disposed.push('hud'),
       };
     },
@@ -1832,6 +1836,21 @@ describe('isPauseHotkey', () => {
     ).toBe(false);
     input.remove();
   });
+
+  it('accepts a key aimed at a focused BUTTON, which consumes Space and Enter and nothing else (issue #318)', () => {
+    // Back restores focus to the control that opened a layer, so a focused button is
+    // the ordinary state after every Back. The `<input>` case above is the negative
+    // control: a control that consumes the key still keeps it.
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    for (const key of ['Escape', 'p']) {
+      expect(
+        isPauseHotkey({ key, repeat: false, target: button } as unknown as KeyboardEvent),
+        key,
+      ).toBe(true);
+    }
+    button.remove();
+  });
 });
 
 describe('isMuteHotkey', () => {
@@ -1854,6 +1873,19 @@ describe('isMuteHotkey', () => {
       isMuteHotkey({ key: 'm', repeat: false, target: input } as unknown as KeyboardEvent),
     ).toBe(false);
     input.remove();
+  });
+
+  it('accepts M aimed at a focused button, and still refuses it aimed at a select or textarea', () => {
+    const button = document.createElement('button');
+    const select = document.createElement('select');
+    const textarea = document.createElement('textarea');
+    document.body.append(button, select, textarea);
+    expect(isMuteHotkey({ key: 'm', repeat: false, target: button } as unknown as KeyboardEvent)).toBe(true);
+    expect(isMuteHotkey({ key: 'm', repeat: false, target: select } as unknown as KeyboardEvent)).toBe(false);
+    expect(isMuteHotkey({ key: 'm', repeat: false, target: textarea } as unknown as KeyboardEvent)).toBe(false);
+    button.remove();
+    select.remove();
+    textarea.remove();
   });
 
   it('ignores other keys', () => {
