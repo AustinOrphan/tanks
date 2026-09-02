@@ -1111,7 +1111,7 @@
       "accelSlew takes the short way round the +/-pi seam",
       "ai-commitment moment specifics nobody dies inside the clip, so no respawn moves a tank mid-measurement",
       "ai-tracking moment specifics the stationary AI holds position and bodyAngle exactly still while its turret sweeps then reverses",
-      "every moment pins its events to exact ticks ai-commitment: each expected event fires on its declared tick — and on no other",
+      "every moment pins its events to exact ticks ai-commitment: each expected event fires on its declared tick \u2014 and on no other",
       "stepAi round phases countdown: no AI tank moves or fires, even with a clear kill shot",
       "stepAi turret slew SEARCHES rather than holding the last angle when it has no line of sight (issue #371)",
       "stepAi turret slew an AI cannot instantly face a target that appears behind it: one tick advances by one acceleration budget",
@@ -1483,15 +1483,15 @@
     ],
     "why": "Restores the defect #239 fixed: with only the world-wide `snap` left, a VS stock respawn -- which keeps the tank's id and does NOT restart the round -- interpolates the revived tank from the position it died at to the spawn point selected for it, and drags the spawn ring parented to its group along with it. Nothing else in the file notices: the tank is at the right place again one tick later, so every assertion about what a respawn LOOKS like a frame after the edge stays green, which is why the alpha sweep reads the first frame at four alphas rather than at one.",
     "killedBy": [
-      "entity views — a stock respawn snaps to the selected spawn point (#239) anchors the spawn ring at the respawn point too, in WORLD space",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) holds in ffa mode, tank and ring alike",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) holds in teams mode, tank and ring alike",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) leaves the death pulse at the death point while the spawn effect begins at the respawn",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0, never between the two",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.25, never between the two",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.5, never between the two",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.99, never between the two",
-      "entity views — a stock respawn snaps to the selected spawn point (#239) snaps the revived tank's FACING as well as its position"
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) anchors the spawn ring at the respawn point too, in WORLD space",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) holds in ffa mode, tank and ring alike",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) holds in teams mode, tank and ring alike",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) leaves the death pulse at the death point while the spawn effect begins at the respawn",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.25, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.5, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.99, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) snaps the revived tank's FACING as well as its position"
     ]
   },
   {
@@ -1505,8 +1505,8 @@
     ],
     "why": "The over-correction, and the reason the teleport is read per tank rather than raised into the world-level `snap` beside `roundStartTick`: snapping unconditionally freezes every tank in the arena onto its current-tick pose, so nothing in the game interpolates at all and motion becomes a 60 Hz stutter. It is invisible to any test that renders a single alpha or a single tank, which is what `snaps only the revived tank: the other player keeps interpolating on the same sync` exists for -- and `interpolates normally within a round` catches the same thing from the pre-#239 side of the file.",
     "killedBy": [
-      "entity views — a stock respawn snaps to the selected spawn point (#239) snaps only the revived tank: the other player keeps interpolating on the same sync",
-      "entity views — interpolation discontinuities interpolates normally within a round",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) snaps only the revived tank: the other player keeps interpolating on the same sync",
+      "entity views \u2014 interpolation discontinuities interpolates normally within a round",
       "shell geometry flies at the height of the barrel that fires it",
       "tank geometry seats the turret ON the hull rather than sinking it in"
     ]
@@ -3104,7 +3104,7 @@
       "src/game/hud.test.ts"
     ],
     "killedBy": [
-      "hud: in-match stock readout (spec §3a, owner addition 2026-08-21) carries the TEAM as a letter beside the colour, all three teams (issue #281)"
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) carries the TEAM as a letter beside the colour, all three teams (issue #281)"
     ]
   },
   {
@@ -3118,7 +3118,7 @@
       "src/game/hud.test.ts"
     ],
     "killedBy": [
-      "hud: in-match stock readout (spec §3a, owner addition 2026-08-21) carries the TEAM as a letter beside the colour, all three teams (issue #281)"
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) carries the TEAM as a letter beside the colour, all three teams (issue #281)"
     ]
   },
   {
@@ -5010,7 +5010,7 @@
       "createGamepadReader: resync (issue #494) a button already DOWN on the resync poll is adopted as held, not reported -- twin reader over the same pad is the control",
       "createGamepadReader: resync (issue #494) a release then re-press after a resync fires again -- the adopted hold is an ordinary hold",
       "createGamepadReader: resync (issue #494) createGamepadInputSource(...).resyncGamepad() forwards to its reader: a held A samples fire: false, and a re-press fires",
-      "createInputController — gamepad resyncGamepad(): an A already down on the resync sample is adopted as held and does not fire; a later fresh press does"
+      "createInputController \u2014 gamepad resyncGamepad(): an A already down on the resync sample is adopted as held and does not fire; a later fresh press does"
     ]
   },
   {
@@ -5037,7 +5037,7 @@
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
       "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
       "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
-      "createInputController — focus does not steal the tank still drives after the player has used a HUD control",
+      "createInputController \u2014 focus does not steal the tank still drives after the player has used a HUD control",
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target",
       "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
       "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
@@ -5062,7 +5062,7 @@
     ],
     "killedBy": [
       "consumesKey a range input (the volume slider) keeps only the keys that operate it",
-      "createInputController — focus does not steal the tank still drives after the player has used a HUD control",
+      "createInputController \u2014 focus does not steal the tank still drives after the player has used a HUD control",
       "isTextEntry is false for a range, checkbox or button-typed input, a button, a select, and a plain div"
     ]
   },
@@ -5303,8 +5303,8 @@
   {
     "id": "mutate-pool-splits-a-scope-across-workers",
     "file": "tools/mutate/run.mjs",
-    "find": "  for (const group of scopes) {\n    let lightest = slices[0];\n    for (const slice of slices) if (slice.length < lightest.length) lightest = slice;\n    lightest.push(...group);\n  }",
-    "replace": "  let turn = 0;\n  for (const group of scopes) {\n    for (const entry of group) slices[turn++ % slices.length].push(entry);\n  }",
+    "find": "  for (const group of scopes) {\n    let lightest = slices[0];\n    for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;\n    lightest.entries.push(...group);\n    lightest.cost += costOfGroup(group);\n  }",
+    "replace": "  let turn = 0;\n  for (const group of scopes) {\n    for (const entry of group) slices[turn++ % slices.length].entries.push(entry);\n  }",
     "why": "Dealing entries round-robin splits a test scope across workers, so the same scope is baselined once per worker instead of once per run and the hud scope's 41 entries cost 41 baselines' worth of extra vitest starts. The partition test's 'never splits an exact scope' assertion is the case.",
     "tests": [
       "tools/mutate/orchestrate.test.ts"
@@ -5319,8 +5319,8 @@
   {
     "id": "mutate-pool-stacks-scopes-on-one-worker",
     "file": "tools/mutate/run.mjs",
-    "find": "    for (const slice of slices) if (slice.length < lightest.length) lightest = slice;",
-    "replace": "    for (const slice of slices) if (slice.length > lightest.length) lightest = slice;",
+    "find": "    for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;",
+    "replace": "    for (const slice of slices) if (slice.cost > lightest.cost) lightest = slice;",
     "why": "Placing each scope on the HEAVIEST worker serialises the whole manifest onto one worker while the others idle -- the pool then costs worktrees and saves nothing. The balance assertion (hud on one worker, loop and both on the other) is the case.",
     "tests": [
       "tools/mutate/orchestrate.test.ts"
@@ -5414,6 +5414,34 @@
     "expect": "killed",
     "killedBy": [
       "failedTestNames lists the full names of failed assertions in report order and nothing else"
+    ]
+  },
+  {
+    "id": "mutate-pool-ignores-scope-cost",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const costOfGroup = (/** @type {T[]} */ group) => group.length * costOf(group[0].tests);",
+    "replace": "  const costOfGroup = (/** @type {T[]} */ group) => group.length;",
+    "why": "Dealing by entry count alone is what left the hud scope's worker running five minutes after the others had finished (issue #507); the cost-weighted partition test is the case that sees it.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "partitionByScope balances by COST when a cost is supplied: one expensive scope outweighs several cheap ones (issue #507)"
+    ]
+  },
+  {
+    "id": "mutate-scope-cost-unknown-scope-costs-nothing",
+    "file": "tools/mutate/run.mjs",
+    "find": "    return Number.isFinite(v) && v > 0 ? v : fallback;",
+    "replace": "    return Number.isFinite(v) && v > 0 ? v : 0;",
+    "why": "A scope the cost file does not know (a brand-new test file) must cost the median, not nothing: at zero the pool would stack every new scope onto one worker as if free.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "scope costs (issue #507) scopeCostLookup returns the measured seconds for a known scope and the median of the known ones otherwise"
     ]
   }
 ]
