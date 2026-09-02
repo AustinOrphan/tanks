@@ -638,9 +638,9 @@ export function botSlotsFor(playerCount: number, botCount: number): Set<number> 
  *
  * `consumesKey` (`input/ui-actions.ts`), the SAME rule `input.ts` drives the tank by
  * (issues #318, #494): a control keeps only the keys it consumes. Text entry keeps
- * everything; a button, slider or select keeps Space, Enter, the arrows and Home/End
- * and nothing else -- so M, P and Escape on a focused button OR a focused volume slider
- * are the player's. The guard used to name `button`, and that one word is why every
+ * everything; a slider or select keeps Space, Enter, the arrows and Home/End; a button
+ * keeps Space and Enter and nothing else -- so M, P and Escape on a focused button OR a
+ * focused volume slider are the player's. The guard used to name `button`, and that one word is why every
  * panel arrival had to focus its CONTAINER rather than a control: a focused Resume
  * killed Escape-to-resume, a focused menu button killed M. Then it named
  * `input,select,textarea`, which still ate Escape on a focused slider. Back returns

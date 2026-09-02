@@ -1,6 +1,9 @@
 /**
- * Menu-time gamepad input (issue #494): the union of every connected pad, read on a page
- * frame loop while nothing is simulating, turned into `UiAction`s.
+ * Menu-time gamepad input (issue #494): the union of every connected pad, read on the
+ * page's frame loop for the life of the page and turned into `UiAction`s. The poll never
+ * stops: `route-host.ts` gates the DISPATCH instead (only `pause` while a session
+ * simulates), so a button held across Pause/Resume stays "held" here and does not read
+ * as a fresh press on the other side.
  *
  * Deliberately NOT `createGamepadReader`. That reader is a gameplay collaborator: one per
  * slot, polled once per simulated tick, carrying the fire/mine edge state the sim depends

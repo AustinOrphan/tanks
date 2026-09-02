@@ -180,10 +180,10 @@ first covering layer).
 **Menu input is one action vocabulary; the gamepad never shares a gameplay reader (issue
 #494).** `src/input/ui-actions.ts` names seven `UiAction`s (`up`, `down`, `left`, `right`,
 `confirm`, `back`, `pause`) and the one consume rule, `consumesKey`: a focused control keeps
-only the keys it consumes (text entry everything; a button, slider or select only Space,
-Enter, the arrows and Home/End), and `input.ts`, the session's hotkey guards and the HUD's
-roving-focus handler all ask it, so Escape with a volume slider focused is Back or Pause,
-never lost. `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
+only the keys it consumes (text entry everything; a slider or select Space, Enter, the
+arrows and Home/End; a button only Space and Enter, because the arrows are the roving
+focus's), and `input.ts`, the session's hotkey guards and the HUD's roving-focus handler
+all ask it, so Escape with a volume slider focused is Back or Pause, never lost. `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
 panel, `confirm` activates the focused control through its own click handler (or lands on
 the first control when only the container is focused, so a Confirm the instant a panel
 arrives cannot start a New Game blind), `back` is `Hud.back()`, and `pause` is reported
