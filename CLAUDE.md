@@ -130,6 +130,7 @@ Command behavior and CI/deployment details are in
 | `src/game/**`, `src/input/**`, boot/main | `.claude/rules/game.md` | architecture and known holes |
 | `src/render/**`, GL/gallery/visual tools | `.claude/rules/rendering.md` | architecture |
 | `src/audio/**`, `tools/audio/**` | `.claude/rules/audio.md` | architecture |
+| `src/presentation/**`, the dependency sweep | `.claude/rules/presentation.md` | architecture |
 | tests and mutation tooling | `.claude/rules/testing.md` | `docs/agent/testing-and-review.md` |
 | workflows, build, Pages, portability | `.claude/rules/workflows.md` | commands and operations |
 | docs and instruction files | `.claude/rules/documentation.md` | `docs/agent/README.md` |

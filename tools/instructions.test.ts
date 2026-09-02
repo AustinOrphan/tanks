@@ -33,6 +33,7 @@ const REQUIRED_RULES = [
   'audio.md',
   'documentation.md',
   'game.md',
+  'presentation.md',
   'rendering.md',
   'simulation.md',
   'testing.md',

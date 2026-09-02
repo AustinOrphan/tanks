@@ -3521,5 +3521,57 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "The renderer is sized from the level system's own `start` instead of the level the START BOUNDARY chose. Those were the same level until issue #428; now New Game opens on level one while `start` is the saved run's level, and a Practice pick opens on the picked level, and the boot build never passes through `switchTo`'s refit. Seen in the browser as level one's 11x9 walls sitting in the corner of a 15x11 floor. 2 of 417 in loop.test.ts: the New Game and Practice-pick cases under \"born fitting the STARTED level\"; the Continue case is the negative control and passes either way."
+  },
+  {
+    "id": "presentation-skin-scroll-never-animates",
+    "file": "src/presentation/customization.ts",
+    "find": "  return SKINS.find((s) => s.id === id)?.scroll ?? null;",
+    "replace": "  return null;",
+    "tests": [
+      "src/render/entities.test.ts",
+      "src/render/preview.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "skinScroll is THE place \"is this skin animated?\" is answered (its own doc comment), and issue #473 moved it from game/customization.ts to presentation/customization.ts. Returning null for every skin freezes flow's texture drift. 1 of 105 across entities.test.ts and preview.test.ts: entities.test.ts's flow-drift case (0.08 repeats/s over 0.5 s of dt) is the kill, which is the proof that the renderer reads the MOVED definition rather than a copy. Stated remainder: preview.ts's second consumer, `controls.setAnimating(skinScroll(skin) !== null)`, is not pinned by preview.test.ts and survives here."
+  },
+  {
+    "id": "presentation-blocked-fire-cue-set-drops-the-paired-arm",
+    "file": "src/presentation/blocked-fire.ts",
+    "find": "export const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio', 'ring', 'ring+audio']);",
+    "replace": "export const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio', 'ring']);",
+    "tests": [
+      "src/audio/director.test.ts",
+      "src/render/blocked-fire-ring.test.ts",
+      "src/game/haptics.test.ts",
+      "src/game/devflags.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "BLOCKED_FIRE_CUES moved from game/devflags.ts to presentation/blocked-fire.ts (issue #473) so the audio director and the ring no longer import the flag parser to name a cue. Dropping `ring+audio` from the SET while the TYPE union keeps it is the failure a stale copy would produce: each consumer's one-row-per-cue table still lists five cues and the set now names four. 3 of 143 across director.test.ts, blocked-fire-ring.test.ts, haptics.test.ts and devflags.test.ts: the three `... for EVERY cue carrying <channel>, and for no other -- one row per cue` cases (audio, haptic, ring), one per consumer, which is what proves all three key off the ONE definition. devflags.test.ts contributes 0: it does not parse `?blockedFire=ring+audio`, so the parser's own rejection of the dropped member is unpinned here."
+  },
+  {
+    "id": "dependency-direction-render-may-import-game",
+    "file": "src/dependency-direction.test.ts",
+    "find": "  render: new Set<Layer>(['render', 'presentation', 'sim']),",
+    "replace": "  render: new Set<Layer>(['render', 'presentation', 'sim', 'game']),",
+    "tests": [
+      "src/dependency-direction.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The layer table loses one direction: render is allowed to import game again, which is exactly the pre-#473 state (five render modules imported game/customization.ts). The sweep over the real tree stays green under it, because the tree is clean -- which is why the guard carries hand-written fixtures that are NOT derived from MAY_IMPORT. 4 of 74 in dependency-direction.test.ts: `flags render -> game`, `flags side-effect import`, `flags CommonJS require` (all three plant a render -> game import and are now reported clean) and `has a hand-written fixture on both sides of every layer pair` (a 16th allowed pair with no clean fixture and a forbidden one). The other 18 forbidden-pair fixtures pass, as they must -- the mutation opens one direction, not all of them."
+  },
+  {
+    "id": "dependency-direction-wiring-allowlist-admits-everything",
+    "file": "src/dependency-direction.test.ts",
+    "find": "      if (allowed.includes(target)) return null;",
+    "replace": "      if (allowed.includes(target) || allowed.length >= 0) return null;",
+    "tests": [
+      "src/dependency-direction.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "GAME_WIRING stops being an allowlist: any game module may import any render or audio module, so the check degrades to the pre-#473 world where hud.ts learned a colour from render/entities.ts. The real tree passes under it. 3 of 74 in dependency-direction.test.ts: `flags game -> render from a non-wiring import` (hud.ts, which IS listed -- for audio/manifest -- so this also pins that the list is per target module), `flags game -> audio from a file with no wiring entry` and `flags a wiring file reaching a render module it is not listed for` (loop.ts -> render/entities). The clean wiring fixtures and the layer-pair coverage test pass either way: the mutation widens the allowlist, not MAY_IMPORT."
   }
 ]
