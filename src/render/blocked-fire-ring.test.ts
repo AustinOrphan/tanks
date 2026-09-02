@@ -41,8 +41,8 @@ describe('blocked-fire ring (issue #356)', () => {
     // The third of the three per-cue tables (director.test.ts owns `audio`, haptics.test.ts
     // owns `haptic`), and the one this file was missing. MEASURED: with the enumeration
     // above narrowed to `cue !== 'ring'` -- which draws nothing for the paired arm -- all 8
-    // tests in this file passed, because `ring+audio` appeared nowhere in it. That is the
-    // same shape of defect as the silent `ring+audio` the audio side shipped: not a wrong
+    // tests in this file passed, because `ring-audio` appeared nowhere in it. That is the
+    // same shape of defect as the silent `ring-audio` the audio side shipped: not a wrong
     // branch, a missing one, which no assertion could fail on. Manifest entry
     // `blocked-fire-ring-drops-its-paired-audio-arm` is that mutation.
     //
@@ -52,9 +52,9 @@ describe('blocked-fire ring (issue #356)', () => {
     const carriesRing: Record<BlockedFireCue, boolean> = {
       haptic: false,
       audio: false,
-      'haptic+audio': false,
+      'haptic-audio': false,
       ring: true,
-      'ring+audio': true,
+      'ring-audio': true,
     };
     expect(Object.keys(carriesRing).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldDraw] of Object.entries(carriesRing)) {

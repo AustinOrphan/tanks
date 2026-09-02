@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TANK_KINDS } from '../sim/config';
+import { BLOCKED_FIRE_CUES } from '../presentation/blocked-fire';
 import {
   parseDevFlags,
   parseDeveloperMode,
@@ -580,3 +581,44 @@ describe('PLAYTEST_BUNDLE: the single list the parser and the doc both read', ()
   });
 });
 
+
+describe('parseDevFlags: blockedFire values are safe to paste into a query string (issue #497)', () => {
+  it('every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 5 registered values', () => {
+    expect(BLOCKED_FIRE_CUES.size).toBe(5);
+    for (const cue of BLOCKED_FIRE_CUES) {
+      expect(parseDevFlags(`?dev=1&blockedFire=${cue}`).blockedFire, cue).toBe(cue);
+    }
+  });
+
+  it('no registered value of ANY valued flag changes meaning under query decoding -- population: every value in the registry', () => {
+    // The class of defect, not the instance: `URLSearchParams` decodes `+` as a space and
+    // `%xx` as a byte, so a documented value carrying either would silently become a
+    // different string on the way in. `ring+audio` was that value; this sweeps the whole
+    // registry so the next one cannot ship. The negative control is the trap test below,
+    // where a `+` demonstrably does change meaning.
+    let values = 0;
+    for (const [name, spec] of Object.entries(FLAG_REGISTRY)) {
+      if (spec.kind !== 'valued') continue;
+      for (const v of spec.values ?? []) { // free-form valued flags (seed, players) list no values
+        values += 1;
+        expect(new URLSearchParams(`x=${v}`).get('x'), `${name}=${v}`).toBe(v);
+      }
+    }
+    expect(values, 'the population this sweeps').toBeGreaterThanOrEqual(BLOCKED_FIRE_CUES.size);
+  });
+
+  it('the historical trap: a raw ring+audio decodes to a space and is rejected to null, never silently another cue', () => {
+    expect(new URLSearchParams('blockedFire=ring+audio').get('blockedFire')).toBe('ring audio');
+    expect(parseDevFlags('?dev=1&blockedFire=ring+audio').blockedFire).toBeNull();
+    expect(parseDevFlags('?dev=1&blockedFire=haptic+audio').blockedFire).toBeNull();
+    expect(parseDevFlags('?dev=1&blockedFire=ring audio').blockedFire).toBeNull();
+  });
+
+  it('the properly encoded legacy spellings stay accepted as aliases of the canonical cue', () => {
+    expect(parseDevFlags('?dev=1&blockedFire=ring%2Baudio').blockedFire).toBe('ring-audio');
+    expect(parseDevFlags('?dev=1&blockedFire=haptic%2Baudio').blockedFire).toBe('haptic-audio');
+    // Aliases are exact: a case or spacing variant is not a spelling anyone documented.
+    expect(parseDevFlags('?dev=1&blockedFire=Ring%2BAudio').blockedFire).toBeNull();
+    expect(parseDevFlags('?dev=1&blockedFire=ring%2B%20audio').blockedFire).toBeNull();
+  });
+});

@@ -417,11 +417,24 @@ function asMineTrigger(params: URLSearchParams): UnarmedTrigger | null {
   return MINE_TRIGGERS.has(raw) ? (raw as UnarmedTrigger) : null;
 }
 
+/**
+ * The pre-#497 spellings of the two multimodal arms, accepted only in their properly
+ * ENCODED form (`ring%2Baudio` decodes to `ring+audio`). Nothing maps the space form
+ * (`ring audio`, which is what an unescaped `ring+audio` decodes to): a value that
+ * silently became a different value is the defect #497 removed, and normalising spaces
+ * back to `+` would make a genuinely space-encoded value indistinguishable from it.
+ */
+const LEGACY_BLOCKED_FIRE_SPELLINGS: ReadonlyMap<string, BlockedFireCue> = new Map([
+  ['haptic+audio', 'haptic-audio'],
+  ['ring+audio', 'ring-audio'],
+]);
+
 /** The one named non-default treatment, or null when absent or unrecognised. */
 function asBlockedFireCue(params: URLSearchParams): BlockedFireCue | null {
   const raw = params.get('blockedFire');
   if (raw === null) return null;
-  return isBlockedFireCue(raw) ? raw : null;
+  if (isBlockedFireCue(raw)) return raw;
+  return LEGACY_BLOCKED_FIRE_SPELLINGS.get(raw) ?? null;
 }
 
 function asBackdrop(params: URLSearchParams): BackdropTreatment | null {

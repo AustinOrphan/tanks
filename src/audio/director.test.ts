@@ -214,15 +214,15 @@ describe('blocked-fire cue (issue #356)', () => {
   it('plays it for BOTH multimodal arms', () => {
     // The combinations #356 asks for by name. If either did not reach BOTH channels it
     // would be a second single-channel arm wearing a compound label -- which is exactly
-    // what `ring+audio` was: the render side accepted it and the gate here did not, so the
+    // what `ring-audio` was: the render side accepted it and the gate here did not, so the
     // pair drew a ring in silence while the flag advertised a multimodal treatment.
-    expect(played({ blockedFire: 'haptic+audio' })).toEqual(['fire-blocked']);
-    expect(played({ blockedFire: 'ring+audio' })).toEqual(['fire-blocked']);
+    expect(played({ blockedFire: 'haptic-audio' })).toEqual(['fire-blocked']);
+    expect(played({ blockedFire: 'ring-audio' })).toEqual(['fire-blocked']);
   });
 
   it('sounds for EVERY cue carrying `audio`, and for no other -- one row per cue', () => {
     // Per cue rather than per remembered case. The bug this replaces was not a wrong
-    // branch, it was a missing one: `ring+audio` existed in the union and nothing here
+    // branch, it was a missing one: `ring-audio` existed in the union and nothing here
     // mentioned it, so no assertion could fail. Keying the table off BLOCKED_FIRE_CUES
     // means a sixth cue cannot be added without stating whether it sounds -- the union
     // widening fails `Record<BlockedFireCue, boolean>` at compile time, and adding to the
@@ -230,9 +230,9 @@ describe('blocked-fire cue (issue #356)', () => {
     const carriesAudio: Record<BlockedFireCue, boolean> = {
       haptic: false,
       audio: true,
-      'haptic+audio': true,
+      'haptic-audio': true,
       ring: false,
-      'ring+audio': true,
+      'ring-audio': true,
     };
     expect(Object.keys(carriesAudio).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldSound] of Object.entries(carriesAudio)) {

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { BLOCKED_FIRE_CUES } from '../presentation/blocked-fire';
 import {
   DEV_FLAGS_OFF,
   FLAG_REGISTRY,
@@ -320,6 +321,23 @@ describe('canonicalDevSearch', () => {
       expect(canonicalDevSearch(r.search).search, `${c} is not a fixed point`).toBe(r.search);
     }
     expect(cases).toHaveLength(8);
+  });
+
+  it('round trips every blockedFire cue, spelled as documented, and the encoded legacy spellings (issue #497)', () => {
+    // The canonical form is what a developer copies out of the Developer Tools panel, so
+    // it must be pasteable as displayed: a value that only survived percent-encoded
+    // would be a URL nobody can read back. The legacy `%2B` forms are carried through
+    // unchanged and still parse to the same cue.
+    for (const cue of BLOCKED_FIRE_CUES) {
+      const r = canonicalDevSearch(`?dev=1&blockedFire=${cue}`);
+      expect(r.search, cue).toBe(`?dev=1&blockedFire=${cue}`);
+      expect(parseDevFlags(r.search).blockedFire, cue).toBe(cue);
+    }
+    for (const [legacy, cue] of [['ring%2Baudio', 'ring-audio'], ['haptic%2Baudio', 'haptic-audio']] as const) {
+      const r = canonicalDevSearch(`?dev=1&blockedFire=${legacy}`);
+      expect(parseDevFlags(r.search).blockedFire, legacy).toBe(cue);
+      expect(parseDevFlags(`?dev=1&blockedFire=${legacy}`).blockedFire).toBe(cue);
+    }
   });
 
   it('emits developer parameters in a derived order, so two callers cannot disagree', () => {
