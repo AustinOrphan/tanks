@@ -66,7 +66,7 @@
 import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync, mkdtempSync, symlinkSync } from 'node:fs';
 import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { tmpdir, availableParallelism } from 'node:os';
-import { join, isAbsolute } from 'node:path';
+import { join, isAbsolute, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyAt, validateManifest, findUnreachableEntries } from './lib.mjs';
 import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFailedError } from './orchestrate.mjs';
@@ -576,13 +576,13 @@ async function runParallel(entries, jobs, root) {
       const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mutate-worker-')));
       sh('git', ['worktree', 'add', '--detach', dir, 'HEAD'], root);
       symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
-      const slicePath = join(dir, '..', `${dir.split('/').pop()}.manifest.json`);
+      const slicePath = join(dir, '..', `${basename(dir)}.manifest.json`);
       writeFileSync(slicePath, JSON.stringify(slices[i], null, 2));
       workers.push({ index: i + 1, dir, code: null, child: null });
       console.log(`[w${i + 1}] ${slices[i].length} mutation(s) in ${dir}`);
     }
     await Promise.all(workers.map((w) => new Promise((resolve) => {
-      const slicePath = join(w.dir, '..', `${w.dir.split('/').pop()}.manifest.json`);
+      const slicePath = join(w.dir, '..', `${basename(w.dir)}.manifest.json`);
       const child = spawn(process.execPath, [thisFile, '--root', w.dir, '--manifest', slicePath], {
         cwd: root,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -617,8 +617,9 @@ async function runParallel(entries, jobs, root) {
   }
   const codes = workers.map((w) => w.code);
   console.log(`\n[pool] worker exit codes: ${codes.map((c, i) => `w${i + 1}=${c ?? 'none'}`).join(' ')}`);
-  if (interrupted) return 130;
-  return aggregateExitCodes(codes);
+  // An interruption is one more code to fold, not an override: a worker that could not
+  // restore its file (3) still outranks the Ctrl+C that killed the others (130).
+  return aggregateExitCodes(interrupted ? [...codes, 130] : codes);
 }
 
 async function run() {
