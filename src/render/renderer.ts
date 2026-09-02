@@ -79,7 +79,7 @@ export interface RendererOptions {
    */
   readonly aiContact?: boolean;
   /**
-   * `?dev=1&blockedFire=ring` or `ring+audio` (devflags.ts): issue #356's tank-local
+   * `?dev=1&blockedFire=ring` or `ring-audio` (devflags.ts): issue #356's tank-local
    * visual candidate. Null/absent draws nothing. See blocked-fire-ring.ts.
    */
   readonly blockedFire?: BlockedFireCue | null;
@@ -114,7 +114,7 @@ export function createRenderer(
       : null;
   const aiContact: AiContact | null = options.aiContact ? createAiContact(ctx.scene) : null;
   const blockedFireRing: BlockedFireRingSystem | null =
-    options.blockedFire === 'ring' || options.blockedFire === 'ring+audio'
+    options.blockedFire === 'ring' || options.blockedFire === 'ring-audio'
       ? createBlockedFireRingSystem(ctx.scene)
       : null;
 

@@ -372,20 +372,20 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
   });
 
   it('the multimodal arm vibrates AND (see director.test.ts) sounds', () => {
-    expect(buzzed('haptic+audio')).toEqual([BLOCKED_FIRE_PATTERN_MS]);
+    expect(buzzed('haptic-audio')).toEqual([BLOCKED_FIRE_PATTERN_MS]);
   });
 
   it('vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue', () => {
-    // The mirror of director.test.ts's audio table, and the half that makes `ring+audio` a
+    // The mirror of director.test.ts's audio table, and the half that makes `ring-audio` a
     // CHECKED pair rather than a label: it must reach the screen and the speaker and stop
     // there. Without this row a bundle that also buzzed would pass as "ring plus audio",
     // and #356 would attribute a preference to the wrong set of channels.
     const carriesHaptic: Record<BlockedFireCue, boolean> = {
       haptic: true,
       audio: false,
-      'haptic+audio': true,
+      'haptic-audio': true,
       ring: false,
-      'ring+audio': false,
+      'ring-audio': false,
     };
     expect(Object.keys(carriesHaptic).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldBuzz] of Object.entries(carriesHaptic)) {

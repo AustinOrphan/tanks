@@ -89,7 +89,7 @@ export function createBlockedFireRingSystem(scene: THREE.Scene): BlockedFireRing
   }
 
   function spawn(events: SimEvent[], world: World, cue: BlockedFireCue | null | undefined): void {
-    if (cue !== 'ring' && cue !== 'ring+audio') return;
+    if (cue !== 'ring' && cue !== 'ring-audio') return;
     for (const e of events) {
       if (e.type !== 'fire-blocked') continue;
       // Only a player tank. `fire-blocked` is emitted for whoever was refused, AI tanks

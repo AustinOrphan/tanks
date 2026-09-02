@@ -2983,26 +2983,26 @@
   {
     "id": "blocked-fire-ring-drops-its-paired-audio-arm",
     "file": "src/render/blocked-fire-ring.ts",
-    "find": "    if (cue !== 'ring' && cue !== 'ring+audio') return;",
+    "find": "    if (cue !== 'ring' && cue !== 'ring-audio') return;",
     "replace": "    if (cue !== 'ring') return;",
     "expect": "killed",
     "expectFailures": 1,
     "tests": [
       "src/render/blocked-fire-ring.test.ts"
     ],
-    "why": "blocked-fire-ring.ts's own cue gate, narrowed to the single `ring` arm so the paired `ring+audio` draws nothing. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 8 test(s) failed) against the tests this file had at the time, because `ring+audio` appeared nowhere in it -- not as a drawing case, not in the negative list. Same shape as the silent `ring+audio` the audio side shipped (see blocked-fire-audio-drops-the-ring-pairing), and pinned for the same reason: not a wrong branch but a MISSING one, which no assertion written per remembered case can fail on. Nothing else notices -- the flag still parses, renderer.ts still constructs the system for the paired cue, and every `ring` case still draws. #356's ruling is made by comparing arms, so a paired arm that silently drops half its channels produces a wrong ruling rather than a cosmetic defect. `draws for EVERY cue carrying `ring`, and for no other -- one row per cue` is the case that catches it; scoped to blocked-fire-ring.test.ts, and expectFailures counts that scoped run only."
+    "why": "blocked-fire-ring.ts's own cue gate, narrowed to the single `ring` arm so the paired `ring-audio` draws nothing. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 8 test(s) failed) against the tests this file had at the time, because `ring-audio` appeared nowhere in it -- not as a drawing case, not in the negative list. Same shape as the silent `ring-audio` the audio side shipped (see blocked-fire-audio-drops-the-ring-pairing), and pinned for the same reason: not a wrong branch but a MISSING one, which no assertion written per remembered case can fail on. Nothing else notices -- the flag still parses, renderer.ts still constructs the system for the paired cue, and every `ring` case still draws. #356's ruling is made by comparing arms, so a paired arm that silently drops half its channels produces a wrong ruling rather than a cosmetic defect. `draws for EVERY cue carrying `ring`, and for no other -- one row per cue` is the case that catches it; scoped to blocked-fire-ring.test.ts, and expectFailures counts that scoped run only."
   },
   {
     "id": "blocked-fire-audio-drops-the-ring-pairing",
     "file": "src/audio/director.ts",
-    "find": "            options.blockedFire === 'haptic+audio' ||\n            options.blockedFire === 'ring+audio') &&",
-    "replace": "            options.blockedFire === 'haptic+audio') &&",
+    "find": "            options.blockedFire === 'haptic-audio' ||\n            options.blockedFire === 'ring-audio') &&",
+    "replace": "            options.blockedFire === 'haptic-audio') &&",
     "expect": "killed",
     "expectFailures": 2,
     "tests": [
       "src/audio/director.test.ts"
     ],
-    "why": "director.ts's audio enumeration returned to the two arms it shipped with. This is the defect the surrounding change repaired rather than a hypothetical: `ring+audio` was added to BLOCKED_FIRE_CUES and wired on the render side while this list stayed at `audio` and `haptic+audio`, so the flag advertised a multimodal treatment that drew a ring in silence. Nothing else notices -- the flag still parses, devflags.test.ts still accepts the value, the ring still spawns, the haptic arm is unaffected, and every other audio cue still plays. The two cases that fail are `plays it for BOTH multimodal arms` and `sounds for EVERY cue carrying `audio`, and for no other -- one row per cue`; the second is the one that would have caught it without anyone remembering to add a case. Scoped to director.test.ts; expectFailures counts that scoped run only."
+    "why": "director.ts's audio enumeration returned to the two arms it shipped with. This is the defect the surrounding change repaired rather than a hypothetical: `ring-audio` was added to BLOCKED_FIRE_CUES and wired on the render side while this list stayed at `audio` and `haptic-audio`, so the flag advertised a multimodal treatment that drew a ring in silence. Nothing else notices -- the flag still parses, devflags.test.ts still accepts the value, the ring still spawns, the haptic arm is unaffected, and every other audio cue still plays. The two cases that fail are `plays it for BOTH multimodal arms` and `sounds for EVERY cue carrying `audio`, and for no other -- one row per cue`; the second is the one that would have caught it without anyone remembering to add a case. Scoped to director.test.ts; expectFailures counts that scoped run only."
   },
   {
     "id": "blocked-fire-ring-freezes-instead-of-resting-under-reduced-motion",
@@ -3959,8 +3959,8 @@
   {
     "id": "presentation-blocked-fire-cue-set-drops-the-paired-arm",
     "file": "src/presentation/blocked-fire.ts",
-    "find": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic+audio',\n  'ring',\n  'ring+audio',\n]);",
-    "replace": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic+audio',\n  'ring',\n]);",
+    "find": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic-audio',\n  'ring',\n  'ring-audio',\n]);",
+    "replace": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic-audio',\n  'ring',\n]);",
     "tests": [
       "src/audio/director.test.ts",
       "src/render/blocked-fire-ring.test.ts",
@@ -3968,8 +3968,8 @@
       "src/game/devflags.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 3,
-    "why": "BLOCKED_FIRE_CUES moved from game/devflags.ts to presentation/blocked-fire.ts (issue #473) so the audio director and the ring no longer import the flag parser to name a cue. Dropping `ring+audio` from the SET while the TYPE union keeps it is the failure a stale copy would produce: each consumer's one-row-per-cue table still lists five cues and the set now names four. 3 of 143 across director.test.ts, blocked-fire-ring.test.ts, haptics.test.ts and devflags.test.ts: the three `... for EVERY cue carrying <channel>, and for no other -- one row per cue` cases (audio, haptic, ring), one per consumer, which is what proves all three key off the ONE definition. devflags.test.ts contributes 0: it does not parse `?blockedFire=ring+audio`, so the parser's own rejection of the dropped member is unpinned here."
+    "expectFailures": 4,
+    "why": "BLOCKED_FIRE_CUES moved from game/devflags.ts to presentation/blocked-fire.ts (issue #473) so the audio director and the ring no longer import the flag parser to name a cue. Dropping `ring-audio` from the SET while the TYPE union keeps it is the failure a stale copy would produce: each consumer's one-row-per-cue table still lists five cues and the set now names four. 4 of 147 across director.test.ts, blocked-fire-ring.test.ts, haptics.test.ts and devflags.test.ts: the three `... for EVERY cue carrying <channel>, and for no other -- one row per cue` cases (audio, haptic, ring), one per consumer, which is what proves all three key off the ONE definition, plus devflags.test.ts's paste-every-documented-cue case (issue #497), which now pins the parser's rejection of the dropped member."
   },
   {
     "id": "dependency-direction-render-may-import-game",
@@ -4373,5 +4373,45 @@
     ],
     "expect": "killed",
     "expectFailures": 8
+  },
+  {
+    "id": "devflags-blocked-fire-legacy-alias-dropped",
+    "file": "src/game/devflags.ts",
+    "find": "  if (isBlockedFireCue(raw)) return raw;\n  return LEGACY_BLOCKED_FIRE_SPELLINGS.get(raw) ?? null;",
+    "replace": "  return isBlockedFireCue(raw) ? raw : null;",
+    "why": "The properly encoded legacy spellings (`ring%2Baudio`, `haptic%2Baudio`) must keep selecting their cue after the rename to the hyphenated canonical values (issue #497); dropping the alias lookup silently breaks every pre-#497 bookmark.",
+    "tests": [
+      "src/game/devflags.test.ts",
+      "src/game/dev-config.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2
+  },
+  {
+    "id": "devflags-blocked-fire-alias-normalises-the-space-form",
+    "file": "src/game/devflags.ts",
+    "find": "  ['haptic+audio', 'haptic-audio'],\n  ['ring+audio', 'ring-audio'],\n]);",
+    "replace": "  ['haptic+audio', 'haptic-audio'],\n  ['ring+audio', 'ring-audio'],\n  ['haptic audio', 'haptic-audio'],\n  ['ring audio', 'ring-audio'],\n]);",
+    "why": "Mapping the space form back to a cue is the 'broadly normalise spaces to +' the issue forbids: an unescaped `ring+audio` would then silently become a valid value, which is exactly the historical trap, and a genuinely space-encoded value would be indistinguishable from it.",
+    "tests": [
+      "src/game/devflags.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1
+  },
+  {
+    "id": "presentation-blocked-fire-cue-spelled-with-a-plus",
+    "file": "src/presentation/blocked-fire.ts",
+    "find": "  'haptic-audio',\n  'ring',\n  'ring-audio',\n]);",
+    "replace": "  'haptic-audio',\n  'ring',\n  'ring+audio',\n]);",
+    "why": "A registered value carrying a reserved query character is the defect class #497 closed: `URLSearchParams` decodes the `+` to a space, so the documented value cannot be pasted as displayed. The registry-wide query-safety sweep in devflags.test.ts is the case written to fail on ANY such value, not only the one that shipped; the consumers' one-row-per-cue tables fail too because the set and the union no longer agree.",
+    "tests": [
+      "src/game/devflags.test.ts",
+      "src/audio/director.test.ts",
+      "src/render/blocked-fire-ring.test.ts",
+      "src/game/haptics.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 6
   }
 ]

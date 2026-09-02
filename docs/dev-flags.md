@@ -55,7 +55,7 @@ Notes:
 | --- | --- | --- | --- | --- |
 | `aiPerception` | `aiPerception` | `full`, `los` | `null` | Bounds AI target SELECTION by line of sight (`los`) instead of the shipped full-board default. Selection only -- aiming and firing always require a real line of sight. Measured before the default changed: the bound was never reached by a banking profile and left a non-banking one with no target for most of its life. |
 | `backdrop` | `backdrop` | `felt` | `null` | Draws the application backdrop with a named alternative treatment; the shipped default is the flat application ground. |
-| `blockedFire` | `blockedFire` | `haptic`, `audio`, `haptic+audio`, `ring`, `ring+audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default is silent. Issue #356 compares several treatments before adopting one. |
+| `blockedFire` | `blockedFire` | `haptic`, `audio`, `haptic-audio`, `ring`, `ring-audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default is silent. Issue #356 compares several treatments before adopting one. |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |

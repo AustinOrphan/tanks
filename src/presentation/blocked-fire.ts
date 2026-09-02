@@ -9,13 +9,13 @@
  *
  * Issue #356's candidate blocked-fire cues, named so they can be compared in one session.
  *
- * `haptic`, `audio`, and `haptic+audio` -- the last being the MULTIMODAL combination the
+ * `haptic`, `audio`, and `haptic-audio` -- the last being the MULTIMODAL combination the
  * issue asks for by name ("compare at least one multimodal combination against the
  * strongest single-channel treatment"). Those two channels are deliberately the ones that
  * need no screen space, so they can be judged without the HUD arms existing yet.
  *
  * `ring` is the tank-local visual treatment (render/blocked-fire-ring.ts), and
- * `ring+audio` pairs it with the click -- a SECOND multimodal arm, so the issue's
+ * `ring-audio` pairs it with the click -- a SECOND multimodal arm, so the issue's
  * "multimodal against the strongest single channel" comparison is not itself limited to
  * one combination.
  *
@@ -26,7 +26,7 @@
 /**
  * Exported so each channel's suite can assert one row PER CUE rather than per remembered
  * case. A cue reaches a channel when its name carries that channel, but nothing enforces
- * that -- every consumer enumerates the members it acts on -- and `ring+audio` was added to
+ * that -- every consumer enumerates the members it acts on -- and `ring-audio` was added to
  * the union twice over before a table caught either half: the audio enumeration in
  * director.ts was left at two arms so the pair shipped silent, and blocked-fire-ring.ts's
  * own gate then went un-asserted for the paired cue (measured: narrowing it to
@@ -38,15 +38,24 @@
  * among them: it has no sibling Vitest file by policy (.claude/rules/rendering.md) and is
  * reached only through the GL harness, which exercises `ring` alone.
  */
-export type BlockedFireCue = 'haptic' | 'audio' | 'haptic+audio' | 'ring' | 'ring+audio';
+/**
+ * The multimodal arms are spelled with a hyphen, not a plus, because these values are
+ * typed into `?dev=1&blockedFire=...` by hand (issue #497). `URLSearchParams` decodes a
+ * literal `+` as a space, so `ring+audio` reached the parser as `ring audio` and fell
+ * back to null -- a playtester saw a silent flag and read it as a broken cue. Every
+ * documented value must survive a paste unescaped; `devflags.test.ts` pins that for the
+ * whole registry, and `devflags.ts` still accepts the properly encoded legacy `%2B`
+ * spellings as aliases.
+ */
+export type BlockedFireCue = 'haptic' | 'audio' | 'haptic-audio' | 'ring' | 'ring-audio';
 // Typed against the union rather than inferred as `Set<string>`, so iterating the set
 // yields `BlockedFireCue` and a member the union does not name is a compile error here.
 export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([
   'haptic',
   'audio',
-  'haptic+audio',
+  'haptic-audio',
   'ring',
-  'ring+audio',
+  'ring-audio',
 ]);
 
 /** Narrow a raw string (a URL flag value) to a cue the union names. */
