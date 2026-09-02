@@ -14,7 +14,8 @@ import { resolveVersusConfig, type VersusConfig } from './versus-config';
 import { botSlotsOf, resolveSources, type VersusSlotSetup } from './versus-setup';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
-import type { CustomizationStore, SkinId } from './customization';
+import type { CustomizationStore } from './customization';
+import type { SkinId } from '../presentation/customization';
 import type {
   PlayerSettings,
   PlayerSettingsStore,

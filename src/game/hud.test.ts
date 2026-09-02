@@ -3,7 +3,7 @@ import { defaultSlots } from './versus-setup';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
-import { SKINS, ACCENTS } from './customization';
+import { SKINS, ACCENTS } from '../presentation/customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { versusMapChoices, type VersusConfig } from './versus-config';

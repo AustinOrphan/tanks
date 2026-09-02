@@ -5,7 +5,7 @@ import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
-import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../game/customization';
+import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
 import { identityApplies, resolveOwnerColor } from '../presentation/identity';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';

@@ -6,7 +6,7 @@ import { createMineDebug } from '../../src/render/minedebug';
 import {
   DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
 } from '../../src/sim/constants';
-import type { SkinId, SpawnAnimId } from '../../src/game/customization';
+import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
 
 export const BLAST_LIFE = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS;
 
