@@ -191,6 +191,13 @@ describe('the instruction files', () => {
     expect(files).toEqual(REQUIRED_RULES);
 
     for (const name of files) {
+      // Present is not tracked: a global gitignore of `.claude/` left presentation.md on
+      // disk and out of every commit, and only CI noticed. `--error-unmatch` throws for
+      // an untracked path, so this fails LOCALLY.
+      expect(
+        () => execFileSync('git', ['ls-files', '--error-unmatch', `.claude/rules/${name}`], { cwd: ROOT, stdio: 'pipe' }),
+        `${name} is present but not tracked by git (a global ignore of .claude/?); add it with git add -f`,
+      ).not.toThrow();
       const text = readFileSync(fileURLToPath(new URL(name, new URL('../.claude/rules/', import.meta.url))), 'utf8');
       const frontmatter = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
       expect(frontmatter, `${name} must have YAML frontmatter`).not.toBeNull();

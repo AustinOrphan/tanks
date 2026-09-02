@@ -1,9 +1,10 @@
 # Project instruction context budget
 
 Initial baseline measured for #211 on 2026-08-19; re-measured for #213 on 2026-08-21,
-for #266, #245 and #321 on 2026-08-25, and for the targeted local mutation and CI-pending
-orchestration policies on 2026-08-28. The conditional-rule table below had drifted
-between those re-measurements -- before #266 it recorded `documentation.md` at 31 lines /
+for #266, #245 and #321 on 2026-08-25, for the targeted local mutation and CI-pending
+orchestration policies on 2026-08-28, and for #473 on 2026-09-02. The conditional-rule
+table below had drifted between those re-measurements -- before #266 it recorded
+`documentation.md` at 31 lines /
 1350 bytes against a file that was already 35 / 1663 -- so its figures are recomputed here
 on the final tree, not adjusted. Only the `After` row is enforced by a test.
 

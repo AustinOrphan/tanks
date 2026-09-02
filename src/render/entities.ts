@@ -824,7 +824,7 @@ export function createEntityViews(
    * laid out along local +x and the group is then yawed, which keeps the orientation maths
    * in one place and matching the barrel (entities.ts lays that along +x too).
    *
-   * `tint` is the owner's identity colour (IDENTITY_RING_COLORS), or null for the
+   * `tint` is the owner's identity colour (presentation/identity.ts's IDENTITY_RING_COLORS), or null for the
    * standard untinted brass -- resolved once by the caller at the shell VIEW's creation
    * tick (syncBullets), never re-touched per frame, because a shell's owner cannot
    * change over its life.
@@ -1036,7 +1036,7 @@ export function createEntityViews(
         view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen, ring: null, spawn: null };
         tankViews.set(t.id, view);
       }
-      // Identity ring: WHO, not WHAT style -- see IDENTITY_RING_COLORS. Only a
+      // Identity ring: WHO, not WHAT style -- see presentation/identity.ts's IDENTITY_RING_COLORS. Only a
       // player-kind tank ever gets one, and only once a second player exists in the
       // world; below that threshold this is a no-op every tick, which is what keeps
       // single-player pixel-identical to before this feature (the negative-control
@@ -1496,7 +1496,7 @@ export function createEntityViews(
     // CURRENT world so a level switch or (hypothetically) a shrinking player count is
     // picked up on the very next sync, the same way `snap` is. At playerCount 1 this
     // is false on every call, which is what keeps single-player pixel-identical to the
-    // game before this feature -- see IDENTITY_RING_COLORS' own comment.
+    // game before this feature -- see IDENTITY_RING_COLORS' own comment in presentation/identity.ts.
     const multiPlayer = identityApplies(curr);
     syncWalls(curr);
     syncTanks(prev, curr, a, snap, multiPlayer, dt);

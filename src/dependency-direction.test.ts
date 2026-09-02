@@ -26,6 +26,20 @@ import { describe, it, expect } from 'vitest';
 // silently stopped matching cannot report a clean tree. The purity guard reported green
 // for four of five planted escapes until it got its meta-test; this one shipped with its
 // own.
+//
+// KNOWN LIMITS -- this is a text scan, not a parse, and these are the shapes it does not
+// see. None occurs under src/ today; a reviewer who meets one should extend the scan or
+// the fixtures rather than trust the green:
+//   - a dynamic `import()` whose specifier is a template literal or a concatenation
+//     (`import(\`../\${layer}/x\`)`) carries no string the specifier regexes can read;
+//   - a `from '...'` or `import.meta.glob('...')` INSIDE a string or template literal is
+//     read as an import (strings are kept by the comment strip), which is why the two
+//     fixture-quoting guards are excluded from the scan;
+//   - a regex literal containing `/*` opens a block comment for the strip, hiding the
+//     rest of that file from the specifier scan until a `*/` appears;
+//   - inline type modifiers (`import { type World } from '../sim/world'`) are treated as
+//     a RUNTIME import; the presentation layer must spell its simulation imports
+//     `import type { ... }`.
 
 // Raw source of every .ts file under src/ (recursive, eager -- a one-off test-time scan).
 const rawModules = import.meta.glob('./**/*.ts', {
@@ -90,8 +104,11 @@ const MAY_IMPORT: Readonly<Record<Layer, ReadonlySet<Layer>>> = {
  *   default, not shared vocabulary. Issue #324 moves the HUD slider into Settings and
  *   takes the `hud.ts` entry with it.
  *
- * Test files are exempt: a test of wiring necessarily names what is wired
- * (`loop.test.ts` reads QUALITY_PRESETS to check the renderer got the right one).
+ * A game TEST file may import any module that SOME entry here lists -- a test of wiring
+ * necessarily names what is wired (`loop.test.ts` reads QUALITY_PRESETS to check the
+ * renderer got the right one) -- and nothing else. The first version exempted game tests
+ * from the list entirely, which left `hud.test.ts` free to keep reading the identity
+ * palette out of `render/entities.ts` after the definition had moved.
  */
 const GAME_WIRING: Readonly<Record<string, readonly string[]>> = {
   './game/loop.ts': [
@@ -109,6 +126,9 @@ const GAME_WIRING: Readonly<Record<string, readonly string[]>> = {
   './game/settings.ts': ['audio/manifest'],
   './game/hud.ts': ['audio/manifest'],
 };
+
+/** Every module some wiring entry lists: what a game test may reach in render/ or audio/. */
+const WIRED_MODULES: ReadonlySet<string> = new Set(Object.values(GAME_WIRING).flat());
 
 /**
  * Packages that ARE a layer's implementation. `three` outside `render/` is a renderer
@@ -137,12 +157,28 @@ const PRESENTATION_FORBIDDEN_GLOBALS: ReadonlyArray<{ token: string; re: RegExp 
 // Paths and specifiers
 // ---------------------------------------------------------------------------
 
-/** 'root' for `./main.ts`, `./boot.ts` and their tests; otherwise the first directory. */
-function layerOf(path: string): Layer | 'root' {
+/**
+ * The composition roots, as a CLOSED set. Anything else at the top of src/ -- a stray
+ * root file, or a new directory such as `shared/` -- is `unclassified`, and the scan
+ * reports it as a violation: a new layer has to be placed in LAYERS and MAY_IMPORT before
+ * it may import anything, rather than inheriting the roots' exemption by default (the
+ * first version of this guard did exactly that, and would have let a `src/shared/`
+ * bridge import game and render alike).
+ */
+const ROOT_FILES: ReadonlySet<string> = new Set([
+  './main.ts',
+  './boot.ts',
+  './boot.test.ts',
+  './dependency-direction.test.ts',
+]);
+
+type Placement = Layer | 'root' | 'unclassified';
+
+function layerOf(path: string): Placement {
+  if (ROOT_FILES.has(path)) return 'root';
   const segments = path.replace(/^\.\//, '').split('/');
-  if (segments.length === 1) return 'root';
-  const head = segments[0];
-  return (LAYERS as readonly string[]).includes(head) ? (head as Layer) : 'root';
+  if (segments.length === 1) return 'unclassified';
+  return (LAYERS as readonly string[]).includes(segments[0]) ? (segments[0] as Layer) : 'unclassified';
 }
 
 function isTestFile(path: string): boolean {
@@ -175,21 +211,37 @@ function resolveInsideSrc(path: string, specifier: string): string | null {
   return joined.replace(/\.(ts|js|mjs|json)$/, '');
 }
 
-function layerOfModule(module: string): Layer | 'root' {
-  return layerOf(`./${module}.ts`);
+/**
+ * Placement of a RESOLVED module path such as `render/entities`, `game` (a directory
+ * index import, `'../game'`), `sim/ai` or `boot`. A bare layer name, or anything under
+ * it, is that layer -- the earlier form fed `'../game'` through `layerOf` as `./game.ts`,
+ * a single-segment path, and called it root.
+ */
+function layerOfModule(module: string): Placement {
+  const head = module.split('/')[0];
+  if ((LAYERS as readonly string[]).includes(head)) return head as Layer;
+  return ROOT_FILES.has(`./${module}.ts`) ? 'root' : 'unclassified';
+}
+
+/** The directory an `import.meta.glob` pattern starts in: everything before its first `*`. */
+function globPrefix(pattern: string): string {
+  const star = pattern.indexOf('*');
+  return star === -1 ? pattern : pattern.slice(0, star);
 }
 
 interface Specifier {
   specifier: string;
-  form: 'static' | 'side-effect' | 'dynamic' | 'require';
+  form: 'static' | 'side-effect' | 'dynamic' | 'require' | 'glob';
   /** `import type ... from` / `export type ... from`: erased at compile time. */
   typeOnly: boolean;
 }
 
 /**
- * Every module specifier in comment-stripped source, however it is written. The four
- * forms are the ones purity.test.ts learned the hard way: `from`-only matching missed
- * side-effect, dynamic and require imports entirely.
+ * Every module specifier in comment-stripped source, however it is written. The first
+ * four forms are the ones purity.test.ts learned the hard way: `from`-only matching
+ * missed side-effect, dynamic and require imports entirely. The fifth, Vite's
+ * `import.meta.glob`, loads a whole directory and is classified by that directory.
+ * Whitespace before the specifier is optional throughout: `from"x"` is legal.
  *
  * For the static form the statement's HEAD is found by walking back to the nearest
  * `import`/`export` keyword: an import clause never contains either word, so the
@@ -199,13 +251,13 @@ interface Specifier {
  */
 function specifiersOf(codeOnly: string): Specifier[] {
   const out: Specifier[] = [];
-  for (const m of codeOnly.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)) {
+  for (const m of codeOnly.matchAll(/\bfrom\s*['"]([^'"]+)['"]/g)) {
     const head = codeOnly.slice(Math.max(0, m.index - 4000), m.index);
     let typeOnly = false;
     for (const k of head.matchAll(/\b(?:import|export)(\s+type)?\b/g)) typeOnly = k[1] !== undefined;
     out.push({ specifier: m[1], form: 'static', typeOnly });
   }
-  for (const m of codeOnly.matchAll(/\bimport\s+['"]([^'"]+)['"]/g)) {
+  for (const m of codeOnly.matchAll(/\bimport\s*['"]([^'"]+)['"]/g)) {
     out.push({ specifier: m[1], form: 'side-effect', typeOnly: false });
   }
   for (const m of codeOnly.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
@@ -213,6 +265,9 @@ function specifiersOf(codeOnly: string): Specifier[] {
   }
   for (const m of codeOnly.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
     out.push({ specifier: m[1], form: 'require', typeOnly: false });
+  }
+  for (const m of codeOnly.matchAll(/\bimport\.meta\.glob\s*\(\s*['"]([^'"]+)['"]/g)) {
+    out.push({ specifier: m[1], form: 'glob', typeOnly: false });
   }
   return out;
 }
@@ -284,9 +339,12 @@ function stripComments(src: string): string {
 // THE classifier
 // ---------------------------------------------------------------------------
 
-/** A human-readable reason the import is forbidden, or null when it is allowed. */
-function classify(path: string, spec: Specifier): string | null {
-  const layer = layerOf(path);
+/**
+ * A human-readable reason the import is forbidden, or null when it is allowed. `layer`
+ * is the importing file's placement; `scan` reports an unclassified file before this
+ * is ever reached.
+ */
+function classify(path: string, layer: Layer | 'root', spec: Specifier): string | null {
   const test = isTestFile(path);
   const s = spec.specifier;
 
@@ -295,26 +353,35 @@ function classify(path: string, spec: Specifier): string | null {
   }
 
   if (s.startsWith('.')) {
-    const target = resolveInsideSrc(path, s);
+    // A glob is classified by the directory it starts in: `'./*.ts'` from a file in
+    // audio/ is audio, `'../game/*.ts'` from render/ is game.
+    const target = resolveInsideSrc(path, spec.form === 'glob' ? globPrefix(s) : s);
     // A test may read any fixture (`index-html.test.ts` reads the real index.html) and
     // may drive the composition root (`loop.test.ts` boots the page). Production code
     // may do neither.
     if (target === null) return test ? null : `import "${s}" escapes src/`;
     if (layer === 'root') return null; // a composition root may wire anything
     const targetLayer = layerOfModule(target);
+    if (targetLayer === 'unclassified') {
+      return `import "${s}" reaches "${target}", which is in no layer: add its directory to LAYERS and MAY_IMPORT`;
+    }
     if (targetLayer === 'root') {
       return test ? null : `import "${s}" reaches a composition root; nothing below main.ts/boot.ts may depend on them`;
     }
     if (MAY_IMPORT[layer].has(targetLayer)) {
       if (layer === 'presentation' && targetLayer === 'sim' && !test) {
         if (spec.form !== 'static' || !spec.typeOnly) {
-          return `runtime import "${s}" of the simulation from the presentation layer (only \`import type\` is allowed there: shapes, never step or mutation code)`;
+          return `runtime import "${s}" of the simulation from the presentation layer (only \`import type { ... }\` is allowed there: shapes, never step or mutation code)`;
         }
       }
       return null;
     }
     if (layer === 'game' && (targetLayer === 'render' || targetLayer === 'audio')) {
-      if (test) return null;
+      if (test) {
+        return WIRED_MODULES.has(target)
+          ? null
+          : `game test imports "${target}" from ${targetLayer}: not a wired module -- a test may name what a wiring module wires, and nothing else`;
+      }
       const allowed = GAME_WIRING[path] ?? [];
       if (allowed.includes(target)) return null;
       return `game module imports "${target}" from ${targetLayer}: not a listed wiring import in GAME_WIRING -- if this is vocabulary, define it under src/presentation/`;
@@ -338,9 +405,16 @@ function classify(path: string, spec: Specifier): string | null {
 
 function scan(path: string, src: string): string[] {
   const violations: string[] = [];
+  const layer = layerOf(path);
+  if (layer === 'unclassified') {
+    const head = path.replace(/^\.\//, '').split('/');
+    const what = head.length > 1 ? `directory "${head[0]}/"` : 'file at the root of src/';
+    violations.push(`${path}: unclassified ${what}: add it to LAYERS and MAY_IMPORT, or to ROOT_FILES if it is a composition root`);
+    return violations;
+  }
   const codeOnly = stripComments(src);
   for (const spec of specifiersOf(codeOnly)) {
-    const reason = classify(path, spec);
+    const reason = classify(path, layer, spec);
     if (reason !== null) violations.push(`${path}: ${reason}`);
   }
   if (layerOf(path) === 'presentation') {
@@ -376,6 +450,11 @@ describe('dependency direction across src/ layers', () => {
       expect(excluded in rawModules, `${excluded} is excluded but no longer exists`).toBe(true);
     }
     expect('./dependency-direction.test.ts' in rawModules, 'the glob included this guard itself').toBe(false);
+    // Every scanned file sits in a layer or is a listed composition root. The sweep
+    // reports the same condition per file; this states it as a property of the tree.
+    for (const path of files) {
+      expect(layerOf(path) !== 'unclassified', `${path} is in no layer and is not a listed composition root`).toBe(true);
+    }
   });
 
   it('every import in src/ points down the layer order, or is a listed wiring import', () => {
@@ -396,6 +475,10 @@ describe('dependency direction across src/ layers', () => {
           .filter((t): t is string => t !== null),
       );
       for (const target of targets) {
+        expect(
+          ['render', 'audio'].includes(layerOfModule(target)),
+          `GAME_WIRING allows ${path} -> ${target}, which is not a render or audio module`,
+        ).toBe(true);
         expect(imported.has(target), `GAME_WIRING allows ${path} -> ${target}, but ${path} does not import it`).toBe(true);
       }
     }
@@ -475,7 +558,39 @@ const FORBIDDEN_FIXTURES: Fixture[] = [
     pair: ['game', 'audio'],
   },
 
-  // --- the wiring allowlist is exact ---
+  // --- placement is closed: no directory or root file is exempt by default ---
+  {
+    rule: 'a new top-level directory (no layer, no exemption) importing game and render',
+    path: './shared/bridge.ts',
+    src: `import { createHud } from '../game/hud';\nimport { createScene } from '../render/scene';\nexport const x = [createHud, createScene];\n`,
+    expect: 'unclassified directory "shared/"',
+  },
+  {
+    rule: 'a stray file at the root of src/ that is not a listed composition root',
+    path: './helpers.ts',
+    src: `export const x = 1;\n`,
+    expect: 'unclassified file at the root',
+  },
+  {
+    rule: 'an import reaching a directory that is in no layer',
+    path: './game/loop.ts',
+    src: `import { bridge } from '../shared/bridge';\nexport const x = bridge;\n`,
+    expect: 'in no layer',
+  },
+  {
+    rule: 'a directory-index import of game (`../game`, not `../game/x`)',
+    path: './render/skins.test.ts',
+    src: `import { createHud } from '../game';\nexport const x = createHud;\n`,
+    expect: 'render may not import game',
+  },
+
+  // --- the wiring allowlist is exact, for tests as well ---
+  {
+    rule: 'a game TEST reaching a render module no wiring entry lists',
+    path: './game/hud.test.ts',
+    src: `import { describe } from 'vitest';\nimport { IDENTITY_RING_COLORS } from '../render/entities';\nexport const x = [describe, IDENTITY_RING_COLORS];\n`,
+    expect: 'not a wired module',
+  },
   {
     rule: 'a wiring file reaching a render module it is not listed for',
     path: './game/loop.ts',
@@ -549,6 +664,24 @@ const FORBIDDEN_FIXTURES: Fixture[] = [
     expect: 'render may not import game',
   },
   {
+    rule: 'no whitespace before the specifier (the minified spelling)',
+    path: './audio/director.ts',
+    src: `import { parseDevFlags } from"../game/devflags";\nimport"../game/haptics";\nexport const x = parseDevFlags;\n`,
+    expect: 'audio may not import game',
+  },
+  {
+    rule: 'import.meta.glob reaching another layer',
+    path: './render/skins.ts',
+    src: `export const modules = import.meta.glob('../game/*.ts');\n`,
+    expect: 'render may not import game',
+  },
+  {
+    rule: 'import.meta.glob of the simulation from the presentation layer (a runtime load)',
+    path: './presentation/identity.ts',
+    src: `export const modules = import.meta.glob('../sim/*.ts');\n`,
+    expect: 'runtime import',
+  },
+  {
     rule: 'dynamic import',
     path: './audio/director.ts',
     src: `export async function cue() {\n  const m = await import('../game/devflags');\n  return m;\n}\n`,
@@ -613,6 +746,20 @@ const CLEAN_FIXTURES: Fixture[] = [
   { rule: 'three in the renderer', path: './render/scene.ts', src: `import * as THREE from 'three';\nexport const s = new THREE.Scene();\n`, expect: '' },
   { rule: 'howler in the audio engine', path: './audio/engine.ts', src: `import { Howl, Howler } from 'howler';\nexport const x = [Howl, Howler];\n`, expect: '' },
   { rule: 'a game TEST probing three directly', path: './game/render-capability.test.ts', src: `import * as THREE from 'three';\nexport const r = THREE.WebGLRenderer;\n`, expect: '' },
+
+  // --- glob and directory-index forms that stay inside an allowed layer ---
+  {
+    rule: 'import.meta.glob within its own layer (the shape audio/imports.test.ts uses)',
+    path: './audio/imports.test.ts',
+    src: `export const sources = import.meta.glob('./*.ts', { query: '?raw', import: 'default', eager: true });\n`,
+    expect: '',
+  },
+  {
+    rule: 'a directory-index import inside an allowed layer (`../sim/ai`)',
+    path: './game/loop.ts',
+    src: `import { decideAi } from '../sim/ai';\nexport const x = decideAi;\n`,
+    expect: '',
+  },
 
   // --- the strip and the resolver ---
   {
@@ -690,7 +837,7 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 
   it('exercises every specifier syntax form the extractor knows', () => {
     const forms = new Set(FORBIDDEN_FIXTURES.flatMap((f) => specifiersOf(f.src).map((s) => s.form)));
-    expect([...forms].sort()).toEqual(['dynamic', 'require', 'side-effect', 'static']);
+    expect([...forms].sort()).toEqual(['dynamic', 'glob', 'require', 'side-effect', 'static']);
   });
 
   it('has one fixture per PRESENTATION_FORBIDDEN_GLOBALS entry it can reach, and the strip works', () => {
