@@ -47,10 +47,11 @@ import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
 import {
-  parseArgs, parseJobs, partitionByScope, aggregateExitCodes, formatResult, dirtyReport, unreachableReport,
+  parseArgs, parseJobs, partitionByScope, scopeCostLookup, aggregateExitCodes, formatResult, dirtyReport, unreachableReport,
   resolveManifestPath, runTestsReal, classifySubprocessFailure, readReachabilityReport, relatedFilesForAll,
   failedTestNames,
 } from './run.mjs';
+import { scopeCosts } from './scope-costs.mjs';
 import { collectReachability } from './reachability.mjs';
 import type { ManifestEntry } from './lib.mjs';
 
@@ -1298,6 +1299,22 @@ describe('partitionByScope', () => {
     expect(slices.map((s) => s.map((e) => e.id))).toEqual([['h1', 'h2', 'h3', 'h4'], ['l1', 'x1', 'l2']]);
   });
 
+  it('balances by COST when a cost is supplied: one expensive scope outweighs several cheap ones (issue #507)', () => {
+    // hud-like: 4 entries at 12 s = 48 s; the other three scopes total 3 entries at 2 s
+    // each. By count the 4-entry scope shares a worker with nothing and the rest split
+    // 2/1; by cost the same happens here, so the discriminating case is a cheap scope
+    // with MORE entries than an expensive one, below.
+    const cost = (tests: readonly string[]) => (tests.join() === hud.join() ? 12 : 2);
+    const heavyFew = [entry('h1', ...hud), entry('h2', ...hud)]; // 2 x 12 = 24 s
+    const cheapMany = [entry('l1', ...loop), entry('l2', ...loop), entry('l3', ...loop), entry('l4', ...loop)]; // 4 x 2 = 8 s
+    const mid = [entry('x1', ...both), entry('x2', ...both), entry('x3', ...both)]; // 3 x 2 = 6 s
+    const byCost = partitionByScope([...heavyFew, ...cheapMany, ...mid], 2, cost);
+    expect(byCost.map((s) => s.map((e) => e.id))).toEqual([['h1', 'h2'], ['l1', 'l2', 'l3', 'l4', 'x1', 'x2', 'x3']]);
+    // Negative control: with no cost the count balance puts the 4-entry scope alone.
+    const byCount = partitionByScope([...heavyFew, ...cheapMany, ...mid], 2);
+    expect(byCount.map((s) => s.map((e) => e.id))).toEqual([['l1', 'l2', 'l3', 'l4'], ['h1', 'h2', 'x1', 'x2', 'x3']]);
+  });
+
   it('drops empty workers when there are fewer scopes than jobs, and --jobs 1 is one slice in manifest order', () => {
     expect(partitionByScope(entries, 8)).toHaveLength(3);
     expect(partitionByScope(entries, 1).map((s) => s.map((e) => e.id))).toEqual([entries.map((e) => e.id)]);
@@ -1392,5 +1409,27 @@ describe('the shipped manifest pins every killed entry by name or by count (issu
     const byName = manifest.filter((e) => e.killedBy !== undefined).length;
     const byCount = manifest.filter((e) => e.expect === 'killed' && e.expectFailures !== undefined).length;
     expect(byName + byCount, 'the population this rule covers').toBe(manifest.filter((e) => e.expect === 'killed').length);
+  });
+});
+
+describe('scope costs (issue #507)', () => {
+  it('scopeCostLookup returns the measured seconds for a known scope and the median of the known ones otherwise', () => {
+    const lookup = scopeCostLookup({ '["a.test.ts"]': 12, '["b.test.ts"]': 2, '["c.test.ts"]': 4 });
+    expect(lookup(['a.test.ts'])).toBe(12);
+    expect(lookup(['zzz.test.ts']), 'an unknown scope gets the median, 4').toBe(4);
+    expect(scopeCostLookup({})(['a.test.ts']), 'no measurements at all: every scope costs 1, the count balance').toBe(1);
+    expect(scopeCostLookup({ '["a.test.ts"]': 0, '["b.test.ts"]': -3 })(['a.test.ts']), 'non-positive samples are ignored').toBe(1);
+  });
+
+  it('scopeCosts takes the median seconds per scope from report entries and ignores entries without a time', () => {
+    const manifest = [
+      { id: 'h1', tests: ['a.test.ts'] }, { id: 'h2', tests: ['a.test.ts'] }, { id: 'h3', tests: ['a.test.ts'] },
+      { id: 'l1', tests: ['b.test.ts'] }, { id: 'u1', tests: ['c.test.ts'] },
+    ];
+    const report = [
+      { id: 'h1', seconds: 10 }, { id: 'h2', seconds: 30 }, { id: 'h3', seconds: 12 },
+      { id: 'l1', seconds: 2.04 }, { id: 'u1', seconds: null }, { id: 'ghost', seconds: 99 },
+    ];
+    expect(scopeCosts(report, manifest)).toEqual({ '["a.test.ts"]': 12, '["b.test.ts"]': 2 });
   });
 });

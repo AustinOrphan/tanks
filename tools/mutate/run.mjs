@@ -161,14 +161,19 @@ export function parseJobs(raw, cores = availableParallelism()) {
  * Split entries across `jobs` workers WITHOUT splitting an exact test scope: every
  * entry of one scope goes to one worker, so each scope is still baselined exactly
  * once per run (`runManifest` caches baselines per scope inside one process). Scopes
- * are placed largest-first onto the lightest worker, balancing by entry count -- the
- * hud scope's 41 entries and the loop scope's 34 land on different workers instead of
- * stacking. Empty slices are dropped, so fewer scopes than workers means fewer workers.
- * Pure over the entries' `tests` arrays; order within a worker is manifest order.
+ * are placed costliest-first onto the worker with the least cost so far (issue #507):
+ * a scope's cost is its entry count times `costOf(tests)`, the seconds one run of that
+ * scope takes. Balancing by count alone put the hud scope (41 entries at 12 s) on one
+ * worker that ran five minutes after the others had finished. Empty slices are
+ * dropped, so fewer scopes than workers means fewer workers. Pure over the entries'
+ * `tests` arrays and the injected cost; order within a worker is manifest order, and
+ * ties keep the sort stable so equal costs reproduce the count balance exactly.
  * @template {{ tests: string[] }} T
- * @param {readonly T[]} entries @param {number} jobs @returns {T[][]}
+ * @param {readonly T[]} entries @param {number} jobs
+ * @param {(tests: readonly string[]) => number} [costOf] Seconds per run of a scope; 1 when absent.
+ * @returns {T[][]}
  */
-export function partitionByScope(entries, jobs) {
+export function partitionByScope(entries, jobs, costOf = () => 1) {
   /** @type {Map<string, T[]>} */
   const byScope = new Map();
   for (const entry of entries) {
@@ -177,18 +182,39 @@ export function partitionByScope(entries, jobs) {
     if (group) group.push(entry);
     else byScope.set(key, [entry]);
   }
-  const scopes = [...byScope.values()].sort((a, b) => b.length - a.length);
-  /** @type {T[][]} */
-  const slices = Array.from({ length: Math.max(1, jobs) }, () => []);
+  const costOfGroup = (/** @type {T[]} */ group) => group.length * costOf(group[0].tests);
+  const scopes = [...byScope.values()].sort((a, b) => costOfGroup(b) - costOfGroup(a) || b.length - a.length);
+  /** @type {{ entries: T[], cost: number }[]} */
+  const slices = Array.from({ length: Math.max(1, jobs) }, () => ({ entries: [], cost: 0 }));
   for (const group of scopes) {
     let lightest = slices[0];
-    for (const slice of slices) if (slice.length < lightest.length) lightest = slice;
-    lightest.push(...group);
+    for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;
+    lightest.entries.push(...group);
+    lightest.cost += costOfGroup(group);
   }
   const order = new Map(entries.map((e, i) => [e, i]));
   return slices
-    .filter((slice) => slice.length > 0)
-    .map((slice) => slice.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)));
+    .filter((slice) => slice.entries.length > 0)
+    .map((slice) => slice.entries.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)));
+}
+
+/**
+ * The per-scope run cost the pool balances with: `tools/mutate/scope-costs.json`, the
+ * median seconds per entry of each exact scope as measured by a previous `--report`
+ * run (`scope-costs.mjs` regenerates it). A scope the file does not know gets the
+ * median of the known ones, so a brand-new test file is neither ignored nor assumed
+ * heavy. Balance only ever depends on this, never correctness, so a stale file costs
+ * seconds of idle worker time and nothing else.
+ * @param {Record<string, number>} costs keyed by `JSON.stringify(tests)`
+ * @returns {(tests: readonly string[]) => number}
+ */
+export function scopeCostLookup(costs) {
+  const known = Object.values(costs).filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+  const fallback = known.length ? known[Math.floor(known.length / 2)] : 1;
+  return (tests) => {
+    const v = costs[JSON.stringify(tests)];
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
 }
 
 /**
@@ -574,9 +600,14 @@ async function runParallel(entries, jobs, root, reportPath) {
     console.error(`--jobs ${jobs} runs the COMMITTED tree in detached worktrees, and these tracked files are not committed:\n${dirty}\ncommit or stash them first.`);
     return 2;
   }
-  const slices = partitionByScope(entries, jobs);
+  const costsPath = join(root, 'tools/mutate/scope-costs.json');
+  /** @type {Record<string, number>} */
+  const costs = existsSync(costsPath) ? JSON.parse(readFileSync(costsPath, 'utf8')) : {};
+  const costOf = scopeCostLookup(costs);
+  const slices = partitionByScope(entries, jobs, costOf);
+  const estimate = (/** @type {ManifestEntry[]} */ slice) => Math.round(slice.reduce((sum, e) => sum + costOf(e.tests), 0));
   const scopes = new Set(entries.map((e) => JSON.stringify(e.tests))).size;
-  console.log(`[pool] ${entries.length} mutation(s), ${scopes} exact test scope(s), ${slices.length} worker(s)`);
+  console.log(`[pool] ${entries.length} mutation(s), ${scopes} exact test scope(s), ${slices.length} worker(s), scope costs from ${Object.keys(costs).length} measured scope(s)`);
 
   const thisFile = fileURLToPath(import.meta.url);
   /** @type {{ index: number, dir: string, code: number | null, child: import('node:child_process').ChildProcess | null, report?: MutationResult[] | null }[]} */
@@ -611,7 +642,7 @@ async function runParallel(entries, jobs, root, reportPath) {
       const slicePath = join(dir, '..', `${basename(dir)}.manifest.json`);
       writeFileSync(slicePath, JSON.stringify(slices[i], null, 2));
       workers.push({ index: i + 1, dir, code: null, child: null });
-      console.log(`[w${i + 1}] ${slices[i].length} mutation(s) in ${dir}`);
+      console.log(`[w${i + 1}] ${slices[i].length} mutation(s), est. ${estimate(slices[i])}s, in ${dir}`);
     }
     await Promise.all(workers.map((w) => new Promise((resolve) => {
       const slicePath = join(w.dir, '..', `${basename(w.dir)}.manifest.json`);
@@ -745,14 +776,18 @@ async function run() {
     onResult: (result, index, count, entry) => {
       // Wall time since the previous line: one entry's apply, scoped run and restore
       // (the first line of each scope also carries that scope's baseline). Printed here
-      // rather than inside formatResult so the pure formatter stays timeless.
+      // rather than inside formatResult so the pure formatter stays timeless, and kept
+      // for the report, which is where `scope-costs.mjs` reads it.
       const now = Date.now();
-      const secs = ((now - lastResultAt) / 1000).toFixed(1);
+      const secs = (now - lastResultAt) / 1000;
       lastResultAt = now;
-      console.log(`${formatResult(result, index, count, entry)} [${secs}s]`);
+      secondsById.set(result.id, secs);
+      console.log(`${formatResult(result, index, count, entry)} [${secs.toFixed(1)}s]`);
     },
   };
   let lastResultAt = Date.now();
+  /** @type {Map<string, number>} */
+  const secondsById = new Map();
 
   const baselineScopes = new Set(entries.map((entry) => JSON.stringify(entry.tests))).size;
   console.log(
@@ -804,7 +839,7 @@ async function run() {
     return;
   }
 
-  if (args.report) writeReport(args.report, results);
+  if (args.report) writeReport(args.report, results, secondsById);
   process.exitCode = computeExitCode(results);
 }
 
@@ -813,9 +848,10 @@ async function run() {
  * with the outcome, the counts and the vitest full names that failed, which is what the
  * `killedBy` migration and any future selection tooling read. Written whole at the end
  * rather than streamed, so a partial file never looks like a finished run.
- * @param {string} path @param {MutationResult[]} results
+ * @param {string} path @param {(MutationResult & { seconds?: number | null })[]} results
+ * @param {Map<string, number>} [secondsById] Wall seconds per entry, when measured here.
  */
-export function writeReport(path, results) {
+export function writeReport(path, results, secondsById = new Map()) {
   const entries = results.map((r) => ({
     id: r.id,
     status: r.status,
@@ -824,6 +860,7 @@ export function writeReport(path, results) {
     total: r.total ?? null,
     failedTests: r.failedTests ?? [],
     missingKilledBy: r.missingKilledBy ?? [],
+    seconds: secondsById.get(r.id) ?? r.seconds ?? null,
   }));
   writeFileSync(path, JSON.stringify({ version: 1, entries }, null, 2) + '\n');
 }

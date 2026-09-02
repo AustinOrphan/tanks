@@ -60,7 +60,11 @@ worker is this same serial harness in its own detached `git worktree` of HEAD wi
 scope (a scope is never split, so it is still baselined once), relays each worker's
 output under a `[wN]` prefix, folds the exit codes worst-first (restore failure,
 interruption, mid-run error, refusal, mismatch) and removes the worktrees. A worker whose
-restore failed keeps its worktree and names it.
+restore failed keeps its worktree and names it. Scopes are dealt costliest-first by
+`scope-costs.json`, the median seconds per entry of each scope from a previous
+`--report` run (`node tools/mutate/scope-costs.mjs <report.json>` regenerates it; a
+scope it does not know costs the median), so the workers finish together instead of one
+carrying the hud scope alone (issue #507).
 
 Because a worktree of HEAD cannot see uncommitted edits, the pool tests the COMMITTED tree
 and refuses to start with any tracked file dirty -- stricter than the serial path, which
