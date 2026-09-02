@@ -11,7 +11,7 @@ import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
 import { configFor } from '../sim/config';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
 let hud: Hud | null = null;
 

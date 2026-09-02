@@ -57,7 +57,7 @@ import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
 import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
-import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../render/entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';

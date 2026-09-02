@@ -2598,7 +2598,7 @@
   },
   {
     "id": "third-team-falls-back-to-the-placeholder",
-    "file": "src/render/entities.ts",
+    "file": "src/presentation/identity.ts",
     "find": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];",
     "replace": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0xffffff];",
     "expect": "killed",

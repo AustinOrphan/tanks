@@ -135,7 +135,7 @@ import { createLevelSystem } from './levels';
 import type { SlotSource } from '../input/assignment';
 import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
 import { SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;

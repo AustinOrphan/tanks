@@ -85,7 +85,7 @@ import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } fr
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from './devflags';
 import type { RouteHost, StartIntent } from './route-host';
-import { resolveOwnerColor } from '../render/entities';
+import { resolveOwnerColor } from '../presentation/identity';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
