@@ -3146,8 +3146,8 @@
   {
     "id": "route-host-clears-the-retained-versus-config-on-detach",
     "file": "src/game/route-host.ts",
-    "find": "        detach(): void {\n          if (!current()) return;\n          live = null;\n        },",
-    "replace": "        detach(): void {\n          if (!current()) return;\n          live = null;\n          versusConfig = null;\n        },",
+    "find": "          live = null;\n          // The menu goes back to the PAGE's shape.",
+    "replace": "          live = null;\n          versusConfig = null;\n          // The menu goes back to the PAGE's shape.",
     "expect": "killed",
     "expectFailures": 2,
     "tests": [
