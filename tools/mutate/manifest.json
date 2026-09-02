@@ -3335,7 +3335,7 @@
     ],
     "expect": "killed",
     "expectFailures": 9,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 455 across both scoped files (route-host.test.ts 35 + loop.test.ts 420), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -3533,7 +3533,7 @@
     ],
     "expect": "killed",
     "expectFailures": 4,
-    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 455 across both scoped files (route-host.test.ts 35 + loop.test.ts 420): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness."
+    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness."
   },
   {
     "id": "route-host-never-re-reads-continue-on-arrival",
@@ -3546,7 +3546,7 @@
     ],
     "expect": "killed",
     "expectFailures": 2,
-    "why": "The page paints Continue once, at construction, and never again. A live session's own subscriber refreshes it on the arrivals it sees, so the only arrivals this loses are the ones after a session has been disposed (issue #429) -- which, with the session's subscriber now released at disposal, is every arrival the player makes from a route. The page must re-read the run store, not trust the last value a since-dead session painted. 2 of 455 across both scoped files (route-host.test.ts 35 + loop.test.ts 420): the arrival case in each, both of which end a run while the page is away on another route."
+    "why": "The page paints Continue once, at construction, and never again. A live session's own subscriber refreshes it on the arrivals it sees, so the only arrivals this loses are the ones after a session has been disposed (issue #429) -- which, with the session's subscriber now released at disposal, is every arrival the player makes from a route. The page must re-read the run store, not trust the last value a since-dead session painted. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the arrival case in each, both of which end a run while the page is away on another route."
   },
   {
     "id": "session-dispose-keeps-observing-the-page-machine",
@@ -3558,7 +3558,7 @@
     ],
     "expect": "killed",
     "expectFailures": 2,
-    "why": "A disposed session keeps its subscriber on the page-scoped state machine (issue #468 made the machine outlive the session), so it runs on every later change with the retired session's closures. Measured before the unsubscribe existed: a retired Practice session on level 3 recorded level 3 as cleared when the live campaign session cleared level 1, and a retired campaign session advanced the shared run with a stale life count before the live one wrote the real value. 2 of 420 in loop.test.ts: the retired-Practice and retired-campaign cases under \"a retired session stops observing the page state machine\", both driven through the page harness with a real machine."
+    "why": "A disposed session keeps its subscriber on the page-scoped state machine (issue #468 made the machine outlive the session), so it runs on every later change with the retired session's closures. Measured before the unsubscribe existed: a retired Practice session on level 3 recorded level 3 as cleared when the live campaign session cleared level 1, and a retired campaign session advanced the shared run with a stale life count before the live one wrote the real value. 2 of 421 in loop.test.ts: the retired-Practice and retired-campaign cases under \"a retired session stops observing the page state machine\", both driven through the page harness with a real machine."
   },
   {
     "id": "state-onchange-unsubscribe-is-inert",
@@ -3571,7 +3571,7 @@
     ],
     "expect": "killed",
     "expectFailures": 4,
-    "why": "`onChange` returns a function that removes nothing. loop.ts calls it at disposal and would believe the session had stopped observing, so this is the mutation that reintroduces the retired-subscriber defect while leaving every call site looking correct. 4 of 459 across both scoped files (state.test.ts 39 + loop.test.ts 420): the two unsubscribe cases in state.test.ts and the two retired-session cases in loop.test.ts."
+    "why": "`onChange` returns a function that removes nothing. loop.ts calls it at disposal and would believe the session had stopped observing, so this is the mutation that reintroduces the retired-subscriber defect while leaving every call site looking correct. 4 of 460 across both scoped files (state.test.ts 39 + loop.test.ts 421): the two unsubscribe cases in state.test.ts and the two retired-session cases in loop.test.ts."
   },
   {
     "id": "state-emit-iterates-the-live-subscriber-array",
