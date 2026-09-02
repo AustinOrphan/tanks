@@ -66,9 +66,11 @@ jobs:
       # strings no longer matching and one declared outcome flipped. Node 24 is the
       # authoritative per-change full-manifest lane; mutation-floor.yml separately runs
       # the same complete manifest daily and on request under exact Node 22.13.0.
+      # `--jobs auto` is the worktree pool (issue #502): one serial harness per detached
+      # worktree, three at a time on this four-core runner, same outcomes as serial.
       - name: Mutation manifest (full, current)
         if: matrix.label == 'current'
-        run: npm run mutate
+        run: npm run mutate -- --jobs auto
 
       - name: Build
         run: npm run build

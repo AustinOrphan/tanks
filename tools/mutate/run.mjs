@@ -63,9 +63,9 @@
  * match must report FAILED-TO-APPLY, and a manifest with a wrong declared outcome
  * must produce a non-zero exit.
  */
-import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync } from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync, mkdtempSync, symlinkSync } from 'node:fs';
+import { execFileSync, spawnSync, spawn } from 'node:child_process';
+import { tmpdir, availableParallelism } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyAt, validateManifest, findUnreachableEntries } from './lib.mjs';
@@ -120,17 +120,80 @@ const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
 const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.meta.url));
 
 /** @param {string[]} argv
- * @returns {{ manifest: string, only: string | null, root: string }} */
+ * @returns {{ manifest: string, only: string | null, root: string, jobs: number }} */
 export function parseArgs(argv) {
-  /** @type {{ manifest: string, only: string | null, root: string }} */
-  const args = { manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd() };
+  /** @type {{ manifest: string, only: string | null, root: string, jobs: number }} */
+  const args = { manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1 };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--manifest') args.manifest = argv[++i];
     else if (argv[i] === '--only') args.only = argv[++i];
     else if (argv[i] === '--root') args.root = argv[++i];
+    else if (argv[i] === '--jobs') args.jobs = parseJobs(argv[++i]);
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   return args;
+}
+
+/**
+ * `--jobs N` runs the manifest over N worktrees at once (issue #502); `--jobs auto`
+ * leaves one core for the parent and the vitest workers' own overhead. 1 -- the
+ * default -- is the serial harness exactly as before. Pure, so a test can pin the
+ * parse without the machine's core count leaking into the expectation.
+ * @param {string | undefined} raw @param {number} [cores] @returns {number}
+ */
+export function parseJobs(raw, cores = availableParallelism()) {
+  if (raw === 'auto') return Math.max(1, cores - 1);
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`--jobs must be a positive integer or "auto", got ${JSON.stringify(raw)}`);
+  return n;
+}
+
+/**
+ * Split entries across `jobs` workers WITHOUT splitting an exact test scope: every
+ * entry of one scope goes to one worker, so each scope is still baselined exactly
+ * once per run (`runManifest` caches baselines per scope inside one process). Scopes
+ * are placed largest-first onto the lightest worker, balancing by entry count -- the
+ * hud scope's 41 entries and the loop scope's 34 land on different workers instead of
+ * stacking. Empty slices are dropped, so fewer scopes than workers means fewer workers.
+ * Pure over the entries' `tests` arrays; order within a worker is manifest order.
+ * @template {{ tests: string[] }} T
+ * @param {readonly T[]} entries @param {number} jobs @returns {T[][]}
+ */
+export function partitionByScope(entries, jobs) {
+  /** @type {Map<string, T[]>} */
+  const byScope = new Map();
+  for (const entry of entries) {
+    const key = JSON.stringify(entry.tests);
+    const group = byScope.get(key);
+    if (group) group.push(entry);
+    else byScope.set(key, [entry]);
+  }
+  const scopes = [...byScope.values()].sort((a, b) => b.length - a.length);
+  /** @type {T[][]} */
+  const slices = Array.from({ length: Math.max(1, jobs) }, () => []);
+  for (const group of scopes) {
+    let lightest = slices[0];
+    for (const slice of slices) if (slice.length < lightest.length) lightest = slice;
+    lightest.push(...group);
+  }
+  const order = new Map(entries.map((e, i) => [e, i]));
+  return slices
+    .filter((slice) => slice.length > 0)
+    .map((slice) => slice.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)));
+}
+
+/**
+ * One exit code for several workers, worst first: a restore failure (3, a worktree
+ * left mutated) outranks an interruption (130), which outranks a mid-run error (4), a
+ * refusal to start (2) and a declared-outcome mismatch (1). Any other non-zero code is
+ * reported as 4 -- a worker that died without a verdict is a mid-run error, not a pass.
+ * @param {readonly (number | null)[]} codes @returns {number}
+ */
+export function aggregateExitCodes(codes) {
+  const severity = [3, 130, 4, 2, 1];
+  const seen = new Set(codes.map((c) => (c === null ? 4 : severity.includes(c) || c === 0 ? c : 4)));
+  for (const code of severity) if (seen.has(code)) return code;
+  return 0;
 }
 
 /** `--manifest` may be given as an absolute path (a reviewer pointing at a scratch
@@ -454,6 +517,110 @@ function installSignalHandlers() {
   process.on('SIGTERM', onSignal);
 }
 
+/**
+ * The worktree pool (issue #502). Each worker is THIS harness, serial, in its own
+ * detached `git worktree` of HEAD with `node_modules` linked from the checkout -- so a
+ * mutation applied by one worker is never visible to another's scoped run, and every
+ * restore/dirty/reachability guarantee of the serial path holds per worker unchanged.
+ * The parent only partitions, spawns, relays output with a `[wN]` prefix, aggregates
+ * exit codes and removes the worktrees.
+ *
+ * The committed tree is what runs, since a worktree of HEAD cannot see uncommitted
+ * edits: the parent refuses to start with ANY tracked file dirty, stricter than the
+ * serial path's mutated-files-only check on purpose.
+ *
+ * A worker whose restore failed (exit 3) keeps its worktree so the file can be
+ * inspected; every other worktree is removed even on failure or interruption -- they
+ * are throwaways, which is what makes Ctrl+C safe here in a way it never was for the
+ * serial harness mutating the checkout itself.
+ * @param {ManifestEntry[]} entries @param {number} jobs @param {string} root
+ * @returns {Promise<number>}
+ */
+async function runParallel(entries, jobs, root) {
+  const dirty = sh('git', ['status', '--porcelain', '--untracked-files=no'], root).trim();
+  if (dirty) {
+    console.error(`--jobs ${jobs} runs the COMMITTED tree in detached worktrees, and these tracked files are not committed:\n${dirty}\ncommit or stash them first.`);
+    return 2;
+  }
+  const slices = partitionByScope(entries, jobs);
+  const scopes = new Set(entries.map((e) => JSON.stringify(e.tests))).size;
+  console.log(`[pool] ${entries.length} mutation(s), ${scopes} exact test scope(s), ${slices.length} worker(s)`);
+
+  const thisFile = fileURLToPath(import.meta.url);
+  /** @type {{ index: number, dir: string, code: number | null, child: import('node:child_process').ChildProcess | null }[]} */
+  const workers = [];
+  const cleanup = () => {
+    for (const w of workers) {
+      if (w.code === 3) {
+        console.error(`[w${w.index}] restore failed -- worktree kept for inspection: ${w.dir}`);
+        continue;
+      }
+      spawnSync('git', ['worktree', 'remove', '--force', w.dir], { cwd: root, encoding: 'utf8' });
+      rmSync(w.dir, { recursive: true, force: true });
+    }
+    spawnSync('git', ['worktree', 'prune'], { cwd: root, encoding: 'utf8' });
+  };
+  let interrupted = false;
+  const onSignal = () => {
+    interrupted = true;
+    for (const w of workers) w.child?.kill('SIGKILL');
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  try {
+    for (let i = 0; i < slices.length; i++) {
+      // realpath, not the path mkdtemp hands back: macOS's temp dir is a symlink, and
+      // vitest names modules by realpath, so a worktree addressed through the symlink
+      // reports NO test file related to any source and the worker refuses to start.
+      const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mutate-worker-')));
+      sh('git', ['worktree', 'add', '--detach', dir, 'HEAD'], root);
+      symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
+      const slicePath = join(dir, '..', `${dir.split('/').pop()}.manifest.json`);
+      writeFileSync(slicePath, JSON.stringify(slices[i], null, 2));
+      workers.push({ index: i + 1, dir, code: null, child: null });
+      console.log(`[w${i + 1}] ${slices[i].length} mutation(s) in ${dir}`);
+    }
+    await Promise.all(workers.map((w) => new Promise((resolve) => {
+      const slicePath = join(w.dir, '..', `${w.dir.split('/').pop()}.manifest.json`);
+      const child = spawn(process.execPath, [thisFile, '--root', w.dir, '--manifest', slicePath], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      w.child = child;
+      /** @param {import('node:stream').Readable} stream @param {(line: string) => void} write */
+      const relay = (stream, write) => {
+        let buffer = '';
+        stream.setEncoding('utf8');
+        stream.on('data', (/** @type {string} */ chunk) => {
+          buffer += chunk;
+          let at;
+          while ((at = buffer.indexOf('\n')) >= 0) {
+            write(`[w${w.index}] ${buffer.slice(0, at)}`);
+            buffer = buffer.slice(at + 1);
+          }
+        });
+        stream.on('end', () => { if (buffer) write(`[w${w.index}] ${buffer}`); });
+      };
+      relay(child.stdout, (line) => console.log(line));
+      relay(child.stderr, (line) => console.error(line));
+      child.on('close', (code, signal) => {
+        w.code = code === null ? (signal === 'SIGKILL' && interrupted ? 130 : null) : code;
+        rmSync(slicePath, { force: true });
+        resolve(undefined);
+      });
+    })));
+  } finally {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+    cleanup();
+  }
+  const codes = workers.map((w) => w.code);
+  console.log(`\n[pool] worker exit codes: ${codes.map((c, i) => `w${i + 1}=${c ?? 'none'}`).join(' ')}`);
+  if (interrupted) return 130;
+  return aggregateExitCodes(codes);
+}
+
 async function run() {
   installSignalHandlers();
   const args = parseArgs(process.argv.slice(2));
@@ -513,6 +680,11 @@ async function run() {
     process.exit(2);
   }
 
+  if (args.jobs > 1) {
+    process.exitCode = await runParallel(entries, args.jobs, root);
+    return;
+  }
+
   /** @type {Deps} */
   const deps = {
     readFile: (file) => readFileSync(join(root, file), 'utf8'),
@@ -520,8 +692,17 @@ async function run() {
     applyToDisk: (file, content) => writeFileSync(join(root, file), content),
     restoreToDisk: (file, content) => writeFileSync(join(root, file), content),
     runTests: (testFiles) => runTestsReal(testFiles, root),
-    onResult: (result, index, count, entry) => console.log(formatResult(result, index, count, entry)),
+    onResult: (result, index, count, entry) => {
+      // Wall time since the previous line: one entry's apply, scoped run and restore
+      // (the first line of each scope also carries that scope's baseline). Printed here
+      // rather than inside formatResult so the pure formatter stays timeless.
+      const now = Date.now();
+      const secs = ((now - lastResultAt) / 1000).toFixed(1);
+      lastResultAt = now;
+      console.log(`${formatResult(result, index, count, entry)} [${secs}s]`);
+    },
   };
+  let lastResultAt = Date.now();
 
   const baselineScopes = new Set(entries.map((entry) => JSON.stringify(entry.tests))).size;
   console.log(

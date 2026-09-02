@@ -47,8 +47,8 @@ import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
 import {
-  parseArgs, formatResult, dirtyReport, unreachableReport, resolveManifestPath, runTestsReal,
-  classifySubprocessFailure, readReachabilityReport, relatedFilesForAll,
+  parseArgs, parseJobs, partitionByScope, aggregateExitCodes, formatResult, dirtyReport, unreachableReport,
+  resolveManifestPath, runTestsReal, classifySubprocessFailure, readReachabilityReport, relatedFilesForAll,
 } from './run.mjs';
 import { collectReachability } from './reachability.mjs';
 import type { ManifestEntry } from './lib.mjs';
@@ -615,12 +615,12 @@ describe('computeExitCode', () => {
 
 describe('parseArgs', () => {
   it('defaults to the shipped manifest, no --only filter, and root = process.cwd()', () => {
-    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd() });
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1 });
   });
 
   it('accepts --manifest, --only and --root overrides', () => {
-    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere']))
-      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere' });
+    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3']))
+      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere', jobs: 3 });
   });
 
   it('rejects an unknown flag rather than silently ignoring it', () => {
@@ -1208,5 +1208,71 @@ describe('relatedFilesForAll against real broken subprocesses', () => {
       }
     }
     expect(outcomes).toEqual(['indeterminate', 'indeterminate', 'interrupted']);
+  });
+});
+
+// The worktree pool's pure pieces (issue #502): how `--jobs` is read, how entries are
+// dealt to workers, and how the workers' exit codes fold into one.
+describe('parseJobs', () => {
+  it('reads a positive integer and "auto" (one core kept back), and refuses anything else', () => {
+    expect(parseJobs('3')).toBe(3);
+    expect(parseJobs('auto', 4)).toBe(3);
+    expect(parseJobs('auto', 1), 'auto on one core is still one worker').toBe(1);
+    for (const bad of ['0', '-1', '2.5', 'many', undefined]) {
+      expect(() => parseJobs(bad), String(bad)).toThrow(/--jobs must be/);
+    }
+  });
+});
+
+describe('partitionByScope', () => {
+  const entry = (id: string, ...tests: string[]): { id: string; tests: string[] } => ({ id, tests });
+  const hud = ['a.test.ts'];
+  const loop = ['b.test.ts'];
+  const both = ['a.test.ts', 'b.test.ts'];
+  const entries = [
+    entry('h1', ...hud), entry('l1', ...loop), entry('h2', ...hud), entry('x1', ...both),
+    entry('h3', ...hud), entry('l2', ...loop), entry('h4', ...hud),
+  ];
+
+  it('deals every entry exactly once and never splits an exact scope across workers', () => {
+    const slices = partitionByScope(entries, 3);
+    const ids = slices.flat().map((e) => e.id).sort();
+    expect(ids).toEqual(entries.map((e) => e.id).sort());
+    for (const slice of slices) {
+      // A scope's entries all sit in ONE slice: no other slice carries that scope.
+      for (const e of slice) {
+        const elsewhere = slices.filter((other) => other !== slice && other.some((o) => JSON.stringify(o.tests) === JSON.stringify(e.tests)));
+        expect(elsewhere, `${e.id}'s scope was split`).toHaveLength(0);
+      }
+    }
+  });
+
+  it('balances by entry count, largest scope first onto the lightest worker, and keeps manifest order within a worker', () => {
+    const slices = partitionByScope(entries, 2);
+    // hud (4) goes first to worker 1; loop (2) and both (1) then fill worker 2.
+    expect(slices.map((s) => s.map((e) => e.id))).toEqual([['h1', 'h2', 'h3', 'h4'], ['l1', 'x1', 'l2']]);
+  });
+
+  it('drops empty workers when there are fewer scopes than jobs, and --jobs 1 is one slice in manifest order', () => {
+    expect(partitionByScope(entries, 8)).toHaveLength(3);
+    expect(partitionByScope(entries, 1).map((s) => s.map((e) => e.id))).toEqual([entries.map((e) => e.id)]);
+    expect(partitionByScope([], 3)).toEqual([]);
+  });
+});
+
+describe('aggregateExitCodes', () => {
+  it('folds worker exit codes worst-first: restore failure, interruption, mid-run error, refusal, mismatch, clean', () => {
+    expect(aggregateExitCodes([0, 0, 0])).toBe(0);
+    expect(aggregateExitCodes([0, 1, 0])).toBe(1);
+    expect(aggregateExitCodes([1, 2])).toBe(2);
+    expect(aggregateExitCodes([2, 4, 1])).toBe(4);
+    expect(aggregateExitCodes([4, 130])).toBe(130);
+    expect(aggregateExitCodes([130, 3, 1]), 'a mutated worktree outranks everything').toBe(3);
+  });
+
+  it('a worker that died without a code, or with an unknown one, is a mid-run error -- never a pass', () => {
+    expect(aggregateExitCodes([0, null])).toBe(4);
+    expect(aggregateExitCodes([0, 137])).toBe(4);
+    expect(aggregateExitCodes([]), 'no workers is clean -- the negative control').toBe(0);
   });
 });

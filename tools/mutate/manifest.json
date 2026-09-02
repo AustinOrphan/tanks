@@ -1363,9 +1363,9 @@
     "replace": "  state.aimTicks = hasSolution ? state.aimTicks + 1 : 0;",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "The same defect at the mirror site. `applyPlayerInput` already refuses the shot during the countdown (world.ts), which is exactly why this clock needed gating separately: the refusal hides the banking, and the scripted player emerges from the countdown entitled to fire on the first live tick. Without an entry here the enemy half is pinned and the player half is not, which is the asymmetry issue #367's own acceptance criterion ('every shipped profile') rules out.",
+    "why": "The same defect at the mirror site. `applyPlayerInput` already refuses the shot during the countdown (world.ts), which is exactly why this clock needed gating separately: the refusal hides the banking, and the scripted player emerges from the countdown entitled to fire on the first live tick. Without an entry here the enemy half is pinned and the player half is not, which is the asymmetry issue #367's own acceptance criterion ('every shipped profile') rules out. Scoped to the countdown test's own file since issue #502: under this mutant the win-rate suite beside it simulates games to their tick cap (179 s in CI), and the verdict lives in the one test.",
     "tests": [
-      "src/sim/ai/player-profile.test.ts"
+      "src/sim/ai/player-profile.countdown.test.ts"
     ]
   },
   {
@@ -4503,5 +4503,65 @@
     ],
     "expect": "killed",
     "expectFailures": 3
+  },
+  {
+    "id": "mutate-pool-splits-a-scope-across-workers",
+    "file": "tools/mutate/run.mjs",
+    "find": "  for (const group of scopes) {\n    let lightest = slices[0];\n    for (const slice of slices) if (slice.length < lightest.length) lightest = slice;\n    lightest.push(...group);\n  }",
+    "replace": "  let turn = 0;\n  for (const group of scopes) {\n    for (const entry of group) slices[turn++ % slices.length].push(entry);\n  }",
+    "why": "Dealing entries round-robin splits a test scope across workers, so the same scope is baselined once per worker instead of once per run and the hud scope's 41 entries cost 41 baselines' worth of extra vitest starts. The partition test's 'never splits an exact scope' assertion is the case.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3
+  },
+  {
+    "id": "mutate-pool-stacks-scopes-on-one-worker",
+    "file": "tools/mutate/run.mjs",
+    "find": "    for (const slice of slices) if (slice.length < lightest.length) lightest = slice;",
+    "replace": "    for (const slice of slices) if (slice.length > lightest.length) lightest = slice;",
+    "why": "Placing each scope on the HEAVIEST worker serialises the whole manifest onto one worker while the others idle -- the pool then costs worktrees and saves nothing. The balance assertion (hud on one worker, loop and both on the other) is the case.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2
+  },
+  {
+    "id": "mutate-pool-restore-failure-outranked",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const severity = [3, 130, 4, 2, 1];",
+    "replace": "  const severity = [130, 4, 2, 1, 3];",
+    "why": "A worker that could not restore its file (exit 3, a worktree left mutated and kept for inspection) must be the run's verdict even when another worker was interrupted; ranking it last hides the one outcome that needs a human.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1
+  },
+  {
+    "id": "mutate-pool-dead-worker-passes",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const seen = new Set(codes.map((c) => (c === null ? 4 : severity.includes(c) || c === 0 ? c : 4)));",
+    "replace": "  const seen = new Set(codes.map((c) => (c === null ? 0 : severity.includes(c) || c === 0 ? c : 0)));",
+    "why": "A worker that died without an exit code, or with one the harness never emits (an OOM kill's 137), ran an unknown number of its entries; folding that into a pass would let a silent crash green the gate.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1
+  },
+  {
+    "id": "mutate-parse-jobs-accepts-zero",
+    "file": "tools/mutate/run.mjs",
+    "find": "  if (!Number.isInteger(n) || n < 1) throw new Error(",
+    "replace": "  if (!Number.isInteger(n) || n < 0) throw new Error(",
+    "why": "`--jobs 0` would parse and fall through to the serial path (pool mode is gated on `jobs > 1`, and the partitioner never yields zero slices), so a CI lane configured with 0 would look like the pool while running serially; the parser is the one place that refuses it.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1
   }
 ]

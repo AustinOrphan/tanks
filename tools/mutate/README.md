@@ -21,6 +21,7 @@ of the tool, and lives in the project that uses it (in this repo, at
 mutate                                    # tools/mutate/manifest.json under --root, all entries
 mutate --manifest path/to/manifest.json   # a different manifest (absolute or --root-relative)
 mutate --only some-manifest-entry-id      # a single entry
+mutate --jobs auto                        # the worktree pool: N serial harnesses, one per detached worktree
 mutate --root /path/to/checkout           # explicit project root (default: process.cwd())
 ```
 
@@ -32,6 +33,22 @@ this workspace's declared Vitest dev dependency. `--root` defaults to `process.c
 which is already correct for the common case -- an `npm run` script's cwd is the
 directory holding the `package.json` that defines the script -- and exists as a flag
 for every other caller (a bin invoked from a subdirectory, a script that `cd`s first).
+
+## The worktree pool (`--jobs`)
+
+`--jobs N` (or `auto`, one fewer than the machine's cores) runs the manifest over N
+workers at once (issue #502). Entries cannot share a checkout while mutated, so each
+worker is this same serial harness in its own detached `git worktree` of HEAD with
+`node_modules` linked from the checkout; the parent partitions entries by exact test
+scope (a scope is never split, so it is still baselined once), relays each worker's
+output under a `[wN]` prefix, folds the exit codes worst-first (restore failure,
+interruption, mid-run error, refusal, mismatch) and removes the worktrees. A worker whose
+restore failed keeps its worktree and names it.
+
+Because a worktree of HEAD cannot see uncommitted edits, the pool tests the COMMITTED tree
+and refuses to start with any tracked file dirty -- stricter than the serial path, which
+checks only the files it mutates. Interrupting the pool is safe: the worktrees are
+throwaways, and the checkout itself is never mutated.
 
 ## Repository CI use
 
