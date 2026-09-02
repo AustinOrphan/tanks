@@ -335,6 +335,9 @@ describe('canonicalDevSearch', () => {
     }
     for (const [legacy, cue] of [['ring%2Baudio', 'ring-audio'], ['haptic%2Baudio', 'haptic-audio']] as const) {
       const r = canonicalDevSearch(`?dev=1&blockedFire=${legacy}`);
+      // Unchanged means the emitted string, not only its parse: the canonical form keeps
+      // the encoded legacy value rather than rewriting it to the hyphenated spelling.
+      expect(r.search, legacy).toBe(`?dev=1&blockedFire=${legacy}`);
       expect(parseDevFlags(r.search).blockedFire, legacy).toBe(cue);
       expect(parseDevFlags(`?dev=1&blockedFire=${legacy}`).blockedFire).toBe(cue);
     }
