@@ -3285,8 +3285,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes. Re-measured at 2 of 417 in loop.test.ts once the renderer-fit case \"New Game with a run parked on a wider level opens on level one's own board\" joined the file: a New Game that stays on the run's board also leaves the renderer fitted to the run's board, so that case dies to this mutation too."
+    "expectFailures": 1,
+    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes."
   },
   {
     "id": "start-boundary-new-game-never-writes-the-run",
@@ -3327,15 +3327,15 @@
   {
     "id": "route-host-never-paints-the-surface",
     "file": "src/game/route-host.ts",
-    "find": "  sm.onChange((location) => hud.setState(locationToHudSurface(location)));\n  hud.setState(locationToHudSurface(sm.location));",
-    "replace": "  sm.onChange((location) => void location);",
+    "find": "  sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // Continue is a claim about the run store, re-read on every arrival at the Main Menu.\n    // A live session's own subscriber makes the same refresh for the arrivals it sees; this\n    // one covers the arrivals no session does -- the first after Launch, and every one\n    // after a session has been disposed.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n  hud.setState(locationToHudSurface(sm.location));\n",
+    "replace": "  sm.onChange((location) => {\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 9,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 437 across both scoped files. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 455 across both scoped files (route-host.test.ts 35 + loop.test.ts 420), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -3521,5 +3521,68 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "The renderer is sized from the level system's own `start` instead of the level the START BOUNDARY chose. Those were the same level until issue #428; now New Game opens on level one while `start` is the saved run's level, and a Practice pick opens on the picked level, and the boot build never passes through `switchTo`'s refit. Seen in the browser as level one's 11x9 walls sitting in the corner of a 15x11 floor. 2 of 417 in loop.test.ts: the New Game and Practice-pick cases under \"born fitting the STARTED level\"; the Continue case is the negative control and passes either way."
+  },
+  {
+    "id": "route-host-paints-nothing-for-the-empty-host",
+    "file": "src/game/route-host.ts",
+    "find": "  hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });\n  hud.setAchievements(deps.achievements.earned());\n  hud.setHullColor(deps.customization.hull());\n  hud.setSkin(deps.customization.skin());\n  hud.setAccentColor(deps.customization.accent());\n  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  paintContinue();\n",
+    "replace": "  // the page paints nothing: a session will, if one ever starts\n",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 455 across both scoped files (route-host.test.ts 35 + loop.test.ts 420): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness."
+  },
+  {
+    "id": "route-host-never-re-reads-continue-on-arrival",
+    "file": "src/game/route-host.ts",
+    "find": "    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n",
+    "replace": "    void location;\n",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The page paints Continue once, at construction, and never again. A live session's own subscriber refreshes it on the arrivals it sees, so the only arrivals this loses are the ones after a session has been disposed (issue #429) -- which, with the session's subscriber now released at disposal, is every arrival the player makes from a route. The page must re-read the run store, not trust the last value a since-dead session painted. 2 of 455 across both scoped files (route-host.test.ts 35 + loop.test.ts 420): the arrival case in each, both of which end a run while the page is away on another route."
+  },
+  {
+    "id": "session-dispose-keeps-observing-the-page-machine",
+    "file": "src/game/loop.ts",
+    "find": "      stopObserving();\n      deps.releaseAudio(audio);",
+    "replace": "      deps.releaseAudio(audio);",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "A disposed session keeps its subscriber on the page-scoped state machine (issue #468 made the machine outlive the session), so it runs on every later change with the retired session's closures. Measured before the unsubscribe existed: a retired Practice session on level 3 recorded level 3 as cleared when the live campaign session cleared level 1, and a retired campaign session advanced the shared run with a stale life count before the live one wrote the real value. 2 of 420 in loop.test.ts: the retired-Practice and retired-campaign cases under \"a retired session stops observing the page state machine\", both driven through the page harness with a real machine."
+  },
+  {
+    "id": "state-onchange-unsubscribe-is-inert",
+    "file": "src/game/state.ts",
+    "find": "        const i = subscribers.indexOf(cb);\n        if (i >= 0) subscribers.splice(i, 1);",
+    "replace": "        void cb;",
+    "tests": [
+      "src/game/state.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "`onChange` returns a function that removes nothing. loop.ts calls it at disposal and would believe the session had stopped observing, so this is the mutation that reintroduces the retired-subscriber defect while leaving every call site looking correct. 4 of 459 across both scoped files (state.test.ts 39 + loop.test.ts 420): the two unsubscribe cases in state.test.ts and the two retired-session cases in loop.test.ts."
+  },
+  {
+    "id": "state-emit-iterates-the-live-subscriber-array",
+    "file": "src/game/state.ts",
+    "find": "    for (const cb of [...subscribers]) cb(current);",
+    "replace": "    for (const cb of subscribers) cb(current);",
+    "tests": [
+      "src/game/state.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`emit` walks the live array, so a subscriber that unsubscribes a sibling mid-emit -- a session disposing inside a state change -- shifts the array under the loop and the subscriber after the removed one is skipped for that change. 1 of 39 in state.test.ts: the mid-emit case, whose third subscriber is skipped under the live-array walk."
   }
 ]
