@@ -5008,3 +5008,143 @@ describe('hud: the semantic action dispatcher (issue #494)', () => {
     expect(document.activeElement).toBe(rowBtn());
   });
 });
+
+describe('hud: spatial focus follows the drawn layout (issue #495)', () => {
+  const ROW_SELECTOR =
+    '.hud-versus-mode-row, .hud-versus-players-row, .hud-versus-map-row, .hud-versus-stock-row, .hud-versus-slot-row, .hud-levels';
+  /**
+   * A desktop-like layout drawn by hand, since jsdom lays nothing out: each Versus option
+   * row and each slot card is one visual row, everything else is one control per row, and
+   * a control's column is its index among the buttons of its row. `perRow` wraps a row
+   * into several, standing in for a narrow viewport.
+   */
+  function drawn(root: HTMLElement, perRow = Infinity): (el: HTMLElement) => DOMRect {
+    const rowEls: Element[] = [];
+    return (el) => {
+      const rowEl = el.closest(ROW_SELECTOR) ?? el.parentElement ?? root;
+      let r = rowEls.indexOf(rowEl);
+      if (r < 0) {
+        r = rowEls.length;
+        rowEls.push(rowEl);
+      }
+      const siblings = Array.from(rowEl.querySelectorAll<HTMLElement>('button'));
+      const i = Math.max(0, siblings.indexOf(el));
+      const wrapRow = Math.floor(i / perRow);
+      const col = i % perRow;
+      return new DOMRect(col * 110, r * 1000 + wrapRow * 50, 100, 40);
+    };
+  }
+  function mountDrawn(perRow?: number): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const h = createHud(root, { measure: drawn(root, perRow) });
+    hud = h;
+    return { hud: h, root };
+  }
+  const press = (key: string): void => {
+    (document.activeElement as HTMLElement).dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+    );
+  };
+  const active = (): HTMLElement => document.activeElement as HTMLElement;
+
+  it('a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row', () => {
+    // The Map row is the segment with the most options (7); Mode has one enabled button
+    // at two players, which is why it is not the subject here.
+    const { hud: h, root } = mountDrawn();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const maps = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-map-row button')).filter((b) => !b.disabled);
+    const players = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-players-row button')).filter((b) => !b.disabled);
+    const stocks = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-stock-row button')).filter((b) => !b.disabled);
+    expect(maps.length, 'the Map segment population').toBe(7);
+    maps[0].focus();
+    press('ArrowRight');
+    expect(active()).toBe(maps[1]);
+    maps[maps.length - 1].focus();
+    press('ArrowRight');
+    expect(active(), 'Right at the end of the segment left it').toBe(maps[0]);
+    press('ArrowLeft');
+    expect(active(), 'Left at the start of the segment left it').toBe(maps[maps.length - 1]);
+    maps[0].focus();
+    press('ArrowDown');
+    expect(active(), 'Down did not leave the segment for the Stock row').toBe(stocks[0]);
+    press('ArrowUp');
+    expect(active()).toBe(maps[0]);
+    press('ArrowUp');
+    expect(active(), 'Up did not leave the segment for the Players row').toBe(players[0]);
+  });
+
+  it('the slot cards navigate as a grid: Down lands on the nearest column of the next card', () => {
+    const { hud: h, root } = mountDrawn();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const card = (slot: number): HTMLElement[] =>
+      Array.from(root.querySelectorAll<HTMLButtonElement>(`.hud-versus-slot-row[data-slot="${slot}"] button`)).filter((b) => !b.disabled);
+    expect([card(0).length, card(1).length], 'the two cards: a human card and a bot card with its difficulty options').toEqual([3, 6]);
+    card(0)[2].focus();
+    press('ArrowDown');
+    expect(active(), 'Down did not land on the same column of the next card').toBe(card(1)[2]);
+    press('ArrowRight');
+    expect(active()).toBe(card(1)[3]);
+    press('ArrowUp');
+    expect(active(), 'Up did not return to the nearest column of the shorter card above').toBe(card(0)[2]);
+    press('ArrowUp');
+    expect(active(), 'Up from the first card did not reach the Stock row above it').not.toBe(card(0)[2]);
+  });
+
+  it('a row that wraps behaves as the grid it has become: the Levels grid at three per row', () => {
+    const { hud: h, root } = mountDrawn(3);
+    h.setLevelSelect(5, 5);
+    h.setState('main-menu');
+    (root.querySelector('.hud-levelselect-open') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+    const levels = Array.from(root.querySelectorAll<HTMLElement>('.hud-levels button'));
+    expect(levels.length, 'the level population').toBe(5);
+    levels[0].focus();
+    press('ArrowDown');
+    expect(active(), 'Down did not drop to the wrapped row').toBe(levels[3]);
+    press('ArrowRight');
+    expect(active()).toBe(levels[4]);
+    press('ArrowRight');
+    expect(active(), 'Right at the wrapped row end did not wrap within it').toBe(levels[3]);
+    levels[2].focus();
+    press('ArrowRight');
+    expect(active(), 'Right at the first row end left the row').toBe(levels[0]);
+  });
+
+  it('the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated', () => {
+    const { hud: h, root } = mountDrawn();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const pane = root.querySelector('.hud-versus-setup') as HTMLElement;
+    const population = Array.from(pane.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
+      (el) => !(el instanceof HTMLButtonElement && el.disabled) && Number(el.getAttribute('tabindex') ?? 0) >= 0 && getComputedStyle(el).display !== 'none',
+    );
+    press('ArrowDown'); // from the container: enters at the first control
+    const first = active();
+    const visited = new Set<HTMLElement>([first]);
+    let rowStart = first;
+    for (let steps = 0; steps < 200; steps++) {
+      press('ArrowRight');
+      if (active() === rowStart) {
+        press('ArrowDown');
+        if (active() === first) break;
+        rowStart = active();
+      }
+      visited.add(active());
+    }
+    expect(visited.size, 'the walk did not cover the pane').toBe(population.length);
+    expect(population.length, 'the population this walk covers').toBe(27);
+  });
+
+  it('negative control: with jsdom\'s empty rects the same Right leaves the segment in document order', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const maps = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-map-row button')).filter((b) => !b.disabled);
+    const stocks = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-stock-row button')).filter((b) => !b.disabled);
+    maps[maps.length - 1].focus();
+    press('ArrowRight');
+    expect(active(), 'the fallback should walk document order').toBe(stocks[0]);
+  });
+});

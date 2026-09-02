@@ -3,8 +3,9 @@
  *
  * Keyboard, gamepad, pointer and touch all end in ONE of these -- or in a direct call to
  * the same handler the action would reach -- so a screen is written once against the
- * vocabulary rather than once per device. Directional actions move the roving focus of
- * the active panel (`hud.ts`'s `act`), `confirm` activates the focused control, `back`
+ * vocabulary rather than once per device. Directional actions move the focus of the
+ * active panel spatially (`hud.ts`'s `act` over `game/spatial-focus.ts`, issue #495),
+ * `confirm` activates the focused control, `back`
  * pops one layer (`Hud.back()`), and `pause` toggles the page's state machine exactly as
  * the Pause button's tap does. The gameplay half of the input system is untouched:
  * `input.ts` and `gamepad.ts` keep producing `InputState`, never a `UiAction`.
@@ -13,25 +14,6 @@ export type UiAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | '
 
 /** Every action, in the order a single poll emits them when several arrive together. */
 export const UI_ACTIONS: readonly UiAction[] = ['up', 'down', 'left', 'right', 'confirm', 'back', 'pause'];
-
-/**
- * The roving-focus step a directional action takes, or null for the non-directional ones.
- * Up and Left both walk backwards through the panel's controls, Down and Right forwards:
- * the panels are one-dimensional lists until the spatial sibling (#495) arrives, so the
- * two axes collapse onto one direction sign here rather than in every caller.
- */
-export function actionDirection(action: UiAction): 1 | -1 | null {
-  switch (action) {
-    case 'up':
-    case 'left':
-      return -1;
-    case 'down':
-    case 'right':
-      return 1;
-    default:
-      return null;
-  }
-}
 
 /**
  * The keyboard half of the vocabulary: a `KeyboardEvent.key` (any case) to the action it

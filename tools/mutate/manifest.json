@@ -2010,7 +2010,7 @@
     "find": "      if (c.classList.contains(LEAVING)) continue;\n      if (getComputedStyle(c).display !== 'none') return c;",
     "replace": "      if (getComputedStyle(c).display !== 'none') return c;",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 8,
     "why": "The roving keyboard order following a surface the player has already left. Before this contract exactly one panel-family element was ever displayed, so `activePanelContainer` could return the first one it found; a crossfade deliberately paints two at once for its duration, and the outgoing one is listed FIRST (`panel`), so without this line the arrow keys walked the screen the player just left for the whole 150ms. Nothing about the visible result changes -- both surfaces are painted either way, the destination still arrives, and every settled-state assertion still passes -- which is why this needs a mutation rather than a screenshot. It is the KEYBOARD half of a rule the stylesheet only covers for the mouse (`.ui-surface--leaving` sets `pointer-events: none`), and it is the reachable half of that rule: `isHiddenWithin`'s sibling check is not, because `--leaving` lands only on the seven surface elements, which are exactly the containers that walk excludes. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/hud.test.ts"
@@ -2566,7 +2566,7 @@
     "find": "  const teamsOfferedAt = (players: number): boolean => players > 2;",
     "replace": "  const teamsOfferedAt = (players: number): boolean => players > 0;",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "why": "Teams becomes selectable at two players, which issue #281's first binding rule forbids by name: 'Teams mode is not a distinct option for two players because it is equivalent to FFA.' Two players on two teams IS free-for-all, and two on one team is a match nobody can win -- which the one-team Start gate then refuses, so the offer becomes a trap rather than a choice. It is a SILENT defect on the shipped pane: the button simply enables, every downstream mode-dependent row renders correctly, and the match starts and plays; what it costs is a mode that means nothing and a refusal the player cannot see the cause of. Killed by the three cases that drive the pane with a real `.click()` -- chosen over `dispatchEvent` deliberately, because a disabled button IGNORES a real click and HONOURS a dispatched one, so only the former measures what a player can actually do. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/hud.test.ts"
@@ -4035,13 +4035,13 @@
   {
     "id": "hud-act-every-direction-walks-forward",
     "file": "src/game/hud.ts",
-    "find": "    if (dir !== null) {\n      moveFocus(container, dir);\n      return true;\n    }",
-    "replace": "    if (dir !== null) {\n      moveFocus(container, 1);\n      return true;\n    }",
+    "find": "    if (isDirection(action)) {\n      moveFocus(container, action);\n      return true;\n    }",
+    "replace": "    if (isDirection(action)) {\n      moveFocus(container, 'down');\n      return true;\n    }",
     "tests": [
       "src/game/hud.test.ts"
     ],
     "expectFailures": 1,
-    "why": "Up and Left walk backwards through the panel; a dispatcher that drops the sign turns every direction into Down.",
+    "why": "Up and Left must walk backwards (and, with geometry, Left/Right must stay in the row): a dispatcher that drops the direction turns every D-pad press into Down.",
     "expect": "killed"
   },
   {
@@ -4328,7 +4328,7 @@
     "find": "  return widget instanceof HTMLButtonElement ? BUTTON_KEYS.has(key) : ADJUSTABLE_KEYS.has(key);",
     "replace": "  return true;",
     "expect": "killed",
-    "expectFailures": 16,
+    "expectFailures": 21,
     "why": "A button, slider or select keeps only the keys it operates on; consuming every key makes M, P and Escape vanish with a slider or a button focused.",
     "tests": [
       "src/input/ui-actions.test.ts",
@@ -4372,7 +4372,7 @@
       "src/game/hud.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 8
+    "expectFailures": 13
   },
   {
     "id": "devflags-blocked-fire-legacy-alias-dropped",
@@ -4413,5 +4413,95 @@
     ],
     "expect": "killed",
     "expectFailures": 6
+  },
+  {
+    "id": "spatial-focus-collapses-to-dom-order",
+    "file": "src/game/spatial-focus.ts",
+    "find": "    if (row && centreY(r) >= row.top && centreY(r) <= row.bottom) {",
+    "replace": "    if (row) {",
+    "why": "Every candidate joins the first row, so geometry collapses to document order: Right walks off the end of a segmented row and Down never reaches the next card. This is the mutation issue #495's acceptance names -- a model that is really DOM order must be killed.",
+    "tests": [
+      "src/game/spatial-focus.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 8
+  },
+  {
+    "id": "spatial-focus-never-joins-a-row",
+    "file": "src/game/spatial-focus.ts",
+    "find": "    if (row && centreY(r) >= row.top && centreY(r) <= row.bottom) {",
+    "replace": "    if (row && false) {",
+    "why": "Each control becomes its own row, so Left and Right wrap onto the focused control itself and never move along the segment.",
+    "tests": [
+      "src/game/spatial-focus.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 11
+  },
+  {
+    "id": "spatial-focus-ignores-the-nearest-column",
+    "file": "src/game/spatial-focus.ts",
+    "find": "    if (d < bestDist) {\n      best = cand;\n      bestDist = d;\n    }",
+    "replace": "    if (false) {\n      best = cand;\n      bestDist = d;\n    }",
+    "why": "Up and Down must land on the control whose centre is nearest, not the row's first: a bot card's difficulty column reached by Down from the card above is the case.",
+    "tests": [
+      "src/game/spatial-focus.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3
+  },
+  {
+    "id": "spatial-focus-single-row-fallback-dropped",
+    "file": "src/game/spatial-focus.ts",
+    "find": "  if (rows.length === 1) {",
+    "replace": "  if (false) {",
+    "why": "With one row (every rect empty under jsdom, or a genuinely single-row pane) Up and Down would wrap onto the same row and land on the focused control: a dead end, and the pre-#495 keyboard walk that closes over every control would spin.",
+    "tests": [
+      "src/game/spatial-focus.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 11
+  },
+  {
+    "id": "spatial-focus-lateral-clamps-instead-of-wrapping",
+    "file": "src/game/spatial-focus.ts",
+    "find": "    return row[(colIdx + step + row.length) % row.length].item;",
+    "replace": "    return row[Math.min(Math.max(colIdx + step, 0), row.length - 1)].item;",
+    "why": "Right at the end of a row must wrap to its start (issue #495: 'row wrap at the ends and no dead ends'); clamping leaves the player stuck on the last option.",
+    "tests": [
+      "src/game/spatial-focus.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 6
+  },
+  {
+    "id": "spatial-focus-rows-clamp-instead-of-wrapping",
+    "file": "src/game/spatial-focus.ts",
+    "find": "  const target = rows[(rowIdx + (forward ? 1 : -1) + rows.length) % rows.length];",
+    "replace": "  const target = rows[Math.min(Math.max(rowIdx + (forward ? 1 : -1), 0), rows.length - 1)];",
+    "why": "Up from the first row must reach the last and Down from the last the first; clamping makes the top and bottom rows dead ends.",
+    "tests": [
+      "src/game/spatial-focus.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1
+  },
+  {
+    "id": "hud-move-focus-measures-nothing",
+    "file": "src/game/hud.ts",
+    "find": "      list.map((el) => ({ item: el, rect: measure(el) })),",
+    "replace": "      list.map((el) => ({ item: el, rect: { left: 0, top: 0, width: 0, height: 0 } })),",
+    "why": "The HUD must feed real rectangles to the spatial model; with empty rects every pane degrades to the document-order walk, and the pure module's tests cannot see that the HUD never measured. The drawn-layout tests in hud.test.ts are what catch it.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 3
   }
 ]
