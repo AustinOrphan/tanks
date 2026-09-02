@@ -49,6 +49,7 @@ import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from
 import {
   parseArgs, parseJobs, partitionByScope, aggregateExitCodes, formatResult, dirtyReport, unreachableReport,
   resolveManifestPath, runTestsReal, classifySubprocessFailure, readReachabilityReport, relatedFilesForAll,
+  failedTestNames,
 } from './run.mjs';
 import { collectReachability } from './reachability.mjs';
 import type { ManifestEntry } from './lib.mjs';
@@ -615,16 +616,23 @@ describe('computeExitCode', () => {
 
 describe('parseArgs', () => {
   it('defaults to the shipped manifest, no --only filter, and root = process.cwd()', () => {
-    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1 });
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1, report: null });
   });
 
   it('accepts --manifest, --only and --root overrides', () => {
-    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3']))
-      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere', jobs: 3 });
+    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3', '--report', 'out.json']))
+      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere', jobs: 3, report: 'out.json' });
   });
 
   it('rejects an unknown flag rather than silently ignoring it', () => {
     expect(() => parseArgs(['--bogus'])).toThrow(/unknown argument/);
+    // A value-taking flag with no value, or followed by another flag, is refused by name
+    // instead of leaving `undefined` to fail later somewhere that cannot say which flag.
+    for (const flag of ['--manifest', '--only', '--root', '--jobs', '--report']) {
+      expect(() => parseArgs([flag]), flag).toThrow(new RegExp(`${flag} needs a value`));
+      expect(() => parseArgs([flag, '--jobs', '2']), `${flag} before another flag`).toThrow(/needs a value/);
+    }
+    expect(parseArgs(['--report', 'out.json', '--jobs', '2']).report, 'a real value still parses').toBe('out.json');
   });
 });
 
@@ -1012,7 +1020,44 @@ describe('end-to-end: real apply -> real vitest subprocess -> real restore', () 
       expect(results[0].status).toBe(STATUS.KILLED);
       expect(results[0].matches).toBe(true);
       expect(results[0].detail).toBe('1 of 1 test(s) failed');
+      // The vitest full name of the one failing test rides along, which is what a
+      // `killedBy` entry is matched against (issue #504).
+      expect(results[0].failedTests).toEqual(['e2e fixture greets by name']);
       expect(readFileSync(abs, 'utf8')).toBe(source); // independent re-read, byte-exact
+    } finally {
+      rmSync(abs, { force: true });
+    }
+  });
+
+  it('a real killedBy entry matches when its named test fails, and a name that does not fail is a mismatch that names it (issue #504)', () => {
+    const { rel, abs, source } = makeFixture('hello');
+    try {
+      const base = {
+        file: rel,
+        find: 'function greet(name: string) { return `hello ${name}`; }',
+        replace: 'function greet(name: string) { return `yo ${name}`; }',
+        why: 'the fixture test asserts the exact string "hello world"',
+        expect: 'killed' as const,
+        tests: [rel],
+      };
+      const results = runManifest(
+        [
+          { id: 'e2e-killed-by', ...base, killedBy: ['e2e fixture greets by name'] },
+          { id: 'e2e-killed-by-wrong-name', ...base, killedBy: ['e2e fixture greets by name', 'e2e fixture a test that does not exist'] },
+        ],
+        realDepsWithStubGit(),
+        applyAt,
+      );
+      expect(results[0].status).toBe(STATUS.KILLED);
+      expect(results[0].matches, 'the named test failed, so this is a match').toBe(true);
+      expect(results[0].missingKilledBy).toEqual([]);
+      expect(results[1].status, 'the negative control is still KILLED').toBe(STATUS.KILLED);
+      expect(results[1].matches).toBe(false);
+      expect(results[1].missingKilledBy).toEqual(['e2e fixture a test that does not exist']);
+      expect(formatResult(results[1], 2, 2, { expect: 'killed', killedBy: results[1].missingKilledBy })).toMatch(
+        /MISMATCH: killedBy test\(s\) did not fail: "e2e fixture a test that does not exist"/,
+      );
+      expect(readFileSync(abs, 'utf8')).toBe(source);
     } finally {
       rmSync(abs, { force: true });
     }
@@ -1274,5 +1319,78 @@ describe('aggregateExitCodes', () => {
     expect(aggregateExitCodes([0, null])).toBe(4);
     expect(aggregateExitCodes([0, 137])).toBe(4);
     expect(aggregateExitCodes([]), 'no workers is clean -- the negative control').toBe(0);
+  });
+});
+
+// `killedBy` (issue #504): the validation rules, the pure report reader, and the verdict
+// through fake deps, so the contract is pinned without spawning vitest.
+describe('killedBy: manifest validation', () => {
+  const base = { id: 'x', file: 'a.ts', find: 'a', replace: 'b', why: 'w', tests: ['a.test.ts'] };
+  it('accepts killedBy on a killed entry, beside the count form and the outcome-only form fixtures use', () => {
+    expect(() => validateEntry({ ...base, expect: 'killed', killedBy: ['suite case'] }, 0)).not.toThrow();
+    expect(() => validateEntry({ ...base, expect: 'killed', expectFailures: 2 }, 0)).not.toThrow();
+    expect(() => validateEntry({ ...base, expect: 'killed' }, 0)).not.toThrow();
+  });
+  it('refuses an empty or non-string list, a survivor with a killer, and both contracts at once', () => {
+    expect(() => validateEntry({ ...base, expect: 'killed', killedBy: [] }, 0)).toThrow(/non-empty array/);
+    expect(() => validateEntry({ ...base, expect: 'killed', killedBy: [1] }, 0)).toThrow(/non-empty array/);
+    expect(() => validateEntry({ ...base, expect: 'survives', expectFailures: 0, killedBy: ['suite case'] }, 0)).toThrow(/cannot name/);
+    expect(() => validateEntry({ ...base, expect: 'killed', expectFailures: 1, killedBy: ['suite case'] }, 0)).toThrow(/alternatives/);
+  });
+});
+
+describe('failedTestNames', () => {
+  it('lists the full names of failed assertions in report order and nothing else', () => {
+    const report = {
+      testResults: [
+        { assertionResults: [{ fullName: 'a one', status: 'failed' }, { fullName: 'a two', status: 'passed' }] },
+        { assertionResults: [{ fullName: 'b three', status: 'failed' }, { fullName: 'b four', status: 'skipped' }] },
+      ],
+    };
+    expect(failedTestNames(report)).toEqual(['a one', 'b three']);
+    expect(failedTestNames({}), 'a report that never collected names nothing').toEqual([]);
+    expect(failedTestNames({ testResults: [{}] })).toEqual([]);
+  });
+});
+
+describe('killedBy: the verdict through fake deps', () => {
+  const entry = {
+    id: 'k', file: 'src/x.ts', find: 'A', replace: 'B', why: 'w', expect: 'killed' as const, tests: ['src/x.test.ts'],
+    killedBy: ['x suite the guard holds'],
+  };
+  const depsWith = (mutated: { failed: number; total: number; failedTests: string[] }) => ({
+    readFile: () => 'A',
+    gitPorcelain: () => '',
+    applyToDisk: () => {},
+    restoreToDisk: () => {},
+    runTests: vi.fn()
+      .mockReturnValueOnce({ failed: 0, total: 3, failedTests: [] }) // baseline
+      .mockReturnValueOnce(mutated),
+    onResult: () => {},
+  });
+  it('matches when the named test fails, however many others fail too -- a new test in the file cannot break the pin', () => {
+    const r = runOne(entry, depsWith({ failed: 3, total: 5, failedTests: ['x suite the guard holds', 'x suite newer case', 'x suite another'] }), applyAt);
+    expect(r.status).toBe(STATUS.KILLED);
+    expect(r.matches).toBe(true);
+    expect(r.missingKilledBy).toEqual([]);
+  });
+  it('mismatches, naming the test, when the named test passed while others failed -- the rot case; the count-only entry is the negative control', () => {
+    const r = runOne(entry, depsWith({ failed: 2, total: 5, failedTests: ['x suite newer case', 'x suite another'] }), applyAt);
+    expect(r.status, 'still KILLED by the others').toBe(STATUS.KILLED);
+    expect(r.matches).toBe(false);
+    expect(r.missingKilledBy).toEqual(['x suite the guard holds']);
+    const counted = runOne({ ...entry, killedBy: undefined, expectFailures: 2 }, depsWith({ failed: 2, total: 5, failedTests: ['x suite newer case', 'x suite another'] }), applyAt);
+    expect(counted.matches, 'an exact count cannot see which test failed').toBe(true);
+  });
+});
+
+describe('the shipped manifest pins every killed entry by name or by count (issue #504)', () => {
+  it('has no outcome-only killed entry -- the harness allows the form, the repository does not', () => {
+    const manifest: ManifestEntry[] = JSON.parse(readFileSync(join(ROOT, 'tools/mutate/manifest.json'), 'utf8'));
+    const outcomeOnly = manifest.filter((e) => e.expect === 'killed' && e.expectFailures === undefined && e.killedBy === undefined).map((e) => e.id);
+    expect(outcomeOnly, 'killed entries pinning neither killedBy nor expectFailures').toEqual([]);
+    const byName = manifest.filter((e) => e.killedBy !== undefined).length;
+    const byCount = manifest.filter((e) => e.expect === 'killed' && e.expectFailures !== undefined).length;
+    expect(byName + byCount, 'the population this rule covers').toBe(manifest.filter((e) => e.expect === 'killed').length);
   });
 });

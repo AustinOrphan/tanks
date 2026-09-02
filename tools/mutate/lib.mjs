@@ -8,7 +8,7 @@
  * @typedef {{
  *   id: string, file: string, find: string, replace: string, why: string,
  *   expect: 'killed' | 'survives', tests: string[],
- *   occurrence?: number, expectFailures?: number, equivalent?: boolean,
+ *   occurrence?: number, expectFailures?: number, killedBy?: string[], equivalent?: boolean,
  * }} ManifestEntry
  */
 
@@ -121,6 +121,24 @@ export function validateEntry(entry, index) {
       throw new Error(`manifest ${label}: "expect": "killed" requires "expectFailures" > 0, got 0`);
     }
   }
+  // `killedBy` (issue #504): the vitest full names of the tests that must fail under the
+  // mutation. Named tests are stable when unrelated tests are added to the scoped file,
+  // which an exact count is not; an entry pins one or the other, never both, so a reader
+  // knows which contract it is looking at. `survives` has no killer to name.
+  if (entry.killedBy !== undefined) {
+    if (!Array.isArray(entry.killedBy) || entry.killedBy.length === 0 || !entry.killedBy.every((/** @type {any} */ t) => typeof t === 'string' && t.length > 0)) {
+      throw new Error(`manifest ${label}: "killedBy" must be a non-empty array of vitest full test names when present`);
+    }
+    if (entry.expect === 'survives') {
+      throw new Error(`manifest ${label}: "expect": "survives" cannot name a "killedBy" test`);
+    }
+    if (entry.expectFailures !== undefined) {
+      throw new Error(`manifest ${label}: "killedBy" and "expectFailures" are alternatives -- pin the named tests or the exact count, not both`);
+    }
+  }
+  // An entry with neither is outcome-only (killed or survives, nothing more). The harness
+  // allows it -- fixtures and one-off probes use it -- and the shipped manifest's own
+  // test (orchestrate.test.ts) is what requires every real killed entry to pin one.
 }
 
 /** Validates the whole manifest: every entry, plus id uniqueness across the set.

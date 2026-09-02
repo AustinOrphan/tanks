@@ -227,8 +227,8 @@ See `tools/gallery/`.
 
 `npm run mutate` (`tools/mutate/`) is the "prove the gap before writing the test" rule,
 made checkable: for each hand-picked entry in `tools/mutate/manifest.json` (an exact
-find/replace against a `src/` or `tools/` file, a declared `killed`/`survives`, an optional
-`expectFailures` count, a `why`, and scoped `tests`) it verifies the find/replace
+find/replace against a `src/` or `tools/` file, a declared `killed`/`survives`, the
+`killedBy` test names or an `expectFailures` count, a `why`, and scoped `tests`) it verifies the find/replace
 actually changed the file's bytes (refusing an ambiguous find rather than guessing),
 runs a BASELINE check on the unmutated file first (a pre-existing red test in scope
 must not be misattributed to the mutation), refuses to start if any entry's `tests`
