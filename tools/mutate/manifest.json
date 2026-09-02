@@ -3327,15 +3327,15 @@
   {
     "id": "route-host-never-paints-the-surface",
     "file": "src/game/route-host.ts",
-    "find": "  sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // Continue is a claim about the run store, re-read on every arrival at the Main Menu.\n    // A live session's own subscriber makes the same refresh for the arrivals it sees; this\n    // one covers the arrivals no session does -- the first after Launch, and every one\n    // after a session has been disposed.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n  hud.setState(locationToHudSurface(sm.location));\n",
-    "replace": "  sm.onChange((location) => {\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n",
+    "find": "  const stopPainting = sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // Continue is a claim about the run store, re-read on every arrival at the Main Menu.\n    // A live session's own subscriber makes the same refresh for the arrivals it sees; this\n    // one covers the arrivals no session does -- the first after Launch, and every one\n    // after a session has been disposed.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n  hud.setState(locationToHudSurface(sm.location));\n",
+    "replace": "  const stopPainting = sm.onChange((location) => {\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 9,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
+    "expectFailures": 10,
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -3597,5 +3597,17 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "Releasing the slot leaves the title shaped around the session that just left. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the live-detach case in route-host.test.ts and the versus-quit case in loop.test.ts; the stale-detach control passes either way."
+  },
+  {
+    "id": "route-host-painter-outlives-the-page",
+    "file": "src/game/route-host.ts",
+    "find": "      stopPainting();\n      hud.dispose();",
+    "replace": "      void stopPainting;\n      hud.dispose();",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Page teardown leaves the route host's painter subscribed to the machine it built. The two die together in production, so nothing visible breaks -- which is exactly why the symmetry with a session's own unsubscribe is pinned rather than trusted: a reference kept past `pagehide` would keep painting a disposed HUD. 1 of 38 in route-host.test.ts: the disposal case that changes the route after `dispose()` and expects no paint."
   }
 ]

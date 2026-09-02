@@ -410,7 +410,7 @@ export function createRouteHost(
   hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
   paintContinue();
 
-  sm.onChange((location) => {
+  const stopPainting = sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
     // Continue is a claim about the run store, re-read on every arrival at the Main Menu.
     // A live session's own subscriber makes the same refresh for the arrivals it sees; this
@@ -523,6 +523,10 @@ export function createRouteHost(
       // The preview then, for the same reason `startGameWith` disposed it before the
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
       routeUi.disposePreview();
+      // The page's own subscription, released for the same reason a session releases its
+      // own: the machine and this host die together, but a reference kept past teardown
+      // must not keep painting a disposed HUD.
+      stopPainting();
       hud.dispose();
     },
   };

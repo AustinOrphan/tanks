@@ -751,6 +751,21 @@ describe('createRouteHost: leaving gameplay (issue #429)', () => {
 });
 
 describe('createRouteHost: disposal', () => {
+  it("releases the page's own painter: a machine change after disposal paints nothing", () => {
+    // The route host and its machine die together, but a reference kept past teardown
+    // must not drive a disposed HUD. Before disposal the same change paints -- the
+    // negative control for an assertion that would otherwise pass on a painter that
+    // never painted at all.
+    const f = fixture({ launchDismissed: true });
+    const before = f.hud.argsOf('setState').length;
+    f.host.sm.toRoute('settings');
+    expect(f.hud.argsOf('setState').length, 'the live painter did not paint').toBe(before + 1);
+    f.host.dispose();
+    const disposed = f.hud.argsOf('setState').length;
+    f.host.sm.toRoute('records');
+    expect(f.hud.argsOf('setState').length, 'the painter outlived the page').toBe(disposed);
+  });
+
   it('disposes the HUD and the live preview, and only from here', () => {
     const f = fixture();
     f.hud.fire('onCustomizeOpen');
