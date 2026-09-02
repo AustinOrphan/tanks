@@ -199,6 +199,29 @@ export function partitionByScope(entries, jobs, costOf = () => 1) {
 }
 
 /**
+ * Best-effort read of the cost file: absent, unreadable or malformed all mean "no
+ * measurements" (every scope then costs 1, the count balance) with a warning, never an
+ * abort -- the file only ever affects how evenly the workers finish, so it must not be
+ * able to stop a run. A non-object JSON value counts as malformed too.
+ * @param {string} path @param {(message: string) => void} warn
+ * @returns {Record<string, number>}
+ */
+export function readScopeCosts(path, warn) {
+  if (!existsSync(path)) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8'));
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      warn(`[pool] ${path} is not an object of scope costs; balancing by entry count`);
+      return {};
+    }
+    return parsed;
+  } catch (/** @type {any} */ e) {
+    warn(`[pool] could not read ${path} (${e?.message ?? e}); balancing by entry count`);
+    return {};
+  }
+}
+
+/**
  * The per-scope run cost the pool balances with: `tools/mutate/scope-costs.json`, the
  * median seconds per entry of each exact scope as measured by a previous `--report`
  * run (`scope-costs.mjs` regenerates it). A scope the file does not know gets the
@@ -600,9 +623,7 @@ async function runParallel(entries, jobs, root, reportPath) {
     console.error(`--jobs ${jobs} runs the COMMITTED tree in detached worktrees, and these tracked files are not committed:\n${dirty}\ncommit or stash them first.`);
     return 2;
   }
-  const costsPath = join(root, 'tools/mutate/scope-costs.json');
-  /** @type {Record<string, number>} */
-  const costs = existsSync(costsPath) ? JSON.parse(readFileSync(costsPath, 'utf8')) : {};
+  const costs = readScopeCosts(join(root, 'tools/mutate/scope-costs.json'), (msg) => console.error(msg));
   const costOf = scopeCostLookup(costs);
   const slices = partitionByScope(entries, jobs, costOf);
   const estimate = (/** @type {ManifestEntry[]} */ slice) => Math.round(slice.reduce((sum, e) => sum + costOf(e.tests), 0));

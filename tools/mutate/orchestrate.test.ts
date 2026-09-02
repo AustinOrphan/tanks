@@ -47,7 +47,7 @@ import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
 import {
-  parseArgs, parseJobs, partitionByScope, scopeCostLookup, aggregateExitCodes, formatResult, dirtyReport, unreachableReport,
+  parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, dirtyReport, unreachableReport,
   resolveManifestPath, runTestsReal, classifySubprocessFailure, readReachabilityReport, relatedFilesForAll,
   failedTestNames,
 } from './run.mjs';
@@ -1419,6 +1419,30 @@ describe('scope costs (issue #507)', () => {
     expect(lookup(['zzz.test.ts']), 'an unknown scope gets the median, 4').toBe(4);
     expect(scopeCostLookup({})(['a.test.ts']), 'no measurements at all: every scope costs 1, the count balance').toBe(1);
     expect(scopeCostLookup({ '["a.test.ts"]': 0, '["b.test.ts"]': -3 })(['a.test.ts']), 'non-positive samples are ignored').toBe(1);
+  });
+
+  it('readScopeCosts is best-effort: a missing, corrupt or non-object file warns and yields no costs, never a throw', () => {
+    const dir = join(tmpdir(), `scope-costs-${process.pid}-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      const warnings: string[] = [];
+      const warn = (m: string) => { warnings.push(m); };
+      expect(readScopeCosts(join(dir, 'absent.json'), warn)).toEqual({});
+      expect(warnings, 'an absent file is the normal fresh-checkout case and warns about nothing').toEqual([]);
+      writeFileSync(join(dir, 'corrupt.json'), '{"["a.test.ts"]": 12,');
+      expect(readScopeCosts(join(dir, 'corrupt.json'), warn)).toEqual({});
+      writeFileSync(join(dir, 'array.json'), '[1, 2]');
+      expect(readScopeCosts(join(dir, 'array.json'), warn)).toEqual({});
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0]).toMatch(/could not read .*corrupt\.json/);
+      expect(warnings[1]).toMatch(/not an object of scope costs/);
+      // Negative control: a well-formed file is returned as is, silently.
+      writeFileSync(join(dir, 'good.json'), JSON.stringify({ '["a.test.ts"]': 12 }));
+      expect(readScopeCosts(join(dir, 'good.json'), warn)).toEqual({ '["a.test.ts"]': 12 });
+      expect(warnings).toHaveLength(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('scopeCosts takes the median seconds per scope from report entries and ignores entries without a time', () => {
