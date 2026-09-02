@@ -53,7 +53,7 @@ export interface VersusConfig {
    *  over, matching `createWorldFor`'s own "no non-default caller yet" precedent. */
   stock: number;
   /** Meaningful only when `mode === 'teams'`; `loadArena`/`createWorld` already ignore
-   *  it outside that mode (see `World.friendlyFire`'s own doc comment), so carrying it
+   *  it outside that mode (see `WorldRules.friendlyFire`'s own doc comment), so carrying it
    *  unconditionally here is harmless. */
   friendlyFire: boolean;
   /**

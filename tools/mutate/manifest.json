@@ -219,21 +219,9 @@
     ]
   },
   {
-    "id": "versus-respawn-clone-drops-arena-geometry",
-    "file": "src/sim/world.ts",
-    "find": "    arenaGeometry: world.arenaGeometry,\n",
-    "replace": "    // arenaGeometry dropped by mutation\n",
-    "expect": "killed",
-    "expectFailures": 1,
-    "why": "cloneWorld must carry World.arenaGeometry across every tick's clone, or a versus respawn silently falls back to the tank's own authored spawn from the very first stepInputs call onward -- exactly the near-miss this file's own test-writing notes describe finding while authoring versus-respawn.test.ts. Caught by only 1 of the 6 cases there: the direct-stepRespawns tests bypass cloneWorld entirely (by design -- see that file's own doc comment on why position-exactness is checked before stepMovement's physics can touch it) and so cannot see this mutation; only the end-to-end test that goes through the real stepInputs pipeline does.",
-    "tests": [
-      "src/sim/versus-respawn.test.ts"
-    ]
-  },
-  {
     "id": "versus-respawn-always-falls-back-to-authored-spawn",
     "file": "src/sim/world.ts",
-    "find": "  if (world.mode === 'campaign-coop' || !world.arenaGeometry) return { x: authored.x, y: authored.y };",
+    "find": "  if (mode === 'campaign-coop' || arenaGeometry === null) return { x: authored.x, y: authored.y };",
     "replace": "  if (true) return { x: authored.x, y: authored.y };",
     "expect": "killed",
     "expectFailures": 5,
@@ -2202,7 +2190,7 @@
   {
     "id": "tread-tint-ignores-the-campaign-gate",
     "file": "src/render/tread-trails.ts",
-    "find": "  if (world.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
+    "find": "  if (world.rules.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
     "replace": "  if (!identityApplies(world)) return TREAD_COLOR;",
     "expect": "killed",
     "expectFailures": 1,
@@ -2889,17 +2877,60 @@
     "why": "step() clones the world every tick, so a field the clone drops is a field that cannot outlive one tick. Subtle because updateTargetMemory re-records immediately: a dropped memory looks present at any single instant, and only a tick count that has AGED below the full span proves it survived a tick without refresh."
   },
   {
-    "id": "clone-drops-the-ai-target-perception",
+    "id": "clone-re-resolves-the-rules",
     "file": "src/sim/world.ts",
-    "find": "    aiTargetPerception: world.aiTargetPerception,\n",
-    "replace": "    // aiTargetPerception dropped by mutation\n",
+    "find": "    rules: world.rules,\n",
+    "replace": "    rules: resolveWorldRules(),\n",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 0,
     "tests": [
       "src/sim/world.test.ts",
+      "src/sim/ai/target-selection.test.ts",
+      "src/sim/versus-respawn.test.ts",
+      "src/sim/versus-modes.test.ts",
+      "src/sim/coop-attempts.test.ts",
+      "src/sim/coop-respawn.test.ts"
+    ],
+    "why": "PLACEHOLDER"
+  },
+  {
+    "id": "rules-boundary-skips-the-coop-attempts-default",
+    "file": "src/sim/rules.ts",
+    "find": "    coopAttempts: init.coopAttempts ?? true,",
+    "replace": "    coopAttempts: init.coopAttempts,",
+    "expect": "killed",
+    "expectFailures": 0,
+    "tests": [
+      "src/sim/rules.test.ts",
+      "src/sim/world.test.ts",
+      "src/sim/coop-attempts.test.ts",
+      "src/game/levels.test.ts"
+    ],
+    "why": "PLACEHOLDER"
+  },
+  {
+    "id": "perception-re-derived-from-the-old-field-with-a-fallback",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const bounded = world.rules.aiTargetPerception === 'line-of-sight';",
+    "replace": "  const bounded = ((world as unknown as { aiTargetPerception?: string }).aiTargetPerception ?? 'full') === 'line-of-sight';",
+    "expect": "killed",
+    "expectFailures": 0,
+    "tests": [
       "src/sim/ai/target-selection.test.ts"
     ],
-    "why": "The sibling of versus-respawn-clone-drops-arena-geometry and clone-drops-the-remembered-contact, and the most dangerous of the three because World.aiTargetPerception is OPTIONAL: ai/targeting.ts reads it as `(world.aiTargetPerception ?? 'full')`, so a clone that omits it does not surface as `undefined` at the use site -- it surfaces as the shipped default, from tick 1 onward. game/loop.ts sets the field for `?dev=1&aiPerception=los` on the world it builds, stepInputs opens with cloneWorld, and the selected line-of-sight bound lasted zero ticks: the dev experiment silently measured the very default it was set up to compare against. TypeScript cannot see it either, because `aiTargetPerception?:` makes the object literal without the field a perfectly valid World -- which is why this shipped. Gap measured with this harness rather than argued: against the pre-assertion test files (this same world.ts, with src/sim/world.test.ts and src/sim/ai/target-selection.test.ts taken from main at f3ff4fc) the mutation SURVIVES, 0 of 24 scoped tests failing. Nothing outside that 24 was measured here, but the tree-wide gap is the shipped record rather than an inference: the required `verify (current)` check -- the complete mutation manifest plus the full unit suite under Node 24 -- is green on main at f3ff4fc, and f3ff4fc is the tree WITHOUT this clone copy. With this PR's tests the same mutation is killed by 3 of 27: world.test.ts's direct `cloneWorld` assertion, world.test.ts's five-tick 'does not let aiTargetPerception decay' case (the clone is per tick, so a single tick is the weakest possible probe), and target-selection.test.ts's 'the bound survives a REAL TICK', which is the only one of the three that shows the game-visible consequence -- a wall-blind brown acquiring the player through the wall it cannot see past."
+    "why": "PLACEHOLDER"
+  },
+  {
+    "id": "levels-drop-the-ai-perception-flag",
+    "file": "src/game/levels.ts",
+    "find": "        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,\n        flags.aiPerception ?? undefined,\n",
+    "replace": "        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,\n        undefined,\n",
+    "expect": "killed",
+    "expectFailures": 0,
+    "tests": [
+      "src/game/levels.test.ts"
+    ],
+    "why": "PLACEHOLDER"
   },
   {
     "id": "remembered-contact-never-reaches-the-turret",

@@ -334,8 +334,8 @@ describe('replayMetaFor', () => {
     const meta = replayMetaFor(recorded, 'arena-01');
     expect(meta.mode).toBe('ffa');
     const rebuilt = worldFor(meta, 4);
-    expect(rebuilt.mode).toBe('ffa');
-    expect(rebuilt.friendlyFire).toBe(false);
+    expect(rebuilt.rules.mode).toBe('ffa');
+    expect(rebuilt.rules.friendlyFire).toBe(false);
     expect(rebuilt.tanks.every((t) => t.kind === 'player')).toBe(true);
   });
 
@@ -347,8 +347,8 @@ describe('replayMetaFor', () => {
     const recorded = createWorldFor(ARENAS[0], 9, 'none', 3, true, false);
     const meta = replayMetaFor(recorded, 'arena-01');
     const rebuilt = worldFor(meta);
-    expect(rebuilt.corpseBlocksShells).toBe(true);
-    expect(rebuilt.muzzleClearsTanks).toBe(false);
+    expect(rebuilt.rules.corpseBlocksShells).toBe(true);
+    expect(rebuilt.rules.muzzleClearsTanks).toBe(false);
   });
 
   it('carries the dev invincibility that loop.ts applies AFTER the world is built', () => {

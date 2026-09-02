@@ -3,6 +3,7 @@
 // renderer, no canvas -- so the sync path is testable headlessly, and that is the layer
 // where "a paused game holds its frame" and "the meshes are disposed" actually live.
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../sim/rules';
 import * as THREE from 'three';
 import { createEntityViews } from './entities';
 import { FUSE_WARNING_SECONDS } from './mine-warning';
@@ -17,9 +18,7 @@ function mine(over: Partial<Mine> = {}): Mine {
 function world(mines: Mine[]): World {
   return {
     tick: 0, nextId: 100, seed: 3, tanks: [], bullets: [], mines, blasts: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none',
-    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
-    mode: 'campaign-coop', friendlyFire: false,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(),
   };
 }
 

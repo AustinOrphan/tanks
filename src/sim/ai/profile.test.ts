@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import { brownDecision } from './brown';
 import { greyDecision } from './grey';
 import { tealDecision } from './teal';
@@ -43,7 +44,7 @@ function world(over: Partial<World>): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: -100000,
-    unarmedTrigger: 'none' as const, corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+    rules: resolveWorldRules(), ...over,
   };
 }
 /** A cfg whose ai block is the shipped one with the given fields overridden. */

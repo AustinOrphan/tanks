@@ -1,4 +1,4 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry, AiTargetPerception } from './types';
 import { createWorld, type World } from './world';
 import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
@@ -193,7 +193,7 @@ export function loadArena(
   playerCount: number = 1,
   // Trailing and defaulted, same precedent as playerCount itself: every existing
   // 1-2-arg call site (dozens across the tree) is untouched. Default 'campaign-coop' is
-  // the shipped rule and the trace argument -- see World.mode's own doc comment.
+  // the shipped rule and the trace argument -- see WorldRules.mode's own doc comment.
   mode: GameMode = 'campaign-coop',
   // Trailing and optional, same precedent again: absent (every existing call site)
   // means no variant is ever built, which is what keeps campaign-coop -- and
@@ -442,18 +442,18 @@ export function createWorldFor(
   // Trailing and optional, same precedent again: undefined here means createWorld's
   // own default (true, the shared-attempts ruling) applies. Only levels.ts's campaign
   // branch ever passes a non-default value, closed over from `?dev=1&coopPool=1` --
-  // see World.coopAttempts.
+  // see WorldRules.coopAttempts.
   coopAttempts?: boolean,
   // Trailing and optional, same precedent again (n-player arc PR 4): undefined here
   // means loadArena's/createWorld's own default ('campaign-coop') applies, which is
   // the whole trace argument -- every existing call site (trace.ts's 2-arg call, the gl
   // harness, createArenaWorld) stays on that default. Threaded to BOTH loadArena (so
-  // versus modes strip enemies and stamp team) and createWorld (so World.mode matches
+  // versus modes strip enemies and stamp team) and createWorld (so World.rules.mode matches
   // what was actually built).
   mode?: GameMode,
   // Trailing and optional, same precedent: undefined here means createWorld's own
   // default (false) applies. Only levels.ts's campaign branch ever passes a non-default
-  // value, closed over from `?dev=1&friendlyFire=1` -- see World.friendlyFire.
+  // value, closed over from `?dev=1&friendlyFire=1` -- see WorldRules.friendlyFire.
   friendlyFire?: boolean,
   // Trailing and optional, same precedent again: undefined here means loadArena's own
   // default (VERSUS_STOCK) applies, so every existing call site (none of which pass an
@@ -469,6 +469,14 @@ export function createWorldFor(
   // to `loadArena`, which is the only place `Tank.team` is ever stamped. Only meaningful
   // with mode `'teams'`; issue #281's setup pane is the first caller to pass one.
   teams?: readonly (number | undefined)[],
+  // Trailing and optional, same precedent again (issue #472): undefined here means
+  // `resolveWorldRules`'s own default ('full', issue #359's owner ruling) applies, so
+  // every existing call site -- none of which passes a 13th argument -- is untouched.
+  // Only levels.ts ever passes a non-default value, closed over from
+  // `?dev=1&aiPerception=los`. It used to be SET on the built world by game/loop.ts
+  // instead; `World.rules` is frozen now, so a rule has to arrive here, before the world
+  // exists, like every other rule does.
+  aiTargetPerception?: AiTargetPerception,
 ): World {
   // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
   // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
@@ -480,7 +488,7 @@ export function createWorldFor(
   return createWorld({
     ...loadArena(arena, playerCount, mode, seed, stock, teams),
     lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
-    mode, friendlyFire,
+    mode, friendlyFire, aiTargetPerception,
   });
 }
 

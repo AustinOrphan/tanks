@@ -2,6 +2,7 @@
 // materials and vector maths on the CPU, so a Scene needs no GL context and this is
 // jsdom-testable.
 import { describe, it, expect, vi } from 'vitest';
+import { resolveWorldRules } from '../sim/rules';
 import * as THREE from 'three';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn } from '../sim/types';
@@ -399,7 +400,7 @@ describe('tread trails: dispose', () => {
 function multiWorld(tanks: Tank[], mode?: 'ffa' | 'teams'): World {
   const spawns: Spawn[] = tanks.map((t) => ({ kind: 'player' as const, pos: { ...t.pos }, angle: t.bodyAngle }));
   const w = createWorld({ walls: [], tanks, spawns, lives: 3 });
-  return mode ? ({ ...w, mode } as World) : w;
+  return mode ? { ...w, rules: resolveWorldRules({ mode }) } : w;
 }
 /** Every distinct decal colour the system printed, in emission order. */
 function printedColors(scene: THREE.Scene): number[] {
@@ -467,7 +468,7 @@ describe('tread trails carry their owner identity in VS (issue #284)', () => {
     // so the first implementation tinted campaign trails. #284 says campaign stays neutral.
     const coop = [0, 1, 2, 3].map((slot) => makeTank(slot + 1, 5 + slot * 8, 5, 0, { controlledBy: slot }));
     const coopWorld = multiWorld(coop); // no mode override -> 'campaign-coop'
-    expect(coopWorld.mode).toBe('campaign-coop');
+    expect(coopWorld.rules.mode).toBe('campaign-coop');
     for (const t of coop) expect(treadColorFor(coopWorld, t), `co-op slot ${t.controlledBy}`).toBe(TREAD_COLOR);
     // ...and the same four tanks in ffa ARE tinted, so the case above is the mode doing the
     // work rather than something else making every assertion neutral.

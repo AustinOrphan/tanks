@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveWorldRules } from '../rules';
 import { greyDecision } from './grey';
 import { aimJitter, aimLead, profileAimSpread } from './targeting';
 import type { Tank, Vec2, Wall, Bullet, Mine } from '../types';
@@ -29,8 +30,7 @@ function mine(id: number, ownerId: number, pos: Vec2, over: Partial<Mine> = {}):
 function world(over: Partial<World>): World {
   return {
     tick: 0, nextId: 100, seed: 7, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, rules: resolveWorldRules(), ...over,
   };
 }
 

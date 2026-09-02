@@ -11,7 +11,7 @@ import { detHypot } from './math/hypot'
 /**
  * Where the shell is born: CENTRED one bullet-radius behind the muzzle plane, so its nose
  * starts at the opening rather than past it (issue #237), unless that position is inside a
- * wall or (when World.muzzleClearsTanks is on) inside a live neighbour's hit circle.
+ * wall or (when World.rules.muzzleClearsTanks is on) inside a live neighbour's hit circle.
  *
  * THE CLEARANCE TEST FOLLOWS THE SHELL, NOT THE PLANE, and that is the whole point of
  * moving it. It asks whether the circle the shell will actually OCCUPY at birth overlaps
@@ -30,7 +30,7 @@ import { detHypot } from './math/hypot'
  * which is exactly the pre-offset behaviour. That keeps the degenerate case working
  * the way it always has rather than inventing a new one.
  *
- * The tank check is the same fallback shape, gated on World.muzzleClearsTanks (see
+ * The tank check is the same fallback shape, gated on World.rules.muzzleClearsTanks (see
  * its doc comment for the ruling): a spawn circle overlapping a LIVE non-owner tank's
  * hit circle -- TANK_RADIUS + BULLET_RADIUS, resolveBulletHits' own threshold --
  * falls back to owner.pos exactly as the wall case does.
@@ -59,7 +59,7 @@ function muzzlePoint(world: World, owner: Tank, dir: Vec2): MuzzleSolution {
     if (w.destroyed) continue
     if (circleVsAABB(spawn, BULLET_RADIUS, w.aabb).hit) return retreat()
   }
-  if (world.muzzleClearsTanks) {
+  if (world.rules.muzzleClearsTanks) {
     for (const t of world.tanks) {
       if (t.id === owner.id || !t.alive) continue
       if (circleVsCircle(spawn, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) return retreat()
@@ -256,8 +256,8 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
   // Snapshotted HERE, after the mine loop above: a tank that loop just killed (a
   // shell detonating the mine it stood on) is already gone from it, so it keeps
   // ghosting either way -- only a tank alive at the START of the tank-hit pass below
-  // can be "killed earlier in the same pass". See World.corpseBlocksShells.
-  const aliveAtPassStart = world.corpseBlocksShells
+  // can be "killed earlier in the same pass". See WorldRules.corpseBlocksShells.
+  const aliveAtPassStart = world.rules.corpseBlocksShells
     ? new Set(world.tanks.filter((t) => t.alive).map((t) => t.id))
     : null
 
@@ -298,7 +298,7 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
         // `!== undefined` on both sides makes this self-disabling outside 'teams' by
         // construction: loadArena only ever stamps `team` when mode === 'teams'.
         const ownerTeam = world.tanks.find((o) => o.id === b.ownerId)?.team
-        const isFriendly = t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam && !world.friendlyFire
+        const isFriendly = t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam && !world.rules.friendlyFire
         b.alive = false
         if (!isDamageImmune(t, world.tick) && !isFriendly) {
           t.alive = false

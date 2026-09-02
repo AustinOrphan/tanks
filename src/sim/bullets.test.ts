@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { configFor } from './config'
 import { createWorld } from './world'
+import { resolveWorldRules } from './rules'
 import { spawnBullet, ownerShellCount, stepBullets, resolveBulletHits } from './bullets'
 import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Bullet } from './types'
@@ -664,8 +665,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     // rather than the player's ability to fire.
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop' as const, friendlyFire: false, tanks: [], mines: [], blasts: [],
+      roundStartTick: 0, rules: resolveWorldRules(), tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -681,8 +681,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     // for being embedded, or every ricochet would die on contact.
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop' as const, friendlyFire: false, tanks: [], mines: [], blasts: [],
+      roundStartTick: 0, rules: resolveWorldRules(), tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -792,8 +791,7 @@ describe('shells versus wall kinds', () => {
   function shellAtWall(kind: WallKind, destroyed: boolean) {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop' as const, friendlyFire: false, tanks: [], mines: [], blasts: [],
+      roundStartTick: 0, rules: resolveWorldRules(), tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: 2, minY: -2, maxX: 3, maxY: 2 }, kind, destroyed }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -1006,7 +1004,7 @@ describe('spawnBullet: muzzleClearsTanks (adopted ruling, 2026-08-14: "spawn at 
   it('ON (the default): falls back to owner.pos when the muzzle would land inside a live neighbour', () => {
     const { owner, neighbour } = riflemanAndNeighbour(true)
     const world = createWorld({ walls: [], tanks: [owner, neighbour], spawns: [], lives: 3 })
-    expect(world.muzzleClearsTanks).toBe(true) // the shipped default -- the adopted lean
+    expect(world.rules.muzzleClearsTanks).toBe(true) // the shipped default -- the adopted lean
     expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
     expect(world.bullets[0].pos).toEqual({ x: 0, y: 0 })
   })
@@ -1144,7 +1142,7 @@ describe('resolveBulletHits: corpseBlocksShells (adopted ruling, 2026-08-14: gho
   it('GHOST (the default): the second bullet passes straight through, pinning today\'s behaviour', () => {
     const { target, a, b } = corpseFixture()
     const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
-    expect(world.corpseBlocksShells).toBe(false) // the shipped default
+    expect(world.rules.corpseBlocksShells).toBe(false) // the shipped default
     world.bullets.push(a, b)
     const events: SimEvent[] = []
     resolveBulletHits(world, events)

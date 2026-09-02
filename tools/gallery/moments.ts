@@ -353,7 +353,7 @@ export const MOMENTS: Record<string, MomentDef> = {
    * The mine is pushed into `world.mines` directly rather than staged through a real
    * `mine: true` input + `dropMine` -- it needs to be ARMED from tick 0 (so
    * `shellMayDetonate` accepts the shell unconditionally, independent of
-   * `world.unarmedTrigger`) and parked well clear of the shooter (see below), neither
+   * `world.rules.unarmedTrigger`) and parked well clear of the shooter (see below), neither
    * of which a scripted drop-then-walk-away input buys anything for here (that sequence
    * IS the `mine-cycle` moment). This skips `dropMine`'s `owner.activeMineIds`
    * bookkeeping and the `mine-dropped` event, both harmless here: `detonateMine` only

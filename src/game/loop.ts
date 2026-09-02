@@ -750,7 +750,7 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  * pair instead.
  */
 export function tallyCoopKills(events: SimEvent[], world: World, kills: number[], deaths: number[]): void {
-  if (world.mode === 'ffa' || world.mode === 'teams') {
+  if (world.rules.mode === 'ffa' || world.rules.mode === 'teams') {
     for (const e of events) {
       if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue; // player-vs-player only
       const victim = world.tanks.find((t) => t.id === e.tankId);
@@ -917,7 +917,7 @@ export function locationToHudSurface(location: AppLocation): HudSurface {
 export function versusResultFromWorld(world: World): VersusResult {
   const players = world.tanks.filter((t) => t.kind === 'player');
   const remaining = players.filter((t) => !isVersusEliminated(t));
-  if (world.mode === 'teams') {
+  if (world.rules.mode === 'teams') {
     const teams = new Set(remaining.map((t) => t.team));
     // Exactly one side left is that side's win; anything else is a draw --
     // matching resolveStatusTeams, which resolves a simultaneous double
@@ -1297,12 +1297,11 @@ export function startGameWith(
       const p = w.tanks.find((t) => t.kind === 'player');
       if (p) p.invincible = true;
     }
-    // Applied here rather than threaded through `levels.world`, for the same reason
-    // `invincible` is: this is the one chokepoint every world in this loop passes through,
-    // so a sixth parameter would buy nothing but two more signatures to keep in step. Absent
-    // leaves World.aiTargetPerception at its own 'full' default (issue #359's owner ruling);
-    // `?dev=1&aiPerception=los` restores the superseded line-of-sight bound.
-    if (deps.devFlags.aiPerception) w.aiTargetPerception = deps.devFlags.aiPerception;
+    // `invincible` is the only dev flag applied HERE, after the build: it marks one tank,
+    // which is mutable snapshot state. Every rule-shaped flag (`aiPerception` included,
+    // since issue #472) is resolved into `World.rules` by levels.ts BEFORE the world
+    // exists -- `rules` is frozen, so setting a rule on a built world is not merely
+    // discouraged, it throws.
     return w;
   }
 
@@ -2120,7 +2119,7 @@ export function startGameWith(
       // relocation's scope) -- the two are the same world by the time either callback
       // runs (driver.ts assigns `curr` before calling either), but `w` is the value
       // this specific callback is actually given.
-      const isVersusFrame = w.mode === 'ffa' || w.mode === 'teams';
+      const isVersusFrame = w.rules.mode === 'ffa' || w.rules.mode === 'teams';
       if (isVersusFrame) {
         // One entry per player-kind tank still in the world (never spliced, even once
         // eliminated -- world.ts's own comment on `alive: false` tanks). `slot` =
@@ -2197,9 +2196,9 @@ export function startGameWith(
       // dispatch one layer up -- campaign-coop feeds ONLY the coop line (today's rule,
       // unchanged), ffa/teams feed ONLY the versus line, so a session's two results
       // lines are never both live at once.
-      const isVersus = driver.world.mode === 'ffa' || driver.world.mode === 'teams';
+      const isVersus = driver.world.rules.mode === 'ffa' || driver.world.rules.mode === 'teams';
       hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
-      hud.setVersusResults(isVersus ? { mode: driver.world.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
+      hud.setVersusResults(isVersus ? { mode: driver.world.rules.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
       // Task 6's in-match stock readout (spec §3a) is dispatched from `onSimulated`
       // below, NOT here -- see that callback's own comment for why. `onFrameEvents`
       // only fires `if (frameEvents.length > 0)` (driver.ts), so gating the readout on
