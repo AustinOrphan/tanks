@@ -1163,11 +1163,6 @@ export function startGameWith(
    */
   intent: StartIntent,
 ): GameHandle {
-  // The STARTING level's board, not a fixed arena: a dev-flag jump may open on a
-  // different-sized level, and the renderer must be born fitting it.
-  let shownBounds = deps.levels.bounds(deps.levels.start);
-  const { width, height } = shownBounds;
-
   /**
    * `players` read once, not re-read per world: mirrors `createLevelSystem`'s own
    * `flags.level === 'sandbox'` branch (levels.ts) rather than a new field on
@@ -1548,6 +1543,19 @@ export function startGameWith(
       playerCount === 1
     );
   }
+
+  // The STARTED level's board, not a fixed arena and not the level system's own
+  // `start`: the renderer must be born fitting the board `level` names by the time the
+  // START BOUNDARY above has run. Those two used to be the same level, because a session
+  // could only ever open on `deps.levels.start`. Since issue #428 a New Game opens on
+  // level one while `start` is still the saved run's level, and a Practice pick opens on
+  // whichever level was picked -- and sizing from `start` gave both of them a floor and a
+  // camera fitted to a board the player was not on. Measured in the browser first: a run
+  // parked on a 15x11 level, New Game, and level one's 11x9 walls sat in the corner of a
+  // 15x11 floor. The boot build below does not pass through `switchTo`, so there is no
+  // refit to catch it; being born fitting is the only thing that does.
+  let shownBounds = deps.levels.bounds(level);
+  const { width, height } = shownBounds;
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
   // try/catch to render a "this browser has no WebGL" page, and that only
