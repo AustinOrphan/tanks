@@ -2882,7 +2882,7 @@
     "find": "    rules: world.rules,\n",
     "replace": "    rules: resolveWorldRules(),\n",
     "expect": "killed",
-    "expectFailures": 0,
+    "expectFailures": 6,
     "tests": [
       "src/sim/world.test.ts",
       "src/sim/ai/target-selection.test.ts",
@@ -2891,7 +2891,7 @@
       "src/sim/coop-attempts.test.ts",
       "src/sim/coop-respawn.test.ts"
     ],
-    "why": "PLACEHOLDER"
+    "why": "cloneWorld carries World.rules as ONE frozen reference (issue #472) -- never re-resolved, never enumerated. Dropping the line outright is loud (`draft.rules.mode` throws on the first read in stepInputs), so the SILENT form is modelled instead: a clone that re-resolves the rules from the shipped defaults every tick, which is exactly what #471's per-field omission looked like from outside -- a rule quietly back at its default from tick 1, with nothing thrown. Subsumes the two per-field clone entries it replaces, clone-drops-the-ai-target-perception and versus-respawn-clone-drops-arena-geometry: with one atomic reference there is no per-field line left to drop. Caught by 6 of the 103 cases across the six files: world.test.ts's reference-identity clone case and its 5-tick WORLD_RULE_KEYS sweep (the sweep is the one that grows on its own when a rule is added), target-selection.test.ts's 'the bound survives a REAL TICK' (aiTargetPerception back to 'full', so a wall-blind brown acquires through the wall), versus-modes.test.ts's 'cloneWorld carries both' (mode/friendlyFire back to campaign-coop/false), coop-attempts.test.ts's explicit-false pool-mode case (coopAttempts back to true) and versus-respawn.test.ts's end-to-end stepInputs respawn (arenaGeometry back to null, so the revived tank lands on its authored spawn). coop-respawn.test.ts contributes 0 of its cases by design -- its pool fixtures enter through resolveStatus/stepRespawns directly and never touch the clone, the same blind spot versus-respawn-always-falls-back-to-authored-spawn's own why names."
   },
   {
     "id": "rules-boundary-skips-the-coop-attempts-default",
@@ -2899,14 +2899,14 @@
     "find": "    coopAttempts: init.coopAttempts ?? true,",
     "replace": "    coopAttempts: init.coopAttempts,",
     "expect": "killed",
-    "expectFailures": 0,
+    "expectFailures": 6,
     "tests": [
       "src/sim/rules.test.ts",
       "src/sim/world.test.ts",
       "src/sim/coop-attempts.test.ts",
       "src/game/levels.test.ts"
     ],
-    "why": "PLACEHOLDER"
+    "why": "resolveWorldRules (rules.ts) is the ONE place a rule's default is chosen (issue #472). Skipping a single `??` leaves every caller that does not state the rule -- which is every shipped call site -- with `undefined` in a required slot: the harness does not typecheck, no consumer has a fallback left to hide behind, and `!undefined` reads as POOL mode in resolveStatusCoop, so a whole win/lose model flips with nothing thrown. Caught by 6 of the 96 cases across the four files: rules.test.ts's key-by-key default pin (the direct guard, and the one that catches the same omission on ANY key), coop-attempts.test.ts's 'defaults coopAttempts to true when omitted' and its N=4 survivor-carries case (attempts mode became pool mode: a single death now decrements), world.test.ts contributes 0 (its fixtures state every rule explicitly, so the skipped default is never reached -- which is the point of stating them), and levels.test.ts's 'builds level i ... the same walls, tanks and seed' (createLevelSystem passes `!flags.coopPool` explicitly while the bare createWorldFor it is compared against does not, so the two worlds stop being equal), its 'sandbox does NOT wire coopPool' default pin, and its issue-#154 reordered-campaign deep-equality for the same reason as the first."
   },
   {
     "id": "perception-re-derived-from-the-old-field-with-a-fallback",
@@ -2914,11 +2914,11 @@
     "find": "  const bounded = world.rules.aiTargetPerception === 'line-of-sight';",
     "replace": "  const bounded = ((world as unknown as { aiTargetPerception?: string }).aiTargetPerception ?? 'full') === 'line-of-sight';",
     "expect": "killed",
-    "expectFailures": 0,
+    "expectFailures": 2,
     "tests": [
       "src/sim/ai/target-selection.test.ts"
     ],
-    "why": "PLACEHOLDER"
+    "why": "The consumer-side half of #471, kept as a regression class under #472: a consumer that reads a rule from where it USED to live (a top-level World field), through a fallback that turns the miss into the shipped default. The rule now lives only on World.rules, so this read always sees undefined, the line-of-sight bound is silently gone, and nothing throws -- which is the whole point of forbidding `??` at rule consumers. Caught by 2 of the 16 cases in target-selection.test.ts: 'acquires only what it can SEE, for a profile that does not bank' (direct commitTarget/resolveOpponent under the bound: wall-blind brown now acquires through the wall) and 'the bound survives a REAL TICK' (the same through stepInputs). The banking-profile case survives by construction (grey perceives what it could bank at, bound or no bound), and the 'full' control passes under the mutation because 'full' is exactly what the fallback produces -- it discriminates the other way."
   },
   {
     "id": "levels-drop-the-ai-perception-flag",
@@ -2926,11 +2926,11 @@
     "find": "        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,\n        flags.aiPerception ?? undefined,\n",
     "replace": "        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,\n        undefined,\n",
     "expect": "killed",
-    "expectFailures": 0,
+    "expectFailures": 2,
     "tests": [
       "src/game/levels.test.ts"
     ],
-    "why": "PLACEHOLDER"
+    "why": "`?dev=1&aiPerception=los` used to be written onto the built world by loop.ts's buildWorld, after the fact, and no test on main pinned that write (measured: zero test lines on main mention aiPerception reaching a world). #472 froze World.rules, so the flag has to travel through levels.ts's closure into createWorldFor's trailing positional like corpseBlock/muzzleInside/coopPool/mode/friendlyFire already do -- the composition question target-selection.test.ts's unit cases on targeting.ts cannot see. Caught by 2 of the 56 cases in levels.test.ts: the campaign branch's 'aiPerception=los reaches world.rules.aiTargetPerception' and its two-player coop sibling. The 'unset (null) leaves full' control survives by design. The sandbox and versus builders carry the same threading and their own cases (dropping all three builders at once measured 4 of 56 while landing this); this entry mutates the campaign branch only, so those two stay green here and are not counted."
   },
   {
     "id": "remembered-contact-never-reaches-the-turret",
