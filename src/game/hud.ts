@@ -451,7 +451,7 @@ export interface Hud {
    * external subscriber owns a resource whose lifecycle must match the panel's
    * (the paint shop's second WebGL context; the gamepad hotplug listeners) -- this
    * pane owns nothing like that, so there is no `onVersusClose`. The subscriber
-   * (`loop.ts`) is what actually opens the pane, by calling `showVersusSetup` itself,
+   * (`route-ui.ts`) is what actually opens the pane, by calling `showVersusSetup` itself,
    * because only the loop knows which `VersusConfig` to retain across a rematch --
    * see `showVersusSetup`'s own doc comment for why the button click does not call it
    * directly.
@@ -732,7 +732,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     </div>
     <!-- The title screen. Deliberately NOT a <button>: any key and any pointer press
          dismiss it, so the whole overlay is the target and a single focusable control
-         would understate that. loop.ts owns the listeners.
+         would understate that. route-host.ts owns the listeners.
          role/aria-label because a screen reader is otherwise told nothing about a
          screen that is blocking the entire game behind it. -->
     <div class="hud-splash hud-splash--hidden" role="dialog" aria-modal="true"
@@ -742,9 +742,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     </div>
     <div class="hud-toasts" aria-live="polite"></div>
     <!-- tabindex="-1" for the same reason .hud-panel carries one: it is what lets
-         showAchievements(true) focus the PANE rather than its first button, keeping
-         isMuteHotkey/isPauseHotkey's target.closest('button,...') guard from going dead
-         the moment this pane opens (see setState's own comment on the same trick). -->
+         showAchievements(true) focus the PANE on arrival rather than a control inside it
+         (see .hud-panel's own note on why arrivals land on the container). -->
     <div class="hud-achievements hud-achievements--hidden" tabindex="-1" aria-labelledby="hud-achievements-title">
       <h1 id="hud-achievements-title">Achievements</h1>
       <p class="hud-achievements-count"></p>
@@ -927,12 +926,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     </div>
     <!-- tabindex="-1" so the menu can RECEIVE focus on every panel-open transition
          (setState('main-menu'/'paused'/'outcome-win'/'outcome-lose')) without joining the
-         tab order. It must
-         be this container and not a button inside it (Start, Resume, ...):
-         isMuteHotkey/isPauseHotkey both ignore a key whose target is inside input,
-         button, select or textarea, so focusing a button leaves M and Escape dead the
-         moment the panel opens -- measured in a browser, and a regression against main
-         that was tried once for the "land already on a control" version of this and
+         tab order. An ARRIVAL lands on this container and not on a button inside it
+         (Start, Resume, ...): nothing invoked the surface, so there is no control to
+         return to, and moveFocus's first ArrowDown reaches control[0] from here as if
+         focus had started there. A BACK is different since issue #318: it restores the
+         control that opened the layer, which is only workable because loop.ts's
+         isMuteHotkey/isPauseHotkey stopped treating a button as a control that consumes
+         M, P and Escape -- the broader guard was why an earlier "land already on a
+         control" version of this went dead the moment the panel opened, and was
          reverted. -->
     <!-- aria-labelledby on all seven focus-target containers (six as of the controller
          assignment panel, docs/superpowers/plans/2026-08-17-controller-assignment.md;
@@ -943,8 +944,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          screen reader a concise name instead. The panel's h1 changes text per state
          (TANKS!/Paused/You Win...), which is exactly what the name should be. aria-*
          attributes cannot match isMuteHotkey/isPauseHotkey's
-         closest('input,button,select,textarea') guard, so this cannot reopen the dead-
-         hotkey bug the container-focus decision exists to avoid. -->
+         closest('input,select,textarea') guard, so this cannot make the hotkeys go dead
+         on the container. -->
     <div class="hud-panel hud-panel--hidden" tabindex="-1" aria-labelledby="hud-panel-title">
       <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
@@ -2027,16 +2028,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * call `.focus()` on the pane itself, which is exactly what `.hud-panel`'s own
    * pre-existing `tabindex="-1"` did for the one transition this file used to handle
    * (splash -> title) -- the other six panes now carry the same attribute for the same
-   * reason. An EARLIER version of this focused each
-   * pane's first CONTROL instead, on the reasoning that arriving already positioned saves
-   * a keypress. That reasoning was wrong: `isMuteHotkey`/`isPauseHotkey`
-   * (`game/loop.ts`) both ignore any key whose `target.closest('input,button,select,
-   * textarea')` matches, so focusing a real button on entry -- Resume on the pause panel,
-   * Continue/New Game back at title -- silently killed Escape-to-resume and M-to-mute the
-   * moment the panel opened. A plain `<div tabindex="-1">` never matches that selector, so
-   * the container is the one target that can carry focus without going near that guard.
-   * `moveFocus`'s `idx < 0` branch is what makes this free: the first ArrowDown from the
-   * container lands on control[0] exactly as it would have if this landed there directly.
+   * reason. Nothing invoked the surface on an arrival, so there is no control to return
+   * to, and `moveFocus`'s `idx < 0` branch makes the container free: the first ArrowDown
+   * from it lands on control[0] exactly as it would have if focus had started there.
+   *
+   * A BACK is the other case (issue #318): `restoreFocus` puts focus on the control that
+   * opened the layer, when it still exists. An EARLIER version of this file focused each
+   * pane's first CONTROL on arrival too, and was reverted because loop.ts's
+   * `isMuteHotkey`/`isPauseHotkey` then ignored any key whose target was inside a
+   * `button`, which made Escape-to-resume and M-to-mute go dead the moment a panel
+   * opened. That guard now names `input,select,textarea` only -- a button consumes Space
+   * and Enter and nothing else -- which is what makes restoring a button legal.
    */
   function activePanelContainer(): HTMLElement | null {
     for (const c of [panel, customizeView, statsView, achView, levelSelectView, controllersView, versusSetupView]) {
@@ -3420,11 +3422,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       setSubtitle('The arena waits.');
       actionBtn.textContent = 'Resume';
       // The PANEL, not actionBtn -- see the tabindex note on the element and the
-      // roving-focus doc comment above `activePanelContainer`. Focusing Resume directly
-      // used to be tried here and reverted: `isPauseHotkey` ignores any key whose target
-      // sits inside a button, so it made Escape-to-resume go dead the instant the pause
-      // panel opened -- measured by constructing the same event that guard reads and
-      // finding it return false. A div can never match that guard.
+      // roving-focus doc comment above `activePanelContainer`: an arrival lands on the
+      // container. (A Back from a layer opened over Pause then restores its opener --
+      // `restoreFocus`, issue #318 -- after this call.)
       panel.focus();
       return; // do NOT fall through: the final else renders a Game Over corpse screen
     }

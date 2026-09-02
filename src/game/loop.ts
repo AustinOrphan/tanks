@@ -2375,11 +2375,11 @@ export function startGameWith(
   });
 
   // The versus setup pane's own entry points -- both bare passthroughs, per the Hud
-  // interface's own doc comments on onVersusOpen/onVersusStart: the pane owns its
-  // config state and its own Back button, so loop.ts's only two jobs are handing it
-  // the retained config to prefill from (`?? null` for "no prior match this session",
-  // the same fallback applyVersusToDeps/versusAwareDeps use for a fresh campaign boot)
-  // and, on Start, forwarding the pane's chosen config to the reboot seam.
+  // interface's own doc comments on onVersusOpen/onVersusStart -- are subscribed by the
+  // PAGE (`route-ui.ts`, since issue #427), not here: the pane owns its config state and
+  // its own Back button, so the page's only two jobs are handing it the retained config
+  // to prefill from and, on Start, forwarding the pane's chosen config to the start
+  // boundary. What this session still does is the post-match reopen above.
   /**
    * Land on a level: build its world, rebind everything the old world owned, and
    * refit the renderer if the BOARD changed size. One path for advance, quit and

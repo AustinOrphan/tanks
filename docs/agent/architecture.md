@@ -95,6 +95,28 @@ That module owns scheduling and interruption only and never touches the DOM; the
 and easing live once in `hud.css`, and `hud.ts` reads the token rather than mirroring it, so
 a missing stylesheet degrades to instant rather than to a second constant that can drift.
 
+**The HUD owns pane history; the state machine does not (issue #318).** The six panes
+(Records, Customize, Achievements, Levels, Controllers, Versus Setup) are layers on a stack
+inside `hud.ts`, built from the pure `src/game/navigation.ts`. Each layer records the
+surface it was pushed over and the control that opened it, so Back -- the pane's button,
+Escape while a layer is open, `Hud.back()`, or the browser's own Back -- pops exactly one
+layer, re-renders that origin surface and restores focus to the opener when it still exists
+(the container otherwise). They are deliberately NOT `AppRoute` values on the machine,
+although `app-state.ts` still declares kinds for them: `toRoute` from gameplay drops the
+session, so Controllers over Pause could never be one, and the page's painter closes every
+pane on every surface change, so a pane pushed as a route would be closed by the paint that
+announced it. The invariant runs the other way: after every `setState` the stack is empty.
+The browser mirror keeps ONE state-only history entry while a layer is open and retires it
+with one `back()` when the stack empties; every History call is wrapped, and the first
+throw (Safari's `pushState` rate limit) latches the mirror off with the in-app stack
+unaffected. Pause is a gameplay phase and stays outside the stack -- the flip is two lines,
+deferred until standalone Back is measured on a device -- and the loop's hotkey guard
+names `input,select,textarea` only, because a restored opener is a button and the old
+`button` term was the reason every arrival had to focus a container. Scroll restoration is
+not implemented: no shipped flow returns to a pane a deeper layer covered, and two of the
+three scrollers rebuild their rows on reopen (issue #488 records the seam to add with the
+first covering layer).
+
 **A developer session persists into its own key namespace (issue #245).**
 `selectStorageNamespace(location.search)` reads the `dev` GATE — `parseDeveloperMode`, not
 any individual flag, so a stray `?aimRay=1` cannot move a session off the player's keys —
