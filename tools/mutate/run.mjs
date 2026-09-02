@@ -124,12 +124,20 @@ const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.m
 export function parseArgs(argv) {
   /** @type {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null }} */
   const args = { manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1, report: null };
+  // Every flag here takes a value; a flag at the end of the line, or followed by another
+  // flag, is refused by name rather than read as `undefined` and failed later somewhere
+  // that cannot say which flag was short.
+  const value = (/** @type {number} */ i) => {
+    const v = argv[i + 1];
+    if (v === undefined || v.startsWith('--')) throw new Error(`${argv[i]} needs a value`);
+    return v;
+  };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--manifest') args.manifest = argv[++i];
-    else if (argv[i] === '--only') args.only = argv[++i];
-    else if (argv[i] === '--root') args.root = argv[++i];
-    else if (argv[i] === '--jobs') args.jobs = parseJobs(argv[++i]);
-    else if (argv[i] === '--report') args.report = argv[++i];
+    if (argv[i] === '--manifest') args.manifest = value(i++);
+    else if (argv[i] === '--only') args.only = value(i++);
+    else if (argv[i] === '--root') args.root = value(i++);
+    else if (argv[i] === '--jobs') args.jobs = parseJobs(value(i++));
+    else if (argv[i] === '--report') args.report = value(i++);
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   return args;

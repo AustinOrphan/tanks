@@ -626,6 +626,13 @@ describe('parseArgs', () => {
 
   it('rejects an unknown flag rather than silently ignoring it', () => {
     expect(() => parseArgs(['--bogus'])).toThrow(/unknown argument/);
+    // A value-taking flag with no value, or followed by another flag, is refused by name
+    // instead of leaving `undefined` to fail later somewhere that cannot say which flag.
+    for (const flag of ['--manifest', '--only', '--root', '--jobs', '--report']) {
+      expect(() => parseArgs([flag]), flag).toThrow(new RegExp(`${flag} needs a value`));
+      expect(() => parseArgs([flag, '--jobs', '2']), `${flag} before another flag`).toThrow(/needs a value/);
+    }
+    expect(parseArgs(['--report', 'out.json', '--jobs', '2']).report, 'a real value still parses').toBe('out.json');
   });
 });
 
