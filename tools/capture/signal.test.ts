@@ -82,6 +82,8 @@ describe('capture CLI signal cancellation', () => {
   ] as const)(
     'handles %s cooperatively and removes descendants, workspace, partial output, and lock',
     async (signalName, expectedCode) => {
+      // Deliberately not realpath'd: on macOS this drives the real CLI through the
+      // /var -> /private/var symlink (#482's reproduction), on Linux through a plain root.
       const root = await mkdtemp(join(tmpdir(), 'capture-signal-'));
       roots.push(root);
       const pidFile = join(root, 'pids.json');
