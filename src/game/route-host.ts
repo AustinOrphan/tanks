@@ -41,7 +41,7 @@ import type { SlotSource } from '../input/assignment';
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
 export type RouteHostDeps = RouteUiDeps &
-  Pick<GameDeps, 'createHud' | 'createStateMachine' | 'launchGate'>;
+  Pick<GameDeps, 'createHud' | 'createStateMachine' | 'launchGate' | 'run'>;
 
 /**
  * The two application-level start requests, threaded in rather than read off a session.
@@ -381,7 +381,43 @@ export function createRouteHost(
    * `locationToHudSurface` is imported from `loop.ts` as a VALUE while `loop.ts` imports
    * this module's types only, so the dependency is one-directional at runtime.
    */
-  sm.onChange((location) => hud.setState(locationToHudSurface(location)));
+  /**
+   * The Main Menu's store-derived affordances, painted by the PAGE.
+   *
+   * Until this block a session painted these at its own construction and its
+   * state-machine subscriber refreshed Continue on every arrival at the Main Menu -- which
+   * was complete only while a session existed from the first frame. With the page booting
+   * into an empty host (issue #428) the first Main Menu a returning player saw was told
+   * nothing beyond which surface to show: no Continue for the run they had left, no
+   * Levels grid, an empty Records page, no selected swatch in the paint shop. Measured on
+   * `main` at b581d86 through loop.test.ts's page harness, with a saved run and cleared
+   * levels in the stores: after the Launch gesture, `rec.continueAvailable` and
+   * `rec.levelSelects` were both empty.
+   *
+   * Everything here is a READ of a page-owned store the route UI already holds. Nothing a
+   * session owns -- the attempt counter, the topbar level chip, the settings-driven
+   * controls -- is painted from here; a session still pushes its own values at its own
+   * construction, and the page's copy is the one that exists before any session does.
+   */
+  const paintContinue = (): void => {
+    hud.setContinueAvailable(deps.run.active() !== null);
+  };
+  hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+  hud.setAchievements(deps.achievements.earned());
+  hud.setHullColor(deps.customization.hull());
+  hud.setSkin(deps.customization.skin());
+  hud.setAccentColor(deps.customization.accent());
+  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
+  paintContinue();
+
+  const stopPainting = sm.onChange((location) => {
+    hud.setState(locationToHudSurface(location));
+    // Continue is a claim about the run store, re-read on every arrival at the Main Menu.
+    // A live session's own subscriber makes the same refresh for the arrivals it sees; this
+    // one covers the arrivals no session does -- the first after Launch, and every one
+    // after a session has been disposed.
+    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();
+  });
   hud.setState(locationToHudSurface(sm.location));
 
   const onLaunchGesture = (): void => {
@@ -469,6 +505,15 @@ export function createRouteHost(
         detach(): void {
           if (!current()) return;
           live = null;
+          // The menu goes back to the PAGE's shape. `relaunchTarget` and the session kind
+          // are pushed only by a session, at its construction, and until this line nothing
+          // took them back: after a setup-pane versus match the empty host kept offering
+          // "Start Match" and "Campaign", and that "Start Match" -- with no session to
+          // dispatch to -- is a New Game, which replaced the player's campaign run with no
+          // confirmation. Reset on the way OUT rather than on the next attach, because the
+          // page can sit at the Main Menu with no session for as long as the player likes.
+          hud.setRelaunchTarget('campaign-levels');
+          hud.setSessionKind('campaign');
         },
       };
     },
@@ -478,6 +523,10 @@ export function createRouteHost(
       // The preview then, for the same reason `startGameWith` disposed it before the
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
       routeUi.disposePreview();
+      // The page's own subscription, released for the same reason a session releases its
+      // own: the machine and this host die together, but a reference kept past teardown
+      // must not keep painting a disposed HUD.
+      stopPainting();
       hud.dispose();
     },
   };

@@ -2,10 +2,11 @@
 import { describe, it, expect } from 'vitest';
 import { createRouteHost, type RouteHost, type RouteHostDeps, type StartIntent } from './route-host';
 import { createAppSettings } from './app-settings';
-import { createMemoryStorage, createStores } from './storage';
+import { createMemoryStorage, createStores, type GameStores } from './storage';
 import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIES } from './capabilities';
 import { createGameStateMachine } from './state';
 import { createLevelSystem } from './levels';
+import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 import { DEV_FLAGS_OFF } from './devflags';
 import { defaultSlots } from './versus-setup';
 import type { Hud } from './hud';
@@ -99,13 +100,16 @@ interface Fixture {
   stopRequests(): number;
   hud: ReturnType<typeof recordingHud>;
   root: HTMLElement;
+  stores: GameStores;
   versusStarts: VersusConfig[];
   campaignRequests: () => number;
   previewDisposals: () => number;
   dismissLaunch(): void;
 }
 
-function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
+function fixture(
+  opts: { launchDismissed?: boolean; seed?: (stores: GameStores) => void } = {},
+): Fixture {
   const storage = createMemoryStorage();
   const appSettings = createAppSettings({
     storage,
@@ -115,6 +119,9 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
     motion: createStaticReducedMotionSource(false),
   });
   const stores = appSettings.stores;
+  // What the page finds in its stores BEFORE it builds anything: a returning player's
+  // run, their cleared levels, their paint job.
+  opts.seed?.(stores);
   const hud = recordingHud();
   const root = document.createElement('div');
   const box = {
@@ -161,6 +168,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
 
   const deps: RouteHostDeps = {
     ...routeUiDeps,
+    run: stores.run,
     createHud: () => hud.hud,
     // The REAL state machine. A fake over a surface variable cannot show that a
     // page-scoped machine resets its route on attach, which is one of this file's claims.
@@ -188,6 +196,7 @@ function fixture(opts: { launchDismissed?: boolean } = {}): Fixture {
     host,
     hud,
     root,
+    stores,
     startRequests: box.startRequests,
     stopRequests: () => box.stopRequests,
     versusStarts: box.versusStarts,
@@ -337,6 +346,35 @@ describe('createRouteHost: the gameplay slot', () => {
     slot.onNewGame(() => fired.push('b'));
     f.hud.fire('onNewGame');
     expect(fired).toEqual(['b']);
+  });
+});
+
+describe('createRouteHost: releasing the slot gives the menu back its page shape', () => {
+  it('resets the relaunch target and session kind when the live session detaches', () => {
+    // A versus session shapes the title around itself ("Start Match", a Campaign
+    // button). The page has to take that back when the session goes, or an empty host
+    // keeps offering a "Start Match" that is a New Game in disguise.
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach();
+    f.hud.hud.setRelaunchTarget('versus-setup');
+    f.hud.hud.setSessionKind('versus');
+    slot.detach();
+    expect(f.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['campaign-levels']);
+    expect(f.hud.argsOf('setSessionKind').at(-1)).toEqual(['campaign']);
+  });
+
+  it('a stale detach does not reshape the menu under the session that replaced it', () => {
+    // The stale-capture control, same shape as the slot's own: an outgoing session's late
+    // detach must not undo what the incoming one just pushed.
+    const f = fixture({ launchDismissed: true });
+    const old = f.host.attach();
+    f.host.attach();
+    f.hud.hud.setRelaunchTarget('versus-setup');
+    f.hud.hud.setSessionKind('versus');
+    const before = f.hud.argsOf('setRelaunchTarget').length;
+    old.detach();
+    expect(f.hud.argsOf('setRelaunchTarget')).toHaveLength(before);
+    expect(f.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['versus-setup']);
   });
 });
 
@@ -503,6 +541,57 @@ describe('createRouteHost: the retained versus config', () => {
   });
 });
 
+describe('createRouteHost: the Main Menu is painted from the stores by the page', () => {
+  /**
+   * A session used to paint these at its own construction, which was complete only while
+   * a session existed from the first frame. The page boots into an empty host since issue
+   * #428, so a returning player's first Main Menu was told nothing but which surface to
+   * show. Every reading here is what the HUD was TOLD, through the recorder, with no
+   * session ever attached.
+   */
+  it('paints Continue, the Levels grid, Records and the paint shop at construction', () => {
+    const f = fixture({
+      seed: (stores) => {
+        stores.run.startNewRun(CAMPAIGN_LEVELS[0].id);
+        stores.progress.recordCleared(CAMPAIGN_LEVELS[0]);
+        stores.customization.setHull('red');
+      },
+    });
+    expect(f.host.hasSession()).toBe(false);
+    expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([true]);
+    // One cleared: the grid offers it plus the next.
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([2, CAMPAIGN_LEVELS.length]);
+    expect(f.hud.argsOf('setHullColor').at(-1)).toEqual(['red']);
+    expect(f.hud.argsOf('setSkin')).toHaveLength(1);
+    expect(f.hud.argsOf('setAccentColor')).toHaveLength(1);
+    expect(f.hud.argsOf('setStats')).toHaveLength(1);
+    expect(f.hud.argsOf('setAchievements')).toHaveLength(1);
+  });
+
+  it('paints no Continue when there is no run -- the negative control', () => {
+    const f = fixture();
+    expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([false]);
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
+  });
+
+  it('re-reads Continue on every arrival at the Main Menu, and only there', () => {
+    // The run changes underneath the page while it is away on another route -- as it
+    // does when a session ends it and is disposed. A page that trusted the value it
+    // painted at construction would offer Continue for a run that no longer exists.
+    const f = fixture({ launchDismissed: true });
+    const before = f.hud.argsOf('setContinueAvailable').length;
+    f.stores.run.startNewRun(CAMPAIGN_LEVELS[0].id);
+    f.host.sm.toRoute('settings');
+    expect(f.hud.argsOf('setContinueAvailable'), 'a non-menu route repainted Continue').toHaveLength(before);
+    f.host.sm.toMainMenu();
+    expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([true]);
+    f.stores.run.endRun();
+    f.host.sm.toRoute('records');
+    f.host.sm.toMainMenu();
+    expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([false]);
+  });
+});
+
 describe('createRouteHost: where the page opens', () => {
   it('opens on the splash when the Launch gate is still up', () => {
     expect(fixture({ launchDismissed: false }).host.sm.atLaunch).toBe(true);
@@ -662,6 +751,21 @@ describe('createRouteHost: leaving gameplay (issue #429)', () => {
 });
 
 describe('createRouteHost: disposal', () => {
+  it("releases the page's own painter: a machine change after disposal paints nothing", () => {
+    // The route host and its machine die together, but a reference kept past teardown
+    // must not drive a disposed HUD. Before disposal the same change paints -- the
+    // negative control for an assertion that would otherwise pass on a painter that
+    // never painted at all.
+    const f = fixture({ launchDismissed: true });
+    const before = f.hud.argsOf('setState').length;
+    f.host.sm.toRoute('settings');
+    expect(f.hud.argsOf('setState').length, 'the live painter did not paint').toBe(before + 1);
+    f.host.dispose();
+    const disposed = f.hud.argsOf('setState').length;
+    f.host.sm.toRoute('records');
+    expect(f.hud.argsOf('setState').length, 'the painter outlived the page').toBe(disposed);
+  });
+
   it('disposes the HUD and the live preview, and only from here', () => {
     const f = fixture();
     f.hud.fire('onCustomizeOpen');

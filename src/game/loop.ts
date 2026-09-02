@@ -2702,7 +2702,7 @@ export function startGameWith(
     audio.duckMusic(location.kind === 'gameplay' && location.phase.kind === 'paused');
   }
 
-  sm.onChange((location) => {
+  const stopObserving = sm.onChange((location) => {
     // No `hud.setState` here: since issue #428 the PAGE paints which screen is showing
     // (`route-host.ts`), because a HUD only a session ever painted would leave a page with
     // no session showing nothing at all. What stays is everything that needs a world.
@@ -2945,6 +2945,14 @@ export function startGameWith(
        * way round.
        */
       slot.detach();
+      // ...and stop observing the page's state machine, which outlives this session
+      // (issue #468) and was subscribed above. A subscriber left behind keeps running on
+      // every later change with THIS session's closures -- its level, its identity, its
+      // disposed input -- so a retired Practice session recorded the live campaign
+      // session's level clear against its own level, and a retired campaign session
+      // advanced the shared run with a stale life count first. Both measured in
+      // loop.test.ts's "a retired session stops observing the page state machine".
+      stopObserving();
       deps.releaseAudio(audio);
     },
   };

@@ -3088,12 +3088,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 100,
+    "expectFailures": 101,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -3101,11 +3101,11 @@
     "find": "      const mine = ++generation;",
     "replace": "      const mine = generation;",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other."
+    "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other. Re-measured at 2 of 37 in route-host.test.ts: the second case is \"a stale detach does not reshape the menu under the session that replaced it\", which the detach reset made observable -- with the generation stuck, the outgoing session's late detach reshapes the incoming one's menu."
   },
   {
     "id": "session-teardown-keeps-the-gameplay-slot",
@@ -3113,11 +3113,11 @@
     "find": "      slot.detach();",
     "replace": "      void slot;",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "tests": [
       "src/game/loop.test.ts"
     ],
-    "why": "A session that never gives the slot back. `attach()` replaces `live` on the next session, so a Campaign<->Versus switch still behaves -- what breaks is the LAST session: after the final teardown the trampolines still dispatch into a disposed input controller, renderer and audio director. 1 of 405 in the scoped run, 'a tap after the LAST session reaches nobody, rather than a disposed one'. Its sibling 'a tap reaches the LIVE session once' deliberately survives this and falls to dropping `live = state` from `attach()` instead -- measured both ways, because the two mechanisms back each other up and reading either as the control for both would claim coverage that is not there."
+    "why": "A session that never gives the slot back. `attach()` replaces `live` on the next session, so a Campaign<->Versus switch still behaves -- what breaks is the LAST session: after the final teardown the trampolines still dispatch into a disposed input controller, renderer and audio director. 1 of 405 in the scoped run, 'a tap after the LAST session reaches nobody, rather than a disposed one'. Its sibling 'a tap reaches the LIVE session once' deliberately survives this and falls to dropping `live = state` from `attach()` instead -- measured both ways, because the two mechanisms back each other up and reading either as the control for both would claim coverage that is not there. Re-measured at 2 of 421 in loop.test.ts: the second case is \"quitting a versus match leaves a campaign-shaped Main Menu behind\", because the menu's page shape is restored from `detach()`, which a session that never gives the slot back never reaches."
   },
   {
     "id": "route-host-attach-never-resets-the-route",
@@ -3146,8 +3146,8 @@
   {
     "id": "route-host-clears-the-retained-versus-config-on-detach",
     "file": "src/game/route-host.ts",
-    "find": "        detach(): void {\n          if (!current()) return;\n          live = null;\n        },",
-    "replace": "        detach(): void {\n          if (!current()) return;\n          live = null;\n          versusConfig = null;\n        },",
+    "find": "          live = null;\n          // The menu goes back to the PAGE's shape.",
+    "replace": "          live = null;\n          versusConfig = null;\n          // The menu goes back to the PAGE's shape.",
     "expect": "killed",
     "expectFailures": 2,
     "tests": [
@@ -3182,8 +3182,8 @@
   {
     "id": "route-host-disposal-leaves-the-preview-context-alive",
     "file": "src/game/route-host.ts",
-    "find": "      routeUi.disposePreview();\n      hud.dispose();",
-    "replace": "      hud.dispose();",
+    "find": "      routeUi.disposePreview();\n      // The page's own subscription, released for the same reason a session releases its\n      // own: the machine and this host die together, but a reference kept past teardown\n      // must not keep painting a disposed HUD.\n      stopPainting();\n      hud.dispose();",
+    "replace": "      stopPainting();\n      hud.dispose();",
     "expect": "killed",
     "expectFailures": 1,
     "tests": [
@@ -3297,8 +3297,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "The opposite half: New Game lands on level one and never touches the run, so the board is right and the campaign the player thinks they restarted is still sitting at level 8 with its old lives. Invisible until they quit and press Continue. Paired with the entry above so both halves of the one write this issue makes are pinned separately -- neither can stand in for the other. `void startsCampaignRun;` rather than a deletion so the guard is still read and a tsc failure cannot be mistaken for coverage. 1 of 412."
+    "expectFailures": 2,
+    "why": "The opposite half: New Game lands on level one and never touches the run, so the board is right and the campaign the player thinks they restarted is still sitting at level 8 with its old lives. Invisible until they quit and press Continue. Paired with the entry above so both halves of the one write this issue makes are pinned separately -- neither can stand in for the other. `void startsCampaignRun;` rather than a deletion so the guard is still read and a tsc failure cannot be mistaken for coverage. 1 of 412. Re-measured at 2 of 421 in loop.test.ts: the second case is \"a retired campaign session does not advance the run a second time from stale state\", whose New Game must create the fresh run the live session's mission-clear then advances."
   },
   {
     "id": "start-boundary-practice-keeps-the-campaign-identity",
@@ -3327,15 +3327,15 @@
   {
     "id": "route-host-never-paints-the-surface",
     "file": "src/game/route-host.ts",
-    "find": "  sm.onChange((location) => hud.setState(locationToHudSurface(location)));\n  hud.setState(locationToHudSurface(sm.location));",
-    "replace": "  sm.onChange((location) => void location);",
+    "find": "  const stopPainting = sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // Continue is a claim about the run store, re-read on every arrival at the Main Menu.\n    // A live session's own subscriber makes the same refresh for the arrivals it sees; this\n    // one covers the arrivals no session does -- the first after Launch, and every one\n    // after a session has been disposed.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n  hud.setState(locationToHudSurface(sm.location));\n",
+    "replace": "  const stopPainting = sm.onChange((location) => {\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 9,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 437 across both scoped files. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike."
+    "expectFailures": 10,
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -3521,6 +3521,94 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "The renderer is sized from the level system's own `start` instead of the level the START BOUNDARY chose. Those were the same level until issue #428; now New Game opens on level one while `start` is the saved run's level, and a Practice pick opens on the picked level, and the boot build never passes through `switchTo`'s refit. Seen in the browser as level one's 11x9 walls sitting in the corner of a 15x11 floor. 2 of 417 in loop.test.ts: the New Game and Practice-pick cases under \"born fitting the STARTED level\"; the Continue case is the negative control and passes either way."
+  },
+  {
+    "id": "route-host-paints-nothing-for-the-empty-host",
+    "file": "src/game/route-host.ts",
+    "find": "  hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });\n  hud.setAchievements(deps.achievements.earned());\n  hud.setHullColor(deps.customization.hull());\n  hud.setSkin(deps.customization.skin());\n  hud.setAccentColor(deps.customization.accent());\n  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  paintContinue();\n",
+    "replace": "  // the page paints nothing: a session will, if one ever starts\n",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness."
+  },
+  {
+    "id": "route-host-never-re-reads-continue-on-arrival",
+    "file": "src/game/route-host.ts",
+    "find": "    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n",
+    "replace": "    void location;\n",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The page paints Continue once, at construction, and never again. A live session's own subscriber refreshes it on the arrivals it sees, so the only arrivals this loses are the ones after a session has been disposed (issue #429) -- which, with the session's subscriber now released at disposal, is every arrival the player makes from a route. The page must re-read the run store, not trust the last value a since-dead session painted. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the arrival case in each, both of which end a run while the page is away on another route."
+  },
+  {
+    "id": "session-dispose-keeps-observing-the-page-machine",
+    "file": "src/game/loop.ts",
+    "find": "      stopObserving();\n      deps.releaseAudio(audio);",
+    "replace": "      deps.releaseAudio(audio);",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "A disposed session keeps its subscriber on the page-scoped state machine (issue #468 made the machine outlive the session), so it runs on every later change with the retired session's closures. Measured before the unsubscribe existed: a retired Practice session on level 3 recorded level 3 as cleared when the live campaign session cleared level 1, and a retired campaign session advanced the shared run with a stale life count before the live one wrote the real value. 2 of 421 in loop.test.ts: the retired-Practice and retired-campaign cases under \"a retired session stops observing the page state machine\", both driven through the page harness with a real machine."
+  },
+  {
+    "id": "state-onchange-unsubscribe-is-inert",
+    "file": "src/game/state.ts",
+    "find": "        const i = subscribers.indexOf(cb);\n        if (i >= 0) subscribers.splice(i, 1);",
+    "replace": "        void cb;",
+    "tests": [
+      "src/game/state.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "`onChange` returns a function that removes nothing. loop.ts calls it at disposal and would believe the session had stopped observing, so this is the mutation that reintroduces the retired-subscriber defect while leaving every call site looking correct. 4 of 460 across both scoped files (state.test.ts 39 + loop.test.ts 421): the two unsubscribe cases in state.test.ts and the two retired-session cases in loop.test.ts."
+  },
+  {
+    "id": "state-emit-iterates-the-live-subscriber-array",
+    "file": "src/game/state.ts",
+    "find": "    for (const cb of [...subscribers]) cb(current);",
+    "replace": "    for (const cb of subscribers) cb(current);",
+    "tests": [
+      "src/game/state.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`emit` walks the live array, so a subscriber that unsubscribes a sibling mid-emit -- a session disposing inside a state change -- shifts the array under the loop and the subscriber after the removed one is skipped for that change. 1 of 39 in state.test.ts: the mid-emit case, whose third subscriber is skipped under the live-array walk."
+  },
+  {
+    "id": "route-host-detach-keeps-the-session-shaped-menu",
+    "file": "src/game/route-host.ts",
+    "find": "          hud.setRelaunchTarget('campaign-levels');\n          hud.setSessionKind('campaign');\n",
+    "replace": "          void hud;\n",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Releasing the slot leaves the title shaped around the session that just left. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the live-detach case in route-host.test.ts and the versus-quit case in loop.test.ts; the stale-detach control passes either way."
+  },
+  {
+    "id": "route-host-painter-outlives-the-page",
+    "file": "src/game/route-host.ts",
+    "find": "      stopPainting();\n      hud.dispose();",
+    "replace": "      void stopPainting;\n      hud.dispose();",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Page teardown leaves the route host's painter subscribed to the machine it built. The two die together in production, so nothing visible breaks -- which is exactly why the symmetry with a session's own unsubscribe is pinned rather than trusted: a reference kept past `pagehide` would keep painting a disposed HUD. 1 of 38 in route-host.test.ts: the disposal case that changes the route after `dispose()` and expects no paint."
   },
   {
     "id": "presentation-skin-scroll-never-animates",
