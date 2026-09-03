@@ -52,6 +52,7 @@ import {
   failedTestNames, readManifestFiles, readManifest,
 } from './run.mjs';
 import { scopeCosts } from './scope-costs.mjs';
+import { selectAffected, entryText } from './select.mjs';
 import { collectReachability } from './reachability.mjs';
 import type { ManifestEntry } from './lib.mjs';
 
@@ -643,19 +644,19 @@ describe('computeExitCode', () => {
 
 describe('parseArgs', () => {
   it('defaults to the shipped manifest, no --only filter, and root = process.cwd()', () => {
-    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null });
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null, changed: null, list: false });
   });
 
   it('accepts --manifest, --only and --root overrides', () => {
-    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3', '--report', 'out.json']))
-      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere', jobs: 3, report: 'out.json' });
+    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3', '--report', 'out.json', '--changed', 'origin/main', '--list']))
+      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere', jobs: 3, report: 'out.json', changed: 'origin/main', list: true });
   });
 
   it('rejects an unknown flag rather than silently ignoring it', () => {
     expect(() => parseArgs(['--bogus'])).toThrow(/unknown argument/);
     // A value-taking flag with no value, or followed by another flag, is refused by name
     // instead of leaving `undefined` to fail later somewhere that cannot say which flag.
-    for (const flag of ['--manifest', '--only', '--root', '--jobs', '--report']) {
+    for (const flag of ['--manifest', '--only', '--root', '--jobs', '--report', '--changed']) {
       expect(() => parseArgs([flag]), flag).toThrow(new RegExp(`${flag} needs a value`));
       expect(() => parseArgs([flag, '--jobs', '2']), `${flag} before another flag`).toThrow(/needs a value/);
     }
@@ -1522,6 +1523,69 @@ describe('readManifestFiles / readManifest', () => {
       expect(() => readManifestFiles(join(dir, 'empty'))).toThrow(/holds no \*\.json file/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// The pull-request selection (issue #506): four rules and an always-run list, each with
+// a change that must NOT select as its negative control.
+describe('selectAffected', () => {
+  const e = (id: string, file: string, tests: string[], extra: Record<string, unknown> = {}) =>
+    ({ id, file, tests, find: 'a', replace: 'b', why: 'w', expect: 'killed', killedBy: ['t'], ...extra });
+  const hud = e('hud-1', 'src/game/hud.ts', ['src/game/hud.test.ts']);
+  const sim = e('sim-1', 'src/sim/world.ts', ['src/sim/world.test.ts']);
+  const loop = e('loop-1', 'src/game/loop.ts', ['src/game/loop.test.ts']);
+  const cap = e('cap-1', 'src/game/render-capability.ts', ['src/game/render-capability.test.ts'], { reads: ['package.json'] });
+  const entries = [hud, sim, loop, cap];
+  const base = new Map(entries.map((x) => [x.id, structuredClone(x)]));
+  const run = (changed: string[], related: string[] = [], over: Partial<{ entries: typeof entries; baseById: Map<string, unknown> }> = {}) =>
+    selectAffected({ entries: over.entries ?? entries, baseById: over.baseById ?? base, changed, relatedTests: new Set(related) });
+  const ids = (sel: ReturnType<typeof run>) => (sel.all ? 'ALL' : sel.selected.map((s) => s.entry.id));
+
+  it('rule 1: a changed mutated file or scoped test selects the entry, and nothing else', () => {
+    expect(ids(run(['src/game/hud.ts']))).toEqual(['hud-1']);
+    expect(ids(run(['src/sim/world.test.ts']))).toEqual(['sim-1']);
+    expect(ids(run(['src/game/nothing-here.ts'])), 'an unrelated change selects nothing').toEqual([]);
+  });
+
+  it('rule 3: a scoped test that imports a changed module selects the entry, even when the entry names neither file', () => {
+    // loop.test.ts imports hud.ts: a change to hud.ts reaches loop-1 through the graph.
+    expect(ids(run(['src/game/hud.ts'], ['src/game/loop.test.ts', 'src/game/hud.test.ts']))).toEqual(['hud-1', 'loop-1']);
+    const sel = run(['src/game/hud.ts'], ['src/game/loop.test.ts']);
+    expect(sel.all ? [] : sel.selected.find((s) => s.entry.id === 'loop-1')?.reasons).toEqual(['scoped test src/game/loop.test.ts imports a changed module']);
+  });
+
+  it('rule 2: an entry whose text changed, or that is new, is selected; key order alone is not a change', () => {
+    const edited = { ...sim, why: 'reworded' };
+    expect(ids(run([], [], { entries: [hud, edited] }))).toEqual(['sim-1']);
+    expect(ids(run([], [], { entries: [hud, e('brand-new', 'src/sim/mines.ts', ['src/sim/mines.test.ts'])] }))).toEqual(['brand-new']);
+    const reordered = Object.fromEntries(Object.entries(sim).reverse()) as typeof sim;
+    expect(entryText(reordered)).toBe(entryText(sim));
+    expect(ids(run([], [], { entries: [reordered] })), 'the same entry with keys reordered').toEqual([]);
+  });
+
+  it('rule 4: a change to a file an entry declares it reads selects it; an undeclared non-module file does not', () => {
+    expect(ids(run(['package-lock.json.example']))).toEqual([]);
+    expect(ids(run(['src/game/render-capability.fixture.json']))).toEqual([]);
+    const sel = run(['package.json'], [], { entries: [cap] });
+    // package.json is on the always-run list, so use a custom list to isolate rule 4.
+    expect(sel.all).toBe(true);
+    const isolated = selectAffected({ entries, baseById: base, changed: ['package.json'], relatedTests: new Set(), alwaysRun: [] });
+    expect(ids(isolated)).toEqual(['cap-1']);
+  });
+
+  it('the always-run list: harness, runner config, dependencies and workflows select everything, and the manifest directory is not on it', () => {
+    for (const path of ['tools/mutate/run.mjs', 'tools/mutate/package.json', 'vite.config.ts', 'package.json', 'package-lock.json', 'tsconfig.json', '.github/workflows/ci.yml']) {
+      const sel = run([path]);
+      expect(sel.all, path).toBe(true);
+    }
+    // The three things under tools/mutate/ that cannot change an outcome. The README case
+    // is not hypothetical: replaying this rule over PR #508 selected all 376 entries on a
+    // docs-only line before the pattern was narrowed to harness code.
+    for (const path of ['tools/mutate/manifests/sim.json', 'tools/mutate/README.md', 'tools/mutate/scope-costs.json']) {
+      const sel = run([path]);
+      expect(sel.all, path).toBe(false);
+      expect(ids(sel), path).toEqual([]);
     }
   });
 });

@@ -13,7 +13,7 @@ on the final tree, not adjusted. Only the `After` row is enforced by a test.
 | State | Source | Lines | UTF-8 bytes |
 | --- | --- | ---: | ---: |
 | Before | `CLAUDE.md` at `844986c` | 1002 | 72393 |
-| After | root `CLAUDE.md` on this branch | 136 | 8174 |
+| After | root `CLAUDE.md` on this branch | 137 | 8244 |
 | Reduction | globally loaded project prose | — | 64219 (88.7%) |
 
 `AGENTS.md` is the same file through a symlink and is retained for non-Claude harnesses.

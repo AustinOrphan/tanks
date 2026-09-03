@@ -470,5 +470,61 @@
     "killedBy": [
       "readManifestFiles / readManifest reads every *.json in a directory sorted by name, ignores other files, and reads a single file as itself"
     ]
+  },
+  {
+    "id": "mutate-select-ignores-the-module-graph",
+    "file": "tools/mutate/select.mjs",
+    "find": "      else if (input.relatedTests.has(t)) reasons.push(`scoped test ${t} imports a changed module`);",
+    "replace": "      else if (false) reasons.push(`scoped test ${t} imports a changed module`);",
+    "why": "Rule 3 is the one that makes the pull-request selection exact rather than name-matching: a change to hud.ts must select the loop entries whose tests import it. Dropping it leaves every entry that names neither the changed file nor a changed test unrun.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "selectAffected rule 3: a scoped test that imports a changed module selects the entry, even when the entry names neither file"
+    ]
+  },
+  {
+    "id": "mutate-select-never-runs-everything",
+    "file": "tools/mutate/select.mjs",
+    "find": "    if (hit) return { all: true, reason: `${path} changed (${hit.source}), which can affect every entry` };",
+    "replace": "    if (hit) continue;",
+    "why": "A change to the harness, the runner config, the dependency set or a workflow can affect every entry's outcome; selecting by file names there would run almost nothing on exactly the changes that need everything.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "selectAffected the always-run list: harness, runner config, dependencies and workflows select everything, and the manifest directory is not on it"
+    ]
+  },
+  {
+    "id": "mutate-select-ignores-entry-text",
+    "file": "tools/mutate/select.mjs",
+    "find": "    else if (entryText(base) !== entryText(entry)) reasons.push('entry text changed');",
+    "replace": "    else if (false) reasons.push('entry text changed');",
+    "why": "An entry whose find, replace, tests or contract changed in the pull request must run: its declared outcome is the thing being claimed, and nothing else in the diff need touch its files.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "selectAffected rule 2: an entry whose text changed, or that is new, is selected; key order alone is not a change"
+    ]
+  },
+  {
+    "id": "mutate-select-ignores-declared-reads",
+    "file": "tools/mutate/select.mjs",
+    "find": "      if (changed.has(read)) reasons.push(`declared read ${read} changed`);",
+    "replace": "      if (false) reasons.push(`declared read ${read} changed`);",
+    "why": "`reads` exists for the one input the module graph cannot see -- a file a test reads through fs -- and the selection must honour the declaration or the declaration is decoration.",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "selectAffected rule 4: a change to a file an entry declares it reads selects it; an undeclared non-module file does not"
+    ]
   }
 ]

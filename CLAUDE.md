@@ -102,7 +102,8 @@ Command behavior and CI/deployment details are in
 - Delegate only a concrete, bounded, independent investigation whose isolation or parallelism
   is worth its startup and handoff cost. Mutating workers use separate worktrees.
 - Before merge, apply the full matrix in `docs/agent/testing-and-review.md#merge-bar`.
-  `verify (current)` authoritatively runs the complete mutation manifest; `verify (floor)`
+  `verify (current)` runs every mutation entry a pull request can affect and, on `main`,
+  authoritatively runs the complete mutation manifest; `verify (floor)`
   covers the supported Node floor; `visual` remains independent. Inspect and resolve every
   CI failure, and independently reproduce material claims rather than relaying output.
 

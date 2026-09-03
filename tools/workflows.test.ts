@@ -277,7 +277,11 @@ describe('the canonical verification scripts', () => {
     }
     expect(COMMAND_REFERENCE).toContain('Typical warm local runtime');
     expect(COMMAND_REFERENCE).toContain('Local full-manifest execution is exceptional');
-    expect(COMMAND_REFERENCE).toMatch(/`verify \(current\)`\s+runs the complete mutation manifest/);
+    // Both halves of the post-#506 policy, so the reference cannot document one without
+    // the other: a pull request runs the entries its diff can affect, `main` the complete set.
+    expect(COMMAND_REFERENCE).toMatch(/`verify \(current\)`\s+runs the mutation manifest/);
+    expect(COMMAND_REFERENCE).toMatch(/on a pull request only the entries the diff can affect/);
+    expect(COMMAND_REFERENCE).toMatch(/on `main` the complete set/);
     expect(COMMAND_REFERENCE).toContain('not the routine local candidate gate');
   });
 
