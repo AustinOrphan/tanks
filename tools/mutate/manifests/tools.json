@@ -545,13 +545,13 @@
   {
     "id": "gallery-blocked-fire-accepts-non-visual-arms",
     "file": "tools/gallery/args.mjs",
-    "find": "    const visual = ['ring', 'muzzle', 'smoke', 'pips'];",
-    "replace": "    const visual = ['ring', 'muzzle', 'smoke', 'pips', 'turret', 'hud', 'audio', 'click', 'haptic'];",
+    "find": "    const visual = ['ring', 'muzzle', 'pips'];",
+    "replace": "    const visual = ['ring', 'muzzle', 'pips', 'turret', 'smoke', 'hud', 'audio', 'click', 'haptic'];",
     "expect": "killed",
     "tests": [
       "tools/gallery/args.test.ts"
     ],
-    "why": "Widens the allowlist to arms the gallery cannot draw. 'turret' is the sharp case now: issue #526 retired it as a cue because the recoil became unconditional, so accepting it would hand back a clip whose motion has nothing to do with the flag that was passed. 'hud' is a real cue the game renders, but into the DOM HUD no gallery page builds, and the audio and haptic arms have nothing to draw at all.",
+    "why": "Widens the allowlist to arms the gallery cannot draw. 'turret' and 'smoke' are the sharp cases now: issues #526 and #536 retired both as cues because the gun recoil and the muzzle puff became unconditional, so accepting either would hand back a clip whose recoil or smoke has nothing to do with the flag that was passed -- and worse for 'smoke', the clip WOULD contain smoke, so the flag would look like it worked. 'hud' is a real cue the game renders, but into the DOM HUD no gallery page builds, and the audio and haptic arms have nothing to draw at all.",
     "killedBy": [
       "gallery args takes a blocked-fire cue only for the moment that stages a refusal"
     ]

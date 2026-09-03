@@ -240,7 +240,6 @@ describe('blocked-fire cue (issue #356)', () => {
     // false here permanently -- they carry no audio at all and must never sound, which
     // is what lets #356 attribute a preference to a channel rather than to a bundle.
     muzzle: false,
-    smoke: false,
     pips: false,
     hud: false,
     'haptic-tap': false,

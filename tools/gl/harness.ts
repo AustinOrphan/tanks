@@ -1993,7 +1993,7 @@ check('the three contact states are distinguishable ON SCREEN, not just in the c
  * magazine the day it moves, leaving this fixture measuring a half-lit strip while its
  * comment still claimed otherwise.
  */
-function blockedFireFrame(cue: 'ring' | 'muzzle' | 'smoke' | 'pips' | null): Uint8Array {
+function blockedFireFrame(cue: 'ring' | 'muzzle' | 'pips' | null): Uint8Array {
   const c = placedCanvas(800, 500, 0, 0, 800, 500);
   const r = createRenderer(c, W, H, BOUNDARY, { blockedFire: cue });
   const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
@@ -2031,20 +2031,19 @@ check('the blocked-fire ring (#356) reaches the framebuffer through renderer.ts'
 });
 
 check('every selectable visual arm reaches the framebuffer, and none looks like another', () => {
-  // The ring check above, extended to the arms issue #516 adds and the `smoke` arm the
-  // owner asked for after it -- and then some. Reaching the framebuffer is necessary but
-  // not sufficient for a COMPARISON: cues that all painted the same pixels would pass
-  // independent "did it draw" checks and still be one treatment wearing several names. So
-  // each arm is measured against the flag being off, AND against every other arm.
+  // The ring check above, extended to the arms issue #516 adds -- and then some. Reaching
+  // the framebuffer is necessary but not sufficient for a COMPARISON: cues that all painted
+  // the same pixels would pass independent "did it draw" checks and still be one treatment
+  // wearing several names. So each arm is measured against the flag being off, AND against
+  // every other arm.
   //
   // MEASURED in this checkout, differing bytes out of 1,600,000, two frames after the
   // refusal (so each arm is sampled part-way through its own decay, not at its peak), at
   // the shipped cap of 5 -- `pips` draws one pip per capacity slot, so its own number
-  // moves with a cap retune while the other three do not:
+  // moves with a cap retune while the other two do not:
   //
-  //   off/ring   1334      ring/muzzle  1509      muzzle/smoke  319
-  //   off/muzzle  225      ring/smoke   1589      muzzle/pips   615
-  //   off/smoke   312      ring/pips    1546      smoke/pips    702
+  //   off/ring   1333      ring/muzzle  1509      muzzle/pips  615
+  //   off/muzzle  225      ring/pips    1545
   //   off/pips    390
   //
   // Those are swiftshader numbers on this machine and they are NOT stable across machines:
@@ -2052,24 +2051,28 @@ check('every selectable visual arm reaches the framebuffer, and none looks like 
   // written, so anti-aliasing alone moves a small arm's count by a fifth. That spread is the
   // argument for the floors rather than for exact values.
   //
-  // Another arm, `turret`, was measured here until issue #526 retired it as a cue: the gun
-  // recoil it drew is now unconditional, so it appears in EVERY frame below including
-  // `off` and cancels out of every comparison rather than distinguishing one. Its own
-  // framebuffer proof is the recoil check that follows.
+  // TWO ARMS HAVE LEFT THIS MATRIX, both because the owner adopted them: `turret` (issue
+  // #526, now barrel-recoil.ts) and `smoke` (issue #536, now muzzle-smoke.ts). Neither is
+  // selectable any more, so both appear in EVERY frame below INCLUDING `off` and cancel out
+  // of every comparison rather than distinguishing one. That cancellation is visible in the
+  // numbers: a refusal now also draws a near-black puff over the same barrel, and the
+  // counts above moved by at most one byte from the values recorded before it did. Their
+  // own framebuffer proofs are the recoil and smoke checks at the end of this file.
   //
-  // The bad value is 0 in every case -- the flag off draws literally nothing -- so each
-  // floor below sits at roughly a third of its own measured value: enough headroom for a
-  // different GPU's anti-aliasing, nowhere near the zero a broken wiring produces. Per
-  // arm rather than one number for all of them, because the arms are deliberately
-  // different SIZES: a ring around the whole hull moves an order of magnitude more bytes
-  // than a flash at the muzzle, and one floor generous enough for the ring would be
-  // unreachable for the flash. The pair floor stays a single number, now set by
-  // muzzle/smoke (319) -- unsurprisingly the tightest pair on the board, since those two
-  // arms are the only ones drawn at the same place. It is the pair worth watching: if a
-  // future retune ever let smoke read as a grey flash, this is the number that would say so.
-  const FLOORS = { ring: 400, muzzle: 60, smoke: 100, pips: 120 } as const;
-  const PAIR_FLOOR = 100;
-  const arms = ['ring', 'muzzle', 'smoke', 'pips'] as const;
+  // The bad value is 0 in every case -- the flag off draws literally nothing that the flag
+  // on does not -- so each floor below sits at roughly a third of its own measured value:
+  // enough headroom for a different GPU's anti-aliasing, nowhere near the zero a broken
+  // wiring produces. Per arm rather than one number for all of them, because the arms are
+  // deliberately different SIZES: a ring around the whole hull moves an order of magnitude
+  // more bytes than a flash at the muzzle, and one floor generous enough for the ring would
+  // be unreachable for the flash. The pair floor stays a single number and is now set by
+  // muzzle/pips (615), the tightest remaining pair. It used to be muzzle/smoke at 319, by
+  // some way the tightest on the board, since those were the only two arms drawn in the
+  // same place; retiring `smoke` took that pair off the matrix, which is why the floor
+  // rises here rather than staying where a much tighter pair had pinned it.
+  const FLOORS = { ring: 400, muzzle: 60, pips: 120 } as const;
+  const PAIR_FLOOR = 200;
+  const arms = ['ring', 'muzzle', 'pips'] as const;
   const off = blockedFireFrame(null);
   const frames = new Map<string, Uint8Array>(arms.map((a) => [a, blockedFireFrame(a)]));
   for (const arm of arms) {
@@ -2205,6 +2208,170 @@ check('the barrel recoils on an ORDINARY SHOT too, in the framebuffer (#526)', (
   const moved = bytesDiffering(animating, held);
   if (moved < 100) {
     return `only ${moved} of ${animating.length} bytes changed between an animating and a held gun on a normal shot -- the recoil did not reach the framebuffer`;
+  }
+  return null;
+});
+
+/**
+ * One rendered frame of the shipped arena, at the SHIPPED ARENA CAMERA, taken
+ * `SMOKE_SAMPLE_FRAMES` updates after a single `event` from the tank at the centre.
+ *
+ * The camera is the point. muzzle-smoke.ts's other evidence is a gallery clip taken from
+ * `--view close`, where the puff fills a quarter of the frame and any two treatments look
+ * different; the question issue #536 actually asks is whether they differ where the game
+ * is played. At this camera the whole cloud covers a couple of hundred pixels of an
+ * 800x500 frame, so a difference that survives here is a difference the player can have.
+ *
+ * WHY THE SAMPLE IS LATE, and why no `Math.random` stub is needed here even though
+ * recoilFrame's own fixture cannot do without one. Everything else a `fire` event puts on
+ * screen has finished by the time this frame is grabbed: particles.ts's muzzle burst lives
+ * `0.18 * (0.7 + rng() * 0.6)` seconds, at most 0.234, and barrel-recoil.ts's kick is over
+ * at 0.16. Sixteen renders at 1/60 is 0.2667s, past both. So the burst's unrepeatable
+ * spark cloud is not merely pinned, it is GONE, and the only thing left that either event
+ * drew is the smoke. `fire-blocked` never had particles to begin with, and neither event
+ * puts a shell in this hand-built world, so a `fire` frame and a `fire-blocked` frame
+ * differ by the puff and nothing else.
+ *
+ * The price of sampling late is that the puff is past its most legible moment -- 0.2667s
+ * into a 0.75s life leaves the shot's cloud at 41% of its birth density and the refusal's
+ * at 64% -- so every separation measured below is a LOWER BOUND on what is on screen when
+ * the gun fires.
+ */
+function smokeFrame(event: 'fire' | 'fire-blocked' | null): Uint8Array {
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY, {});
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const w = soloTankWorld(W / 2, H / 2);
+  try {
+    // A `fire` event carries the fields particles.ts's muzzle burst reads (`pos`), which a
+    // bare {type, ownerId} would not -- the burst throws on the missing vector rather than
+    // skipping it, so the shape has to be the real one even though the burst is dead by
+    // the time the frame is taken.
+    const events = (
+      event === 'fire'
+        ? [{ type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: W / 2, y: H / 2 }, angle: 0 }]
+        : event
+          ? [{ type: 'fire-blocked', ownerId: 1, reason: 'shell-cap' }]
+          : []
+    ) as unknown as Parameters<typeof r.render>[3];
+    r.render(w, w, 1, events, 1 / 60);
+    const none = [] as unknown as Parameters<typeof r.render>[3];
+    for (let i = 0; i < SMOKE_SAMPLE_FRAMES; i++) r.render(w, w, 1, none, 1 / 60);
+    return grab(gl, c.width, c.height);
+  } finally {
+    r.dispose();
+    c.remove();
+  }
+}
+
+/** Updates after the event frame. 15 + the event's own render = 0.2667s; see smokeFrame. */
+const SMOKE_SAMPLE_FRAMES = 15;
+
+/**
+ * The COLOUR bytes (alpha skipped) where either `a` or `b` departs from the reference
+ * frame -- in practice, every byte the smoke touches under either event.
+ *
+ * The union rather than one event's own footprint, so both are scored over the same set of
+ * pixels and neither is flattered by being measured only where it happens to be. It does
+ * mean the set moves a little as the looks change, which is why the shot's own numbers
+ * below are not identical from one measurement to the next.
+ */
+function smokeCoverage(a: Uint8Array, b: Uint8Array, ref: Uint8Array): number[] {
+  const idx: number[] = [];
+  for (let i = 0; i < ref.length; i++) {
+    if (i % 4 === 3) continue;
+    if (a[i] !== ref[i] || b[i] !== ref[i]) idx.push(i);
+  }
+  return idx;
+}
+
+/**
+ * Mean absolute difference in LEVELS (0-255) over `idx`.
+ *
+ * bytesDiffering is the wrong instrument for this one question and it is worth saying why,
+ * since every other check on this page uses it. It counts bytes that differ AT ALL, so it
+ * measures the area a change covers, not how much the change is worth looking at: two
+ * puffs one level apart would score the same as two puffs a hundred levels apart. The
+ * whole risk issue #536 asks to measure is a difference that is present everywhere and
+ * strong nowhere, which is precisely the shape bytesDiffering cannot see.
+ */
+function meanLevelDelta(a: Uint8Array, b: Uint8Array, idx: number[]): number {
+  let s = 0;
+  for (const i of idx) s += Math.abs(a[i] - b[i]);
+  return idx.length ? s / idx.length : 0;
+}
+
+check('muzzle smoke leaves the barrel on an ORDINARY SHOT, in the framebuffer (#536)', () => {
+  // Issue #536's inversion, the same one #526 made for the recoil: before it, a normal shot
+  // produced no smoke at all and the puff was a dev-flagged refusal arm. Vitest can assert
+  // that a sprite was added to a scene (muzzle-smoke.test.ts) but cannot see a pixel, and
+  // this is a translucent normally-blended sprite drawn over the felt -- exactly the kind of
+  // thing that can be correct in the scene graph and invisible on screen, whether because
+  // the renderer never built the system, or because something opaque is in front of it.
+  //
+  // MEASURED on this tree: 596 differing bytes of 1,600,000, against EXACTLY 0 with `fire`
+  // removed from the system's own event gate. The separation is total, so the floor sits at
+  // roughly a third of the live value -- clear of nothing at all, and loose enough for
+  // another GPU's anti-aliasing.
+  const off = smokeFrame(null);
+  const shot = smokeFrame('fire');
+  const moved = bytesDiffering(off, shot);
+  if (moved < 200) {
+    return `only ${moved} of ${off.length} bytes changed on an ordinary shot -- the smoke did not reach the framebuffer`;
+  }
+  return null;
+});
+
+check('a REFUSED shot smokes darker AND louder than a fired one, at the shipped camera (#536)', () => {
+  // The check issue #536 exists for, and the one that changed the design.
+  //
+  // The recoil's inversion worked because a refusal is an ABSENCE: no shell, no flash, so
+  // the player compares what they see against a whole missing object. Smoke is not that.
+  // Both events draw a puff, in the same place, in the same shape, so the difference has to
+  // survive being compared against a REMEMBERED puff -- and the arena's felt is a dark
+  // green, which means a darker grey moves toward the background rather than away from it.
+  // The worry was that the exceptional event would end up quieter than the routine one.
+  //
+  // It did. MEASURED here, over the 615 colour bytes the two puffs cover, with the refusal
+  // differing from the shot ONLY in colour (a near-black soot at the shot's own density and
+  // thinning): the shot's puff departs from the empty arena by a mean of 11.13 levels and
+  // the refusal's by 9.20. Backwards, exactly as the issue predicted, and a difference of
+  // 20.34 levels between the two puffs did not rescue it -- a player cannot compare two
+  // clouds that are never on screen together, only notice that one of them is louder than
+  // usual.
+  //
+  // So muzzle-smoke.ts carries the difference on density as well as value, and the two
+  // assertions below are the two halves of that. FIRST, the puffs must be far enough apart
+  // to be different pictures at all: MEASURED at a mean of 27.54 levels over 646 covered
+  // bytes, against EXACTLY 0.00 with the refusal drawing the shot's own look -- the
+  // negative control, run in this session, which also scores 0 differing bytes and is what
+  // "no separation" looks like on this instrument. SECOND, and this is the assertion the
+  // colour-only version fails, the refusal must depart from the empty arena FURTHER than
+  // the shot does: 16.94 levels against 10.60, where colour alone gave 9.20 against 11.13.
+  //
+  // Both floors sit near a third of the measured value, the convention the checks above
+  // use, because these are swiftshader numbers and anti-aliasing moves a small effect's
+  // count by a fifth between machines. The directional assertion has no floor of its own --
+  // it is a comparison between two numbers measured in the same frame pair, so a GPU that
+  // shifted both would not flip it.
+  const off = smokeFrame(null);
+  const shot = smokeFrame('fire');
+  const refused = smokeFrame('fire-blocked');
+  // The fixture is deterministic to the byte -- two renders of the same event differ by
+  // nothing -- so every level counted below is the event type and not the renderer.
+  const noise = bytesDiffering(shot, smokeFrame('fire'));
+  if (noise !== 0) {
+    return `two renders of the same shot differ by ${noise} bytes -- this fixture cannot attribute a difference to the event`;
+  }
+  const covered = smokeCoverage(shot, refused, off);
+  const apart = meanLevelDelta(shot, refused, covered);
+  if (apart < 9) {
+    return `the two puffs differ by a mean of ${apart.toFixed(2)} levels over ${covered.length} covered bytes -- a refusal looks like an ordinary shot`;
+  }
+  const shotVoice = meanLevelDelta(off, shot, covered);
+  const refusedVoice = meanLevelDelta(off, refused, covered);
+  if (refusedVoice <= shotVoice) {
+    return `a refusal departs from the empty arena by ${refusedVoice.toFixed(2)} levels and an ordinary shot by ${shotVoice.toFixed(2)} -- the exceptional event is the quieter one, which is backwards`;
   }
   return null;
 });
