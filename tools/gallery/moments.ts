@@ -197,12 +197,13 @@ function buildSoloWorld(walls: Wall[] = []): World {
 
 export const MOMENTS: Record<string, MomentDef> = {
   /**
-   * The active-shell cap, refusing shots (issues #356, #516). The tank holds fire from
-   * tick 0: the first shots leave normally until `maxActiveProjectiles` are in flight,
-   * and every attempt after that is refused, so `fire-blocked` repeats for the rest of
-   * the clip rather than happening once and being missed. That repetition is the whole
-   * point of the moment -- a refusal cue lives 0.07s to 0.55s, which is unmissable when
-   * it recurs every few ticks and nearly impossible to catch in a single pass.
+   * The active-shell cap, refusing shots (issues #356, #516). The magazine starts at
+   * `maxActiveProjectiles` (see `build`), so the tank holds fire from tick 0 and the very
+   * first attempt is already refused -- there is no warm-up in which real shots leave the
+   * barrel. Refusals then repeat on the fire cooldown for the rest of the clip rather
+   * than happening once and being missed. That repetition is the whole point of the
+   * moment: a refusal cue lives 0.07s to 0.55s, which is unmissable when it recurs and
+   * nearly impossible to catch in a single pass.
    *
    * No walls, so nothing a shell hits frees a slot back up mid-clip and lets a real shot
    * slip in among the refusals. The camera sits close on the tank (`focus`/`span`), which

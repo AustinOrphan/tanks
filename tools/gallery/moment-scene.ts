@@ -66,9 +66,13 @@ export interface MomentSceneOptions {
    * timeline is deterministic, and `--subdiv`/`--fps` slow the clip down, so a reviewer
    * comparing arms sees the same gesture each time.
    *
-   * The `hud` arm is deliberately unsupported: it draws into the DOM HUD, which no
-   * gallery scene builds. Ask for it and you get an unadorned tank, which would be
-   * misleading, so `renderMomentScene` rejects it rather than rendering a lie.
+   * Only the four visual arms render. The audio and haptic arms have nothing to draw,
+   * and `hud` draws into the DOM HUD, which no gallery scene builds -- ask for one of
+   * those and the cue-to-system mapping below matches nothing, so you get an unadorned
+   * tank. The CLI refuses them for that reason (`args.mjs`), and it refuses a cue paired
+   * with any other moment, which is where a caller can be stopped before a browser is
+   * even launched. This field itself stays permissive, the same way `main.ts` reads
+   * `?skin=`/`?scene=` unvalidated so a hand-typed dev-server URL behaves predictably.
    */
   blockedFire?: BlockedFireCue | null;
 }
