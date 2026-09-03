@@ -118,10 +118,12 @@
     "find": "      countEl.classList.remove('hud-count--pop');\n      void countEl.offsetWidth;\n      countEl.classList.add('hud-count--pop');",
     "replace": "      countEl.classList.add('hud-count--pop');",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "The countdown redesign's pop animation must restart on EVERY new second, not just the first -- setRoundPhase calls this every simulated tick, so most calls repeat the same secondsLeft and must NOT restart (guarded above by the lastCountShown check), but a genuinely new second must. Dropping the remove+reflow half of the restart trick (the same one signalPlayerDeath uses) leaves only the add, which is a no-op once the class is already present -- a real browser would not replay the CSS animation for the second and third numbers, only the first. Caught by 1 of 149 in hud.test.ts: 'restarts the pop animation on each new second, not on every call' spies on classList.remove and asserts it is called once per new second: with the restart deleted, classList.remove('hud-count--pop') is never called at all, so the first assertion (expecting exactly 1 call after the first setRoundPhase) already fails.",
+    "why": "The countdown redesign's pop animation must restart on EVERY new second, not just the first -- setRoundPhase calls this every simulated tick, so most calls repeat the same secondsLeft and must NOT restart (guarded above by the lastCountShown check), but a genuinely new second must. Dropping the remove+reflow half of the restart trick (the same one signalPlayerDeath uses) leaves only the add, which is a no-op once the class is already present -- a real browser would not replay the CSS animation for the second and third numbers, only the first. Caught by hud.surfaces.test.ts: 'restarts the pop animation on each new second, not on every call' spies on classList.remove and asserts it is called once per new second: with the restart deleted, classList.remove('hud-count--pop') is never called at all, so the first assertion (expecting exactly 1 call after the first setRoundPhase) already fails. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: round-start countdown restarts the pop animation on each new second, not on every call"
     ]
   },
   {
@@ -130,10 +132,12 @@
     "find": "      if (!info || info.phase === 'live') {",
     "replace": "      if (!info) {",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by 1 of 149 in hud.test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead.",
+    "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by hud.surfaces.test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: round-start countdown hides on null and on live"
     ]
   },
   {
@@ -195,7 +199,7 @@
     "expect": "killed",
     "why": "The tempting widening once setSessionKind takes three kinds. Practice is a campaign board played in isolation and its Lives/Enemies are as real there as in a run, so hiding them is a shipped-behaviour regression on the non-developer Level-Select path -- and it would also surface the versus stock strip for practice. Kept as a permanent entry because nothing about the code's shape argues against the wider predicate; only the test does. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: relaunch target -- the title/outcome affordance policy setSessionKind('practice') shows the campaign stats, exactly as 'campaign' does"
@@ -209,7 +213,7 @@
     "expect": "killed",
     "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Scoped to hud.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: relaunch target -- the title/outcome affordance policy setSessionKind('versus') alone leaves the outcome action button reading 'Play Again'/'Retry'",
@@ -658,8 +662,8 @@
     "replace": "  el.setAttribute('data-selected', String(selected));",
     "expect": "killed",
     "tests": [
-      "src/game/ui.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/ui.test.ts"
     ],
     "why": "Exactly the state the HUD was in before #321: the selection ring is drawn and nothing is announced, so which choice is current is carried by a white border and by nothing else. `setSelected` exists to make the two channels inseparable, and this mutation separates them again by writing the state to a `data-` attribute instead: the value is still recorded, still moves with the choice, and is still invisible to every assistive technology. The class toggle is untouched, so every visual assertion in the suite stays green. Killed by three unit cases in ui.test.ts and by the two HUD sweeps over all 50 choice controls. COUNT MOVED 5 -> 7 for issue #281: the per-slot TEAM buttons are choice controls built with `setSelected`, so the two cases that read their `aria-pressed` -- the untouched slot showing its EFFECTIVE team, and a chosen team surviving a round trip through FFA -- detect this defect as well. Re-measured on the tree, not predicted; the harness reported the mismatch and the declaration was corrected to what it actually trips.",
     "killedBy": [
@@ -679,8 +683,8 @@
     "replace": "  if (reasonId === null) el.setAttribute('aria-describedby', '');",
     "expect": "killed",
     "tests": [
-      "src/game/ui.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/ui.test.ts"
     ],
     "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all. Issue #260 raised this from 3 to 5: the versus pane's Start button now carries its refusal through the same helper, so two more assertions -- the pane's own aria-describedby checks -- fail when it is broken.",
     "killedBy": [
@@ -699,7 +703,7 @@
     "expect": "killed",
     "why": "Widens the application backdrop by ONE surface, which is the mistake this gate is most likely to be made into: `.hud-splash`'s own rule already keys on `atLaunch`, so folding the ground into it looks like consistency. It is not -- the title screen is deliberately a 0.92 scrim over the live arena ('the game is visibly already there, waiting'), and an opaque ground under it removes the only place the game is shown before it starts. The same one-surface widening applied to `paused` or an outcome screen would hide the board the player is reading the panel over, which is why hud.test.ts sweeps all six surfaces rather than sampling. RE-CUT for issue #364: the gate moved from a bare `appGroundEl.classList.toggle('ui-app-ground--hidden', !atMainMenu)` into the one transition contract's desired-state list, so the old anchor stopped applying -- which only `failed-to-apply` reported, while a grep for the status word read the run as fine. Same mutation, inverted sense: the list says which surfaces should be OPEN, so widening is `|| atLaunch` rather than `&& !atLaunch`. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract crossfades the title screen into the menu, and the backdrop with it",
@@ -821,8 +825,8 @@
     "replace": "  for (let i = 0; i < players; i++) out.push(defaults[i]);",
     "expect": "killed",
     "tests": [
-      "src/game/versus-setup.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/versus-setup.test.ts"
     ],
     "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing. Issue #260 raised this from 3 to 4, and the extra failure is the point: until the pane had role CONTROLS, nothing in the UI could show a discarded role. The fourth test drives the player-count buttons and reads the role back off the rendered card, so this is now pinned end to end rather than at the model alone.",
     "killedBy": [
@@ -1020,7 +1024,7 @@
     "expect": "killed",
     "why": "setState's gameplay-entry exemption, deleted. Issue #364 is explicit that no transition may run during gameplay entry or exit in a way that delays the countdown or the first input; this is the single argument that enforces it, and `false` is what the line would say if that rule had never been read. The failure is silent in every other check: the menu still ends up hidden, the ground still ends up covering the board, and every settled-state assertion in this suite still passes -- only the frames BETWEEN the click and the countdown differ, with the panel painted over the live game for the whole duration and `--leaving` still on it. `never runs a transition on gameplay entry` is the case that measures it, and it measures the timer DELTA rather than an absolute count, so the HUD's unrelated toast and armed-reset timers cannot satisfy it. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract never runs a transition on gameplay entry",
@@ -1036,7 +1040,7 @@
     "expect": "killed",
     "why": "The other half of the gameplay-entry exemption, one level down: the runner honours the caller's `instant` rather than consulting the configured duration. Mutated here the flag still threads through every call site and still typechecks, so `transition-runs-on-gameplay-entry` above -- which pins the ARGUMENT -- cannot see it, and neither can transitions.test.ts, which never passes `instant` (0 call sites, checked). `instant` is a property of WHICH change this is, not of how long transitions happen to be configured to take, so a build that merely set the duration low would not restore the guarantee. `never runs a transition on gameplay entry` is again the case that measures it, through hud.ts's two `showCustomize(false, true)` / `showControllers(false, true)` cleanup closes and setState's own call. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract never runs a transition on gameplay entry",
@@ -1081,7 +1085,7 @@
     "expect": "killed",
     "why": "Issue #364's FIRST acceptance criterion, inverted into the exact shape it forbids: a second copy of the duration living in the TypeScript, agreeing with the stylesheet today and free to drift from it tomorrow. Everything else stays green -- the transition still runs, still lasts 150ms, and hud.css.test.ts's textual checks still find one declaration of the token in the stylesheet, because this copy is not IN the stylesheet. That is the point: \"one place defines the duration\" is only testable as a BEHAVIOUR, by moving that one place and watching the timer move with it. `reads its duration from the stylesheet rather than mirroring it` is the case that measures it, by setting the token to 400ms and asserting the outgoing surface is still displayed at 399ms. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract reads its duration from the stylesheet rather than mirroring it"
@@ -1095,7 +1099,7 @@
     "expect": "killed",
     "why": "The resolved reduced-motion policy reaching the HUD but never reaching the clock. `hud.setReducedMotion` still exists, loop.ts still pushes it on every `effectiveSettings` change, and the field is still assigned -- so the wiring entries in loop.test.ts (`pushes the same resolved policy to the HUD, and again when it changes`) all still pass; only the effect is gone. Issue #364's fifth criterion asks that a player who resolved reduced motion gets instant transitions, and this is the one line that makes the duration zero rather than merely recorded. `makes every transition instant under the RESOLVED reduced-motion policy` is the case that measures it, and it carries its own negative control in the same test: the motion-ON branch asserts the outgoing surface is still displayed and one extra timer is armed, so a suite that had been accidentally synchronous would fail there rather than pass here. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract makes every transition instant under the RESOLVED reduced-motion policy"
@@ -1107,11 +1111,22 @@
     "find": "    return !surface.el.classList.contains(surface.hidden) && !surface.el.classList.contains(LEAVING);",
     "replace": "    return !surface.el.classList.contains(surface.hidden);",
     "expect": "killed",
-    "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at 6 of 244 in hud.test.ts once #318's layer cases joined the file: both Escape cases and the fake-host mirror case also count a close callback that this mutation doubles.",
+    "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at hud.controls.test.ts once #318's layer cases joined the file: both Escape cases and the fake-host mirror case also count a close callback that this mutation doubles. Pinned by name since the hud suite was split (issue #511); its killers live in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.controls.test.ts",
+      "src/game/hud.navigation.test.ts",
+      "src/game/hud.surfaces.test.ts"
     ],
-    "expectFailures": 8
+    "killedBy": [
+      "createHud application transition contract leaks no timers and fires no duplicate callbacks under repeated fast navigation",
+      "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+      "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed",
+      "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) onControllersOpen/onControllersClose fire once per ACTUAL transition, matching onCustomizeOpen/Close's own contract",
+      "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+      "hud: the paint shop fires onCustomizeOpen/onCustomizeClose exactly on the Back-button round trip",
+      "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
+      "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+    ]
   },
   {
     "id": "contract-rules-hardcode-their-own-duration",
@@ -1136,7 +1151,7 @@
     "expect": "killed",
     "why": "The roving keyboard order following a surface the player has already left. Before this contract exactly one panel-family element was ever displayed, so `activePanelContainer` could return the first one it found; a crossfade deliberately paints two at once for its duration, and the outgoing one is listed FIRST (`panel`), so without this line the arrow keys walked the screen the player just left for the whole 150ms. Nothing about the visible result changes -- both surfaces are painted either way, the destination still arrives, and every settled-state assertion still passes -- which is why this needs a mutation rather than a screenshot. It is the KEYBOARD half of a rule the stylesheet only covers for the mouse (`.ui-surface--leaving` sets `pointer-events: none`), and it is the reachable half of that rule: `isHiddenWithin`'s sibling check is not, because `--leaving` lands only on the seven surface elements, which are exactly the containers that walk excludes. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
@@ -1155,11 +1170,20 @@
     "find": "    if (!desired.some(([surface, want]) => want !== isSurfaceOpen(surface))) {\n      onBegin?.();\n      return;\n    }\n    let leaving: Surface[] = [];",
     "replace": "    let leaving: Surface[] = [];",
     "expect": "killed",
-    "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at 5 of 244 in hud.test.ts once #318's layer cases joined the file: the `hud.back()`, first Escape and both mirror cases read the pane's LEAVING class right after a Back, which this mutation slams shut.",
+    "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the `hud.back()`, first Escape and both mirror cases read the pane's LEAVING class right after a Back, which this mutation slams shut. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts, hud.surfaces.test.ts.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/hud.surfaces.test.ts"
     ],
-    "expectFailures": 7
+    "killedBy": [
+      "createHud application transition contract crossfades a panel CLOSE, not only its open",
+      "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) hud.back() pops one layer and reports true; with nothing open it reports false and changes no class",
+      "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+      "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+      "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
+      "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+    ]
   },
   {
     "id": "close-all-cleanup-slams-a-fading-surface",
@@ -1169,7 +1193,7 @@
     "expect": "killed",
     "why": "The other half of the same defect, and independently sufficient to cause it: `setState`'s close-all putting `--hidden` on a surface that is mid-crossfade. These four calls were bare `classList.add`s that bypassed the transition contract entirely, so the Back handlers' `setState` slammed the pane `showX(false)` was fading. Reverting EITHER this or `panel-close-collapsed-by-its-own-setstate` above reproduces the cut on its own -- measured, both directions -- which is why both exist as separate entries rather than one. The skip is safe because closure is still guaranteed: a surface passed over here is hidden by its own settle, and gameplay entry (where 150ms later would be too late) goes through `setState`'s own `instant` transition, whose drain settles it in the same frame. `crossfades a panel CLOSE, not only its open` is the case that measures it, at the assertion that the closing pane keeps its `--hidden` OFF while it fades. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract crossfades a panel CLOSE, not only its open"
@@ -1274,10 +1298,17 @@
     "find": "    opts.versusSetup?.set({ ...next });",
     "replace": "    void next;",
     "expect": "killed",
-    "expectFailures": 6,
-    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at 6 of 244 in hud.test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once.",
+    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "createHud roving-tabindex focus navigation (issue #115) does not intercept arrow keys while playing, so input.ts still drives the tank",
+      "createHud roving-tabindex focus navigation (issue #115) leaves ArrowLeft/ArrowRight on the preview canvas for its own rotation scheme",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back fires no start, pick, reset, quit, pause, setup or open callback, leaves no reset armed, and writes nothing to the retained VS store",
+      "hud: the versus pane reads and writes the RETAINED setup (issue #260) never writes a device to storage -- only the role pattern survives",
+      "hud: the versus pane reads and writes the RETAINED setup (issue #260) persists a role choice to the RAW key, so a second HUD on the same storage opens with it",
+      "hud: the versus pane reads and writes the RETAINED setup (issue #260) persists the match rules too, not only the slots -- every write goes through one funnel"
     ]
   },
   {
@@ -1288,7 +1319,7 @@
     "expect": "killed",
     "why": "The issue's 'never accept Start with an inert required slot'. The reasons would still render on the offending card, so the pane would still LOOK like it was refusing -- while Start stayed clickable and launched a match with an unassigned or driverless tank. Computing a refusal and not enforcing it is the failure this pins.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "createHud roving-tabindex focus navigation (issue #115) does not intercept arrow keys while playing, so input.ts still drives the tank",
@@ -1308,7 +1339,7 @@
     "expect": "killed",
     "why": "Derives every slot's device as if no controller were connected. A second human slot would read 'Unassigned' and refuse Start with a controller plugged in, and -- worse in kind -- the gate would stop reacting to a hotplug at all, which is the criterion about a disconnect disabling Start with an actionable reason.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) a Human slot left without a device refuses Start with the device-missing reason, not the off one",
@@ -1323,7 +1354,7 @@
     "expect": "killed",
     "why": "Drops the slot check, so the FIRST problem's sentence is stamped on every card at once -- 'Player 2 is off' would appear under Player 3 as well. The pane deliberately shows one actionable reason at a time (versusSetupProblem returns the first problem, not a list); this pins that the other cards stay silent, which a test asserting only the offending card would not. RE-ANCHORED for issue #281: the guard gained a `problem.kind !== 'one-team'` clause when the team-count refusal joined `no-human` as the second PANE-level problem, so the previous find string no longer occurs -- which the harness reports as `failed-to-apply`, and which CI caught here rather than the local sweep, because the local selection was filtered to the files the change was ABOUT (`arena.ts`, `versus-setup.ts`) and this entry lives in `hud.ts`. The mutation, its meaning and its killing test are unchanged; only the anchor moved, and the count below was re-measured on the new text rather than carried over.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one"
@@ -1337,7 +1368,7 @@
     "expect": "killed",
     "why": "Issue #321's rule is that a disabled control's reason is ASSOCIATED, not merely nearby. The sentence would still be on screen for a sighted player while a screen-reader user hears only that Start is disabled. Nothing about the visible rendering changes, so only an aria-describedby assertion can catch it.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one",
@@ -1542,7 +1573,7 @@
     "expect": "killed",
     "why": "Teams becomes selectable at two players, which issue #281's first binding rule forbids by name: 'Teams mode is not a distinct option for two players because it is equivalent to FFA.' Two players on two teams IS free-for-all, and two on one team is a match nobody can win -- which the one-team Start gate then refuses, so the offer becomes a trap rather than a choice. It is a SILENT defect on the shipped pane: the button simply enables, every downstream mode-dependent row renders correctly, and the match starts and plays; what it costs is a mode that means nothing and a refusal the player cannot see the cause of. Killed by the three cases that drive the pane with a real `.click()` -- chosen over `dispatchEvent` deliberately, because a disabled button IGNORES a real click and HONOURS a dispatched one, so only the former measures what a player can actually do. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
@@ -1559,7 +1590,7 @@
     "expect": "killed",
     "why": "Dropping from three players to two while Teams is selected LEAVES the pane in Teams -- a mode it no longer offers. The disabled button cannot prevent this state, because the player never touches the mode row to reach it; they touch the player count. The result is a pane whose mode control shows a refused option as chosen, whose Teams-only friendly-fire row is still on screen, and whose Start may be refused by the one-team gate with no visible way to fix it, since the team controls are the thing that would let a player split the sides. Exactly ONE test fails, which is the point of the entry: the offer rule and this consistency rule are separate claims, and a build could satisfy the first while breaking the second -- the disabled button and the forced fallback are not the same guarantee. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) drops out of Teams when the player count falls to two"
@@ -1573,7 +1604,7 @@
     "expect": "killed",
     "why": "The stock readout goes back to carrying its side in COLOUR ALONE. Issue #281 requires the team choice to be reinforced \"with label/marker in addition to color\", and this is the readout where that matters most: it is the only place a player checks mid-match to see who is left. Three readers lose the information and get no warning -- a colour-blind player (red and green are the shipped team A and C, the worst pair for a deuteranope, which is stated in TEAM_COLORS' own comment as the reason the letter is not optional), anyone on a forced-colours palette (issue #368 replaces authored hues outright, so every chip becomes one system colour), and anyone reading a greyscale screenshot. Nothing else fails: the chips still render, still count down, and still carry their hue, so no layout or visibility assertion can see it. Killed by the case that pins the chip TEXT for all three teams, whose control is the FFA case asserting no letter appears where a slot has no side. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.match.test.ts"
     ],
     "killedBy": [
       "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) carries the TEAM as a letter beside the colour, all three teams (issue #281)"
@@ -1601,7 +1632,7 @@
     "replace": "    const mines = cfg.weapon.maxActiveProjectiles;",
     "expect": "killed",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.match.test.ts"
     ],
     "why": "Issue #268 requires each displayed limit to come from the field the simulation actually enforces -- dropMine gates on cfg.mineCapacity, spawnBullet on cfg.weapon.maxActiveProjectiles -- so a line that read one field twice would be right about shells and silently wrong about mines. Note the OTHER drift this issue names, a hardcoded literal, cannot be pinned here: 5 and 2 are today's shipped values, so a literal agrees with config and SURVIVES. That half is proven instead by editing tank-defs.json to 3/1, where the derived line follows and a hardcoded one fails; the run is recorded on the PR.",
     "killedBy": [
@@ -2197,8 +2228,8 @@
     "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
     "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) return false;",
     "tests": [
-      "src/game/loop.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/loop.test.ts"
     ],
     "why": "`isMuteHotkey` treats a focused button as a control that consumes M, which is the pre-#318 guard. Back returns focus to the control that opened a layer, so after every Back the focused element IS a button, and this mutation makes M dead exactly there.",
     "expect": "killed",
@@ -2213,8 +2244,8 @@
     "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
     "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) return false;",
     "tests": [
-      "src/game/loop.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/loop.test.ts"
     ],
     "why": "`isPauseHotkey` treats a focused button as a control that consumes Escape and P. With Back restoring focus to the Controllers button on the pause panel, this is the mutation under which the second Escape -- the one that should resume -- does nothing.",
     "expect": "killed",
@@ -2230,11 +2261,13 @@
     "find": "    LAYERS[popped.id].close();\n    setState(popped.origin);",
     "replace": "    LAYERS[popped.id].close();\n    setState('main-menu');",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "Back re-renders the Main Menu whatever surface the layer was opened over -- the pre-#318 hard-code, restored. Controllers opened from Pause returns to the title and abandons the paused round on screen while the state machine still says paused; Versus Setup opened over Pause does the same. 1 of 244 in hud.test.ts (244): the Controllers-from-Pause case under \"navigation layers\", whose Back must re-render the paused panel."
+    "why": "Back re-renders the Main Menu whatever surface the layer was opened over -- the pre-#318 hard-code, restored. Controllers opened from Pause returns to the title and abandons the paused round on screen while the state machine still says paused; Versus Setup opened over Pause does the same. hud.navigation.test.ts (244): the Controllers-from-Pause case under \"navigation layers\", whose Back must re-render the paused panel. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) Back hides the pane and returns to the surface it was opened OVER: paused when opened there, title from the title (issue #318)"
+    ]
   },
   {
     "id": "back-focuses-the-container-not-the-opener",
@@ -2242,11 +2275,22 @@
     "find": "    if (isHiddenWithin(opener, el)) return;\n    opener.focus();",
     "replace": "    if (isHiddenWithin(opener, el)) return;\n    void opener;",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 10,
-    "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. 9 of 244 in hud.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener."
+    "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. hud.navigation.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
+      "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+      "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+      "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pointer-initiated Back click still lands focus on the opener",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) hud.back() pops one layer and reports true; with nothing open it reports false and changes no class",
+      "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+      "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+      "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+    ]
   },
   {
     "id": "back-focuses-a-hidden-opener",
@@ -2254,11 +2298,13 @@
     "find": "    if (opener instanceof HTMLButtonElement && opener.disabled) return;\n    if (isHiddenWithin(opener, el)) return;",
     "replace": "    if (opener instanceof HTMLButtonElement && opener.disabled) return;",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "Back focuses an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up, or any title-only opener after a detach reshaped the menu. A hidden focused element strands a keyboard player with no visible position, which is the case the container fallback exists for. 1 of 244 in hud.test.ts (244): \"Back falls back to the panel container when the opener was hidden while the pane was up\"."
+    "why": "Back focuses an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up, or any title-only opener after a detach reshaped the menu. A hidden focused element strands a keyboard player with no visible position, which is the case the container fallback exists for. hud.navigation.test.ts (244): \"Back falls back to the panel container when the opener was hidden while the pane was up\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back falls back to the panel container when the opener was hidden while the pane was up"
+    ]
   },
   {
     "id": "close-all-leaves-the-layer-stack-populated",
@@ -2266,11 +2312,13 @@
     "find": "    disarmReset();\n    // ...and the layer stack with them (issue #318): a surface change is never a Back,\n    // so every layer is dropped rather than popped, and the history mirror retires its\n    // entry. After this line the stack is empty on every path through this function.\n    resetLayers();",
     "replace": "    disarmReset();\n    // (mutation) the stack outlives the surface it opened over",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "A surface change closes every pane on screen but leaves the layer stack populated. The next Escape during play is claimed by the HUD for a pane that is no longer there, `hud.back()` re-renders a surface the state machine has left, and a later browser Back reopens nothing while consuming a history entry the page thinks it still owns. 1 of 244 in hud.test.ts (244): \"entering gameplay from an open pane empties the stack\"."
+    "why": "A surface change closes every pane on screen but leaves the layer stack populated. The next Escape during play is claimed by the HUD for a pane that is no longer there, `hud.back()` re-renders a surface the state machine has left, and a later browser Back reopens nothing while consuming a history entry the page thinks it still owns. hud.navigation.test.ts (244): \"entering gameplay from an open pane empties the stack\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) entering gameplay from an open pane empties the stack: hud.back() then has nothing to pop"
+    ]
   },
   {
     "id": "back-reports-consumed-with-an-empty-stack",
@@ -2278,11 +2326,18 @@
     "find": "    const popped = layers.pop();\n    if (popped === null) return false;",
     "replace": "    const popped = layers.pop();\n    if (popped === null) return true;",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 6,
-    "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. 5 of 244 in hud.test.ts (244): the `hud.back()` and gameplay-entry cases, the first Escape case and both mirror cases, each of which asserts `back()` is false once nothing is open."
+    "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. hud.navigation.test.ts (244): the `hud.back()` and gameplay-entry cases, the first Escape case and both mirror cases, each of which asserts `back()` is false once nothing is open. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) entering gameplay from an open pane empties the stack: hud.back() then has nothing to pop",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) hud.back() pops one layer and reports true; with nothing open it reports false and changes no class",
+      "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+      "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+      "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+    ]
   },
   {
     "id": "pane-covers-the-open-pane",
@@ -2290,11 +2345,13 @@
     "find": "    if (top !== null && top.id !== id) {\n      layers.pop();\n      LAYERS[top.id].close();\n      origin = top.origin;\n    }",
     "replace": "    if (top !== null && top.id !== id) {\n      layers.pop();\n      origin = top.origin;\n    }",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "A pane opened while a different pane is up covers it without closing it: the covered Customize pane keeps its live WebGL preview and the covered Controllers pane its window gamepad listeners, with no close callback ever firing for either, and the transition contract's second-destination rule is met only by accident of paint order. 1 of 244 in hud.test.ts (244): \"a pane opened while a different pane is up replaces it through that pane's own close\", which counts `onCustomizeClose`."
+    "why": "A pane opened while a different pane is up covers it without closing it: the covered Customize pane keeps its live WebGL preview and the covered Controllers pane its window gamepad listeners, with no close callback ever firing for either, and the transition contract's second-destination rule is met only by accident of paint order. hud.navigation.test.ts (244): \"a pane opened while a different pane is up replaces it through that pane's own close\", which counts `onCustomizeClose`. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once"
+    ]
   },
   {
     "id": "back-writes-the-retained-config",
@@ -2302,11 +2359,13 @@
     "find": "    setState(popped.origin);\n    restoreFocus(popped);",
     "replace": "    setState(popped.origin);\n    restoreFocus(popped);\n    if (opts.versusSetup) opts.versusSetup.set({ ...versusConfigState });",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "Back writes the retained Versus Setup store on its way out. The issue's own criterion is that Back never changes persisted settings; this is the smallest write a Back could make and the spies in the callback sweep must see it. 1 of 244 in hud.test.ts (244): the callback-and-store sweep under \"navigation layers\", whose spy on `versusSetup.set` counts the write."
+    "why": "Back writes the retained Versus Setup store on its way out. The issue's own criterion is that Back never changes persisted settings; this is the smallest write a Back could make and the spies in the callback sweep must see it. hud.navigation.test.ts (244): the callback-and-store sweep under \"navigation layers\", whose spy on `versusSetup.set` counts the write. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back fires no start, pick, reset, quit, pause, setup or open callback, leaves no reset armed, and writes nothing to the retained VS store"
+    ]
   },
   {
     "id": "hud-reopens-the-top-pane-with-a-transition",
@@ -2314,11 +2373,13 @@
     "find": "    if (result === 'already-top') {\n      // Re-render only: a second open of the pane on top must not run a transition from\n      // the pane to itself, which marks the one surface LEAVING and then ENTERING and hides\n      // it when the crossfade settles.\n      LAYERS[id].refresh?.(initial);\n      return true;\n    }",
     "replace": "    if (result === 'already-top') {\n      LAYERS[id].open(initial);\n      return true;\n    }",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "A second open of the pane already on top runs a transition from the pane to itself, which is the pre-#318 `showVersusSetup(true)` twice: the one surface is marked LEAVING and then ENTERING, and the crossfade's settle hides it. The pane the player was looking at disappears a frame later. 1 of 244 in hud.test.ts (244): \"showVersusSetup(true, cfg) twice keeps the pane open\", measured failing on the pre-#318 tree with exactly this shape."
+    "why": "A second open of the pane already on top runs a transition from the pane to itself, which is the pre-#318 `showVersusSetup(true)` twice: the one surface is marked LEAVING and then ENTERING, and the crossfade's settle hides it. The pane the player was looking at disappears a frame later. hud.navigation.test.ts (244): \"showVersusSetup(true, cfg) twice keeps the pane open\", measured failing on the pre-#318 tree with exactly this shape. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) showVersusSetup(true, cfg) twice keeps the pane open and reseeds from the second config"
+    ]
   },
   {
     "id": "escape-back-leaks-to-the-session",
@@ -2326,11 +2387,14 @@
     "find": "      disarm();\n      e.preventDefault();\n      e.stopPropagation();\n      back();\n      return;",
     "replace": "      disarm();\n      e.preventDefault();\n      back();\n      return;",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. 2 of 244 in hud.test.ts (244): both Escape cases, each asserting the bubble-phase listener saw nothing for the Escape that closed a pane."
+    "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. hud.navigation.test.ts (244): both Escape cases, each asserting the bubble-phase listener saw nothing for the Escape that closed a pane. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+      "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed"
+    ]
   },
   {
     "id": "escape-back-fires-with-no-layer",
@@ -2338,11 +2402,14 @@
     "find": "      if (e.repeat || layers.depth === 0) return;",
     "replace": "      if (e.repeat) return;",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. 2 of 244 in hud.test.ts (244): both Escape cases, each pressing Escape once more with nothing open and expecting the session to see it."
+    "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. hud.navigation.test.ts (244): both Escape cases, each pressing Escape once more with nothing open and expecting the session to see it. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+      "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed"
+    ]
   },
   {
     "id": "hud-never-syncs-the-mirror",
@@ -2350,11 +2417,14 @@
     "find": "    LAYERS[id].open(initial);\n    mirror.sync(layers.depth);\n    return true;",
     "replace": "    LAYERS[id].open(initial);\n    return true;",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. 2 of 244 in hud.test.ts (244): the fake-host and real-jsdom-history mirror cases."
+    "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. hud.navigation.test.ts (244): the fake-host and real-jsdom-history mirror cases. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "killedBy": [
+      "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+      "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint"
+    ]
   },
   {
     "id": "stack-back-pops-the-bottom",
@@ -2482,7 +2552,7 @@
     "find": "    if (controls.length > 0) controls[0].focus();\n    return true;",
     "replace": "    if (controls.length > 0) controls[0].click();\n    return true;",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "Confirm the instant a panel arrives must land focus on the first control, not activate it: a gamepad Confirm at a Main Menu with no run would otherwise start a New Game blind.",
     "expect": "killed",
@@ -2496,7 +2566,7 @@
     "find": "    if (action === 'pause') return false;\n    const container = activePanelContainer();",
     "replace": "    if (action === 'pause') return true;\n    const container = activePanelContainer();",
     "tests": [
-      "src/game/hud.test.ts",
+      "src/game/hud.navigation.test.ts",
       "src/game/route-host.test.ts"
     ],
     "why": "The HUD does not own pause. Reporting it consumed stops the page from toggling the state machine, so Start on a pad could never pause or resume.",
@@ -2512,7 +2582,7 @@
     "find": "    if (isDirection(action)) {\n      moveFocus(container, action);\n      return true;\n    }",
     "replace": "    if (isDirection(action)) {\n      moveFocus(container, 'down');\n      return true;\n    }",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "Up and Left must walk backwards (and, with geometry, Left/Right must stay in the row): a dispatcher that drops the direction turns every D-pad press into Down.",
     "expect": "killed",
@@ -2526,7 +2596,7 @@
     "find": "    if (action === 'back') return back();\n    if (action === 'pause') return false;",
     "replace": "    if (action === 'back') {\n      back();\n      return true;\n    }\n    if (action === 'pause') return false;",
     "tests": [
-      "src/game/hud.test.ts",
+      "src/game/hud.navigation.test.ts",
       "src/game/route-host.test.ts"
     ],
     "why": "Back with nothing open must report unconsumed so the page can make it Resume at Pause; a Back that always claims strands a paused round.",
@@ -2542,7 +2612,7 @@
     "find": "    if (consumesKey(e.target, e.key)) return;\n    const action = keyToUiAction(e.key);",
     "replace": "    if (e.target instanceof HTMLInputElement) return;\n    const action = keyToUiAction(e.key);",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "The roving-focus handler must ask the consume rule: the old any-input early return ate Escape at a focused volume slider, so Back never fired there (issue #494's product-visible ruling).",
     "expect": "killed",
@@ -2556,7 +2626,7 @@
     "find": "    if (consumesKey(e.target, e.key)) return;\n    const action = keyToUiAction(e.key);",
     "replace": "    const action = keyToUiAction(e.key);",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "Without the consume rule the roving focus takes ArrowDown away from a focused volume slider, which is the key the slider exists to consume.",
     "expect": "killed",
@@ -2571,7 +2641,7 @@
     "find": "      (same ?? sameRow ?? controls[0])?.focus();",
     "replace": "      controls[0]?.focus();",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "A re-render must put focus back on the SAME candidate on the SAME row; landing on the pane's first control loses the player's place on every hotplug.",
     "expect": "killed",
@@ -2586,7 +2656,7 @@
     "find": "      (same ?? sameRow ?? controls[0])?.focus();",
     "replace": "      (same ?? controls[0])?.focus();",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "When the focused candidate vanishes (its pad unplugged), focus must stay on that row rather than jump to the first row's first control.",
     "expect": "killed",
@@ -2600,7 +2670,7 @@
     "find": "      versusSlotRowsEl.appendChild(row);\n    }\n    restoreFocus();",
     "replace": "      versusSlotRowsEl.appendChild(row);\n    }",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "A hotplug repaints every Versus Setup row; without the restore the focused role button is gone and focus falls to body.",
     "expect": "killed",
@@ -2614,7 +2684,7 @@
     "find": "      container.appendChild(row);\n    }\n    restoreFocus();",
     "replace": "      container.appendChild(row);\n    }",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "why": "A hotplug or reassignment rebuilds the Controllers rows; without the restore the focused candidate is gone and focus falls to body.",
     "expect": "killed",
@@ -2818,8 +2888,8 @@
     "replace": "    if (row) {",
     "why": "Every candidate joins the first row, so geometry collapses to document order: Right walks off the end of a segmented row and Down never reaches the next card. This is the mutation issue #495's acceptance names -- a model that is really DOM order must be killed.",
     "tests": [
-      "src/game/spatial-focus.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/spatial-focus.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
@@ -2840,8 +2910,8 @@
     "replace": "    if (row && false) {",
     "why": "Each control becomes its own row, so Left and Right wrap onto the focused control itself and never move along the segment.",
     "tests": [
-      "src/game/spatial-focus.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/spatial-focus.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
@@ -2865,8 +2935,8 @@
     "replace": "    if (false) {\n      best = cand;\n      bestDist = d;\n    }",
     "why": "Up and Down must land on the control whose centre is nearest, not the row's first: a bot card's difficulty column reached by Down from the card above is the case.",
     "tests": [
-      "src/game/spatial-focus.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/spatial-focus.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
@@ -2882,8 +2952,8 @@
     "replace": "  if (false) {",
     "why": "With one row (every rect empty under jsdom, or a genuinely single-row pane) Up and Down would wrap onto the same row and land on the focused control: a dead end, and the pre-#495 keyboard walk that closes over every control would spin.",
     "tests": [
-      "src/game/spatial-focus.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/spatial-focus.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
@@ -2907,8 +2977,8 @@
     "replace": "    return row[Math.min(Math.max(colIdx + step, 0), row.length - 1)].item;",
     "why": "Right at the end of a row must wrap to its start (issue #495: 'row wrap at the ends and no dead ends'); clamping leaves the player stuck on the last option.",
     "tests": [
-      "src/game/spatial-focus.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/spatial-focus.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
@@ -2927,8 +2997,7 @@
     "replace": "  const target = rows[Math.min(Math.max(rowIdx + (forward ? 1 : -1), 0), rows.length - 1)];",
     "why": "Up from the first row must reach the last and Down from the last the first; clamping makes the top and bottom rows dead ends.",
     "tests": [
-      "src/game/spatial-focus.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/spatial-focus.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
@@ -2942,7 +3011,7 @@
     "replace": "      list.map((el) => ({ item: el, rect: { left: 0, top: 0, width: 0, height: 0 } })),",
     "why": "The HUD must feed real rectangles to the spatial model; with empty rects every pane degrades to the document-order walk, and the pure module's tests cannot see that the HUD never measured. The drawn-layout tests in hud.test.ts are what catch it.",
     "tests": [
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
     "killedBy": [

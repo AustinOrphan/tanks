@@ -379,7 +379,8 @@
     "replace": "      : [];",
     "why": "A `killedBy` entry whose named test PASSED under the mutation must mismatch by name -- that rot is the one thing the named-test contract exists to catch; treating every name as satisfied turns killedBy into an outcome-only pin.",
     "tests": [
-      "tools/mutate/orchestrate.test.ts"
+      "tools/mutate/orchestrate.test.ts",
+      "tools/mutate/subprocess.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
