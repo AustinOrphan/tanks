@@ -852,11 +852,13 @@
     "find": "    initialRoute: deps.launchGate.dismissed() ? 'main-menu' : 'launch',",
     "replace": "    initialRoute: 'launch',",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Opens every session on the Launch route, which is what production did before issue #317. boot.ts rebuilds the whole session on a Campaign<->Versus switch, so this re-shows 'press any key or tap to begin' to a player who already dismissed it -- the acceptance criterion 'the Launch gate appears at most once per document load'. Invisible to every session-level test in loop.test.ts, because one session in isolation SHOULD open at Launch, and invisible to boot.test.ts, which fakes startGame. Killed only by the boot+startGameWith seam, which composes the real boot() with the real startGameWith over the REAL state machine. Kills BOTH dismissal tests (pointer and keyboard), because neither session can reach a dismissed gate: 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered. RE-ANCHORED by issue #468, and the reachability of the defect changed with it. The line moved from `startGameWith` to `route-host.ts`, where it is evaluated ONCE PER PAGE rather than once per session -- so a reboot can no longer replay the splash by rebuilding a machine, because no machine is rebuilt. What this mutation now describes is a page that opens on the splash after a reload the gate should have been carried through, which is the surviving half of the original criterion. `route-host.test.ts` joins its scope because that is where the page-level route decision now lives; the count below is the re-measured one, not the pre-move one: 3 of the old scope became 1 of 425, because the reboot cases it used to kill are now covered by attach() rather than by rebuilding a machine. The surviving killer is route-host.test.ts s opens on Main Menu when the gate was already dismissed, which was written FOR this entry after the re-anchor showed it SURVIVING 0 of 423.",
+    "why": "Opens every session on the Launch route, which is what production did before issue #317. boot.ts rebuilds the whole session on a Campaign<->Versus switch, so this re-shows 'press any key or tap to begin' to a player who already dismissed it -- the acceptance criterion 'the Launch gate appears at most once per document load'. Invisible to every session-level test in loop.test.ts, because one session in isolation SHOULD open at Launch, and invisible to boot.test.ts, which fakes startGame. Killed only by the boot+startGameWith seam, which composes the real boot() with the real startGameWith over the REAL state machine. Kills BOTH dismissal tests (pointer and keyboard), because neither session can reach a dismissed gate: 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered. RE-ANCHORED by issue #468, and the reachability of the defect changed with it. The line moved from `startGameWith` to `route-host.ts`, where it is evaluated ONCE PER PAGE rather than once per session -- so a reboot can no longer replay the splash by rebuilding a machine, because no machine is rebuilt. What this mutation now describes is a page that opens on the splash after a reload the gate should have been carried through, which is the surviving half of the original criterion. `route-host.test.ts` joins its scope because that is where the page-level route decision now lives; the count below is the re-measured one, not the pre-move one: 3 of the old scope became 1 of 425, because the reboot cases it used to kill are now covered by attach() rather than by rebuilding a machine. The surviving killer is route-host.test.ts s opens on Main Menu when the gate was already dismissed, which was written FOR this entry after the re-anchor showed it SURVIVING 0 of 423. Pinned by NAME since issue #504 rather than by a count: the count drifted from 2 to 3 when issue #496 added tests to the same file, and only one of those three failures is the load-bearing one -- the two incidental failures would make this entry brittle if they were named too.",
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "createRouteHost: where the page opens opens on Main Menu when the gate was already dismissed"
     ]
   },
   {
@@ -2651,8 +2653,8 @@
   {
     "id": "route-host-pad-does-not-dismiss-launch",
     "file": "src/game/route-host.ts",
-    "find": "  const onMenuAction = (action: UiAction): void => {\n    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }",
-    "replace": "  const onMenuAction = (action: UiAction): void => {\n    if (sm.atLaunch) return;",
+    "find": "  const onMenuAction = (action: UiAction): void => {\n    noteModality('gamepad');\n    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }",
+    "replace": "  const onMenuAction = (action: UiAction): void => {\n    noteModality('gamepad');\n    if (sm.atLaunch) return;",
     "tests": [
       "src/game/route-host.test.ts"
     ],
@@ -2947,6 +2949,129 @@
       "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
       "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
       "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card"
+    ]
+  },
+  {
+    "id": "modality-switches-on-a-single-stray-event",
+    "file": "src/game/modality.ts",
+    "find": "      return now - candidateSince >= switchAfterMs ? settle(modality) : false;",
+    "replace": "      return settle(modality);",
+    "why": "Without the threshold a palm on a trackpad or a pad's idle drift rewrites the prompts mid-read, which is the flicker issue #496 exists to prevent; the stray-event case is what sees it.",
+    "tests": [
+      "src/game/modality.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "modality tracker: a switch needs the threshold (issue #496) switches once the candidate has held the field for the whole threshold, and not before",
+      "modality tracker: a switch needs the threshold (issue #496) the threshold is injected: a tracker built with a different one switches on that one"
+    ]
+  },
+  {
+    "id": "modality-never-switches-after-the-threshold",
+    "file": "src/game/modality.ts",
+    "find": "      return now - candidateSince >= switchAfterMs ? settle(modality) : false;",
+    "replace": "      return false;",
+    "occurrence": 1,
+    "why": "A prompt that never follows a deliberate change of device is the other half of the failure: a player who picks up a pad keeps reading key names.",
+    "tests": [
+      "src/game/modality.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "createRouteHost: prompts follow the input the player is using (issue #496) a gamepad naming its own button takes over from the keyboard, and the mouse is not touch",
+      "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+      "modality tracker: a switch needs the threshold (issue #496) switches once the candidate has held the field for the whole threshold, and not before",
+      "modality tracker: a switch needs the threshold (issue #496) the threshold is injected: a tracker built with a different one switches on that one",
+      "modality tracker: a switch needs the threshold (issue #496) two challengers interleaving never switch: each restarts the other's clock, however long it goes on"
+    ]
+  },
+  {
+    "id": "modality-first-input-waits-for-the-threshold",
+    "file": "src/game/modality.ts",
+    "find": "      if (current === null) return settle(modality); // the first input of the page",
+    "replace": "      if (current === null) { candidate = modality; candidateSince = now; return false; }",
+    "why": "The first input on a fresh page is accepted with no history (issue #496's ruling): the splash's own 'press any key or tap' is answered by whatever the player reaches for, and the visual job's first Space must not wait out a threshold.",
+    "tests": [
+      "src/game/modality.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "createRouteHost: prompts follow the input the player is using (issue #496) a gamepad naming its own button takes over from the keyboard, and the mouse is not touch",
+      "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+      "createRouteHost: prompts follow the input the player is using (issue #496) the first input of the page sets the hint with no threshold: a touch tap drops the key hint",
+      "modality tracker: a switch needs the threshold (issue #496) a single stray event of another modality does not switch, and the incumbent resets the challenge",
+      "modality tracker: a switch needs the threshold (issue #496) switches once the candidate has held the field for the whole threshold, and not before",
+      "modality tracker: a switch needs the threshold (issue #496) the incumbent repeating is never a change, however long it goes on",
+      "modality tracker: a switch needs the threshold (issue #496) the threshold is injected: a tracker built with a different one switches on that one",
+      "modality tracker: a switch needs the threshold (issue #496) two challengers interleaving never switch: each restarts the other's clock, however long it goes on",
+      "modality tracker: the first input wins immediately (issue #496) accepts the very first input of the page with no history, whatever it is",
+      "modality tracker: the first input wins immediately (issue #496) notifies subscribers on that first input, and the unsubscribe stops it"
+    ]
+  },
+  {
+    "id": "modality-hint-names-a-key-on-touch",
+    "file": "src/game/modality.ts",
+    "find": "  if (modality === 'touch') return '';",
+    "replace": "  if (false) return '';",
+    "why": "A touch-only device has no key to press, so a key hint there is an instruction the player cannot follow -- the acceptance criterion 'touch-only devices show no key hints'.",
+    "tests": [
+      "src/game/modality.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+      "createRouteHost: prompts follow the input the player is using (issue #496) the first input of the page sets the hint with no threshold: a touch tap drops the key hint",
+      "keyHint: one policy for static hints across the HUD (issue #496) names the key for a keyboard, a pad's button only when one is bound, nothing for touch, and keeps the key for a mouse"
+    ]
+  },
+  {
+    "id": "modality-pen-and-touch-read-as-a-mouse",
+    "file": "src/game/route-host.ts",
+    "find": "    noteModality(pointerType === 'touch' || pointerType === 'pen' ? 'touch' : 'pointer');",
+    "replace": "    noteModality('pointer');",
+    "why": "The browser's own `pointerType` is what tells a finger from a mouse on a laptop that has both; collapsing them leaves a touchscreen user reading key hints.",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+      "createRouteHost: prompts follow the input the player is using (issue #496) the first input of the page sets the hint with no threshold: a touch tap drops the key hint"
+    ]
+  },
+  {
+    "id": "modality-change-re-renders-a-surface",
+    "file": "src/game/hud.ts",
+    "find": "    setMuted(currentMuted); // repaint the hints, nothing else: no surface is re-rendered",
+    "replace": "    setMuted(currentMuted);\n    setState(currentSurface);",
+    "why": "Issue #496's ruling that a modality change never reflows Settings: repainting a surface on every switch is exactly the reflow it forbids, and the contrast test against the HUD's setState count is what sees it.",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "createRouteHost: the gamepad menu poller (issue #494) Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused",
+      "createRouteHost: the gamepad menu poller (issue #494) a held A across a Resume does not confirm again, so the pad that resumed the round is silent at the next Pause"
+    ]
+  },
+  {
+    "id": "modality-names-an-unbound-pad-button",
+    "file": "src/game/modality.ts",
+    "find": "  if (modality === 'gamepad') return button === null ? '' : ` (${button})`;",
+    "replace": "  if (modality === 'gamepad') return ` (${button})`;",
+    "why": "A control with no pad binding must not name a button: mute is bound to M and its own on-screen button and nothing else, so a hint naming a pad button instructs the player to press something inert (caught in review of issue #496, where the hint claimed `Y`). A pad reaches the control through focus like any other.",
+    "tests": [
+      "src/game/modality.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "createRouteHost: prompts follow the input the player is using (issue #496) a gamepad naming its own button takes over from the keyboard, and the mouse is not touch",
+      "keyHint: one policy for static hints across the HUD (issue #496) names the key for a keyboard, a pad's button only when one is bound, nothing for touch, and keeps the key for a mouse"
     ]
   }
 ]

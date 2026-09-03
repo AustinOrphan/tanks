@@ -59,6 +59,9 @@ boot({
           const id = requestAnimationFrame(cb);
           return () => cancelAnimationFrame(id);
         },
+        // Monotonic, unlike Date.now: the modality threshold measures a span, and a
+        // clock the system can step backwards would make a switch arrive early or never.
+        now: () => performance.now(),
       },
       requests,
     ),

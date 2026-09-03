@@ -6,6 +6,7 @@ import { locationToHudSurface, type GameDeps } from './loop';
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
 import type { GetGamepads } from '../input/gamepad';
 import type { UiAction } from '../input/ui-actions';
+import { createModalityTracker, type Modality } from './modality';
 import type { VersusConfig } from './versus-config';
 import type { SlotSource } from '../input/assignment';
 
@@ -54,6 +55,12 @@ export type RouteHostDeps = RouteUiDeps &
     readonly menuGamepads: GetGamepads;
     /** Schedule one page frame; returns the cancel. `requestAnimationFrame` in the browser. */
     readonly requestFrame: (cb: (now: number) => void) => () => void;
+    /**
+     * The clock the modality tracker measures its switch threshold on (issue #496),
+     * milliseconds and monotonic. `performance.now()` in the browser; a test drives it
+     * by hand so the threshold under test is the one the assertion names.
+     */
+    readonly now: () => number;
   };
 
 /**
@@ -433,11 +440,33 @@ export function createRouteHost(
   });
   hud.setState(locationToHudSurface(sm.location));
 
+  /**
+   * Which input the player is using, for the prompts that name a key or a button (issue
+   * #496). Every page-level input path reports here -- the keydown listener below, the
+   * pointer gesture, and the gamepad poller's actions -- and only a settled change
+   * repaints the HUD's hints. Touch is told apart from mouse by the pointer event's own
+   * `pointerType`, which is the browser's answer rather than a capability guess: a
+   * laptop with a touchscreen genuinely produces both, and the last one used is the one
+   * the player is holding.
+   */
+  const modality = createModalityTracker();
+  const noteModality = (kind: Modality): void => {
+    if (modality.note(kind, deps.now())) hud.setModality(kind);
+  };
+
   const onLaunchGesture = (): void => {
     sm.dismissLaunch();
     deps.launchGate.dismiss();
   };
-  deps.host.addEventListener('pointerdown', onLaunchGesture);
+  const onPointerDown = (e?: Event): void => {
+    // Optional, and read defensively: the pre-#496 handler ignored its argument, and
+    // fakes in the session tests still invoke the page's listeners with none. A pointer
+    // event that does not say what it came from is a mouse, the majority case.
+    const pointerType = (e as { pointerType?: string } | undefined)?.pointerType;
+    noteModality(pointerType === 'touch' || pointerType === 'pen' ? 'touch' : 'pointer');
+    onLaunchGesture();
+  };
+  deps.host.addEventListener('pointerdown', onPointerDown);
 
   /**
    * ONE keydown listener for the whole page, and it decides.
@@ -451,6 +480,7 @@ export function createRouteHost(
    * a host neither of them owns.
    */
   const onHostKey = (e: KeyboardEvent): void => {
+    noteModality('keyboard');
     if (sm.atLaunch) {
       onLaunchGesture();
       return;
@@ -475,6 +505,7 @@ export function createRouteHost(
    * records that exception.
    */
   const onMenuAction = (action: UiAction): void => {
+    noteModality('gamepad');
     if (sm.atLaunch) {
       onLaunchGesture();
       return;
@@ -571,7 +602,7 @@ export function createRouteHost(
       };
     },
     dispose(): void {
-      deps.host.removeEventListener('pointerdown', onLaunchGesture);
+      deps.host.removeEventListener('pointerdown', onPointerDown);
       deps.host.removeEventListener('keydown', onHostKey);
       // The frame loop first: a frame already queued must find the poller disposed
       // (its poll is then a no-op) and must not queue another.

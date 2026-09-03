@@ -1098,6 +1098,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setTouchIndicator: (t: TouchIndicator) => rec.touchPushes.push(t),
         setMuted: (m) => rec.muted.push(m),
+        setModality: () => {},
         setVolume: (v: number) => rec.volumeEchoes.push(v),
         setShellCount: (i) => rec.shellCounts.push(i),
         setLevel: (c: number, t: number) => rec.hudLevels.push([c, t]),
@@ -1603,7 +1604,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
    */
   let lazyRouteHost: RouteHost | null = null;
   const buildRouteHost = (): RouteHost =>
-    (lazyRouteHost ??= createRouteHost(uiRoot, { ...deps, menuGamepads: () => [], requestFrame: () => () => {} }, {
+    (lazyRouteHost ??= createRouteHost(uiRoot, { ...deps, menuGamepads: () => [], requestFrame: () => () => {}, now: () => 0 }, {
       // RECORDED, not serviced (issue #428). These suites call `startGameWith`
       // themselves, so a seam that started a session here would leave two live and make
       // every count below ambiguous. `bootPageOn` is where the request is honoured.
@@ -8238,6 +8239,7 @@ function bootPageOn(
           ...h.deps,
           menuGamepads: () => [],
           requestFrame: () => () => {},
+          now: () => 0,
           createStateMachine: (config) => {
             capturedMachine = createGameStateMachine(config);
             return capturedMachine;
