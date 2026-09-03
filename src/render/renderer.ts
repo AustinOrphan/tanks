@@ -15,6 +15,9 @@ import type { SkinId } from '../presentation/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
 import { createAiContact, type AiContact } from './ai-contact';
 import { createBlockedFireRingSystem, type BlockedFireRingSystem } from './blocked-fire-ring';
+import { createBlockedFireMuzzleSystem, type BlockedFireMuzzleSystem } from './blocked-fire-muzzle';
+import { createBlockedFireTurretSystem, type BlockedFireTurretSystem } from './blocked-fire-turret';
+import { createBlockedFirePipsSystem, type BlockedFirePipsSystem } from './blocked-fire-pips';
 
 export interface Renderer3D {
   render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
@@ -79,8 +82,13 @@ export interface RendererOptions {
    */
   readonly aiContact?: boolean;
   /**
-   * `?dev=1&blockedFire=ring` or `ring-audio` (devflags.ts): issue #356's tank-local
-   * visual candidate. Null/absent draws nothing. See blocked-fire-ring.ts.
+   * `?dev=1&blockedFire=<cue>` (devflags.ts): which of issue #356's candidate refusal
+   * cues to show. Four of the five visual arms are built here -- `ring`/`ring-audio`
+   * (blocked-fire-ring.ts), `muzzle` (blocked-fire-muzzle.ts), `turret`
+   * (blocked-fire-turret.ts) and `pips` (blocked-fire-pips.ts); the fifth, `hud`, is a
+   * DOM surface and lives in game/blocked-fire-hud.ts. Null/absent draws nothing, and
+   * each system re-checks the cue in its own `spawn` -- these constructor gates only
+   * decide whether the scene objects exist at all.
    */
   readonly blockedFire?: BlockedFireCue | null;
 }
@@ -117,6 +125,16 @@ export function createRenderer(
     options.blockedFire === 'ring' || options.blockedFire === 'ring-audio'
       ? createBlockedFireRingSystem(ctx.scene)
       : null;
+  // One arm per cue, built only for the cue that names it: an unbuilt system is the
+  // cheapest possible "off", and the comparison is between one arm at a time.
+  const blockedFireMuzzle: BlockedFireMuzzleSystem | null =
+    options.blockedFire === 'muzzle' ? createBlockedFireMuzzleSystem(ctx.scene) : null;
+  // `entities`, not the scene: this arm moves the REAL turret and looks it up per frame
+  // through EntityViews.turretOf -- see blocked-fire-turret.ts.
+  const blockedFireTurret: BlockedFireTurretSystem | null =
+    options.blockedFire === 'turret' ? createBlockedFireTurretSystem(entities) : null;
+  const blockedFirePips: BlockedFirePipsSystem | null =
+    options.blockedFire === 'pips' ? createBlockedFirePipsSystem(ctx.scene) : null;
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -139,6 +157,15 @@ export function createRenderer(
     deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
     blockedFireRing?.spawn(events, curr, options.blockedFire);
     blockedFireRing?.update(dt);
+    blockedFireMuzzle?.spawn(events, curr, options.blockedFire);
+    blockedFireMuzzle?.update(dt);
+    // AFTER entities.sync, and load-bearing: sync writes the turret's rotation every
+    // frame, and this writes the recoil offset onto the object sync has already posed.
+    blockedFireTurret?.spawn(events, curr, options.blockedFire);
+    blockedFireTurret?.update(dt);
+    // `curr` in update too: the pip strip follows its tank for the half-second it lives.
+    blockedFirePips?.spawn(events, curr, options.blockedFire);
+    blockedFirePips?.update(dt, curr);
     deathPulse.update(dt);
     treadTrails.sync(prev, curr);
     treadTrails.update(dt);
@@ -170,6 +197,9 @@ export function createRenderer(
     mineDebug?.dispose();
     aiContact?.dispose();
     blockedFireRing?.dispose();
+    blockedFireMuzzle?.dispose();
+    blockedFireTurret?.dispose();
+    blockedFirePips?.dispose();
     entities.dispose();
     particles.dispose();
     deathPulse.dispose();
@@ -189,6 +219,9 @@ export function createRenderer(
     setReducedMotion: (on: boolean) => {
       deathPulse.setReducedMotion(on);
       blockedFireRing?.setReducedMotion(on);
+      blockedFireMuzzle?.setReducedMotion(on);
+      blockedFireTurret?.setReducedMotion(on);
+      blockedFirePips?.setReducedMotion(on);
     },
     dispose,
   };

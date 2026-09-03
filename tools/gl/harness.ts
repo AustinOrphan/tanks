@@ -17,6 +17,7 @@ import { createAimRay } from '../../src/render/aimray';
 import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { createWorld } from '../../src/sim/world';
+import { configFor } from '../../src/sim/config';
 import type { Tank, Spawn, Wall } from '../../src/sim/types';
 import { framedBounds } from '../../src/render/framing';
 import { synthVoice, isSfxKey } from '../../src/audio/synth';
@@ -1863,13 +1864,35 @@ check('the three contact states are distinguishable ON SCREEN, not just in the c
   return null;
 });
 
-function blockedFireFrame(cue: 'ring' | null): Uint8Array {
+/**
+ * One rendered frame of a refused shot under `cue`, against a fixed tank pose.
+ *
+ * The world carries a FULL magazine of the owner's own live shells, because one of the
+ * arms reads that count rather than merely reacting to the event: `pips` lights one pip
+ * per shell in the air (blocked-fire-pips.ts), so a world with an empty magazine would
+ * draw the strip entirely dim and understate the cue. The shells themselves are identical
+ * in every frame here, so they cancel out of every comparison below.
+ *
+ * "Full" is DERIVED from the tank's own resolved weapon config, not a literal 5 that
+ * happens to match today's cap: the ordnance experiment (#356's sibling work) exists to
+ * retune `maxActiveProjectiles`, and a hardcoded count would quietly stop being a full
+ * magazine the day it moves, leaving this fixture measuring a half-lit strip while its
+ * comment still claimed otherwise.
+ */
+function blockedFireFrame(cue: 'ring' | 'muzzle' | 'turret' | 'pips' | null): Uint8Array {
   const c = placedCanvas(800, 500, 0, 0, 800, 500);
   const r = createRenderer(c, W, H, BOUNDARY, { blockedFire: cue });
   const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
   const w = soloTankWorld(W / 2, H / 2);
+  const cap = configFor('player').weapon.maxActiveProjectiles;
+  for (let i = 0; i < cap; i++) {
+    w.bullets.push({
+      id: 900 + i, ownerId: 1, type: 'normal',
+      pos: { x: 1 + i * 0.5, y: 1 }, vel: { x: 0, y: 0 }, bouncesLeft: 1, alive: true,
+    } as (typeof w.bullets)[number]);
+  }
   const events = [{ type: 'fire-blocked', ownerId: 1, reason: 'shell-cap' }] as unknown as Parameters<typeof r.render>[3];
-  // One frame with the event, then a second so the ring has actually been through
+  // One frame with the event, then a second so the cue has actually been through
   // `update` -- a system that spawned correctly and never advanced would still differ here on
   // the first frame alone, which would prove less than it appears to.
   r.render(w, w, 1, events, 1 / 60);
@@ -1889,6 +1912,53 @@ check('the blocked-fire ring (#356) reaches the framebuffer through renderer.ts'
   const moved = bytesDiffering(off, on);
   if (moved < 500) {
     return `only ${moved} of ${on.length} bytes changed with blockedFire=ring -- the cue did not reach the framebuffer`;
+  }
+  return null;
+});
+
+check('every #516 visual arm reaches the framebuffer, and none looks like another', () => {
+  // The ring check above, extended to the arms issue #516 adds -- and then some. Reaching
+  // the framebuffer is necessary but not sufficient for a COMPARISON: four cues that all
+  // painted the same pixels would pass four independent "did it draw" checks and still be
+  // one treatment wearing four names. So each arm is measured against the flag being off,
+  // AND against every other arm.
+  //
+  // MEASURED on this tree, differing bytes out of 1,600,000, two frames after the refusal
+  // (so each arm is sampled part-way through its own decay, not at its peak), at the
+  // shipped cap of 5 -- `pips` draws one pip per capacity slot, so its own number moves
+  // with a cap retune while the other three do not:
+  //
+  //   off/ring   1306      ring/muzzle  1479      muzzle/turret  1581
+  //   off/muzzle  183      ring/turret  2665      muzzle/pips     573
+  //   off/turret 1448      ring/pips    1518      turret/pips    1838
+  //   off/pips    390
+  //
+  // The bad value is 0 in every case -- the flag off draws literally nothing -- so each
+  // floor below sits at roughly a third of its own measured value: enough headroom for a
+  // different GPU's anti-aliasing, nowhere near the zero a broken wiring produces. Per
+  // arm rather than one number for all four, because the arms are deliberately different
+  // SIZES: a ring around the whole hull moves an order of magnitude more bytes than a
+  // barrel sliding 0.07 units, and one floor generous enough for the ring would be
+  // unreachable for the muzzle flash. The pair floor is a single number because the
+  // smallest measured pair (muzzle/pips, 573) is already the tightest constraint.
+  const FLOORS = { ring: 400, muzzle: 60, turret: 350, pips: 120 } as const;
+  const PAIR_FLOOR = 150;
+  const arms = ['ring', 'muzzle', 'turret', 'pips'] as const;
+  const off = blockedFireFrame(null);
+  const frames = new Map<string, Uint8Array>(arms.map((a) => [a, blockedFireFrame(a)]));
+  for (const arm of arms) {
+    const moved = bytesDiffering(off, frames.get(arm) as Uint8Array);
+    if (moved < FLOORS[arm]) {
+      return `only ${moved} of ${off.length} bytes changed with blockedFire=${arm} -- the cue did not reach the framebuffer`;
+    }
+  }
+  for (let i = 0; i < arms.length; i++) {
+    for (let j = i + 1; j < arms.length; j++) {
+      const moved = bytesDiffering(frames.get(arms[i]) as Uint8Array, frames.get(arms[j]) as Uint8Array);
+      if (moved < PAIR_FLOOR) {
+        return `${arms[i]} and ${arms[j]} differ by only ${moved} bytes -- they are the same treatment on screen`;
+      }
+    }
   }
   return null;
 });

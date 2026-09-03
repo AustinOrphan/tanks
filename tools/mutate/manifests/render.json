@@ -326,5 +326,176 @@
     "killedBy": [
       "blocked-fire ring (issue #356) snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight"
     ]
+  },
+  {
+    "id": "blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own",
+    "file": "src/render/blocked-fire-muzzle.ts",
+    "find": "    if (!cueDrives(cue, 'visual') || cue !== 'muzzle') return;",
+    "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'muzzle' && cue !== 'ring')) return;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-muzzle.test.ts"
+    ],
+    "why": "The muzzle arm's own cue gate, widened so it also flashes for `ring` -- the exact shape of defect that shipped `ring-audio` silent (see blocked-fire-ring-drops-its-paired-audio-arm): not a wrong branch but a cue no assertion mentions. Issue #516 exists to make five visual treatments COMPARABLE, so an arm that also fires under another arm's flag corrupts the comparison rather than merely looking wrong -- the owner would be judging `ring` against `ring plus a muzzle flash`. Only the one-row-per-cue table can catch it: every case written per remembered scenario passes, since `muzzle` still flashes and null still draws nothing. MEASURED with the table's `it` deleted from the file: 0 of 8 remaining tests failed (survived). With it: killed.",
+    "killedBy": [
+      "blocked-fire muzzle flash (issue #516, parent #356) flashes for EVERY cue carrying `muzzle`, and for no other -- one row per cue"
+    ]
+  },
+  {
+    "id": "blocked-fire-muzzle-flashes-at-the-tank-instead-of-the-barrel",
+    "file": "src/render/blocked-fire-muzzle.ts",
+    "find": "      f.mesh.position.set(\n        owner.pos.x + Math.cos(owner.turretAngle) * SHELL_MUZZLE_FORWARD,\n        BULLET_Y,\n        owner.pos.y + Math.sin(owner.turretAngle) * SHELL_MUZZLE_FORWARD,\n      );",
+    "replace": "      f.mesh.position.set(owner.pos.x, BULLET_Y, owner.pos.y);",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-muzzle.test.ts"
+    ],
+    "why": "Drops the muzzle offset, so the flash goes off inside the tank rather than at the barrel opening. That is not a cosmetic slip: it turns issue #356's WEAPON-LOCAL candidate into a second tank-local one, which is the treatment `ring` already occupies, and the comparison would then be run on two arms that are the same idea. The position is the same point bullets.ts hands a real `fire` event as its flash (SHELL_MUZZLE_FORWARD along the turret), so this also breaks the arm's whole premise -- the shot's own visual, in the shot's own place.",
+    "killedBy": [
+      "blocked-fire muzzle flash (issue #516, parent #356) sits at the MUZZLE, on the barrel centreline -- not on the tank"
+    ]
+  },
+  {
+    "id": "blocked-fire-muzzle-outlives-the-shot-it-refused",
+    "file": "src/render/blocked-fire-muzzle.ts",
+    "find": "const LIFETIME_SECONDS = 0.07;",
+    "replace": "const LIFETIME_SECONDS = 0.3;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-muzzle.test.ts"
+    ],
+    "why": "`muzzle` is 'the shot's own visual, CUT SHORT' (issue #516's wording), and the cut is the whole distinction from a real discharge: a real fire burst's particles live 0.18s and travel. At 0.3s the refusal blazes longer than the shot it stands in for, which is both a wrong cue and, at a held trigger against a full cap, visual noise of exactly the kind #356 forbids. Duration is a feel constant, so this is pinned as a BOUND rather than an exact value -- the test asserts the flash is gone inside a tenth of a second.",
+    "killedBy": [
+      "blocked-fire muzzle flash (issue #516, parent #356) is CUT SHORT: it collapses and fades, and is gone inside a tenth of a second"
+    ]
+  },
+  {
+    "id": "blocked-fire-muzzle-freezes-instead-of-resting-under-reduced-motion",
+    "file": "src/render/blocked-fire-muzzle.ts",
+    "find": "      f.mesh.scale.setScalar(reducedMotion ? 1 : 1 - (1 - SHRINK_TO) * k);",
+    "replace": "      if (!reducedMotion) f.mesh.scale.setScalar(1 - (1 - SHRINK_TO) * k);",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-muzzle.test.ts"
+    ],
+    "why": "The landmine blocked-fire-ring.ts records, reproduced on this arm: skipping the scale term under reduced motion instead of writing a rest scale freezes an ALREADY-LIVE flash at whatever size it had collapsed to when the preference flipped, rather than moving it to rest. Reachable only mid-flight, because `prefers-reduced-motion` is a live media query -- the test that sets the preference BEFORE spawning stays green under this, which is why one reduced-motion case is not enough.",
+    "killedBy": [
+      "blocked-fire muzzle flash (issue #516, parent #356) snaps an ALREADY-LIVE flash to full size when reduced motion turns on mid-flight"
+    ]
+  },
+  {
+    "id": "blocked-fire-turret-kicks-for-an-arm-that-is-not-its-own",
+    "file": "src/render/blocked-fire-turret.ts",
+    "find": "    if (!cueDrives(cue, 'visual') || cue !== 'turret') return;",
+    "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'turret' && cue !== 'ring')) return;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-turret.test.ts"
+    ],
+    "why": "This arm's own cue gate, widened so the gun also stutters under `ring`. Same defect class and same rationale as blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own: only the one-row-per-cue table can fail on a cue no other assertion names, and an arm that fires under another arm's flag makes issue #356's ruling on a treatment nobody built. MEASURED with the table's `it` deleted from the file: 0 of 9 remaining tests failed (survived). With it: killed.",
+    "killedBy": [
+      "blocked-fire turret stutter (issue #516, parent #356) kicks for EVERY cue carrying `turret`, and for no other -- one row per cue"
+    ]
+  },
+  {
+    "id": "blocked-fire-turret-lunges-forward-instead-of-recoiling",
+    "file": "src/render/blocked-fire-turret.ts",
+    "find": "    return KICK * (1 - k) * Math.abs(Math.sin(k * Math.PI * 2 * CYCLES));",
+    "replace": "    return KICK * (1 - k) * Math.sin(k * Math.PI * 2 * CYCLES);",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-turret.test.ts"
+    ],
+    "why": "Drops the `abs`, so the second half of every cycle drives the turret FORWARD along the bore -- the gun lunging at the target. A recoil that pushes out is the visual language of firing, which is precisely the reading this arm exists to avoid: #356 needs the player to infer that the shot did not happen. The sign is not a detail here, it is the message.",
+    "killedBy": [
+      "blocked-fire turret stutter (issue #516, parent #356) recoils BACKWARD along the bore, never forward",
+      "blocked-fire turret stutter (issue #516, parent #356) STUTTERS -- two decaying bumps, not one push"
+    ]
+  },
+  {
+    "id": "blocked-fire-turret-pushes-once-instead-of-stuttering",
+    "file": "src/render/blocked-fire-turret.ts",
+    "find": "const CYCLES = 1;",
+    "replace": "const CYCLES = 0.5;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-turret.test.ts"
+    ],
+    "why": "Halves the oscillation, leaving one smooth hump: the gun eases back and returns, which reads as a nudge or as the tank being bumped. The arm's claim is a STUTTER -- a mechanism that cycled and delivered nothing -- and two decaying bumps are what carry it. Issue #516 asks for arms that are genuinely different from one another; a single soft push is much closer to no cue at all than to the treatment being compared.",
+    "killedBy": [
+      "blocked-fire turret stutter (issue #516, parent #356) STUTTERS -- two decaying bumps, not one push"
+    ]
+  },
+  {
+    "id": "blocked-fire-turret-parks-the-gun-off-centre",
+    "file": "src/render/blocked-fire-turret.ts",
+    "find": "        rest(tankId);\n        active.delete(tankId);",
+    "replace": "        active.delete(tankId);",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-turret.test.ts"
+    ],
+    "why": "Drops the return-to-rest at the end of the stutter. This is the one arm that writes onto an object another system owns (entities.ts's turret group), on an axis `sync` never reassigns -- so the last frame's offset is PERMANENT: the tank drives on for the rest of the match with its turret sitting back on its ring, and every subsequent refusal leaves it a little further off. A cue that damages the thing it annotates is a correctness bug, not a taste one, which is why the offset's lifecycle is pinned as tightly as its shape.",
+    "killedBy": [
+      "blocked-fire turret stutter (issue #516, parent #356) puts the gun back at EXACTLY rest when the stutter ends",
+      "blocked-fire turret stutter (issue #516, parent #356) reduced motion holds ONE static offset instead of oscillating"
+    ]
+  },
+  {
+    "id": "blocked-fire-pips-draw-for-an-arm-that-is-not-their-own",
+    "file": "src/render/blocked-fire-pips.ts",
+    "find": "    if (!cueDrives(cue, 'visual') || cue !== 'pips') return;",
+    "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'pips' && cue !== 'ring')) return;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-pips.test.ts"
+    ],
+    "why": "This arm's own cue gate, widened so the strip also lights under `ring`. Same defect class and same rationale as blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own. MEASURED with the table's `it` deleted from the file: 0 of 10 remaining tests failed (survived). With it: killed.",
+    "killedBy": [
+      "blocked-fire capacity pips (issue #516, parent #356) draws for EVERY cue carrying `pips`, and for no other -- one row per cue"
+    ]
+  },
+  {
+    "id": "blocked-fire-pips-light-every-slot-instead-of-the-shells-in-the-air",
+    "file": "src/render/blocked-fire-pips.ts",
+    "find": "      const spent = ownerShellCount(world, owner.id);",
+    "replace": "      const spent = cap;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-pips.test.ts"
+    ],
+    "why": "Replaces the authoritative count with the capacity. In a real match the two are equal at a refusal -- being at the cap is what refused the shot -- so this is invisible in play and passes every scenario written from memory. It matters because the strip's whole job is to say WHY (issue #356: the player must infer capacity full rather than cooldown or lost input), and a readout that always lights every pip is asserting that, not measuring it: the moment the ordnance experiment retunes a cap, or a refusal arrives for a reason that is not 'full', it reports a number that is not true. `ownerShellCount` is half of `shellCapReached` itself, which is what makes the strip agree with the gate it explains.",
+    "killedBy": [
+      "blocked-fire capacity pips (issue #516, parent #356) counts the OWNER's live shells, not the arena's traffic",
+      "blocked-fire capacity pips (issue #516, parent #356) only the LIT pips pop"
+    ]
+  },
+  {
+    "id": "blocked-fire-pips-strand-the-strip-where-the-refusal-happened",
+    "file": "src/render/blocked-fire-pips.ts",
+    "find": "    row.group.position.set(owner.pos.x, PIP_Y, owner.pos.y + ROW_FORWARD);\n    return true;",
+    "replace": "    return owner.alive;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-pips.test.ts"
+    ],
+    "why": "Stops the strip following its tank while leaving every other behaviour intact -- the owner is still resolved, a dead one still retires the cue, only the reposition is gone. This arm lives 0.55s -- three times the ring's life, because it is READ rather than merely noticed -- and a tank at speed leaves a latched strip behind it well inside that window, so the readout detaches from the tank whose capacity it reports. The ring can be latched and is; this cannot, and the difference is exactly why `update` here takes the world at all. Deliberately targeted at the reposition alone: blocked-fire-pips-outlive-the-tank-they-report-on covers the other half of `follow`.",
+    "killedBy": [
+      "blocked-fire capacity pips (issue #516, parent #356) FOLLOWS its tank, rather than being stranded where the refusal happened"
+    ]
+  },
+  {
+    "id": "blocked-fire-pips-outlive-the-tank-they-report-on",
+    "file": "src/render/blocked-fire-pips.ts",
+    "find": "      if (!follow(row, world)) {\n        retire(row);\n        continue;\n      }",
+    "replace": "      follow(row, world);",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-pips.test.ts"
+    ],
+    "why": "Restores the shape review found on this PR: `follow` merely declines to reposition a strip whose owner is gone, instead of ending it. The strip then freezes where the tank died and stays lit for the rest of its 0.55s -- a capacity readout for a tank that no longer exists and can hold no shells, which reads as a rendering fault rather than as a cue. Reachable in ordinary play: half a second is long enough to be shot in, and #356's arms are judged in live matches. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 11 tests failed) against the file as it stood, because every other case keeps its tank alive for the whole effect. With `RETIRES the strip when its tank dies, or leaves the arena, mid-effect` present: killed.",
+    "killedBy": [
+      "blocked-fire capacity pips (issue #516, parent #356) RETIRES the strip when its tank dies, or leaves the arena, mid-effect"
+    ]
   }
 ]

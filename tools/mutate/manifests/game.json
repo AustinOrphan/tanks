@@ -3433,5 +3433,75 @@
     "killedBy": [
       "hud: the replace-run confirmation (issue #226) is announced as a modal, and earns that claim: focus cannot rove out of it into the menu behind"
     ]
+  },
+  {
+    "id": "blocked-fire-hud-flashes-for-an-arm-that-is-not-its-own",
+    "file": "src/game/blocked-fire-hud.ts",
+    "find": "      if (!cueDrives(options.blockedFire, 'visual') || options.blockedFire !== 'hud') return;",
+    "replace": "      if (!cueDrives(options.blockedFire, 'visual') || (options.blockedFire !== 'hud' && options.blockedFire !== 'ring')) return;",
+    "expect": "killed",
+    "tests": [
+      "src/game/blocked-fire-hud.test.ts"
+    ],
+    "why": "The HUD arm's own cue gate, widened so the capacity line also flashes under `ring`. Same defect class as the three render arms' gates: a cue no assertion names cannot fail anything written per remembered case, and issue #516's comparison is between a cue on the tank and a cue off it -- an arm that fires under another arm's flag makes the owner judge a combination nobody built. MEASURED with the one-row-per-cue table's `it` deleted from the file: 0 of 8 remaining tests failed (survived). With it: killed.",
+    "killedBy": [
+      "blocked-fire HUD cue (issue #516, parent #356) flashes for EVERY cue carrying `hud`, and for no other -- one row per cue"
+    ]
+  },
+  {
+    "id": "blocked-fire-hud-flashes-for-any-tank-that-was-refused",
+    "file": "src/game/blocked-fire-hud.ts",
+    "find": "        if (e.type !== 'fire-blocked' || e.ownerId !== playerId) continue;",
+    "replace": "        if (e.type !== 'fire-blocked') continue;",
+    "expect": "killed",
+    "tests": [
+      "src/game/blocked-fire-hud.test.ts"
+    ],
+    "why": "Drops the controlling-player filter, the presence-only mistake CLAUDE.md names on a shared event stream: `fire-blocked` is emitted for whoever was refused, AI tanks and other players included, so the local HUD would announce an enemy's capacity as though it were the player's own. #356 requires the cue to appear only for the controlling player and only for the capacity condition; this breaks the first half while leaving every single-tank test green.",
+    "killedBy": [
+      "blocked-fire HUD cue (issue #516, parent #356) ignores a refusal that is not the CONTROLLING player's"
+    ]
+  },
+  {
+    "id": "blocked-fire-hud-reports-the-cap-instead-of-counting-the-shells",
+    "file": "src/game/blocked-fire-hud.ts",
+    "find": "          inFlight: ownerShellCount(world, owner.id),",
+    "replace": "          inFlight: configFor(owner.kind).weapon.maxActiveProjectiles,",
+    "expect": "killed",
+    "tests": [
+      "src/game/blocked-fire-hud.test.ts"
+    ],
+    "why": "Reports the capacity twice instead of reading the live count. Indistinguishable in play -- at a capacity refusal the player is by definition holding every shell allowed -- and wrong in the way #356 cares about: the displayed capacity must DERIVE from the same resolved configuration spawnBullet enforces, and `ownerShellCount` is the half that makes the line a measurement rather than a caption. The doctored-world case is what separates the two.",
+    "killedBy": [
+      "blocked-fire HUD cue (issue #516, parent #356) COUNTS the shells rather than assuming the cap"
+    ]
+  },
+  {
+    "id": "blocked-fire-hud-arm-never-reaches-the-hud",
+    "file": "src/game/loop.ts",
+    "find": "      blockedFireHud.handle(events, driver.world);\n",
+    "replace": "      void blockedFireHud;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Removes the loop's per-frame dispatch to the HUD arm, leaving the cue built, gated, tested in isolation -- and never called. Unit tests that invoke a stage directly cannot see this (CLAUDE.md's own rule); only a driven frame that reaches a REAL capacity refusal can, which is what the loop test does rather than injecting the event. This is the composition half of the arm: the flag would parse, the cue would exist, and the screen would stay silent -- the same silent-flag failure #497 and the `ring-audio` pairing already cost this repository once.",
+    "killedBy": [
+      "startGameWith: dev flags stay off by default flashes the capacity line on a REAL refusal under blockedFire=hud"
+    ]
+  },
+  {
+    "id": "blocked-fire-capacity-flash-cannot-replay-for-a-second-refusal",
+    "file": "src/game/hud.ts",
+    "find": "      capacityEl.classList.remove('hud-capacity--flash');\n      void capacityEl.offsetWidth;\n",
+    "replace": "      void capacityEl;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "why": "Drops the remove-and-reflow, so re-adding a class the element already carries does NOT restart the CSS animation. The second refusal inside the animation window would then be invisible -- and against a full cap with a held trigger, refusals arrive in a row, which is exactly when the player most needs telling. Same mechanism and same failure mode as signalPlayerDeath's replay, pinned the same way.",
+    "killedBy": [
+      "hud: blocked-fire capacity flash (issue #516, parent #356) replays for a second refusal, so two refusals read as two"
+    ]
   }
 ]
