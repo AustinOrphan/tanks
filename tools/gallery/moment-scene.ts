@@ -5,7 +5,7 @@ import { createDeathPulseSystem } from '../../src/render/death-pulse';
 import { createTreadTrailSystem } from '../../src/render/tread-trails';
 import { createBlockedFireRingSystem } from '../../src/render/blocked-fire-ring';
 import { createBlockedFireMuzzleSystem } from '../../src/render/blocked-fire-muzzle';
-import { createBlockedFireSmokeSystem } from '../../src/render/blocked-fire-smoke';
+import { createMuzzleSmokeSystem } from '../../src/render/muzzle-smoke';
 import { createBarrelRecoilSystem } from '../../src/render/barrel-recoil';
 import { createBlockedFirePipsSystem } from '../../src/render/blocked-fire-pips';
 import type { BlockedFireCue } from '../../src/presentation/blocked-fire';
@@ -67,13 +67,18 @@ export interface MomentSceneOptions {
    * timeline is deterministic, and `--subdiv`/`--fps` slow the clip down, so a reviewer
    * comparing arms sees the same gesture each time.
    *
-   * Only the four remaining visual arms render. The audio and haptic arms have nothing to draw,
-   * and `hud` draws into the DOM HUD, which no gallery scene builds -- ask for one of
-   * those and the cue-to-system mapping below matches nothing, so you get an unadorned
-   * tank. The CLI refuses them for that reason (`args.mjs`), and it refuses a cue paired
-   * with any other moment, which is where a caller can be stopped before a browser is
-   * even launched. This field itself stays permissive, the same way `main.ts` reads
-   * `?skin=`/`?scene=` unvalidated so a hand-typed dev-server URL behaves predictably.
+   * Only the three remaining visual arms render. The audio and haptic arms have nothing to
+   * draw, and `hud` draws into the DOM HUD, which no gallery scene builds -- ask for one of
+   * those and the cue-to-system mapping below matches nothing, so you get a tank wearing
+   * only the unconditional effects. The CLI refuses them for that reason (`args.mjs`), and
+   * it refuses a cue paired with any other moment, which is where a caller can be stopped
+   * before a browser is even launched. This field itself stays permissive, the same way
+   * `main.ts` reads `?skin=`/`?scene=` unvalidated so a hand-typed dev-server URL behaves
+   * predictably.
+   *
+   * "Unadorned" is no longer available at all, and that is the point of #526 and #536: a
+   * blocked-fire clip with no flag now shows the barrel kicking and a black puff leaving
+   * the muzzle, because that IS the refusal. A cue here adds an arm on top of that.
    */
   blockedFire?: BlockedFireCue | null;
 }
@@ -194,12 +199,13 @@ export function buildMomentScene(
   const blockedFireRing =
     cue === 'ring' || cue === 'ring-audio' ? createBlockedFireRingSystem(scene) : null;
   const blockedFireMuzzle = cue === 'muzzle' ? createBlockedFireMuzzleSystem(scene) : null;
-  const blockedFireSmoke = cue === 'smoke' ? createBlockedFireSmokeSystem(scene) : null;
-  // NOT gated on the cue, unlike the arms around it: since issue #526 the gun kicks on
-  // every shot and every refusal as shipped behaviour, so the gallery shows it in every
-  // moment that fires -- which is also what makes a refusal legible here, as the one
-  // kick with no shell behind it.
+  // NEITHER of these is gated on the cue, unlike the arms around them: since issues #526
+  // and #536 the gun kicks and smokes on every shot and every refusal as shipped
+  // behaviour, so the gallery shows both in every moment that fires -- which is also what
+  // makes a refusal legible here, as the one kick with no shell behind it and a puff that
+  // comes out black.
   const barrelRecoil = createBarrelRecoilSystem(views);
+  const muzzleSmoke = createMuzzleSmokeSystem(scene);
   const blockedFirePips = cue === 'pips' ? createBlockedFirePipsSystem(scene) : null;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
@@ -259,8 +265,8 @@ export function buildMomentScene(
       deathPulse.spawn(tl.events[fed], tl.worlds[fed], { enemyEnabled: true });
       blockedFireRing?.spawn(tl.events[fed], tl.worlds[fed], cue);
       blockedFireMuzzle?.spawn(tl.events[fed], tl.worlds[fed], cue);
-      blockedFireSmoke?.spawn(tl.events[fed], tl.worlds[fed], cue);
       barrelRecoil.spawn(tl.events[fed], tl.worlds[fed]);
+      muzzleSmoke.spawn(tl.events[fed], tl.worlds[fed]);
       blockedFirePips?.spawn(tl.events[fed], tl.worlds[fed], cue);
       fed++;
     }
@@ -273,8 +279,8 @@ export function buildMomentScene(
     // land on the object sync has already posed or it is overwritten before it is drawn.
     blockedFireRing?.update(dt);
     blockedFireMuzzle?.update(dt);
-    blockedFireSmoke?.update(dt);
     barrelRecoil.update(dt);
+    muzzleSmoke.update(dt);
     blockedFirePips?.update(dt, tl.worlds[a]);
     // Same prev/curr pair as views.sync above -- treadTrails reads only
     // roundStartTick off `prev`, never its tank positions (tread-trails.ts's own
@@ -292,8 +298,8 @@ export function buildMomentScene(
     treadTrails.dispose();
     blockedFireRing?.dispose();
     blockedFireMuzzle?.dispose();
-    blockedFireSmoke?.dispose();
     barrelRecoil.dispose();
+    muzzleSmoke.dispose();
     blockedFirePips?.dispose();
     renderer.dispose();
   }

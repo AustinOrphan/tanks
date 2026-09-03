@@ -598,87 +598,199 @@
     ]
   },
   {
-    "id": "blocked-fire-smoke-puffs-for-an-arm-that-is-not-its-own",
-    "file": "src/render/blocked-fire-smoke.ts",
-    "find": "    if (!cueDrives(cue, 'visual') || cue !== 'smoke') return;",
-    "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'smoke' && cue !== 'muzzle')) return;",
+    "id": "muzzle-smoke-only-on-a-refusal",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "      if (e.type !== 'fire' && e.type !== 'fire-blocked') continue;",
+    "replace": "      if (e.type !== 'fire-blocked') continue;",
     "expect": "killed",
     "tests": [
-      "src/render/blocked-fire-smoke.test.ts"
+      "src/render/muzzle-smoke.test.ts"
     ],
-    "why": "This arm's own cue gate, widened so the cloud also puffs under `muzzle`. Same defect class as blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own, and worse here than for any earlier pair: `muzzle` and `smoke` draw at the SAME barrel, so the owner comparing them would be ranking a flash against a flash-plus-smoke and reading the difference as a preference between arms. Only the one-row-per-cue table can catch it -- every case written per remembered scenario passes, since `smoke` still puffs and null still draws nothing. MEASURED with that table's `it` deleted from the file: 0 of the 11 remaining tests failed (survived). With it: killed.",
+    "why": "Reverts issue #536's inversion, leaving the puff as the refusal-only cue it was as #356's `smoke` arm. That is the SHAPE A READER EXPECTS from the file's history, which is what makes it worth pinning: a refusal reads as smoke coming out WRONG only because smoke is what every ordinary shot already produces, so a puff that appears exclusively when a shot is refused is a cue to be learned rather than a spoiled version of something familiar -- the exact design the owner ruled against, and the same reversion barrel-recoil-only-on-a-refusal guards for the recoil.",
     "killedBy": [
-      "blocked-fire muzzle smoke (issue #356) puffs for EVERY cue carrying `smoke`, and for no other -- one row per cue"
+      "muzzle smoke (issue #536, parent #356) puffs on a SHOT and on a REFUSAL alike -- that is the whole ruling"
     ]
   },
   {
-    "id": "blocked-fire-smoke-puffs-at-the-tank-instead-of-the-barrel",
-    "file": "src/render/blocked-fire-smoke.ts",
+    "id": "muzzle-smoke-player-only",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "      if (!owner || !owner.alive) continue;",
+    "replace": "      if (!owner || !owner.alive || owner.kind !== 'player') continue;",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Restores the player-only gate this had as a refusal arm, where it was correct: an enemy's REFUSAL would have reported the enemy's ammunition state to the player. That reason does not survive #536 -- firing is already visible, the shell is right there -- and the gate now produces enemy guns that fire clean while the player's smokes. A stale guard whose original justification has been removed is exactly the kind of thing a port forward reintroduces, and barrel-recoil-player-only records the identical mistake one file over.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) smokes EVERY living tank, enemies included, and never a dead one"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-refusal-is-lighter-than-a-shot",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 1 },",
+    "replace": "  refused: { color: 0xd6dade, peakOpacity: 0.96, fadePower: 1 },",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Inverts the owner's actual instruction, and it is the plausible mistake rather than a random one: the measurement recorded in SMOKE says a darker grey sits CLOSER to this dark green felt, so a reader optimising for raw legibility would reach for a lighter one. The ruling was `darker, blacker`, and the answer to the felt problem is density, not brightness. Nothing about the puff's density, motion or lifetime changes here, so only an assertion about the colour itself can see it.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) a REFUSAL is darker, and denser, than a shot"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-refusal-is-no-denser-than-a-shot",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 1 },",
+    "replace": "  refused: { color: 0x08090a, peakOpacity: 0.72, fadePower: 1 },",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Drops the refusal to the ordinary puff's density, leaving value doing most of the work. This is the configuration issue #536 predicted would fail and the GL harness MEASURED failing: with the refusal carrying only the darker colour and the shot's own thinning, the refusal departs from the empty arena by 9.20 levels against the shot's 11.13, so the exceptional event is the quieter one. The Vitest suite cannot see levels on a felt, but it can pin the property the measurement chose, which is what this entry exists for.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) a REFUSAL is darker, and denser, than a shot"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-refusal-thins-as-fast-as-a-shot",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 1 },",
+    "replace": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 2 },",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "The other half of the density difference: the soot goes back to the ordinary puff's squared thinning, so it is only briefly thicker and has given up 56% of itself a third of the way through its life. The raw-opacity assertion stays green under this -- the refusal still starts denser -- which is exactly why the suite compares each cloud against its OWN birth density as well. A retune that kept the higher peak and dropped the curve would look like a simplification and would quietly return most of the measured separation.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) thins a refusal SLOWER, not merely from a higher start"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-fades-every-cloud-from-the-shot-s-peak",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "      for (const sprite of cl.billows) sprite.material.opacity = cl.peak * fade;",
+    "replace": "      for (const sprite of cl.billows) sprite.material.opacity = SMOKE.fired.peakOpacity * fade;",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Fades from a shared constant instead of the cloud's own peak. The refusal is still born nearly solid, so anything reading the material at spawn passes; one frame later the soot has been pulled back to the ordinary puff's weight and stays there for the rest of its life. A defect visible for one sixtieth of a second and then permanently is the shape a birth-time assertion cannot catch, which is why the suite also samples mid-life.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) keeps a refusal DENSE for its whole life, not just at birth"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-fades-every-cloud-on-the-shot-s-curve",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "      const fade = Math.pow(1 - k, cl.fadePower);",
+    "replace": "      const fade = Math.pow(1 - k, SMOKE.fired.fadePower);",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "The same defect on the other field, and the one that survives more assertions: the refusal keeps its higher peak, so it is still visibly denser than a shot at every instant, and only the fraction of its own birth density that it has left betrays it. Reading a per-cloud property off a shared table is the natural edit for someone tidying this loop, and half the separation the GL harness measured goes with it.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) thins a refusal SLOWER, not merely from a higher start"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-recycles-a-cloud-wearing-the-wrong-tint",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "      sprite.material.color.setHex(look.color);\n      sprite.material.opacity = look.peakOpacity;",
+    "replace": "      sprite.material.opacity = look.peakOpacity;",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Drops the tint reset from the pool's acquire path. One pool now serves both looks, so the sprites a refusal retired are handed straight to the next ordinary shot -- and every shot after that one, on that tank, comes out black. It is invisible until a refusal happens, which is what makes it a defect rather than a mistake anyone would notice while developing: a match that never hits the shell cap renders correctly all the way through.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) gives a recycled cloud the look of the event that reused it, not the one that retired it"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-puffs-at-the-tank-instead-of-the-barrel",
+    "file": "src/render/muzzle-smoke.ts",
     "find": "      cl.origin.set(\n        owner.pos.x + cos * SHELL_MUZZLE_FORWARD,\n        BULLET_Y,\n        owner.pos.y + sin * SHELL_MUZZLE_FORWARD,\n      );",
     "replace": "      cl.origin.set(owner.pos.x, BULLET_Y, owner.pos.y);",
     "expect": "killed",
     "tests": [
-      "src/render/blocked-fire-smoke.test.ts"
+      "src/render/muzzle-smoke.test.ts"
     ],
-    "why": "Drops the muzzle offset, so the smoke rises out of the hull rather than out of the barrel. That is not cosmetic: this arm's whole claim is that the GUN cycled and produced smoke instead of a shell, and a cloud centred on the tank says nothing about the weapon -- it becomes a second tank-local treatment, which is the picture `ring` already occupies. The position is the same point bullets.ts hands a real `fire` event as its flash, so the sim's own muzzle plane is what is being discarded.",
+    "why": "Drops the muzzle offset, so the smoke rises out of the hull rather than out of the barrel. That is not cosmetic: the whole claim is that the GUN cycled, and a cloud centred on the tank says nothing about the weapon. The position is the same point bullets.ts hands a real `fire` event as its flash, so the sim's own muzzle plane is what is being discarded -- and since #536 this is on screen for every shot every tank fires, not only for a flagged player's refusal.",
     "killedBy": [
-      "blocked-fire muzzle smoke (issue #356) leaves the MUZZLE, on the barrel centreline -- not the tank"
+      "muzzle smoke (issue #536, parent #356) leaves the MUZZLE, on the barrel centreline -- not the tank"
     ]
   },
   {
-    "id": "blocked-fire-smoke-collapses-like-the-flash-it-must-not-resemble",
-    "file": "src/render/blocked-fire-smoke.ts",
+    "id": "muzzle-smoke-collapses-like-the-flash-it-must-not-resemble",
+    "file": "src/render/muzzle-smoke.ts",
     "find": "      const size = (BIRTH_SIZE + (GROWN_SIZE - BIRTH_SIZE) * grow) * b.size;",
     "replace": "      const size = (GROWN_SIZE - (GROWN_SIZE - BIRTH_SIZE) * grow) * b.size;",
     "expect": "killed",
     "tests": [
-      "src/render/blocked-fire-smoke.test.ts"
+      "src/render/muzzle-smoke.test.ts"
     ],
-    "why": "Inverts the growth, so the cloud shrinks as it fades. That is precisely blocked-fire-muzzle.ts's gesture (collapse plus fade toward SHRINK_TO) in grey, and it would collapse two of the four selectable visual arms into one treatment at one place -- the failure mode issue #356's comparison cannot survive, since arms that differ only in colour produce no ruling. The scale still changes every frame under this, so nothing that merely watched for movement would notice.",
+    "why": "Inverts the growth, so the cloud shrinks as it fades. That is precisely blocked-fire-muzzle.ts's gesture (collapse plus fade toward SHRINK_TO) in grey, and `muzzle` is still a selectable refusal arm -- so under this the two would play together at the same barrel as two sizes of one collapse, which is the failure #356's comparison cannot survive. The scale still changes every frame, so nothing that merely watched for movement would notice.",
     "killedBy": [
-      "blocked-fire muzzle smoke (issue #356) reads as SMOKE, not as the flash: it EXPANDS and thins where the flash collapsed"
+      "muzzle smoke (issue #536, parent #356) reads as SMOKE, not as the flash: it EXPANDS and thins where the flash collapsed"
     ]
   },
   {
-    "id": "blocked-fire-smoke-dies-with-the-flash-it-stands-beside",
-    "file": "src/render/blocked-fire-smoke.ts",
+    "id": "muzzle-smoke-dies-with-the-flash-it-stands-beside",
+    "file": "src/render/muzzle-smoke.ts",
     "find": "const LIFETIME_SECONDS = 0.75;",
     "replace": "const LIFETIME_SECONDS = 0.07;",
     "expect": "killed",
     "tests": [
-      "src/render/blocked-fire-smoke.test.ts"
+      "src/render/muzzle-smoke.test.ts"
     ],
-    "why": "Cuts the cloud to blocked-fire-muzzle.ts's own 0.07s. Duration is the property the owner's request turns on -- smoke lingers, a flash does not -- so an arm gone in a frame and a half is a grey flash whatever its texture says, and the two arms at this barrel would again be one treatment. Pinned as a BOUND rather than an exact value, since the number is feel: the tests ask only that the cue outlive the flash several times over and still end.",
+    "why": "Cuts the cloud to blocked-fire-muzzle.ts's own 0.07s. Duration is the property the owner's original request turns on -- smoke lingers, a flash does not -- so a puff gone in a frame and a half is a grey flash whatever its texture says. It matters more since #536 than it did as an arm: a refusal is now told apart by how its smoke looks, and there is no looking at something that has already gone. Pinned as a BOUND rather than an exact value, since the number is feel: the tests ask only that the puff outlive the flash several times over and still end.",
     "killedBy": [
-      "blocked-fire muzzle smoke (issue #356) drifts off the barrel and rises, and outlives the flash several times over"
+      "muzzle smoke (issue #536, parent #356) drifts off the barrel and rises, and outlives the flash several times over"
     ]
   },
   {
-    "id": "blocked-fire-smoke-glows-instead-of-obscuring",
-    "file": "src/render/blocked-fire-smoke.ts",
-    "find": "          transparent: true,\n          opacity: PEAK_OPACITY,\n          depthWrite: false,\n        }),",
-    "replace": "          transparent: true,\n          opacity: PEAK_OPACITY,\n          depthWrite: false,\n          blending: THREE.AdditiveBlending,\n        }),",
+    "id": "muzzle-smoke-glows-instead-of-obscuring",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "          transparent: true,\n          opacity: SMOKE.fired.peakOpacity,\n          depthWrite: false,\n        }),",
+    "replace": "          transparent: true,\n          opacity: SMOKE.fired.peakOpacity,\n          depthWrite: false,\n          blending: THREE.AdditiveBlending,\n        }),",
     "expect": "killed",
     "tests": [
-      "src/render/blocked-fire-smoke.test.ts"
+      "src/render/muzzle-smoke.test.ts"
     ],
-    "why": "Makes the smoke additive, the treatment every other effect in this renderer uses for light -- sparks, muzzle flash, the mine glow. Additive smoke BRIGHTENS the felt and the hull behind it, which is the one thing smoke cannot do, and on this arena's dark ground it would read as the same white bloom the muzzle flash makes. The geometry, the colour, the motion and the lifetime all stay correct under this, so only an assertion about the blend mode itself can see it.",
+    "why": "Makes the smoke additive, the treatment every other effect in this renderer uses for light. Additive smoke BRIGHTENS the felt and the hull behind it, which is the one thing smoke cannot do -- and since #536 it breaks the refusal outright, because under additive blending a near-black tint adds almost nothing, so the DARKER puff would be the invisible one and the ruling would invert. The geometry, the colour, the motion and the lifetime all stay correct under this, so only an assertion about the blend mode itself can see it.",
     "killedBy": [
-      "blocked-fire muzzle smoke (issue #356) is not made of light: desaturated grey, normally blended"
+      "muzzle smoke (issue #536, parent #356) is not made of light: normally blended, and textured"
     ]
   },
   {
-    "id": "blocked-fire-smoke-freezes-instead-of-resting-under-reduced-motion",
-    "file": "src/render/blocked-fire-smoke.ts",
+    "id": "muzzle-smoke-freezes-instead-of-resting-under-reduced-motion",
+    "file": "src/render/muzzle-smoke.ts",
     "find": "      place(cl, k);",
     "replace": "      if (!reducedMotion) place(cl, k);",
     "expect": "killed",
     "tests": [
-      "src/render/blocked-fire-smoke.test.ts"
+      "src/render/muzzle-smoke.test.ts"
     ],
-    "why": "The landmine blocked-fire-ring.ts records, reproduced on this arm: honouring reduced motion by not animating, instead of by writing a rest placement every frame. `prefers-reduced-motion` is a live media query, so the defect is only reachable MID-FLIGHT -- a cloud already drifting away from the barrel freezes where it had got to and hangs there for the rest of its life. The test that sets the preference BEFORE spawning stays green under this, because that cloud is placed once at spawn and never needs moving again, which is exactly why one reduced-motion case is not enough here.",
+    "why": "The landmine blocked-fire-ring.ts records, reproduced here: honouring reduced motion by not animating, instead of by writing a rest placement every frame. `prefers-reduced-motion` is a live media query, so the defect is only reachable MID-FLIGHT -- a cloud already drifting away from the barrel freezes where it had got to and hangs there for the rest of its life. The test that sets the preference BEFORE spawning stays green under this, because that cloud is placed once at spawn and never needs moving again, which is exactly why one reduced-motion case is not enough.",
     "killedBy": [
-      "blocked-fire muzzle smoke (issue #356) snaps an ALREADY-DRIFTING cloud back to rest when reduced motion turns on mid-flight"
+      "muzzle smoke (issue #536, parent #356) snaps an ALREADY-DRIFTING cloud back to rest when reduced motion turns on mid-flight"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-drops-the-newest-puff-at-the-ceiling",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "        const oldest = active.shift();\n        if (!oldest) return null;\n        for (const sprite of oldest.billows) sprite.visible = false;\n        cl = oldest;",
+    "replace": "        return null;",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Refuses the new puff at the cloud ceiling instead of recycling the oldest -- the obvious way to write the bound, and the way this was written until review. It drops smoke from the shot the player just fired and is watching, while a nearly-faded cloud from half a second ago keeps its slot. Only an assertion that identifies the NEWEST cloud can see it: nothing in that test calls `update`, so every cloud still sits at its birth opacity and a peak-opacity check would pass either way. The refusal's near-black tint against the shot's grey is what makes the newest identifiable.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) recycles the OLDEST cloud at budget, so the newest puff always survives"
     ]
   }
 ]

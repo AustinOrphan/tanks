@@ -65,7 +65,6 @@ describe('blocked-fire HUD cue (issue #516, parent #356)', () => {
       ring: false,
       'ring-audio': false,
       muzzle: false,
-      smoke: false,
       pips: false,
       audio: false,
       click: false,

@@ -279,14 +279,16 @@ describe('gallery args', () => {
     expect(() => parseArgs(['--scene', 'fire', '--blocked-fire', 'ring'])).toThrow(
       /needs --scene blocked-fire/,
     );
-    // Only the four ARENA visual arms: the audio and haptic arms have nothing to draw,
+    // Only the three ARENA visual arms: the audio and haptic arms have nothing to draw,
     // and 'hud' draws into the DOM HUD, which no gallery page builds.
-    for (const arm of ['ring', 'muzzle', 'smoke', 'pips']) {
+    for (const arm of ['ring', 'muzzle', 'pips']) {
       expect(parseArgs(['--scene', 'blocked-fire', '--blocked-fire', arm]).blockedFire).toBe(arm);
     }
-    // 'turret' is in this list, not the one above: issue #526 retired it as a cue, so
-    // asking for it must fail rather than quietly render the recoil that now plays anyway.
-    for (const arm of ['turret', 'hud', 'audio', 'click', 'haptic', 'ring-audio', 'nonsense']) {
+    // 'turret' and 'smoke' are in this list, not the one above: issues #526 and #536
+    // retired both as cues by making the recoil and the muzzle puff unconditional, so
+    // asking for either must fail rather than quietly render an effect that now plays
+    // anyway and reporting it as the flag's doing.
+    for (const arm of ['turret', 'smoke', 'hud', 'audio', 'click', 'haptic', 'ring-audio', 'nonsense']) {
       expect(() => parseArgs(['--scene', 'blocked-fire', '--blocked-fire', arm])).toThrow(
         /--blocked-fire must be one of/,
       );

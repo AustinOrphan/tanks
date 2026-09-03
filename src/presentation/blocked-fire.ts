@@ -3,7 +3,7 @@
  * semantic signal with consumers in three layers -- `game/haptics.ts` (buzz),
  * `audio/director.ts` (click), `game/blocked-fire-hud.ts` (the transient capacity line),
  * and, under `render/`, `blocked-fire-ring.ts`, `blocked-fire-muzzle.ts`,
- * `blocked-fire-smoke.ts`, `blocked-fire-pips.ts` and `renderer.ts`'s construction gate
+ * `blocked-fire-pips.ts` and `renderer.ts`'s construction gate
  * -- chosen by the application (`game/devflags.ts` parses `?blockedFire=`) and
  * implemented by each projection for the arms that name its channel. Issue #473 moved
  * the vocabulary here from `game/devflags.ts` so the audio director and the renderer no
@@ -23,22 +23,26 @@
  *
  * The visual channel's other arms (issue #516) are built and each has its own artefact:
  * `muzzle` a flash at the barrel opening cut short of a real discharge
- * (render/blocked-fire-muzzle.ts), `smoke` a grey puff drifting off that same barrel
- * (render/blocked-fire-smoke.ts), `pips` a capacity strip on the felt beside the tank
+ * (render/blocked-fire-muzzle.ts), `pips` a capacity strip on the felt beside the tank
  * (render/blocked-fire-pips.ts), and `hud` a transient capacity line off the arena
  * (game/blocked-fire-hud.ts, painted by hud.ts's signalShellCapacity). Deliberately
  * different pictures rather than sizes of one: #356 rules by comparison, and arms that
- * differ only in degree would produce no ruling. `muzzle` and `smoke` are the closest
- * pair in that set and still not a pair of sizes -- one is additive yellow light that
- * collapses in 0.07s, the other a normally-blended grey cloud that expands for 0.75s.
+ * differ only in degree would produce no ruling.
  *
- * A FIFTH ARM, `turret`, IS GONE -- and it is the one that won. The owner ranked its gun
- * recoil first and ruled it should play on every shot, not only on a refusal, so issue
- * #526 made it unconditional shipped behaviour in render/barrel-recoil.ts. It is not
- * listed here because nothing about it is selectable any more: a flag that toggles a
- * motion which is always on would be a lie in the tooling. What a refusal looks like now
- * is that same recoil arriving with no shell and no flash, which every remaining arm here
- * is compared AGAINST rather than instead of.
+ * TWO ARMS ARE GONE FROM THIS LIST, and they are the two the owner liked. `turret` came
+ * out first: the owner ranked its gun recoil top and ruled it should play on every shot,
+ * so issue #526 made it unconditional shipped behaviour in render/barrel-recoil.ts.
+ * `smoke` -- a grey puff off the barrel, added when the owner asked for "maybe a smoke
+ * type texture?" -- followed it out for the same reason in issue #536: smoke now leaves
+ * the muzzle of every shot fired (render/muzzle-smoke.ts) and a refusal draws it near
+ * black and nearly solid instead.
+ *
+ * Neither is listed here because nothing about either is selectable any more: a flag that
+ * toggles something which is always on would be a lie in the tooling. What a refusal looks
+ * like now is that recoil arriving with no shell and no flash, and that puff arriving
+ * burnt -- which is what every remaining arm here is compared AGAINST rather than instead
+ * of. The comparison has therefore narrowed twice: an arm the owner adopts stops being an
+ * arm.
  *
  * The audio and haptic arms landed alongside them in their own change, so every
  * single-channel arm the matrix names is now implemented. Still to come: #516's pairing of
@@ -54,14 +58,18 @@
  * own gate then went un-asserted for the paired cue (measured: narrowing it to
  * `cue !== 'ring'` left all 8 of that file's tests green).
  *
- * Seven of the eight consumers key a table off this set -- director.test.ts (`audio`),
+ * Six of the seven consumers key a table off this set -- director.test.ts (`audio`),
  * haptics.test.ts (`haptic`), and one per visual arm in blocked-fire-ring.test.ts,
- * blocked-fire-muzzle.test.ts, blocked-fire-smoke.test.ts, blocked-fire-pips.test.ts and
- * blocked-fire-hud.test.ts -- so a new cue fails all seven until its channels are stated.
- * The eighth, renderer.ts's construction gate, is not among them: it has no sibling Vitest
- * file by policy (.claude/rules/rendering.md) and is reached only through the GL harness,
- * which measures the four selectable arena arms against each other but not the whole
- * cue set.
+ * blocked-fire-muzzle.test.ts, blocked-fire-pips.test.ts and blocked-fire-hud.test.ts --
+ * so a new cue fails all six until its channels are stated. The seventh, renderer.ts's
+ * construction gate, is not among them: it has no sibling Vitest file by policy
+ * (.claude/rules/rendering.md) and is reached only through the GL harness, which measures
+ * the three selectable arena arms against each other but not the whole cue set.
+ *
+ * There were eight consumers and seven tables until issue #536 retired `smoke`. Its table
+ * went with it, because the file that kept it (render/muzzle-smoke.ts) no longer reads a
+ * cue at all -- which is what retiring an arm means here, and why the count above is worth
+ * restating rather than leaving as a number a reader has to re-derive.
  */
 /**
  * The multimodal arms are spelled with a hyphen, not a plus, because these values are
@@ -76,7 +84,6 @@ export type BlockedFireCue =
   // Visual, tank- or weapon-local (issue #516's comparison matrix).
   | 'ring'
   | 'muzzle'
-  | 'smoke'
   | 'pips'
   | 'hud'
   // Audio.
@@ -99,7 +106,6 @@ export type BlockedFireCue =
 export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([
   'ring',
   'muzzle',
-  'smoke',
   'pips',
   'hud',
   'audio',
@@ -120,17 +126,17 @@ export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFir
  * Which channel each cue BELONGS TO -- a vocabulary map, not a claim that anything is
  * wired (issue #516). `cueDrives(cue, 'audio')` answers "is this cue mine" for a
  * consumer in one place instead of each one listing members, but a cue can be named here
- * and still be completely inert: the twelve arms the comparison matrix adds are
- * classified from the day they are named and become audible, visible or felt only when a
- * consumer implements them. Ownership, in other words, not behaviour. A multimodal arm
- * belongs to more than one channel, which is why this is set-valued rather than a field.
+ * and still be completely inert: the eleven arms this set has gained since issue #497
+ * first wrote it down are classified from the day they are named and become audible,
+ * visible or felt only when a consumer implements them. Ownership, in other words, not
+ * behaviour. A multimodal arm belongs to more than one channel, which is why this is
+ * set-valued rather than a field.
  */
 export type BlockedFireChannel = 'visual' | 'audio' | 'haptic';
 
 const CHANNELS: Readonly<Record<BlockedFireCue, readonly BlockedFireChannel[]>> = {
   ring: ['visual'],
   muzzle: ['visual'],
-  smoke: ['visual'],
   pips: ['visual'],
   hud: ['visual'],
   audio: ['audio'],
