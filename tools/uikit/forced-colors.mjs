@@ -86,13 +86,13 @@ const WATCHED = [
 /** The shipped controls this contract has to cover, with the surface each lives on. */
 const CONTROLS = [
   { id: 'primary-action', sel: '.hud-new-game', surface: 'main menu' },
-  { id: 'quiet-slab', sel: '.hud-stats-open', surface: 'main menu' },
-  { id: 'small-quiet', sel: '.hud-panel-mute', surface: 'main menu' },
+  { id: 'quiet-slab', sel: '.hud-records-open', surface: 'main menu' },
+  { id: 'small-quiet', sel: '.hud-about-open', surface: 'main menu' },
   { id: 'hint', sel: '.ui-hint', surface: 'any' },
   { id: 'locked-level', sel: '.hud-level-btn--locked', surface: 'level select' },
   { id: 'selectable-on', sel: '[data-fc="selected"]', surface: 'customize' },
   { id: 'selectable-off', sel: '[data-fc="unselected"]', surface: 'customize' },
-  { id: 'destructive', sel: '.hud-reset-progress', surface: 'stats' },
+  { id: 'destructive', sel: '.hud-reset-progress', surface: 'settings' },
 ];
 
 async function readStyle(page, selector) {
@@ -230,12 +230,14 @@ async function main() {
 
     await page.screenshot({ path: join(outDir, `customize--${colorScheme}--${forcedColors}.png`), fullPage: false });
 
-    // ---- Stats: the destructive control ----
+    // ---- Settings -> Data: the destructive control ----
+    // In Settings since issue #226, which moved both resets out of Records ("destructive
+    // reset/import actions live under Data, not Records").
     await page.click('.hud-customize-back', { timeout: 15000 }).catch(() => {});
     await page.waitForSelector('.hud-customize', { state: 'hidden', timeout: 8000 }).catch(() => {});
-    out.__surfaces.stats = await openPanel('.hud-stats-open', '.hud-stats:not(.hud-stats--hidden)');
+    out.__surfaces.settings = await openPanel('.hud-settings-open', '.hud-settings:not(.hud-settings--hidden)');
     out.destructive = await readStyle(page, '.hud-reset-progress');
-    await page.screenshot({ path: join(outDir, `stats--${colorScheme}--${forcedColors}.png`), fullPage: false });
+    await page.screenshot({ path: join(outDir, `settings--${colorScheme}--${forcedColors}.png`), fullPage: false });
 
     await page.close();
     return out;

@@ -43,7 +43,8 @@ with a cycle of type imports. What stays put on purpose: `QualityPreset` and
 `MineWarnStyle` are renderer-owned treatments only a developer flag selects, so
 `devflags.ts` validates against `render/` directly (if either becomes a Setting, its
 names move here), and `DEFAULT_VOLUME` is the audio engine's default, read by
-`settings.ts` and, until #324 moves the slider into Settings, `hud.ts`.
+`settings.ts` and `hud.ts`, whose one remaining reader is the Settings pane's slider
+(issue #226 retired the topbar's twin; #324 still owns splitting the HUD interface itself).
 
 **The step boundary takes a LIST.** `stepInputs(world, inputs: InputState[])` is the
 primitive and pairs `inputs[i]` with the i-th `kind === 'player'` tank in tank-array
@@ -155,9 +156,10 @@ That module owns scheduling and interruption only and never touches the DOM; the
 and easing live once in `hud.css`, and `hud.ts` reads the token rather than mirroring it, so
 a missing stylesheet degrades to instant rather than to a second constant that can drift.
 
-**The HUD owns pane history; the state machine does not (issue #318).** The six panes
-(Records, Customize, Achievements, Levels, Controllers, Versus Setup) are layers on a stack
-inside `hud.ts`, built from the pure `src/game/navigation.ts`. Each layer records the
+**The HUD owns pane history; the state machine does not (issue #318).** The nine panes
+(Stats, Achievements, Customize, Levels, Controllers, Versus Setup, Settings, About & Legal
+and the replace-run confirmation) are layers on a stack inside `hud.ts`, built from the pure
+`src/game/navigation.ts`. Each layer records the
 surface it was pushed over and the control that opened it, so Back -- the pane's button,
 Escape while a layer is open, `Hud.back()`, or the browser's own Back -- pops exactly one
 layer, re-renders that origin surface and restores focus to the opener when it still exists
@@ -169,7 +171,16 @@ announced it. The invariant runs the other way: after every `setState` the stack
 The browser mirror keeps ONE state-only history entry while a layer is open and retires it
 with one `back()` when the stack empties; every History call is wrapped, and the first
 throw (Safari's `pushState` rate limit) latches the mirror off with the in-app stack
-unaffected. Pause is a gameplay phase and stays outside the stack -- the flip is two lines,
+unaffected. Eight of the nine are `route` layers, and issue #226 added the file's first
+`overlay`: the replace-run confirmation. The difference is one rule -- `navigation.ts`
+refuses a route pushed over an overlay -- and `openLayer` has to enforce it BEFORE its own
+replace step, because that step pops the current top and would otherwise close the
+unanswered question before `push` could refuse anything. A route opened over a route still
+REPLACES it, which is why Stats and Achievements are sibling Records tabs over one origin
+rather than a two-deep stack, and why a pane opened from inside another pane (Settings ->
+Controllers, Settings -> About) returns Back to the origin rather than to the pane it came
+from; genuine nesting waits on issue #327's covering-layer contract.
+Pause is a gameplay phase and stays outside the stack -- the flip is two lines,
 deferred until standalone Back is measured on a device -- and the loop's hotkey guard
 names `input,select,textarea` only, because a restored opener is a button and the old
 `button` term was the reason every arrival had to focus a container. Scroll restoration is
@@ -295,9 +306,36 @@ Main Menu had no Continue and no Levels grid. A session still pushes the same va
 its own construction, and the page resets the session-shaped affordances
 (`setRelaunchTarget`, `setSessionKind`) when the slot is released, so an empty host never
 offers a "Start Match" that is a New Game in disguise. What the page still does NOT own is
-recorded in issue #485: menu music and the settings-driven controls, both of which run
-through the session's `applySettings`/`followMusic` and go silent or stale on the empty
-host.
+recorded in issue #485: menu music, and the AUDIO ENGINE half of the settings, both of
+which run through the session's `applySettings`/`followMusic` and go silent on the empty
+host. The DISPLAY half moved to the page with issue #226, because Settings became the one
+durable home for mute and volume and a preference whose only control lies is worse than one
+with no control at all: `route-host.ts` pushes the five settings-driven values at the HUD at
+construction and on every store change, and early-returns while a session holds the slot so
+the two owners never both paint. The engine is untouched from there -- a stored mute reaches
+it through `applySettings` the moment a session exists, which is also the moment there is
+any audio for it to affect.
+
+**The Main Menu is a hierarchy, not a list (issue #226).** One dominant Campaign action with
+a run summary above it, Versus and Practice as direct play actions, Customize/Records/
+Settings as compact utilities, and an About & Legal footer -- three named regions in
+`hud.ts`'s panel markup, hidden as GROUPS so `isHiddenWithin` takes every control inside a
+hidden region out of the roving focus in one move. What it replaced was nine peer slab
+buttons and a five-control settings row at one weight. "Start New Campaign" is the same
+button as "Start Campaign" under a third label and a tertiary weight, and with a run active
+it opens the confirmation instead of firing `onNewGame` -- so every subscriber still means
+"the player deliberately asked for a fresh run" and no caller changed. The mission number in
+the summary is resolved by the PAGE, not the HUD: `run.ts` stores a level id and never
+imports campaign data, and the HUD names no simulation module, so `route-host.ts` is the only
+layer that can order one; an id this build's campaign does not contain reports `mission:
+null` and the line degrades to the lives half rather than inventing a position. Settings
+declares five sections (Audio, Controls, Accessibility, Data, About & Legal) and renders only
+those with a visible control, measured with the same predicate the roving focus uses --
+Accessibility ships empty until #289/#290, which is what exercises the rule on the shipped
+build, and #227's per-control capability hiding collapses a section that empties with no
+change there. The topbar is hidden at the Main Menu as well as at Launch: with the audio
+pair gone it carries in-match status only, and carrying an abandoned session's Lives and
+Enemies over a menu is the leak the issue names.
 
 `tanks.touch.v1` is now a migration READ only (`readLegacyTouchSettings`). When there is no
 usable canonical payload, each legacy field is validated independently, merged over the

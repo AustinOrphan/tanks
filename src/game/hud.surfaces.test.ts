@@ -53,8 +53,13 @@ describe('createHud panel', () => {
     vi.advanceTimersByTime(1000);
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     expect(splash.classList.contains('hud-splash--hidden')).toBe(true);
+    // HIDDEN at the Main Menu since issue #226, where it used to show: everything left
+    // in that bar is in-match status (the audio pair moved to Settings), and carrying the
+    // abandoned session's Lives/Enemies/Level over a menu offering to start a new one is
+    // the leak the issue names. `hud: the topbar's surface rule` below sweeps every
+    // surface; this asserts the one a dismissed splash lands on.
     const topbar = root.querySelector('.hud-topbar') as HTMLElement;
-    expect(topbar.classList.contains('hud-topbar--hidden')).toBe(false);
+    expect(topbar.classList.contains('hud-topbar--hidden')).toBe(true);
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
     expect(title(root)).toBe('TANKS!');
     // The single 'Start' button is retired at title: New Game is always offered, and
@@ -584,7 +589,8 @@ describe('createHud panel', () => {
   });
 
   function muteBtnOf(root: HTMLElement): HTMLButtonElement {
-    return root.querySelector('.hud-mute') as HTMLButtonElement;
+    // In Settings -> Audio since issue #226; the topbar chip it used to name is gone.
+    return root.querySelector('.hud-settings-mute') as HTMLButtonElement;
   }
 });
 
@@ -778,17 +784,29 @@ describe('hud: pause panel', () => {
   const panel = (root: HTMLElement): HTMLElement => root.querySelector('.hud-panel') as HTMLElement;
   const quit = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-quit') as HTMLButtonElement;
+  // THE UTILITIES REGION, which is where Settings lives since issue #226. The pause
+  // panel used to carry an inline five-control audio/input row; it now carries the one
+  // button that opens the pane those controls moved into, and the region is the thing
+  // whose visibility says whether a paused player can reach them at all.
   const settings = (root: HTMLElement): HTMLElement =>
-    root.querySelector('.hud-panel-settings') as HTMLElement;
+    root.querySelector('.hud-menu-utilities') as HTMLElement;
 
-  it('shows the frozen-scene panel with Resume, Quit and the audio pair', () => {
+  it('shows the frozen-scene panel with Resume, Quit and a way into Settings', () => {
     const { hud: h, root } = mount();
     h.setState('paused');
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
     expect((root.querySelector('.hud-title') as HTMLElement).textContent).toBe('Paused');
     expect((root.querySelector('.hud-action') as HTMLElement).textContent).toBe('Resume');
     expect(quit(root).classList.contains('hud-quit--hidden')).toBe(false);
-    expect(settings(root).classList.contains('hud-panel-settings--hidden')).toBe(false);
+    expect(settings(root).classList.contains('hud-menu-utilities--hidden')).toBe(false);
+    // ...and the region carries Settings alone here: repainting a tank or reading
+    // lifetime statistics is not something a paused round has a claim on, so Customize
+    // and Records are hidden inside a region that is itself visible.
+    const visible = (sel: string): boolean =>
+      !(root.querySelector(sel) as HTMLElement).classList.contains(`${sel.slice(1)}--hidden`);
+    expect(visible('.hud-settings-open'), 'Settings must be reachable from Pause').toBe(true);
+    expect(visible('.hud-customize-open'), 'Customize does not belong to Pause').toBe(false);
+    expect(visible('.hud-records-open'), 'Records does not belong to Pause').toBe(false);
   });
 
   it('keeps Quit out of every other panel state, and settings off the END screens', () => {
@@ -804,10 +822,10 @@ describe('hud: pause panel', () => {
     }
     for (const s of ['outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
-      expect(settings(root).classList.contains('hud-panel-settings--hidden'), s).toBe(true);
+      expect(settings(root).classList.contains('hud-menu-utilities--hidden'), s).toBe(true);
     }
     h.setState('main-menu');
-    expect(settings(root).classList.contains('hud-panel-settings--hidden')).toBe(false);
+    expect(settings(root).classList.contains('hud-menu-utilities--hidden')).toBe(false);
     h.setState('playing'); // panel hidden entirely
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
   });
@@ -832,31 +850,33 @@ describe('hud: pause panel', () => {
     expect(starts).toBe(0);
   });
 
-  it('mirrors mute state onto the panel button too', () => {
+  it('has exactly ONE mute button, in Settings, and it says which state it is in', () => {
+    // The pair this replaces asserted that the panel button and the topbar button
+    // mirrored each other. Issue #226 removed the second one, so the obligation is no
+    // longer "keep two in step" but "there is only one to keep" -- asserted by counting,
+    // because a reintroduced twin is exactly the regression the count can see and a
+    // single-selector assertion cannot.
     const { hud: h, root } = mount();
     h.setMuted(true);
-    expect((root.querySelector('.hud-panel-mute') as HTMLElement).textContent).toBe('Muted (M)');
-    expect((root.querySelector('.hud-mute') as HTMLElement).textContent).toBe('Muted (M)');
+    const buttons = Array.from(root.querySelectorAll('button')).filter((b) =>
+      /^Mute|^Muted/.test(b.textContent ?? ''),
+    );
+    expect(buttons.length, 'a second mute control came back').toBe(1);
+    expect(buttons[0].classList.contains('hud-settings-mute')).toBe(true);
+    expect(buttons[0].textContent).toBe('Muted (M)');
   });
 
-  it('panel volume slider reports changes and keeps the topbar slider in step', () => {
+  it('the volume slider reports changes, and there is one of it', () => {
     const { hud: h, root } = mount();
     const seen: number[] = [];
     h.onVolumeChange((v) => seen.push(v));
-    const panelSlider = root.querySelector('.hud-panel-volume') as HTMLInputElement;
-    panelSlider.value = '0.2';
-    panelSlider.dispatchEvent(new Event('input'));
+    const sliders = root.querySelectorAll('input[type="range"]');
+    expect(sliders.length, 'a second volume slider came back').toBe(1);
+    const slider = sliders[0] as HTMLInputElement;
+    expect(slider.classList.contains('hud-settings-volume')).toBe(true);
+    slider.value = '0.2';
+    slider.dispatchEvent(new Event('input'));
     expect(seen).toEqual([0.2]);
-    expect((root.querySelector('.hud-volume') as HTMLInputElement).value).toBe('0.2');
-  });
-
-  it('topbar slider keeps the panel slider in step, so reopening pause never lies', () => {
-    const { hud: h, root } = mount();
-    void h;
-    const topbar = root.querySelector('.hud-volume') as HTMLInputElement;
-    topbar.value = '0.7';
-    topbar.dispatchEvent(new Event('input'));
-    expect((root.querySelector('.hud-panel-volume') as HTMLInputElement).value).toBe('0.7');
   });
 
   it('the aim-scheme toggle shows the current scheme, labelled so the schemes read as different', () => {
@@ -898,18 +918,18 @@ describe('hud: pause panel', () => {
     expect(seen).toEqual(['point', 'stick']);
   });
 
-  it('the aim-scheme toggle is reachable from the title screen too, not just pause', () => {
-    // The settings row (and everything in it) shows on 'title' AND 'paused' -- see the
-    // shared visibility test above. This pins that the toggle specifically rides along,
-    // since a row-level class check cannot tell "the row is visible" from "the row is
-    // visible AND still has every control in it".
-    const { hud: h, root } = mount();
-    h.setState('main-menu');
+  it('the aim-scheme toggle lives in the Settings pane, under Controls', () => {
+    // It used to ride the panel's own settings row, which showed on the Main Menu AND at
+    // Pause. Since issue #226 it lives in the Settings pane, which is reachable from both
+    // of those -- so the reachability claim is unchanged and its EVIDENCE moved: the
+    // question is now which section holds the control, since a pane-level check cannot
+    // tell "the pane is open" from "the pane is open AND still has this control in it".
+    const { root } = mount();
     const toggle = root.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
-    const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
-    expect(settingsRow.classList.contains('hud-panel-settings--hidden')).toBe(false);
-    expect(settingsRow.contains(toggle)).toBe(true);
+    const section = toggle.closest('.hud-settings-section') as HTMLElement;
+    expect(section, 'the toggle is not inside a Settings section').not.toBeNull();
+    expect(section.dataset.section).toBe('controls');
   });
 });
 
@@ -1025,6 +1045,111 @@ describe('hud: level select panel', () => {
   });
 });
 
+/*
+ * ISSUE #226: the Main Menu's information architecture.
+ *
+ * What is under test here is COMPOSITION -- which control sits in which region, and what
+ * the menu says about the run it is offering to continue. The same issue's layer-stack
+ * half (the replace-run confirmation, and Back out of Settings) is in
+ * hud.navigation.test.ts, and its per-control half (the Settings sections, and audio
+ * having one home) is in hud.controls.test.ts.
+ */
+describe('hud: the Main Menu hierarchy (issue #226)', () => {
+  const q = (root: HTMLElement, sel: string): HTMLButtonElement =>
+    root.querySelector(sel) as HTMLButtonElement;
+  const summary = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-run-summary') as HTMLElement;
+
+  it('puts every destination the issue names in the region the issue names', () => {
+    // The issue body IS the specification, and this is its hierarchy read back off the
+    // DOM: one dominant Campaign action, Versus and Practice as direct secondary play
+    // actions, Customize/Records/Settings as compact utilities, and a compact About/Legal
+    // entry. Asserted as CONTAINMENT rather than as a list of visible classes, because
+    // the failure this is for is a button drifting between regions -- which every
+    // per-button visibility test in this file would keep passing through.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(2, 4);
+    h.setState('main-menu');
+    const regionOf = (sel: string): string | null => {
+      const el = q(root, sel);
+      const region = el.closest('.hud-menu-play, .hud-menu-utilities, .hud-menu-footer');
+      return region === null ? null : (region.className.split(' ')[0] ?? null);
+    };
+    // The primary pair sits directly on the panel, in NO region -- they are the dominant
+    // action, and putting them in a row would make them peers of something.
+    expect(regionOf('.hud-continue'), 'Continue must not be inside a region').toBeNull();
+    expect(regionOf('.hud-new-game'), 'the campaign start must not be inside a region').toBeNull();
+    expect(regionOf('.hud-versus-open')).toBe('hud-menu-play');
+    expect(regionOf('.hud-levelselect-open')).toBe('hud-menu-play');
+    expect(regionOf('.hud-customize-open')).toBe('hud-menu-utilities');
+    expect(regionOf('.hud-records-open')).toBe('hud-menu-utilities');
+    expect(regionOf('.hud-settings-open')).toBe('hud-menu-utilities');
+    expect(regionOf('.hud-about-open')).toBe('hud-menu-footer');
+    // ...and the two play actions say what they DO. "Levels" named the pane it opened,
+    // which is why a new player could not tell it from the campaign.
+    expect(q(root, '.hud-levelselect-open').textContent).toBe('Practice');
+    expect(q(root, '.hud-versus-open').textContent).toBe('Versus');
+    expect(q(root, '.hud-continue').textContent).toBe('Continue Campaign');
+  });
+
+  it('summarises the active run above the action it describes, and only there', () => {
+    // "Show only the current mission and remaining run lives needed to build confidence."
+    // MAIN MENU only: pause and the outcome screens are the same panel element and
+    // already say where the session stands, and during practice the two legitimately
+    // disagree -- a run summary there would report the run's position over a board the
+    // run did not choose.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    expect(summary(root).classList.contains('hud-run-summary--hidden'), 'no run, no line').toBe(
+      true,
+    );
+
+    h.setCampaignRun({ mission: 3, total: 8, lives: 2 });
+    expect(summary(root).classList.contains('hud-run-summary--hidden')).toBe(false);
+    expect(summary(root).textContent).toBe('Mission 3 of 8 -- 2 lives left');
+
+    for (const state of ['paused', 'outcome-win', 'outcome-lose'] as const) {
+      h.setState(state);
+      expect(
+        summary(root).classList.contains('hud-run-summary--hidden'),
+        `the run summary leaked onto ${state}`,
+      ).toBe(true);
+    }
+    h.setState('main-menu');
+    expect(summary(root).classList.contains('hud-run-summary--hidden')).toBe(false);
+
+    // ...and it goes away when the run does, rather than describing a run that ended.
+    h.setCampaignRun(null);
+    expect(summary(root).classList.contains('hud-run-summary--hidden')).toBe(true);
+    expect(summary(root).textContent).toBe('');
+  });
+
+  it('says "1 life left", and degrades to the lives half when the mission cannot be resolved', () => {
+    // Two wordings that are easy to get wrong in opposite directions. The singular is not
+    // a flourish: the number is at its most alarming when it is one, and "1 lives" is
+    // exactly the reading a player is least likely to trust. The null mission is the
+    // honest answer for a stored level this build's campaign does not contain (see
+    // `setCampaignRun`) -- inventing a position would be worse than omitting one.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.setCampaignRun({ mission: 1, total: 8, lives: 1 });
+    expect(summary(root).textContent).toBe('Mission 1 of 8 -- 1 life left');
+    h.setCampaignRun({ mission: null, total: 8, lives: 3 });
+    expect(summary(root).textContent).toBe('3 lives left');
+  });
+
+  it('hides the summary for a versus relaunch target, exactly as Continue is hidden', () => {
+    // The versus session shares the campaign run store (loop.ts's `versusAwareDeps`), so
+    // a real campaign run is usually active behind a versus match. Without this the
+    // versus menu would carry a campaign mission line over buttons that start a match.
+    const { hud: h, root } = mount();
+    h.setRelaunchTarget('versus-setup');
+    h.setCampaignRun({ mission: 3, total: 8, lives: 2 });
+    h.setState('main-menu');
+    expect(summary(root).classList.contains('hud-run-summary--hidden')).toBe(true);
+  });
+});
+
 describe('hud: continue vs new game', () => {
   const continueBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-continue') as HTMLButtonElement;
@@ -1059,29 +1184,44 @@ describe('hud: continue vs new game', () => {
     expect(starts).toBe(1);
   });
 
-  it('New Game fires its OWN callback, distinct from onLevelSelect', () => {
+  it('Start Campaign fires its OWN callback, distinct from onLevelSelect', () => {
     // Before issue #153 New Game reported onLevelSelect(0), indistinguishable from
     // picking level 1 in the Levels panel -- exactly the seam practice-vs-campaign
     // needed to tell apart and could not. The production change that would break this
     // is New Game firing onLevelSelect again, or firing nothing at all.
+    //
+    // NO ACTIVE RUN here, unlike before issue #226: with a run the same button is the
+    // destructive "Start New Campaign" and opens the confirmation instead of firing --
+    // which is its own test, in hud.navigation.test.ts. This is the direct path.
     const { hud: h, root } = mount();
     let newGames = 0;
     const picks: number[] = [];
     h.onNewGame(() => newGames++);
     h.onLevelSelect((i) => picks.push(i));
     h.setState('main-menu');
-    h.setContinueAvailable(true); // a run exists, but New Game must still fire
     newGameBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(newGames).toBe(1);
     expect(picks).toEqual([]);
   });
 
-  it('New Game is always offered at title, with or without an active run', () => {
+  it('the campaign start button is always offered at title, and says which of the two it is', () => {
+    // One button, three labels (issue #226). "Start Campaign" is the primary action when
+    // nothing is running; with a run active the same control becomes the tertiary "Start
+    // New Campaign", and the word New is the only warning before the confirmation pane.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
+    expect(newGameBtn(root).textContent).toBe('Start Campaign');
+    expect(newGameBtn(root).classList.contains('ui-btn--primary'), 'primary with no run').toBe(true);
     h.setContinueAvailable(true);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
+    expect(newGameBtn(root).textContent).toBe('Start New Campaign');
+    // TERTIARY once Continue is beside it: the destructive action must not keep the
+    // primary weight while the safe one is on screen.
+    expect(newGameBtn(root).classList.contains('ui-btn--primary'), 'still primary with a run').toBe(
+      false,
+    );
+    expect(newGameBtn(root).classList.contains('hud-new-game--tertiary')).toBe(true);
   });
 
   it('both buttons are a title-screen affair, and the retired action button stays hidden there', () => {
@@ -1202,7 +1342,7 @@ describe('createHud application transition contract', () => {
       const { hud, root } = mount();
       document.documentElement.style.setProperty('--ui-transition-duration', '400ms');
       hud.setState('main-menu');
-      click(root, '.hud-stats-open');
+      click(root, '.hud-records-open');
 
       vi.advanceTimersByTime(399);
       expect(
@@ -1223,7 +1363,7 @@ describe('createHud application transition contract', () => {
     try {
       const { hud, root } = mount();
       hud.setState('main-menu');
-      click(root, '.hud-stats-open');
+      click(root, '.hud-records-open');
       expect(document.activeElement).toBe(surface(root, '.hud-stats'));
       // ...and the animation has demonstrably not finished, or "at the start" is vacuous.
       expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(false);
@@ -1238,8 +1378,12 @@ describe('createHud application transition contract', () => {
     try {
       const { hud, root } = mount();
       hud.setState('main-menu');
-      click(root, '.hud-stats-open');
-      click(root, '.hud-achievements-open'); // interrupts, before any timer runs
+      click(root, '.hud-records-open');
+      // The Achievements TAB inside the pane that is still fading in -- a second
+      // navigation arriving inside the first one's window, which is the interrupt this
+      // criterion is about. Scoped to `.hud-stats` because the same tab exists in the
+      // Achievements pane too.
+      click(root, '.hud-stats .hud-records-tab-achievements'); // interrupts, before any timer runs
       vi.advanceTimersByTime(1000);
 
       expect(hidden(root, '.hud-achievements', 'hud-achievements--hidden')).toBe(false);
@@ -1273,7 +1417,7 @@ describe('createHud application transition contract', () => {
       // there either way, so the honest quantity is the DIFFERENCE the policy makes.
       hud.setReducedMotion(false);
       const before = vi.getTimerCount();
-      click(root, '.hud-stats-open');
+      click(root, '.hud-records-open');
       const withMotion = vi.getTimerCount() - before;
       expect(
         hidden(root, '.hud-panel', 'hud-panel--hidden'),
@@ -1285,7 +1429,7 @@ describe('createHud application transition contract', () => {
 
       hud.setReducedMotion(true);
       const armed = vi.getTimerCount();
-      click(root, '.hud-stats-open');
+      click(root, '.hud-records-open');
       const reduced = vi.getTimerCount() - armed;
 
       // The outgoing surface is gone in the same frame -- no advance between.
@@ -1349,7 +1493,7 @@ describe('createHud application transition contract', () => {
       const panelEl = surface(root, '.hud-panel');
       const statsEl = surface(root, '.hud-stats');
 
-      click(root, '.hud-stats-open');
+      click(root, '.hud-records-open');
       expect(panelEl.classList.contains('ui-surface--leaving'), 'nothing was in flight').toBe(
         true,
       );
@@ -1384,7 +1528,7 @@ describe('createHud application transition contract', () => {
       const { hud, root } = mount();
       hud.setState('main-menu');
       vi.advanceTimersByTime(1000);
-      click(root, '.hud-stats-open');
+      click(root, '.hud-records-open');
       vi.advanceTimersByTime(1000); // settle the OPEN, so what follows is only the close
 
       click(root, '.hud-stats-back');

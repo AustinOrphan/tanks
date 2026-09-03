@@ -1829,12 +1829,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 102,
+    "expectFailures": 104,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -1923,8 +1923,8 @@
   {
     "id": "route-host-disposal-leaves-the-preview-context-alive",
     "file": "src/game/route-host.ts",
-    "find": "      routeUi.disposePreview();\n      // The page's own subscription, released for the same reason a session releases its\n      // own: the machine and this host die together, but a reference kept past teardown\n      // must not keep painting a disposed HUD.\n      stopPainting();\n      hud.dispose();",
-    "replace": "      stopPainting();\n      hud.dispose();",
+    "find": "      routeUi.disposePreview();\n      // The page's own subscription, released for the same reason a session releases its\n      // own: the machine and this host die together, but a reference kept past teardown\n      // must not keep painting a disposed HUD.\n      stopPainting();\n      stopPaintingSettings();\n      hud.dispose();",
+    "replace": "      stopPainting();\n      stopPaintingSettings();\n      hud.dispose();",
     "expect": "killed",
     "expectFailures": 1,
     "tests": [
@@ -2045,14 +2045,14 @@
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
     "file": "src/game/route-host.ts",
-    "find": "    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }\n    live?.key?.(e);",
-    "replace": "    if (sm.atLaunch) onLaunchGesture();\n    live?.key?.(e);",
+    "find": "    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }\n    /*\n     * M IS THE PAGE'S KEY NOW (issue #226).",
+    "replace": "    if (sm.atLaunch) onLaunchGesture();\n    /*\n     * M IS THE PAGE'S KEY NOW (issue #226).",
     "tests": [
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 1,
-    "why": "Drops the early return, so the key that dismisses the splash ALSO reaches the session's hotkeys. 'Press any key or tap to begin' then includes M, which mutes: the one key most likely to be pressed by someone checking whether the game has sound silences the menu bed the screen exists to make audible, with only the Mute button's label left to explain why. This is why the page owns ONE keydown listener and trampolines it rather than adding a second beside the session's -- two listeners would race, whichever ran first moving the route out from under the other's guard. 1 of 412 -- 'the key that dismisses it does nothing else'."
+    "why": "Drops the early return, so the key that dismisses the splash ALSO reaches the session's hotkeys. 'Press any key or tap to begin' then includes M, which mutes: the one key most likely to be pressed by someone checking whether the game has sound silences the menu bed the screen exists to make audible, with only the Mute button's label left to explain why. This is why the page owns ONE keydown listener and trampolines it rather than adding a second beside the session's -- two listeners would race, whichever ran first moving the route out from under the other's guard. 1 of 412 -- 'the key that dismisses it does nothing else'. The find names the KEY path explicitly since issue #226: the gamepad poller's own `atLaunch` return is written identically a few lines below, and either would match a shorter pattern."
   },
   {
     "id": "session-host-campaign-return-replaces-instead-of-stopping",
@@ -2176,8 +2176,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 4,
-    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness."
+    "expectFailures": 6,
+    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness. Re-measured at 6 of 482 for issue #226: the page now also paints the active run's SUMMARY and the stored audio/input settings at construction, so the two cases that pin those fail here too."
   },
   {
     "id": "route-host-never-re-reads-continue-on-arrival",
@@ -2245,8 +2245,8 @@
   {
     "id": "route-host-painter-outlives-the-page",
     "file": "src/game/route-host.ts",
-    "find": "      stopPainting();\n      hud.dispose();",
-    "replace": "      void stopPainting;\n      hud.dispose();",
+    "find": "      stopPainting();\n      stopPaintingSettings();\n      hud.dispose();",
+    "replace": "      void stopPainting;\n      stopPaintingSettings();\n      hud.dispose();",
     "tests": [
       "src/game/route-host.test.ts"
     ],
@@ -2374,8 +2374,8 @@
   {
     "id": "pane-covers-the-open-pane",
     "file": "src/game/hud.ts",
-    "find": "    if (top !== null && top.id !== id) {\n      layers.pop();\n      LAYERS[top.id].close();\n      origin = top.origin;\n    }",
-    "replace": "    if (top !== null && top.id !== id) {\n      layers.pop();\n      origin = top.origin;\n    }",
+    "find": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;\n      layers.pop();\n      LAYERS[top.id].close();\n      origin = top.origin;",
+    "replace": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;\n      layers.pop();\n      origin = top.origin;",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
@@ -2991,7 +2991,7 @@
     "killedBy": [
       "createHud roving-tabindex focus navigation (issue #115) leaves ArrowLeft/ArrowRight on the preview canvas for its own rotation scheme",
       "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
-      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Controllers, then Quit from the pause panel with three ArrowDowns",
+      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Settings, then Controllers, then Quit from the pause panel",
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
       "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
       "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
@@ -3202,6 +3202,236 @@
     "expect": "killed",
     "killedBy": [
       "checkTrace rejects a schema-3 trace, which predates the recorded perception rule (issue #492)"
+    ]
+  },
+  {
+    "id": "menu-replaces-a-run-without-asking",
+    "file": "src/game/hud.ts",
+    "find": "    if (!confirmsNewCampaign()) {\n      startNewCampaign();\n      return;\n    }\n    openLayer('confirm-new-campaign', newGameBtn);",
+    "replace": "    startNewCampaign();",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "Issue #226's acceptance criterion: 'starting a replacement campaign requires confirmation only when an active run would be lost'. Without the gate the tertiary 'Start New Campaign' deletes the run on one click, from a button sitting directly under the Continue that describes it -- the single most destructive thing the Main Menu can do, and silent from every other angle, since the run store write happens inside the session the click creates.",
+    "killedBy": [
+      "hud: the replace-run confirmation (issue #226) is asked only when an active run would be lost",
+      "hud: the replace-run confirmation (issue #226) names the run it would replace",
+      "hud: the replace-run confirmation (issue #226) Cancel starts nothing and returns to the menu; Confirm starts exactly one campaign",
+      "hud: the replace-run confirmation (issue #226) is a BLOCKING layer: no route opens under an unanswered question",
+      "hud: the replace-run confirmation (issue #226) Back cancels it, and a surface change dismisses it rather than letting it outlive the menu",
+      "hud: the replace-run confirmation (issue #226) puts the safe answer first, so a blind Confirm cannot delete a run"
+    ]
+  },
+  {
+    "id": "menu-asks-even-with-no-run-to-lose",
+    "file": "src/game/hud.ts",
+    "find": "  const confirmsNewCampaign = (): boolean =>\n    hasProgress && relaunchTarget !== 'versus-setup';",
+    "replace": "  const confirmsNewCampaign = (): boolean => relaunchTarget !== 'versus-setup';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts",
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The OTHER half of the same criterion -- 'only when an active run would be lost'. A confirmation on a first-ever Start Campaign is friction protecting nothing, and it puts a destructive-sounding question in front of the one action a new player is meant to take without hesitating. Asserted separately from the gate above because a mutation that always asks passes any test that only checks the pane can appear.",
+    "killedBy": [
+      "hud: the replace-run confirmation (issue #226) is asked only when an active run would be lost",
+      "createHud panel does not eat a click after a drag dismissal followed by ARROW-KEY navigation",
+      "hud: continue vs new game Start Campaign fires its OWN callback, distinct from onLevelSelect"
+    ]
+  },
+  {
+    "id": "menu-confirmation-lets-a-route-open-underneath",
+    "file": "src/game/hud.ts",
+    "find": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;",
+    "replace": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) void 0;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "The one structural difference between an overlay and a route (`navigation.ts`): a route may never be pushed over an overlay. Dropping the check lets `openLayer`'s replace rule pop the unanswered confirmation and open a pane over the surface it was blocking -- which is the outcome `push` would have refused, except that the pop happens first. The player's Back then lands on a screen they never asked for, with the destructive question silently withdrawn.",
+    "killedBy": [
+      "hud: the replace-run confirmation (issue #226) is a BLOCKING layer: no route opens under an unanswered question"
+    ]
+  },
+  {
+    "id": "menu-confirmation-does-not-start-the-campaign",
+    "file": "src/game/hud.ts",
+    "find": "  const handleConfirmAccept = (): void => {\n    back();\n    startNewCampaign();\n  };",
+    "replace": "  const handleConfirmAccept = (): void => {\n    back();\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "The confirmed answer becomes a second Cancel: the player says yes and lands back on the Main Menu with the old run intact and no explanation. Distinct from the two gate mutations above, which are about WHETHER the question is asked -- this is about the answer being honoured, and a test that only opened and cancelled the pane would never see it.",
+    "killedBy": [
+      "hud: the replace-run confirmation (issue #226) Cancel starts nothing and returns to the menu; Confirm starts exactly one campaign"
+    ]
+  },
+  {
+    "id": "menu-run-summary-leaks-off-the-main-menu",
+    "file": "src/game/hud.ts",
+    "find": "    const show =\n      shownState === 'main-menu' && campaignRun !== null && relaunchTarget !== 'versus-setup';",
+    "replace": "    const show = campaignRun !== null && relaunchTarget !== 'versus-setup';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The run summary is context for the Main Menu's primary action and nothing else. On Pause and the outcome screens the same `.hud-panel` already says where the SESSION stands, and during practice the two legitimately disagree -- so this puts a campaign mission line over a board the run did not choose, contradicting the panel it is printed on.",
+    "killedBy": [
+      "hud: the Main Menu hierarchy (issue #226) summarises the active run above the action it describes, and only there"
+    ]
+  },
+  {
+    "id": "menu-run-summary-always-plural",
+    "file": "src/game/hud.ts",
+    "find": "    const lives = `${run.lives} ${run.lives === 1 ? 'life' : 'lives'} left`;",
+    "replace": "    const lives = `${run.lives} lives left`;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts",
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "\"1 lives left\" at exactly the moment the number matters most. The summary exists to build confidence about a run the player is deciding whether to continue, and the last life is when it is read most carefully -- a wording defect there costs more trust than the same defect at three. Invisible to any assertion that only checks the line contains the number.",
+    "killedBy": [
+      "hud: the replace-run confirmation (issue #226) names the run it would replace",
+      "hud: the Main Menu hierarchy (issue #226) says \"1 life left\", and degrades to the lives half when the mission cannot be resolved"
+    ]
+  },
+  {
+    "id": "menu-replace-button-keeps-the-primary-weight",
+    "file": "src/game/hud.ts",
+    "find": "    newGameBtn.classList.toggle('ui-btn--primary', !hasProgress || versusKind);\n    newGameBtn.classList.toggle('hud-new-game--tertiary', hasProgress && !versusKind);",
+    "replace": "    newGameBtn.classList.toggle('ui-btn--primary', true);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Issue #226 makes Start New Campaign TERTIARY while a run exists: with Continue on screen this button is the destructive one and must not compete with it for the eye. Left at primary weight the menu offers two equally loud campaign actions, one of which deletes the other's subject -- exactly the flat competition the issue exists to remove, and a pure CSS-class change that no behavioural test would notice.",
+    "killedBy": [
+      "hud: continue vs new game the campaign start button is always offered at title, and says which of the two it is"
+    ]
+  },
+  {
+    "id": "settings-renders-a-section-with-no-controls",
+    "file": "src/game/hud.ts",
+    "find": "      const populated = controls !== null && focusableControls(controls).length > 0;",
+    "replace": "      const populated = true;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Issue #226: 'only sections with relevant controls should render'. Accessibility ships declared and empty -- its motion and UI-scale controls are issues #289/#290 -- so without the rule Settings opens on a heading over nothing, which is the 'permanently disabled settings players have to decode' the UI direction rules out. It is also the mechanism #227 leans on: hide every control in a section on capability and the section must collapse with no further change here.",
+    "killedBy": [
+      "hud: the Settings sections (issue #226) declares the issue's five sections and renders only the ones with controls",
+      "hud: the Settings sections (issue #226) renders a section as soon as it HAS a control -- the rule reads the DOM, not a list"
+    ]
+  },
+  {
+    "id": "topbar-leaks-gameplay-status-onto-the-main-menu",
+    "file": "src/game/hud.ts",
+    "find": "    topbarEl.classList.toggle('hud-topbar--hidden', atLaunch || atMainMenu);",
+    "replace": "    topbarEl.classList.toggle('hud-topbar--hidden', atLaunch);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts",
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The gap issue #226 names in its own words: 'the persistent top bar can leak gameplay status into application screens'. Everything left in that bar is in-match status now that the audio pair moved to Settings, so restoring the old rule puts the abandoned session's Lives, Enemies and Level chip above a menu offering to start a different match -- numbers about a world nobody is playing.",
+    "killedBy": [
+      "hud: the topbar carries gameplay status only (issue #226) hides the whole bar at Launch and at the Main Menu, and shows it over the board",
+      "createHud panel shows the title panel once the splash screen is dismissed"
+    ]
+  },
+  {
+    "id": "records-tab-restores-the-tab-instead-of-the-menu-control",
+    "file": "src/game/hud.ts",
+    "find": "  const handleRecordsTabAchievements = (): void => {\n    openLayer('achievements', recordsOpenBtn);\n  };",
+    "replace": "  const handleRecordsTabAchievements = (): void => {\n    openLayer('achievements', recordsTabAchievementsBtns[0]);\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Records is one destination with two tabs, and switching tabs REPLACES the top layer -- so the tab that was clicked belongs to the pane being left and is not on the destination Back returns to. Recording it as the opener makes `restoreFocus` fall through to the container on every Back out of the Achievements tab, silently losing a keyboard player's place at the Main Menu control they actually used. Issue #318's whole point, in the one place issue #226 could break it.",
+    "killedBy": [
+      "hud: achievements is one destination with two tabs: switching keeps the Main Menu as the origin"
+    ]
+  },
+  {
+    "id": "route-host-paints-no-run-summary",
+    "file": "src/game/route-host.ts",
+    "find": "    const index = deps.levels.levels.findIndex((level) => level.id === run.currentLevelId);\n    hud.setCampaignRun({\n      mission: index < 0 ? null : index + 1,\n      total: deps.levels.levels.length,\n      lives: run.livesRemaining,\n    });",
+    "replace": "    hud.setCampaignRun({ mission: null, total: 0, lives: run.livesRemaining });",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The mission NUMBER is resolvable only here: `run.ts` holds a level id and deliberately never imports campaign data, and the HUD names no simulation module at all, so a page that does not resolve it leaves the Main Menu's confidence line permanently degraded to the lives half for every player. It also feeds the replace-run confirmation's copy, which is what stops that question being about runs in general.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)",
+      "createRouteHost: the Main Menu is painted from the stores by the page reports a mission it cannot place as null rather than inventing a position"
+    ]
+  },
+  {
+    "id": "route-host-drops-the-mute-shortcut",
+    "file": "src/game/route-host.ts",
+    "find": "    if (isMuteHotkey(e)) {\n      routeUi.toggleMute();\n      hud.showToast(deps.settings.snapshot().audio.muted ? 'Muted' : 'Sound on');\n      return;\n    }",
+    "replace": "    void isMuteHotkey;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "why": "M moved onto the page with issue #226 because the Mute BUTTON it used to mirror stopped appearing on every surface: with the topbar chip retired, a session-scoped shortcut is dead on exactly the screen that no longer shows one -- the Main Menu of a page that has not started a match, which is the normal boot state since #428. Removing it leaves the shortcut working nowhere at all, since `loop.ts` no longer carries a copy.",
+    "killedBy": [
+      "startGameWith: leaving the title screen still mutes on M once the game is past the title screen",
+      "startGameWith: listeners and teardown toggles mute on M through the PAGE listener, not this session (issue #226)",
+      "createRouteHost: the Main Menu is painted from the stores by the page claims M for the page and reports the result, on a page with no session"
+    ]
+  },
+  {
+    "id": "route-host-mutes-without-saying-so",
+    "file": "src/game/route-host.ts",
+    "find": "      hud.showToast(deps.settings.snapshot().audio.muted ? 'Muted' : 'Sound on');",
+    "replace": "      void deps;",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The issue's 'retain applicable shortcuts with brief status feedback'. The always-visible topbar label was the only thing that told a player whether the game was muted or merely silent -- no music ships, so silence is the normal condition either way -- and removing it without a replacement makes a mis-typed M indistinguishable from a broken build. The mute still happens, which is why nothing but the toast can see this.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page claims M for the page and reports the result, on a page with no session"
+    ]
+  },
+  {
+    "id": "route-host-repaints-settings-behind-a-live-session",
+    "file": "src/game/route-host.ts",
+    "find": "    if (live !== null) return;",
+    "replace": "    if (live !== null) void 0;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "The page's settings paint exists for the arrivals no session sees. A live session pushes the same five values from its own subscription to the same HUD (`loop.ts`'s `applySettings`), so without the guard every preference change repaints twice -- redundant rather than wrong, and the shape that later reads as two owners for one control. Counted by loop.test.ts's mute and volume push arrays, which is the only place the duplicate is visible at all.",
+    "killedBy": [
+      "startGameWith: HUD wiring routes the mute button through the STORE, to the engine, and back to the button",
+      "startGameWith: HUD wiring routes the volume slider through the STORE and on to the engine",
+      "startGameWith: leaving the title screen still mutes on M once the game is past the title screen",
+      "startGameWith: listeners and teardown toggles mute on M through the PAGE listener, not this session (issue #226)"
+    ]
+  },
+  {
+    "id": "confirm-not-announced-as-modal",
+    "file": "src/game/hud.ts",
+    "find": "role=\"alertdialog\" aria-modal=\"true\"",
+    "replace": "role=\"alertdialog\"",
+    "why": "The replace-run confirmation keeps the menu on screen behind a scrim, which is what a modal is; without `aria-modal` a screen reader is free to wander into that menu while an unanswered destructive question is open. Focus containment already holds (the roving walk stays inside the confirmation), so this attribute is the part that tells assistive technology the same thing. Raised in review of PR #523.",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "hud: the replace-run confirmation (issue #226) is announced as a modal, and earns that claim: focus cannot rove out of it into the menu behind"
     ]
   }
 ]

@@ -417,7 +417,9 @@ function runChecks(results) {
  * is working exactly as designed.
  *
  * Continue when a run exists, New Game otherwise -- whichever the HUD is actually
- * offering, since `applyTitleAffordances` hides the other. Returns whether it managed to
+ * offering, since `applyTitleAffordances` hides the other. The order also keeps this
+ * clear of issue #226's replace-run confirmation: Continue is preferred, and New Game only
+ * runs when Continue is hidden, which is exactly the case with no run to replace. Returns whether it managed to
  * start one; the call site ignores that for the same reason `dismissSplash` is ignored:
  * the checks downstream report the consequence more usefully than a throw here would.
  */

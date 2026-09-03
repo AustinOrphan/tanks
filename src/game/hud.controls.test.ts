@@ -21,8 +21,10 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+// The one volume slider since issue #226, in Settings -> Audio. It used to have a twin
+// in the topbar; the mirror-writing those two needed is what disappeared with it.
 const volumeSlider = (root: HTMLElement): HTMLInputElement =>
-  root.querySelector('.hud-volume') as HTMLInputElement;
+  root.querySelector('.hud-settings-volume') as HTMLInputElement;
 
 describe('createHud volume control', () => {
   it('shows the volume the audio engine actually boots at', () => {
@@ -33,20 +35,20 @@ describe('createHud volume control', () => {
     expect(Number(volumeSlider(root).value)).toBe(DEFAULT_VOLUME);
   });
 
-  it('setVolume moves BOTH sliders, so the persisted level is not shown in one place only', () => {
+  it('setVolume shows the persisted level, and there is exactly ONE slider to show it on', () => {
     // The markup renders at DEFAULT_VOLUME, which was the truth while volume was a
     // session-local field on the audio engine. Since issue #320 it is persisted, and
-    // loop.ts pushes the stored value through here at boot -- so a returning player who
-    // set 0.2 must not see 0.6 on either control.
+    // the page pushes the stored value through here at boot -- so a returning player who
+    // set 0.2 must not see 0.6.
     //
-    // BOTH, asserted separately: the topbar slider and the pause-panel slider are two
-    // views of one value, and the input handlers already mirror each other in the other
-    // direction. Dropping the panel write leaves the topbar test green and the panel
-    // silently stale, which is exactly the half a fake HUD in loop.test.ts cannot see.
+    // The count is the other half, and it is what issue #226 made assertable: while the
+    // topbar carried a twin, "setVolume moves BOTH sliders" was a real obligation and
+    // dropping either write left one control silently stale. One control cannot drift
+    // from itself, so the guard that replaces it is that a second one has not come back.
     const { hud, root } = mount();
     hud.setVolume(0.2);
     expect(volumeSlider(root).value).toBe('0.2');
-    expect((root.querySelector('.hud-panel-volume') as HTMLInputElement).value).toBe('0.2');
+    expect(root.querySelectorAll('input[type="range"]').length).toBe(1);
   });
 
   it('keeps DEFAULT_VOLUME on the step grid the browser will snap to', () => {
@@ -108,8 +110,9 @@ describe('createHud stats', () => {
 });
 
 describe('createHud mute button', () => {
+  // In Settings -> Audio since issue #226, and nowhere else: the topbar chip is gone.
   const muteBtn = (root: HTMLElement): HTMLButtonElement =>
-    root.querySelector('.hud-mute') as HTMLButtonElement;
+    root.querySelector('.hud-settings-mute') as HTMLButtonElement;
 
   it('starts unmuted and says so', () => {
     const { root } = mount();
@@ -147,7 +150,7 @@ describe('createHud does not keep keyboard focus after a pointer interaction', (
     // clicked elsewhere. Keyboard activation reports detail 0 and must KEEP focus, so
     // anyone tabbing through the HUD still has it work.
     const { root } = mount();
-    const btn = root.querySelector('.hud-mute') as HTMLButtonElement;
+    const btn = root.querySelector('.hud-settings-mute') as HTMLButtonElement;
 
     btn.focus();
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
@@ -156,7 +159,7 @@ describe('createHud does not keep keyboard focus after a pointer interaction', (
 
   it('keeps focus when the mute button is activated from the keyboard', () => {
     const { root } = mount();
-    const btn = root.querySelector('.hud-mute') as HTMLButtonElement;
+    const btn = root.querySelector('.hud-settings-mute') as HTMLButtonElement;
 
     btn.focus();
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
@@ -221,14 +224,13 @@ describe('hud: the fire-mode toggle', () => {
     expect(seen, 'the third click did not wrap back to tap').toEqual(['double', 'button', 'tap']);
   });
 
-  it('is reachable from the title screen too, not just pause', () => {
-    const { hud: h, root } = mount();
-    h.setState('main-menu');
+  it('lives in the Settings pane, under Controls', () => {
+    const { root } = mount();
     const toggle = root.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
-    const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
-    expect(settingsRow.classList.contains('hud-panel-settings--hidden')).toBe(false);
-    expect(settingsRow.contains(toggle)).toBe(true);
+    const section = toggle.closest('.hud-settings-section') as HTMLElement;
+    expect(section, 'the toggle is not inside a Settings section').not.toBeNull();
+    expect(section.dataset.section).toBe('controls');
   });
 });
 
@@ -273,14 +275,16 @@ describe('hud: the haptics toggle', () => {
     expect(seen).toEqual([false, true]);
   });
 
-  it('is reachable from the title screen too, not just pause', () => {
-    const { hud: h, root } = mount();
-    h.setState('main-menu');
+  it('lives in the Settings pane, under Controls rather than Accessibility', () => {
+    // The placement is a decision, not an accident: device vibration is feedback FROM an
+    // input device and lives under `input` in the settings model, while Accessibility is
+    // reserved for the motion and UI-scale policies issues #289/#290 add.
+    const { root } = mount();
     const toggle = root.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
-    const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
-    expect(settingsRow.classList.contains('hud-panel-settings--hidden')).toBe(false);
-    expect(settingsRow.contains(toggle)).toBe(true);
+    const section = toggle.closest('.hud-settings-section') as HTMLElement;
+    expect(section, 'the toggle is not inside a Settings section').not.toBeNull();
+    expect(section.dataset.section).toBe('controls');
   });
 });
 
@@ -305,21 +309,34 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
   const candidateButtons = (row: HTMLElement): HTMLButtonElement[] =>
     Array.from(row.querySelectorAll('.hud-controller-source-btn'));
 
-  it('is reachable from BOTH the title screen and the pause panel, unlike every sibling subpanel', () => {
+  it('is CONTEXTUAL, not a permanent Main Menu destination (issue #226)', () => {
+    // The ruling: "Controllers are contextual to VS/setup or Controls settings, not a
+    // permanent top-level destination." So the panel button on the menu is gone and the
+    // two contextual entries remain: the pause panel, which is the owner's original "in
+    // case controllers disconnect" case, and Settings -> Controls, which is the durable
+    // one and is itself reachable from both the Main Menu and Pause.
+    //
     // 'playing' is excluded from this per-button check, matching the established
     // convention (see 'hud: level select panel's own equivalent test): setState's
     // early-return for playing/splash hides the whole .hud-panel wrapper rather than
     // toggling each button's own class, so the button's OWN class is not the right
     // oracle there.
     const { hud: h, root } = mount();
-    h.setState('main-menu');
-    expect(openBtn(root).classList.contains('hud-controllers-open--hidden')).toBe(false);
     h.setState('paused');
     expect(openBtn(root).classList.contains('hud-controllers-open--hidden')).toBe(false);
-    for (const s of ['outcome-win', 'outcome-lose'] as const) {
+    for (const s of ['main-menu', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-controllers-open--hidden'), s).toBe(true);
     }
+    // The durable entry, and it opens the SAME pane -- a second Controllers destination
+    // would be the peer this issue removed, wearing a different hat.
+    h.setState('main-menu');
+    const fromSettings = root.querySelector('.hud-settings-controllers') as HTMLButtonElement;
+    expect(fromSettings.closest('.hud-settings-section')!.getAttribute('data-section')).toBe(
+      'controls',
+    );
+    fromSettings.dispatchEvent(new MouseEvent('click'));
+    expect(view(root).classList.contains('hud-controllers--hidden')).toBe(false);
   });
 
   it('renders one row per slot, with the current source\'s label per SlotSource kind', () => {
@@ -461,11 +478,160 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
   });
 });
 
+/*
+ * ISSUE #226: Settings as the one durable home for a preference.
+ *
+ * The per-control half of the menu restructure -- which section holds which control, that
+ * a section with none does not render, and that audio has exactly one home. The
+ * composition half is in hud.surfaces.test.ts and the layer-stack half in
+ * hud.navigation.test.ts.
+ */
+describe('hud: the Settings sections (issue #226)', () => {
+  const sections = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-settings-section'));
+  const shown = (root: HTMLElement): (string | undefined)[] =>
+    sections(root)
+      .filter((el) => !el.classList.contains('hud-settings-section--hidden'))
+      .map((el) => el.dataset.section);
+
+  it('declares the issue\'s five sections and renders only the ones with controls', () => {
+    // The issue names Audio, Controls, Accessibility, Data, About & Legal, and then:
+    // "Only sections with relevant controls should render." Accessibility is declared
+    // with none -- the motion and UI-scale controls are issues #289/#290, and the
+    // settings MODEL already carries both fields with no HUD to drive them -- so the rule
+    // is exercised on the shipped build rather than written for a future one.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    (root.querySelector('.hud-settings-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
+    expect(sections(root).map((el) => el.dataset.section)).toEqual([
+      'audio',
+      'controls',
+      'accessibility',
+      'data',
+      'about',
+    ]);
+    expect(shown(root)).toEqual(['audio', 'controls', 'data', 'about']);
+  });
+
+  it('renders a section as soon as it HAS a control -- the rule reads the DOM, not a list', () => {
+    // The negative control for the test above, and the property that makes this a rule
+    // rather than a hardcoded exclusion: reveal a control inside Accessibility and the
+    // section must appear on the next open, with nothing in hud.ts changed. This is also
+    // the shape #227 relies on in the other direction -- hide every control in a section
+    // on capability and the section collapses on its own.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    const open = (): void => {
+      (root.querySelector('.hud-settings-open') as HTMLButtonElement).dispatchEvent(
+        new MouseEvent('click'),
+      );
+    };
+    open();
+    expect(shown(root), 'the fixture must start with Accessibility empty').not.toContain(
+      'accessibility',
+    );
+
+    const a11y = sections(root).find((el) => el.dataset.section === 'accessibility')!;
+    const control = document.createElement('button');
+    control.textContent = 'Reduce motion';
+    (a11y.querySelector('.hud-settings-controls') as HTMLElement).appendChild(control);
+    h.back();
+    open();
+    expect(shown(root)).toEqual(['audio', 'controls', 'accessibility', 'data', 'about']);
+  });
+
+  it('reaches Settings from the Main Menu AND from Pause, and Back returns to the origin', () => {
+    // "Settings opened from Pause returns to Pause over the same session." The layer
+    // stack records the surface a layer was pushed over, so this is the origin rule
+    // rather than a second Settings; the test is here because it is the criterion.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const title = (): string =>
+        (root.querySelector('.hud-title') as HTMLElement).textContent ?? '';
+      for (const origin of ['main-menu', 'paused'] as const) {
+        h.setState(origin);
+        const opener = root.querySelector('.hud-settings-open') as HTMLButtonElement;
+        opener.dispatchEvent(new MouseEvent('click'));
+        expect(
+          (root.querySelector('.hud-settings') as HTMLElement).classList.contains(
+            'hud-settings--hidden',
+          ),
+          `Settings did not open from ${origin}`,
+        ).toBe(false);
+        (root.querySelector('.hud-settings-back') as HTMLButtonElement).dispatchEvent(
+          new MouseEvent('click'),
+        );
+        vi.advanceTimersByTime(1000);
+        expect(title(), `Back from Settings left ${origin}`).toBe(
+          origin === 'paused' ? 'Paused' : 'TANKS!',
+        );
+        expect(document.activeElement, `Back did not restore the opener from ${origin}`).toBe(
+          opener,
+        );
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("hud: the topbar carries gameplay status only (issue #226)", () => {
+  it('hides the whole bar at Launch and at the Main Menu, and shows it over the board', () => {
+    // The gap the issue names: "the persistent top bar can leak gameplay status into
+    // application screens". It used to hide at Launch alone, so an abandoned session's
+    // Lives, Enemies and Level chip sat above a menu offering to start a different match.
+    // Everything left in the bar is in-match status now that the audio pair moved to
+    // Settings, so the rule is the surface.
+    //
+    // Population: all six HudSurface values. The outcome screens keep the bar because
+    // they are read OVER the board the numbers describe.
+    const { hud: h, root } = mount();
+    const bar = root.querySelector('.hud-topbar') as HTMLElement;
+    const hidden = (): boolean => bar.classList.contains('hud-topbar--hidden');
+    for (const state of ['launch', 'main-menu'] as const) {
+      h.setState(state);
+      expect(hidden(), `the topbar showed at ${state}`).toBe(true);
+    }
+    for (const state of ['playing', 'paused', 'outcome-win', 'outcome-lose'] as const) {
+      h.setState(state);
+      expect(hidden(), `the topbar was hidden at ${state}`).toBe(false);
+    }
+  });
+
+  it('carries no audio control at all: Settings is the one durable home', () => {
+    // The issue's scope line -- "remove menu-embedded and always-visible top-bar
+    // mute/volume controls" -- and its acceptance criterion, "audio controls have one
+    // durable home and no always-visible gameplay/menu slider". Asserted over the whole
+    // HUD rather than over the bar, because a control moved from the bar back onto the
+    // pause panel would satisfy a bar-scoped check and break the criterion.
+    const { root } = mount();
+    const sliders = Array.from(root.querySelectorAll('input[type="range"]'));
+    expect(sliders.map((el) => el.className)).toEqual(['hud-settings-volume']);
+    const mutes = Array.from(root.querySelectorAll('button')).filter((b) =>
+      /^Mute|^Muted/.test(b.textContent ?? ''),
+    );
+    expect(mutes.map((b) => Array.from(b.classList).join('.'))).toEqual([
+      'ui-btn.ui-btn--sm.hud-settings-mute',
+    ]);
+    for (const el of [...sliders, ...mutes]) {
+      expect(
+        el.closest('.hud-settings'),
+        `${el.className} is not inside the Settings pane`,
+      ).not.toBeNull();
+    }
+  });
+});
+
 describe('hud: the stats page', () => {
   const statsView = (root: HTMLElement): HTMLElement =>
     root.querySelector('.hud-stats') as HTMLElement;
+  // ONE Main Menu entry since issue #226: Records, which opens the Stats tab. The
+  // Achievements button that used to sit beside it on the menu is a tab inside the pane.
   const openBtn = (root: HTMLElement): HTMLButtonElement =>
-    root.querySelector('.hud-stats-open') as HTMLButtonElement;
+    root.querySelector('.hud-records-open') as HTMLButtonElement;
   const cell = (root: HTMLElement, row: string, col: 0 | 1): string => {
     const tr = Array.from(root.querySelectorAll('.hud-stats-table tr')).find(
       (r) => r.querySelector('th')?.textContent === row,
@@ -515,14 +681,31 @@ describe('hud: the stats page', () => {
     expect(cell(root, 'Accuracy', 1)).toBe('--'); // 0 shots this run
   });
 
-  it('the Stats button lives on the title panel only', () => {
+  it('the Records button lives on the title panel only', () => {
     const { hud: h, root } = mount();
     for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
-      expect(openBtn(root).classList.contains('hud-stats-open--hidden'), s).toBe(true);
+      expect(openBtn(root).classList.contains('hud-records-open--hidden'), s).toBe(true);
     }
     h.setState('main-menu');
-    expect(openBtn(root).classList.contains('hud-stats-open--hidden')).toBe(false);
+    expect(openBtn(root).classList.contains('hud-records-open--hidden')).toBe(false);
+  });
+
+  it('carries NO destructive action: the resets live under Settings -> Data (issue #226)', () => {
+    // The issue's ruling: "Destructive reset/import actions live under Data, not
+    // Records." A page whose purpose is reading progress should not put deleting it one
+    // mis-click away, and the two reset buttons were the whole of `.hud-stats-actions`
+    // beside Back.
+    const { hud: h, root } = mount();
+    h.setStats({ lifetime: SOME, attempt: NONE });
+    h.setState('main-menu');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(statsView(root).querySelector('.hud-reset-stats')).toBeNull();
+    expect(statsView(root).querySelector('.hud-reset-progress')).toBeNull();
+    for (const sel of ['.hud-reset-stats', '.hud-reset-progress']) {
+      const btn = root.querySelector(sel) as HTMLButtonElement;
+      expect(btn.closest('.hud-settings-section')!.getAttribute('data-section'), sel).toBe('data');
+    }
   });
 
   it('both resets are two-click: the first arms, the second fires', () => {
@@ -531,9 +714,10 @@ describe('hud: the stats page', () => {
     let progResets = 0;
     h.onResetStats(() => statResets++);
     h.onResetProgress(() => progResets++);
-    h.setStats({ lifetime: SOME, attempt: NONE });
     h.setState('main-menu');
-    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    (root.querySelector('.hud-settings-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
 
     const reset = root.querySelector('.hud-reset-stats') as HTMLButtonElement;
     reset.dispatchEvent(new MouseEvent('click'));
@@ -551,15 +735,21 @@ describe('hud: the stats page', () => {
 
   it('arming one reset does not arm the other, and leaving the page disarms', () => {
     const { hud: h, root } = mount();
-    h.setStats({ lifetime: SOME, attempt: NONE });
     h.setState('main-menu');
-    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    const openSettings = (): void => {
+      (root.querySelector('.hud-settings-open') as HTMLButtonElement).dispatchEvent(
+        new MouseEvent('click'),
+      );
+    };
+    openSettings();
     const reset = root.querySelector('.hud-reset-stats') as HTMLButtonElement;
     const prog = root.querySelector('.hud-reset-progress') as HTMLButtonElement;
     reset.dispatchEvent(new MouseEvent('click'));
     expect(prog.textContent).toBe('Reset progress'); // untouched
-    (root.querySelector('.hud-stats-back') as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
-    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    (root.querySelector('.hud-settings-back') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
+    openSettings();
     expect(reset.textContent).toBe('Reset stats'); // disarmed by leaving
   });
 
@@ -612,8 +802,16 @@ describe('hud: the stats page', () => {
 });
 
 describe('hud: achievements', () => {
-  const openBtn = (root: HTMLElement): HTMLButtonElement =>
-    root.querySelector('.hud-achievements-open') as HTMLButtonElement;
+  // The Achievements TAB of Records since issue #226, not a Main Menu peer of its own:
+  // Records opens the Stats tab and the tab row inside it reaches this one. Scoped to
+  // `.hud-stats` because the same tab pair exists in both panes -- an unscoped query
+  // would find the Achievements pane's own copy, which is the tab you are already on.
+  const openBtn = (root: HTMLElement): HTMLButtonElement => {
+    (root.querySelector('.hud-records-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
+    return root.querySelector('.hud-stats .hud-records-tab-achievements') as HTMLButtonElement;
+  };
   const page = (root: HTMLElement): HTMLElement =>
     root.querySelector('.hud-achievements') as HTMLElement;
   const rows = (root: HTMLElement): HTMLElement[] =>
@@ -658,10 +856,66 @@ describe('hud: achievements', () => {
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     h.setState('playing');
     expect(page(root).classList.contains('hud-achievements--hidden')).toBe(true);
+    // ...and the only way back in is Records, which is Main-Menu only. The old sweep
+    // asked the same question of a `.hud-achievements-open` button that no longer
+    // exists; the entry it is really gated on is the one that replaced it.
+    const records = root.querySelector('.hud-records-open') as HTMLButtonElement;
     for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
-      expect(openBtn(root).classList.contains('hud-achievements-open--hidden'), s).toBe(true);
+      expect(records.classList.contains('hud-records-open--hidden'), s).toBe(true);
     }
+  });
+
+  it('is one destination with two tabs: switching keeps the Main Menu as the origin', () => {
+    // The shallow-tab shape issue #226 asks for, on the layer stack the HUD already has:
+    // Stats and Achievements are SIBLING layers over the same origin, not a two-deep
+    // stack, so Back from either returns to the Main Menu rather than to the other tab.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      const records = root.querySelector('.hud-records-open') as HTMLButtonElement;
+      records.dispatchEvent(new MouseEvent('click'));
+      expect(
+        (root.querySelector('.hud-stats') as HTMLElement).classList.contains('hud-stats--hidden'),
+        'Records opens the Stats tab',
+      ).toBe(false);
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      vi.advanceTimersByTime(1000);
+      expect(page(root).classList.contains('hud-achievements--hidden')).toBe(false);
+      expect(
+        (root.querySelector('.hud-stats') as HTMLElement).classList.contains('hud-stats--hidden'),
+        'the Stats tab must LEAVE, not be covered',
+      ).toBe(true);
+
+      // One Back, and it lands on the menu -- not on the tab it came from.
+      expect(h.back()).toBe(true);
+      vi.advanceTimersByTime(1000);
+      expect(page(root).classList.contains('hud-achievements--hidden')).toBe(true);
+      expect(
+        (root.querySelector('.hud-panel') as HTMLElement).classList.contains('hud-panel--hidden'),
+      ).toBe(false);
+      expect(h.back(), 'the stack must be empty after one Back').toBe(false);
+      // ...and focus is on the Records control the player actually used, not on the tab
+      // button inside the pane they just left.
+      expect(document.activeElement).toBe(records);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks the tab you are on, in both panes', () => {
+    // `ui-selectable--on` is the shared current-choice ring, and `aria-pressed` is the
+    // same claim for a screen reader. Without both, two identical buttons say nothing
+    // about which view is showing.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    const on = (sel: string): boolean =>
+      (root.querySelector(sel) as HTMLElement).classList.contains('ui-selectable--on');
+    expect(on('.hud-stats .hud-records-tab-stats')).toBe(true);
+    expect(on('.hud-stats .hud-records-tab-achievements')).toBe(false);
+    expect(on('.hud-achievements .hud-records-tab-achievements')).toBe(true);
+    expect(on('.hud-achievements .hud-records-tab-stats')).toBe(false);
   });
 
   it('toasts each unlock, stacks simultaneous ones, and expires them', () => {
