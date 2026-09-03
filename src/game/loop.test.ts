@@ -2055,24 +2055,22 @@ describe('startGameWith: HUD wiring', () => {
     // the store's subscription is what reaches the engine and both buttons. Without the
     // store write the mute would not survive a reload; without the subscription the
     // engine would never hear about it.
-    // TWO boot pushes since issue #226, and the pair is the page/session split rather
-    // than a duplicate: `route-host.ts` paints the stored value the moment the HUD exists,
-    // because with the topbar's mute chip retired the Settings button is the only display
-    // this preference has and a session-less page (the normal boot state since #428) had
-    // nothing painting it; then this session's own `applySettings` pushes the same value
-    // at its construction. Only ONE of the two answers a later change -- the page's paint
-    // early-returns while a session holds the slot -- which is what keeps the click below
-    // appending a single entry rather than two.
+    // ONE boot push since issue #324, where there were two. `route-host.ts` paints the
+    // stored value the moment the HUD exists -- with the topbar's mute chip retired the
+    // Settings button is this preference's only display, and a session-less page (the
+    // normal boot state since #428) had nothing painting it -- and the session no longer
+    // pushes settings to the HUD at all. The page's paint used to early-return while a
+    // session held the slot, which is what made the two boot pushes agree; now there is
+    // one writer and nothing to keep in step.
     const h = boot();
     expect(h.rec.muted, 'the button must show the stored value before any click').toEqual([
-      false,
       false,
     ]);
     h.hud.mute();
     expect(h.rec.mutedStoreSets).toEqual([true]);
     expect(h.settingsStore.snapshot().audio.muted).toBe(true);
     expect(h.rec.audioMuted.at(-1)).toBe(true);
-    expect(h.rec.muted).toEqual([false, false, true]);
+    expect(h.rec.muted).toEqual([false, true]);
     h.handle.dispose();
   });
 
@@ -2086,7 +2084,10 @@ describe('startGameWith: HUD wiring', () => {
     // else. Only a session reaches the engine, so this array is unaffected by the page's
     // own display paint (issue #226) -- `volumeEchoes` below is the one that sees it.
     expect(h.rec.volumes).toEqual([DEFAULT_VOLUME, 0.42]);
-    expect(h.rec.volumeEchoes).toEqual([DEFAULT_VOLUME, DEFAULT_VOLUME, 0.42]);
+    // The CONTROL hears it once at boot, from the page, and once for the accepted value.
+    // It was twice at boot until issue #324 made the page the only writer of the settings
+    // display; the session's duplicate push is gone, the engine's is not.
+    expect(h.rec.volumeEchoes).toEqual([DEFAULT_VOLUME, 0.42]);
     h.handle.dispose();
   });
 
@@ -2101,10 +2102,12 @@ describe('startGameWith: HUD wiring', () => {
     // session-less page is issue #485).
     expect(h.rec.audioMuted).toEqual([true]);
     expect(h.rec.volumes).toEqual([0.2]);
-    // The CONTROLS hear it twice at boot -- page then session -- and the value is the
-    // stored one both times, which is the property this test is for.
-    expect(h.rec.muted).toEqual([true, true]);
-    expect(h.rec.volumeEchoes).toEqual([0.2, 0.2]);
+    // The CONTROLS hear it once at boot -- the page's paint, the only writer of the
+    // settings display since issue #324 -- and the value is the stored one, which is the
+    // property this test is for. Two entries here until #324; the session's duplicate is
+    // what went, not the store read.
+    expect(h.rec.muted).toEqual([true]);
+    expect(h.rec.volumeEchoes).toEqual([0.2]);
     h.handle.dispose();
   });
 
@@ -2322,9 +2325,9 @@ describe('startGameWith: leaving the title screen', () => {
     const h = bootAtSplash();
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
     expect(h.getState()).toBe('main-menu');
-    // `[false, false]` is the pair of boot pushes -- page then session, see 'routes the
+    // `[false]` is the single boot push -- the page's, see 'routes the
     // mute button through the STORE' -- not a mute. A mute would append `true`.
-    expect(h.rec.muted, 'the key that began the game also muted it').toEqual([false, false]);
+    expect(h.rec.muted, 'the key that began the game also muted it').toEqual([false]);
     expect(h.rec.mutedStoreSets, 'the key that began the game reached the store').toEqual([]);
     h.handle.dispose();
   });
@@ -2333,7 +2336,7 @@ describe('startGameWith: leaving the title screen', () => {
     // The other edge: the early return must not swallow the hotkey forever.
     const h = boot(); // already past the splash
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
-    expect(h.rec.muted).toEqual([false, false, true]);
+    expect(h.rec.muted).toEqual([false, true]);
     // Through the STORE, like both buttons. The hotkey used to call `audio.toggleMute()`
     // directly, which is the shape that would make an M-key mute the one mute that did
     // not survive a reload.
@@ -3239,7 +3242,7 @@ describe('startGameWith: listeners and teardown', () => {
     // duplicate no assertion on the resulting mute STATE could catch.
     const h = boot();
     h.keydown({ key: 'm', repeat: false, target: null });
-    expect(h.rec.muted).toEqual([false, false, true]);
+    expect(h.rec.muted).toEqual([false, true]);
     h.handle.dispose();
   });
 
@@ -3247,7 +3250,7 @@ describe('startGameWith: listeners and teardown', () => {
     const h = boot();
     h.keydown({ key: 'm', repeat: true, target: null });
     // Only the two boot pushes. A repeat that reached the store would append to both.
-    expect(h.rec.muted).toEqual([false, false]);
+    expect(h.rec.muted).toEqual([false]);
     expect(h.rec.mutedStoreSets).toEqual([]);
     h.handle.dispose();
   });

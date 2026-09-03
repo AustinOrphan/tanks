@@ -1840,39 +1840,36 @@ export function startGameWith(
    * Note which side each consumer is given:
    *
    *  - `haptics.setEnabled` gets the EFFECTIVE value, so a device with no
-   *    `navigator.vibrate` stays silent whatever the switch says;
-   *  - `hud.setHaptics` gets the STORED preference, because that toggle EDITS the
-   *    preference. Showing it forced off on an unsupported device would look like a dead
-   *    control and would suggest the preference had been erased, which is exactly what
-   *    issue #320 forbids. Hiding it where it cannot apply is issue #227's work.
+   *    `navigator.vibrate` stays silent whatever the switch says.
+   *
+   * The DISPLAY side of that same split -- the Settings toggle showing the STORED
+   * preference, because a switch forced off on an unsupported device reads as a preference
+   * that was erased, which issue #320 forbids -- moved with the rest of the HUD pushes to
+   * `route-host.ts`'s `paintSettingsControls` (issue #324). The rule did not change owner
+   * as an afterthought: it is stated there, beside the call that now depends on it.
    *
    * Touch scheme and fire mode are ungated, so stored and effective agree by construction
    * (effective-settings.ts); they are read from the effective side so that every consumer
    * in this function reads from the same place a future gate would appear.
    */
   function applySettings(): void {
-    const stored = deps.settings.snapshot();
     const effective = deps.effectiveSettings.current();
     audio.setMuted(effective.muted);
     audio.setVolume(effective.volume);
     input.setTouchScheme(effective.touchScheme);
     input.setFireMode(effective.fireMode);
     haptics.setEnabled(effective.deviceHaptics);
-    hud.setMuted(effective.muted);
-    hud.setVolume(effective.volume);
-    hud.setTouchScheme(effective.touchScheme);
-    hud.setFireMode(effective.fireMode);
-    hud.setHaptics(stored.input.deviceHaptics);
-    // The RESOLVED policy, and the reason this is here rather than a createHud argument:
-    // application transitions must become instant the moment the player picks reduced
-    // motion, with the menu already open (issue #364, criterion 5). This subscription
-    // republishes on a stored preference, a capability, OR the OS motion preference, so
-    // both halves of `'system'` reach the HUD through the one call.
-    hud.setReducedMotion(effective.reducedMotion);
-    // ...and the same resolved value to the gameplay renderer (issue #289). The HUD line
-    // above has been here since #364; gameplay effects had no equivalent policy at all,
-    // which is the inconsistency #289 exists to close. One subscription, two consumers --
-    // NOT a second media-query read, which capabilities.ts forbids by design.
+    // NO `hud.*` HERE (issue #324). Every line above drives a RUNTIME consumer this
+    // session owns; the six HUD pushes that used to follow drove Settings' own controls
+    // and the page frame, which the session does not own and cannot be the only writer
+    // of -- a page with no session (since #428, every page before its first match) got
+    // no settings display at all, which is the hole #485 recorded.
+    // `route-host.ts`'s `paintSettingsControls` is now the single writer, on the same
+    // subscription to the same handle.
+    //
+    // The gameplay renderer stays here, because it IS this session's (issue #289): one
+    // subscription, two consumers in two owners -- NOT a second media-query read, which
+    // capabilities.ts forbids by design.
     renderer.setReducedMotion(effective.reducedMotion);
   }
 
