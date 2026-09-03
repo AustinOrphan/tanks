@@ -13,6 +13,10 @@ import {
   MINE_DANGER_RADIUS,
   type VibrateFn,
   BLOCKED_FIRE_PATTERN_MS,
+  BLOCKED_FIRE_TAP_PULSE_MS,
+  BLOCKED_FIRE_DOUBLE_PATTERN_MS,
+  BLOCKED_FIRE_LONG_PULSE_MS,
+  BLOCKED_FIRE_RISE_PATTERN_MS,
 } from './haptics';
 import type { SimEvent } from '../sim/events';
 import { BLOCKED_FIRE_CUES, type BlockedFireCue } from '../presentation/blocked-fire';
@@ -31,6 +35,9 @@ function fakeVibrate(): { vibrate: VibrateFn; calls: Array<number | number[]> } 
 
 const PLAYER_ID = 7;
 const ENEMY_ID = 8;
+
+/** The cues whose name carries the `haptic` channel -- issue #516's haptic column. */
+type HapticArm = 'haptic' | 'haptic-tap' | 'haptic-double' | 'haptic-long' | 'haptic-rise' | 'haptic-audio';
 
 function fireEvent(ownerId: number): SimEvent {
   return { type: 'fire', ownerId, bulletType: 'normal', pos: { x: 1, y: 2 }, angle: 0 };
@@ -375,40 +382,100 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
     expect(buzzed('haptic-audio')).toEqual([BLOCKED_FIRE_PATTERN_MS]);
   });
 
+  const carriesHaptic: Record<BlockedFireCue, boolean> = {
+    haptic: true,
+    audio: false,
+    'haptic-audio': true,
+    ring: false,
+    'ring-audio': false,
+    // The visual and audio arms of issue #516's matrix: named in the vocabulary, and
+    // false here permanently -- they carry no haptic at all and must never buzz, which
+    // is what lets #356 attribute a preference to a channel rather than to a bundle.
+    muzzle: false,
+    turret: false,
+    pips: false,
+    hud: false,
+    click: false,
+    clunk: false,
+    'thunk-soft': false,
+    'pitch-empty': false,
+    // Issue #516's four extra haptic arms, now implemented (haptics.ts's
+    // BLOCKED_FIRE_ARMS). This table is about CHANNEL MEMBERSHIP -- does this cue reach
+    // the hand at all -- so it counts pulses; WHICH pattern each arm feels like is a
+    // different contract, and has its own one-row-per-arm table below.
+    'haptic-tap': true,
+    'haptic-double': true,
+    'haptic-long': true,
+    'haptic-rise': true,
+  };
+
   it('vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue', () => {
     // The mirror of director.test.ts's audio table, and the half that makes `ring-audio` a
     // CHECKED pair rather than a label: it must reach the screen and the speaker and stop
     // there. Without this row a bundle that also buzzed would pass as "ring plus audio",
     // and #356 would attribute a preference to the wrong set of channels.
-    const carriesHaptic: Record<BlockedFireCue, boolean> = {
-      haptic: true,
-      audio: false,
-      'haptic-audio': true,
-      ring: false,
-      'ring-audio': false,
-      // The visual and audio arms of issue #516's matrix: named in the vocabulary, and
-      // false here permanently -- they carry no haptic at all and must never buzz, which
-      // is what lets #356 attribute a preference to a channel rather than to a bundle.
-      muzzle: false,
-      turret: false,
-      pips: false,
-      hud: false,
-      click: false,
-      clunk: false,
-      'thunk-soft': false,
-      'pitch-empty': false,
-      // Issue #516's four extra haptic arms, now implemented (haptics.ts's
-      // BLOCKED_FIRE_ARMS). This table is about CHANNEL MEMBERSHIP -- does this cue reach
-      // the hand at all -- so it counts pulses; WHICH pattern each arm feels like is a
-      // different contract, and has its own one-row-per-arm table below.
-      'haptic-tap': true,
-      'haptic-double': true,
-      'haptic-long': true,
-      'haptic-rise': true,
-    };
     expect(Object.keys(carriesHaptic).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldBuzz] of Object.entries(carriesHaptic)) {
       expect(buzzed(cue as BlockedFireCue), cue).toHaveLength(shouldBuzz ? 1 : 0);
     }
+  });
+  it('gives each haptic arm its OWN pattern -- one row per arm (issue #516)', () => {
+    // The table above is CHANNEL MEMBERSHIP: five arms all buzzing the baseline double tap
+    // would satisfy it completely, and a hand asked to compare five identical buzzes is
+    // not comparing anything. MEASURED: collapsing haptics.ts's lookup to
+    // `BLOCKED_FIRE_PATTERN_MS` left all 30 of this file's tests green before this case
+    // existed.
+    //
+    // `haptic-audio` shares the baseline BY DESIGN: it exists to test the PAIRING of two
+    // channels, so giving it a pattern of its own would confound the two questions.
+    const armPulse: Record<HapticArm, number | number[]> = {
+      haptic: BLOCKED_FIRE_PATTERN_MS,
+      'haptic-audio': BLOCKED_FIRE_PATTERN_MS,
+      'haptic-tap': BLOCKED_FIRE_TAP_PULSE_MS,
+      'haptic-double': BLOCKED_FIRE_DOUBLE_PATTERN_MS,
+      'haptic-long': BLOCKED_FIRE_LONG_PULSE_MS,
+      'haptic-rise': BLOCKED_FIRE_RISE_PATTERN_MS,
+    };
+    // Every cue the membership table says buzzes needs a row here, so a sixth haptic arm
+    // cannot be added, buzz, and go unmentioned by this test.
+    expect(Object.keys(armPulse).sort()).toEqual(
+      Object.entries(carriesHaptic)
+        .filter(([, buzzes]) => buzzes)
+        .map(([cue]) => cue)
+        .sort(),
+    );
+    for (const [cue, pattern] of Object.entries(armPulse)) {
+      expect(buzzed(cue as BlockedFireCue), cue).toEqual([pattern]);
+    }
+
+    // The five compared shapes really are five, and none of them is the shot. Pointing two
+    // arms at one constant passes every row above; so does an arm that feels exactly like
+    // firing, which is the one thing #356 says the refusal must never feel like.
+    const compared = ['haptic', 'haptic-tap', 'haptic-double', 'haptic-long', 'haptic-rise'] as const;
+    const shapes = compared.map((cue) => JSON.stringify(armPulse[cue]));
+    expect(new Set(shapes).size, `arms sharing a pattern: ${shapes.join(' | ')}`).toBe(compared.length);
+    expect(shapes).not.toContain(JSON.stringify(FIRE_PULSE_MS));
+  });
+
+  it('stays silent on a device with no vibration, and behind the haptics preference', () => {
+    // The two gates every arm inherits, asserted for a NEW arm rather than assumed from
+    // the old one. `resolveVibrate({})` is what a host with no `navigator.vibrate`
+    // resolves to -- per this file's own resolveVibrate suite, that is every Safari and
+    // Firefox visitor, on any OS -- and a cue that threw there would take the frame's
+    // whole event loop down with it, not merely go quiet.
+    const d = createHapticsDirector(resolveVibrate({}), 7, { blockedFire: 'haptic-rise' });
+    expect(() => d.handle([blocked(7)])).not.toThrow();
+
+    // And the persisted off switch (touch-settings.ts) suppresses a new arm exactly as it
+    // suppresses the shipped one -- asserted in both directions, so a `setEnabled` that
+    // ignored its argument entirely would fail rather than pass on the silent half.
+    const calls: (number | number[])[] = [];
+    const off = createHapticsDirector((p) => { calls.push(p); return true; }, 7, { blockedFire: 'haptic-long' });
+    off.setEnabled(false);
+    off.handle([blocked(7)]);
+    expect(calls).toEqual([]);
+    off.setEnabled(true);
+    off.handle([blocked(7)]);
+    expect(calls).toEqual([BLOCKED_FIRE_LONG_PULSE_MS]);
   });
 });

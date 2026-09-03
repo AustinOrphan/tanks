@@ -10,6 +10,9 @@ interface PlayCall {
   opts?: { rate?: number; volume?: number };
 }
 
+/** The cues whose name carries the `audio` channel -- issue #516's audio column. */
+type AudioArm = 'audio' | 'click' | 'clunk' | 'thunk-soft' | 'pitch-empty' | 'haptic-audio' | 'ring-audio';
+
 function makeSpyEngine(): { engine: AudioEngine; calls: PlayCall[] } {
   const calls: PlayCall[] = [];
   const engine: AudioEngine = {
@@ -227,6 +230,33 @@ describe('blocked-fire cue (issue #356)', () => {
     expect(played({ blockedFire: 'ring-audio' })).toEqual(['fire-blocked']);
   });
 
+  const carriesAudio: Record<BlockedFireCue, boolean> = {
+    haptic: false,
+    audio: true,
+    'haptic-audio': true,
+    ring: false,
+    'ring-audio': true,
+    // The visual and haptic arms of issue #516's matrix: named in the vocabulary, and
+    // false here permanently -- they carry no audio at all and must never sound, which
+    // is what lets #356 attribute a preference to a channel rather than to a bundle.
+    muzzle: false,
+    turret: false,
+    pips: false,
+    hud: false,
+    'haptic-tap': false,
+    'haptic-double': false,
+    'haptic-long': false,
+    'haptic-rise': false,
+    // Issue #516's four extra audio arms, now implemented (director.ts's
+    // BLOCKED_FIRE_ARMS). This table is about CHANNEL MEMBERSHIP -- does this cue reach
+    // the speaker at all -- so it counts calls; WHICH sound each arm makes is a
+    // different contract, and has its own one-row-per-arm table below.
+    click: true,
+    clunk: true,
+    'thunk-soft': true,
+    'pitch-empty': true,
+  };
+
   it('sounds for EVERY cue carrying `audio`, and for no other -- one row per cue', () => {
     // Per cue rather than per remembered case. The bug this replaces was not a wrong
     // branch, it was a missing one: `ring-audio` existed in the union and nothing here
@@ -234,36 +264,57 @@ describe('blocked-fire cue (issue #356)', () => {
     // means a sixth cue cannot be added without stating whether it sounds -- the union
     // widening fails `Record<BlockedFireCue, boolean>` at compile time, and adding to the
     // set alone fails the key comparison below.
-    const carriesAudio: Record<BlockedFireCue, boolean> = {
-      haptic: false,
-      audio: true,
-      'haptic-audio': true,
-      ring: false,
-      'ring-audio': true,
-      // The visual and haptic arms of issue #516's matrix: named in the vocabulary, and
-      // false here permanently -- they carry no audio at all and must never sound, which
-      // is what lets #356 attribute a preference to a channel rather than to a bundle.
-      muzzle: false,
-      turret: false,
-      pips: false,
-      hud: false,
-      'haptic-tap': false,
-      'haptic-double': false,
-      'haptic-long': false,
-      'haptic-rise': false,
-      // Issue #516's four extra audio arms, now implemented (director.ts's
-      // BLOCKED_FIRE_ARMS). This table is about CHANNEL MEMBERSHIP -- does this cue reach
-      // the speaker at all -- so it counts calls; WHICH sound each arm makes is a
-      // different contract, and has its own one-row-per-arm table below.
-      click: true,
-      clunk: true,
-      'thunk-soft': true,
-      'pitch-empty': true,
-    };
     expect(Object.keys(carriesAudio).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldSound] of Object.entries(carriesAudio)) {
       expect(playedCalls(cue as BlockedFireCue), cue).toHaveLength(shouldSound ? 1 : 0);
     }
+  });
+
+  it('gives each audio arm its OWN voice -- one row per arm (issue #516)', () => {
+    // The table above is CHANNEL MEMBERSHIP: five arms all playing the baseline click
+    // would satisfy it completely. #516 exists to put five sounds in front of a person
+    // who has to tell them apart at speed, so this pins what each arm actually plays.
+    // MEASURED: collapsing director.ts's lookup to `BLOCKED_FIRE_BASELINE` left all 18 of
+    // this file's tests green before this case existed.
+    //
+    // Three arms share the baseline BY DESIGN -- `audio` IS the baseline, and the two
+    // multimodal arms exist to test a channel PAIRING, so giving them their own sound
+    // would confound "is a pair better than one channel" with "is this sound better".
+    const armVoice: Record<AudioArm, PlayCall> = {
+      audio: { key: 'fire-blocked', opts: undefined },
+      'haptic-audio': { key: 'fire-blocked', opts: undefined },
+      'ring-audio': { key: 'fire-blocked', opts: undefined },
+      // Its own recipe, because "a short dry mechanical click, NO TONE" removes a layer
+      // and no playback rate or gain can do that.
+      click: { key: 'fire-blocked-click', opts: undefined },
+      // Variations of a cue that already exists rather than new sounds: half rate is
+      // literally "lower and slower", and `thunk-soft` is that same gesture at 0.3 gain --
+      // the same key and the same rate, differing in volume and nothing else, or it would
+      // be answering a different question than "does restraint read as intentional".
+      clunk: { key: 'fire-blocked', opts: { rate: 0.5 } },
+      'thunk-soft': { key: 'fire-blocked', opts: { rate: 0.5, volume: 0.3 } },
+      // The NORMAL FIRE cue itself, pitched down: the refusal heard as the same action
+      // failing. Pulled back to 0.7 so it cannot be mistaken for the shot going off.
+      'pitch-empty': { key: 'cannon', opts: { rate: 0.55, volume: 0.7 } },
+    };
+    // Every cue the membership table says sounds needs a row here, so a sixth audio arm
+    // cannot be added, sound, and go unheard-of by this test.
+    expect(Object.keys(armVoice).sort()).toEqual(
+      Object.entries(carriesAudio)
+        .filter(([, sounds]) => sounds)
+        .map(([cue]) => cue)
+        .sort(),
+    );
+    for (const [cue, voice] of Object.entries(armVoice)) {
+      expect(playedCalls(cue as BlockedFireCue), cue).toEqual([voice]);
+    }
+
+    // And the five DISTINCT sounds really are five. Without this, pointing two arms at
+    // one voice still passes every row above -- and a comparison between two arms that
+    // sound identical is not a comparison.
+    const compared = ['audio', 'click', 'clunk', 'thunk-soft', 'pitch-empty'] as const;
+    const shapes = new Set(compared.map((cue) => JSON.stringify(armVoice[cue])));
+    expect(shapes.size, `arms sharing a voice: ${[...shapes].join(' | ')}`).toBe(compared.length);
   });
 
   it('the arms are SEPARABLE: the haptic arm makes no sound', () => {

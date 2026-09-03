@@ -165,6 +165,33 @@ describe('synthVoice: every shipped sound is built', () => {
   });
 });
 
+describe('the blocked-fire `click` arm (issue #516)', () => {
+  it('has NO tone layer at all -- the absent oscillator IS the design', () => {
+    // #516 asks this arm for "a short dry mechanical click, no tone". Every other recipe
+    // in this file is two or three layers, because a single oscillator is the old beep;
+    // this one is deliberately one BUFFER SOURCE and no oscillator, which is also why it
+    // is the only audio arm that needed a recipe rather than a rate or a gain applied to
+    // the baseline (director.ts). A click that grew a body would be the baseline refusal
+    // again wearing a second flag value, and the comparison would compare nothing.
+    //
+    // MEASURED: adding the baseline's square blip to this recipe left all 16 of this
+    // file's tests green before this case existed.
+    const { ctx, voice } = build('fire-blocked-click');
+    expect(voice).not.toBeNull();
+    expect(ctx.oscillators).toHaveLength(0);
+    expect(ctx.sources).toHaveLength(1);
+
+    // Negative control: the baseline refusal DOES carry a tone, so the assertion above is
+    // reading the recipe rather than a fake context that never records an oscillator.
+    const baseline = build('fire-blocked');
+    expect(baseline.ctx.oscillators.length).toBeGreaterThan(0);
+
+    // And "short" is not decorative: it must end before the cue it is a stripped-down
+    // version of, or "dry click" is just "quieter refusal".
+    expect(voice!.endsAt).toBeLessThan(baseline.voice!.endsAt);
+  });
+});
+
 describe('synthVoice: the sound design itself', () => {
   it('gives explosions a filtered NOISE body, not just a tone', () => {
     // An explosion built from oscillators alone is a beep. The noise source and
