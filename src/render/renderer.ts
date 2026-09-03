@@ -216,10 +216,21 @@ export function createRenderer(
     ctx.resize(w, h);
   }
 
-  // Forwarded to each system that keeps cross-frame state, rather than latched here and
-  // passed down through `render`'s already long argument list: each system then owns the
-  // one-frame lifetime of its own latch and can be tested for it in jsdom, which
-  // `createRenderer` itself (a real GL context) cannot be.
+  // Forwarded to the two systems whose cross-frame state OUTLIVES a board, rather than
+  // latched here and passed down through `render`'s already long argument list: each
+  // system then owns the one-frame lifetime of its own latch and can be tested for it in
+  // jsdom, which `createRenderer` itself (a real GL context) cannot be.
+  //
+  // Not every system holding state between frames is here, and the distinction is what a
+  // board switch can strand. `entities` keeps a view and an interpolation anchor per tank
+  // id, and `treadTrails` an anchor per tank plus its decals -- both indexed by something
+  // that survives the switch, so stale entries are re-used against the new board's
+  // coordinates. `particles` and `deathPulse` also keep pooled state, but it is untethered
+  // to any tank and self-expires in well under a second (deathPulse fixes 0.6s; a particle
+  // burst is given its life at the call site, 0.18s to 0.6s across the shipped set), so a
+  // switch leaves at most a few sparks finishing their arc. Deliberately left alone: this
+  // change fixes a trail drawn ACROSS the map, and clearing sub-second effects is a
+  // separate question about how a level should transition.
   function worldReplaced(): void {
     entities.worldReplaced();
     treadTrails.worldReplaced();

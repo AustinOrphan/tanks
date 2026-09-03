@@ -288,7 +288,12 @@ interface Recorder {
   volumes: number[];
   resizes: Array<[number, number]>;
   refits: Array<[number, number, number]>;
-  /** One entry per `Renderer3D.worldReplaced()` call -- the level-switch announcement (#531). */
+  /**
+   * How many times `Renderer3D.worldReplaced()` has been called -- the level-switch
+   * announcement (#531). A COUNT, not a log: the announcement carries no arguments, so
+   * there would be nothing in an entry to inspect, and every assertion about it is either
+   * "did it happen" or "how many times relative to some other event".
+   */
   worldReplacements: number;
   restyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
   /** Every reduced-motion policy value pushed at the RENDERER (issue #289). */

@@ -658,11 +658,20 @@ check('tread trails (#231) reach the framebuffer through the real renderer.ts wi
     return px;
   }
 
-  const stillPath = Array.from({ length: STEPS }, () => FINAL);
-  const drivenPath = Array.from({ length: STEPS }, (_, i) => {
-    const t = (i + 1) / STEPS;
-    return { x: START.x + (FINAL.x - START.x) * t, y: START.y + (FINAL.y - START.y) * t };
-  });
+  // START is the FIRST entry, not the first step away from it. `frameFor` seeds `prev`
+  // from `path[0]`, so its opening render is always a no-op -- and with the path starting
+  // one step along, the tank never occupied START at all and only three of the four
+  // EMIT_SPACING steps were ever walked. Both paths carry the extra entry so the two runs
+  // still pay exactly the same number of renders, which is what makes their final
+  // silhouettes comparable.
+  const stillPath = Array.from({ length: STEPS + 1 }, () => FINAL);
+  const drivenPath = [
+    START,
+    ...Array.from({ length: STEPS }, (_, i) => {
+      const t = (i + 1) / STEPS;
+      return { x: START.x + (FINAL.x - START.x) * t, y: START.y + (FINAL.y - START.y) * t };
+    }),
+  ];
 
   const stillFrame = frameFor(stillPath);
   const drivenFrame = frameFor(drivenPath);
@@ -715,11 +724,20 @@ check('a level switch announced to the real renderer clears the trail behind it 
     return px;
   }
 
-  const stillPath = Array.from({ length: STEPS }, () => FINAL);
-  const drivenPath = Array.from({ length: STEPS }, (_, i) => {
-    const t = (i + 1) / STEPS;
-    return { x: START.x + (FINAL.x - START.x) * t, y: START.y + (FINAL.y - START.y) * t };
-  });
+  // START is the FIRST entry, not the first step away from it. `frameFor` seeds `prev`
+  // from `path[0]`, so its opening render is always a no-op -- and with the path starting
+  // one step along, the tank never occupied START at all and only three of the four
+  // EMIT_SPACING steps were ever walked. Both paths carry the extra entry so the two runs
+  // still pay exactly the same number of renders, which is what makes their final
+  // silhouettes comparable.
+  const stillPath = Array.from({ length: STEPS + 1 }, () => FINAL);
+  const drivenPath = [
+    START,
+    ...Array.from({ length: STEPS }, (_, i) => {
+      const t = (i + 1) / STEPS;
+      return { x: START.x + (FINAL.x - START.x) * t, y: START.y + (FINAL.y - START.y) * t };
+    }),
+  ];
 
   const still = frameFor(stillPath, false);
   const driven = frameFor(drivenPath, false);
