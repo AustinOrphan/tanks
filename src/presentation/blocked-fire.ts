@@ -92,9 +92,13 @@ export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFir
 ]);
 
 /**
- * The channel each cue drives, so a consumer asks "is this mine" once rather than
- * listing members (issue #516). A multimodal arm belongs to more than one channel,
- * which is the whole reason this is a set-valued question and not a field.
+ * Which channel each cue BELONGS TO -- a vocabulary map, not a claim that anything is
+ * wired (issue #516). `cueDrives(cue, 'audio')` answers "is this cue mine" for a
+ * consumer in one place instead of each one listing members, but a cue can be named here
+ * and still be completely inert: the twelve arms the comparison matrix adds are
+ * classified from the day they are named and become audible, visible or felt only when a
+ * consumer implements them. Ownership, in other words, not behaviour. A multimodal arm
+ * belongs to more than one channel, which is why this is set-valued rather than a field.
  */
 export type BlockedFireChannel = 'visual' | 'audio' | 'haptic';
 

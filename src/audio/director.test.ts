@@ -233,9 +233,10 @@ describe('blocked-fire cue (issue #356)', () => {
       'haptic-audio': true,
       ring: false,
       'ring-audio': true,
-      // The arms issue #516 added to the vocabulary but this consumer does not drive
-      // yet: each is false until its own channel implements it, so the table states
-      // today's behaviour rather than an intention.
+      // The rest of issue #516's vocabulary, false here for two DIFFERENT reasons: the
+      // visual and haptic arms carry no audio at all and will never sound, while the four
+      // new audio arms (click, clunk, thunk-soft, pitch-empty) are named but not yet
+      // implemented and flip to true as each lands.
       muzzle: false,
       turret: false,
       pips: false,

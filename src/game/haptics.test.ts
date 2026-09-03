@@ -386,9 +386,10 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
       'haptic-audio': true,
       ring: false,
       'ring-audio': false,
-      // The arms issue #516 added to the vocabulary but this consumer does not drive
-      // yet: each is false until its own channel implements it, so the table states
-      // today's behaviour rather than an intention.
+      // The rest of issue #516's vocabulary, false here for two DIFFERENT reasons: the
+      // visual and audio arms carry no haptic at all and will never buzz, while the four
+      // new haptic arms (haptic-tap, haptic-double, haptic-long, haptic-rise) are named
+      // but not yet implemented and flip to true as each lands.
       muzzle: false,
       turret: false,
       pips: false,

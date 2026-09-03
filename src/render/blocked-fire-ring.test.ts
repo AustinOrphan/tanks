@@ -55,9 +55,11 @@ describe('blocked-fire ring (issue #356)', () => {
       'haptic-audio': false,
       ring: true,
       'ring-audio': true,
-      // The arms issue #516 added to the vocabulary but this consumer does not drive
-      // yet: each is false until its own channel implements it, so the table states
-      // today's behaviour rather than an intention.
+      // The rest of issue #516's vocabulary, ALL permanently false here: this system draws
+      // the tank-local ring and nothing else. The other visual arms (muzzle, turret, pips,
+      // hud) are separate treatments in their own systems, so their rows stay false in this
+      // table however they are implemented -- and the audio and haptic arms never draw at
+      // all. Only `ring` and `ring-audio` belong to this system.
       muzzle: false,
       turret: false,
       pips: false,
