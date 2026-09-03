@@ -88,12 +88,13 @@ export interface ReplayMeta {
   /** See WorldRules.friendlyFire. Read off the world, same as unarmedTrigger. n-player arc PR 4. */
   friendlyFire: boolean;
   /**
-   * See WorldRules.aiTargetPerception. The seventh rule this meta carries, and the one it
-   * used to omit (issue #492): a trace recorded under `?dev=1&aiPerception=los` rebuilt at
-   * the shipped `'full'`, so every AI target-selection decision the bound had changed came
-   * out differently on playback -- silently, because the data fingerprint covers the four
-   * sim JSON files and says nothing about which rules a world was built under, and reported
-   * a match throughout. Read off the world, same as unarmedTrigger. REPLAY_SCHEMA 3 -> 4.
+   * See WorldRules.aiTargetPerception. The seventh and last rule this meta carries, and
+   * the one it used to omit (issue #492): a trace recorded under `?dev=1&aiPerception=los`
+   * rebuilt at the shipped `'full'`, so every AI target-selection decision the bound had
+   * changed came out differently on playback -- silently, because the data fingerprint
+   * covers the four sim JSON files and says nothing about which rules a world was built
+   * under, and reported a match throughout. Read off the world, same as unarmedTrigger.
+   * REPLAY_SCHEMA 3 -> 4.
    */
   aiTargetPerception: AiTargetPerception;
 }
@@ -161,11 +162,12 @@ export function fingerprint(value: unknown): string {
  * `mode` is not derivable from the tank array the way `playerCount` is, so a trace
  * recorded from a versus session needs it to reconstruct the same win/lose dispatch on
  * playback. 4 (issue #492) is the same kind of change again -- `ticks` unchanged, one more
- * meta field -- adding `ReplayMeta.aiTargetPerception`, the one rule on `World.rules` this
- * meta did not carry, so a trace recorded under `?dev=1&aiPerception=los` stops rebuilding
- * at the shipped `'full'`. A schema-3 trace is REJECTED rather than read with the missing
- * rule defaulted, because defaulting it is precisely the divergence the bump exists to
- * stop. There is no migration layer for
+ * meta field -- adding `ReplayMeta.aiTargetPerception`, the last of the `World.rules`
+ * switches this meta did not carry (`arenaGeometry`, the eighth rule, is rebuilt from
+ * `arenaId` rather than stamped), so a trace recorded under `?dev=1&aiPerception=los`
+ * stops rebuilding at the shipped `'full'`. A schema-3 trace is REJECTED rather than read
+ * with the missing rule defaulted, because defaulting it is precisely the divergence the
+ * bump exists to stop. There is no migration layer for
  * replays anywhere in this codebase; a schema mismatch is already outright rejection
  * (`checkTrace`), never reinterpreted, and `?dev=1&replay=1` traces are a dev-console
  * debug capture, not user save data, so rejecting an old trace rather than reading it
