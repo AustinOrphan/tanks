@@ -77,6 +77,69 @@ export interface AIProfileBalance {
   estimationAccuracy: number;
   reactionTime: number;
   /**
+   * Seconds of staleness in this profile's HAZARD PICTURE (issue #223).
+   *
+   * The second of the six competence axes both #223 and #267 name, and the one that makes
+   * the estimation error more than a radius offset: `perceiveHazards` (ai/hazard-perception.ts)
+   * back-dates the shells and mines a tank reacts to by this many seconds, so a stale read
+   * is wrong about a threat's POSITION, its TIME TO IMPACT, and whether a just-dropped mine
+   * exists at all -- not merely about how wide a blast is.
+   *
+   * STRICTLY POSITIVE by authorship rather than by validation, and that is the whole reason
+   * it is not authored at zero. `hard` scales it DOWN (COMPETENCE, ai/bot-difficulty.ts), and
+   * a multiplier cannot improve on zero: an axis whose neutral value is 0 admits an `easy`
+   * that is worse and a `hard` that is identical, which fails #223's monotonicity criterion.
+   * `MIN_COMPETENCE_AWARENESS_DELAY` then keeps the scaled value nonzero, which is the
+   * "never oracle-perfect" half of the same rule.
+   *
+   * 0.1s (6 ticks) UNIFORMLY across profiles. Uniform for the reason targetCommitmentTime
+   * states -- no deterministic sweep justifies a per-profile spread, and inventing one would
+   * be a difficulty change dressed as polish. 0.1s is chosen against the authored reaction
+   * times (0.25-0.8s) as the smallest delay that is more than rounding at 60Hz while staying
+   * well inside the fastest profile's reaction: a bot notices a shell a beat late, it does
+   * not stop noticing. The value is a FEEL constant, flagged for the owner's normal-speed
+   * read; see the PR that introduced it.
+   */
+  awarenessDelay: number;
+  /**
+   * Extra world units of clearance this profile keeps beyond the hazard radius it believes
+   * in (issue #223). Added to every perceived hazard radius by `perceiveHazards`.
+   *
+   * Authored at ZERO for every shipped profile, deliberately, and that is the opposite of
+   * awarenessDelay's reasoning rather than an inconsistency: a margin is signed, so
+   * difficulty composes over it ADDITIVELY (`COMPETENCE.safetyMargin`) and `easy` can cut
+   * corners while `hard` keeps room, with `normal` at exactly the authored value. An axis
+   * that can go both ways does not need a nonzero anchor to be monotone -- and authoring it
+   * at zero is what keeps this axis a byte-for-byte no-op at `normal`.
+   *
+   * The field is per-profile rather than difficulty-only so a future cautious archetype can
+   * author caution the way DEFENSIVE_ROCKET authors retreatChance, without difficulty having
+   * to learn about tank kinds -- which is the per-kind override both issues forbid by name.
+   */
+  safetyMargin: number;
+  /**
+   * Seconds this profile HOLDS one hazard read before drawing a new one (issue #223) -- the
+   * sixth competence axis, "hazard-perception refresh cadence".
+   *
+   * Consumed by `hazardRefreshTicks` (ai/hazard-perception.ts) as
+   * `Math.round(hazardRefreshTime * TICK_HZ)`, the same conversion every other span in this
+   * schema uses. It is the bucket width `estimationError` divides the tick by, so it decides
+   * how long a misjudgement is LIVED WITH: #223 asks for "a perceived hazard snapshot held
+   * for a decision window ... rather than frame-to-frame noise", and this is that window's
+   * length made a profile field instead of a constant.
+   *
+   * SHORTER IS MORE COMPETENT, which is why `hard` scales it down: a shorter window corrects
+   * a bad read sooner, so less of the encounter is spent acting on it. It is bounded below
+   * (`MIN_COMPETENCE_HAZARD_REFRESH`) because the limit case is the defect, not the ideal --
+   * re-drawing every tick averages the error away inside a single dodge and hands back the
+   * oracle the error exists to deny.
+   *
+   * 0.5s across every profile, which is `WANDER_TICKS` (30) at 60Hz -- the cadence this
+   * mechanism already ran at as a hardcoded constant. Authoring the incumbent value is what
+   * makes `normal` an exact no-op on this axis: `Math.round(0.5 * 60)` is 30 exactly.
+   */
+  hazardRefreshTime: number;
+  /**
    * Seconds this profile COMMITS to a movement decision before re-deciding (issue #222).
    * Consumed by `commitMove` (ai/commitment.ts) as `Math.round(commitmentTime * TICK_HZ)`.
    *

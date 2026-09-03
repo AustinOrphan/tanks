@@ -67,6 +67,18 @@ function nonNegative(file: string, path: string, v: unknown): number {
   return n;
 }
 
+/**
+ * Durations in seconds that must not be zero: unbounded above like `nonNegative`, but the
+ * sim either DIVIDES by them or scales them by a multiplier that cannot improve on zero.
+ * `positiveUnitInterval` makes the same exclusion for values that are also capped at 1;
+ * these are spans, so they are not.
+ */
+function strictlyPositive(file: string, path: string, v: unknown): number {
+  const n = num(file, path, v);
+  if (!(n > 0)) fail(file, path, `must be strictly positive, got ${n}`);
+  return n;
+}
+
 /** Chances, accuracies and weights: the sim reasons about these as [0, 1]. */
 function unitInterval(file: string, path: string, v: unknown): number {
   const n = num(file, path, v);
@@ -159,7 +171,7 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
 }
 
 const PROFILE_FIELDS = [
-  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aimHoldTime', 'shotCommitmentTime', 'targetCommitmentTime', 'aggression', 'preferredDistance',
+  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'awarenessDelay', 'safetyMargin', 'hazardRefreshTime', 'commitmentTime', 'aimHoldTime', 'shotCommitmentTime', 'targetCommitmentTime', 'aggression', 'preferredDistance',
   'minimumDistance', 'retreatChance', 'directShotWeight', 'bankShotWeight',
 ] as const;
 const PROFILE_OPTIONAL_FIELDS = ['minePlacementChance'] as const;
@@ -195,6 +207,24 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // by it (targeting.ts), and 0 would make the spread Infinity.
       estimationAccuracy: positiveUnitInterval(file, `${profile}.estimationAccuracy`, p.estimationAccuracy),
       reactionTime: num(file, `${profile}.reactionTime`, p.reactionTime),
+      // Strictly positive, and the ONLY span in this schema that is: `hard` scales it DOWN
+      // (bot-difficulty.ts), and a multiplier cannot improve on zero -- an awarenessDelay
+      // authored at 0 would make `hard` identical to `normal` on this axis, which is issue
+      // #223's monotonicity criterion failing silently at load rather than loudly. The
+      // resolved value stays nonzero at every preset via MIN_COMPETENCE_AWARENESS_DELAY;
+      // this guard is about what may be AUTHORED.
+      awarenessDelay: strictlyPositive(file, `${profile}.awarenessDelay`, p.awarenessDelay),
+      // Signed on purpose, unlike every other field here: a margin is extra clearance, and
+      // a NEGATIVE one is a profile that cuts hazard corners. Difficulty composes over it
+      // additively, so `easy` reaches negative values from an authored 0 -- refusing them
+      // here would forbid the resolved value the preset is defined to produce.
+      safetyMargin: num(file, `${profile}.safetyMargin`, p.safetyMargin),
+      // Strictly positive for a different reason than awarenessDelay's: hazardRefreshTicks
+      // divides `world.tick` by it. Zero (or a value rounding to zero ticks) is a division
+      // by zero producing an Infinity bucket, i.e. one frozen hazard read for the whole
+      // round. Contained downstream only by accident; a degenerate config should die at
+      // load, the same argument aimAccuracy's guard makes.
+      hazardRefreshTime: strictlyPositive(file, `${profile}.hazardRefreshTime`, p.hazardRefreshTime),
       // Non-negative, not merely numeric: commitMove re-arms its window to
       // Math.round(commitmentTime * TICK_HZ), and a negative value would re-arm to a
       // negative countdown -- which never satisfies `ticks > 0`, silently disabling the

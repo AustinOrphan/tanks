@@ -138,7 +138,7 @@ describe('the bot input path: the sim gate blocks a shielded bot exactly as it b
   // for the identical reaction-gate arithmetic.
   const REACTION_TICKS = 48;
   function heldSolutionState(): PlayerAiState {
-    return { aimTicks: REACTION_TICKS, wanderHeading: 0, wanderTicksLeft: 1000, mineInclined: false, intent: null, intentTicks: 0 };
+    return { aimTicks: REACTION_TICKS, wanderHeading: 0, wanderTicksLeft: 1000, mineInclined: false, intent: null, intentTicks: 0, hazardTicksLeft: 0, hazardOffset: 0, hazardDelayTicks: 0 };
   }
 
   it('control: unshielded, the bot decision fires -- proves the fixture is genuinely lethal, not merely inert', () => {
@@ -169,7 +169,7 @@ describe('the bot input path: the sim gate blocks a shielded bot exactly as it b
     // Force the mine inclination directly rather than searching for a seed that draws
     // one -- state.mineInclined is the caller-owned field decidePlayerInput reads, and
     // this is exactly the same "pre-seed the state" shortcut used for aimTicks above.
-    const state: PlayerAiState = { aimTicks: 0, wanderHeading: 0, wanderTicksLeft: 1000, mineInclined: true, intent: null, intentTicks: 0 };
+    const state: PlayerAiState = { aimTicks: 0, wanderHeading: 0, wanderTicksLeft: 1000, mineInclined: true, intent: null, intentTicks: 0, hazardTicksLeft: 0, hazardOffset: 0, hazardDelayTicks: 0 };
     bot.pos = { x: 5, y: 5 };
     const enemy = world.tanks.find((t) => t.id === 2)!;
     enemy.pos = { x: 10, y: 5 }; // within tacticalRadius, outside minimumDistance

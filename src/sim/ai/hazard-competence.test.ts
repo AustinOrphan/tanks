@@ -7,6 +7,13 @@
 // flee radius before deciding whether it is safe. Break any link and bot-difficulty.test.ts
 // stays entirely green while every difficulty judges mines identically.
 //
+// SCOPE, since issue #223 widened what "perceived" means. This file is about ONE axis --
+// `estimationAccuracy` reaching a mine's perceived RADIUS -- and it draws `estimationError`
+// directly at the default cadence, so it deliberately does not see the safety margin, the
+// awareness delay or the refresh cadence #223 added. Those live in
+// `ai/hazard-perception.test.ts`, which enters through `perceiveHazards` and the decision
+// functions. Splitting them is what keeps each file's failure legible.
+//
 // The measured quantity is deliberately the CONSEQUENCE rather than the spread: how often a
 // tank believes it is safe while standing inside the radius a blast actually kills at. That
 // is issue #223's "sometimes react late or choose insufficient escape" in the only form the

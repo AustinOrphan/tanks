@@ -2,6 +2,7 @@ import type { World } from '../world';
 import type { InputState, Tank, Vec2 } from '../types';
 import { vsub, vdist, vnorm, vlen, fromAngle } from '../types';
 import { lineOfSight, aimLead, dangerAvoidMove, incomingThreats, profileAimSpread, profileHazardSpread, wallBlocksPath } from './targeting';
+import { backdateHazards, hazardRefreshTicks } from './hazard-perception';
 import { commitHeading } from './commitment';
 import { driveVelocity } from '../collision';
 import { configFor, hasAbility, TankAbility } from '../config';
@@ -82,12 +83,33 @@ export interface PlayerAiState {
    */
   intent: Vec2 | null;
   intentTicks: number;
+  /**
+   * THE HELD HAZARD SNAPSHOT (issue #223), this file's answer to the enemy AI's
+   * `perceiveHazards`. The three fields are drawn together and expire together.
+   *
+   * It lives in state rather than being re-derived because of the split this module's own
+   * comment describes: the enemy side re-derives its snapshot from a pure hash of
+   * `(world.seed, tank.id, bucket)`, and a bot driving a player slot has no `world.seed` to
+   * key on -- it draws from an injected `rnd` stream, which is linear and cannot be asked
+   * what it said 20 ticks ago. Holding the answer is the only way to give this side the
+   * same "one read per window" property, and #223 requires it: a per-TICK draw is the
+   * frame-to-frame noise the issue opens against, not a mistaken judgment.
+   */
+  hazardTicksLeft: number;
+  /** This window's signed radius-estimation offset, world units. */
+  hazardOffset: number;
+  /** This window's awareness delay, whole ticks. */
+  hazardDelayTicks: number;
 }
 
 export function createPlayerAiState(rnd: () => number): PlayerAiState {
   return {
     aimTicks: 0, wanderHeading: rnd() * Math.PI * 2, wanderTicksLeft: 0, mineInclined: false,
     intent: null, intentTicks: 0,
+    // Zero ticks left, so the FIRST call draws rather than acting on a fabricated read.
+    // The two values below are never consumed in that state; they are initialised anyway
+    // because a partially-populated state object is a footgun for the next reader.
+    hazardTicksLeft: 0, hazardOffset: 0, hazardDelayTicks: 0,
   };
 }
 
@@ -357,19 +379,37 @@ export function decidePlayerInput(
   // nearest-opponent scan.
   const threats = assessThreats(world, player);
 
-  // Directive B: the player's own perceived hazard radii, drawn ONCE per tick from the
-  // injected `rnd` stream (never `world.seed` -- see the module comment). A linear PRNG
-  // stream has no bucket to re-derive a value from later, unlike the enemy AI's
-  // world.seed-keyed hash, so a per-TICK draw is this file's equivalent of "hold a
-  // misjudgement for a while": every mine/dodge gate below reads the SAME offset this
-  // tick, exactly as grey.ts/teal.ts reuse one `estimationError` draw across their sites.
-  const hazardOffset = (rnd() * 2 - 1) * profileHazardSpread(cfg);
+  // Directive B, widened to issue #223's whole hazard picture: the bot's own perceived
+  // hazard state, drawn from the injected `rnd` stream (never `world.seed` -- see the
+  // module comment) and HELD for `hazardRefreshTime`, the same competence axis the enemy
+  // side buckets on. Every mine/dodge gate below reads the same window's belief, exactly as
+  // grey.ts/teal.ts reuse one `perceiveHazards` snapshot across their sites.
+  //
+  // WHY THIS IS THE DIFFICULTY-BEARING SITE. `withBotDifficulty` is applied in this file and
+  // nowhere else, because a versus bot fills a PLAYER slot -- campaign enemies resolve
+  // `configFor(tank.kind)` with no preset. So all six competence axes have to reach a
+  // decision HERE or the feature is a menu label: the three accuracy/timing axes already
+  // did, and these are the other three.
+  if (state.hazardTicksLeft <= 0) {
+    state.hazardOffset = (rnd() * 2 - 1) * profileHazardSpread(cfg);
+    // Uniform on [0, awarenessDelay], matching `awarenessDelayTicks`'s enemy-side draw --
+    // the profile's value is the worst case, not a flat handicap.
+    state.hazardDelayTicks = Math.round(rnd() * cfg.ai.awarenessDelay * TICK_HZ);
+    state.hazardTicksLeft = hazardRefreshTicks(cfg);
+  }
+  state.hazardTicksLeft -= 1;
+  const hazardOffset = state.hazardOffset + cfg.ai.safetyMargin;
   const fleeRadius = AI_MINE_FLEE_RADIUS + hazardOffset;
   const dangerCorridor = DANGER_CORRIDOR + hazardOffset;
   const tacticalRadius = AI_MINE_TACTICAL_RADIUS + hazardOffset;
+  // The world this bot BELIEVES it is looking at: shells back-dated by its awareness delay,
+  // mines it has not noticed yet absent. Identical to `world` at a zero delay, and used for
+  // the hazard reads only -- targeting, line of sight and the movement band below still
+  // read the real world, because difficulty may not reach those.
+  const seen = backdateHazards(world, state.hazardDelayTicks);
 
   // ---- Movement: dodge overrides the band/wander baseline, never the reverse. ----
-  const avoid = dangerAvoidMove(world, player, fleeRadius, dangerCorridor);
+  const avoid = dangerAvoidMove(seen, player, fleeRadius, dangerCorridor);
   const candidate = avoid ?? seekLikeMove(world, player, rnd, state, threats);
   // The commitment layer (issue #222), shared with the enemy AI via `commitHeading`. A bot
   // driving a player slot reaches the same `dangerAvoidMove` geometry and so exhibited the
@@ -378,7 +418,7 @@ export function decidePlayerInput(
   // world (see that field's own comment).
   const avoidKind = avoid === null
     ? null
-    : incomingThreats(world, player, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
+    : incomingThreats(seen, player, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
   const committed = commitHeading(
     world, player, state.intent, state.intentTicks,
     Math.round(cfg.ai.commitmentTime * TICK_HZ), candidate, avoid, avoidKind,
@@ -447,7 +487,9 @@ export function decidePlayerInput(
   // not) -- the same margin dangerAvoidMove now flees to, so a mine is never dropped
   // somewhere the player's own (possibly mistaken) read says it would have to dodge again.
   const nearest = threats.nearest;
-  const nearLiveMine = world.mines.some(
+  // `seen`, not `world`: this is a hazard read, so it goes through the same believed picture
+  // the dodge above did. A mine the bot has not noticed cannot be a reason not to lay one.
+  const nearLiveMine = seen.mines.some(
     (m) => !m.detonated && vdist(player.pos, m.pos) <= fleeRadius,
   );
   // Also requires the enemy to be at a comfortable range, not point-blank -- a plausible

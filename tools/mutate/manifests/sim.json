@@ -1371,5 +1371,169 @@
       "ai-last-seen moment specifics holds the bearing to the position it LAST OBSERVED, while the player moves somewhere else",
       "ai-last-seen moment specifics the plateau is caused by the memory, not by the geometry"
     ]
+  },
+  {
+    "id": "hazard-perception-never-back-dates",
+    "file": "src/sim/ai/hazard-perception.ts",
+    "find": "  if (delayTicks <= 0) return world;",
+    "replace": "  if (delayTicks >= 0) return world;",
+    "expect": "killed",
+    "why": "The whole of issue #223's awareness delay dies silently: `backdateHazards` returns the real world for every delay, so a tank's hazard picture is current to the tick again and the escape solve is the oracle the issue opens against. Nothing else can see it. `bot-difficulty.test.ts` still resolves the preset correctly, `hazard-competence.test.ts` still measures the radius error (untouched by this), and the golden trace CANNOT catch it either -- a build with a zero delay is exactly the neutrality point tools/baseline/trace.ts's re-pin was demonstrated at, so this mutation just moves BASELINE_HASH back to a value that was green three commits ago. The mutation is written as `>= 0` rather than by deleting the guard because the harness needs a non-empty replacement and an always-true guard is the more realistic shape of the regression -- someone loosening a condition, not removing a line. Killed by seven of the 22 tests in hazard-perception.test.ts, spanning three distinct claims: the four `backdateHazards` unit assertions, the pair that enters through greyDecision/tealDecision (so it is a DECISION change, not merely a data one), and the developer trace's own zero-divergence control.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "backdateHazards: the stale picture itself returns the SAME world object at a zero delay, not an equal copy",
+      "backdateHazards: the stale picture itself moves a shell BACK along its own velocity by exactly the delay",
+      "backdateHazards: the stale picture itself mutates nothing, and shares by reference exactly what it does not rewrite",
+      "backdateHazards: the stale picture itself hides a mine younger than the delay and keeps an older one -- perceived FUSE STATE",
+      "the decision functions solve from the PERCEIVED world, not the real one grey ignores a real, incoming shell its stale picture has not caught up with",
+      "the decision functions solve from the PERCEIVED world, not the real one teal does the same, through its own wiring rather than a copy that could rot",
+      "the developer trace compares actual against perceived reports the divergence a stale picture creates, and zero when there is none"
+    ]
+  },
+  {
+    "id": "hazard-perception-back-dates-shells-the-wrong-way",
+    "file": "src/sim/ai/hazard-perception.ts",
+    "find": "    b.alive ? { ...b, pos: { x: b.pos.x - b.vel.x * lag, y: b.pos.y - b.vel.y * lag } } : b);",
+    "replace": "    b.alive ? { ...b, pos: { x: b.pos.x + b.vel.x * lag, y: b.pos.y + b.vel.y * lag } } : b);",
+    "expect": "killed",
+    "why": "A sign error turns the awareness delay into an awareness ADVANTAGE: the shell is placed where it is going rather than where it was, so a stale tank reacts to the future and is better than truth instead of worse. It is the most plausible defect in this file by a distance -- the arithmetic is one character -- and it is invisible to any test that only checks that the perceived world DIFFERS from the real one, which is why the unit assertion pins the exact coordinates rather than the direction. Killed by three: the exact-arithmetic unit test, and both decision-level fixtures, whose crossover (a shell falling outside THREAT_HORIZON once back-dated 4 ticks) inverts entirely when the shell moves forward instead.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "backdateHazards: the stale picture itself moves a shell BACK along its own velocity by exactly the delay",
+      "the decision functions solve from the PERCEIVED world, not the real one grey ignores a real, incoming shell its stale picture has not caught up with",
+      "the decision functions solve from the PERCEIVED world, not the real one teal does the same, through its own wiring rather than a copy that could rot"
+    ]
+  },
+  {
+    "id": "hazard-perception-notices-every-mine-instantly",
+    "file": "src/sim/ai/hazard-perception.ts",
+    "find": "  const mines: Mine[] = world.mines.filter((m) => MINE_TIMER - m.timer >= lag);",
+    "replace": "  const mines: Mine[] = world.mines.filter((m) => MINE_TIMER - m.timer >= 0);",
+    "expect": "killed",
+    "why": "The FUSE-STATE half of the perceived picture goes, leaving the shell back-dating behind: every mine is noticed the instant it is dropped, however stale the tank's picture of everything else is. That is the one-dimensional error issue #223 names as the defect (\"not only a fresh radius offset\") reintroduced on the mine side alone, and it survives every shell-based fixture in the file by construction. The replacement keeps the same filter shape with a zero threshold rather than deleting the predicate, so it is a threshold regression rather than an obviously-dead line. Killed by the single test that owns the claim, which asserts both directions -- a mine younger than the delay is absent, one older is present -- plus the inclusive boundary at exactly the delay.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "backdateHazards: the stale picture itself hides a mine younger than the delay and keeps an older one -- perceived FUSE STATE"
+    ]
+  },
+  {
+    "id": "hazard-perception-drops-the-safety-margin",
+    "file": "src/sim/ai/hazard-perception.ts",
+    "find": "  const offset = radiusError + safetyMargin;",
+    "replace": "  const offset = radiusError;",
+    "expect": "killed",
+    "why": "`safetyMargin` resolves correctly and reaches no distance: the axis becomes a number `withBotDifficulty` computes and nothing reads. Every assertion in bot-difficulty.test.ts still passes, because they are all about the resolved config. Authored at 0 for every shipped profile, the field's ONLY live consumer is difficulty, which is exactly why it needs a pin of its own -- at `normal` the mutation is a genuine no-op and the tree looks healthy. Killed by two, deliberately at two different levels: the unit assertion that a margin moves all three radii by exactly its own value, and the decision-level fixture where a mine sitting just outside the TRUE flee radius is fled more often at `hard` than at `easy` -- which is the margin's whole purpose and collapses to a tie without it.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "perceiveHazards: one belief, every hazard type carries the profile safety margin into every radius",
+      "difficulty moves the whole hazard picture, monotonically makes an EASY bot walk past a mine a HARD bot flees, THROUGH a decision"
+    ]
+  },
+  {
+    "id": "estimation-error-ignores-the-profile-refresh-cadence",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const bucket = Math.floor(world.tick / Math.max(1, refreshTicks));",
+    "replace": "  const bucket = Math.floor(world.tick / WANDER_TICKS);",
+    "expect": "killed",
+    "why": "`hazardRefreshTime` becomes a dead field: the cadence argument is accepted and discarded, and every profile buckets on the old hardcoded WANDER_TICKS again. This is the specific regression that makes issue #223's sixth competence axis decorative -- `easy` and `hard` still resolve different windows, and both live with a bad read for exactly as long as `normal` does. Invisible to hazard-competence.test.ts, which samples on the WANDER_TICKS cadence itself, and invisible at `normal`, whose authored 0.5s IS 30 ticks. Killed by the one test built to separate them: a 60-tick profile and a 12-tick profile compared at ticks 0 and 45, where the slow profile must still hold its read and the quick one must not.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "perceiveHazards: one belief, every hazard type reads the estimation error on the PROFILE cadence, not on a fixed one"
+    ]
+  },
+  {
+    "id": "bot-difficulty-leaves-awareness-delay-unscaled",
+    "file": "src/sim/ai/bot-difficulty.ts",
+    "find": "      awarenessDelay: Math.max(\n        cfg.ai.awarenessDelay * scale.awarenessDelay,\n        MIN_COMPETENCE_AWARENESS_DELAY,\n      ),",
+    "replace": "      awarenessDelay: Math.max(cfg.ai.awarenessDelay, MIN_COMPETENCE_AWARENESS_DELAY),",
+    "expect": "killed",
+    "why": "The composition drops one axis: every preset inherits the authored delay, so `easy` is no slower to notice a hazard than `hard` is. Issue #223's monotonicity criterion fails on the axis that carries most of its behaviour, while the resolved config still LOOKS right -- the field is present, finite, and within its bounds, so every shape assertion in bot-difficulty.test.ts passes. The floor is kept in the replacement on purpose, so this tests the SCALING and not the clamp; the clamp has its own entry. Killed by the ordering test, which asserts strict inequalities across all three of #223's axes rather than mere difference.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts",
+      "src/sim/ai/bot-difficulty.test.ts"
+    ],
+    "killedBy": [
+      "difficulty moves the whole hazard picture, monotonically orders every one of the three axes #223 added, easy -> normal -> hard"
+    ]
+  },
+  {
+    "id": "bot-difficulty-lets-hard-reach-a-current-hazard-picture",
+    "file": "src/sim/ai/bot-difficulty.ts",
+    "find": "      awarenessDelay: Math.max(\n        cfg.ai.awarenessDelay * scale.awarenessDelay,\n        MIN_COMPETENCE_AWARENESS_DELAY,\n      ),",
+    "replace": "      awarenessDelay: cfg.ai.awarenessDelay * scale.awarenessDelay,",
+    "expect": "killed",
+    "why": "The other half of the same line: the scaling stays and the floor goes, so a profile authored with a short enough delay resolves at `hard` to a picture current to the tick -- the oracle both #223 and #267 forbid by name (\"never oracle-perfect\"). It cannot be caught with the shipped profiles, whose 0.1s is nowhere near MIN_COMPETENCE_AWARENESS_DELAY at any preset, which is why the test probes a synthetic profile already at the bound -- the same argument bot-difficulty.test.ts's own oracle test makes for the accuracy ceiling. Killed by the one test that carries that fixture, which also checks the shipped profile still reaches a nonzero delay so the clamp is not passing by making everything slow.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "difficulty moves the whole hazard picture, monotonically never lets HARD reach a current picture, however extreme the profile"
+    ]
+  },
+  {
+    "id": "grey-solves-its-dodge-from-the-real-world",
+    "file": "src/sim/ai/grey.ts",
+    "find": "  const avoid = dangerAvoidMove(seen, tank, fleeRadius, dangerCorridor);",
+    "replace": "  const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);",
+    "expect": "killed",
+    "why": "The perceived world is built, the radii are perceived, and the dodge is solved against the REAL shells anyway -- so grey's escape has oracle knowledge of where every shell actually is, which is the exact defect issue #223 opens against, wearing the new module's name. It survives everything in this file's older neighbours: the radii it passes are still perturbed, so profile.test.ts's under/over-estimation fixtures still behave, and it was MEASURED to survive the whole of hazard-perception.test.ts as first written -- the test that kills it was added because this entry survived. That fixture isolates the axis rather than the radius: a shell dead-centre on the tank has perpendicular distance 0, so no corridor width can drop it, and only the lookahead horizon -- i.e. where the shell is BELIEVED to be -- can. Killed by that one test, whose crossover is arithmetic (4 ticks) and asserted per draw rather than statistically.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "the decision functions solve from the PERCEIVED world, not the real one grey ignores a real, incoming shell its stale picture has not caught up with"
+    ]
+  },
+  {
+    "id": "player-bot-redraws-its-hazard-read-every-tick",
+    "file": "src/sim/ai/player-profile.ts",
+    "find": "  if (state.hazardTicksLeft <= 0) {",
+    "replace": "  if (state.hazardTicksLeft <= 0 || true) {",
+    "expect": "killed",
+    "why": "The versus bot goes back to drawing a fresh hazard belief every tick, which is the pre-#223 behaviour and the frame-to-frame noise the issue names: a misjudgement that averages itself away over the frames of a single dodge instead of being lived with, so no mistake a player could read or exploit ever forms. It is invisible to the golden trace -- that drives its one player through `stepInputs`, never `decidePlayerInput` -- and invisible to every outcome-level pin in player-profile.test.ts, whose win-rate bars are far wider than this moves them. The mutation is written as `|| true` rather than by deleting the guard because the harness needs a non-empty replacement and the field must still be maintained for the counter assertions to have anything to read. Killed by the one test that walks a whole window tick by tick and pins the held offset, the held delay, and the turnover at the boundary.",
+    "tests": [
+      "src/sim/ai/player-profile.hazard.test.ts"
+    ],
+    "killedBy": [
+      "the versus bot holds a difficulty-scaled hazard read HOLDS one hazard read for the profile refresh span instead of re-drawing per tick (#223)"
+    ]
+  },
+  {
+    "id": "player-bot-ignores-the-difficulty-refresh-window",
+    "file": "src/sim/ai/player-profile.ts",
+    "find": "    state.hazardTicksLeft = hazardRefreshTicks(cfg);",
+    "replace": "    state.hazardTicksLeft = hazardRefreshTicks(configFor(player.kind));",
+    "expect": "killed",
+    "why": "The hold survives but stops being difficulty-aware: the window re-arms from the tank kind's AUTHORED profile instead of the difficulty-scaled one, so every preset holds its hazard read for the same 30 ticks. This is the exact shape of the bug issue #223's own comment thread warns about -- `withBotDifficulty` is applied in this file and nowhere else, because a versus bot fills a player slot, so an axis that does not reach a decision HERE is a menu label with nothing behind it. It is invisible to bot-difficulty.test.ts (the resolved config is still correct) and to hazard-perception.test.ts (the enemy-side path is untouched). Killed by the one test that reads the re-armed counter back at all three presets and pins `normal` at the authored span exactly.",
+    "tests": [
+      "src/sim/ai/player-profile.hazard.test.ts"
+    ],
+    "killedBy": [
+      "the versus bot holds a difficulty-scaled hazard read scales the held refresh span with the DIFFICULTY, so easy lives with a bad read for longer"
+    ]
+  },
+  {
+    "id": "teal-solves-its-dodge-from-the-real-world",
+    "file": "src/sim/ai/teal.ts",
+    "find": "  const avoid = dangerAvoidMove(seen, tank, fleeRadius, dangerCorridor);",
+    "replace": "  const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);",
+    "expect": "killed",
+    "why": "grey's entry at the other decision function, and a separate entry rather than a wider one because the two wire the perceived world independently -- teal has no `underFire` of its own to reuse and reaches `incomingThreats` by a second path. profile.test.ts already keeps a paired grey/teal fixture for the estimation-error wiring on the same reasoning (\"not a copy that could rot separately\"); this is that pairing for the awareness delay. Killed by the teal half of the shared crossover fixture.",
+    "tests": [
+      "src/sim/ai/hazard-perception.test.ts"
+    ],
+    "killedBy": [
+      "the decision functions solve from the PERCEIVED world, not the real one teal does the same, through its own wiring rather than a copy that could rot"
+    ]
   }
 ]
