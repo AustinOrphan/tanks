@@ -1704,6 +1704,40 @@ describe('hud: the replace-run confirmation (issue #226)', () => {
   const confirmOpen = (root: HTMLElement): boolean =>
     !(root.querySelector('.hud-confirm') as HTMLElement).classList.contains('hud-confirm--hidden');
 
+  it('is announced as a modal, and earns that claim: focus cannot rove out of it into the menu behind', () => {
+    // `aria-modal="true"` is a promise that nothing outside this is reachable while it is
+    // open, so it is asserted TOGETHER with the behaviour that makes it true rather than
+    // on its own. The menu stays on screen behind the scrim -- that is what a modal IS --
+    // so the load-bearing property is that the roving focus walks the confirmation's own
+    // controls and never lands on a menu button. Asserted through the arrow keys, which
+    // is the same path a D-pad takes (issues #494, #495).
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      const confirm = root.querySelector('.hud-confirm') as HTMLElement;
+      expect(confirm.getAttribute('role')).toBe('alertdialog');
+      expect(confirm.getAttribute('aria-modal')).toBe('true');
+
+      h.setContinueAvailable(true); // only a run that would be LOST is worth asking about
+      click(root, '.hud-new-game');
+      vi.advanceTimersByTime(1000); // let the crossfade finish, so nothing is mid-transition
+      expect(confirmOpen(root), 'the confirmation did not open').toBe(true);
+
+      const inside = [...confirm.querySelectorAll('button')];
+      expect(inside.map((b) => b.className.includes('hud-confirm-cancel') || b.className.includes('hud-confirm-accept')))
+        .toEqual([true, true]);
+      for (let i = 0; i < 6; i++) {
+        (document.activeElement ?? document.body).dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+        );
+        expect(confirm.contains(document.activeElement), `step ${i} left the confirmation`).toBe(true);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('is asked only when an active run would be lost', () => {
     // The acceptance criterion, both ways round. With no run the same button is "Start
     // Campaign" and starting is not destructive, so a confirmation there would be

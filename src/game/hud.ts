@@ -1214,7 +1214,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          The DESTRUCTIVE choice is the second button and the safe one is first, so a
          gamepad Confirm on arrival (which lands focus on the first control rather than
          activating it -- see 'act') cannot be one press from deleting a run. -->
-    <div class="hud-confirm hud-confirm--hidden" tabindex="-1" role="alertdialog" aria-labelledby="hud-confirm-title" aria-describedby="hud-confirm-body">
+    <div class="hud-confirm hud-confirm--hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="hud-confirm-title" aria-describedby="hud-confirm-body">
       <h1 id="hud-confirm-title">Start a new campaign?</h1>
       <p class="hud-confirm-body" id="hud-confirm-body"></p>
       <div class="hud-confirm-actions">
