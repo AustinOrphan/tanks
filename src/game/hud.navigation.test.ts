@@ -684,10 +684,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // the container it names.
     const { root } = mount();
     const containers = Array.from(root.querySelectorAll<HTMLElement>('[tabindex="-1"]'));
-    expect(containers.length, '7 panel containers carry tabindex=-1 (panel + 6 subpanels: ' +
+    expect(containers.length, '10 panel containers carry tabindex=-1 (panel + 9 panes: ' +
       'controller assignment landing added the 6th (docs/superpowers/plans/2026-08-17-' +
       'controller-assignment.md), the versus setup pane the 7th (docs/superpowers/specs/' +
-      '2026-08-21-versus-setup-menu-design.md))').toBe(7);
+      '2026-08-21-versus-setup-menu-design.md), and issue #226 the 8th, 9th and 10th -- ' +
+      'Settings, About & Legal, and the replace-run confirmation)').toBe(10);
     for (const c of containers) {
       const ref = c.getAttribute('aria-labelledby');
       expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();
@@ -722,8 +723,8 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
    * `focusableControls` applies, straight from the DOM rather than a maintained list --
    * `button, [tabindex]`, filtered to not-disabled and not hidden by `display: none` on
    * itself OR ON ANY ANCESTOR up to (not including) `container`. That ancestor walk
-   * matters: `.hud-panel-settings` hides the audio row as a GROUP on the win/lose panel,
-   * and `getComputedStyle` on a child inside it reports the child's OWN resolved
+   * matters: since issue #226 the three Main Menu regions hide as GROUPS on the win/lose
+   * panel, and `getComputedStyle` on a child inside one reports the child's OWN resolved
    * display, not `none` (measured directly below), so a check that only looked at the
    * element itself would disagree with a correct production predicate exactly where a
    * hidden wrapper is involved -- which is exactly the drift this independent oracle
@@ -741,13 +742,26 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     );
   }
 
+  /**
+   * The openers that live on the MAIN PANEL, and the pane each opens.
+   *
+   * Panel-level only, deliberately, and that is a statement about the layer stack rather
+   * than about this test's convenience: a pane opened from inside ANOTHER pane replaces
+   * it (`openLayer`), so the opener is gone by the time Back runs and `restoreFocus`
+   * falls back to the container. The walk below asserts that Back restores the opener,
+   * which is true exactly for the openers listed here. The three pane-to-pane moves
+   * issue #226 adds -- the Records tabs, Settings -> Controllers, Settings -> About --
+   * have their own tests, and issue #327 owns the covering-layer contract that would let
+   * them nest.
+   */
   const OPEN_TO_PANEL: Record<string, string> = {
     'hud-customize-open': 'hud-customize',
-    'hud-stats-open': 'hud-stats',
-    'hud-achievements-open': 'hud-achievements',
+    'hud-records-open': 'hud-stats',
     'hud-levelselect-open': 'hud-levelselect',
     'hud-controllers-open': 'hud-controllers',
     'hud-versus-open': 'hud-versus-setup',
+    'hud-settings-open': 'hud-settings',
+    'hud-about-open': 'hud-about',
   };
   const BACK_OF_PANEL: Record<string, string> = {
     'hud-customize': 'hud-customize-back',
@@ -756,6 +770,8 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     'hud-levelselect': 'hud-levelselect-back',
     'hud-controllers': 'hud-controllers-back',
     'hud-versus-setup': 'hud-versus-back',
+    'hud-settings': 'hud-settings-back',
+    'hud-about': 'hud-about-back',
   };
 
   it('reaches every visible, enabled control from the title screen using arrow keys alone', () => {
@@ -879,7 +895,32 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // `[human, bot]`) gained Easy/Normal/Hard. The per-slot TEAM buttons do not appear
     // here at all, because they render only under Teams -- which this fixture cannot now
     // reach at two players.
-    expect(totalControls, 'recount the panels above if this moves').toBe(72);
+    //
+    // 76 SINCE ISSUE #226, up 4 from 72, and every part of the delta is the Main Menu and
+    // Settings restructure. Re-measured per container at this fixture's state rather than
+    // adjusted: 8 (Main Menu) + 24 (Customize) + 3 (Records/Stats) + 4 (Levels) + 27
+    // (Versus setup) + 9 (Settings) + 1 (About & Legal) = 76.
+    //
+    // Itemised against the 72:
+    //   -4  the Main Menu drops from 12 to 8. OUT: Stats-open and Achievements-open (one
+    //       Records entry replaces both), Controllers-open (pause-only now), and the four
+    //       settings-row controls (panel Mute, scheme, fire mode, haptics -- moved into
+    //       the Settings pane). IN: Records, Settings, and the About & Legal footer.
+    //       Continue, the campaign start button, Versus and Practice are unchanged.
+    //   -1  the Controllers pane is no longer walked FROM HERE: its opener is pause-only,
+    //       and the Settings -> Controls entry that replaces it is a pane-to-pane move,
+    //       which this walk deliberately does not follow (see OPEN_TO_PANEL).
+    //   -1  the Achievements pane likewise: it is a TAB of Records now, reached from
+    //       inside the Stats pane rather than from the menu. Its own tests cover it.
+    //   +9  the Settings pane: Mute, aim scheme, fire mode, haptics, Controllers, Reset
+    //       stats, Reset progress, About & Legal, Back. The volume slider is excluded for
+    //       the same reason the retired ones were -- `input[type=range]` matches neither
+    //       `button` nor `[tabindex]`.
+    //   +1  the About & Legal pane: Back. Its three paragraphs are prose, not controls.
+    //
+    // The Records pane holds at 3: the two reset buttons it gave up were replaced,
+    // one for one, by the two tab buttons.
+    expect(totalControls, 'recount the panels above if this moves').toBe(76);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
@@ -974,12 +1015,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     expect(isMuteHotkey(ev('m')), 'M-to-mute is dead while paused').toBe(true);
   });
 
-  it('reaches Resume, then Controllers, then Quit from the pause panel with three ArrowDowns', () => {
+  it('reaches Resume, then Settings, then Controllers, then Quit from the pause panel', () => {
     // Was "two ArrowDowns" before the controller assignment panel landed (docs/
-    // superpowers/plans/2026-08-17-controller-assignment.md): its own open button sits
-    // between the action button and Quit in DOM order and is now visible at 'paused'
-    // too (owner ruling: "in case controllers disconnect"), so it is a real, reachable
-    // stop, not a skip.
+    // superpowers/plans/2026-08-17-controller-assignment.md), and three until issue #226
+    // gave the pause panel a Settings entry -- which sits in the utilities region, and so
+    // in DOM order before Controllers and Quit. Each is a real, reachable stop.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.setState('playing');
@@ -989,11 +1029,15 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       root.querySelector('.hud-action'),
     );
     pressActive('ArrowDown');
-    expect(document.activeElement, 'the second ArrowDown did not reach Controllers').toBe(
+    expect(document.activeElement, 'the second ArrowDown did not reach Settings').toBe(
+      root.querySelector('.hud-settings-open'),
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the third ArrowDown did not reach Controllers').toBe(
       root.querySelector('.hud-controllers-open'),
     );
     pressActive('ArrowDown');
-    expect(document.activeElement, 'the third ArrowDown did not reach Quit').toBe(
+    expect(document.activeElement, 'the fourth ArrowDown did not reach Quit').toBe(
       root.querySelector('.hud-quit'),
     );
   });
@@ -1039,29 +1083,39 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     expect(document.activeElement).toBe(action);
   });
 
-  it('never walks focus onto the audio row while its wrapper is display:none', () => {
-    // The bug the ancestor-walking `isHiddenWithin` in hud.ts exists to catch:
-    // `.hud-panel-settings` hides the audio row (panel Mute, the scheme and fire-mode
-    // toggles) as a GROUP on the win/lose panel, but each control's OWN `display`
-    // resolves to something other than `none` -- measured directly, a `getComputedStyle`
-    // check that only looked at the control itself would have included all three and
-    // walked the roving order onto invisible buttons on every win/lose screen.
+  it('never walks focus into a Main Menu region while its wrapper is display:none', () => {
+    // The bug the ancestor-walking `isHiddenWithin` in hud.ts exists to catch. It used
+    // to be `.hud-panel-settings` hiding the audio row as a group; since issue #226 the
+    // group hides are the three Main Menu REGIONS, which is a wider version of the same
+    // shape -- each control's OWN `display` still resolves to something other than
+    // `none`, so a check that only looked at the control itself would walk the roving
+    // order onto six invisible buttons on every win/lose screen instead of three.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.setState('playing');
     h.setState('outcome-win'); // controls: the action button ALONE
-    const settings = root.querySelector('.hud-panel-settings') as HTMLElement;
-    expect(getComputedStyle(settings).display, 'test invalid: the wrapper is not actually hidden').toBe(
-      'none',
-    );
-    const panelMute = root.querySelector('.hud-panel-mute') as HTMLElement;
-    expect(
-      getComputedStyle(panelMute).display,
-      'test invalid: the control itself now also resolves display:none, which would make this pass for the wrong reason',
-    ).not.toBe('none');
+    for (const cls of ['hud-menu-play', 'hud-menu-utilities', 'hud-menu-footer']) {
+      const region = root.querySelector(`.${cls}`) as HTMLElement;
+      expect(getComputedStyle(region).display, `test invalid: .${cls} is not actually hidden`).toBe(
+        'none',
+      );
+    }
+    // The half that makes this test about the ANCESTOR walk rather than about the
+    // controls: these two carry no `--hidden` of their own, so their own resolved
+    // `display` is not `none` and only the wrapper excludes them. (The play region's two
+    // buttons both have their own modifiers as well -- Versus is Main-Menu-only and
+    // Practice also needs a level choice -- so they cannot make this point and are
+    // deliberately not asked to.)
+    for (const sel of ['.hud-settings-open', '.hud-about-open']) {
+      const inner = root.querySelector(sel) as HTMLElement;
+      expect(
+        getComputedStyle(inner).display,
+        `test invalid: ${sel} now also resolves display:none, which would make this pass for the wrong reason`,
+      ).not.toBe('none');
+    }
     pressActive('ArrowDown'); // reaches the action button
-    pressActive('ArrowDown'); // must WRAP back to the action button, not fall into the audio row
-    expect(document.activeElement, 'focus walked onto a control inside the hidden audio row').toBe(
+    pressActive('ArrowDown'); // must WRAP back to it, not fall into a hidden region
+    expect(document.activeElement, 'focus walked onto a control inside a hidden region').toBe(
       root.querySelector('.hud-action'),
     );
   });
@@ -1091,7 +1145,12 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // early return in `onNavKeyDown`.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    const slider = root.querySelector('.hud-panel-volume') as HTMLInputElement;
+    // In the Settings pane since issue #226, so the pane has to be open for the slider to
+    // be the control the roving handler is deciding about.
+    (root.querySelector('.hud-settings-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
+    );
+    const slider = root.querySelector('.hud-settings-volume') as HTMLInputElement;
     slider.focus();
     for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
       const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
@@ -1202,7 +1261,7 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     expect(titleAffordances(root)).toEqual({
       continueVisible: true,
       newGameVisible: true,
-      newGameLabel: 'New Game',
+      newGameLabel: 'Start New Campaign',
       levelsVisible: true,
       campaignVisible: false,
       versusVisible: true,
@@ -1218,7 +1277,7 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     expect(titleAffordances(root)).toEqual({
       continueVisible: true,
       newGameVisible: true,
-      newGameLabel: 'New Game',
+      newGameLabel: 'Start New Campaign',
       levelsVisible: true,
       campaignVisible: false,
       versusVisible: true,
@@ -1373,7 +1432,7 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     expect(titleAffordances(kindOnly.root)).toEqual({
       continueVisible: true,
       newGameVisible: true,
-      newGameLabel: 'New Game',
+      newGameLabel: 'Start New Campaign',
       levelsVisible: true,
       campaignVisible: false,
       versusVisible: true,
@@ -1428,7 +1487,7 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     practice.hud.setContinueAvailable(true);
     practice.hud.setLevelSelect(2, 4);
     practice.hud.setState('main-menu');
-    expect(titleAffordances(practice.root).newGameLabel).toBe('New Game');
+    expect(titleAffordances(practice.root).newGameLabel).toBe('Start New Campaign');
     expect(titleAffordances(practice.root).campaignVisible).toBe(false);
     practice.hud.dispose();
   });
@@ -1537,7 +1596,14 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     // fixture's player count -- 3 buttons, not 6. Re-derived, not incremented: the count
     // depends on how many slots are bots, so a fixture that defaulted both slots to Bot
     // would pin 29 here.
-    expect(btns.length).toBe(11 + 7 + 8 + 26);
+    //
+    // +4 since issue #226: the Records tab pair, which appears in BOTH the Stats and the
+    // Achievements pane so that each reads as one destination with two views. Their
+    // selected state is STATIC -- a pane's own tab is always the current one -- so they
+    // are the sweep's only members that never move, which is exactly why they have to be
+    // in it: a static `aria-pressed` that disagreed with its static class would be
+    // invisible to any test that only watched controls change.
+    expect(btns.length).toBe(11 + 7 + 8 + 26 + 4);
     const missing = btns
       .filter((b) => !b.hasAttribute('aria-pressed'))
       .map((b) => Array.from(b.classList).join('.'));
@@ -1618,6 +1684,154 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     expect(reason, 'aria-describedby points at no element').not.toBeNull();
     expect(reason.textContent, 'the referenced element is empty, so the excuse says nothing')
       .not.toBe('');
+  });
+});
+
+/*
+ * ISSUE #226: the replace-run confirmation.
+ *
+ * Here rather than with the menu composition it belongs to, because every property it has
+ * is a layer-stack property: it is this file's first `overlay`, a route may not open
+ * under it, Back cancels it, a surface change dismisses it, and answering it has to
+ * restore the control that asked.
+ */
+describe('hud: the replace-run confirmation (issue #226)', () => {
+  const q = (root: HTMLElement, sel: string): HTMLButtonElement =>
+    root.querySelector(sel) as HTMLButtonElement;
+  const click = (root: HTMLElement, sel: string): void => {
+    q(root, sel).dispatchEvent(new MouseEvent('click'));
+  };
+  const confirmOpen = (root: HTMLElement): boolean =>
+    !(root.querySelector('.hud-confirm') as HTMLElement).classList.contains('hud-confirm--hidden');
+
+  it('is asked only when an active run would be lost', () => {
+    // The acceptance criterion, both ways round. With no run the same button is "Start
+    // Campaign" and starting is not destructive, so a confirmation there would be
+    // friction with nothing to protect.
+    const { hud: h, root } = mount();
+    const starts: number[] = [];
+    h.onNewGame(() => starts.push(1));
+    h.setState('main-menu');
+
+    click(root, '.hud-new-game');
+    expect(confirmOpen(root), 'no run, and it still asked').toBe(false);
+    expect(starts, 'the direct path did not start a campaign').toEqual([1]);
+
+    h.setContinueAvailable(true);
+    click(root, '.hud-new-game');
+    expect(confirmOpen(root), 'a run would be replaced and it did not ask').toBe(true);
+    expect(starts, 'opening the question already started the campaign').toEqual([1]);
+  });
+
+  it('names the run it would replace', () => {
+    // "Are you sure?" over an unnamed loss is the wording that gets clicked through. The
+    // body is written at OPEN, from the summary the menu is already showing, so it cannot
+    // describe a run the player is not looking at.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.setContinueAvailable(true);
+    h.setCampaignRun({ mission: 4, total: 8, lives: 1 });
+    click(root, '.hud-new-game');
+    const body = root.querySelector('.hud-confirm-body') as HTMLElement;
+    expect(body.textContent).toBe(
+      'Mission 4 of 8 -- 1 life left. Starting a new campaign replaces it. This cannot be undone.',
+    );
+  });
+
+  it('Cancel starts nothing and returns to the menu; Confirm starts exactly one campaign', () => {
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const starts: number[] = [];
+      h.onNewGame(() => starts.push(1));
+      h.setState('main-menu');
+      h.setContinueAvailable(true);
+
+      click(root, '.hud-new-game');
+      click(root, '.hud-confirm-cancel');
+      vi.advanceTimersByTime(1000);
+      expect(starts, 'Cancel started a campaign').toEqual([]);
+      expect(confirmOpen(root), 'Cancel left the question up').toBe(false);
+      expect(
+        (root.querySelector('.hud-panel') as HTMLElement).classList.contains('hud-panel--hidden'),
+        'Cancel did not return to the menu',
+      ).toBe(false);
+      // ...and focus is back on the control that asked, so a keyboard player who cancels
+      // is standing where they were rather than at the top of the panel.
+      expect(document.activeElement).toBe(q(root, '.hud-new-game'));
+
+      click(root, '.hud-new-game');
+      click(root, '.hud-confirm-accept');
+      vi.advanceTimersByTime(1000);
+      expect(starts, 'Confirm did not start exactly one campaign').toEqual([1]);
+      expect(confirmOpen(root), 'Confirm left the question up').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('is a BLOCKING layer: no route opens under an unanswered question', () => {
+    // The one structural difference between an overlay and a route (`navigation.ts`):
+    // a route may never be pushed over an overlay. Without it a menu button reached by
+    // the keyboard behind the confirmation would open a pane UNDER it, and the Back that
+    // dismissed the question would land on a screen the player never asked for.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.setContinueAvailable(true);
+    click(root, '.hud-new-game');
+    expect(confirmOpen(root)).toBe(true);
+
+    click(root, '.hud-records-open');
+    expect(
+      (root.querySelector('.hud-stats') as HTMLElement).classList.contains('hud-stats--hidden'),
+      'a route opened under the confirmation',
+    ).toBe(true);
+    expect(confirmOpen(root), 'the confirmation was replaced by a route').toBe(true);
+
+    // NEGATIVE CONTROL: the same click with no question up really does open the pane, so
+    // the assertion above is about the overlay and not about a broken Records button.
+    expect(h.back()).toBe(true);
+    click(root, '.hud-records-open');
+    expect(
+      (root.querySelector('.hud-stats') as HTMLElement).classList.contains('hud-stats--hidden'),
+    ).toBe(false);
+  });
+
+  it('Back cancels it, and a surface change dismisses it rather than letting it outlive the menu', () => {
+    const { hud: h, root } = mount();
+    const starts: number[] = [];
+    h.onNewGame(() => starts.push(1));
+    h.setState('main-menu');
+    h.setContinueAvailable(true);
+
+    click(root, '.hud-new-game');
+    expect(h.back(), 'Back did not consume the confirmation').toBe(true);
+    expect(starts, 'Back answered the question').toEqual([]);
+
+    click(root, '.hud-new-game');
+    h.setState('playing');
+    expect(confirmOpen(root), 'the question survived a surface change').toBe(false);
+    expect(h.back(), 'the confirmation was left on the layer stack').toBe(false);
+    expect(starts, 'a surface change answered the question').toEqual([]);
+  });
+
+  it('puts the safe answer first, so a blind Confirm cannot delete a run', () => {
+    // `act('confirm')` on a freshly arrived pane lands focus on the FIRST control rather
+    // than activating it (issue #494), and the first ArrowDown from a container lands
+    // there too. Both make the first control the one a hurried player reaches, which is
+    // why the destructive answer is second.
+    const { hud: h, root } = mount();
+    const starts: number[] = [];
+    h.onNewGame(() => starts.push(1));
+    h.setState('main-menu');
+    h.setContinueAvailable(true);
+    click(root, '.hud-new-game');
+
+    expect(h.act('confirm'), 'the pane did not take the action').toBe(true);
+    expect(document.activeElement, 'the first control is not the safe answer').toBe(
+      q(root, '.hud-confirm-cancel'),
+    );
+    expect(starts, 'a single blind Confirm replaced the run').toEqual([]);
   });
 });
 
@@ -1704,12 +1918,14 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
     // with nothing open would swallow every gamepad Back at the Main Menu.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    const surfaces = ['.hud-panel', '.hud-stats', '.hud-customize', '.hud-achievements', '.hud-levelselect', '.hud-controllers', '.hud-versus-setup'];
+    const surfaces = ['.hud-panel', '.hud-stats', '.hud-customize', '.hud-achievements',
+      '.hud-levelselect', '.hud-controllers', '.hud-versus-setup', '.hud-settings',
+      '.hud-about', '.hud-confirm'];
     const snapshot = (): string[] => surfaces.map((sel) => q(root, sel).className);
     const before = snapshot();
     expect(h.back()).toBe(false);
     expect(snapshot()).toEqual(before);
-    const opener = q(root, '.hud-stats-open');
+    const opener = q(root, '.hud-records-open');
     click(opener);
     expect(h.back()).toBe(true);
     expect(q(root, '.hud-stats').classList.contains('ui-surface--leaving'), 'the pane is not on its way out').toBe(true);
@@ -1722,9 +1938,9 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
     // invoking control without a modality.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    const opener = q(root, '.hud-achievements-open');
+    const opener = q(root, '.hud-about-open');
     click(opener, 1);
-    click(q(root, '.hud-achievements-back'), 1);
+    click(q(root, '.hud-about-back'), 1);
     expect(document.activeElement).toBe(opener);
   });
 
@@ -1733,9 +1949,9 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
     // opened over -- a ghost layer here would swallow the first Escape of the match.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    click(q(root, '.hud-stats-open'));
+    click(q(root, '.hud-records-open'));
     expect(h.back(), 'the pane did not open').toBe(true);
-    click(q(root, '.hud-stats-open'));
+    click(q(root, '.hud-records-open'));
     h.setState('playing');
     expect(isHidden(root, '.hud-stats', 'hud-stats--hidden')).toBe(true);
     expect(h.back(), 'gameplay entry left a layer on the stack').toBe(false);
@@ -1773,12 +1989,18 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
     h.onCampaignOpen(() => fired.push('campaign-open'));
     h.setLevelSelect(3, 3);
     h.setState('main-menu');
+    // Population: every pane with an opener and a Back button. Achievements is reached
+    // through the Records tab inside the Stats pane since issue #226, and Controllers
+    // through Settings -> Controls, which is why those two rows name an opener that lives
+    // inside another pane rather than on the menu.
     const pairs: Array<[string, string]> = [
-      ['.hud-stats-open', '.hud-stats-back'],
+      ['.hud-records-open', '.hud-stats-back'],
       ['.hud-customize-open', '.hud-customize-back'],
-      ['.hud-achievements-open', '.hud-achievements-back'],
+      ['.hud-stats .hud-records-tab-achievements', '.hud-achievements-back'],
       ['.hud-levelselect-open', '.hud-levelselect-back'],
-      ['.hud-controllers-open', '.hud-controllers-back'],
+      ['.hud-settings-open', '.hud-settings-back'],
+      ['.hud-settings-controllers', '.hud-controllers-back'],
+      ['.hud-about-open', '.hud-about-back'],
     ];
     for (const [open, back] of pairs) {
       click(q(root, open));
@@ -2022,7 +2244,7 @@ describe('hud: the browser-history mirror (issue #318)', () => {
       hud = createHud(root, { history: browserHistoryHost(window) });
       const h = hud;
       h.setState('main-menu');
-      const opener = q(root, '.hud-stats-open');
+      const opener = q(root, '.hud-records-open');
       click(opener);
       expect(window.history.state).toEqual({ tanks: 'layer' });
       expect(window.location.search).toBe('?dev=1');
@@ -2118,7 +2340,7 @@ describe('hud: the semantic action dispatcher (issue #494)', () => {
     const { hud: h, root } = mount();
     h.setState('main-menu');
     click(q(root, '.hud-customize-open'));
-    const slider = q(root, '.hud-panel-volume') as HTMLInputElement;
+    const slider = q(root, '.hud-settings-volume') as HTMLInputElement;
     slider.focus();
     expect(document.activeElement).toBe(slider);
     press('ArrowDown');

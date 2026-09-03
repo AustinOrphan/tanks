@@ -97,7 +97,10 @@ const CENSUS = () => {
  *
  * ORDER IS LOAD-BEARING. `Continue` needs a campaign run to continue, and the only thing
  * here that creates one is `New Game` -- so running Continue first would find its button
- * hidden and report a probe failure for a game behaving correctly. The Practice pick reaches
+ * hidden and report a probe failure for a game behaving correctly. It is also why New
+ * Game runs against NO run and therefore starts directly: with one, issue #226 makes the
+ * same button ask first, which `dismissReplaceRun` below answers so the ordering is a
+ * preference rather than a trap. The Practice pick reaches
  * the same start boundary through the level-select pane, which is why its selector is a
  * level TILE and not the pane's open button: opening the pane is navigation and builds
  * nothing, and stopping there would have exercised no start at all.
@@ -176,10 +179,35 @@ async function quitToMenu(page, gesture) {
   throw new UnreachableControl(gesture, '.hud-quit');
 }
 
+/**
+ * Answer the replace-run confirmation, if this gesture raised one (issue #226).
+ *
+ * "Start New Campaign" replaces an active run and asks before doing it, so the click that
+ * used to enter gameplay now opens a pane on the paths where a run already exists. A SHORT
+ * bounded wait and no throw: on the gestures that raise no question -- which is all of them
+ * in the order above -- this must cost one poll and get out of the way, and a probe that
+ * required the pane would report a failure for the correct behaviour.
+ */
+async function dismissReplaceRun(page) {
+  const shown = await page
+    .waitForFunction(
+      () => {
+        const el = document.querySelector('.hud-confirm-accept');
+        return !!el && el.offsetParent !== null;
+      },
+      undefined,
+      { timeout: 1000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  if (shown) await page.click('.hud-confirm-accept');
+}
+
 /** One gesture: census before, start, census in match, return, census after. */
 async function runGesture(page, gesture) {
   const before = await page.evaluate(CENSUS);
   for (const sel of gesture.clicks) await clickWhenReady(page, gesture.id, sel);
+  await dismissReplaceRun(page);
 
   // The canvas has to be BUILT and SIZED, not merely present: #428's shipped defect was a
   // start that built the board and left the player on the Main Menu, and a zero-width canvas

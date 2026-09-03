@@ -16,12 +16,25 @@ export type HudSurface =
   | 'outcome-lose';
 
 /**
- * The layers that open OVER a surface (issue #318): the six panes, by the name each has
- * carried in its classes since it was added. Recorded on the HUD's layer stack together
- * with the surface each was pushed over and the control that opened it, so Back returns
- * to the true origin and restores the invoking control. #226 adds `settings`, #322
- * `records`, #243 `developer-tools`: one member here and one `LAYERS` row each, and the
- * exhaustive record makes a missing row a compile error.
+ * The layers that open OVER a surface (issue #318), by the name each has carried in its
+ * classes since it was added. Recorded on the HUD's layer stack together with the surface
+ * each was pushed over and the control that opened it, so Back returns to the true origin
+ * and restores the invoking control. #243 still adds `developer-tools`: one member here
+ * and one `LAYERS` row, and the exhaustive record makes a missing row a compile error.
+ *
+ * Issue #226 added `settings`, `about` and `confirm-new-campaign`. The first two are
+ * ROUTES like the six before them; `confirm-new-campaign` is the file's first `overlay`,
+ * and it is an overlay rather than a route for the reason `navigation.ts` states -- a
+ * route may not be pushed over it, which is what stops a menu button opening a pane
+ * UNDER the question it has not answered yet. It is deliberately not a general dialog
+ * primitive; issue #327 owns that.
+ *
+ * `stats` and `achievements` are the two RECORDS tabs since #226. They stay two layer ids
+ * rather than one because they are two panes; what changed is that only one Main Menu
+ * control opens them, and each pane carries the tab row that reaches the other. Switching
+ * tabs replaces the top layer, so both keep the Main Menu as their origin and Back from
+ * either returns there -- which is exactly the shallow-tab contract the UI direction
+ * asks for. Issue #322 owns the content and terminology inside them.
  */
 export type HudLayerId =
   | 'stats'
@@ -29,7 +42,10 @@ export type HudLayerId =
   | 'achievements'
   | 'levelselect'
   | 'controllers'
-  | 'versus-setup';
+  | 'versus-setup'
+  | 'settings'
+  | 'about'
+  | 'confirm-new-campaign';
 
 /**
  * WHAT IS BEING PLAYED -- the actual session kind, projected from the canonical
@@ -112,6 +128,20 @@ export interface RoundPhaseInfo {
   secondsLeft: number;
 }
 
+/**
+ * The active campaign run, as the Main Menu and the replace-run confirmation describe it
+ * (issue #226). See `Hud.setCampaignRun` for who resolves these numbers and why they are
+ * not derived inside the HUD.
+ */
+export interface CampaignRunSummary {
+  /** 1-based position in this build's campaign, or `null` when it cannot be resolved. */
+  readonly mission: number | null;
+  /** How many missions the campaign has. Only rendered beside a resolved `mission`. */
+  readonly total: number;
+  /** Lives left in the run, verbatim from the run store. */
+  readonly lives: number;
+}
+
 export interface Hud {
   /**
    * The campaign topbar stat -- loop.ts pushes this every frame regardless of session
@@ -162,10 +192,37 @@ export interface Hud {
    */
   setContinueAvailable(available: boolean): void;
   /**
+   * WHERE THE ACTIVE RUN STANDS, for the Main Menu's one-line confidence summary and the
+   * replace-run confirmation's copy (issue #226): "Mission 3 of 8 -- 2 lives left".
+   *
+   * A SECOND signal beside `setContinueAvailable`, not a replacement for it, and the
+   * split is the same one #153 drew between "is there a run" and what the run contains.
+   * `setContinueAvailable` is pushed from five places in `loop.ts` on every path where
+   * the run's EXISTENCE can change, several of them mid-session where no menu is on
+   * screen; this is pushed by the PAGE (`route-host.ts`) on every arrival at the Main
+   * Menu, which is the only surface that renders it. Folding the two into one setter
+   * would either make every one of those five loop call sites resolve a mission number
+   * they have no reason to know, or make the page's paint the only one -- losing the
+   * mid-session availability updates that already work.
+   *
+   * `mission` is 1-BASED and `total` is the campaign length, both resolved by the caller
+   * against the level system; a run whose stored level id is not in this build's campaign
+   * reports `mission: null` and the line degrades to the lives half rather than inventing
+   * a position. The HUD owns the wording; the caller owns the numbers.
+   */
+  setCampaignRun(run: CampaignRunSummary | null): void;
+  /**
    * New Game: the one deliberate, explicit action that starts (or replaces) the
    * active campaign run. Separate from onLevelSelect (see its doc comment) so the
    * loop can tell "start/replace the run" from "enter practice" apart -- before this
    * split they were the literal same event.
+   *
+   * SINCE ISSUE #226 THE BUTTON IS NOT THE EVENT. With a run active, "Start New
+   * Campaign" opens the replace-run confirmation and this fires only when that
+   * confirmation is answered; with no run it fires directly from "Start Campaign".
+   * Every subscriber therefore still means the same thing -- the player has deliberately
+   * asked to start a fresh run -- which is what let the confirmation be added without
+   * touching a single caller.
    */
   onNewGame(cb: () => void): void;
   setState(s: HudSurface): void;
@@ -715,15 +772,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            setVersusStocks hands it entries; see that setter's own doc comment on the
            Hud interface for the full visibility rule. -->
       <div class="hud-versus-stocks hud-versus-stocks--hidden"></div>
-      <div class="hud-audio">
-        <button class="hud-mute" type="button">Mute (M)</button>
-        <!-- autocomplete="off": Firefox restores form-control values across a
-             soft reload and bfcache restore. Without this the slider comes back
-             at the user's last position while a freshly-built engine boots at
-             DEFAULT_VOLUME, and no 'input' event fires to reconcile them --
-             reopening the exact "slider is lying" bug this markup was fixed for. -->
-        <input class="hud-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
-      </div>
+      <!-- NO AUDIO PAIR HERE since issue #226. A Mute button and a volume slider sat in
+           this bar on every surface including the Main Menu, which is what made audio
+           the only setting with two permanent homes and no durable one. Both controls
+           now live once, in Settings -> Audio; the M shortcut survives and reports
+           through a toast ('route-host.ts'), which is the status feedback the button
+           label used to carry. What is left in this bar is GAMEPLAY STATUS only, which
+           is why the whole bar is now hidden at the Main Menu too -- see setState. -->
     </div>
     <div class="hud-count hud-count--hidden"></div>
     <div class="hud-damage" aria-hidden="true"></div>
@@ -769,7 +824,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          showAchievements(true) focus the PANE on arrival rather than a control inside it
          (see .hud-panel's own note on why arrivals land on the container). -->
     <div class="hud-achievements hud-achievements--hidden" tabindex="-1" aria-labelledby="hud-achievements-title">
-      <h1 id="hud-achievements-title">Achievements</h1>
+      <h1 id="hud-achievements-title">Records</h1>
+      <!-- The Records tab row (issue #226). Both tabs appear in BOTH panes and each
+           pane's own tab is the selected one, so the pair reads as one destination with
+           two views rather than as two menu entries. 'ui-selectable--on' marks the
+           current tab; 'aria-pressed' says the same thing to a screen reader, which is
+           what a pair of buttons can honestly claim without a full tablist widget (the
+           panes are siblings on the layer stack, not tabpanels inside one container). -->
+      <div class="hud-records-tabs" role="group" aria-label="Records views">
+        <button class="ui-btn ui-btn--sm ui-selectable hud-records-tab hud-records-tab-stats" type="button" aria-pressed="false">Stats</button>
+        <button class="ui-btn ui-btn--sm ui-selectable ui-selectable--on hud-records-tab hud-records-tab-achievements" type="button" aria-pressed="true">Achievements</button>
+      </div>
       <p class="hud-achievements-count"></p>
       <div class="hud-achievement-list"></div>
       <button class="ui-btn ui-btn--slab hud-achievements-back" type="button">Back</button>
@@ -793,9 +858,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     </div>
     <!-- The controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
          assignment.md): ONE panel, TWO entry points -- the title screen's own open
-         button below, and .hud-panel-settings' presence at 'paused' too (in case a
-         controller disconnects mid-round). Unlike its four siblings above/below, this
-         one is NOT title-only, so its Back button cannot hardcode setState('main-menu') --
+         button below, and its own presence at 'paused' too (in case a controller
+         disconnects mid-round; since issue #226 the pause panel is where that button
+         lives, and Settings -> Controls is the durable way in). Unlike its four siblings
+         above/below, this one is NOT title-only, so its Back button cannot hardcode
+         setState('main-menu') --
          see handleControllersBack, which routes to shownState instead. The heading
          text itself branches on shownState too, in showControllers. -->
     <div class="hud-controllers hud-controllers--hidden" tabindex="-1" aria-labelledby="hud-controllers-title">
@@ -939,12 +1006,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       </section>
       <button class="ui-btn ui-btn--slab hud-customize-back" type="button">Back</button>
     </div>
+    <!-- The Stats tab of Records (issue #226). The two RESET buttons that used to sit in
+         .hud-stats-actions moved to Settings -> Data: the issue's ruling is that
+         "destructive reset/import actions live under Data, not Records", and a page whose
+         purpose is reading progress should not put deleting it one mis-click away. -->
     <div class="hud-stats hud-stats--hidden" tabindex="-1" aria-labelledby="hud-stats-title">
-      <h1 id="hud-stats-title">Stats</h1>
+      <h1 id="hud-stats-title">Records</h1>
+      <div class="hud-records-tabs" role="group" aria-label="Records views">
+        <button class="ui-btn ui-btn--sm ui-selectable ui-selectable--on hud-records-tab hud-records-tab-stats" type="button" aria-pressed="true">Stats</button>
+        <button class="ui-btn ui-btn--sm ui-selectable hud-records-tab hud-records-tab-achievements" type="button" aria-pressed="false">Achievements</button>
+      </div>
       <table class="hud-stats-table"></table>
       <div class="hud-stats-actions">
-        <button class="ui-btn ui-btn--slab ui-btn--danger hud-reset-stats hud-danger" type="button">Reset stats</button>
-        <button class="ui-btn ui-btn--slab ui-btn--danger hud-reset-progress hud-danger" type="button">Reset progress</button>
         <button class="ui-btn ui-btn--slab hud-stats-back" type="button">Back</button>
       </div>
     </div>
@@ -976,56 +1049,177 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
       <p class="hud-coop-kills hud-coop-kills--hidden"></p>
       <p class="hud-versus-results hud-versus-results--hidden"></p>
+      <!-- THE MAIN MENU HIERARCHY (issue #226), top to bottom and in exactly the order
+           the issue names it: one dominant Campaign action with a run summary above it,
+           the two direct play actions, the three compact utilities, and a footer.
+           Everything below .hud-action is Main-Menu-only chrome; the pause and outcome
+           screens reuse the same panel element and hide all of it (see setState).
+
+           WHAT THIS REPLACED: nine peer .ui-btn--slab siblings in one flat column, plus a
+           five-control settings row, all at the same visual weight -- which is the flat
+           competition the issue exists to remove. Grouping them into three named regions
+           is what lets CSS give each region its own weight without any button here
+           learning about layout. -->
+      <!-- Where the active run stands, above the primary action it describes. Main-Menu
+           only and only while a run exists; setCampaignRun owns the text. -->
+      <p class="hud-run-summary hud-run-summary--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
            at the furthest unlocked level and is offered only once there is something to
            resume; New Game always starts level 1. The .hud-action button itself survives
-           for Resume/Next Level/Play Again/Retry -- see setState -- and hides at title. -->
-      <button class="ui-btn ui-btn--primary hud-continue hud-continue--hidden" type="button">Continue</button>
-      <button class="ui-btn ui-btn--primary hud-new-game hud-new-game--hidden" type="button">New Game</button>
+           for Resume/Next Level/Play Again/Retry -- see setState -- and hides at title.
+           Both labels name CAMPAIGN since #226: "Continue"/"New Game" said nothing about
+           which of the three play modes they entered, and Versus sat beside them. -->
+      <button class="ui-btn ui-btn--primary hud-continue hud-continue--hidden" type="button">Continue Campaign</button>
+      <button class="ui-btn ui-btn--primary hud-new-game hud-new-game--hidden" type="button">Start Campaign</button>
       <button class="ui-btn ui-btn--primary hud-action" type="button"></button>
-      <button class="ui-btn ui-btn--slab hud-stats-open hud-stats-open--hidden" type="button">Stats</button>
-      <button class="ui-btn ui-btn--slab hud-achievements-open hud-achievements-open--hidden" type="button">Achievements</button>
-      <button class="ui-btn ui-btn--slab hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
-      <button class="ui-btn ui-btn--slab hud-levelselect-open hud-levelselect-open--hidden" type="button">Levels</button>
-      <!-- Visible at title AND paused -- the one new variant of this file's per-button
-           visibility pattern, precedented by .hud-panel-settings itself already showing
-           at both those states (see setState). -->
-      <button class="ui-btn ui-btn--slab hud-controllers-open hud-controllers-open--hidden" type="button">Controllers</button>
-      <!-- Versus setup entry (docs/superpowers/specs/2026-08-21-versus-setup-menu-
-           design.md, ruling 1): TITLE ONLY, unlike Controllers just above (title AND
-           paused) -- a live round's mode/players/stock are closed over for its whole
-           session (levels.ts's own doc comment, loop.ts's startGameWith), so there is
-           nothing this button could offer mid-round. See onVersusOpen's own doc
-           comment on the Hud interface for why its click handler is a bare
-           passthrough rather than a local showX(true) call. -->
-      <button class="ui-btn ui-btn--slab hud-versus-open hud-versus-open--hidden" type="button">Versus</button>
-      <!-- A setup-pane versus session's title has nothing for Continue/Levels-open to
+      <!-- The two DIRECT play actions (issue #226 hierarchy step 2). Versus setup entry
+           (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md, ruling 1) is
+           MAIN-MENU ONLY -- a live round's mode/players/stock are closed over for its
+           whole session (levels.ts's own doc comment, loop.ts's startGameWith), so there
+           is nothing it could offer mid-round. See onVersusOpen's own doc comment on the
+           Hud interface for why its click handler is a bare passthrough rather than a
+           local showX(true) call.
+
+           "Practice", not "Levels": the button opens the level select, and what picking a
+           level there DOES is enter practice (see onLevelSelect's own doc comment). The
+           old label named the pane rather than the action, which is why a new player had
+           no way to tell it from the campaign. -->
+      <div class="hud-menu-play hud-menu-play--hidden">
+        <button class="ui-btn ui-btn--slab hud-versus-open hud-versus-open--hidden" type="button">Versus</button>
+        <button class="ui-btn ui-btn--slab hud-levelselect-open hud-levelselect-open--hidden" type="button">Practice</button>
+      </div>
+      <!-- The three COMPACT UTILITIES (hierarchy step 3). Records is ONE entry for what
+           used to be two peers of the play actions, Stats and Achievements -- they are
+           now its two tabs. Settings is the new durable home for audio and the input
+           controls that used to be a row on this panel. -->
+      <div class="hud-menu-utilities hud-menu-utilities--hidden">
+        <button class="ui-btn ui-btn--slab hud-customize-open" type="button">Customize</button>
+        <button class="ui-btn ui-btn--slab hud-records-open" type="button">Records</button>
+        <button class="ui-btn ui-btn--slab hud-settings-open" type="button">Settings</button>
+      </div>
+      <!-- A setup-pane versus session's title has nothing for Continue/Practice-open to
            do (see setRelaunchTarget's own doc comment on the Hud interface) -- this
            replaces them with a reboot back to a plain campaign session instead. Hidden
            by default, same convention as every other gated button here; only shown once
            setRelaunchTarget('versus-setup') runs. -->
       <button class="ui-btn ui-btn--slab hud-campaign-open hud-campaign-open--hidden" type="button">Campaign</button>
+      <!-- PAUSE ONLY since issue #226, where it used to show at the Main Menu too. The
+           issue's ruling: "Controllers are contextual to VS/setup or Controls settings,
+           not a permanent top-level destination." The contextual reasons survive -- the
+           owner's original "in case controllers disconnect" mid-round is what this
+           button is, and Settings -> Controls carries the durable entry point that the
+           Main Menu no longer does. -->
+      <button class="ui-btn ui-btn--slab hud-controllers-open hud-controllers-open--hidden" type="button">Controllers</button>
       <button class="ui-btn ui-btn--slab hud-quit hud-quit--hidden" type="button">Quit to Title</button>
-      <!-- The panel settings row, shown on the main menu AND the pause panel: the
-           seed of the settings pane. Mirrors the topbar audio pair (same engine, same
-           callbacks) rather than moving it, so audio stays adjustable mid-game too.
-           autocomplete="off" for the same Firefox bfcache reason as the topbar slider. -->
-      <div class="hud-panel-settings hud-panel-settings--hidden">
-        <button class="ui-btn ui-btn--sm hud-panel-mute" type="button">Mute (M)</button>
-        <input class="hud-panel-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
-        <!-- The right thumb's aim scheme, reachable from both the title screen and the
-             pause panel -- a phone player can only change this here, there being no
-             keyboard to bind it to. Label/hint text is filled in by renderSchemeToggle. -->
-        <button class="ui-btn ui-btn--sm hud-scheme-toggle" type="button"></button>
-        <!-- How the aim thumb pulls the trigger (see FireMode in touch.ts) -- beside the
-             aim-scheme toggle, same row, same reachability. The FIRE button works in
-             EVERY mode; this only adds a gesture. Label/hint filled in by
-             renderFireModeToggle. -->
-        <button class="ui-btn ui-btn--sm hud-firemode-toggle" type="button"></button>
-        <!-- Whether haptics.ts's vibrate calls fire at all -- same row, same
-             reachability as the two toggles above (a phone player can only reach this
-             here). Label/hint text is filled in by renderHapticsToggle. -->
-        <button class="ui-btn ui-btn--sm hud-haptics-toggle" type="button"></button>
+      <!-- The compact About/Legal utility entry (hierarchy step 5), in its own footer
+           region so it reads as the quietest thing on the screen. It opens the same pane
+           Settings -> About & Legal does; one destination, two ways in, and the layer
+           stack sends Back to whichever of them was used. -->
+      <div class="hud-menu-footer hud-menu-footer--hidden">
+        <button class="ui-btn ui-btn--sm hud-about-open" type="button">About &amp; Legal</button>
+      </div>
+    </div>
+    <!-- SETTINGS (issue #226), the durable home for every preference that survives a
+         reload. Reached from the Main Menu and from Pause, and the layer stack returns
+         Back to whichever it was -- which is the spec's "Settings from Pause returns to
+         Pause over the same session".
+
+         SECTIONS ARE DECLARED, AND AN EMPTY ONE DOES NOT RENDER. Each section is a
+         <section class="hud-settings-section"> whose controls live in one
+         .hud-settings-controls child, and 'refreshSettingsSections' hides any section
+         with no visible control in it. Accessibility is declared here with none: motion
+         and UI-scale controls are issues #289/#290, and the settings MODEL already
+         carries both fields ('presentation.motion', 'presentation.uiScale') with no HUD
+         to drive them. So the rule is exercised on the shipped build rather than written
+         for a future one, and #227's per-control capability hiding collapses a section
+         that empties out with no further change here. -->
+    <div class="hud-settings hud-settings--hidden" tabindex="-1" aria-labelledby="hud-settings-title">
+      <h1 id="hud-settings-title">Settings</h1>
+      <section class="hud-settings-section" data-section="audio" aria-labelledby="hud-settings-audio">
+        <h2 id="hud-settings-audio">Audio</h2>
+        <div class="hud-settings-controls">
+          <button class="ui-btn ui-btn--sm hud-settings-mute" type="button">Mute (M)</button>
+          <!-- autocomplete="off": Firefox restores form-control values across a soft
+               reload and bfcache restore. Without this the slider comes back at the
+               user's last position while a freshly-built engine boots at DEFAULT_VOLUME,
+               and no 'input' event fires to reconcile them -- reopening the exact
+               "slider is lying" bug the retired topbar slider was fixed for. -->
+          <input class="hud-settings-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" aria-label="Volume" />
+        </div>
+      </section>
+      <section class="hud-settings-section" data-section="controls" aria-labelledby="hud-settings-controls-h">
+        <h2 id="hud-settings-controls-h">Controls</h2>
+        <div class="hud-settings-controls">
+          <!-- The right thumb's aim scheme. A phone player can only change this here,
+               there being no keyboard to bind it to. Label/hint by renderSchemeToggle. -->
+          <button class="ui-btn ui-btn--sm hud-scheme-toggle" type="button"></button>
+          <!-- How the aim thumb pulls the trigger (see FireMode in touch.ts). The FIRE
+               button works in EVERY mode; this only adds a gesture. Label/hint filled in
+               by renderFireModeToggle. -->
+          <button class="ui-btn ui-btn--sm hud-firemode-toggle" type="button"></button>
+          <!-- Whether haptics.ts's vibrate calls fire at all. Filed under Controls rather
+               than Accessibility deliberately: it is feedback FROM an input device, it
+               lives under 'input' in the settings model, and the Accessibility section is
+               reserved for the motion and scale policies #289/#290 add. -->
+          <button class="ui-btn ui-btn--sm hud-haptics-toggle" type="button"></button>
+          <!-- The durable Controllers entry the Main Menu gave up. -->
+          <button class="ui-btn ui-btn--sm hud-settings-controllers" type="button">Controllers</button>
+        </div>
+      </section>
+      <section class="hud-settings-section" data-section="accessibility" aria-labelledby="hud-settings-a11y">
+        <h2 id="hud-settings-a11y">Accessibility</h2>
+        <div class="hud-settings-controls"></div>
+      </section>
+      <section class="hud-settings-section" data-section="data" aria-labelledby="hud-settings-data">
+        <h2 id="hud-settings-data">Data</h2>
+        <p class="ui-hint">Progress, stats and customization are saved in this browser only.</p>
+        <div class="hud-settings-controls">
+          <button class="ui-btn ui-btn--sm ui-btn--danger hud-reset-stats hud-danger" type="button">Reset stats</button>
+          <button class="ui-btn ui-btn--sm ui-btn--danger hud-reset-progress hud-danger" type="button">Reset progress</button>
+        </div>
+      </section>
+      <section class="hud-settings-section" data-section="about" aria-labelledby="hud-settings-about">
+        <h2 id="hud-settings-about">About &amp; Legal</h2>
+        <div class="hud-settings-controls">
+          <button class="ui-btn ui-btn--sm hud-settings-about" type="button">About &amp; Legal</button>
+        </div>
+      </section>
+      <button class="ui-btn ui-btn--slab hud-settings-back" type="button">Back</button>
+    </div>
+    <!-- ABOUT & LEGAL (issue #226). One pane, two entry points: the Main Menu footer and
+         Settings -> About & Legal. Static prose, so it is markup rather than a render
+         function -- there is nothing here derived from state.
+
+         THE STORAGE CLAIM IS CHECKED, NOT ASSERTED: 'src/' contains no 'fetch', no
+         'XMLHttpRequest' and no 'sendBeacon', and every persistence path in the build
+         goes through 'storage.ts' on an injected 'Storage' (CLAUDE.md's persistence
+         invariant). If that stops being true this copy becomes false, which is what the
+         guard in hud.controls.test.ts is for. -->
+    <div class="hud-about hud-about--hidden" tabindex="-1" aria-labelledby="hud-about-title">
+      <h1 id="hud-about-title">About &amp; Legal</h1>
+      <p class="hud-about-line">Tanks! is a browser arena shooter.</p>
+      <p class="hud-about-line">It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local storage and are never sent anywhere.</p>
+      <p class="hud-about-line">Built with Three.js and Howler.js, which are used under their own licences.</p>
+      <button class="ui-btn ui-btn--slab hud-about-back" type="button">Back</button>
+    </div>
+    <!-- THE REPLACE-RUN CONFIRMATION (issue #226): "Starting a replacement campaign
+         requires confirmation only when an active run would be lost."
+
+         An 'overlay' layer, not a route, and not a new dialog primitive -- issue #327
+         owns dialogs. What 'overlay' buys here is 'navigation.ts''s one rule that a route
+         may never be pushed over one, so no menu button can open a pane underneath a
+         question the player has not answered. Everything else is the pane mechanism every
+         other layer already uses, including Back.
+
+         The DESTRUCTIVE choice is the second button and the safe one is first, so a
+         gamepad Confirm on arrival (which lands focus on the first control rather than
+         activating it -- see 'act') cannot be one press from deleting a run. -->
+    <div class="hud-confirm hud-confirm--hidden" tabindex="-1" role="alertdialog" aria-labelledby="hud-confirm-title" aria-describedby="hud-confirm-body">
+      <h1 id="hud-confirm-title">Start a new campaign?</h1>
+      <p class="hud-confirm-body" id="hud-confirm-body"></p>
+      <div class="hud-confirm-actions">
+        <button class="ui-btn ui-btn--slab hud-confirm-cancel" type="button">Keep playing</button>
+        <button class="ui-btn ui-btn--slab ui-btn--danger hud-confirm-accept" type="button">Start new campaign</button>
       </div>
     </div>
   `;
@@ -1057,8 +1251,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const campaignStatEls = Array.from(el.querySelectorAll('.hud-campaign-stat')) as HTMLElement[];
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
   const levelNum = el.querySelector('.hud-level-num') as HTMLElement;
-  const muteBtn = el.querySelector('.hud-mute') as HTMLButtonElement;
-  const volumeEl = el.querySelector('.hud-volume') as HTMLInputElement;
   const panel = el.querySelector('.hud-panel') as HTMLElement;
   const titleEl = el.querySelector('.hud-title') as HTMLElement;
   const subtitleEl = el.querySelector('.hud-subtitle') as HTMLElement;
@@ -1075,11 +1267,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const continueBtn = el.querySelector('.hud-continue') as HTMLButtonElement;
   const newGameBtn = el.querySelector('.hud-new-game') as HTMLButtonElement;
   const quitBtn = el.querySelector('.hud-quit') as HTMLButtonElement;
-  const statsOpenBtn = el.querySelector('.hud-stats-open') as HTMLButtonElement;
+  const runSummaryEl = el.querySelector('.hud-run-summary') as HTMLElement;
+  const menuPlayRow = el.querySelector('.hud-menu-play') as HTMLElement;
+  const menuUtilitiesRow = el.querySelector('.hud-menu-utilities') as HTMLElement;
+  const menuFooterRow = el.querySelector('.hud-menu-footer') as HTMLElement;
+  const recordsOpenBtn = el.querySelector('.hud-records-open') as HTMLButtonElement;
   const statsView = el.querySelector('.hud-stats') as HTMLElement;
   const statsTable = el.querySelector('.hud-stats-table') as HTMLElement;
-  const resetStatsBtn = el.querySelector('.hud-reset-stats') as HTMLButtonElement;
-  const resetProgressBtn = el.querySelector('.hud-reset-progress') as HTMLButtonElement;
   const statsBackBtn = el.querySelector('.hud-stats-back') as HTMLButtonElement;
   const customizeOpenBtn = el.querySelector('.hud-customize-open') as HTMLButtonElement;
   const customizeView = el.querySelector('.hud-customize') as HTMLElement;
@@ -1090,7 +1284,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const swatchesRow = el.querySelector('.hud-swatches') as HTMLElement;
   const accentsRow = el.querySelector('.hud-accents') as HTMLElement;
   const customizeBackBtn = el.querySelector('.hud-customize-back') as HTMLButtonElement;
-  const achOpenBtn = el.querySelector('.hud-achievements-open') as HTMLButtonElement;
   const achView = el.querySelector('.hud-achievements') as HTMLElement;
   const achListEl = el.querySelector('.hud-achievement-list') as HTMLElement;
   const achCountEl = el.querySelector('.hud-achievements-count') as HTMLElement;
@@ -1099,7 +1292,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
   const coopKillsEl = el.querySelector('.hud-coop-kills') as HTMLElement;
   const versusResultsEl = el.querySelector('.hud-versus-results') as HTMLElement;
-  const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
   const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
   const levelSelectBackBtn = el.querySelector('.hud-levelselect-back') as HTMLButtonElement;
@@ -1124,8 +1316,31 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const levelsNoteEl = el.querySelector('.hud-levels-note') as HTMLElement;
   const versusStartBtn = el.querySelector('.hud-versus-start') as HTMLButtonElement;
   const versusBackBtn = el.querySelector('.hud-versus-back') as HTMLButtonElement;
-  const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
-  const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
+  const settingsOpenBtn = el.querySelector('.hud-settings-open') as HTMLButtonElement;
+  const settingsView = el.querySelector('.hud-settings') as HTMLElement;
+  const settingsBackBtn = el.querySelector('.hud-settings-back') as HTMLButtonElement;
+  const settingsSections = Array.from(
+    el.querySelectorAll('.hud-settings-section'),
+  ) as HTMLElement[];
+  const settingsMuteBtn = el.querySelector('.hud-settings-mute') as HTMLButtonElement;
+  const settingsVolumeEl = el.querySelector('.hud-settings-volume') as HTMLInputElement;
+  const settingsControllersBtn = el.querySelector('.hud-settings-controllers') as HTMLButtonElement;
+  const settingsAboutBtn = el.querySelector('.hud-settings-about') as HTMLButtonElement;
+  const resetStatsBtn = el.querySelector('.hud-reset-stats') as HTMLButtonElement;
+  const resetProgressBtn = el.querySelector('.hud-reset-progress') as HTMLButtonElement;
+  const aboutOpenBtn = el.querySelector('.hud-about-open') as HTMLButtonElement;
+  const aboutView = el.querySelector('.hud-about') as HTMLElement;
+  const aboutBackBtn = el.querySelector('.hud-about-back') as HTMLButtonElement;
+  const confirmView = el.querySelector('.hud-confirm') as HTMLElement;
+  const confirmBodyEl = el.querySelector('.hud-confirm-body') as HTMLElement;
+  const confirmAcceptBtn = el.querySelector('.hud-confirm-accept') as HTMLButtonElement;
+  const confirmCancelBtn = el.querySelector('.hud-confirm-cancel') as HTMLButtonElement;
+  const recordsTabStatsBtns = Array.from(
+    el.querySelectorAll('.hud-records-tab-stats'),
+  ) as HTMLButtonElement[];
+  const recordsTabAchievementsBtns = Array.from(
+    el.querySelectorAll('.hud-records-tab-achievements'),
+  ) as HTMLButtonElement[];
   const schemeToggleBtn = el.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
   const firemodeToggleBtn = el.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
   const hapticsToggleBtn = el.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
@@ -1567,6 +1782,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const LEVELSELECT_SURFACE: Surface = { el: levelSelectView, hidden: 'hud-levelselect--hidden' };
   const CONTROLLERS_SURFACE: Surface = { el: controllersView, hidden: 'hud-controllers--hidden' };
   const VERSUS_SETUP_SURFACE: Surface = { el: versusSetupView, hidden: 'hud-versus-setup--hidden' };
+  const SETTINGS_SURFACE: Surface = { el: settingsView, hidden: 'hud-settings--hidden' };
+  const ABOUT_SURFACE: Surface = { el: aboutView, hidden: 'hud-about--hidden' };
+  const CONFIRM_SURFACE: Surface = { el: confirmView, hidden: 'hud-confirm--hidden' };
   /**
    * The two surfaces `setState` moves between that are NOT in the panel family, plus the
    * backdrop underneath them (issue #317's shell-owned ground).
@@ -1588,6 +1806,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     LEVELSELECT_SURFACE,
     CONTROLLERS_SURFACE,
     VERSUS_SETUP_SURFACE,
+    SETTINGS_SURFACE,
+    ABOUT_SURFACE,
+    CONFIRM_SURFACE,
   ];
 
   const ENTERING = 'ui-surface--entering';
@@ -1875,6 +2096,69 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * ONLY SECTIONS WITH RELEVANT CONTROLS RENDER (issue #226).
+   *
+   * The rule reads the DOM rather than a maintained list of "which sections exist today":
+   * a section is shown iff its own `.hud-settings-controls` holds at least one control
+   * that `focusableControls` would sweep -- the SAME predicate that decides what a
+   * keyboard or D-pad can reach, so a section that renders always has something to walk
+   * to and a section that does not can never strand the roving focus inside a heading.
+   *
+   * Called on every open rather than once at construction, because the inputs are not
+   * fixed for the HUD's life: #227 hides individual touch/haptic controls on capability,
+   * and #289/#290 add the Accessibility controls that make that section non-empty. Both
+   * land as changes to which controls are visible, with nothing to add here.
+   *
+   * Deliberately NOT reading `getComputedStyle` on the section itself -- that is what
+   * this function writes -- and deliberately counting controls, not children: the Data
+   * section carries a `.ui-hint` paragraph that is content, not a control, and a section
+   * that had only prose left would be a heading over an explanation of nothing.
+   */
+  function refreshSettingsSections(): void {
+    for (const section of settingsSections) {
+      const controls = section.querySelector('.hud-settings-controls') as HTMLElement | null;
+      const populated = controls !== null && focusableControls(controls).length > 0;
+      section.classList.toggle('hud-settings-section--hidden', !populated);
+    }
+  }
+
+  // Same shape as showAchievements. The sections are refreshed at OPEN, inside `onBegin`,
+  // so the pane is measured with its real content on the frame it arrives -- a refresh
+  // after the transition settled would let a section pop in behind the fade.
+  function showSettings(show: boolean): void {
+    if (show) {
+      swapSurface(openSurface(), SETTINGS_SURFACE, () => {
+        refreshSettingsSections();
+        settingsView.focus();
+      });
+    } else {
+      closeSurface(SETTINGS_SURFACE);
+    }
+  }
+
+  // Static prose: nothing to render on open, so this is the smallest of the panes.
+  function showAbout(show: boolean): void {
+    if (show) swapSurface(openSurface(), ABOUT_SURFACE, () => aboutView.focus());
+    else closeSurface(ABOUT_SURFACE);
+  }
+
+  /**
+   * The replace-run confirmation. Its body is written from the run summary the Main Menu
+   * is already showing, so the question names the run it would destroy rather than
+   * warning about runs in general.
+   */
+  function showConfirmNewCampaign(show: boolean): void {
+    if (show) {
+      swapSurface(openSurface(), CONFIRM_SURFACE, () => {
+        confirmBodyEl.textContent = confirmNewCampaignBody();
+        confirmView.focus();
+      });
+    } else {
+      closeSurface(CONFIRM_SURFACE);
+    }
+  }
+
+  /**
    * A candidate/current source's label. `'gamepad'` looks its `id` up in
    * `currentDetectedPads` -- the panel's own live list, not a cached name -- falling
    * back to `Controller ${padIndex}` when the browser reports an empty id (or, for a
@@ -2096,7 +2380,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * and Enter and nothing else -- which is what makes restoring a button legal.
    */
   function activePanelContainer(): HTMLElement | null {
-    for (const c of [panel, customizeView, statsView, achView, levelSelectView, controllersView, versusSetupView]) {
+    for (const c of [
+      panel,
+      customizeView,
+      statsView,
+      achView,
+      levelSelectView,
+      controllersView,
+      versusSetupView,
+      settingsView,
+      aboutView,
+      confirmView,
+    ]) {
       // A surface fading OUT is displayed but no longer active (issue #364). Before the
       // transition contract exactly one of these was ever displayed, and this loop could
       // return the first one it found; a crossfade puts two on screen at once for the
@@ -2112,8 +2407,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * Walks up from `el` to (not including) `container`, so a control whose own
    * `display` resolves to something other than `none` but sits inside a hidden
-   * WRAPPER -- `.hud-panel-settings` on the win/lose panel, which hides the audio row
-   * as a group rather than each control individually -- is still excluded. Measured:
+   * WRAPPER -- since issue #226 the three Main Menu regions on the win/lose panel, which
+   * hide as groups rather than control by control -- is still excluded. Measured:
    * `getComputedStyle` on a `<button>` inside a `display:none` ancestor reports the
    * button's OWN resolved display (e.g. `inline-block`), not `none` -- computed style is
    * per-element, not "as rendered" -- so `focusableControls` checking only the control
@@ -2292,16 +2587,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleMute = (): void => {
     for (const cb of muteCbs) cb();
   };
-  // Two sliders, one truth: whichever moves, the other follows before subscribers
-  // hear about it -- reopening the pause panel must never show a stale level.
-  const handleVolume = (): void => {
-    panelVolumeEl.value = volumeEl.value;
-    const v = Number(volumeEl.value);
-    for (const cb of volumeCbs) cb(v);
-  };
-  const handlePanelVolume = (): void => {
-    volumeEl.value = panelVolumeEl.value;
-    const v = Number(panelVolumeEl.value);
+  // ONE slider since issue #226. There used to be two -- the topbar's and the panel
+  // row's -- kept in step by each handler writing the other's value before notifying
+  // subscribers, which is the coupling that disappears when a setting has one home.
+  const handleSettingsVolume = (): void => {
+    const v = Number(settingsVolumeEl.value);
     for (const cb of volumeCbs) cb(v);
   };
   const handleAction = (): void => {
@@ -2324,10 +2614,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     (e.currentTarget as HTMLElement).blur();
   };
 
-  muteBtn.addEventListener('click', handleMute);
-  muteBtn.addEventListener('click', blurIfPointer);
-  volumeEl.addEventListener('input', handleVolume);
-  volumeEl.addEventListener('mouseup', blurAfterDrag);
   actionBtn.addEventListener('click', handleAction);
   actionBtn.addEventListener('click', blurIfPointer);
   quitBtn.addEventListener('click', handleQuit);
@@ -2377,7 +2663,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       close: () => closeVersusPane(),
       refresh: (initial) => seedAndRenderVersus(initial),
     },
+    settings: { container: settingsView, open: () => showSettings(true), close: () => showSettings(false) },
+    about: { container: aboutView, open: () => showAbout(true), close: () => showAbout(false) },
+    'confirm-new-campaign': {
+      container: confirmView,
+      open: () => showConfirmNewCampaign(true),
+      close: () => showConfirmNewCampaign(false),
+    },
   };
+  /**
+   * Which layers are BLOCKING (issue #226). Every pane in this file is a full-screen
+   * route except the replace-run confirmation, which is an overlay so `navigation.ts`
+   * refuses to push a route over it -- the one structural difference between the two
+   * kinds, and the whole reason the confirmation is not simply a seventh route.
+   *
+   * A record rather than an `=== 'confirm-new-campaign'` check so a second overlay is one
+   * row here and cannot be added by editing a condition that reads like a special case.
+   */
+  const OVERLAY_LAYERS: ReadonlySet<HudLayerId> = new Set<HudLayerId>(['confirm-new-campaign']);
   const layers = createLayerStack<HudLayerId, HudSurface, HudRestore>();
   /**
    * The browser's Back, kept in step with the stack (issue #318). With no `opts.history`
@@ -2420,11 +2723,26 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const top = layers.top();
     let origin = shownState;
     if (top !== null && top.id !== id) {
+      /*
+       * AN OVERLAY IS NOT REPLACED (issue #226). The replace-pane rule below is what makes
+       * a second route resolve to the second destination (issue #364's interrupt rule);
+       * applying it to an overlay would pop the blocking layer and then push the route
+       * over the surface it was blocking, which is exactly the outcome `navigation.ts`'s
+       * `push` refuses. Checked HERE rather than relying on that refusal, because the pop
+       * happens first: by the time `push` could refuse, the confirmation the player has
+       * not answered is already closed.
+       */
+      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;
       layers.pop();
       LAYERS[top.id].close();
       origin = top.origin;
     }
-    const result = layers.push({ id, kind: 'route', origin, restore: { opener } });
+    const result = layers.push({
+      id,
+      kind: OVERLAY_LAYERS.has(id) ? 'overlay' : 'route',
+      origin,
+      restore: { opener },
+    });
     if (result === 'refused') return false;
     disarmReset();
     if (result === 'already-top') {
@@ -2477,8 +2795,29 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     mirror.sync(0);
   }
 
-  const handleStatsOpen = (): void => {
-    openLayer('stats', statsOpenBtn);
+  /**
+   * RECORDS IS ONE ENTRY WITH TWO TABS (issue #226).
+   *
+   * The Main Menu opens the Stats tab; each pane's tab row reaches the other. Both tab
+   * handlers pass `recordsOpenBtn` as the opener rather than the tab that was clicked,
+   * which is what makes Back land on the Main Menu control the player actually used --
+   * the tab they pressed lives inside the pane they are leaving, so restoring it would
+   * mean restoring a control the destination does not show (`restoreFocus` would fall
+   * back to the container and silently lose the player's place).
+   *
+   * Switching tabs REPLACES the top layer (`openLayer`'s different-id branch), carrying
+   * the replaced layer's `origin` forward, so Stats and Achievements are siblings over
+   * the same origin rather than a two-deep stack. That is the shallow-tab shape the UI
+   * direction asks for, and it is why no covering-layer support (issue #327) is needed.
+   */
+  const handleRecordsOpen = (): void => {
+    openLayer('stats', recordsOpenBtn);
+  };
+  const handleRecordsTabStats = (): void => {
+    openLayer('stats', recordsOpenBtn);
+  };
+  const handleRecordsTabAchievements = (): void => {
+    openLayer('achievements', recordsOpenBtn);
   };
   const handleStatsBack = (): void => {
     back();
@@ -2491,30 +2830,60 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleCustomizeBack = (): void => {
     back();
   };
-  const handleAchOpen = (): void => {
-    openLayer('achievements', achOpenBtn);
-  };
   const handleAchBack = (): void => {
     back();
   };
-  achOpenBtn.addEventListener('click', handleAchOpen);
-  achOpenBtn.addEventListener('click', blurIfPointer);
+  const handleSettingsOpen = (): void => {
+    openLayer('settings', settingsOpenBtn);
+  };
+  const handleSettingsBack = (): void => {
+    back();
+  };
+  // Two openers, one pane, and each records ITS OWN control -- Back from About returns to
+  // the Main Menu footer or to the Settings row, whichever was used.
+  const handleAboutOpen = (): void => {
+    openLayer('about', aboutOpenBtn);
+  };
+  const handleSettingsAboutOpen = (): void => {
+    openLayer('about', settingsAboutBtn);
+  };
+  const handleAboutBack = (): void => {
+    back();
+  };
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
   customizeOpenBtn.addEventListener('click', handleCustomizeOpen);
   customizeOpenBtn.addEventListener('click', blurIfPointer);
   customizeBackBtn.addEventListener('click', handleCustomizeBack);
   customizeBackBtn.addEventListener('click', blurIfPointer);
-  statsOpenBtn.addEventListener('click', handleStatsOpen);
-  statsOpenBtn.addEventListener('click', blurIfPointer);
+  recordsOpenBtn.addEventListener('click', handleRecordsOpen);
+  recordsOpenBtn.addEventListener('click', blurIfPointer);
+  for (const btn of recordsTabStatsBtns) {
+    btn.addEventListener('click', handleRecordsTabStats);
+    btn.addEventListener('click', blurIfPointer);
+  }
+  for (const btn of recordsTabAchievementsBtns) {
+    btn.addEventListener('click', handleRecordsTabAchievements);
+    btn.addEventListener('click', blurIfPointer);
+  }
   statsBackBtn.addEventListener('click', handleStatsBack);
   statsBackBtn.addEventListener('click', blurIfPointer);
   resetStatsBtn.addEventListener('click', handleResetStats);
   resetProgressBtn.addEventListener('click', handleResetProgress);
-  panelMuteBtn.addEventListener('click', handleMute);
-  panelMuteBtn.addEventListener('click', blurIfPointer);
-  panelVolumeEl.addEventListener('input', handlePanelVolume);
-  panelVolumeEl.addEventListener('mouseup', blurAfterDrag);
+  settingsOpenBtn.addEventListener('click', handleSettingsOpen);
+  settingsOpenBtn.addEventListener('click', blurIfPointer);
+  settingsBackBtn.addEventListener('click', handleSettingsBack);
+  settingsBackBtn.addEventListener('click', blurIfPointer);
+  settingsAboutBtn.addEventListener('click', handleSettingsAboutOpen);
+  settingsAboutBtn.addEventListener('click', blurIfPointer);
+  aboutOpenBtn.addEventListener('click', handleAboutOpen);
+  aboutOpenBtn.addEventListener('click', blurIfPointer);
+  aboutBackBtn.addEventListener('click', handleAboutBack);
+  aboutBackBtn.addEventListener('click', blurIfPointer);
+  settingsMuteBtn.addEventListener('click', handleMute);
+  settingsMuteBtn.addEventListener('click', blurIfPointer);
+  settingsVolumeEl.addEventListener('input', handleSettingsVolume);
+  settingsVolumeEl.addEventListener('mouseup', blurAfterDrag);
 
   // The aim-scheme toggle: one button, two states, cycling between them like a mute
   // button rather than offering two radio buttons for a binary choice. Labelled with
@@ -2619,6 +2988,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // to be derived from `unlocked > 1`, which was exactly the highestCleared/active-run
   // conflation issue #153 removes.
   let hasProgress = false;
+  /**
+   * Where the active run stands, for the Main Menu summary line and the replace-run
+   * confirmation's copy (issue #226). Null until `setCampaignRun` says otherwise, which
+   * is what makes a HUD that never calls it -- every css and gallery fixture -- render
+   * exactly as it did before the setter existed.
+   */
+  let campaignRun: CampaignRunSummary | null = null;
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash a button onto it.
   let shownState: HudSurface = 'launch';
@@ -2673,13 +3049,76 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // startPlaying(), so for a versus session it is the ONLY path from title into the
     // just-configured match. Only its LABEL changes.
     newGameBtn.classList.toggle('hud-new-game--hidden', !atTitle);
-    newGameBtn.textContent = versusKind ? 'Start Match' : 'New Game';
+    /*
+     * THREE LABELS, and the third is what issue #226 added. "Start Campaign" is the
+     * primary action when nothing is running; with a run active the SAME button becomes
+     * the tertiary "Start New Campaign" that the confirmation guards, and the word "New"
+     * is the only warning a player gets before that pane appears. A versus session keeps
+     * "Start Match" (see setRelaunchTarget), and `versusKind` is checked first because a
+     * versus session shares the campaign run store -- `hasProgress` is routinely true
+     * there and must not relabel a button that starts a match.
+     */
+    newGameBtn.textContent = versusKind
+      ? 'Start Match'
+      : hasProgress
+        ? 'Start New Campaign'
+        : 'Start Campaign';
+    // TERTIARY while a run exists (issue #226's ruling), primary otherwise: with Continue
+    // on screen this button is the destructive one and must not compete with it. A class
+    // rather than a swapped element, so the button keeps its identity, its handlers and
+    // its place in the roving order across the change.
+    newGameBtn.classList.toggle('ui-btn--primary', !hasProgress || versusKind);
+    newGameBtn.classList.toggle('hud-new-game--tertiary', hasProgress && !versusKind);
     // Symmetric with Continue, but inert today: a setup-pane versus session's single
     // synthetic level already keeps `levelChoice` false (setLevelSelect's own
     // `total > 1`), so this button is already hidden there without the target check. Added anyway for
     // defense-in-depth against a future multi-level versus system.
     levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', !atTitle || !levelChoice || versusKind);
     campaignOpenBtn.classList.toggle('hud-campaign-open--hidden', !atTitle || !versusKind);
+    renderRunSummary();
+  }
+
+  /**
+   * The Main Menu's one-line run summary (issue #226): "only the current mission and
+   * remaining run lives needed to build confidence", and nothing else.
+   *
+   * MAIN MENU ONLY, and only with a run. The pause and outcome screens are the same
+   * `.hud-panel` element and already say where the session stands in their own copy; a
+   * second summary there would report the RUN's position while the panel above it reports
+   * the session's, and the two legitimately disagree during practice.
+   *
+   * Hidden for a versus relaunch target for the same reason Continue is: that session
+   * shares the campaign run store, so a real campaign run is usually active behind a
+   * versus match and would otherwise put a campaign mission line over a versus menu.
+   */
+  function renderRunSummary(): void {
+    const show =
+      shownState === 'main-menu' && campaignRun !== null && relaunchTarget !== 'versus-setup';
+    runSummaryEl.classList.toggle('hud-run-summary--hidden', !show);
+    runSummaryEl.textContent = show && campaignRun !== null ? runSummaryText(campaignRun) : '';
+  }
+
+  /**
+   * "Mission 3 of 8 -- 2 lives left", or just the lives half when the run's stored level
+   * is not a mission this build knows (see `setCampaignRun`). Singular "1 life left" is
+   * not a flourish: the number is at its most alarming exactly when it is one, and
+   * "1 lives" is the reading a player is least likely to trust.
+   */
+  function runSummaryText(run: CampaignRunSummary): string {
+    const lives = `${run.lives} ${run.lives === 1 ? 'life' : 'lives'} left`;
+    if (run.mission === null) return lives;
+    return `Mission ${run.mission} of ${run.total} -- ${lives}`;
+  }
+
+  /**
+   * The confirmation's body. It names the run it would replace, because "are you sure?"
+   * over an unnamed loss is the wording that makes a player click through without
+   * reading. Falls back to the generic sentence when no summary has been pushed -- a HUD
+   * whose page never calls `setCampaignRun` still gets a truthful question.
+   */
+  function confirmNewCampaignBody(): string {
+    if (campaignRun === null) return 'Your campaign run will be replaced. This cannot be undone.';
+    return `${runSummaryText(campaignRun)}. Starting a new campaign replaces it. This cannot be undone.`;
   }
 
   /**
@@ -2744,6 +3183,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleControllersOpen = (): void => {
     openLayer('controllers', controllersOpenBtn);
   };
+  // The Settings -> Controls entry (issue #226), and the durable one now that the Main
+  // Menu no longer carries a Controllers peer. It REPLACES the Settings pane rather than
+  // covering it, like every other pane-to-pane move in this file, so Back returns to the
+  // surface Settings was opened over -- Main Menu, or Pause. A genuinely nested Back
+  // (Controllers -> Settings -> Main Menu) needs the covering-layer contract issue #327
+  // owns; nothing here fakes one.
+  const handleSettingsControllersOpen = (): void => {
+    openLayer('controllers', settingsControllersBtn);
+  };
   // Reachable from 'paused' as well as the Main Menu (owner ruling: "in case controllers
   // disconnect"), which is why this panel's Back was the one that could never hard-code
   // its destination. The layer records the surface it was opened over, so Back from a
@@ -2754,6 +3202,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   controllersOpenBtn.addEventListener('click', handleControllersOpen);
   controllersOpenBtn.addEventListener('click', blurIfPointer);
+  settingsControllersBtn.addEventListener('click', handleSettingsControllersOpen);
+  settingsControllersBtn.addEventListener('click', blurIfPointer);
   controllersBackBtn.addEventListener('click', handleControllersBack);
   controllersBackBtn.addEventListener('click', blurIfPointer);
 
@@ -3344,11 +3794,52 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   continueBtn.addEventListener('click', blurIfPointer);
   // New Game fires its OWN callback list now -- see onNewGame's doc comment for why it
   // no longer reuses onLevelSelect's.
-  const handleNewGame = (): void => {
+  const startNewCampaign = (): void => {
     for (const cb of newGameCbs) cb();
+  };
+  /**
+   * "Starting a replacement campaign requires confirmation only when an active run would
+   * be lost" (issue #226).
+   *
+   * The condition is `hasProgress` -- the same signal that decides whether Continue is
+   * offered, which is `run.active() !== null` at every one of its call sites. Deriving
+   * both from one signal is what makes the button's own promise honest: the confirmation
+   * appears exactly when there is a Continue beside it to contradict.
+   *
+   * NOT gated on `relaunchTarget`. A setup-pane versus session labels this button "Start
+   * Match" and its click starts a match, replacing nothing -- and `applyTitleAffordances`
+   * already forces `hasProgress`'s effects off for that target, so the versus branch
+   * reaches the direct path without a second condition here. See the `versusKind` term in
+   * `confirmsNewCampaign`.
+   */
+  const confirmsNewCampaign = (): boolean =>
+    hasProgress && relaunchTarget !== 'versus-setup';
+  const handleNewGame = (): void => {
+    if (!confirmsNewCampaign()) {
+      startNewCampaign();
+      return;
+    }
+    openLayer('confirm-new-campaign', newGameBtn);
+  };
+  /**
+   * The confirmed answer. The overlay is closed FIRST and the callbacks fire afterwards,
+   * for the same reason every other exit from this file does it in that order: a
+   * subscriber starts a session, whose `setState` empties the layer stack, and a stack
+   * emptied out from under an open pane leaves the pane on screen with nothing to pop it.
+   */
+  const handleConfirmAccept = (): void => {
+    back();
+    startNewCampaign();
+  };
+  const handleConfirmCancel = (): void => {
+    back();
   };
   newGameBtn.addEventListener('click', handleNewGame);
   newGameBtn.addEventListener('click', blurIfPointer);
+  confirmAcceptBtn.addEventListener('click', handleConfirmAccept);
+  confirmAcceptBtn.addEventListener('click', blurIfPointer);
+  confirmCancelBtn.addEventListener('click', handleConfirmCancel);
+  confirmCancelBtn.addEventListener('click', blurIfPointer);
 
   /**
    * Put a pane away as part of `setState`'s close-all cleanup.
@@ -3400,6 +3891,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // comment), so there is nothing a transition-guarded call would buy here that a
     // plain toggle does not already give the stats/achievements/level-select siblings.
     cleanupHide(versusSetupView, 'hud-versus-setup--hidden');
+    // The three panes issue #226 added, closed on the same terms as their siblings: none
+    // of them owns a close callback or a live resource, so each is a bare class add. The
+    // confirmation is included deliberately -- a surface change is never an answer to it,
+    // so it must not survive one and leave a question hanging over the next screen.
+    cleanupHide(settingsView, 'hud-settings--hidden');
+    cleanupHide(aboutView, 'hud-about--hidden');
+    cleanupHide(confirmView, 'hud-confirm--hidden');
     disarmReset();
     // ...and the layer stack with them (issue #318): a surface change is never a Back,
     // so every layer is dropped rather than popped, and the history mirror retires its
@@ -3444,9 +3942,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // Only while playing. Pausing from the pause panel is what its own buttons are for,
     // and a Mine button on the menu lays nothing.
     touchRow.classList.toggle('hud-touch--hidden', s !== 'playing');
-    // The topbar is the only chrome that outranks the menu panel, so it is also the
-    // only thing that would show through on the Launch route.
-    topbarEl.classList.toggle('hud-topbar--hidden', atLaunch);
+    /*
+     * GAMEPLAY STATUS DOES NOT LEAK ONTO APPLICATION SCREENS (issue #226's named gap:
+     * "the persistent top bar can leak gameplay status into application screens").
+     *
+     * The bar used to hide at Launch alone, so the Main Menu carried the last session's
+     * Lives, Enemies and Level chip -- numbers about a world that is no longer being
+     * played, sitting above a menu offering to start a different one. Everything left in
+     * the bar since the audio pair moved to Settings is in-match status, so the honest
+     * rule is the surface: hidden at Launch and at the Main Menu, shown while playing,
+     * paused, or reading an outcome over the board it belongs to.
+     */
+    topbarEl.classList.toggle('hud-topbar--hidden', atLaunch || atMainMenu);
     // The in-match stock readout and the campaign stat row -- both keyed on the
     // SESSION KIND, both recomputed in one place (`applySessionKindSurfaces`, see
     // its own doc comment) so `setSessionKind` and `setState` cannot disagree
@@ -3480,23 +3987,53 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const clearedIntermediate =
       s === 'outcome-win' && !!levelPos && levelPos.current < levelPos.total;
     shownState = s;
-    statsOpenBtn.classList.toggle('hud-stats-open--hidden', !atMainMenu);
-    customizeOpenBtn.classList.toggle('hud-customize-open--hidden', !atMainMenu);
-    achOpenBtn.classList.toggle('hud-achievements-open--hidden', !atMainMenu);
+    /*
+     * THE THREE MAIN-MENU REGIONS (issue #226), hidden as GROUPS rather than one button
+     * at a time. Customize, Records and Settings used to carry a `--hidden` modifier
+     * each, which is what let the menu's information architecture live in three
+     * independent class toggles instead of anywhere a reader could see it. The group is
+     * now the unit: a button added to a region inherits the region's visibility, and
+     * `isHiddenWithin` already excludes every control inside a hidden wrapper from the
+     * roving focus, so a group hide is complete for the keyboard and the D-pad too.
+     *
+     * Versus and Practice keep their OWN modifiers inside the play region because each
+     * has a second condition of its own -- see applyTitleAffordances.
+     */
+    menuPlayRow.classList.toggle('hud-menu-play--hidden', !atMainMenu);
+    menuFooterRow.classList.toggle('hud-menu-footer--hidden', !atMainMenu);
+    /*
+     * The utilities region is the ONE that also shows at Pause, because Settings lives in
+     * it and Settings must be reachable from a paused session -- the spec's "Settings
+     * opened from Pause returns to Pause over the same session" is not reachable
+     * otherwise, and the layer stack's origin is what makes the return true once it is.
+     * Customize and Records keep their own modifiers so the row is Settings alone there:
+     * repainting a tank or reading lifetime statistics is not something a paused round
+     * has any claim on, and the old panel row's precedent is that a Pause-visible group
+     * carries only the controls Pause needs.
+     */
+    menuUtilitiesRow.classList.toggle(
+      'hud-menu-utilities--hidden',
+      s !== 'paused' && !atMainMenu,
+    );
+    recordsOpenBtn.classList.toggle('hud-records-open--hidden', !atMainMenu);
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !clearedIntermediate);
     // "Quit" is the wrong word for leaving a level you just WON -- the run is preserved
     // either way, but the copy should not imply abandoning it.
     quitBtn.textContent = clearedIntermediate ? 'Main Menu' : 'Quit to Title';
-    panelSettings.classList.toggle(
-      'hud-panel-settings--hidden',
-      s !== 'paused' && !atMainMenu,
-    );
-    // Visible at Main Menu AND paused -- the one new variant of this per-button visibility
-    // pattern, precedented by panelSettings itself just above.
-    controllersOpenBtn.classList.toggle(
-      'hud-controllers-open--hidden',
-      s !== 'paused' && !atMainMenu,
-    );
+    /*
+     * PAUSE ONLY since issue #226 -- the inverse of the old rule, which showed it at the
+     * Main Menu AND at Pause. The issue removes it as a permanent top-level destination
+     * and keeps it where it is contextual: a controller that disconnects mid-round, which
+     * is the case the owner ruling named. The durable entry now lives in
+     * Settings -> Controls, which Pause can also reach.
+     *
+     * Settings itself is the button that took over the "Main Menu and Pause" shape; it
+     * sits in the utilities region at the Main Menu and gets its own toggle here so a
+     * paused player still has one, which is what makes "Settings from Pause returns to
+     * Pause" reachable rather than merely implemented.
+     */
+    controllersOpenBtn.classList.toggle('hud-controllers-open--hidden', s !== 'paused');
+    customizeOpenBtn.classList.toggle('hud-customize-open--hidden', !atMainMenu);
     // MAIN-MENU ONLY, unlike Controllers just above -- see this button's own markup
     // comment for why a live round has nothing this could offer.
     versusOpenBtn.classList.toggle('hud-versus-open--hidden', !atMainMenu);
@@ -3591,11 +4128,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // M and this button, and a pad reaches the button through focus like any control.
     // Naming a button here would instruct a player to press something inert.
     const hint = keyHint(currentModality, 'M', null);
-    for (const btn of [muteBtn, panelMuteBtn]) {
-      btn.setAttribute('aria-pressed', String(muted));
-      btn.textContent = `${muted ? 'Muted' : 'Mute'}${hint}`;
-      btn.classList.toggle('hud-mute--active', muted);
-    }
+    // ONE button since issue #226, in Settings -> Audio. The topbar's copy is gone, so
+    // this is the only place mute is ever WRITTEN; `route-host.ts` toasts the M key's
+    // result, which is the status feedback the always-visible button used to provide.
+    settingsMuteBtn.setAttribute('aria-pressed', String(muted));
+    settingsMuteBtn.textContent = `${muted ? 'Muted' : 'Mute'}${hint}`;
+    settingsMuteBtn.classList.toggle('hud-mute--active', muted);
   }
 
   function setModality(modality: Modality): void {
@@ -3607,16 +4145,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   setMuted(false);
 
   /**
-   * Both sliders, always, from one call -- they are two views of one value, and the
-   * input handlers above already mirror each other for exactly that reason.
+   * The one slider, from one call (issue #226 retired the topbar's twin).
    *
    * Writes `String(v)` rather than trusting the caller's formatting: `value` is a string
-   * attribute, and the browser re-snaps it to the step grid on read.
+   * attribute, and the browser re-snaps it to the step grid on read. The guard survives
+   * the collapse to a single control on purpose -- `loop.ts` pushes settings on every
+   * subscription fire, and writing `value` while the player is dragging the thumb resets
+   * the drag.
    */
   function setVolume(v: number): void {
     const text = String(v);
-    if (volumeEl.value !== text) volumeEl.value = text;
-    if (panelVolumeEl.value !== text) panelVolumeEl.value = text;
+    if (settingsVolumeEl.value !== text) settingsVolumeEl.value = text;
   }
 
   // textContent's setter tears down and rebuilds the text node even when the
@@ -3709,6 +4248,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // before the player is back at the title screen to see it). Routed through
       // applyTitleAffordances for the same `relaunchTarget` reason as setLevelSelect above.
       applyTitleAffordances();
+    },
+    setCampaignRun(run: CampaignRunSummary | null): void {
+      campaignRun = run;
+      // Through `renderRunSummary` alone, NOT `applyTitleAffordances`: this setter says
+      // what the run contains, never whether one exists. Which buttons the Main Menu
+      // offers stays `setContinueAvailable`'s single answer, so a page that pushed a
+      // summary without an availability -- or the reverse -- cannot make Continue and its
+      // own description disagree.
+      renderRunSummary();
     },
     onNewGame(cb: () => void): void {
       newGameCbs.push(cb);
@@ -4027,8 +4575,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       firemodeToggleBtn.removeEventListener('click', blurIfPointer);
       hapticsToggleBtn.removeEventListener('click', handleHapticsToggle);
       hapticsToggleBtn.removeEventListener('click', blurIfPointer);
-      achOpenBtn.removeEventListener('click', handleAchOpen);
-      achOpenBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);
       achBackBtn.removeEventListener('click', blurIfPointer);
       levelSelectOpenBtn.removeEventListener('click', handleLevelSelectOpen);
@@ -4037,6 +4583,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       levelSelectBackBtn.removeEventListener('click', blurIfPointer);
       controllersOpenBtn.removeEventListener('click', handleControllersOpen);
       controllersOpenBtn.removeEventListener('click', blurIfPointer);
+      settingsControllersBtn.removeEventListener('click', handleSettingsControllersOpen);
+      settingsControllersBtn.removeEventListener('click', blurIfPointer);
       controllersBackBtn.removeEventListener('click', handleControllersBack);
       controllersBackBtn.removeEventListener('click', blurIfPointer);
       versusOpenBtn.removeEventListener('click', handleVersusOpen);
@@ -4051,26 +4599,44 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       continueBtn.removeEventListener('click', blurIfPointer);
       newGameBtn.removeEventListener('click', handleNewGame);
       newGameBtn.removeEventListener('click', blurIfPointer);
+      confirmAcceptBtn.removeEventListener('click', handleConfirmAccept);
+      confirmAcceptBtn.removeEventListener('click', blurIfPointer);
+      confirmCancelBtn.removeEventListener('click', handleConfirmCancel);
+      confirmCancelBtn.removeEventListener('click', blurIfPointer);
       customizeOpenBtn.removeEventListener('click', handleCustomizeOpen);
       customizeOpenBtn.removeEventListener('click', blurIfPointer);
       customizeBackBtn.removeEventListener('click', handleCustomizeBack);
       customizeBackBtn.removeEventListener('click', blurIfPointer);
-      statsOpenBtn.removeEventListener('click', handleStatsOpen);
-      statsOpenBtn.removeEventListener('click', blurIfPointer);
+      recordsOpenBtn.removeEventListener('click', handleRecordsOpen);
+      recordsOpenBtn.removeEventListener('click', blurIfPointer);
+      for (const btn of recordsTabStatsBtns) {
+        btn.removeEventListener('click', handleRecordsTabStats);
+        btn.removeEventListener('click', blurIfPointer);
+      }
+      for (const btn of recordsTabAchievementsBtns) {
+        btn.removeEventListener('click', handleRecordsTabAchievements);
+        btn.removeEventListener('click', blurIfPointer);
+      }
+      settingsOpenBtn.removeEventListener('click', handleSettingsOpen);
+      settingsOpenBtn.removeEventListener('click', blurIfPointer);
+      settingsBackBtn.removeEventListener('click', handleSettingsBack);
+      settingsBackBtn.removeEventListener('click', blurIfPointer);
+      settingsAboutBtn.removeEventListener('click', handleSettingsAboutOpen);
+      settingsAboutBtn.removeEventListener('click', blurIfPointer);
+      aboutOpenBtn.removeEventListener('click', handleAboutOpen);
+      aboutOpenBtn.removeEventListener('click', blurIfPointer);
+      aboutBackBtn.removeEventListener('click', handleAboutBack);
+      aboutBackBtn.removeEventListener('click', blurIfPointer);
       statsBackBtn.removeEventListener('click', handleStatsBack);
       statsBackBtn.removeEventListener('click', blurIfPointer);
       resetStatsBtn.removeEventListener('click', handleResetStats);
       resetProgressBtn.removeEventListener('click', handleResetProgress);
       quitBtn.removeEventListener('click', handleQuit);
       quitBtn.removeEventListener('click', blurIfPointer);
-      panelMuteBtn.removeEventListener('click', handleMute);
-      panelMuteBtn.removeEventListener('click', blurIfPointer);
-      panelVolumeEl.removeEventListener('input', handlePanelVolume);
-      panelVolumeEl.removeEventListener('mouseup', blurAfterDrag);
-      muteBtn.removeEventListener('click', handleMute);
-      muteBtn.removeEventListener('click', blurIfPointer);
-      volumeEl.removeEventListener('input', handleVolume);
-      volumeEl.removeEventListener('mouseup', blurAfterDrag);
+      settingsMuteBtn.removeEventListener('click', handleMute);
+      settingsMuteBtn.removeEventListener('click', blurIfPointer);
+      settingsVolumeEl.removeEventListener('input', handleSettingsVolume);
+      settingsVolumeEl.removeEventListener('mouseup', blurAfterDrag);
       actionBtn.removeEventListener('click', handleAction);
       actionBtn.removeEventListener('click', blurIfPointer);
       el.remove();

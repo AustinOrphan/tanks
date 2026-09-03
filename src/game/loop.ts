@@ -2855,7 +2855,12 @@ export function startGameWith(
     // No `atLaunch` branch: since issue #428 the PAGE owns the keydown listener
     // (`route-host.ts`'s `onHostKey`) and never forwards a key that dismissed the splash.
     // A second guard here would be dead code that read as the live one.
-    if (isMuteHotkey(e)) routeUi.toggleMute();
+    //
+    // No `isMuteHotkey` branch either, since issue #226: mute is a page-scoped preference
+    // on a page-scoped store, and the Mute BUTTON it used to mirror no longer exists on
+    // every surface -- `route-host.ts`'s `onHostKey` claims M and returns, so this handler
+    // never sees it. Keeping a copy here would have muted twice per keystroke, which
+    // cancels out and is therefore exactly the kind of duplicate a test would not catch.
     if (isPauseHotkey(e)) {
       // Toggle, guarded by the state machine: pause() acts only from `playing`
       // and resume() only from `paused`, so main-menu/outcome ignore the key

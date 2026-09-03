@@ -614,7 +614,78 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
   it('paints no Continue when there is no run -- the negative control', () => {
     const f = fixture();
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([false]);
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([null]);
     expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
+  });
+
+  it('resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)', () => {
+    // The mission number is resolved HERE and not in the HUD, because the run store holds
+    // a level ID and only the level system can order it -- `run.ts` deliberately never
+    // imports campaign data, and the HUD names no simulation module at all. So the page
+    // is the only layer that can turn a stored id into "Mission 2 of N".
+    const f = fixture({
+      seed: (stores) => {
+        stores.run.startNewRun(CAMPAIGN_LEVELS[1].id);
+        stores.run.setLivesRemaining(2);
+      },
+    });
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([
+      { mission: 2, total: CAMPAIGN_LEVELS.length, lives: 2 },
+    ]);
+  });
+
+  it('reports a mission it cannot place as null rather than inventing a position', () => {
+    // Reachable today: a developer session's `?dev=1&level=` jump can leave a run on a
+    // level this build's sequence does not list. The HUD degrades the line to the lives
+    // half; a fabricated `Mission 0` or a silent clamp to 1 would both be worse than
+    // saying nothing about where the run stands.
+    const f = fixture({
+      seed: (stores) => {
+        stores.run.startNewRun('a-level-this-campaign-does-not-contain');
+      },
+    });
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([
+      { mission: null, total: CAMPAIGN_LEVELS.length, lives: 3 },
+    ]);
+    // ...and Continue is still offered: the run exists, only its POSITION is unresolvable.
+    expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([true]);
+  });
+
+  it('paints the stored audio and input settings, which no session-less page did before', () => {
+    // Issue #226 made Settings the one durable home for mute and volume, so a page that
+    // painted neither until a session existed would show a returning player "Mute" and a
+    // 0.6 slider over a store that says otherwise. DISPLAY only: the audio ENGINE is
+    // untouched here (issue #485 still owns that half), which is why nothing in this
+    // fixture's recorder sees a second owner.
+    const f = fixture({
+      seed: (stores) => {
+        stores.settings.setMuted(true);
+        stores.settings.setVolume(0.25);
+      },
+    });
+    expect(f.host.hasSession(), 'the point is a page with no session').toBe(false);
+    expect(f.hud.argsOf('setMuted').at(-1)).toEqual([true]);
+    expect(f.hud.argsOf('setVolume').at(-1)).toEqual([0.25]);
+    // ...and a later change reaches the controls too, so the button the player just
+    // pressed redraws from the value the store actually accepted.
+    f.stores.settings.setVolume(0.75);
+    expect(f.hud.argsOf('setVolume').at(-1)).toEqual([0.75]);
+  });
+
+  it('claims M for the page and reports the result, on a page with no session', () => {
+    // The mute shortcut moved off the session's key handler with issue #226: the topbar
+    // chip that used to show mute state on every surface is gone, so a session-scoped M
+    // would be dead on exactly the screen that no longer shows one. The toast is the
+    // issue's "brief status feedback" -- without it a mis-typed M is indistinguishable
+    // from a broken build.
+    const f = fixture({ launchDismissed: true });
+    expect(f.host.hasSession()).toBe(false);
+    f.fireHost('keydown', new KeyboardEvent('keydown', { key: 'm' }));
+    expect(f.stores.settings.snapshot().audio.muted, 'M did not reach the store').toBe(true);
+    expect(f.hud.argsOf('showToast').at(-1)).toEqual(['Muted']);
+    f.fireHost('keydown', new KeyboardEvent('keydown', { key: 'm' }));
+    expect(f.stores.settings.snapshot().audio.muted).toBe(false);
+    expect(f.hud.argsOf('showToast').at(-1)).toEqual(['Sound on']);
   });
 
   it('re-reads Continue on every arrival at the Main Menu, and only there', () => {
@@ -1026,7 +1097,11 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
 });
 
 describe('createRouteHost: prompts follow the input the player is using (issue #496)', () => {
-  const mute = (f: Fixture): HTMLElement => f.root.querySelector('.hud-mute') as HTMLElement;
+  // The mute button lives in Settings -> Audio since issue #226; the topbar chip this
+  // used to read is gone. Its label is still the modality-sensitive one (`Mute (M)` on a
+  // keyboard, bare `Mute` on touch and on a pad), which is all this suite reads it for.
+  const mute = (f: Fixture): HTMLElement =>
+    f.root.querySelector('.hud-settings-mute') as HTMLElement;
   const key = (f: Fixture): void => {
     f.fireHost('keydown', new KeyboardEvent('keydown', { key: 'a' }));
   };

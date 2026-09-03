@@ -2,7 +2,7 @@ import { createRouteUi, type RouteUi, type RouteUiDeps, type StyleSink } from '.
 import { createOutcomeClassifier, type GameStateMachine, type OutcomeContext } from './state';
 import { versusDraw } from './app-state';
 import type { Hud } from './hud';
-import { locationToHudSurface, type GameDeps } from './loop';
+import { isMuteHotkey, locationToHudSurface, type GameDeps } from './loop';
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
 import type { GetGamepads } from '../input/gamepad';
 import type { UiAction } from '../input/ui-actions';
@@ -419,8 +419,32 @@ export function createRouteHost(
    * controls -- is painted from here; a session still pushes its own values at its own
    * construction, and the page's copy is the one that exists before any session does.
    */
+  /**
+   * The active run, as both signals the Main Menu needs (issue #226): whether Continue is
+   * offered at all, and where the run stands for the summary line above it and the
+   * replace-run confirmation's copy.
+   *
+   * The mission NUMBER is resolved here rather than in the HUD because the run store
+   * holds a level ID and only the level system can order it -- `run.ts` deliberately
+   * never imports campaign data (see its own doc comment), and the HUD names no
+   * simulation module at all. A stored id this build's campaign does not contain reports
+   * `mission: null` and the HUD degrades the line to the lives half; that is reachable
+   * today by a developer session whose `?dev=1&level=` jump left a run on a level the
+   * sandbox sequence does not list.
+   */
   const paintContinue = (): void => {
-    hud.setContinueAvailable(deps.run.active() !== null);
+    const run = deps.run.active();
+    hud.setContinueAvailable(run !== null);
+    if (run === null) {
+      hud.setCampaignRun(null);
+      return;
+    }
+    const index = deps.levels.levels.findIndex((level) => level.id === run.currentLevelId);
+    hud.setCampaignRun({
+      mission: index < 0 ? null : index + 1,
+      total: deps.levels.levels.length,
+      lives: run.livesRemaining,
+    });
   };
   hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   hud.setAchievements(deps.achievements.earned());
@@ -429,6 +453,46 @@ export function createRouteHost(
   hud.setAccentColor(deps.customization.accent());
   hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
   paintContinue();
+
+  /**
+   * THE SETTINGS-DRIVEN CONTROLS, painted by the PAGE (issue #226).
+   *
+   * Until this block only a session pushed these (`loop.ts`'s `applySettings`), which is
+   * the second half of the hole issue #485 records: on a page with no session -- since
+   * #428, every page before its first match -- the mute button read "Mute" and the volume
+   * slider sat at its markup default no matter what the store said. That was survivable
+   * while those two controls were topbar decoration; it is not now that Settings is the
+   * one durable home for them, because a preference whose only display lies is worse than
+   * no display at all.
+   *
+   * DISPLAY ONLY, and that is the whole boundary. It reads `effectiveSettings` and writes
+   * the HUD; it never writes the store back (which would turn opening a menu into a
+   * preference change) and it never reaches the audio ENGINE, which `app-shell.ts` owns
+   * and no session-less page has wired -- issue #485 still owns that half. A stored mute
+   * is applied to the engine by `applySettings` the moment a session exists, so the
+   * preference is honoured wherever there is any audio for it to affect.
+   *
+   * Subscribed as well as painted once: a change made in Settings arrives here through the
+   * store, so the button the player just pressed redraws from the value that was actually
+   * accepted rather than from the click.
+   */
+  const paintSettingsControls = (): void => {
+    // ONLY WHILE THE HOST IS EMPTY. A live session pushes the same five values from its
+    // own subscription to the same handle (`loop.ts`'s `applySettings`, which also
+    // reaches the audio engine), so painting here as well would repaint the HUD twice for
+    // every preference change -- redundant rather than wrong, and the kind of redundancy
+    // that later reads as two owners. The page's copy exists for the arrivals no session
+    // sees, which is exactly the split `paintContinue` above already draws.
+    if (live !== null) return;
+    const effective = deps.effectiveSettings.current();
+    hud.setMuted(effective.muted);
+    hud.setVolume(effective.volume);
+    hud.setTouchScheme(effective.touchScheme);
+    hud.setFireMode(effective.fireMode);
+    hud.setHaptics(effective.deviceHaptics);
+  };
+  paintSettingsControls();
+  const stopPaintingSettings = deps.effectiveSettings.subscribe(paintSettingsControls);
 
   const stopPainting = sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
@@ -483,6 +547,30 @@ export function createRouteHost(
     noteModality('keyboard');
     if (sm.atLaunch) {
       onLaunchGesture();
+      return;
+    }
+    /*
+     * M IS THE PAGE'S KEY NOW (issue #226).
+     *
+     * The mute shortcut used to live in `loop.ts`'s session key handler, which was
+     * survivable only while the Mute button sat in the topbar on every surface: with the
+     * button gone, a session-scoped M would be dead on exactly the screens that no longer
+     * show one -- the Main Menu of a page that has not started a match. Muting is a
+     * page-scoped preference on a page-scoped store (`AppSettings`, see this module's
+     * ownership comment), so the key belongs beside it.
+     *
+     * It RETURNS rather than falling through, so the session never sees a key the page
+     * has claimed -- the same rule the Launch gesture above follows, and what stops the
+     * old session handler and this one both firing during a match.
+     *
+     * The toast is the issue's "brief status feedback", and it is not decoration: the
+     * always-visible button label was the only thing that told a player whether the game
+     * was muted or merely silent, and removing it without a replacement would make a
+     * mis-typed M indistinguishable from a broken build.
+     */
+    if (isMuteHotkey(e)) {
+      routeUi.toggleMute();
+      hud.showToast(deps.settings.snapshot().audio.muted ? 'Muted' : 'Sound on');
       return;
     }
     live?.key?.(e);
@@ -617,6 +705,7 @@ export function createRouteHost(
       // own: the machine and this host die together, but a reference kept past teardown
       // must not keep painting a disposed HUD.
       stopPainting();
+      stopPaintingSettings();
       hud.dispose();
     },
   };

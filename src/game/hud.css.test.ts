@@ -426,10 +426,32 @@ describe('hud.css is syntactically whole', () => {
       // the aim thumb's own stick under 'stick' scheme -- without the hidden rule it
       // shows fixed at the origin before any touch has landed there
       '.hud-aimstick', '.hud-aimstick--hidden',
-      // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
-      '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
-      '.hud-panel-volume', // the settings row's slider; its buttons are `.ui-btn--sm`
-                           // now and have no rule of their own to be present
+      // pause + menu: without the hidden rules, Quit/levels show on EVERY panel
+      '.hud-quit', '.hud-quit--hidden',
+      // The Main Menu's three regions (issue #226). The panel's own settings ROW is gone
+      // -- its controls live in the Settings pane below -- and these replaced it. Without
+      // the base rules the menu is one flat column at one weight again, which is the
+      // information architecture the issue exists to remove; without the hidden rules
+      // every region shows on the pause and outcome panels too.
+      '.hud-menu-play', '.hud-menu-utilities', '.hud-menu-footer',
+      '.hud-menu-play--hidden', '.hud-menu-utilities--hidden', '.hud-menu-footer--hidden',
+      // The run summary and the tertiary weight the replace-run button drops to.
+      '.hud-run-summary', '.hud-run-summary--hidden', '.hud-new-game--tertiary',
+      // Settings (issue #226): the pane, its hidden rule, and the section machinery.
+      // `.hud-settings-section--hidden` is what makes "only sections with relevant
+      // controls render" visible -- without it Accessibility, which has no controls until
+      // #289/#290, renders as a heading over nothing.
+      '.hud-settings', '.hud-settings--hidden', '.hud-settings-section',
+      '.hud-settings-section--hidden', '.hud-settings-controls',
+      '.hud-settings-volume', // the audio slider; its buttons are `.ui-btn--sm`
+                              // now and have no rule of their own to be present
+      // About & Legal (issue #226): the pane, its hidden rule, and the prose measure.
+      '.hud-about', '.hud-about--hidden', '.hud-about-line',
+      // The replace-run confirmation (issue #226): the file's one blocking layer.
+      '.hud-confirm', '.hud-confirm--hidden', '.hud-confirm-body', '.hud-confirm-actions',
+      // Records is one Main Menu entry with two tabs (issue #226): the tab row's layout,
+      // and the hidden rule that keeps the entry off the pause panel.
+      '.hud-records-tabs', '.hud-records-open--hidden',
       '.hud-levels', '.hud-level-btn', '.hud-level-btn--locked', // level select buttons
       // ...and the reason a locked one is locked: without the hidden rule it explains a
       // state the player has already left
@@ -440,8 +462,10 @@ describe('hud.css is syntactically whole', () => {
       // Continue/New Game split: without these hidden rules both show at once, or the
       // retired single action button shows alongside them at title
       '.hud-continue--hidden', '.hud-new-game--hidden', '.hud-action--hidden',
-      // stats: without the hidden rules the page covers everything from load
-      '.hud-stats', '.hud-stats--hidden', '.hud-stats-open', '.hud-stats-open--hidden',
+      // stats: without the hidden rule the page covers everything from load. Its OPEN
+      // button is `.hud-records-open` since issue #226 (Records is one entry, Stats is a
+      // tab), swept with the other Main Menu classes above.
+      '.hud-stats', '.hud-stats--hidden',
       '.hud-danger', '.hud-danger--armed', '.hud-attempt-summary', '.hud-attempt-summary--hidden',
       // coop's kill tally: without the hidden rule it shows on every panel, not just
       // win/lose (mirrors .hud-attempt-summary exactly)
@@ -466,7 +490,10 @@ describe('hud.css is syntactically whole', () => {
       // skins: the button's own padding; base and ring both come from the primitives
       '.hud-skin',
       // achievements: hidden rules, the earned/locked contrast, and the toast rail
-      '.hud-achievements', '.hud-achievements--hidden', '.hud-achievements-open--hidden',
+      // `.hud-achievements-open--hidden` is deliberately ABSENT since issue #226: there
+      // is no Achievements button on the Main Menu any more, only the Achievements TAB
+      // inside Records, so a rule for it would be dead.
+      '.hud-achievements', '.hud-achievements--hidden',
       '.hud-achievement', '.hud-achievement--earned', '.hud-toasts', '.hud-toast',
       // controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
       // assignment.md): hidden rules, the row layout, the disconnected dimming, and the
@@ -654,25 +681,28 @@ describe('hud.css is syntactically whole', () => {
     // (`defaultSlots(2)` is `[human, bot]`). They carry `.ui-btn`/`.ui-btn--sm`, so they
     // are inside this sweep rather than falling through to browser default styling --
     // which is exactly what the sweep is for.
-    // 107 since issue #281, and the jump is the fixture's route changing rather than the
-    // kit growing: Teams is no longer offered at two players, so this fixture now selects
-    // THREE before switching mode, and its setControllers call follows to match.
-    //
-    // MEASURED composition at that state, not derived -- the previous derivation drifted
-    // by one twice while I was recounting it by hand:
+    // 117 since issue #226, up 10 from 107, and the delta is the Main Menu and Settings
+    // restructure rather than the kit growing. MEASURED at this fixture's state; the
+    // arithmetic is recorded so the next change re-derives instead of adjusting a literal:
     //
     //   versus pane      41  = 16 option (mode 2 + players 3 + map 6 + stock 5)
     //                         + 9 role (3 slots x Human/Bot/Off)
-    //                         + 9 team (3 slots x A/B/C -- new, issue #281)
+    //                         + 9 team (3 slots x A/B/C -- issue #281)
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
     //                         + 1 friendly-fire toggle (Teams-only)
     //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
-    //   everything else  54  = the panels above, unchanged by this issue
+    //   everything else  64  = the panels above (54 before this issue, +10)
     //
-    // Two of those move with the fixture's player count and one with how many slots are
-    // BOTS, so a fixture that picked a different count pins a different number -- which is
-    // the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(107);
+    // The +10, itemised: OUT go the topbar Mute chip, the Main Menu's Stats button and
+    // its Achievements button (-3). IN come Records, Settings and About & Legal on the
+    // menu (+3), the Records tab pair repeated in BOTH the Stats and Achievements panes
+    // (+4), the Settings pane's Controllers and About & Legal entries (+2), and the Back
+    // buttons of Settings and About plus the confirmation's two answers (+4).
+    //
+    // Two of the versus figures move with the fixture's player count and one with how
+    // many slots are BOTS, so a fixture that picked a different count pins a different
+    // number -- which is the prompt to re-measure rather than to adjust the literal.
+    expect(buttons.length).toBe(117);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -692,8 +722,9 @@ describe('hud.css is syntactically whole', () => {
       document.body.appendChild(b);
       return getComputedStyle(b);
     };
-    const panel = ['hud-stats-open', 'hud-achievements-open', 'hud-customize-open', 'hud-levelselect-open'];
-    const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back', 'hud-levelselect-back'];
+    const panel = ['hud-records-open', 'hud-settings-open', 'hud-customize-open', 'hud-levelselect-open'];
+    const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back',
+      'hud-levelselect-back', 'hud-settings-back', 'hud-about-back'];
 
     // Quitting is pushed further off the action button than its neighbours are off
     // each other. Asserted as the relationship, so retuning either value is free.
@@ -723,7 +754,8 @@ describe('hud.css is syntactically whole', () => {
     const EXCEPTIONS = [
       'hud-swatch', // the colour circles: their background IS the colour they offer
       'hud-rotate-btn', // the preview's icon buttons: outlined, 34px, their own fill
-      'hud-mute', // the topbar mute: a yellow state chip, not a quiet control
+      // `hud-mute` left this list with issue #226: the topbar's yellow state chip is
+      // gone, and the Settings button that replaced it is an ordinary `.ui-btn--sm`.
       'hud-pause-btn', 'hud-fire-btn', 'hud-mine-btn', // the on-screen driving controls
     ];
     const strays = Array.from(root.querySelectorAll('button'))
@@ -753,13 +785,21 @@ describe('hud.css is syntactically whole', () => {
       return `${resolved(el!, 'padding')} / ${resolved(el!, 'borderRadius')}`;
     };
     // The slab a panel stacks, and the small control a row lays out in a line.
-    const slab = ['.hud-quit', '.hud-stats-open', '.hud-achievements-open',
+    const slab = ['.hud-quit', '.hud-records-open', '.hud-settings-open',
       '.hud-customize-open', '.hud-levelselect-open', '.hud-controllers-open',
       '.hud-versus-open', '.hud-campaign-open', '.hud-stats-back', '.hud-customize-back',
       '.hud-achievements-back', '.hud-levelselect-back', '.hud-controllers-back',
-      '.hud-versus-back', '.hud-reset-stats', '.hud-reset-progress'];
-    const small = ['.hud-panel-mute', '.hud-scheme-toggle', '.hud-firemode-toggle',
-      '.hud-haptics-toggle', '.hud-versus-friendlyfire-btn'];
+      '.hud-versus-back', '.hud-settings-back', '.hud-about-back',
+      '.hud-confirm-accept', '.hud-confirm-cancel'];
+    // The reset pair moved here from the slab list with issue #226: they are two controls
+    // in the Settings -> Data row now, not two buttons stacked under a Stats heading, and
+    // a row lays out `--sm`. The About & Legal footer entry is `--sm` for the opposite
+    // reason -- it is the quietest thing on the Main Menu and must not read as a peer of
+    // the utility slabs above it.
+    const small = ['.hud-settings-mute', '.hud-scheme-toggle', '.hud-firemode-toggle',
+      '.hud-haptics-toggle', '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
+      '.hud-settings-about', '.hud-about-open', '.hud-records-tab-stats',
+      '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
     for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));
     // Without this the two loops above would both pass on a stylesheet that gave every
@@ -774,16 +814,24 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
-  it('lets the settings row wrap, since five controls no longer fit a phone width', () => {
-    // Review measured this in real chromium at hud.css's own named phone widths: four
-    // controls fit 393px exactly (rowWidth 393.0); adding the haptics toggle made it
-    // 448.5, clipped at both edges and unpannable under the body's overflow:hidden +
-    // the panel's touch-action: pan-y. `flex-wrap: wrap` is what folds it instead.
-    // Breaks if the declaration is dropped from `.hud-panel-settings`.
-    const row = document.createElement('div');
-    row.className = 'hud-panel-settings';
-    document.body.appendChild(row);
-    expect(getComputedStyle(row).flexWrap).toBe('wrap');
+  it('lets every control row wrap, since four controls do not fit a phone width', () => {
+    // Review measured this in real chromium at hud.css's own named phone widths, on the
+    // panel settings row these replaced: four controls fit 393px exactly (rowWidth
+    // 393.0); adding a fifth made it 448.5, clipped at both edges and unpannable under
+    // the body's overflow:hidden + the panel's touch-action: pan-y. `flex-wrap: wrap` is
+    // what folds it instead.
+    //
+    // THREE rows since issue #226, not one: the Settings pane's control rows (Controls
+    // carries four), and the Main Menu's own play and utility regions. All three lay
+    // buttons out in a line inside the same clipped body, so all three need the same
+    // declaration -- and asserting them together is what stops a new region shipping
+    // without it.
+    for (const cls of ['hud-settings-controls', 'hud-menu-play', 'hud-menu-utilities']) {
+      const row = document.createElement('div');
+      row.className = cls;
+      document.body.appendChild(row);
+      expect(getComputedStyle(row).flexWrap, cls).toBe('wrap');
+    }
     document.body.innerHTML = '';
   });
 
@@ -1178,6 +1226,10 @@ describe('hud.css is syntactically whole', () => {
     // board. After, across four shapes: 320x568 36px/-10, 393x727 40px/-12,
     // 727x393 (landscape) 40px/-12, 820x1180 51px/-20 -- nothing clipped anywhere.
     //
+    // The slider and the mute chip are no longer IN this bar (issue #226 moved both to
+    // Settings), so the two selectors that sized them here are gone with them. What is
+    // left is what the bar still carries: its own padding and gap, and the stat text.
+    //
     // A TEXT assertion, and weak on purpose -- jsdom does no layout, so nothing here can
     // measure a width. It catches the block being deleted or the selectors being
     // renamed out from under it, which is the regression that actually happens. The real
@@ -1188,7 +1240,7 @@ describe('hud.css is syntactically whole', () => {
     // none of these rules -- a 51px topbar across the shape that can least afford it.
     expect(src, 'the very-narrow block is gone').toMatch(/@media\s*\(max-width:\s*360px\)/);
     const block = src.split(/@media\s*\(max-width:\s*760px\)/)[1] ?? '';
-    for (const sel of ['.hud-topbar', '.hud-stat', '.hud-mute', '.hud-volume']) {
+    for (const sel of ['.hud-topbar', '.hud-stat']) {
       expect(block.slice(0, 600), `${sel} dropped out of the narrow layout`).toContain(sel);
     }
   });
@@ -1430,12 +1482,16 @@ describe('a leaving surface stops eating clicks meant for the one arriving', () 
     const hud = createHud(root);
     try {
       const panel = root.querySelector('.hud-panel') as HTMLElement;
-      const settings = root.querySelector('.hud-panel-settings') as HTMLElement;
+      // `.hud-menu-play` since issue #226, which retired `.hud-panel-settings`. Any
+      // descendant of the panel that sets `pointer-events: auto` for itself will do; this
+      // is the Main Menu's play region, and it is the control the measured Playwright
+      // failure would land on today.
+      const settings = root.querySelector('.hud-menu-play') as HTMLElement;
       expect(settings, 'fixture drifted: no descendant with its own pointer-events').not.toBeNull();
 
       // NEGATIVE CONTROL: with the surface not leaving, the descendant is clickable --
       // otherwise this test would pass against a stylesheet that disabled it always.
-      expect(getComputedStyle(settings).pointerEvents, 'control: settings should be clickable').toBe('auto');
+      expect(getComputedStyle(settings).pointerEvents, 'control: the region should be clickable').toBe('auto');
 
       panel.classList.add('ui-surface--leaving');
       expect(getComputedStyle(panel).pointerEvents, 'the leaving surface itself').toBe('none');

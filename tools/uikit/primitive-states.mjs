@@ -216,8 +216,13 @@ async function main() {
     // and is hidden on a title screen with no run to resume, so a capture aimed at it
     // would sit waiting on an invisible element. New Game is the primary the menu shows.
     await capture('primary-action', '.hud-new-game', ['hover', 'focus-visible', 'pressed'], 'main menu');
-    await capture('quiet-slab', '.hud-stats-open', ['hover', 'focus-visible', 'pressed'], 'main menu');
-    await capture('small-quiet', '.hud-panel-mute', ['hover', 'focus-visible', 'pressed'], 'main menu panel settings row');
+    // `.hud-records-open` since issue #226: Records is the utility slab that replaced the
+    // Stats and Achievements pair, and `.hud-panel-mute` is gone with the panel settings
+    // row it sat in. The small quiet control the menu still shows is the About & Legal
+    // footer entry, which is `--sm` for exactly the reason this capture is taken: it must
+    // read as quieter than the utility slabs above it.
+    await capture('quiet-slab', '.hud-records-open', ['hover', 'focus-visible', 'pressed'], 'main menu');
+    await capture('small-quiet', '.hud-about-open', ['hover', 'focus-visible', 'pressed'], 'main menu footer');
     await page.screenshot({ path: join(outDir, 'surface--main-menu.png') });
 
     // ---- Level select: the disabled control AND the visible reason it is disabled ----
@@ -276,12 +281,19 @@ async function main() {
 
     await page.locator('.hud-customize').screenshot({ path: join(outDir, 'surface--customize.png') });
 
-    // ---- Stats: the destructive hierarchy ----
+    // ---- Records, and then Settings for the destructive hierarchy ----
+    // The two reset buttons moved out of Records and into Settings -> Data with issue
+    // #226 ("destructive reset/import actions live under Data, not Records"), so the
+    // destructive capture follows them; Records is still photographed as a surface.
     await page.click('.hud-customize-back');
     await page.waitForSelector('.hud-customize', { state: 'hidden' });
-    await open('.hud-stats-open', '.hud-stats:not(.hud-stats--hidden)');
-    await capture('destructive', '.hud-reset-progress', ['hover', 'focus-visible', 'pressed'], 'stats page');
-    await page.locator('.hud-stats').screenshot({ path: join(outDir, 'surface--stats.png') });
+    await open('.hud-records-open', '.hud-stats:not(.hud-stats--hidden)');
+    await page.locator('.hud-stats').screenshot({ path: join(outDir, 'surface--records.png') });
+    await page.click('.hud-stats-back');
+    await page.waitForSelector('.hud-stats', { state: 'hidden' });
+    await open('.hud-settings-open', '.hud-settings:not(.hud-settings--hidden)');
+    await capture('destructive', '.hud-reset-progress', ['hover', 'focus-visible', 'pressed'], 'settings, Data section');
+    await page.locator('.hud-settings').screenshot({ path: join(outDir, 'surface--settings.png') });
     // Hierarchy is a difference BETWEEN controls at rest, so it is measured that way rather
     // than left to the eye: "primary, quiet and destructive are distinguishable on the dark
     // surface" is a claim about how the three differ, and each control's own hover/pressed

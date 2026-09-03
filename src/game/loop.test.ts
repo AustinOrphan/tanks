@@ -43,7 +43,13 @@ import {
   playingPhase,
   resolveSession,
 } from './app-state';
-import type { HudBackdrop, HudRelaunchTarget, HudSessionKind, HudSurface } from './hud';
+import type {
+  CampaignRunSummary,
+  HudBackdrop,
+  HudRelaunchTarget,
+  HudSessionKind,
+  HudSurface,
+} from './hud';
 
 /**
  * The HUD-visible surface the harness sets by name. Mirrors the exhaustive
@@ -267,6 +273,8 @@ interface Recorder {
   levelSelects: Array<[number, number]>;
   /** Every value pushed to hud.setContinueAvailable, in order. */
   continueAvailable: boolean[];
+  /** Every summary pushed to hud.setCampaignRun, in order (issue #226). */
+  campaignRuns: Array<CampaignRunSummary | null>;
   /** Every level passed to run.startNewRun, in order. */
   runNewRuns: number[];
   /** Every (level, lives) passed to run.advanceLevel, in order. */
@@ -500,6 +508,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     hudCallLog: [],
     levelSelects: [],
     continueAvailable: [],
+    campaignRuns: [],
     runNewRuns: [],
     runAdvances: [],
     runLivesSets: [],
@@ -1203,6 +1212,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setContinueAvailable: (available: boolean) => {
           rec.continueAvailable.push(available);
+        },
+        setCampaignRun: (run: CampaignRunSummary | null) => {
+          rec.campaignRuns.push(run);
         },
         onNewGame: (cb: () => void) => {
           onNewGame = cb;
@@ -2039,13 +2051,24 @@ describe('startGameWith: HUD wiring', () => {
     // the store's subscription is what reaches the engine and both buttons. Without the
     // store write the mute would not survive a reload; without the subscription the
     // engine would never hear about it.
+    // TWO boot pushes since issue #226, and the pair is the page/session split rather
+    // than a duplicate: `route-host.ts` paints the stored value the moment the HUD exists,
+    // because with the topbar's mute chip retired the Settings button is the only display
+    // this preference has and a session-less page (the normal boot state since #428) had
+    // nothing painting it; then this session's own `applySettings` pushes the same value
+    // at its construction. Only ONE of the two answers a later change -- the page's paint
+    // early-returns while a session holds the slot -- which is what keeps the click below
+    // appending a single entry rather than two.
     const h = boot();
-    expect(h.rec.muted, 'the button must show the stored value before any click').toEqual([false]);
+    expect(h.rec.muted, 'the button must show the stored value before any click').toEqual([
+      false,
+      false,
+    ]);
     h.hud.mute();
     expect(h.rec.mutedStoreSets).toEqual([true]);
     expect(h.settingsStore.snapshot().audio.muted).toBe(true);
     expect(h.rec.audioMuted.at(-1)).toBe(true);
-    expect(h.rec.muted).toEqual([false, true]);
+    expect(h.rec.muted).toEqual([false, false, true]);
     h.handle.dispose();
   });
 
@@ -2054,9 +2077,12 @@ describe('startGameWith: HUD wiring', () => {
     h.hud.volume(0.42);
     expect(h.rec.volumeStoreSets).toEqual([0.42]);
     expect(h.settingsStore.snapshot().audio.volume).toBe(0.42);
-    // DEFAULT_VOLUME at boot, then the accepted new value -- the boot push is what stops
-    // a returning player's slider showing 0.6 while the game plays at something else.
+    // The ENGINE, once at boot and once for the accepted new value. The boot push is what
+    // stops a returning player's slider showing 0.6 while the game plays at something
+    // else. Only a session reaches the engine, so this array is unaffected by the page's
+    // own display paint (issue #226) -- `volumeEchoes` below is the one that sees it.
     expect(h.rec.volumes).toEqual([DEFAULT_VOLUME, 0.42]);
+    expect(h.rec.volumeEchoes).toEqual([DEFAULT_VOLUME, DEFAULT_VOLUME, 0.42]);
     h.handle.dispose();
   });
 
@@ -2066,10 +2092,15 @@ describe('startGameWith: HUD wiring', () => {
     // Non-default on BOTH fields, and neither value is a default, so a wiring that
     // ignored the store would have to be wrong here rather than accidentally right.
     const h = boot(makeDeps({ savedMuted: true, savedVolume: 0.2 }));
+    // The ENGINE hears it once: only a session reaches the audio engine, and the page's
+    // own paint is deliberately display-only (issue #226; the engine half of a
+    // session-less page is issue #485).
     expect(h.rec.audioMuted).toEqual([true]);
     expect(h.rec.volumes).toEqual([0.2]);
-    expect(h.rec.muted).toEqual([true]);
-    expect(h.rec.volumeEchoes).toEqual([0.2]);
+    // The CONTROLS hear it twice at boot -- page then session -- and the value is the
+    // stored one both times, which is the property this test is for.
+    expect(h.rec.muted).toEqual([true, true]);
+    expect(h.rec.volumeEchoes).toEqual([0.2, 0.2]);
     h.handle.dispose();
   });
 
@@ -2287,9 +2318,9 @@ describe('startGameWith: leaving the title screen', () => {
     const h = bootAtSplash();
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
     expect(h.getState()).toBe('main-menu');
-    // `[false]` is the boot push, not a mute: the button was told the stored value once
-    // when the HUD appeared. A mute would append `true`.
-    expect(h.rec.muted, 'the key that began the game also muted it').toEqual([false]);
+    // `[false, false]` is the pair of boot pushes -- page then session, see 'routes the
+    // mute button through the STORE' -- not a mute. A mute would append `true`.
+    expect(h.rec.muted, 'the key that began the game also muted it').toEqual([false, false]);
     expect(h.rec.mutedStoreSets, 'the key that began the game reached the store').toEqual([]);
     h.handle.dispose();
   });
@@ -2298,7 +2329,7 @@ describe('startGameWith: leaving the title screen', () => {
     // The other edge: the early return must not swallow the hotkey forever.
     const h = boot(); // already past the splash
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
-    expect(h.rec.muted).toEqual([false, true]);
+    expect(h.rec.muted).toEqual([false, false, true]);
     // Through the STORE, like both buttons. The hotkey used to call `audio.toggleMute()`
     // directly, which is the shape that would make an M-key mute the one mute that did
     // not survive a reload.
@@ -3195,18 +3226,24 @@ describe('startGameWith: listeners and teardown', () => {
     h.handle.dispose();
   });
 
-  it('toggles mute on M through the registered listener', () => {
+  it('toggles mute on M through the PAGE listener, not this session (issue #226)', () => {
+    // The key moved to `route-host.ts`'s one keydown handler, which claims it and
+    // returns rather than forwarding it here. That is what makes M work at a Main Menu
+    // with no session -- the normal boot state since #428, and the only screen the
+    // retired topbar chip used to cover. A copy left in the session would have muted
+    // twice per keystroke, which cancels out and is therefore exactly the kind of
+    // duplicate no assertion on the resulting mute STATE could catch.
     const h = boot();
     h.keydown({ key: 'm', repeat: false, target: null });
-    expect(h.rec.muted).toEqual([false, true]);
+    expect(h.rec.muted).toEqual([false, false, true]);
     h.handle.dispose();
   });
 
   it('does not toggle mute on auto-repeat', () => {
     const h = boot();
     h.keydown({ key: 'm', repeat: true, target: null });
-    // Only the boot push. A repeat that reached the store would append to both arrays.
-    expect(h.rec.muted).toEqual([false]);
+    // Only the two boot pushes. A repeat that reached the store would append to both.
+    expect(h.rec.muted).toEqual([false, false]);
     expect(h.rec.mutedStoreSets).toEqual([]);
     h.handle.dispose();
   });

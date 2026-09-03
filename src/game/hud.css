@@ -132,8 +132,8 @@
  * rule.
  *
  * The defect that motivates it is on record rather than hypothetical:
- * `.hud-achievements-open` shipped with no base rule at all -- a stock grey browser
- * button beside three themed siblings, for as long as the feature existed -- because
+ * the retired `.hud-achievements-open` shipped with no base rule at all -- a stock grey
+ * browser button beside three themed siblings, for as long as it existed -- because
  * every sibling carried its own copy of the same block and one copy was simply missing.
  * Grouping the selectors fixed that instance; a primitive removes the shape of it.
  *
@@ -583,36 +583,17 @@
   display: none;
 }
 
-.hud-audio {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--hud-space-3);
-  pointer-events: auto;
-}
-
-.hud-mute {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-sm);
-  padding: 6px 12px;
-  font-weight: var(--hud-weight-normal);
-  background: #ffcf3f;
-  color: #3a2c00;
-}
+/* The topbar's audio pair -- `.hud-audio`, `.hud-mute` and `.hud-volume` -- is gone with
+   issue #226: audio has one durable home, in Settings, and this bar carries gameplay
+   status only. `.hud-mute--active` survives because the Settings button it now styles is
+   the same control under a different parent; its base comes from `.ui-btn--sm`, so the
+   only rule it still needs of its own is the "off" state. */
 
 /* Muted has to read as "off" at a glance, not just as different text -- with no
    music shipped, silence is the game's normal state either way. */
 .hud-mute--active {
   background: #4a4f59;
   color: #c3c8d2;
-}
-
-.hud-volume {
-  pointer-events: auto;
-  cursor: pointer;
-  width: 120px;
 }
 
 .hud-panel {
@@ -658,7 +639,10 @@
 .hud-achievements:focus,
 .hud-levelselect:focus,
 .hud-controllers:focus,
-.hud-versus-setup:focus {
+.hud-versus-setup:focus,
+.hud-settings:focus,
+.hud-about:focus,
+.hud-confirm:focus {
   outline: none;
 }
 
@@ -713,20 +697,12 @@
     white-space: nowrap;
   }
 
-  .hud-mute {
-    padding: 5px 8px;
-    font-size: 12px;
-  }
-
-  .hud-volume {
-    width: 64px;
-  }
 }
 
-/* An iPhone SE is 320px and still shipping: measured there, the row above still ran 3px
- * past the edge and wrapped to 54px. The slider is what gives, because it is the only
- * control here that degrades gracefully -- it stays draggable at 44px, and mute is a
- * button whose label must stay readable. */
+/* An iPhone SE is 320px and still shipping. The two rules that used to shrink and then
+ * drop the topbar's volume slider here are gone with issue #226 -- the slider moved to
+ * Settings, where it has a whole pane rather than a shared strip, so the narrowest phone
+ * no longer has to choose between it and the readouts a player needs mid-round. */
 @media (max-width: 360px) {
   .hud-topbar {
     gap: var(--hud-space-1);
@@ -736,21 +712,6 @@
 
   .hud-stat {
     font-size: 12px;
-  }
-
-  .hud-volume {
-    width: 44px;
-  }
-}
-
-/* A Galaxy Fold's cover screen is 280px and still clipped 4px under the block above.
- * The slider goes rather than the readouts: lives and enemies remaining are what the
- * player is reading mid-round, and mute is still a button. Volume remains reachable from
- * the pause panel's settings row, which is why this can be dropped rather than shrunk
- * into something undraggable. */
-@media (max-width: 300px) {
-  .hud-volume {
-    display: none;
   }
 }
 
@@ -769,6 +730,9 @@
 .hud-levelselect,
 .hud-controllers,
 .hud-versus-setup,
+.hud-settings,
+.hud-about,
+.hud-confirm,
 .hud-splash {
   touch-action: pan-y;
 }
@@ -1115,11 +1079,11 @@
 /* The panel buttons stack under a heading, so they carry the gap and a fixed size.
  * The Back buttons sit alone at the foot of their pane and take neither. */
 .hud-quit,
-.hud-stats-open,
-.hud-achievements-open,
+.hud-records-open,
 .hud-customize-open,
 .hud-levelselect-open,
 .hud-controllers-open,
+.hud-settings-open,
 .hud-versus-open,
 .hud-campaign-open {
   margin-top: 2px;
@@ -1137,25 +1101,223 @@
   display: none;
 }
 
-.hud-panel-settings {
+/* ---- Main Menu regions (issue #226) --------------------------------------------- */
+
+/*
+ * THE MENU'S HIERARCHY IS LAID OUT HERE, not in hud.ts. The panel used to hold nine peer
+ * slab buttons and a five-control settings row in one flat column, all at one weight;
+ * these three regions are what let the same buttons read as a primary action, two play
+ * actions, three utilities and a footer without any of them learning about layout.
+ *
+ * The play and utility rows WRAP for the same measured reason the retired settings row
+ * did: three `.ui-btn--slab` controls at the file's own named phone widths overflow a
+ * single line, and the body is `overflow: hidden`, so an unwrapped row is clipped and
+ * unpannable rather than merely tight.
+ */
+.hud-menu-play,
+.hud-menu-utilities {
   pointer-events: auto;
   display: flex;
-  /* wrap, since the haptics toggle made this a five-control row: measured in real
-   * chromium at the file's own named phone widths, four controls fit 393px exactly
-   * (rowWidth 393.0) and five overflow both edges (448.5, clipped and unpannable
-   * under the body's overflow:hidden + the panel's touch-action: pan-y). Wrapping
-   * folds the row to two lines instead. */
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
   gap: var(--hud-space-4);
-  margin-top: 18px;
+  margin-top: 10px;
 }
 
-/* Without this rule the settings row shows on every panel -- the class alone does
- * nothing, which is exactly the dead-CSS failure this file's test exists to catch. */
-.hud-panel-settings--hidden {
+/* Quieter than the play row above it by distance, not by a second colour. */
+.hud-menu-utilities {
+  margin-top: 14px;
+}
+
+/* The footer is the quietest thing on the screen -- pushed away from the utilities and
+   dimmed, so About & Legal is findable without competing with anything that plays. */
+.hud-menu-footer {
+  pointer-events: auto;
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  opacity: 0.72;
+}
+
+/* Without these rules every region shows on every panel -- the class alone does nothing,
+   which is exactly the dead-CSS failure this file's test exists to catch. */
+.hud-menu-play--hidden,
+.hud-menu-utilities--hidden,
+.hud-menu-footer--hidden,
+.hud-records-open--hidden {
   display: none;
+}
+
+/* The run summary sits directly above the primary action it describes, tight to it and
+   dimmed: it is context for the button, not a heading of its own. */
+.hud-run-summary {
+  margin: 0 0 2px;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-run-summary--hidden {
+  display: none;
+}
+
+/*
+ * TERTIARY "Start New Campaign" (issue #226): with a run active this button replaces
+ * that run, and it must not look like the thing to press. `applyTitleAffordances` takes
+ * `.ui-btn--primary` off and puts this on, so the button drops to the quiet slab weight
+ * its neighbours use while keeping its own identity and handlers.
+ */
+.hud-new-game--tertiary {
+  font-size: 15px;
+  opacity: 0.85;
+}
+
+/* ---- Records tabs (issue #226) --------------------------------------------------- */
+
+/* Two sibling panes, one destination: each pane carries the same pair of tab buttons and
+   marks its own with `.ui-selectable--on`, which is the shared current-choice ring. */
+.hud-records-tabs {
+  display: flex;
+  justify-content: center;
+  gap: var(--hud-space-3);
+}
+
+/* ---- Settings pane (issue #226) -------------------------------------------------- */
+
+/*
+ * The durable home for every preference that survives a reload. Same page-scrim shape as
+ * the Records and Customize panes so the three read as one family, with `overflow-y` of
+ * its own because the section list is the first pane here that can outgrow a phone.
+ */
+.hud-settings {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hud-space-4);
+  overflow-y: auto;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+/* Without this rule Settings covers every screen from page load -- the class alone does
+   nothing, the dead-CSS failure this file's test exists to catch. */
+.hud-settings--hidden {
+  display: none;
+}
+
+.hud-settings-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--hud-space-2);
+}
+
+/*
+ * A SECTION WITH NO CONTROLS DOES NOT RENDER (issue #226's "only sections with relevant
+ * controls should render"). `refreshSettingsSections` decides which; without this rule
+ * the class it writes does nothing, and Accessibility -- empty until #289/#290 add the
+ * motion and scale controls -- would show as a heading over nothing.
+ */
+.hud-settings-section--hidden {
+  display: none;
+}
+
+.hud-settings-section h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--hud-weight-normal);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+/* Wraps for the same measured reason the retired panel settings row did: four controls
+   overflow the file's own named phone widths on one line. */
+.hud-settings-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--hud-space-3);
+}
+
+/* ---- About & Legal pane (issue #226) --------------------------------------------- */
+
+.hud-about {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
+  overflow-y: auto;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+/* Without this rule the About pane covers every screen from page load. */
+.hud-about--hidden {
+  display: none;
+}
+
+/* Prose, so it takes a measure rather than the pane's full width -- a legal paragraph
+   run edge to edge on a TV is unreadable. */
+.hud-about-line {
+  margin: 0;
+  max-width: 46ch;
+  text-align: center;
+  opacity: 0.9;
+}
+
+/* ---- Replace-run confirmation (issue #226) --------------------------------------- */
+
+/*
+ * The one BLOCKING layer in the file (see `OVERLAY_LAYERS` in hud.ts). A heavier stacking
+ * position than the route panes deliberately: it is a question over the menu, not a
+ * destination that replaced it, and the difference has to be visible for "Back cancels"
+ * to read as cancelling rather than as leaving.
+ */
+.hud-confirm {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+/* Without this rule the confirmation covers every screen from page load. */
+.hud-confirm--hidden {
+  display: none;
+}
+
+.hud-confirm-body {
+  margin: 0;
+  max-width: 42ch;
+  text-align: center;
+  opacity: 0.9;
+}
+
+.hud-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--hud-space-4);
 }
 
 /* ---- Stats page ------------------------------------------------------------------ */
@@ -1163,9 +1325,10 @@
 .hud-stats {
   pointer-events: auto;
   position: absolute;
-  /* Below the topbar (see .hud-topbar's z-index): mute and volume stay reachable
-   * while the stats page is open. Found in review: with no z-index anywhere, DOM
-   * order painted this OVER the topbar and ate its clicks. */
+  /* Below the topbar (see .hud-topbar's z-index). Found in review: with no z-index
+   * anywhere, DOM order painted this OVER the topbar and ate its clicks. The topbar's
+   * own controls are gone since issue #226, but the stacking rule is what keeps a pane
+   * from swallowing whatever that bar carries next. */
   z-index: 0;
   inset: 0;
   display: flex;
@@ -1206,9 +1369,6 @@
   margin-top: 10px;
 }
 
-.hud-stats-open--hidden {
-  display: none;
-}
 
 /* The destructive pair: quiet until armed, unmistakable after. */
 .hud-danger--armed {
@@ -1464,9 +1624,6 @@
   padding: 8px 16px;
 }
 
-.hud-achievements-open--hidden {
-  display: none;
-}
 
 .hud-levelselect-open--hidden {
   display: none;
@@ -1631,7 +1788,7 @@
   opacity: 0.35;
 }
 
-.hud-panel-volume {
+.hud-settings-volume {
   pointer-events: auto;
   width: 140px;
 }

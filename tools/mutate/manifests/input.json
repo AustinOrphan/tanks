@@ -98,7 +98,7 @@
       "consumesKey the widget key set is case-insensitive",
       "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
       "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
-      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Controllers, then Quit from the pause panel with three ArrowDowns",
+      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Settings, then Controllers, then Quit from the pause panel",
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
       "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
       "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
@@ -160,7 +160,7 @@
     "killedBy": [
       "consumesKey a button keeps Enter and Space (activation) but not Escape, the arrows or the driving keys",
       "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
-      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Controllers, then Quit from the pause panel with three ArrowDowns",
+      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Settings, then Controllers, then Quit from the pause panel",
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
       "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
       "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
