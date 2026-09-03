@@ -7348,9 +7348,11 @@ describe('startGameWith: the input recorder', () => {
     expect(checkTrace(t)).toEqual({ ok: true, reason: null });
 
     const live = h.rec.renders[h.rec.renders.length - 1].curr;
-    // ALL meta fields thread through, including the two sim switches -- a rebuild
-    // that silently defaults them reproduces today's defaults, not the recorded
-    // run's behaviour (the review of this PR caught exactly that staleness here).
+    // ALL meta fields thread through, including every sim switch -- a rebuild that
+    // silently defaults them reproduces today's defaults, not the recorded run's
+    // behaviour (the review of this PR caught exactly that staleness here, and it
+    // recurred: this call stopped at coopAttempts while the meta had since grown
+    // mode/friendlyFire, and issue #492 added aiTargetPerception).
     const rebuilt = createWorldFor(
       arenaById(t.meta.arenaId),
       t.meta.seed,
@@ -7360,6 +7362,11 @@ describe('startGameWith: the input recorder', () => {
       t.meta.muzzleClearsTanks,
       undefined,
       t.meta.coopAttempts,
+      t.meta.mode,
+      t.meta.friendlyFire,
+      undefined, // stock: versus-only, not a ReplayMeta field
+      undefined, // teams: versus-only, not a ReplayMeta field
+      t.meta.aiTargetPerception,
     );
     const replayed = replayTrace(t, rebuilt);
     expect(replayed.world.tick).toBe(live.tick);

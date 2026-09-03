@@ -1,5 +1,5 @@
 import { stepInputs, type World } from '../sim/world';
-import type { InputState, UnarmedTrigger, GameMode } from '../sim/types';
+import type { AiTargetPerception, InputState, UnarmedTrigger, GameMode } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import balanceJson from '../sim/config/data/balance.json';
 import tankDefsJson from '../sim/config/data/tank-defs.json';
@@ -33,7 +33,7 @@ export const REPLAY_FORMAT = 'tanks.replay';
  * Bump it when the encoding changes; it says nothing about whether the sim would
  * produce the same run, which is what the fingerprint is for.
  */
-export const REPLAY_SCHEMA = 3;
+export const REPLAY_SCHEMA = 4;
 
 /**
  * Ten minutes at 60 Hz. A trace that grows forever is a memory leak in a flag
@@ -87,6 +87,16 @@ export interface ReplayMeta {
   mode: GameMode;
   /** See WorldRules.friendlyFire. Read off the world, same as unarmedTrigger. n-player arc PR 4. */
   friendlyFire: boolean;
+  /**
+   * See WorldRules.aiTargetPerception. The seventh and last rule this meta carries, and
+   * the one it used to omit (issue #492): a trace recorded under `?dev=1&aiPerception=los`
+   * rebuilt at the shipped `'full'`, so every AI target-selection decision the bound had
+   * changed came out differently on playback -- silently, because the data fingerprint
+   * covers the four sim JSON files and says nothing about which rules a world was built
+   * under, and reported a match throughout. Read off the world, same as unarmedTrigger.
+   * REPLAY_SCHEMA 3 -> 4.
+   */
+  aiTargetPerception: AiTargetPerception;
 }
 
 /** `[moveX, moveY, aimX, aimY, bits]`, bits = fire | mine<<1. Still the per-SLOT shape:
@@ -151,7 +161,13 @@ export function fingerprint(value: unknown): string {
  * shape at all -- `ticks` is unchanged -- but adds `ReplayMeta.mode`/`friendlyFire`:
  * `mode` is not derivable from the tank array the way `playerCount` is, so a trace
  * recorded from a versus session needs it to reconstruct the same win/lose dispatch on
- * playback. There is no migration layer for
+ * playback. 4 (issue #492) is the same kind of change again -- `ticks` unchanged, one more
+ * meta field -- adding `ReplayMeta.aiTargetPerception`, the last of the `World.rules`
+ * switches this meta did not carry (`arenaGeometry`, the eighth rule, is rebuilt from
+ * `arenaId` rather than stamped), so a trace recorded under `?dev=1&aiPerception=los`
+ * stops rebuilding at the shipped `'full'`. A schema-3 trace is REJECTED rather than read
+ * with the missing rule defaulted, because defaulting it is precisely the divergence the
+ * bump exists to stop. There is no migration layer for
  * replays anywhere in this codebase; a schema mismatch is already outright rejection
  * (`checkTrace`), never reinterpreted, and `?dev=1&replay=1` traces are a dev-console
  * debug capture, not user save data, so rejecting an old trace rather than reading it
@@ -311,6 +327,7 @@ export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
     coopAttempts: world.rules.coopAttempts,
     mode: world.rules.mode,
     friendlyFire: world.rules.friendlyFire,
+    aiTargetPerception: world.rules.aiTargetPerception,
   };
 }
 

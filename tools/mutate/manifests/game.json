@@ -3142,5 +3142,34 @@
       "createRouteHost: prompts follow the input the player is using (issue #496) a gamepad naming its own button takes over from the keyboard, and the mouse is not touch",
       "keyHint: one policy for static hints across the HUD (issue #496) names the key for a keyboard, a pad's button only when one is bound, nothing for touch, and keeps the key for a mouse"
     ]
+  },
+  {
+    "id": "replay-meta-drops-the-ai-perception-rule",
+    "file": "src/game/replay.ts",
+    "find": "    aiTargetPerception: world.rules.aiTargetPerception,",
+    "replace": "    aiTargetPerception: 'full',",
+    "why": "Models issue #492's defect exactly: `replayMetaFor` stamping the SHIPPED default instead of reading the rule off the world, which is what the meta did while it omitted the field entirely. Deliberately silent -- the trace still parses, the data fingerprint still reports a match (it covers the four sim JSON files and says nothing about which rules a world was built under), and only the AI's target selection moves. Measured on the branch that landed this, against the 32 cases replay.test.ts held before the regression coverage was written: 0 failed, so the omission really was invisible. Killed by the two cases added with it -- the first pins the RECORD side (the meta reads 'line-of-sight' off a world built with it), the second the REBUILD side end to end (rebuild from the meta alone, replay the recorded trace, and the AI commits to different opponents than a rebuild at 'full' does).",
+    "tests": [
+      "src/game/replay.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "replayMetaFor reads aiTargetPerception off the world too, when the line-of-sight bound was requested (issue #492)",
+      "replayTrace round-trips the AI perception rule, and a rebuild at the shipped default fights DIFFERENT opponents (issue #492)"
+    ]
+  },
+  {
+    "id": "replay-schema-not-bumped-for-the-perception-rule",
+    "file": "src/game/replay.ts",
+    "find": "export const REPLAY_SCHEMA = 4;",
+    "replace": "export const REPLAY_SCHEMA = 3;",
+    "why": "The other half of issue #492: adding a required ReplayMeta field WITHOUT bumping the schema, so a schema-3 trace recorded before the field existed is still accepted and replayed with the rule missing -- the exact silent divergence the field was added to stop, and the case the replay layer's no-migration policy answers by rejecting rather than defaulting. Invisible to every other assertion in the file, because `checkTrace` compares a trace's stamp against this same constant and the recorder writes it: the round-trip cases and the existing `REPLAY_SCHEMA + 1` rejection case all still pass at 3, measured at 0 of the 32 cases replay.test.ts held before the regression coverage. Killed only by the case that names the old version as a literal.",
+    "tests": [
+      "src/game/replay.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "checkTrace rejects a schema-3 trace, which predates the recorded perception rule (issue #492)"
+    ]
   }
 ]
