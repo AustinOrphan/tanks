@@ -13,6 +13,7 @@
  *   npm run audio -- --track arena --seconds 30
  *   npm run audio -- --sfx explosion
  *   npm run audio -- --sfx all
+ *   npm run audio -- --arms all      # every #516 blocked-fire audio arm, in order
  *   npm run audio -- --list
  */
 import { spawn } from 'node:child_process';
@@ -25,12 +26,13 @@ const PORT = Number(process.env.AUDIO_TOOL_PORT ?? 5210);
 const OUT_DIR = resolve(ROOT, 'audio-out');
 
 function parseArgs(argv) {
-  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false, intensity: null, seed: null, suite: null, chain: null };
+  const args = { seconds: null, track: null, sfx: null, arms: null, list: false, out: null, loop: false, intensity: null, seed: null, suite: null, chain: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--list') args.list = true;
     else if (a === '--track') args.track = argv[++i];
     else if (a === '--sfx') args.sfx = argv[++i];
+    else if (a === '--arms') args.arms = argv[++i];
     else if (a === '--seconds') args.seconds = Number(argv[++i]);
     else if (a === '--out') args.out = argv[++i];
     else if (a === '--loop') args.loop = true;
@@ -53,9 +55,9 @@ for (const [flag, value] of Object.entries(args)
     process.exit(2);
   }
 }
-if (!args.list && !args.track && !args.sfx && !args.suite && !args.chain) {
+if (!args.list && !args.track && !args.sfx && !args.arms && !args.suite && !args.chain) {
   console.error(
-    'usage: npm run audio -- [--list] [--track <id> [--seconds N]] [--sfx <key|all>] [--out file.wav]',
+    'usage: npm run audio -- [--list] [--track <id> [--seconds N]] [--sfx <key|all>] [--arms <cue|all>] [--out file.wav]',
   );
   process.exit(2);
 }
@@ -165,6 +167,45 @@ try {
     // --chain: play one track from each named SUITE in turn, entering every
     // suite after the first through its dominant with the tempo ramping. The
     // cross-set join is the thing that has to be judged by ear.
+    if (opts.arms) {
+      // Every #516 audio arm, rendered from the SAME table the director plays them from
+      // (`BLOCKED_FIRE_ARMS` in src/audio/director.ts) rather than a second copy of the
+      // rates and gains here -- a preview that restated them could drift from the game,
+      // which is the one thing a preview must never do.
+      const { BLOCKED_FIRE_ARMS, BLOCKED_FIRE_BASELINE } = await import('/src/audio/director.ts');
+      const { BLOCKED_FIRE_CUES, cueDrives } = await import('/src/presentation/blocked-fire.ts');
+      const arms = [...BLOCKED_FIRE_CUES].filter((c) => cueDrives(c, 'audio'));
+      const voiceOf = (arm) => BLOCKED_FIRE_ARMS[arm] ?? BLOCKED_FIRE_BASELINE;
+      const sig = (arm) => JSON.stringify([voiceOf(arm).key, voiceOf(arm).opts ?? null]);
+      // `all` renders each distinct VOICE once. The multimodal cues drive audio too, but
+      // through the baseline voice, so listing them would render the same sound three
+      // times and read as three arms; they stay selectable by name.
+      const seen = new Set();
+      const distinct = arms.filter((a) => !seen.has(sig(a)) && seen.add(sig(a)));
+      const one = opts.arms === 'all' ? distinct : [opts.arms];
+      for (const a of one) if (!arms.includes(a)) return { error: `unknown audio arm "${a}". known: ${arms.join(', ')}` };
+      const span = one.length * 0.9 + 1;
+      const ctx = new OfflineAudioContext(1, Math.floor(RATE * span), RATE);
+      one.forEach((arm, i) => {
+        const voice = voiceOf(arm);
+        // `volume` in a voice is a MULTIPLIER -- engine.ts plays it as
+        // `VOICE_GAIN * masterVolume * (opts.volume ?? 1)` -- so it scales the preview's
+        // base gain rather than replacing it. Overwriting instead rendered `thunk-soft`
+        // at 0.3 where the game plays it at 0.9 * 0.3, which is exactly the drift this
+        // mode reads the director's own table to avoid.
+        synthVoice(ctx, ctx.destination, voice.key, 0.15 + i * 0.9, {
+          rate: voice.opts?.rate,
+          volume: 0.9 * (voice.opts?.volume ?? 1),
+        });
+      });
+      const shared = arms.filter((a) => !one.includes(a) && one.some((b) => sig(b) === sig(a)));
+      return {
+        wav: toWav(await ctx.startRendering()),
+        label: `arms-${opts.arms}`,
+        note: one.join(' -> ') + (shared.length ? ` (same voice as: ${shared.join(', ')})` : ''),
+      };
+    }
+
     if (opts.chain) {
       const { suiteById, membersOf } = await import('/src/audio/suites.ts');
       const ids = opts.chain.split(',').map((x) => x.trim());
@@ -360,6 +401,9 @@ try {
     // Peak is reported so silence is obvious without opening the file -- a
     // preview that quietly writes 30s of nothing is worse than an error.
     console.log(`wrote ${file}  (peak ${result.wav.peak.toFixed(3)})`);
+    // Which arms are actually in the file, and which cues share a voice with them: an
+    // `--arms all` render is otherwise five unlabelled thumps in a row.
+    if (result.note) console.log(`  ${result.note}`);
     if (result.marks) {
       console.log(`  switches at: ${result.marks.map((m) => `${m.at.toFixed(2)}s -> ${m.id}`).join(', ')}`);
     }

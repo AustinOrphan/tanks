@@ -30,7 +30,7 @@ export interface AudioDirectorOptions {
 }
 
 /** One blocked-fire arm's sound: an engine key, and how that key is varied. */
-interface BlockedFireVoice {
+export interface BlockedFireVoice {
   readonly key: string;
   readonly opts?: { rate?: number; volume?: number };
 }
@@ -41,7 +41,7 @@ interface BlockedFireVoice {
  * baseline by definition (they exist to test a channel PAIRING, so varying their sound
  * too would confound the two questions).
  */
-const BLOCKED_FIRE_BASELINE: BlockedFireVoice = { key: 'fire-blocked' };
+export const BLOCKED_FIRE_BASELINE: BlockedFireVoice = { key: 'fire-blocked' };
 
 /**
  * Issue #516's four extra audio arms, as VARIATIONS rather than new sounds wherever the
@@ -76,7 +76,7 @@ const BLOCKED_FIRE_BASELINE: BlockedFireVoice = { key: 'fire-blocked' };
  * volume setting exactly as `cannon` is -- `volume` below is a per-voice multiplier the
  * engine applies ON TOP of the master volume, never instead of it.
  */
-const BLOCKED_FIRE_ARMS: Readonly<Partial<Record<BlockedFireCue, BlockedFireVoice>>> = {
+export const BLOCKED_FIRE_ARMS: Readonly<Partial<Record<BlockedFireCue, BlockedFireVoice>>> = {
   click: { key: 'fire-blocked-click' },
   clunk: { key: 'fire-blocked', opts: { rate: 0.5 } },
   'thunk-soft': { key: 'fire-blocked', opts: { rate: 0.5, volume: 0.3 } },
