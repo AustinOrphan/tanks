@@ -5,6 +5,7 @@ import { createDeathPulseSystem } from '../../src/render/death-pulse';
 import { createTreadTrailSystem } from '../../src/render/tread-trails';
 import { createBlockedFireRingSystem } from '../../src/render/blocked-fire-ring';
 import { createBlockedFireMuzzleSystem } from '../../src/render/blocked-fire-muzzle';
+import { createBlockedFireSmokeSystem } from '../../src/render/blocked-fire-smoke';
 import { createBarrelRecoilSystem } from '../../src/render/barrel-recoil';
 import { createBlockedFirePipsSystem } from '../../src/render/blocked-fire-pips';
 import type { BlockedFireCue } from '../../src/presentation/blocked-fire';
@@ -60,13 +61,13 @@ export interface MomentSceneOptions {
    * `?dev=1&blockedFire=<cue>` flag; null renders none, which is the shipped default.
    *
    * These cues are why the gallery grew a `blocked-fire` moment. A refusal cue lives
-   * between 0.07s and 0.55s and moves a few hundred pixels; at the arena camera the
+   * between 0.07s and 0.75s and moves a few hundred pixels; at the arena camera the
    * whole tank is about 40px wide, so screen capture of real play could not show one
    * legibly no matter how carefully it was timed. Here the camera sits on the tank, the
    * timeline is deterministic, and `--subdiv`/`--fps` slow the clip down, so a reviewer
    * comparing arms sees the same gesture each time.
    *
-   * Only the three remaining visual arms render. The audio and haptic arms have nothing to draw,
+   * Only the four remaining visual arms render. The audio and haptic arms have nothing to draw,
    * and `hud` draws into the DOM HUD, which no gallery scene builds -- ask for one of
    * those and the cue-to-system mapping below matches nothing, so you get an unadorned
    * tank. The CLI refuses them for that reason (`args.mjs`), and it refuses a cue paired
@@ -193,6 +194,7 @@ export function buildMomentScene(
   const blockedFireRing =
     cue === 'ring' || cue === 'ring-audio' ? createBlockedFireRingSystem(scene) : null;
   const blockedFireMuzzle = cue === 'muzzle' ? createBlockedFireMuzzleSystem(scene) : null;
+  const blockedFireSmoke = cue === 'smoke' ? createBlockedFireSmokeSystem(scene) : null;
   // NOT gated on the cue, unlike the arms around it: since issue #526 the gun kicks on
   // every shot and every refusal as shipped behaviour, so the gallery shows it in every
   // moment that fires -- which is also what makes a refusal legible here, as the one
@@ -257,6 +259,7 @@ export function buildMomentScene(
       deathPulse.spawn(tl.events[fed], tl.worlds[fed], { enemyEnabled: true });
       blockedFireRing?.spawn(tl.events[fed], tl.worlds[fed], cue);
       blockedFireMuzzle?.spawn(tl.events[fed], tl.worlds[fed], cue);
+      blockedFireSmoke?.spawn(tl.events[fed], tl.worlds[fed], cue);
       barrelRecoil.spawn(tl.events[fed], tl.worlds[fed]);
       blockedFirePips?.spawn(tl.events[fed], tl.worlds[fed], cue);
       fed++;
@@ -270,6 +273,7 @@ export function buildMomentScene(
     // land on the object sync has already posed or it is overwritten before it is drawn.
     blockedFireRing?.update(dt);
     blockedFireMuzzle?.update(dt);
+    blockedFireSmoke?.update(dt);
     barrelRecoil.update(dt);
     blockedFirePips?.update(dt, tl.worlds[a]);
     // Same prev/curr pair as views.sync above -- treadTrails reads only
@@ -288,6 +292,7 @@ export function buildMomentScene(
     treadTrails.dispose();
     blockedFireRing?.dispose();
     blockedFireMuzzle?.dispose();
+    blockedFireSmoke?.dispose();
     barrelRecoil.dispose();
     blockedFirePips?.dispose();
     renderer.dispose();

@@ -392,6 +392,7 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
     // false here permanently -- they carry no haptic at all and must never buzz, which
     // is what lets #356 attribute a preference to a channel rather than to a bundle.
     muzzle: false,
+    smoke: false,
     pips: false,
     hud: false,
     click: false,

@@ -279,9 +279,9 @@ describe('gallery args', () => {
     expect(() => parseArgs(['--scene', 'fire', '--blocked-fire', 'ring'])).toThrow(
       /needs --scene blocked-fire/,
     );
-    // Only the four VISUAL arms: the audio and haptic arms have nothing to draw, and
-    // 'hud' draws into the DOM HUD, which no gallery page builds.
-    for (const arm of ['ring', 'muzzle', 'pips']) {
+    // Only the four ARENA visual arms: the audio and haptic arms have nothing to draw,
+    // and 'hud' draws into the DOM HUD, which no gallery page builds.
+    for (const arm of ['ring', 'muzzle', 'smoke', 'pips']) {
       expect(parseArgs(['--scene', 'blocked-fire', '--blocked-fire', arm]).blockedFire).toBe(arm);
     }
     // 'turret' is in this list, not the one above: issue #526 retired it as a cue, so

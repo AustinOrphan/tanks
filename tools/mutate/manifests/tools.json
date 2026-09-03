@@ -545,8 +545,8 @@
   {
     "id": "gallery-blocked-fire-accepts-non-visual-arms",
     "file": "tools/gallery/args.mjs",
-    "find": "    const visual = ['ring', 'muzzle', 'pips'];",
-    "replace": "    const visual = ['ring', 'muzzle', 'pips', 'turret', 'hud', 'audio', 'click', 'haptic'];",
+    "find": "    const visual = ['ring', 'muzzle', 'smoke', 'pips'];",
+    "replace": "    const visual = ['ring', 'muzzle', 'smoke', 'pips', 'turret', 'hud', 'audio', 'click', 'haptic'];",
     "expect": "killed",
     "tests": [
       "tools/gallery/args.test.ts"

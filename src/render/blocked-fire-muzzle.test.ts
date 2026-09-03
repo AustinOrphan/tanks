@@ -53,13 +53,17 @@ describe('blocked-fire muzzle flash (issue #516, parent #356)', () => {
     const carriesMuzzle: Record<BlockedFireCue, boolean> = {
       muzzle: true,
       // Every other cue, false, for two different reasons. The four other VISUAL arms
-      // (ring, pips, hud) are separate treatments in their own systems and their
+      // (ring, smoke, pips, hud) are separate treatments in their own systems and their
       // rows stay false here however they are implemented -- the whole point of the
-      // comparison is that they are not the same picture. The audio and haptic arms draw
-      // nothing at all. When #516's pairing of the strongest visual with the strongest
-      // audio lands, whichever combination names this arm flips its own row to true.
+      // comparison is that they are not the same picture. `smoke` matters most in that
+      // list: it is the other arm at this barrel, so an implementation that let one flag
+      // draw both would produce a comparison between a flash and a flash-plus-smoke.
+      // The audio and haptic arms draw nothing at all. When #516's pairing of the
+      // strongest visual with the strongest audio lands, whichever combination names
+      // this arm flips its own row to true.
       ring: false,
       'ring-audio': false,
+      smoke: false,
       pips: false,
       hud: false,
       audio: false,
