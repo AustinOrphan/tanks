@@ -13,6 +13,7 @@
  *   npm run audio -- --track arena --seconds 30
  *   npm run audio -- --sfx explosion
  *   npm run audio -- --sfx all
+ *   npm run audio -- --arms all      # every #516 blocked-fire audio arm, in order
  *   npm run audio -- --list
  */
 import { spawn } from 'node:child_process';
@@ -25,12 +26,13 @@ const PORT = Number(process.env.AUDIO_TOOL_PORT ?? 5210);
 const OUT_DIR = resolve(ROOT, 'audio-out');
 
 function parseArgs(argv) {
-  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false, intensity: null, seed: null, suite: null, chain: null };
+  const args = { seconds: null, track: null, sfx: null, arms: null, list: false, out: null, loop: false, intensity: null, seed: null, suite: null, chain: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--list') args.list = true;
     else if (a === '--track') args.track = argv[++i];
     else if (a === '--sfx') args.sfx = argv[++i];
+    else if (a === '--arms') args.arms = argv[++i];
     else if (a === '--seconds') args.seconds = Number(argv[++i]);
     else if (a === '--out') args.out = argv[++i];
     else if (a === '--loop') args.loop = true;
@@ -53,9 +55,9 @@ for (const [flag, value] of Object.entries(args)
     process.exit(2);
   }
 }
-if (!args.list && !args.track && !args.sfx && !args.suite && !args.chain) {
+if (!args.list && !args.track && !args.sfx && !args.arms && !args.suite && !args.chain) {
   console.error(
-    'usage: npm run audio -- [--list] [--track <id> [--seconds N]] [--sfx <key|all>] [--out file.wav]',
+    'usage: npm run audio -- [--list] [--track <id> [--seconds N]] [--sfx <key|all>] [--arms <cue|all>] [--out file.wav]',
   );
   process.exit(2);
 }
@@ -165,6 +167,25 @@ try {
     // --chain: play one track from each named SUITE in turn, entering every
     // suite after the first through its dominant with the tempo ramping. The
     // cross-set join is the thing that has to be judged by ear.
+    if (opts.arms) {
+      // Every #516 audio arm, rendered from the SAME table the director plays them from
+      // (`BLOCKED_FIRE_ARMS` in src/audio/director.ts) rather than a second copy of the
+      // rates and gains here -- a preview that restated them could drift from the game,
+      // which is the one thing a preview must never do.
+      const { BLOCKED_FIRE_ARMS, BLOCKED_FIRE_BASELINE } = await import('/src/audio/director.ts');
+      const { BLOCKED_FIRE_CUES, cueDrives } = await import('/src/presentation/blocked-fire.ts');
+      const arms = [...BLOCKED_FIRE_CUES].filter((c) => cueDrives(c, 'audio'));
+      const one = opts.arms === 'all' ? arms : [opts.arms];
+      for (const a of one) if (!arms.includes(a)) return { error: `unknown audio arm "${a}". known: ${arms.join(', ')}` };
+      const span = one.length * 0.9 + 1;
+      const ctx = new OfflineAudioContext(1, Math.floor(RATE * span), RATE);
+      one.forEach((arm, i) => {
+        const voice = BLOCKED_FIRE_ARMS[arm] ?? BLOCKED_FIRE_BASELINE;
+        synthVoice(ctx, ctx.destination, voice.key, 0.15 + i * 0.9, { volume: 0.9, ...(voice.opts ?? {}) });
+      });
+      return { wav: toWav(await ctx.startRendering()), label: `arms-${opts.arms}`, note: one.join(' -> ') };
+    }
+
     if (opts.chain) {
       const { suiteById, membersOf } = await import('/src/audio/suites.ts');
       const ids = opts.chain.split(',').map((x) => x.trim());
