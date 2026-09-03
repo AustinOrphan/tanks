@@ -14,6 +14,7 @@ import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
 import type { RouteUiDeps } from './route-ui';
 import type { GamepadLike } from '../input/gamepad';
+import { MODALITY_SWITCH_MS } from './modality';
 
 /**
  * Issue #468's coverage, and the shape of it is the point.
@@ -108,6 +109,8 @@ interface Fixture {
   /** The page menu poller's pads and queued frames (issue #494). */
   pads: GamepadLike[];
   frames: Array<(now: number) => void>;
+  advance: (ms: number) => void;
+  fireHost: (type: string, event: Event) => void;
   dismissLaunch(): void;
 }
 
@@ -142,6 +145,10 @@ function fixture(
     pads: [] as GamepadLike[],
     /** Page frames requested and not yet run or cancelled, oldest first. */
     frames: [] as Array<(now: number) => void>,
+    /** The clock the modality tracker reads (issue #496); a test advances it by hand. */
+    now: 0,
+    /** Listeners the route host registered on the page host, by event type. */
+    hostListeners: new Map<string, Set<(e: Event) => void>>(),
   };
 
   const routeUiDeps: RouteUiDeps = {
@@ -161,9 +168,17 @@ function fixture(
         },
       }) as unknown as TankPreview,
     readDetectedPads: () => [],
+    // A host that actually registers, so a test can fire the page's own listeners rather
+    // than dispatching at a window the route host never bound (issue #496's input paths).
     host: {
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      addEventListener: (type: string, fn: (e: Event) => void) => {
+        const set = box.hostListeners.get(type) ?? new Set();
+        set.add(fn);
+        box.hostListeners.set(type, set);
+      },
+      removeEventListener: (type: string, fn: (e: Event) => void) => {
+        box.hostListeners.get(type)?.delete(fn);
+      },
     } as unknown as RouteUiDeps['host'],
     // Deliberately the WRONG answers: the route host must override both with the
     // application-level seams it was handed, so a host that passed `deps` straight
@@ -181,6 +196,7 @@ function fixture(
     ...routeUiDeps,
     run: stores.run,
     menuGamepads: () => box.pads,
+    now: () => box.now,
     requestFrame: (cb) => {
       box.frames.push(cb);
       return () => {
@@ -223,6 +239,12 @@ function fixture(
     previewDisposals: () => box.previewDisposals,
     pads: box.pads,
     frames: box.frames,
+    advance: (ms: number) => {
+      box.now += ms;
+    },
+    fireHost: (type: string, event: Event) => {
+      for (const fn of [...(box.hostListeners.get(type) ?? [])]) fn(event);
+    },
     dismissLaunch: () => {
       box.launchDismissed = true;
     },
@@ -1000,5 +1022,84 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     queued(32);
     expect(f.frames, 'a post-disposal frame queued another').toHaveLength(0);
     expect(f.host.sm.isPaused, 'a disposed poller still emitted').toBe(true);
+  });
+});
+
+describe('createRouteHost: prompts follow the input the player is using (issue #496)', () => {
+  const mute = (f: Fixture): HTMLElement => f.root.querySelector('.hud-mute') as HTMLElement;
+  const key = (f: Fixture): void => {
+    f.fireHost('keydown', new KeyboardEvent('keydown', { key: 'a' }));
+  };
+  /** A pointerdown at the page host, of the given kind, the way a browser reports it. */
+  const pointer = (f: Fixture, pointerType: string): void => {
+    const e = new MouseEvent('pointerdown') as MouseEvent & { pointerType?: string };
+    Object.defineProperty(e, 'pointerType', { value: pointerType });
+    f.fireHost('pointerdown', e);
+  };
+  const pad = (...pressed: number[]): GamepadLike => ({
+    axes: [0, 0, 0, 0],
+    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
+    id: 'Fake Pad',
+  });
+
+  it('the first input of the page sets the hint with no threshold: a touch tap drops the key hint', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    expect(mute(f).textContent, 'a fresh page keeps the shipped keyboard hint').toBe('Mute (M)');
+    pointer(f, 'touch');
+    expect(mute(f).textContent, 'the first input did not take effect immediately').toBe('Mute');
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('a single stray event of another modality does not switch the hint; a sustained one does', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    key(f);
+    expect(mute(f).textContent).toBe('Mute (M)');
+    f.advance(50);
+    pointer(f, 'touch');
+    expect(mute(f).textContent, 'one stray tap rewrote the hint').toBe('Mute (M)');
+    f.advance(MODALITY_SWITCH_MS);
+    pointer(f, 'touch');
+    expect(mute(f).textContent, 'a sustained touch did not take over').toBe('Mute');
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('a gamepad naming its own button takes over from the keyboard, and the mouse is not touch', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    key(f);
+    f.pads.push(pad(13));
+    f.frames.shift()!(0);
+    expect(mute(f).textContent, 'one pad press rewrote the hint').toBe('Mute (M)');
+    f.advance(MODALITY_SWITCH_MS);
+    f.pads[0] = pad();
+    f.frames.shift()!(1);
+    f.pads[0] = pad(13);
+    f.frames.shift()!(2);
+    // Nothing binds a pad button to mute, so the hint is empty rather than a false
+    // instruction; the pad reaches the button through focus like any other control.
+    expect(mute(f).textContent, 'a sustained pad should not name an unbound button').toBe('Mute');
+    // A mouse is `pointer`, not `touch`, and keeps the key hint: clicking says nothing
+    // about whether a keyboard is present, and on the desktop it always is.
+    f.advance(MODALITY_SWITCH_MS * 2);
+    pointer(f, 'mouse');
+    f.advance(MODALITY_SWITCH_MS);
+    pointer(f, 'mouse');
+    expect(mute(f).textContent, 'a mouse should keep the key hint').toBe('Mute (M)');
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('a modality change repaints the hint and nothing else: no surface is re-rendered', () => {
+    // The ruling this pins: Settings never reflows on a modality change. Measured as a
+    // contrast -- the HUD's own setState count must not move while the hint does.
+    const f = fixture({ launchDismissed: true });
+    const before = f.hud.argsOf('setState').length;
+    key(f);
+    f.advance(MODALITY_SWITCH_MS);
+    pointer(f, 'touch');
+    f.advance(MODALITY_SWITCH_MS);
+    pointer(f, 'touch');
+    expect(f.hud.argsOf('setState').length, 'a modality change re-rendered a surface').toBe(before);
   });
 });

@@ -73,6 +73,7 @@ import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
 import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
 import { isDirection, spatialNext, type Direction, type Rect } from './spatial-focus';
+import { keyHint, type Modality } from './modality';
 import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
@@ -170,6 +171,13 @@ export interface Hud {
   setState(s: HudSurface): void;
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
+  /**
+   * The input the player is actually using (issue #496), which decides whether a static
+   * hint names a key, a button, or nothing at all. The page's tracker pushes this; the
+   * HUD only repaints the labels that carry a hint, and never reflows a surface -- so
+   * Settings is unaffected by a modality change, which is the ruling this obeys.
+   */
+  setModality(modality: Modality): void;
   /**
    * Reflect the effective master volume in BOTH sliders.
    *
@@ -3571,12 +3579,29 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // The button is the only indication of mute state, and there is genuinely no
   // music shipped, so "silent" is the normal condition -- without this a muted
   // game and a broken game look identical.
+  /** The last modality the page reported; null until the first input (see `keyHint`). */
+  let currentModality: Modality | null = null;
+  let currentMuted = false;
+
   function setMuted(muted: boolean): void {
+    currentMuted = muted;
+    // `Mute (M)` on a keyboard or mouse, plain `Mute` on touch AND on a pad -- one
+    // policy, in `modality.ts`, so every hint in the HUD answers the same question the
+    // same way. The pad button is null because nothing binds one to mute: `loop.ts` has
+    // M and this button, and a pad reaches the button through focus like any control.
+    // Naming a button here would instruct a player to press something inert.
+    const hint = keyHint(currentModality, 'M', null);
     for (const btn of [muteBtn, panelMuteBtn]) {
       btn.setAttribute('aria-pressed', String(muted));
-      btn.textContent = muted ? 'Muted (M)' : 'Mute (M)';
+      btn.textContent = `${muted ? 'Muted' : 'Mute'}${hint}`;
       btn.classList.toggle('hud-mute--active', muted);
     }
+  }
+
+  function setModality(modality: Modality): void {
+    if (modality === currentModality) return;
+    currentModality = modality;
+    setMuted(currentMuted); // repaint the hints, nothing else: no surface is re-rendered
   }
 
   setMuted(false);
@@ -3695,6 +3720,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     setState,
     setMuted,
+    setModality,
     setVolume,
     setRoundPhase(info: RoundPhaseInfo | null): void {
       if (!info || info.phase === 'live') {
