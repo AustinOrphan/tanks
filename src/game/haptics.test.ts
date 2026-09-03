@@ -386,6 +386,21 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
       'haptic-audio': true,
       ring: false,
       'ring-audio': false,
+      // The arms issue #516 added to the vocabulary but this consumer does not drive
+      // yet: each is false until its own channel implements it, so the table states
+      // today's behaviour rather than an intention.
+      muzzle: false,
+      turret: false,
+      pips: false,
+      hud: false,
+      click: false,
+      clunk: false,
+      'thunk-soft': false,
+      'pitch-empty': false,
+      'haptic-tap': false,
+      'haptic-double': false,
+      'haptic-long': false,
+      'haptic-rise': false,
     };
     expect(Object.keys(carriesHaptic).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldBuzz] of Object.entries(carriesHaptic)) {

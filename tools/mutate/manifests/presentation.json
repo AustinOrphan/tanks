@@ -30,8 +30,8 @@
   {
     "id": "presentation-blocked-fire-cue-set-drops-the-paired-arm",
     "file": "src/presentation/blocked-fire.ts",
-    "find": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic-audio',\n  'ring',\n  'ring-audio',\n]);",
-    "replace": "export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([\n  'haptic',\n  'audio',\n  'haptic-audio',\n  'ring',\n]);",
+    "find": "  'haptic-audio',\n  'ring-audio',\n]);",
+    "replace": "  'haptic-audio',\n]);",
     "tests": [
       "src/audio/director.test.ts",
       "src/render/blocked-fire-ring.test.ts",
@@ -40,13 +40,13 @@
     ],
     "expect": "killed",
     "expectFailures": 4,
-    "why": "BLOCKED_FIRE_CUES moved from game/devflags.ts to presentation/blocked-fire.ts (issue #473) so the audio director and the ring no longer import the flag parser to name a cue. Dropping `ring-audio` from the SET while the TYPE union keeps it is the failure a stale copy would produce: each consumer's one-row-per-cue table still lists five cues and the set now names four. 4 of 147 across director.test.ts, blocked-fire-ring.test.ts, haptics.test.ts and devflags.test.ts: the three `... for EVERY cue carrying <channel>, and for no other -- one row per cue` cases (audio, haptic, ring), one per consumer, which is what proves all three key off the ONE definition, plus devflags.test.ts's paste-every-documented-cue case (issue #497), which now pins the parser's rejection of the dropped member."
+    "why": "BLOCKED_FIRE_CUES lives in presentation/blocked-fire.ts (issue #473) so the audio director and the ring do not import the flag parser to name a cue. Dropping `ring-audio` from the SET while the TYPE union keeps it is the failure a stale copy would produce: each consumer's one-row-per-cue table still enumerates every union member and the set now names one fewer, so the key comparison fails in every consumer at once. Re-anchored for issue #516's matrix, which grew the set from 5 to 17 and moved the paired arms to the end of the list."
   },
   {
     "id": "presentation-blocked-fire-cue-spelled-with-a-plus",
     "file": "src/presentation/blocked-fire.ts",
-    "find": "  'haptic-audio',\n  'ring',\n  'ring-audio',\n]);",
-    "replace": "  'haptic-audio',\n  'ring',\n  'ring+audio',\n]);",
+    "find": "  'ring-audio',\n]);",
+    "replace": "  'ring+audio',\n]);",
     "why": "A registered value carrying a reserved query character is the defect class #497 closed: `URLSearchParams` decodes the `+` to a space, so the documented value cannot be pasted as displayed. The registry-wide query-safety sweep in devflags.test.ts is the case written to fail on ANY such value, not only the one that shipped; the consumers' one-row-per-cue tables fail too because the set and the union no longer agree.",
     "tests": [
       "src/game/devflags.test.ts",
@@ -59,7 +59,7 @@
       "blocked-fire cue (issue #356) sounds for EVERY cue carrying `audio`, and for no other -- one row per cue",
       "blocked-fire cue: the arms are separable (issue #356) vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue",
       "blocked-fire ring (issue #356) draws for EVERY cue carrying `ring`, and for no other -- one row per cue",
-      "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 5 registered values",
+      "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 17 registered values",
       "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) no registered value of ANY valued flag changes meaning under query decoding -- population: every value in the registry",
       "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) the properly encoded legacy spellings stay accepted as aliases of the canonical cue"
     ]
