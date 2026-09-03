@@ -220,7 +220,7 @@ export function parseArgs(argv) {
     // nothing to draw, and 'hud' has no HUD to draw into (see DEFAULTS.blockedFire).
     // 'turret' is absent because issue #526 retired it: gun recoil is unconditional
     // shipped behaviour now, so the blocked-fire moment shows it with no flag at all.
-    const visual = ['ring', 'muzzle', 'pips'];
+    const visual = ['ring', 'muzzle', 'smoke', 'pips'];
     if (!visual.includes(out.blockedFire)) {
       throw new Error(
         `--blocked-fire must be one of ${visual.join('|')}, got '${out.blockedFire}'`,

@@ -62,6 +62,7 @@ describe('blocked-fire capacity pips (issue #516, parent #356)', () => {
       ring: false,
       'ring-audio': false,
       muzzle: false,
+      smoke: false,
       hud: false,
       audio: false,
       click: false,

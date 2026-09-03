@@ -16,6 +16,7 @@ import { createMineDebug, type MineDebug } from './minedebug';
 import { createAiContact, type AiContact } from './ai-contact';
 import { createBlockedFireRingSystem, type BlockedFireRingSystem } from './blocked-fire-ring';
 import { createBlockedFireMuzzleSystem, type BlockedFireMuzzleSystem } from './blocked-fire-muzzle';
+import { createBlockedFireSmokeSystem, type BlockedFireSmokeSystem } from './blocked-fire-smoke';
 import { createBarrelRecoilSystem } from './barrel-recoil';
 import { createBlockedFirePipsSystem, type BlockedFirePipsSystem } from './blocked-fire-pips';
 
@@ -108,11 +109,12 @@ export interface RendererOptions {
   readonly aiContact?: boolean;
   /**
    * `?dev=1&blockedFire=<cue>` (devflags.ts): which of issue #356's candidate refusal
-   * cues to show. Three of the four remaining visual arms are built here --
-   * `ring`/`ring-audio` (blocked-fire-ring.ts), `muzzle` (blocked-fire-muzzle.ts) and
-   * `pips` (blocked-fire-pips.ts); the fourth, `hud`, is a DOM surface and lives in
-   * game/blocked-fire-hud.ts. The arm that WON, gun recoil, is not among them: issue
-   * #526 made it unconditional (barrel-recoil.ts below), so it is not a cue any more.
+   * cues to show. Four of the five remaining visual arms are built here --
+   * `ring`/`ring-audio` (blocked-fire-ring.ts), `muzzle` (blocked-fire-muzzle.ts),
+   * `smoke` (blocked-fire-smoke.ts) and `pips` (blocked-fire-pips.ts); the fifth, `hud`,
+   * is a DOM surface and lives in game/blocked-fire-hud.ts. The arm that WON, gun recoil,
+   * is not among them: issue #526 made it unconditional (barrel-recoil.ts below), so it
+   * is not a cue any more.
    * Null/absent draws nothing, and
    * each system re-checks the cue in its own `spawn` -- these constructor gates only
    * decide whether the scene objects exist at all.
@@ -156,6 +158,8 @@ export function createRenderer(
   // cheapest possible "off", and the comparison is between one arm at a time.
   const blockedFireMuzzle: BlockedFireMuzzleSystem | null =
     options.blockedFire === 'muzzle' ? createBlockedFireMuzzleSystem(ctx.scene) : null;
+  const blockedFireSmoke: BlockedFireSmokeSystem | null =
+    options.blockedFire === 'smoke' ? createBlockedFireSmokeSystem(ctx.scene) : null;
   // NOT gated on a cue, unlike every system around it: the gun kicks whenever it cycles,
   // on a shot and on a refusal alike (issue #526). `entities`, not the scene, because it
   // moves the REAL barrel and looks it up per frame through EntityViews.barrelOf.
@@ -186,10 +190,13 @@ export function createRenderer(
     blockedFireRing?.update(dt);
     blockedFireMuzzle?.spawn(events, curr, options.blockedFire);
     blockedFireMuzzle?.update(dt);
+    blockedFireSmoke?.spawn(events, curr, options.blockedFire);
+    blockedFireSmoke?.update(dt);
     // After entities.sync, though no longer load-bearing the way it was when this moved
     // the turret GROUP: sync writes `turret.rotation.y` every frame and never touches the
     // barrel's own position, which entities.ts sets once at construction. Kept in place
-    // beside the muzzle flash because the two dress the same shot.
+    // beside the two weapon-local arms because all three dress the same shot: the kick,
+    // and whatever the gun did or did not produce with it.
     barrelRecoil.spawn(events, curr);
     barrelRecoil.update(dt);
     // `curr` in update too: the pip strip follows its tank for the half-second it lives.
@@ -247,6 +254,7 @@ export function createRenderer(
     aiContact?.dispose();
     blockedFireRing?.dispose();
     blockedFireMuzzle?.dispose();
+    blockedFireSmoke?.dispose();
     barrelRecoil.dispose();
     blockedFirePips?.dispose();
     entities.dispose();
@@ -270,6 +278,7 @@ export function createRenderer(
       deathPulse.setReducedMotion(on);
       blockedFireRing?.setReducedMotion(on);
       blockedFireMuzzle?.setReducedMotion(on);
+      blockedFireSmoke?.setReducedMotion(on);
       barrelRecoil.setReducedMotion(on);
       blockedFirePips?.setReducedMotion(on);
     },

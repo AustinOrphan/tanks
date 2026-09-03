@@ -3,7 +3,7 @@
  * semantic signal with consumers in three layers -- `game/haptics.ts` (buzz),
  * `audio/director.ts` (click), `game/blocked-fire-hud.ts` (the transient capacity line),
  * and, under `render/`, `blocked-fire-ring.ts`, `blocked-fire-muzzle.ts`,
- * `blocked-fire-pips.ts` and `renderer.ts`'s construction gate
+ * `blocked-fire-smoke.ts`, `blocked-fire-pips.ts` and `renderer.ts`'s construction gate
  * -- chosen by the application (`game/devflags.ts` parses `?blockedFire=`) and
  * implemented by each projection for the arms that name its channel. Issue #473 moved
  * the vocabulary here from `game/devflags.ts` so the audio director and the renderer no
@@ -23,11 +23,14 @@
  *
  * The visual channel's other arms (issue #516) are built and each has its own artefact:
  * `muzzle` a flash at the barrel opening cut short of a real discharge
- * (render/blocked-fire-muzzle.ts), `pips` a capacity strip on the felt beside the tank
+ * (render/blocked-fire-muzzle.ts), `smoke` a grey puff drifting off that same barrel
+ * (render/blocked-fire-smoke.ts), `pips` a capacity strip on the felt beside the tank
  * (render/blocked-fire-pips.ts), and `hud` a transient capacity line off the arena
  * (game/blocked-fire-hud.ts, painted by hud.ts's signalShellCapacity). Deliberately
  * different pictures rather than sizes of one: #356 rules by comparison, and arms that
- * differ only in degree would produce no ruling.
+ * differ only in degree would produce no ruling. `muzzle` and `smoke` are the closest
+ * pair in that set and still not a pair of sizes -- one is additive yellow light that
+ * collapses in 0.07s, the other a normally-blended grey cloud that expands for 0.75s.
  *
  * A FIFTH ARM, `turret`, IS GONE -- and it is the one that won. The owner ranked its gun
  * recoil first and ruled it should play on every shot, not only on a refusal, so issue
@@ -51,13 +54,13 @@
  * own gate then went un-asserted for the paired cue (measured: narrowing it to
  * `cue !== 'ring'` left all 8 of that file's tests green).
  *
- * Seven of the eight consumers now key a table off this set -- director.test.ts (`audio`),
+ * Seven of the eight consumers key a table off this set -- director.test.ts (`audio`),
  * haptics.test.ts (`haptic`), and one per visual arm in blocked-fire-ring.test.ts,
- * blocked-fire-muzzle.test.ts, blocked-fire-pips.test.ts and
+ * blocked-fire-muzzle.test.ts, blocked-fire-smoke.test.ts, blocked-fire-pips.test.ts and
  * blocked-fire-hud.test.ts -- so a new cue fails all seven until its channels are stated.
  * The eighth, renderer.ts's construction gate, is not among them: it has no sibling Vitest
  * file by policy (.claude/rules/rendering.md) and is reached only through the GL harness,
- * which exercises the three remaining arena arms against each other but not the whole
+ * which measures the four selectable arena arms against each other but not the whole
  * cue set.
  */
 /**
@@ -73,6 +76,7 @@ export type BlockedFireCue =
   // Visual, tank- or weapon-local (issue #516's comparison matrix).
   | 'ring'
   | 'muzzle'
+  | 'smoke'
   | 'pips'
   | 'hud'
   // Audio.
@@ -95,6 +99,7 @@ export type BlockedFireCue =
 export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([
   'ring',
   'muzzle',
+  'smoke',
   'pips',
   'hud',
   'audio',
@@ -125,6 +130,7 @@ export type BlockedFireChannel = 'visual' | 'audio' | 'haptic';
 const CHANNELS: Readonly<Record<BlockedFireCue, readonly BlockedFireChannel[]>> = {
   ring: ['visual'],
   muzzle: ['visual'],
+  smoke: ['visual'],
   pips: ['visual'],
   hud: ['visual'],
   audio: ['audio'],
