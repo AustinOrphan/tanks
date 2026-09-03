@@ -1510,6 +1510,11 @@ describe('readManifestFiles / readManifest', () => {
       writeFileSync(join(dir, 'sim.json'), JSON.stringify([{ id: 's1' }]));
       writeFileSync(join(dir, 'app.json'), JSON.stringify([{ id: 'a1' }, { id: 'a2' }]));
       writeFileSync(join(dir, 'notes.md'), '# not a manifest');
+      writeFileSync(join(dir, 'object.json'), JSON.stringify({ id: 'not-an-array' }));
+      // Named, not a TypeError from some later `.map`: every reader comes through here,
+      // including migrate-killed-by.mjs, which rewrites each file and never merges.
+      expect(() => readManifestFiles(dir)).toThrow(/manifest .*object\.json: must be a JSON array/);
+      rmSync(join(dir, 'object.json'));
       expect(readManifestFiles(dir).map((f) => [f.path.split('/').pop(), f.entries.length])).toEqual([['app.json', 2], ['sim.json', 1]]);
       expect(readManifest(dir).map((x) => x.id)).toEqual(['a1', 'a2', 's1']);
       expect(readManifest(join(dir, 'sim.json')).map((x) => x.id), 'a single file').toEqual(['s1']);

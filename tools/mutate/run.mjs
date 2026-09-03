@@ -273,7 +273,15 @@ export function resolveManifestPath(root, manifestArg) {
  * @param {string} path @returns {{ path: string, entries: any[] }[]}
  */
 export function readManifestFiles(path) {
-  const parse = (/** @type {string} */ file) => ({ path: file, entries: JSON.parse(readFileSync(file, 'utf8')) });
+  // The array check lives HERE, not only in `mergeManifestFiles`: every reader goes
+  // through this function, including `migrate-killed-by.mjs`, which rewrites each file
+  // in place and never merges. Without it a non-array file reaches that script's
+  // `entries.map` as an unnamed TypeError instead of naming the broken file.
+  const parse = (/** @type {string} */ file) => {
+    const entries = JSON.parse(readFileSync(file, 'utf8'));
+    if (!Array.isArray(entries)) throw new Error(`manifest ${file}: must be a JSON array of entries`);
+    return { path: file, entries };
+  };
   if (!statSync(path).isDirectory()) return [parse(path)];
   const names = readdirSync(path).filter((n) => n.endsWith('.json')).sort();
   if (names.length === 0) throw new Error(`manifest directory ${path} holds no *.json file`);
