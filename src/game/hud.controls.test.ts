@@ -27,19 +27,28 @@ const volumeSlider = (root: HTMLElement): HTMLInputElement =>
   root.querySelector('.hud-settings-volume') as HTMLInputElement;
 
 describe('createHud volume control', () => {
-  it('shows the volume the audio engine actually boots at', () => {
+  it('bakes NO level into the markup -- the page is the only source (issue #324)', () => {
     const { root } = mount();
 
-    // Not a literal: the slider and the engine must read the same constant, or
-    // the displayed level is a guess that happens to be wrong.
-    expect(Number(volumeSlider(root).value)).toBe(DEFAULT_VOLUME);
+    // The markup carried `value="${DEFAULT_VOLUME}"` until issue #324, so that a slider
+    // nobody had pushed to still agreed with the engine. Since issue #320 the level is a
+    // persisted SETTING, which made that default a guess: a returning player who chose
+    // 0.2 saw 0.6 until the first push landed, and the control lied about the state it
+    // controls for exactly as long as that took.
+    //
+    // Removing it also takes `hud.ts`'s last import from the audio layer, which is why
+    // the dependency allowlist no longer lists this file (dependency-direction.test.ts).
+    // The engine-agreement property did not disappear, it moved: `settings.ts` resolves
+    // an unset preference to DEFAULT_VOLUME (settings.test.ts pins the constant), and
+    // `route-host.ts` pushes the resolved value in the same synchronous call that builds
+    // this DOM -- so no frame can render between the two.
+    expect(volumeSlider(root).hasAttribute('value')).toBe(false);
   });
 
   it('setVolume shows the persisted level, and there is exactly ONE slider to show it on', () => {
-    // The markup renders at DEFAULT_VOLUME, which was the truth while volume was a
-    // session-local field on the audio engine. Since issue #320 it is persisted, and
-    // the page pushes the stored value through here at boot -- so a returning player who
-    // set 0.2 must not see 0.6.
+    // The page pushes the stored value through here at boot -- so a returning player who
+    // set 0.2 must not see 0.6. Since issue #324 that push is the ONLY thing that ever
+    // gives this slider a level; the markup no longer carries one (see above).
     //
     // The count is the other half, and it is what issue #226 made assertable: while the
     // topbar carried a twin, "setVolume moves BOTH sliders" was a real obligation and
@@ -52,10 +61,12 @@ describe('createHud volume control', () => {
   });
 
   it('keeps DEFAULT_VOLUME on the step grid the browser will snap to', () => {
-    // Real browsers sanitize <input type="range"> onto the `step` grid; jsdom
-    // does not. A DEFAULT_VOLUME of, say, 1/3 would leave the test above green
-    // while the real HUD displayed 0.33 and the engine ran at 0.3333... --
-    // the same lie, just below this test's resolution.
+    // Real browsers sanitize <input type="range"> onto the `step` grid; jsdom does not.
+    // Still load-bearing after issue #324 removed the markup default, because the value
+    // the page pushes is the resolved SETTING, which is DEFAULT_VOLUME whenever the player
+    // has never chosen one -- so an off-grid default would be snapped on arrival, and the
+    // real HUD would display 0.33 while the engine ran at 0.3333..., a lie below the
+    // resolution of every other test here.
     const { root } = mount();
     const step = Number(volumeSlider(root).step);
 

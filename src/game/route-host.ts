@@ -477,19 +477,34 @@ export function createRouteHost(
    * accepted rather than from the click.
    */
   const paintSettingsControls = (): void => {
-    // ONLY WHILE THE HOST IS EMPTY. A live session pushes the same five values from its
-    // own subscription to the same handle (`loop.ts`'s `applySettings`, which also
-    // reaches the audio engine), so painting here as well would repaint the HUD twice for
-    // every preference change -- redundant rather than wrong, and the kind of redundancy
-    // that later reads as two owners. The page's copy exists for the arrivals no session
-    // sees, which is exactly the split `paintContinue` above already draws.
-    if (live !== null) return;
+    // UNCONDITIONALLY, session or not (issue #324). This used to return early while a
+    // session was live, because `loop.ts` pushed the same values from its own
+    // subscription and painting in both places would have meant two owners. #324 settled
+    // which one: Settings is an application route, so the page paints it and the session
+    // no longer touches the HUD's settings controls at all. The early return would now
+    // leave the controls unpainted for as long as a match lasts.
     const effective = deps.effectiveSettings.current();
     hud.setMuted(effective.muted);
     hud.setVolume(effective.volume);
     hud.setTouchScheme(effective.touchScheme);
     hud.setFireMode(effective.fireMode);
-    hud.setHaptics(effective.deviceHaptics);
+    // THE STORED PREFERENCE, not the effective one, and this is the only asymmetry in the
+    // function. `haptics.setEnabled` (loop.ts) takes the effective value so a device with
+    // no `navigator.vibrate` stays silent whatever the switch says -- but this toggle
+    // EDITS the preference, and showing it forced off would look like a dead control and
+    // suggest the preference had been erased, which issue #320 forbids. Hiding it where
+    // it cannot apply is issue #227's work.
+    //
+    // It read `effective.deviceHaptics` while this block only ran on a session-less page
+    // (issue #485), where it was a latent bug rather than a visible one: a supported
+    // device reads the same either way, and an unsupported one had no session to correct
+    // it. Making this the ONLY writer would have shipped that reading everywhere.
+    hud.setHaptics(deps.settings.snapshot().input.deviceHaptics);
+    // The resolved motion policy, so an application transition becomes instant the moment
+    // the preference changes with the menu already open (issue #364, criterion 5). The
+    // gameplay renderer gets the same value from the session's own subscription
+    // (issue #289); this is the frame's half, and the frame is the page's.
+    hud.setReducedMotion(effective.reducedMotion);
   };
   paintSettingsControls();
   const stopPaintingSettings = deps.effectiveSettings.subscribe(paintSettingsControls);

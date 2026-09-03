@@ -100,9 +100,10 @@ const MAY_IMPORT: Readonly<Record<Layer, ReadonlySet<Layer>>> = {
  *   not player-facing semantics; if either becomes a Setting, its NAMES move to
  *   presentation/ and this entry goes.
  * - `app-shell.ts` builds the page-scoped audio engine from the manifest (issue #317).
- * - `settings.ts` and `hud.ts` read the audio manifest's DEFAULT_VOLUME -- the engine's
- *   default, not shared vocabulary. Issue #324 moves the HUD slider into Settings and
- *   takes the `hud.ts` entry with it.
+ * - `settings.ts` reads the audio manifest's DEFAULT_VOLUME -- the engine's
+ *   default, not shared vocabulary. `hud.ts` was listed here for the same import until
+ *   issue #324: its Settings slider no longer renders a default value at all, so there is
+ *   nothing for it to read.
  *
  * A game TEST file may import any module that SOME entry here lists -- a test of wiring
  * necessarily names what is wired (`loop.test.ts` reads QUALITY_PRESETS to check the
@@ -124,7 +125,6 @@ const GAME_WIRING: Readonly<Record<string, readonly string[]>> = {
   './game/devflags.ts': ['render/quality', 'render/mine-warning'],
   './game/app-shell.ts': ['audio/engine', 'audio/manifest'],
   './game/settings.ts': ['audio/manifest'],
-  './game/hud.ts': ['audio/manifest'],
 };
 
 /** Every module some wiring entry lists: what a game test may reach in render/ or audio/. */
@@ -465,8 +465,8 @@ describe('dependency direction across src/ layers', () => {
 
   it('every GAME_WIRING entry names a real file and an import that file actually makes', () => {
     // An allowlist entry nothing uses is a permission waiting to be picked up by the
-    // next edit. When a wiring import goes (issue #324 takes hud.ts's DEFAULT_VOLUME),
-    // its entry goes with it.
+    // next edit. When a wiring import goes, its entry goes with it -- as `hud.ts`'s did
+    // when issue #324 removed its DEFAULT_VOLUME read.
     for (const [path, targets] of Object.entries(GAME_WIRING)) {
       expect(path in rawModules, `GAME_WIRING lists ${path}, which does not exist`).toBe(true);
       const imported = new Set(
@@ -541,11 +541,16 @@ const FORBIDDEN_FIXTURES: Fixture[] = [
     pair: ['audio', 'game'],
   },
   {
-    // The shape #473 removed on the other side: the HUD learning a colour from a
-    // Three.js module. hud.ts IS in GAME_WIRING (for audio/manifest), so this also
-    // pins that the allowlist is per target module, not per file.
-    rule: 'game -> render from a non-wiring import (the pre-#473 hud.ts identity import)',
-    path: './game/hud.ts',
+    // The shape #473 removed on the other side: an application module learning a colour
+    // from a Three.js module. route-ui.ts IS in GAME_WIRING (for render/preview), so this
+    // also pins that the allowlist is per target module, not per file -- a listed file
+    // may still not reach a module its entry does not name.
+    //
+    // This fixture used hud.ts until issue #324 removed that file's last audio import and
+    // with it its wiring entry; hud.ts is no longer listed at all, so it could no longer
+    // carry the per-target-module half of the claim.
+    rule: 'game -> render from a non-wiring import (the pre-#473 identity import)',
+    path: './game/route-ui.ts',
     src: `import { IDENTITY_RING_COLORS } from '../render/entities';\nexport const x = IDENTITY_RING_COLORS;\n`,
     expect: 'not a listed wiring import',
     pair: ['game', 'render'],

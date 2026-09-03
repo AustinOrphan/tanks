@@ -98,7 +98,6 @@ import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntr
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
-import { DEFAULT_VOLUME } from '../audio/manifest';
 import { VERSUS_STOCK } from '../sim/constants';
 import { configFor } from '../sim/config';
 import { versusMapChoices, type VersusConfig } from './versus-config';
@@ -238,11 +237,13 @@ export interface Hud {
   /**
    * Reflect the effective master volume in BOTH sliders.
    *
-   * The markup renders them at `DEFAULT_VOLUME`, which was the truth while volume was a
-   * session-local field on the audio engine. Since issue #320 it is a persisted setting,
-   * so a returning player's slider would sit at 0.6 while the game played at whatever
-   * they last chose -- the control lying about the state it controls. loop.ts pushes the
-   * accepted stored value through here at boot, and again whenever it changes.
+   * The markup carries NO `value` (issue #324), so the slider has nothing to say until
+   * this is called. It used to render at `DEFAULT_VOLUME`, which was the truth while
+   * volume was a session-local field on the audio engine; since issue #320 it is a
+   * persisted setting, so that default was a control lying about the state it controls
+   * for as long as it took the first push to arrive. Removing it also takes `hud.ts`'s
+   * last import from the audio layer, which is why the dependency allowlist no longer
+   * lists this file. `route-host.ts` paints the stored value the moment the HUD exists.
    */
   setVolume(v: number): void;
   /**
@@ -681,6 +682,103 @@ export interface Hud {
   act(action: UiAction): boolean;
   dispose(): void;
 }
+
+/**
+ * WHO OWNS EACH MEMBER of `Hud` (issue #324).
+ *
+ * `Hud` is one interface with 67 members spanning two different lifetimes: the persistent
+ * application shell, which exists before any match and outlives every match, and a single
+ * gameplay session, which does not. Issue #468 separated those OWNERS in the code
+ * (`route-host.ts` renders application routes with no session at all); this separates them
+ * in the CONTRACT, so a session can no longer reach the Main Menu's level list or the
+ * Settings sliders just because they happen to hang off the same object.
+ *
+ * Declared as `Pick`s of the one interface rather than by splitting the interface into
+ * three physical declarations. That is deliberate on two counts. The member docs stay
+ * where they are, beside the member, instead of being scattered across three blocks by a
+ * 540-line move that no reviewer could read. And every mutation-manifest `find` string
+ * anchored in those lines keeps working, so the coverage contract survives a change that
+ * alters no behaviour at all.
+ *
+ * These say who SHOULD own each member. `loop.ts` today still calls a number of
+ * `RouteHudKey` members directly -- that gap is the remaining work of #324, and it is
+ * pinned as an explicit, shrinking list in `hud-ownership.test.ts` so each step of the
+ * migration deletes a line from it rather than quietly moving the goalposts.
+ */
+export type HudFrameKey =
+  // Page chrome and dispatch. The frame is what the shell paints around whatever is
+  // showing; none of it belongs to any one route, and none of it to a session.
+  | 'setState'
+  | 'setModality'
+  | 'setBackdrop'
+  | 'setReducedMotion'
+  | 'back'
+  | 'act'
+  | 'dispose'
+  // The toast stack. The frame owns the element; a session is LENT the writer -- see
+  // `GameplayHudKey`, the one member deliberately in two roles.
+  | 'showToast';
+
+/**
+ * Application-route surfaces: Main Menu, Level Select, Records, Customize, Controllers,
+ * Versus Setup and Settings. Owned by `route-host.ts` and `route-ui.ts`.
+ *
+ * The seven gameplay-FACING callbacks (`onStartRestart`, `onQuitToTitle`, `onPauseTap`,
+ * `onMineTap`, `onFireTap`, `onMuteToggle`, `onVolumeChange`) are here rather than in
+ * `GameplayHudKey` because ownership is about who REGISTERS them, not about what they
+ * eventually do: `route-host.ts` registers each exactly once, as a trampoline into
+ * whatever session is live. A session never touches them, and must not, or a handler
+ * would outlive the session that installed it.
+ */
+export type RouteHudKey =
+  | 'setLevelSelect' | 'onLevelSelect' | 'setContinueAvailable' | 'setCampaignRun'
+  | 'onNewGame' | 'onCampaignOpen'
+  | 'setMuted' | 'setVolume' | 'onMuteToggle' | 'onVolumeChange'
+  | 'onStartRestart' | 'onQuitToTitle' | 'onPauseTap' | 'onMineTap' | 'onFireTap'
+  | 'setStats' | 'onResetStats' | 'onResetProgress' | 'setAchievements'
+  | 'setHullColor' | 'onPickHullColor' | 'setSkin' | 'onPickSkin'
+  | 'setAccentColor' | 'onPickAccentColor'
+  | 'previewCanvas' | 'previewRotateButtons' | 'onCustomizeOpen' | 'onCustomizeClose'
+  | 'setTouchScheme' | 'onTouchSchemeChange' | 'setFireMode' | 'onFireModeChange'
+  | 'setHaptics' | 'onHapticsChange'
+  | 'onReassignSlot' | 'setControllers' | 'setDetectedPads' | 'setBotAssignmentAllowed'
+  | 'onControllersOpen' | 'onControllersClose'
+  | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
+  | 'setRelaunchTarget';
+
+/**
+ * What a live match may write, and the ONLY part of `Hud` a gameplay session should ever
+ * hold. Fourteen members plus the lent `showToast`.
+ *
+ * Several of these are the per-kind status members issue #324 goes on to absorb into one
+ * projection (`setLives`/`setEnemiesRemaining`/`setLevel`/`setSessionKind` and the versus
+ * trio): they are gameplay-owned today and stay gameplay-owned after, so they are
+ * classified here rather than being left unclassified pending that work.
+ */
+export type GameplayHudKey =
+  | 'setLives' | 'setEnemiesRemaining' | 'setLevel' | 'setSessionKind'
+  | 'setCoopKills' | 'setVersusResults' | 'setVersusStocks'
+  | 'setRoundPhase' | 'setShellCount' | 'signalShellCapacity'
+  | 'signalPlayerDeath' | 'signalPlayerFire' | 'setTouchIndicator'
+  | 'showAchievementToasts'
+  // Lent from the frame, which owns the stack itself. A session needs it for the gamepad
+  // connect/disconnect edges, which are neither route changes nor gameplay events but do
+  // happen mid-match and have nowhere else to report.
+  | 'showToast';
+
+export type HudFrame = Pick<Hud, HudFrameKey>;
+export type RouteHud = Pick<Hud, RouteHudKey>;
+export type GameplayHud = Pick<Hud, GameplayHudKey>;
+
+/**
+ * Every member of `Hud` is classified above. A member added without a role makes this
+ * union non-`never` and the assignment below stops compiling -- which is the point: the
+ * failure mode this guards against is not a wrong classification but an UNCLASSIFIED one,
+ * silently reachable from everywhere, which is how the interface reached 67 members.
+ */
+type UnclassifiedHudKey = Exclude<keyof Hud, HudFrameKey | RouteHudKey | GameplayHudKey>;
+const _everyHudMemberHasAnOwner: UnclassifiedHudKey extends never ? true : never = true;
+void _everyHudMemberHasAnOwner;
 
 /** How long an unlock toast sits on screen. Feel, not measurement. */
 const TOAST_MS = 3200;
@@ -1167,7 +1265,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
                user's last position while a freshly-built engine boots at DEFAULT_VOLUME,
                and no 'input' event fires to reconcile them -- reopening the exact
                "slider is lying" bug the retired topbar slider was fixed for. -->
-          <input class="hud-settings-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" aria-label="Volume" />
+          <input class="hud-settings-volume" type="range" min="0" max="1" step="0.01" autocomplete="off" aria-label="Volume" />
         </div>
       </section>
       <section class="hud-settings-section" data-section="controls" aria-labelledby="hud-settings-controls-h">

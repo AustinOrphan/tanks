@@ -672,6 +672,46 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     expect(f.hud.argsOf('setVolume').at(-1)).toEqual([0.75]);
   });
 
+  it('paints the STORED haptics preference, not the effective one', () => {
+    // The one asymmetry in `paintSettingsControls`, and the only place stored and
+    // effective can disagree on this page: the fixture runs under NO_CAPABILITIES, so
+    // `deviceVibration` is false and the EFFECTIVE value is false however the store reads.
+    //
+    // The toggle EDITS the preference. Painting it from the effective value shows a switch
+    // forced off on any device without vibration, which reads as the preference having
+    // been erased -- what issue #320 forbids, and what `loop.ts` was careful about while
+    // it owned this push. The page read `effective.deviceHaptics` while it only ran on a
+    // session-less page (issue #485); issue #324 made it the ONLY writer, which would have
+    // shipped that reading everywhere.
+    const f = fixture({ seed: (stores) => stores.settings.setDeviceHaptics(true) });
+    expect(f.host.hasSession()).toBe(false);
+    expect(
+      f.stores.settings.snapshot().input.deviceHaptics,
+      'the stored preference is what the toggle edits',
+    ).toBe(true);
+    expect(f.hud.argsOf('setHaptics').at(-1), 'the switch must not read as erased').toEqual([
+      true,
+    ]);
+  });
+
+  it('keeps painting settings while a session holds the slot', () => {
+    // The early return this replaced (`if (live !== null) return;`) existed because
+    // `loop.ts` pushed the same values from its own subscription, so two owners would
+    // have painted the same control. Issue #324 removed the session's push, which makes
+    // the early return a hole rather than a courtesy: Settings is reachable DURING a
+    // match, and a preference changed there would not redraw for as long as the match
+    // lasted.
+    const f = fixture({ seed: (stores) => stores.settings.setVolume(0.25) });
+    fillSlot(f.host);
+    expect(f.host.hasSession(), 'this test is about the live case').toBe(true);
+    const before = f.hud.argsOf('setVolume').length;
+    f.stores.settings.setVolume(0.8);
+    expect(f.hud.argsOf('setVolume').length, 'the page repainted with a session live').toBe(
+      before + 1,
+    );
+    expect(f.hud.argsOf('setVolume').at(-1)).toEqual([0.8]);
+  });
+
   it('claims M for the page and reports the result, on a page with no session', () => {
     // The mute shortcut moved off the session's key handler with issue #226: the topbar
     // chip that used to show mute state on every surface is gone, so a session-scoped M

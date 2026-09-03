@@ -1829,12 +1829,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 104,
+    "expectFailures": 101,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered. expectFailures moved 104 -> 101 when issue #324 removed the session's duplicate settings pushes: three loop.test.ts assertions that counted a page push AND a session push now count one, so they no longer fail on a slot that was never filled."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -3404,23 +3404,6 @@
     ]
   },
   {
-    "id": "route-host-repaints-settings-behind-a-live-session",
-    "file": "src/game/route-host.ts",
-    "find": "    if (live !== null) return;",
-    "replace": "    if (live !== null) void 0;",
-    "expect": "killed",
-    "tests": [
-      "src/game/loop.test.ts"
-    ],
-    "why": "The page's settings paint exists for the arrivals no session sees. A live session pushes the same five values from its own subscription to the same HUD (`loop.ts`'s `applySettings`), so without the guard every preference change repaints twice -- redundant rather than wrong, and the shape that later reads as two owners for one control. Counted by loop.test.ts's mute and volume push arrays, which is the only place the duplicate is visible at all.",
-    "killedBy": [
-      "startGameWith: HUD wiring routes the mute button through the STORE, to the engine, and back to the button",
-      "startGameWith: HUD wiring routes the volume slider through the STORE and on to the engine",
-      "startGameWith: leaving the title screen still mutes on M once the game is past the title screen",
-      "startGameWith: listeners and teardown toggles mute on M through the PAGE listener, not this session (issue #226)"
-    ]
-  },
-  {
     "id": "confirm-not-announced-as-modal",
     "file": "src/game/hud.ts",
     "find": "role=\"alertdialog\" aria-modal=\"true\"",
@@ -3502,6 +3485,50 @@
     "why": "Drops the remove-and-reflow, so re-adding a class the element already carries does NOT restart the CSS animation. The second refusal inside the animation window would then be invisible -- and against a full cap with a held trigger, refusals arrive in a row, which is exactly when the player most needs telling. Same mechanism and same failure mode as signalPlayerDeath's replay, pinned the same way.",
     "killedBy": [
       "hud: blocked-fire capacity flash (issue #516, parent #356) replays for a second refusal, so two refusals read as two"
+    ]
+  },
+  {
+    "id": "route-host-settings-paint-skips-a-live-session",
+    "file": "src/game/route-host.ts",
+    "find": "    const effective = deps.effectiveSettings.current();\n    hud.setMuted(effective.muted);",
+    "replace": "    if (live !== null) return;\n    const effective = deps.effectiveSettings.current();\n    hud.setMuted(effective.muted);",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Restores the early return this block carried until issue #324, when `loop.ts` pushed the same values from its own subscription and painting in both places meant two owners. #324 removed the session's push, which turns the guard from a courtesy into a hole: Settings is reachable DURING a match, so a preference changed there would not redraw for as long as the match lasted. The exact line a reader following the file's history would put back.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot"
+    ]
+  },
+  {
+    "id": "route-host-haptics-toggle-reads-the-effective-value",
+    "file": "src/game/route-host.ts",
+    "find": "    hud.setHaptics(deps.settings.snapshot().input.deviceHaptics);",
+    "replace": "    hud.setHaptics(effective.deviceHaptics);",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Reads the effective value for a control that EDITS the stored preference -- the one asymmetry in this function, and the tempting edit, since every other line beside it reads `effective`. On a device without vibration the switch then shows forced-off, which reads as the preference having been erased: what issue #320 forbids. This was the code until #324, harmless only because the block ran on session-less pages where `loop.ts` corrected it; making the page the sole writer would have shipped it everywhere.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED haptics preference, not the effective one"
+    ]
+  },
+  {
+    "id": "session-pushes-settings-display-to-the-hud",
+    "file": "src/game/loop.ts",
+    "find": "    renderer.setReducedMotion(effective.reducedMotion);",
+    "replace": "    hud.setMuted(effective.muted);\n    renderer.setReducedMotion(effective.reducedMotion);",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/hud-ownership.test.ts"
+    ],
+    "why": "Puts back ONE of the six HUD pushes issue #324 removed from `applySettings`. This is the regression the whole ownership boundary exists to stop, and it is worth pinning because it is invisible by inspection -- a second writer of a control looks like ordinary wiring next to the runtime pushes around it. Two independent nets catch it: loop.test.ts counts the boot pushes, and hud-ownership.test.ts reports `setMuted` as a session reaching an application route, which is what proves that guard is not decorative.",
+    "killedBy": [
+      "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
+      "startGameWith: HUD wiring routes the mute button through the STORE, to the engine, and back to the button"
     ]
   }
 ]
