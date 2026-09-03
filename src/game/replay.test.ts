@@ -337,7 +337,32 @@ describe('replayMetaFor', () => {
     });
   });
 
-  it('round-trips mode and friendlyFire through createWorldFor, at schema 3 -- enemies stay stripped on the rebuilt world too', () => {
+  it('reads aiTargetPerception off the world too, when the line-of-sight bound was requested (issue #492)', () => {
+    // The seventh rule on World.rules, and the one this meta used to omit entirely: a
+    // trace recorded under `?dev=1&aiPerception=los` stamped nothing about the bound,
+    // so playback rebuilt at the shipped 'full' while the fingerprint still reported a
+    // match. Every field is asserted, so a rule the meta stops reading is caught here
+    // whichever of the seven it is.
+    const world = createWorldFor(
+      ARENAS[0], 13, 'none', 3, undefined, undefined, 1, undefined,
+      undefined, undefined, undefined, undefined, 'line-of-sight',
+    );
+    expect(replayMetaFor(world, 'arena-01')).toEqual({
+      arenaId: 'arena-01',
+      seed: 13,
+      lives: 3,
+      unarmedTrigger: 'none',
+      invincible: false,
+      corpseBlocksShells: false,
+      muzzleClearsTanks: true,
+      coopAttempts: true,
+      mode: 'campaign-coop',
+      friendlyFire: false,
+      aiTargetPerception: 'line-of-sight',
+    });
+  });
+
+  it('round-trips mode and friendlyFire through createWorldFor -- enemies stay stripped on the rebuilt world too', () => {
     const recorded = createWorldFor(ARENAS[0], 12, 'none', 3, undefined, undefined, 4, undefined, 'ffa', undefined);
     const meta = replayMetaFor(recorded, 'arena-01');
     expect(meta.mode).toBe('ffa');
@@ -497,6 +522,52 @@ describe('replayTrace', () => {
     const replayedSwapped = replayTrace(swapped, worldFor(meta, 2));
     expect(cloneWorld(replayedSwapped.world)).not.toEqual(cloneWorld(live));
   });
+
+  it('round-trips the AI perception rule, and a rebuild at the shipped default fights DIFFERENT opponents (issue #492)', () => {
+    // The rule the meta used to omit, proven end to end rather than field by field:
+    // record under the line-of-sight bound, rebuild from the meta alone, and the
+    // replay must reproduce the recorded run -- while the rebuild the omission
+    // actually produced ('full', the shipped default) must not.
+    //
+    // arena-02 is the discriminating board. Measured at world seed 12345, input seed
+    // 2024 and COUNTDOWN_TICKS + 240 ticks, the four enemies' committed targets come
+    // out [null, 5, 5, null] under the bound and [5, 5, 5, 5] without it: two of them
+    // are fighting nobody in the recorded run and all four are fighting the player in
+    // the rebuild the defect produced. arena-01 would prove nothing here -- its three
+    // enemies commit to the player under both rules (measured over the same seeds at
+    // COUNTDOWN_TICKS + 120, + 240 and + 480).
+    const recorded = createWorldFor(
+      arenaById('arena-02'), 12345, 'none', 3, undefined, undefined, 1, undefined,
+      undefined, undefined, undefined, undefined, 'line-of-sight',
+    );
+    const meta = replayMetaFor(recorded, 'arena-02');
+    expect(meta.aiTargetPerception).toBe('line-of-sight');
+    expect(worldFor(meta).rules.aiTargetPerception).toBe('line-of-sight');
+
+    const rec = createRecordingInput(scriptedInputs(2024), meta);
+    let live = worldFor(meta);
+    const TICKS = COUNTDOWN_TICKS + 240;
+    for (let i = 0; i < TICKS; i++) live = stepInputs(live, rec.sample()).world;
+
+    const trace = rec.trace();
+    const replayed = replayTrace(trace, worldFor(meta));
+    expect(cloneWorld(replayed.world)).toEqual(cloneWorld(live));
+
+    // The divergence-sensitive outcome, and the negative control for the equality
+    // above: the SAME trace replayed into a world rebuilt at 'full'. Compared on the
+    // AI's own committed targets rather than on the whole world, because `rules` is
+    // itself part of the world and would differ trivially.
+    const committed = (w: World) =>
+      w.tanks.filter((t) => t.kind !== 'player').map((t) => t.aiTargetId ?? null);
+    const unbounded = replayTrace(trace, worldFor({ ...meta, aiTargetPerception: 'full' }));
+    expect(committed(replayed.world)).not.toEqual(committed(unbounded.world));
+    // and in which direction: the bound leaves someone with no opponent at all, the
+    // default leaves nobody without one. The length is asserted first because `some`
+    // and `every` are both vacuous on an empty enemy list.
+    expect(committed(replayed.world)).toHaveLength(4);
+    expect(committed(replayed.world).some((id) => id === null)).toBe(true);
+    expect(committed(unbounded.world).every((id) => id !== null)).toBe(true);
+  });
 });
 
 describe('checkTrace', () => {
@@ -516,5 +587,20 @@ describe('checkTrace', () => {
     // and the reason names which one, so a bug report says why it was refused
     expect(checkTrace({ ...good, data: 'deadbeef' }).reason).toContain('deadbeef');
     expect(checkTrace({ ...good, schema: 9 }).reason).toContain('schema');
+  });
+
+  it('rejects a schema-3 trace, which predates the recorded perception rule (issue #492)', () => {
+    // The no-migration policy, at the one version where reading an old trace anyway
+    // would be actively wrong: a schema-3 trace carries no aiTargetPerception, so
+    // anything that accepted it would have to default the rule to 'full' -- which is
+    // exactly the silent divergence the bump exists to stop. Fails if REPLAY_SCHEMA is
+    // left at 3 while the field is added, which is the whole hazard of a meta change
+    // without a version change.
+    const good = createRecordingInput(scriptedInputs(1), META).trace();
+    expect(checkTrace({ ...good, schema: 3 }).ok).toBe(false);
+    expect(checkTrace({ ...good, schema: 3 }).reason).toContain('schema 3');
+    // Non-vacuous: the trace this build just produced is still accepted, so the
+    // rejection above is about the version and not about the trace.
+    expect(checkTrace(good).ok).toBe(true);
   });
 });
