@@ -66,6 +66,13 @@ export const DEFAULTS = {
    */
   skin: 'solid',
   mineWarn: null,
+  /**
+   * Which of issue #356's candidate blocked-fire cues to render, matching the game's own
+   * `?dev=1&blockedFire=<cue>`. Only meaningful with `--scene blocked-fire`, whose
+   * timeline is the one that actually refuses shots. 'hud' is intentionally absent: it
+   * draws into the DOM HUD, which no gallery page builds.
+   */
+  blockedFire: null,
   hull: null,
   accent: null,
   /**
@@ -137,6 +144,9 @@ export const MOMENT_IDS = [
   'ai-commitment',
   // The same issue's other half: the AI letting go, 37 ticks after a better target appeared.
   'ai-retarget',
+  // Issues #356/#516: the shell cap refusing a shot, staged so the refusal repeats. The
+  // only moment whose subject is a cue rather than a body -- see --blocked-fire.
+  'blocked-fire',
 ];
 
 /**
@@ -187,6 +197,7 @@ export function parseArgs(argv) {
     else if (key === 'sweep') out.sweep = value.split(',').map((s) => s.trim()).filter(Boolean);
     else if (key === 'labels') out.labels = value.split(';').map((s) => s.trim());
     else if (key === 'spawn-anim') out.spawnAnim = value;
+    else if (key === 'blocked-fire') out.blockedFire = value;
     else if (NUMERIC.includes(key)) {
       const n = Number(value);
       if (!Number.isFinite(n)) throw new Error(`--${key} must be a number, got ${value}`);
@@ -201,6 +212,24 @@ export function parseArgs(argv) {
   }
   if (out.mineWarn !== null && !['lance', 'slump', 'spike'].includes(out.mineWarn)) {
     throw new Error(`--mineWarn must be one of lance|slump|spike, got '${out.mineWarn}'`);
+  }
+  if (out.blockedFire !== null) {
+    // Named here rather than imported from src/presentation/blocked-fire.ts: this is a
+    // plain .mjs the runner loads with no build step, so it cannot read a .ts export.
+    // Only the four VISUAL arms are accepted -- the audio and haptic arms have nothing
+    // to draw, and 'hud' has no HUD to draw into (see DEFAULTS.blockedFire).
+    const visual = ['ring', 'muzzle', 'turret', 'pips'];
+    if (!visual.includes(out.blockedFire)) {
+      throw new Error(
+        `--blocked-fire must be one of ${visual.join('|')}, got '${out.blockedFire}'`,
+      );
+    }
+    if (out.scene !== 'blocked-fire') {
+      // Fail rather than render an unadorned tank: the cue only fires on a refusal, and
+      // 'blocked-fire' is the only moment that stages one. Silently producing a gif with
+      // no cue in it is exactly the failure this flag exists to end.
+      throw new Error(`--blocked-fire needs --scene blocked-fire, got --scene '${out.scene}'`);
+    }
   }
   if (!SKIN_IDS.includes(out.skin)) {
     // A typo'd skin would otherwise reach setPlayerStyle, where `PAINTERS[skin]` is

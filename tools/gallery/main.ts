@@ -21,6 +21,7 @@ const hull = params.get('hull');
 const accent = params.get('accent');
 const spawnAnimParam = params.get('spawn-anim') as SpawnAnimId | null;
 const mineWarnParam = params.get('mineWarn') as import('../../src/render/mine-warning').MineWarnStyle | null;
+const blockedFireParam = params.get('blockedFire') as import('../../src/presentation/blocked-fire').BlockedFireCue | null;
 
 // `scene` selects one of MOMENTS's scripted timelines over the default posed gallery.
 // Looking the id up directly in MOMENTS (rather than checking against a hardcoded list)
@@ -44,6 +45,7 @@ const g = moment
       // reads the same as an un-decorated --scene <moment> invocation.
       spawnAnim: spawnAnimParam ?? DEFAULT_SPAWN_ANIM,
       mineWarn: mineWarnParam,
+      blockedFire: blockedFireParam,
     })
   : buildGallery(canvas, W, H, {
       elements: (params.get('elements') ?? 'mine').split(',').map((x) => x.trim()).filter(Boolean),

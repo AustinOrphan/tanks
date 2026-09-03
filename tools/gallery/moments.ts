@@ -2,7 +2,8 @@ import { createWorld, step, stepInputs } from '../../src/sim/world';
 import type { World } from '../../src/sim/world';
 import type { SimEvent } from '../../src/sim/events';
 import type { ArenaGeometry, InputState, Wall } from '../../src/sim/types';
-import { RESPAWN_DELAY_TICKS } from '../../src/sim/constants';
+import { bulletConfig, RESPAWN_DELAY_TICKS } from '../../src/sim/constants';
+import { configFor } from '../../src/sim/config/roster';
 
 const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
 
@@ -195,6 +196,57 @@ function buildSoloWorld(walls: Wall[] = []): World {
 }
 
 export const MOMENTS: Record<string, MomentDef> = {
+  /**
+   * The active-shell cap, refusing shots (issues #356, #516). The tank holds fire from
+   * tick 0: the first shots leave normally until `maxActiveProjectiles` are in flight,
+   * and every attempt after that is refused, so `fire-blocked` repeats for the rest of
+   * the clip rather than happening once and being missed. That repetition is the whole
+   * point of the moment -- a refusal cue lives 0.07s to 0.55s, which is unmissable when
+   * it recurs every few ticks and nearly impossible to catch in a single pass.
+   *
+   * No walls, so nothing a shell hits frees a slot back up mid-clip and lets a real shot
+   * slip in among the refusals. The camera sits close on the tank (`focus`/`span`), which
+   * is what the arena camera cannot do: at the shipped distance the tank is about 40px
+   * wide and these cues are a few hundred pixels of change.
+   */
+  'blocked-fire': {
+    ticks: 60,
+    // The magazine starts full, so there is no warm-up: the first attempt is already
+    // refused. A refusal still costs the fire cooldown (24 ticks, see `shellCapReached`'s
+    // contract in bullets.ts), so holding fire refuses on a 24-tick cadence rather than
+    // every tick -- three times across this clip.
+    expect: [
+      { type: 'fire-blocked', tick: 1 },
+      { type: 'fire-blocked', tick: 25 },
+      { type: 'fire-blocked', tick: 49 },
+    ],
+    focus: [0, 0.3, 0], span: 2.2,
+    build: () => {
+      const w = buildSoloWorld();
+      // The magazine starts FULL, rather than being filled by firing. The weapon's own
+      // cadence is 24 ticks, so reaching the cap honestly would take ~120 ticks of
+      // warm-up before the first refusal, and the shells fired during it would expire
+      // and free slots back up mid-clip. Seeding the shells makes every tick of the
+      // moment a refusal, which is what a cue that lives 0.07s needs to be legible.
+      // They are placed BEHIND the tank and travelling away, so nothing they do enters
+      // the frame or interacts: the moment is about the refusal, not about shells.
+      const cap = configFor('player').weapon.maxActiveProjectiles;
+      for (let i = 0; i < cap; i++) {
+        w.bullets.push({
+          id: w.nextId++,
+          ownerId: 1,
+          type: 'normal',
+          pos: { x: -6 - i, y: -6 },
+          vel: { x: -0.1, y: -0.1 },
+          bouncesLeft: bulletConfig.normal.bounces,
+          alive: true,
+        });
+      }
+      return w;
+    },
+    input: () => ({ ...IDLE, fire: true }),
+  },
+
   /** One tank, one trigger pull: the muzzle flash / fire event, dead centre. */
   fire: {
     ticks: 40,

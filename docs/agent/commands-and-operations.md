@@ -224,6 +224,16 @@ deterministic and scripted end to end, so its frame count comes from the moment 
 controlled slot so a respawning tank does not depend on which slot the moment uses.
 `--elements`/`--reach`/`--timer`/`--fill` are gallery-composition flags a
 moment scene does not consume either, but they are dropped silently rather than rejected.
+
+`--blocked-fire <ring|muzzle|turret|pips>` renders one of issue #356's candidate
+shell-cap refusal cues, the same set the game's `?dev=1&blockedFire=` flag selects. It
+requires `--scene blocked-fire`, the moment that stages repeated refusals, and is
+rejected with any other scene rather than producing a clip with no cue in it. The four
+visual arms are the whole accepted set: the audio and haptic arms have nothing to draw,
+and `hud` draws into the DOM HUD, which no gallery page builds. This is the supported way
+to review a refusal cue — the cues live between 0.07s and 0.55s, so a close view and a
+slowed clip (`--anim`, plus `--subdiv`/`--fps`) show one where an arena-framed capture
+of real play cannot.
 See `tools/gallery/`.
 
 `npm run mutate` (`tools/mutate/`) is the "prove the gap before writing the test" rule,
