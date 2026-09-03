@@ -552,6 +552,32 @@ from `balance.json` per the `AI_AIM_SPREAD` precedent) is the anchor a
 perfect-estimationAccuracy profile would still misjudge by; every shipped profile that
 reaches a consuming site sits below accuracy 1.
 
+**The hazard picture is now a SNAPSHOT, not a radius offset (issue #223).**
+`ai/hazard-perception.ts` is the single place a tank's belief about hazards is formed;
+`grey.ts`, `teal.ts`, `stepAi`'s mine gate and `player-profile.ts` all read it and nothing
+else draws its own. It composes three things: the pre-existing `estimationError` offset on
+the three radii, an additive `safetyMargin`, and an `awarenessDelay` that BACK-DATES the
+hazard populations — shells moved back along their own velocity, mines younger than the
+delay absent. One knob produces the whole list #223 asks for (perceived position, velocity,
+time-to-impact, fuse state, blast reach) and keeps the errors mutually consistent, which
+five independent draws would not: a tank holds one picture that is a moment out of date, not
+five separately-wrong beliefs about the same shell. Only shells and mines are back-dated —
+tanks and walls are shared by reference, because awareness delay is a hazard axis and a bot
+that also mislaid its opponent would be a targeting change wearing the issue's label.
+
+Three consequences worth knowing before changing it. (1) `hazardRefreshTime` replaced the
+hardcoded `WANDER_TICKS` bucket `estimationError` used, and is authored at 0.5s = exactly 30
+ticks, so `normal` is arithmetically the incumbent cadence. (2) `awarenessDelay` is the one
+span in `AIProfileBalance` that validation refuses at zero, because `hard` SCALES IT DOWN and
+a multiplier cannot improve on zero — an axis authored at 0 would make `hard` identical to
+`normal` and fail #223's monotonicity criterion silently. (3) The player-side mirror holds its
+snapshot in `PlayerAiState` rather than re-deriving it, because that side draws from a linear
+`rnd` stream with no bucket to re-derive from; that is also the only place `withBotDifficulty`
+is applied, so an axis that reaches no decision there is a menu label with nothing behind it.
+The golden-trace re-pin records the neutrality demonstration: authoring `awarenessDelay` at
+0.001s (small enough never to round to a whole tick) reproduces the previous `BASELINE_HASH`
+byte for byte, so the delay is provably the whole of the behaviour move.
+
 **A green tank changed what `structuralFailures` has to check.** "No enemy sees
 the player spawn" tested `lineOfSight` only, which was the same as "no enemy can
 SHOOT the player spawn" for exactly as long as no stationary enemy could bank.

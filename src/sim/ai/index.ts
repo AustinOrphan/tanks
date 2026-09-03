@@ -8,14 +8,15 @@ import { greyDecision } from './grey';
 import { tealDecision } from './teal';
 import { spawnBullet, shellCapReached } from '../bullets';
 import { dropMine } from '../mines';
-import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread, resolveOpponent } from './targeting';
+import { shotHitsOwnSide, friendlyInMineBlast, resolveOpponent } from './targeting';
+import { perceiveHazards } from './hazard-perception';
 import { commitMove } from './commitment';
 import { accelSlew } from './turret-accel';
 import { holdAimFor } from './aim-hold';
 import { searchAim } from './search';
 import { commitTarget } from './target-selection';
 import { memoryAim, updateTargetMemory } from './target-memory';
-import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_MINE_FLEE_RADIUS, AI_AIM_BREAK } from '../constants';
+import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_AIM_BREAK } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
@@ -295,12 +296,31 @@ export function stepAi(world: World, events: SimEvent[]): void {
     //
     // Directive B: this is the OFFENSE side of estimation error (targeting.ts's
     // friendlyInMineBlast doc comment) -- a PERCEIVED flee radius, drawn fresh here via
-    // the same estimationError/profileHazardSpread house recipe grey.ts/teal.ts use for
-    // their own dodge gates. Independently recomputed (a pure hash of world.seed/tank.id/
-    // tick bucket, not threaded state), so it lands on the identical offset those decision
-    // functions already drew this tick without anything being passed between them.
+    // the same `perceiveHazards` house recipe grey.ts/teal.ts use for their own dodge gates.
+    // Independently recomputed (a pure hash of world.seed/tank.id/refresh bucket, not
+    // threaded state), so it lands on the identical belief those decision functions already
+    // drew this tick without anything being passed between them.
+    //
+    // The REAL world, not the perceived one: `friendlyInMineBlast` scans TANKS, and issue
+    // #223's awareness delay is a hazard axis -- a bot that also mislaid its teammates would
+    // be a targeting change wearing this issue's label. Only the radius is perceived here.
+    //
+    // AND THE BACK-DATED WORLD `perceiveHazards` BUILDS IS DISCARDED HERE, deliberately, on
+    // review (PR #522). It reads as waste, so it is worth knowing how much: MEASURED over
+    // the golden-trace population (8 arenas x 6 seeds x 2500 ticks), this gate is reached
+    // 2419 times against 234978 AI tank-ticks -- 1.03%, one tick in 97 -- because every
+    // cheap term short-circuits ahead of it, `decision.mine` most of all (itself gated on
+    // `mineInclination`'s ~0.3 per-window draw, `!avoid`, the cap and `mineThreatensPlayer`).
+    // Those 2419 calls are 1.70% of the 141926 `perceiveHazards` calls in the same run, and
+    // about 2217 of them allocate: two arrays plus a mean of 3.23 shell copies each.
+    //
+    // A radii-only helper would save exactly that, at the price of a SECOND path computing
+    // the perceived radii that must stay bit-identical to this one or the baseline hash moves
+    // silently. This module exists so one place forms the belief; buying back ~2200 tiny
+    // allocations per 48 full games is not worth a second definition of what a tank believes.
+    // If this gate ever stops short-circuiting, re-measure before revisiting.
     if (canAct && !tank.disarmed && hasAbility(tank.kind, TankAbility.MINE_LAYER) && decision.mine && tank.mineCooldown <= 0
-      && !friendlyInMineBlast(world, tank, AI_MINE_FLEE_RADIUS + estimationError(world, tank, profileHazardSpread(configFor(tank.kind))))) {
+      && !friendlyInMineBlast(world, tank, perceiveHazards(world, tank, configFor(tank.kind)).fleeRadius)) {
       if (dropMine(world, tank.id, events)) {
         tank.mineCooldown = MINE_COOLDOWN_TICKS;
       }

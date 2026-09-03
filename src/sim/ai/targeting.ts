@@ -692,8 +692,21 @@ export function profileHazardSpread(cfg: ResolvedTankConfig): number {
  * argument BOT_SEED_SPACING's own doc comment gives for the other four multipliers applies
  * to any positive one, this included.
  */
-export function estimationError(world: World, tank: Tank, spread: number): number {
-  const bucket = Math.floor(world.tick / WANDER_TICKS);
+export function estimationError(
+  world: World,
+  tank: Tank,
+  spread: number,
+  /**
+   * The refresh cadence, in ticks. Defaults to `WANDER_TICKS` -- the constant this was
+   * hardcoded to before it became a competence axis (issue #223), so every existing caller
+   * is unperturbed. `perceiveHazards` (ai/hazard-perception.ts) passes the profile's own
+   * `hazardRefreshTicks` instead, which is what lets `easy` live with a bad read for longer
+   * than `hard` does. Floored at 1 tick: it is a divisor, and a zero window would bucket
+   * every tick to the same Infinity and freeze one draw for the whole round.
+   */
+  refreshTicks = WANDER_TICKS,
+): number {
+  const bucket = Math.floor(world.tick / Math.max(1, refreshTicks));
   const rng = nextRng(world.seed + tank.id * 5303 + bucket);
   return (rng.value * 2 - 1) * spread;
 }

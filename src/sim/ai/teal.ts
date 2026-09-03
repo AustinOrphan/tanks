@@ -1,8 +1,9 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer, resolveOpponent } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer, resolveOpponent } from './targeting';
+import { perceiveHazards } from './hazard-perception';
 import { driveVelocity } from '../collision';
-import { AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS, TICK_HZ } from '../constants';
+import { TICK_HZ } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
@@ -13,20 +14,22 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // Weapon (ricochet bullet, its muzzle speed, and its bounce budget) comes from
   // the resolved config -- Teal fires the RICOCHET_ROCKET its definition names.
   const weapon = cfg.weapon;
-  // Directive B: perceived, not exact, hazard radii -- same per-tick, per-window draw
-  // grey.ts uses (targeting.ts's estimationError/profileHazardSpread), reused below at
-  // both dangerAvoidMove and the mine-threat gate.
-  const hazardOffset = estimationError(world, tank, profileHazardSpread(cfg));
-  const fleeRadius = AI_MINE_FLEE_RADIUS + hazardOffset;
-  const dangerCorridor = DANGER_CORRIDOR + hazardOffset;
-  const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);
+  // Directive B, widened to issue #223's whole hazard picture -- the same per-window
+  // snapshot grey.ts takes (ai/hazard-perception.ts), reused below at both dangerAvoidMove
+  // and the mine-threat gate. `hazard.world` carries teal's own back-dated shells and the
+  // mines it has noticed; targeting and line of sight still read the real world.
+  const hazard = perceiveHazards(world, tank, cfg);
+  const seen = hazard.world;
+  const fleeRadius = hazard.fleeRadius;
+  const dangerCorridor = hazard.dangerCorridor;
+  const avoid = dangerAvoidMove(seen, tank, fleeRadius, dangerCorridor);
   // Which hazard `avoid` escapes, for the commitment layer's sign rule (see AiDecision's
   // avoidKind). Unlike grey, teal has no `underFire` of its own to reuse, so this is a
   // second incomingThreats pass over the same perceived corridor -- bullets only, no wall
   // geometry, and skipped entirely when there is nothing to escape.
   const avoidKind = avoid === null
     ? null
-    : incomingThreats(world, tank, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
+    : incomingThreats(seen, tank, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
   // Mobile (spec §7): wander is the baseline move whenever there's nothing more specific
   // to do; dodging overrides it when a threat is present. This lets Teal keep roaming
   // (and reposition itself into new bank opportunities) instead of standing still as a
@@ -166,7 +169,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // per-window probability of proposing.
   const mine = mineInclination(world, tank, cfg)
     && !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < cfg.mineCapacity
-    && mineThreatensPlayer(world, tank, AI_MINE_TACTICAL_RADIUS + hazardOffset);
+    && mineThreatensPlayer(world, tank, hazard.tacticalRadius);
 
   if (turretAngle !== null) {
     return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan, nextShotPlanTicks };

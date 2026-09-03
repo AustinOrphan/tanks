@@ -83,8 +83,16 @@ describe('bot difficulty presets', () => {
     // is covered by this test without anyone remembering to list it.
     const base = playerCfg();
     const strip = (cfg: ReturnType<typeof playerCfg>): Record<string, unknown> => {
-      const { aimAccuracy, estimationAccuracy, reactionTime, ...personality } = cfg.ai;
+      const {
+        aimAccuracy, estimationAccuracy, reactionTime,
+        // The three axes issue #223 added. Listed here, and ONLY here, for the reason the
+        // first three are: this is the one place the personality/competence line is drawn
+        // by name, so widening difficulty's reach is a visible edit to this list.
+        awarenessDelay, safetyMargin, hazardRefreshTime,
+        ...personality
+      } = cfg.ai;
       void aimAccuracy; void estimationAccuracy; void reactionTime;
+      void awarenessDelay; void safetyMargin; void hazardRefreshTime;
       return { ...cfg, ai: personality };
     };
     for (const d of BOT_DIFFICULTIES) {

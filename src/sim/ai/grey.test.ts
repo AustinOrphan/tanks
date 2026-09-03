@@ -89,7 +89,7 @@ describe('greyDecision', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 });
     const w = world({
       tanks: [grey],
-      mines: [{ id: 70, ownerId: 1, pos: { x: 1, y: 0 }, timer: 3, armed: true, detonated: false }],
+      mines: [{ id: 70, ownerId: 1, pos: { x: 1, y: 0 }, timer: 1.5, armed: true, detonated: false }],
       blasts: [],
     });
     const d = greyDecision(w, grey);

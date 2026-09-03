@@ -142,6 +142,31 @@ describe.skip('competent-player measurement (flip skip off to run locally)', () 
 // in player-profile.ts for the same caveat applied to a different gate). The "arena-01
 // easier than arena-03/arena-04" ordinal claim below still holds with real margin (64%
 // vs 48% vs 24%), not merely by the assertion's own generous slack.
+//
+// RE-MEASURED (2026-09-02, issue #223: the held, difficulty-scaled hazard window). Two
+// things changed at once and both are stated rather than folded together.
+//
+//   1. THE POPULATION IS 200 GAMES, NOT 125. `ARENAS.length` is 8 on this tree, not the 5
+//      the paragraph above was written against -- that number went stale when arenas were
+//      added and nobody re-derived it. Everything below is 8 arenas x 25 seeds; the older
+//      figures above are left in place as history and are NOT comparable game-for-game.
+//   2. EVERY GAME IS A DIFFERENT RUN, again for the reason directive B's entry gives:
+//      `decidePlayerInput` now draws its hazard belief once per refresh window instead of
+//      once per tick, and draws a second value (the awareness delay) with it, so the whole
+//      `rnd` stream renumbers from the first tick onward.
+//
+// Measured on this tree, against the same harness run at the branch point (ec54ecb):
+//   wins/25 per arena  after: 13, 10, 9, 0, 0, 25, 21, 0   before: 14, 11, 4, 1, 0, 25, 25, 0
+//   total              after: 78/200 (39.0%)               before: 80/200 (40.0%)
+//   self-mine deaths   after: 31/118 losses                before: 33/120
+//   timeouts           after: 4/200                        before: 0/200
+//   fires/game  after: 17.0 13.0 28.7 18.1 20.6 4.7 2.0 0.0
+//   mines/game  after: 1.32 10.08 2.64 1.40 2.40 0.04 1.32 3.00
+// The headline rate is flat within a game either way. The four timeouts are the one
+// directional read worth recording: a bot that notices a hazard a beat late spends longer
+// repositioning, and four games out of 200 now run the 5-minute cap out. The "arena-01
+// easier than arena-03/arena-04" ordinal claim still holds with real margin (52% vs 36%
+// vs 0%), and by a WIDER margin over arena-04 than before (56% vs 16% vs 4%).
 // ---------------------------------------------------------------------------
 describe('a competent scripted player against the shipped arenas', () => {
   const SEEDS = 25;
@@ -285,7 +310,7 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
     const near = makeTank('brown', 2, 0, -2); // within PLAYER_MINIMUM_DISTANCE (4)
     const far = makeTank('grey', 3, 0, 6);    // pulls the centroid to (0, 2)
     const world = createWorld({ walls: [], tanks: [player, near, far], spawns: [], lives: 3 });
-    const rnd = mulberry32(4); // found by scanning seeds 1..2000 for one where the retreat draw fires
+    const rnd = mulberry32(6); // re-scanned for issue #223: the held hazard window changed this file's rnd stream
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
 
@@ -325,7 +350,7 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
     const far = makeTank('grey', 3, 0, 6);
     const corpse = { ...makeTank('teal', 4, 40, 0), alive: false };
     const world = createWorld({ walls: [], tanks: [player, near, far, corpse], spawns: [], lives: 3 });
-    const rnd = mulberry32(4); // same seed as above: the retreat draw fires identically
+    const rnd = mulberry32(6); // same seed as above: the retreat draw fires identically
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
 
@@ -360,7 +385,7 @@ describe('n-player arc PR 4: isOpponent is mode-aware', () => {
     const nearby = makeTank('player', 2, 0, -2);
     const world = createWorld({ walls: [], tanks: [player, nearby], spawns: [], lives: 3 });
     expect(world.rules.mode).toBe('campaign-coop'); // the fixture's own precondition
-    const rnd = mulberry32(4); // same seed the retreat-draw fixtures above use
+    const rnd = mulberry32(6); // same seed the retreat-draw fixtures above use
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
     const wander = fromAngle(state.wanderHeading);
@@ -374,7 +399,7 @@ describe('n-player arc PR 4: isOpponent is mode-aware', () => {
     const near = makeTank('player', 2, 0, -2); // within PLAYER_MINIMUM_DISTANCE (4)
     const far = makeTank('player', 3, 0, 6);   // pulls the centroid to (0, 2)
     const world = createWorld({ walls: [], tanks: [player, near, far], spawns: [], lives: 3, mode: 'ffa' });
-    const rnd = mulberry32(4); // the seed the retreat draw is known to fire on
+    const rnd = mulberry32(6); // the seed the retreat draw is known to fire on
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
 
@@ -438,7 +463,7 @@ describe('directive B: estimation error (the player half, injected rnd, never wo
     // 2.48: inside the TRUE kill radius (MINE_BLAST_RADIUS + TANK_RADIUS = 2.5) and the
     // true flee radius (3.25), but past the perceived one (~2.45) with real margin either
     // side (~0.02-0.03), not a boundary-exact fixture.
-    const mineFixture = { id: 70, ownerId: 99, pos: { x: 2.48, y: 0 }, timer: 3, armed: true, detonated: false };
+    const mineFixture = { id: 70, ownerId: 99, pos: { x: 2.48, y: 0 }, timer: 1.5, armed: true, detonated: false };
     const world = { ...createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 }), mines: [mineFixture] };
     const rnd = mulberry32(4771);
     const state = createPlayerAiState(rnd); // draw #1: wanderHeading
@@ -454,7 +479,7 @@ describe('directive B: estimation error (the player half, injected rnd, never wo
     const player = makeTank('player', PLAYER_ID, 0, 0);
     // 3.8: past the TRUE flee radius (3.25, with a 0.55 margin) but inside the perceived
     // one (~4.05, with a 0.25 margin) -- real margins both sides, not boundary-exact.
-    const mineFixture = { id: 71, ownerId: 99, pos: { x: 3.8, y: 0 }, timer: 3, armed: true, detonated: false };
+    const mineFixture = { id: 71, ownerId: 99, pos: { x: 3.8, y: 0 }, timer: 1.5, armed: true, detonated: false };
     const world = { ...createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 }), mines: [mineFixture] };
     const rnd = mulberry32(3434);
     const state = createPlayerAiState(rnd);

@@ -295,7 +295,7 @@ describe('estimationAccuracy scales the perceived hazard radius from the AI_HAZA
   it('UNDER-estimation: the tank does not dodge a mine sitting inside its own actual kill radius -- the DECISION half of "sometimes fatal" (death itself is not simulated here)', () => {
     const grey = tank(6, 'grey', { x: 0, y: 0 });
     const cfg = withAi(configFor('grey'), { estimationAccuracy: 0.3 });
-    const m = { id: 70, ownerId: 6, pos: { x: 2.4, y: 0 }, timer: 3, armed: true, detonated: false };
+    const m = { id: 70, ownerId: 6, pos: { x: 2.4, y: 0 }, timer: 1.5, armed: true, detonated: false };
     const w = world({ seed: 1, tick: 0, tanks: [grey], mines: [m] });
 
     // Ground the "fatal" claim: this mine is inside the tank's TRUE lethal blast radius
@@ -314,7 +314,7 @@ describe('estimationAccuracy scales the perceived hazard radius from the AI_HAZA
   it("UNDER-estimation is the same consumption through tealDecision, not a copy that could rot separately", () => {
     const teal = tank(6, 'teal', { x: 0, y: 0 });
     const cfg = withAi(configFor('teal'), { estimationAccuracy: 0.3 });
-    const m = { id: 70, ownerId: 6, pos: { x: 2.4, y: 0 }, timer: 3, armed: true, detonated: false };
+    const m = { id: 70, ownerId: 6, pos: { x: 2.4, y: 0 }, timer: 1.5, armed: true, detonated: false };
     const w = world({ seed: 1, tick: 0, tanks: [teal], mines: [m] });
     expect(dangerAvoidMove(w, teal)).not.toBeNull(); // control: true radius flees
     const d = tealDecision(w, teal, cfg);
@@ -324,7 +324,7 @@ describe('estimationAccuracy scales the perceived hazard radius from the AI_HAZA
   it('OVER-estimation: the tank dodges a mine the TRUE radius says is safe (wasted caution, not merely cosmetic scatter)', () => {
     const grey = tank(5, 'grey', { x: 0, y: 0 });
     const cfg = withAi(configFor('grey'), { estimationAccuracy: 0.3 });
-    const m = { id: 71, ownerId: 5, pos: { x: 4, y: 0 }, timer: 3, armed: true, detonated: false };
+    const m = { id: 71, ownerId: 5, pos: { x: 4, y: 0 }, timer: 1.5, armed: true, detonated: false };
     const w = world({ seed: 1, tick: 150, tanks: [grey], mines: [m] });
 
     // The TRUE radius (3.25) does not reach this mine -- proves the old code ignored it.

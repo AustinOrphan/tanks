@@ -185,6 +185,48 @@ describe('validateAiProfiles', () => {
     expect(() => validateAiProfiles(ok)).not.toThrow();
   });
 
+  it('rejects awarenessDelay 0 -- a multiplier cannot make `hard` better than zero (issue #223)', () => {
+    // The one span in this schema that may not be zero, and for a reason that is neither
+    // a division nor a sign: `hard` scales awarenessDelay DOWN, so an authored zero makes
+    // `hard` identical to `normal` on the axis that carries most of #223's behaviour. That
+    // is the issue's monotonicity criterion failing at load with no other symptom -- the
+    // resolved config is finite, in bounds, and completely wrong.
+    const bad = corrupt(aiProfilesJson, (c) => { (c.STATIC_BASIC as Mutable).awarenessDelay = 0; });
+    expect(() => validateAiProfiles(bad)).toThrow(/STATIC_BASIC\.awarenessDelay.*strictly positive/);
+    const neg = corrupt(aiProfilesJson, (c) => { (c.STATIC_BASIC as Mutable).awarenessDelay = -0.1; });
+    expect(() => validateAiProfiles(neg)).toThrow(/STATIC_BASIC\.awarenessDelay.*strictly positive/);
+  });
+
+  it('rejects hazardRefreshTime 0 (hazardBucket divides world.tick by it)', () => {
+    // A zero window buckets every tick to the same value: one hazard read frozen for the
+    // whole round, which is a permanent misjudgement rather than a fallible one.
+    const bad = corrupt(aiProfilesJson, (c) => { (c.BERSERKER_ROCKET as Mutable).hazardRefreshTime = 0; });
+    expect(() => validateAiProfiles(bad)).toThrow(/BERSERKER_ROCKET\.hazardRefreshTime.*strictly positive/);
+  });
+
+  it('accepts a NEGATIVE safetyMargin -- it is signed, unlike every other span here', () => {
+    // The negative control for the two rejections above, and a real authoring case rather
+    // than a hypothetical: `easy` composes an additive -0.2 over the authored value, so a
+    // profile that already cuts corners is exactly what the preset is defined to produce.
+    // A validator that swept this up with the other new fields would forbid the resolved
+    // value of a shipped difficulty.
+    const ok = corrupt(aiProfilesJson, (c) => { (c.OFFENSIVE_ASSAULT as Mutable).safetyMargin = -0.35; });
+    expect(() => validateAiProfiles(ok)).not.toThrow();
+    expect(validateAiProfiles(ok)[AIProfile.OFFENSIVE_ASSAULT].safetyMargin).toBe(-0.35);
+  });
+
+  it('rejects a profile missing any of the three competence axes issue #223 added', () => {
+    // Required, not optional like minePlacementChance: an omitted field would resolve to
+    // undefined and reach arithmetic (`awarenessDelay * TICK_HZ`), producing NaN ticks
+    // rather than a loud failure at load.
+    for (const field of ['awarenessDelay', 'safetyMargin', 'hazardRefreshTime'] as const) {
+      const bad = corrupt(aiProfilesJson, (c) => { delete (c.MOBILE_MINE_LAYER as Mutable)[field]; });
+      expect(() => validateAiProfiles(bad)).toThrow(
+        new RegExp(`MOBILE_MINE_LAYER.*missing required entry "${field}"`),
+      );
+    }
+  });
+
   it('rejects a profile missing estimationAccuracy -- it is required, not optional like minePlacementChance', () => {
     const bad = corrupt(aiProfilesJson, (c) => { delete (c.RICOCHET_SNIPER as Mutable).estimationAccuracy; });
     expect(() => validateAiProfiles(bad)).toThrow(/RICOCHET_SNIPER.*missing required entry "estimationAccuracy"/);
