@@ -4,7 +4,6 @@ import { createHud, type Hud } from './hud';
 import { configFor } from '../sim/config';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
-// @vitest-environment jsdom
 
 let hud: Hud | null = null;
 
@@ -309,7 +308,11 @@ describe('standard VS ordnance limits (issue #268)', () => {
 
   const mount = (): HTMLElement => {
     const root = document.createElement('div');
-    createHud(root);
+    document.body.appendChild(root);
+    // Through the shared `hud` binding so the file-level afterEach disposes it: this
+    // block's own mount used to drop the instance on the floor, leaking createHud's
+    // window listeners and timers into every later test in the file.
+    hud = createHud(root);
     return root;
   };
 

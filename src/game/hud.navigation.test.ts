@@ -9,7 +9,6 @@ import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
 
-// @vitest-environment jsdom
 
 let hud: Hud | null = null;
 

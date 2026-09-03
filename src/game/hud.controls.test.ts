@@ -5,7 +5,6 @@ import { SKINS, ACCENTS } from '../presentation/customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 
-// @vitest-environment jsdom
 
 let hud: Hud | null = null;
 

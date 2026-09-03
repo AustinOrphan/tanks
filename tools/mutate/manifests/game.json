@@ -118,7 +118,7 @@
     "find": "      countEl.classList.remove('hud-count--pop');\n      void countEl.offsetWidth;\n      countEl.classList.add('hud-count--pop');",
     "replace": "      countEl.classList.add('hud-count--pop');",
     "expect": "killed",
-    "why": "The countdown redesign's pop animation must restart on EVERY new second, not just the first -- setRoundPhase calls this every simulated tick, so most calls repeat the same secondsLeft and must NOT restart (guarded above by the lastCountShown check), but a genuinely new second must. Dropping the remove+reflow half of the restart trick (the same one signalPlayerDeath uses) leaves only the add, which is a no-op once the class is already present -- a real browser would not replay the CSS animation for the second and third numbers, only the first. Caught by test.ts: 'restarts the pop animation on each new second, not on every call' spies on classList.remove and asserts it is called once per new second: with the restart deleted, classList.remove('hud-count--pop') is never called at all, so the first assertion (expecting exactly 1 call after the first setRoundPhase) already fails. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
+    "why": "The countdown redesign's pop animation must restart on EVERY new second, not just the first -- setRoundPhase calls this every simulated tick, so most calls repeat the same secondsLeft and must NOT restart (guarded above by the lastCountShown check), but a genuinely new second must. Dropping the remove+reflow half of the restart trick (the same one signalPlayerDeath uses) leaves only the add, which is a no-op once the class is already present -- a real browser would not replay the CSS animation for the second and third numbers, only the first. Caught by hud.surfaces.test.ts: 'restarts the pop animation on each new second, not on every call' spies on classList.remove and asserts it is called once per new second: with the restart deleted, classList.remove('hud-count--pop') is never called at all, so the first assertion (expecting exactly 1 call after the first setRoundPhase) already fails. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
@@ -132,7 +132,7 @@
     "find": "      if (!info || info.phase === 'live') {",
     "replace": "      if (!info) {",
     "expect": "killed",
-    "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
+    "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by hud.surfaces.test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
@@ -1111,7 +1111,7 @@
     "find": "    return !surface.el.classList.contains(surface.hidden) && !surface.el.classList.contains(LEAVING);",
     "replace": "    return !surface.el.classList.contains(surface.hidden);",
     "expect": "killed",
-    "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at test.ts once #318's layer cases joined the file: both Escape cases and the fake-host mirror case also count a close callback that this mutation doubles. Pinned by name since the hud suite was split (issue #511); its killers live in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts.",
+    "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at hud.controls.test.ts once #318's layer cases joined the file: both Escape cases and the fake-host mirror case also count a close callback that this mutation doubles. Pinned by name since the hud suite was split (issue #511); its killers live in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts.",
     "tests": [
       "src/game/hud.controls.test.ts",
       "src/game/hud.navigation.test.ts",
@@ -1170,7 +1170,7 @@
     "find": "    if (!desired.some(([surface, want]) => want !== isSurfaceOpen(surface))) {\n      onBegin?.();\n      return;\n    }\n    let leaving: Surface[] = [];",
     "replace": "    let leaving: Surface[] = [];",
     "expect": "killed",
-    "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at test.ts once #318's layer cases joined the file: the `hud.back()`, first Escape and both mirror cases read the pane's LEAVING class right after a Back, which this mutation slams shut. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts, hud.surfaces.test.ts.",
+    "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the `hud.back()`, first Escape and both mirror cases read the pane's LEAVING class right after a Back, which this mutation slams shut. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts, hud.surfaces.test.ts.",
     "tests": [
       "src/game/hud.navigation.test.ts",
       "src/game/hud.surfaces.test.ts"
@@ -1298,7 +1298,7 @@
     "find": "    opts.versusSetup?.set({ ...next });",
     "replace": "    void next;",
     "expect": "killed",
-    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
@@ -2264,7 +2264,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "Back re-renders the Main Menu whatever surface the layer was opened over -- the pre-#318 hard-code, restored. Controllers opened from Pause returns to the title and abandons the paused round on screen while the state machine still says paused; Versus Setup opened over Pause does the same. test.ts (244): the Controllers-from-Pause case under \"navigation layers\", whose Back must re-render the paused panel. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "Back re-renders the Main Menu whatever surface the layer was opened over -- the pre-#318 hard-code, restored. Controllers opened from Pause returns to the title and abandons the paused round on screen while the state machine still says paused; Versus Setup opened over Pause does the same. hud.navigation.test.ts (244): the Controllers-from-Pause case under \"navigation layers\", whose Back must re-render the paused panel. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) Back hides the pane and returns to the surface it was opened OVER: paused when opened there, title from the title (issue #318)"
     ]
@@ -2278,7 +2278,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. hud.navigation.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
@@ -2301,7 +2301,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "Back focuses an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up, or any title-only opener after a detach reshaped the menu. A hidden focused element strands a keyboard player with no visible position, which is the case the container fallback exists for. test.ts (244): \"Back falls back to the panel container when the opener was hidden while the pane was up\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "Back focuses an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up, or any title-only opener after a detach reshaped the menu. A hidden focused element strands a keyboard player with no visible position, which is the case the container fallback exists for. hud.navigation.test.ts (244): \"Back falls back to the panel container when the opener was hidden while the pane was up\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back falls back to the panel container when the opener was hidden while the pane was up"
     ]
@@ -2315,7 +2315,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "A surface change closes every pane on screen but leaves the layer stack populated. The next Escape during play is claimed by the HUD for a pane that is no longer there, `hud.back()` re-renders a surface the state machine has left, and a later browser Back reopens nothing while consuming a history entry the page thinks it still owns. test.ts (244): \"entering gameplay from an open pane empties the stack\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "A surface change closes every pane on screen but leaves the layer stack populated. The next Escape during play is claimed by the HUD for a pane that is no longer there, `hud.back()` re-renders a surface the state machine has left, and a later browser Back reopens nothing while consuming a history entry the page thinks it still owns. hud.navigation.test.ts (244): \"entering gameplay from an open pane empties the stack\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) entering gameplay from an open pane empties the stack: hud.back() then has nothing to pop"
     ]
@@ -2329,7 +2329,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. test.ts (244): the `hud.back()` and gameplay-entry cases, the first Escape case and both mirror cases, each of which asserts `back()` is false once nothing is open. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. hud.navigation.test.ts (244): the `hud.back()` and gameplay-entry cases, the first Escape case and both mirror cases, each of which asserts `back()` is false once nothing is open. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) entering gameplay from an open pane empties the stack: hud.back() then has nothing to pop",
@@ -2348,7 +2348,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "A pane opened while a different pane is up covers it without closing it: the covered Customize pane keeps its live WebGL preview and the covered Controllers pane its window gamepad listeners, with no close callback ever firing for either, and the transition contract's second-destination rule is met only by accident of paint order. test.ts (244): \"a pane opened while a different pane is up replaces it through that pane's own close\", which counts `onCustomizeClose`. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "A pane opened while a different pane is up covers it without closing it: the covered Customize pane keeps its live WebGL preview and the covered Controllers pane its window gamepad listeners, with no close callback ever firing for either, and the transition contract's second-destination rule is met only by accident of paint order. hud.navigation.test.ts (244): \"a pane opened while a different pane is up replaces it through that pane's own close\", which counts `onCustomizeClose`. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once"
     ]
@@ -2362,7 +2362,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "Back writes the retained Versus Setup store on its way out. The issue's own criterion is that Back never changes persisted settings; this is the smallest write a Back could make and the spies in the callback sweep must see it. test.ts (244): the callback-and-store sweep under \"navigation layers\", whose spy on `versusSetup.set` counts the write. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "Back writes the retained Versus Setup store on its way out. The issue's own criterion is that Back never changes persisted settings; this is the smallest write a Back could make and the spies in the callback sweep must see it. hud.navigation.test.ts (244): the callback-and-store sweep under \"navigation layers\", whose spy on `versusSetup.set` counts the write. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back fires no start, pick, reset, quit, pause, setup or open callback, leaves no reset armed, and writes nothing to the retained VS store"
     ]
@@ -2376,7 +2376,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "A second open of the pane already on top runs a transition from the pane to itself, which is the pre-#318 `showVersusSetup(true)` twice: the one surface is marked LEAVING and then ENTERING, and the crossfade's settle hides it. The pane the player was looking at disappears a frame later. test.ts (244): \"showVersusSetup(true, cfg) twice keeps the pane open\", measured failing on the pre-#318 tree with exactly this shape. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "A second open of the pane already on top runs a transition from the pane to itself, which is the pre-#318 `showVersusSetup(true)` twice: the one surface is marked LEAVING and then ENTERING, and the crossfade's settle hides it. The pane the player was looking at disappears a frame later. hud.navigation.test.ts (244): \"showVersusSetup(true, cfg) twice keeps the pane open\", measured failing on the pre-#318 tree with exactly this shape. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) showVersusSetup(true, cfg) twice keeps the pane open and reseeds from the second config"
     ]
@@ -2390,7 +2390,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. test.ts (244): both Escape cases, each asserting the bubble-phase listener saw nothing for the Escape that closed a pane. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. hud.navigation.test.ts (244): both Escape cases, each asserting the bubble-phase listener saw nothing for the Escape that closed a pane. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
       "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed"
@@ -2405,7 +2405,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. test.ts (244): both Escape cases, each pressing Escape once more with nothing open and expecting the session to see it. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. hud.navigation.test.ts (244): both Escape cases, each pressing Escape once more with nothing open and expecting the session to see it. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
       "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed"
@@ -2420,7 +2420,7 @@
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. test.ts (244): the fake-host and real-jsdom-history mirror cases. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. hud.navigation.test.ts (244): the fake-host and real-jsdom-history mirror cases. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
     "killedBy": [
       "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
       "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint"
