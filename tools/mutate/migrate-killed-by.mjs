@@ -5,7 +5,7 @@
  * complete run on the same commit.
  *
  *   npm run mutate -- --jobs auto --report /tmp/report.json
- *   node tools/mutate/migrate-killed-by.mjs /tmp/report.json [tools/mutate/manifest.json]
+ *   node tools/mutate/migrate-killed-by.mjs /tmp/report.json [tools/mutate/manifests]
  *
  * Rules, so the result is reviewable rather than magic:
  *   - Only `expect: "killed"` entries with a count are touched. Survivors keep their 0.
@@ -21,10 +21,11 @@
  * updated through their generators.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
+import { readManifestFiles } from './run.mjs';
 
-const [reportPath, manifestPath = 'tools/mutate/manifest.json'] = process.argv.slice(2);
+const [reportPath, manifestPath = 'tools/mutate/manifests'] = process.argv.slice(2);
 if (!reportPath) {
-  console.error('usage: migrate-killed-by.mjs <report.json> [manifest.json]');
+  console.error('usage: migrate-killed-by.mjs <report.json> [manifest.json or a directory of them]');
   process.exit(2);
 }
 const POPULATION_CLAIM = /\b\d+ of \d+\b/;
@@ -57,10 +58,18 @@ export function migrate(manifest, byId) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const report = JSON.parse(readFileSync(reportPath, 'utf8'));
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const byId = new Map(report.entries.map((/** @type {any} */ r) => [r.id, r]));
-  const { manifest: next, migrated, kept, skipped } = migrate(manifest, byId);
-  writeFileSync(manifestPath, JSON.stringify(next, null, 2) + '\n');
+  let migrated = 0;
+  /** @type {string[]} */ const kept = [];
+  /** @type {string[]} */ const skipped = [];
+  // One file at a time, each written back where it came from (issue #505).
+  for (const file of readManifestFiles(manifestPath)) {
+    const result = migrate(file.entries, byId);
+    writeFileSync(file.path, JSON.stringify(result.manifest, null, 2) + '\n');
+    migrated += result.migrated;
+    kept.push(...result.kept);
+    skipped.push(...result.skipped);
+  }
   console.log(`migrated ${migrated} entr${migrated === 1 ? 'y' : 'ies'} to killedBy; kept a count on ${kept.length} (population claims); left ${skipped.length} untouched`);
   if (kept.length) console.log('kept:', kept.join(', '));
   if (skipped.length) console.log('skipped (not in the report, survived, or named no failing test):', skipped.join(', '));

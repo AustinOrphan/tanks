@@ -226,7 +226,8 @@ moment scene does not consume either, but they are dropped silently rather than 
 See `tools/gallery/`.
 
 `npm run mutate` (`tools/mutate/`) is the "prove the gap before writing the test" rule,
-made checkable: for each hand-picked entry in `tools/mutate/manifest.json` (an exact
+made checkable: for each hand-picked entry in `tools/mutate/manifests/*.json` (one file per
+area, read as one set; an exact
 find/replace against a `src/` or `tools/` file, a declared `killed`/`survives`, the
 `killedBy` test names or an `expectFailures` count, a `why`, and scoped `tests`) it verifies the find/replace
 actually changed the file's bytes (refusing an ambiguous find rather than guessing),
@@ -312,7 +313,7 @@ went red before assuming the deploy is broken.
 re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
 `ci.yml`'s 10 checking steps** (`verify`: 7, `visual`: 3), **not the `visual` job and not
 either mutation step**, so a manual deploy can still publish a render regression that only
-`tools/gl/` and `tools/visual/` catch, and a stale `tools/mutate/manifest.json`. Those
+`tools/gl/` and `tools/visual/` catch, and a stale `tools/mutate/manifests/`. Those
 five steps are duplicated work on the automatic path; they are kept because deleting them
 would leave the manual path checking nothing. (Denominator: the named steps of both
 `ci.yml` jobs that check something — that can fail because of the tree — rather than set

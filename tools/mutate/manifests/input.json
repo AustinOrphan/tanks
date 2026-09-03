@@ -1,0 +1,176 @@
+[
+  {
+    "id": "gamepad-menu-confirm-button-index",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "export const MENU_CONFIRM_BUTTON = 0;",
+    "replace": "export const MENU_CONFIRM_BUTTON = 2;",
+    "expect": "killed",
+    "why": "Confirm must be the bottom face button (A/Cross), the same index the gameplay reader calls fire; on another index a pad's A does nothing in menus.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ],
+    "killedBy": [
+      "createGamepadMenuPoller: button indices confirm and back are the SAME face buttons gamepad.ts reads as fire and mine -- the reason loop.ts resyncs -- and pause is Start (9)"
+    ]
+  },
+  {
+    "id": "gamepad-menu-repeat-never-arms",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "held.set(action, repeats ? now + MENU_REPEAT_DELAY_MS : Infinity);",
+    "replace": "held.set(action, Infinity);",
+    "expect": "killed",
+    "why": "Directions must repeat while held after the initial delay; without the arm a held D-pad moves focus once.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ],
+    "killedBy": [
+      "createGamepadMenuPoller: direction repeat a release resets the schedule: the next press starts over with the full delay, not the interval",
+      "createGamepadMenuPoller: direction repeat a repeat that is due is emitted once per poll, not once per elapsed interval",
+      "createGamepadMenuPoller: direction repeat nothing before MENU_REPEAT_DELAY_MS, one at the delay, then one every MENU_REPEAT_INTERVAL_MS",
+      "createGamepadMenuPoller: left stick a held stick is an edge like the D-pad, repeating on the same schedule and releasing on recentre"
+    ]
+  },
+  {
+    "id": "gamepad-menu-union-first-pad-only",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "for (let i = 0; i < pads.length; i++) {",
+    "replace": "for (let i = 0; i < Math.min(pads.length, 1); i++) {",
+    "expect": "killed",
+    "why": "The union of every connected pad drives menus; reading only pad 0 leaves a second player's pad dead at Versus Setup.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ],
+    "killedBy": [
+      "createGamepadMenuPoller: the union of every pad a null slot is skipped, not treated as \"no pads\": the pad beside it still drives and connected() is true",
+      "createGamepadMenuPoller: the union of every pad a pad at index 1 alone drives the menu -- index 0 is not special, whichever pad is in a hand counts",
+      "createGamepadMenuPoller: the union of every pad different pads holding different actions merge into one ordered emission"
+    ]
+  },
+  {
+    "id": "gamepad-menu-dispose-keeps-polling",
+    "file": "src/input/gamepad-menu.ts",
+    "find": "disposed = true;",
+    "replace": "disposed = false;",
+    "expect": "killed",
+    "why": "A disposed poller must emit nothing; a late frame after page teardown would otherwise still dispatch actions.",
+    "tests": [
+      "src/input/gamepad-menu.test.ts"
+    ],
+    "killedBy": [
+      "createGamepadMenuPoller: dispose after dispose(), poll() emits nothing and connected() is false, even with a pad still held"
+    ]
+  },
+  {
+    "id": "gamepad-resync-does-not-suppress-fire",
+    "file": "src/input/gamepad.ts",
+    "find": "const fire = firePressed && !prevFire && !resyncPending;",
+    "replace": "const fire = firePressed && !prevFire;",
+    "expect": "killed",
+    "why": "The resync poll must adopt a held fire button as already-down; reporting the edge fires a shell on the first tick after a pad-confirmed Resume.",
+    "tests": [
+      "src/input/gamepad.test.ts",
+      "src/input/input.test.ts"
+    ],
+    "killedBy": [
+      "createGamepadReader: resync (issue #494) a button already DOWN on the resync poll is adopted as held, not reported -- twin reader over the same pad is the control",
+      "createGamepadReader: resync (issue #494) a release then re-press after a resync fires again -- the adopted hold is an ordinary hold",
+      "createGamepadReader: resync (issue #494) createGamepadInputSource(...).resyncGamepad() forwards to its reader: a held A samples fire: false, and a re-press fires",
+      "createInputController \u2014 gamepad resyncGamepad(): an A already down on the resync sample is adopted as held and does not fire; a later fresh press does"
+    ]
+  },
+  {
+    "id": "ui-actions-widget-consumes-any-key",
+    "file": "src/input/ui-actions.ts",
+    "find": "  return widget instanceof HTMLButtonElement ? BUTTON_KEYS.has(key) : ADJUSTABLE_KEYS.has(key);",
+    "replace": "  return true;",
+    "expect": "killed",
+    "why": "A button, slider or select keeps only the keys it operates on; consuming every key makes M, P and Escape vanish with a slider or a button focused.",
+    "tests": [
+      "src/input/ui-actions.test.ts",
+      "src/input/input.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "killedBy": [
+      "consumesKey a button keeps Enter and Space (activation) but not Escape, the arrows or the driving keys",
+      "consumesKey a range input (the volume slider) keeps only the keys that operate it",
+      "consumesKey a select keeps the arrows that walk its options but not P",
+      "consumesKey a span nested inside a button resolves through closest(): it keeps the button's keys and no more",
+      "consumesKey the widget key set is case-insensitive",
+      "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
+      "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
+      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Controllers, then Quit from the pause panel with three ArrowDowns",
+      "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+      "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
+      "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
+      "createInputController \u2014 focus does not steal the tank still drives after the player has used a HUD control",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target",
+      "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
+      "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
+      "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
+      "hud: spatial focus follows the drawn layout (issue #495) negative control: with jsdom's empty rects the same Right leaves the segment in document order",
+      "hud: spatial focus follows the drawn layout (issue #495) the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated",
+      "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card",
+      "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
+      "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly"
+    ]
+  },
+  {
+    "id": "ui-actions-range-is-text-entry",
+    "file": "src/input/ui-actions.ts",
+    "find": "return TEXT_INPUT_TYPES.has(field.type.toLowerCase());",
+    "replace": "return TEXT_INPUT_TYPES.has(field.type.toLowerCase()) || field.type === 'range';",
+    "expect": "killed",
+    "why": "A range slider is not text entry; treating it as one swallows Escape and the hotkeys while the volume slider is focused.",
+    "tests": [
+      "src/input/ui-actions.test.ts",
+      "src/input/input.test.ts"
+    ],
+    "killedBy": [
+      "consumesKey a range input (the volume slider) keeps only the keys that operate it",
+      "createInputController \u2014 focus does not steal the tank still drives after the player has used a HUD control",
+      "isTextEntry is false for a range, checkbox or button-typed input, a button, a select, and a plain div"
+    ]
+  },
+  {
+    "id": "ui-actions-escape-unmapped",
+    "file": "src/input/ui-actions.ts",
+    "find": "return 'back';",
+    "replace": "return null;",
+    "expect": "killed",
+    "why": "Escape must map to back: the HUD's key handler pops a layer only through that mapping.",
+    "tests": [
+      "src/input/ui-actions.test.ts"
+    ],
+    "killedBy": [
+      "keyToUiAction is case-insensitive: the upper-case spelling of every mapped key lands on the same action",
+      "keyToUiAction maps \"Escape\" to back"
+    ]
+  },
+  {
+    "id": "ui-actions-button-consumes-the-arrows",
+    "file": "src/input/ui-actions.ts",
+    "find": "  return widget instanceof HTMLButtonElement ? BUTTON_KEYS.has(key) : ADJUSTABLE_KEYS.has(key);",
+    "replace": "  return ADJUSTABLE_KEYS.has(key);",
+    "why": "A focused button must NOT keep the arrows: the roving-focus handler asks this rule first, and a button that consumed arrows froze keyboard navigation on the first focused menu button (found as a spinning walk test on 2026-09-02).",
+    "tests": [
+      "src/input/ui-actions.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "expect": "killed",
+    "killedBy": [
+      "consumesKey a button keeps Enter and Space (activation) but not Escape, the arrows or the driving keys",
+      "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
+      "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Controllers, then Quit from the pause panel with three ArrowDowns",
+      "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+      "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
+      "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
+      "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
+      "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
+      "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
+      "hud: spatial focus follows the drawn layout (issue #495) negative control: with jsdom's empty rects the same Right leaves the segment in document order",
+      "hud: spatial focus follows the drawn layout (issue #495) the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated",
+      "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card",
+      "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly"
+    ]
+  }
+]

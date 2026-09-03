@@ -44,7 +44,7 @@
  * with `npm test` if a mutation might be type-only.
  *
  *   npm run mutate
- *   npm run mutate -- --manifest tools/mutate/manifest.json
+ *   npm run mutate -- --manifest tools/mutate/manifests        # a directory: every *.json in it, by name
  *   npm run mutate -- --only skins-min-accent-delta-200
  *   npm run mutate -- --root /path/to/checkout
  *
@@ -63,12 +63,12 @@
  * match must report FAILED-TO-APPLY, and a manifest with a wrong declared outcome
  * must produce a non-zero exit.
  */
-import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync, mkdtempSync, symlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync, mkdtempSync, symlinkSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { tmpdir, availableParallelism } from 'node:os';
 import { join, isAbsolute, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyAt, validateManifest, findUnreachableEntries } from './lib.mjs';
+import { applyAt, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
 import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFailedError } from './orchestrate.mjs';
 
 /**
@@ -123,7 +123,7 @@ const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.m
  * @returns {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null }} */
 export function parseArgs(argv) {
   /** @type {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null }} */
-  const args = { manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd(), jobs: 1, report: null };
+  const args = { manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null };
   // Every flag here takes a value; a flag at the end of the line, or followed by another
   // flag, is refused by name rather than read as `undefined` and failed later somewhere
   // that cannot say which flag was short.
@@ -261,6 +261,37 @@ export function aggregateExitCodes(codes) {
  * @param {string} root @param {string} manifestArg @returns {string} */
 export function resolveManifestPath(root, manifestArg) {
   return isAbsolute(manifestArg) ? manifestArg : join(root, manifestArg);
+}
+
+/**
+ * The manifest as a list of files (issue #505): one file when `path` is a JSON file, or
+ * every `*.json` directly inside it, sorted by name, when it is a directory. The
+ * repository keeps one file per area under `tools/mutate/manifests/`, so a PR that adds
+ * entries appends to its own area's file and two PRs in different areas never conflict.
+ * Returned per file so a tool that rewrites entries (`migrate-killed-by.mjs`) can put
+ * each back where it came from; `readManifest` below is the flattened view.
+ * @param {string} path @returns {{ path: string, entries: any[] }[]}
+ */
+export function readManifestFiles(path) {
+  // The array check lives HERE, not only in `mergeManifestFiles`: every reader goes
+  // through this function, including `migrate-killed-by.mjs`, which rewrites each file
+  // in place and never merges. Without it a non-array file reaches that script's
+  // `entries.map` as an unnamed TypeError instead of naming the broken file.
+  const parse = (/** @type {string} */ file) => {
+    const entries = JSON.parse(readFileSync(file, 'utf8'));
+    if (!Array.isArray(entries)) throw new Error(`manifest ${file}: must be a JSON array of entries`);
+    return { path: file, entries };
+  };
+  if (!statSync(path).isDirectory()) return [parse(path)];
+  const names = readdirSync(path).filter((n) => n.endsWith('.json')).sort();
+  if (names.length === 0) throw new Error(`manifest directory ${path} holds no *.json file`);
+  return names.map((n) => parse(join(path, n)));
+}
+
+/** Every entry of the manifest at `path` (a file or a directory of files), in file order
+ * then entry order, refusing an id present in two files. @param {string} path @returns {any[]} */
+export function readManifest(path) {
+  return mergeManifestFiles(readManifestFiles(path));
 }
 
 /** @param {string} cmd @param {string[]} argv @param {string} cwd @returns {string} */
@@ -734,7 +765,7 @@ async function run() {
   // is trusted to be well-formed, which is true at runtime only because the
   // validateManifest call immediately below throws first if it is not.
   /** @type {ManifestEntry[]} */
-  const allEntries = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const allEntries = readManifest(manifestPath);
   validateManifest(allEntries);
 
   const entries = args.only ? allEntries.filter((e) => e.id === args.only) : allEntries;

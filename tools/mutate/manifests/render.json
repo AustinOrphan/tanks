@@ -1,0 +1,330 @@
+[
+  {
+    "id": "skins-min-accent-delta-200",
+    "file": "src/render/skins.ts",
+    "find": "export const MIN_ACCENT_DELTA = 43;",
+    "replace": "export const MIN_ACCENT_DELTA = 200;",
+    "expect": "killed",
+    "why": "MIN_ACCENT_DELTA is the luma gap an explicit accent is nudged to keep from the hull colour (skins.ts's own comment above the constant). Raising it to 200 pushes the nudge past what a single HSL pole (pure black/white) can deliver, so accents lose their hue and slide toward grey -- exactly the defect skins.test.ts's hue-preservation tests exist to catch. expectFailures pins the count itself, not just the killed/survives outcome: a test added later that also breaks under this mutation should move this number, and a stale number here is what the harness's exit code exists to catch. Re-verified via the harness itself against skins.test.ts as it stands after PR #101 (which added Clouds and grew the file to 19 tests): 4 failures, down from 5 at this entry's original count.",
+    "tests": [
+      "src/render/skins.test.ts"
+    ],
+    "killedBy": [
+      "createSkinTexture accent (the pattern's second tone) is selectable an explicit accent keeps its saturation and hue: gold stays gold, not olive",
+      "ensureContrast never trades the chosen hue away for contrast always reaches the required separation, over a 33,696-pair sweep",
+      "ensureContrast never trades the chosen hue away for contrast keeps a chromatic accent chromatic -- the pole is never reached",
+      "ensureContrast never trades the chosen hue away for contrast nudges exactly the three white-hull pairings, which is what pins the luma weights"
+    ]
+  },
+  {
+    "id": "skins-ensure-contrast-iteration-budget-1",
+    "file": "src/render/skins.ts",
+    "find": "for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < delta; i++) {",
+    "replace": "for (let i = 0; i < 1 && Math.abs(luma(base) - luma(t)) < delta; i++) {",
+    "occurrence": 1,
+    "expect": "killed",
+    "why": "ensureContrast steps lightness toward whichever pole increases the luma gap, up to 20 times, until it clears its delta parameter (MIN_ACCENT_DELTA by default). Capping the budget at 1 step leaves most pairs under-separated -- caught by the 33,696-pair sweep that asserts every pair reaches the required separation. `delta` was `MIN_ACCENT_DELTA` directly until PR #101 parameterised it (autoAccent/stepLightness now share the same loop shape) -- this same loop text now occurs TWICE in skins.ts (ensureContrast and stepLightness), so `occurrence: 1` picks ensureContrast specifically, which is the one the sweep above measures.",
+    "tests": [
+      "src/render/skins.test.ts"
+    ],
+    "killedBy": [
+      "createSkinTexture accent (the pattern's second tone) is selectable explicit accents clear a real contrast floor, not just \"not flat\"",
+      "ensureContrast never trades the chosen hue away for contrast always reaches the required separation, over a 33,696-pair sweep"
+    ]
+  },
+  {
+    "id": "skins-luma-rec601",
+    "file": "src/render/skins.ts",
+    "find": "return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];",
+    "replace": "return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];",
+    "expect": "killed",
+    "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. expectFailures is verified against the SCOPED run (src/render/skins.test.ts) only -- not re-verified repo-wide here. Re-verified via the harness itself after PR #101 (which added Clouds and reworked the auto-accent derivation): now 2 failures against skins.test.ts, up from 1 at this entry's original count -- the count moved because the suite gained coverage, not because this stayed stale. Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
+    "tests": [
+      "src/render/skins.test.ts"
+    ],
+    "killedBy": [
+      "createSkinTexture accent (the pattern's second tone) is selectable the auto derivation is pinned: changing it is deliberate, never incidental",
+      "ensureContrast never trades the chosen hue away for contrast nudges exactly the three white-hull pairings, which is what pins the luma weights"
+    ]
+  },
+  {
+    "id": "skins-ensure-contrast-pole-clamp",
+    "file": "src/render/skins.ts",
+    "find": "l = towardBlack ? Math.max(0, l - STEP) : Math.min(1, l + STEP);",
+    "replace": "l = towardBlack ? l - STEP : Math.min(1, l + STEP);",
+    "expect": "survives",
+    "expectFailures": 0,
+    "equivalent": true,
+    "why": "EQUIVALENT, not a coverage gap: skins.ts's own comment on the loop states this branch is measured unreachable at the shipped MIN_ACCENT_DELTA (43) -- an instrumented 909,792-pair probe hit the l===0 clamp 0 times (vs 34,835 times at MIN_ACCENT_DELTA 127), so dropping the redundant Math.max(0, ...) floor changes no output any test can observe. Included so a future retune of MIN_ACCENT_DELTA that makes the branch reachable is the thing that flips this from survives to killed, not a silent behaviour change.",
+    "tests": [
+      "src/render/skins.test.ts"
+    ]
+  },
+  {
+    "id": "preview-drops-the-rotate-buttons",
+    "file": "src/render/preview.ts",
+    "find": "    rotateButtons,\n",
+    "replace": "    rotateButtons: rotateButtons ? undefined : undefined,\n",
+    "expect": "survives",
+    "expectFailures": 0,
+    "why": "A DISCLOSED SURVIVOR, and not an equivalent mutant -- the shipped behaviour it removes is real: the Customize pane's four rotate buttons stop working entirely. It survives because nothing vitest can run reaches it. createTankPreview builds a WebGLRenderer, which jsdom cannot provide (preview.test.ts exercises only the null-return branch for exactly that reason), so no vitest case can observe whether the buttons were forwarded to createPreviewControls; preview-controls.test.ts constructs the controls itself and so never goes through this line at all. What DOES kill it is tools/gl/harness.ts's 'a rotate button turns the tank in the rendered image', in a real browser, measured at both ends: 11828 of 197600 bytes differ with the argument wired and EXACTLY 0 with it dropped. Recorded here rather than left as a number in a PR body so the claim is re-derivable -- and so that if someone ever finds a way to cover this under vitest, the harness flips it to a mismatch instead of letting the entry go quietly stale. The replacement keeps the parameter read so the mutation compiles: a tsc failure would prove nothing about test coverage.",
+    "tests": [
+      "src/render/preview.test.ts",
+      "src/render/preview-controls.test.ts"
+    ]
+  },
+  {
+    "id": "framing-bounds-multiplier-3",
+    "file": "src/render/framing.ts",
+    "find": "return { width: worldWidth + boundary * 2, height: worldHeight + boundary * 2 };",
+    "replace": "return { width: worldWidth + boundary * 3, height: worldHeight + boundary * 3 };",
+    "expect": "killed",
+    "why": "framedBounds must widen by exactly 2x the boundary ring (one cell radius on each side) to match the wall geometry loadArena actually builds -- widening by 3x instead is caught by the test that pins framedBounds(10, 8, 3) against a literal, boundary-argument-only expectation.",
+    "tests": [
+      "src/render/framing.test.ts"
+    ],
+    "killedBy": [
+      "framedBounds covers the playable area plus the boundary ring exactly",
+      "framedBounds matches the outer extent of the arena walls it has to cover",
+      "framedBounds scales with the boundary it is given, not with the shipped arena"
+    ]
+  },
+  {
+    "id": "framing-frame-margin-doubled",
+    "file": "src/render/framing.ts",
+    "find": "export const FRAME_MARGIN = 0.03;",
+    "replace": "export const FRAME_MARGIN = 0.06;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "HISTORY, not the current story: when this entry was first written (against an earlier commit, FRAME_MARGIN 0.06), it was a documented SURVIVING gap -- framing.test.ts imported FRAME_MARGIN and used the same constant on both sides of its own assertion (to drive fitCameraToArea AND to compute the test's expected screen-space bound), so doubling it moved both sides together and passed regardless of value. PR #103 ('give the board the screen back') independently added a coverage-ratio floor (`covers at least 48% of the frame...`) that does NOT reference FRAME_MARGIN at all -- it measures the framed rect's actual projected area against a hardcoded 0.48 threshold. Re-verifying this entry against current main (as this manifest's own re-verification process requires) found the gap CLOSED: doubling FRAME_MARGIN now fails that coverage floor (46.5% < 48% at 'phone landscape' on 3 of 4 arenas), one test, moved from SURVIVES to KILLED by a change that never touched this mutation. Left in the manifest as a killed entry rather than dropped, specifically because the reversal is itself the lesson: a stale 'known gap' claim in a comment or a PR body would have been WRONG here had it not been re-run.",
+    "tests": [
+      "src/render/framing.test.ts"
+    ]
+  },
+  {
+    "id": "framing-fit-bracket-4.5",
+    "file": "src/render/framing.ts",
+    "find": "let hi = span * 8;",
+    "replace": "let hi = span * 4.5;",
+    "expect": "killed",
+    "expectFailures": 17,
+    "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 11 -- 5 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire (was 9 = 4 arenas x 2 + 1 before arena-05 shipped; arena-05 shares arena-04's exact bounds, so it fails the same two checks). NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here. COUNT MOVED with issue #271: framing.test.ts sweeps every shipped arena, so a sixth board raises the number of cases this mutation fails from 11 to 13. Measured, not adjusted to fit. DRIFTED UPWARD 13 -> 15 for issue #272, and verified rather than renumbered: the mutation was applied on BOTH trees and the failing-test SETS diffed. The two additions are `contains the whole arena and its walls, arena 7 @ 0.42` and `wastes little screen, arena 7 @ 0.42` -- the per-arena framing cases for vs-tri-01, which is the seventh entry in ARENAS. No test failed on main and stopped failing here, so this is coverage added by a new board rather than coverage moved off an old one.",
+    "tests": [
+      "src/render/framing.test.ts"
+    ]
+  },
+  {
+    "id": "render-respawn-teleport-removed",
+    "file": "src/render/entities.ts",
+    "find": "      const p = snap || revived ? undefined : prevT;",
+    "replace": "      const p = snap ? undefined : prevT;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "Restores the defect #239 fixed: with only the world-wide `snap` left, a VS stock respawn -- which keeps the tank's id and does NOT restart the round -- interpolates the revived tank from the position it died at to the spawn point selected for it, and drags the spawn ring parented to its group along with it. Nothing else in the file notices: the tank is at the right place again one tick later, so every assertion about what a respawn LOOKS like a frame after the edge stays green, which is why the alpha sweep reads the first frame at four alphas rather than at one.",
+    "killedBy": [
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) anchors the spawn ring at the respawn point too, in WORLD space",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) holds in ffa mode, tank and ring alike",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) holds in teams mode, tank and ring alike",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) leaves the death pulse at the death point while the spawn effect begins at the respawn",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.25, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.5, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.99, never between the two",
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) snaps the revived tank's FACING as well as its position"
+    ]
+  },
+  {
+    "id": "render-respawn-teleport-applied-to-every-tank",
+    "file": "src/render/entities.ts",
+    "find": "      const revived = !!prevT && !prevT.alive;",
+    "replace": "      const revived = true;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "The over-correction, and the reason the teleport is read per tank rather than raised into the world-level `snap` beside `roundStartTick`: snapping unconditionally freezes every tank in the arena onto its current-tick pose, so nothing in the game interpolates at all and motion becomes a 60 Hz stutter. It is invisible to any test that renders a single alpha or a single tank, which is what `snaps only the revived tank: the other player keeps interpolating on the same sync` exists for -- and `interpolates normally within a round` catches the same thing from the pre-#239 side of the file.",
+    "killedBy": [
+      "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) snaps only the revived tank: the other player keeps interpolating on the same sync",
+      "entity views \u2014 interpolation discontinuities interpolates normally within a round",
+      "shell geometry flies at the height of the barrel that fires it",
+      "tank geometry seats the turret ON the hull rather than sinking it in"
+    ]
+  },
+  {
+    "id": "drawn-shell-retuned-without-the-sim-following",
+    "file": "src/render/entities.ts",
+    "find": "  const SHELL_BODY_LEN = BULLET_RADIUS * 4.5;",
+    "replace": "  const SHELL_BODY_LEN = BULLET_RADIUS * 3.0;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "The failure mode SHELL_NOSE_REACH_RADII exists to catch: src/sim may not import src/render, so a renderer retune can silently desynchronise the spawn depth from the drawn geometry. Stands in for the next person shortening the shell without knowing the sim keyed an inset to its length.",
+    "killedBy": [
+      "tank geometry agrees with the sim about how far a drawn shell reaches ahead of its position",
+      "tank geometry starts the shell nose flush with the drawn muzzle opening, not past it"
+    ]
+  },
+  {
+    "id": "mine-proximity-fill-never-completes",
+    "file": "src/render/mine-warning.ts",
+    "find": "    const span = MINE_PROXIMITY_DELAY_TICKS - 1;",
+    "replace": "    const span = MINE_PROXIMITY_DELAY_TICKS;",
+    "expect": "killed",
+    "tests": [
+      "src/render/mine-warning.test.ts"
+    ],
+    "why": "stepMines decrements BEFORE it checks expiry, so the rendered countdown runs DELAY down to 1 and never 0. Dividing by DELAY tops the fill out at 29/30: the cue visibly never completes, and the acceptance criterion 'the final proximity-warning frame agrees with the blast-start tick' is violated by one tick in a way no screenshot review would reliably catch.",
+    "killedBy": [
+      "proximity trip: the mine lights from the OUTSIDE in is FULLY lit on the last frame before the blast"
+    ]
+  },
+  {
+    "id": "mine-fuse-glow-growth-frozen",
+    "file": "src/render/mine-warning.ts",
+    "find": "  return mineRadius * (GLOW_START_SCALE + (GLOW_END_SCALE - GLOW_START_SCALE) * clamp01(growth));",
+    "replace": "  return mineRadius * GLOW_START_SCALE;",
+    "expect": "killed",
+    "tests": [
+      "src/render/mine-warning.test.ts",
+      "src/render/mine-warning.sync.test.ts"
+    ],
+    "why": "Growth IS the fuse cue now that the blink is gone (owner ruling on PR #396): with the radius frozen the glow still appears, still brightens, and still ends exactly at the blast, so every timing assertion stays green while the thing that communicates urgency has stopped moving. Replaces the retired mine-fuse-ring-thickness-frozen, which anchored on a ring that no longer exists.",
+    "killedBy": [
+      "fuse urgency: a glow from underneath GROWS monotonically as the fuse runs out, and is largest at expiry",
+      "fuse urgency: a glow from underneath clamps at peak rather than overshooting when the fuse is driven past zero"
+    ]
+  },
+  {
+    "id": "mine-proximity-lights-from-the-inside-out",
+    "file": "src/render/mine-warning.ts",
+    "find": "  return 1 - clamp01(lit);",
+    "replace": "  return clamp01(lit);",
+    "expect": "killed",
+    "tests": [
+      "src/render/mine-warning.test.ts",
+      "src/render/mine-warning.sync.test.ts"
+    ],
+    "why": "THE DIRECTION IS THE RULING. Inverting this reproduces the previous revision exactly -- a lit region growing from the centre outward instead of closing in from the rim -- using the same numbers read the other way round. Every timing assertion (starts empty, full on the blast frame, monotone) passes under both, so only an assertion about which EDGE moves can tell them apart.",
+    "killedBy": [
+      "mine warning cues through createEntityViews (issue #276) the illumination CLOSES IN as the countdown runs, ending as a full disc",
+      "proximity trip: the mine lights from the OUTSIDE in closes INWARD, not outward -- the direction is the whole ruling",
+      "proximity trip: the mine lights from the OUTSIDE in is FULLY lit on the last frame before the blast",
+      "proximity trip: the mine lights from the OUTSIDE in starts as a rim hairline on the tick it is tripped"
+    ]
+  },
+  {
+    "id": "mine-fuse-glow-blinks-again",
+    "file": "src/render/mine-warning.ts",
+    "find": "    fuse = { growth: clamp01(1 - mine.timer / FUSE_WARNING_SECONDS) };",
+    "replace": "    { const g = clamp01(1 - mine.timer / FUSE_WARNING_SECONDS); fuse = { growth: Math.floor(g * 12) % 2 === 0 ? g : g * 0.4 }; }",
+    "expect": "killed",
+    "tests": [
+      "src/render/mine-warning.test.ts",
+      "src/render/mine-warning.sync.test.ts"
+    ],
+    "why": "The blink was removed for a reason that outlives the aesthetic preference: sustained flashing above ~3 Hz is a photosensitivity hazard, and the previous revision could only BOUND it at 6 Hz rather than remove it. This entry reintroduces an oscillation and must fail, so the monotone guarantee is enforced rather than merely intended.",
+    "killedBy": [
+      "fuse urgency: a glow from underneath GROWS monotonically as the fuse runs out, and is largest at expiry",
+      "fuse urgency: a glow from underneath NEVER oscillates: no frame is dimmer or smaller than the frame before it"
+    ]
+  },
+  {
+    "id": "tread-tint-set-once-not-per-emission",
+    "file": "src/render/tread-trails.ts",
+    "find": "      d.mesh.material.color.setHex(colorHex);",
+    "replace": "      void colorHex;",
+    "expect": "killed",
+    "why": "The identity tint stops being applied per EMISSION, so a decal keeps whatever colour it was built with. Decals are pooled (`pool.pop() ?? makeDecal()`), so the visible defect is not 'no colour' -- it is a player inheriting ANOTHER player's tint the moment the pool turns over, which on a busy board is most marks. It looks like a working feature in a screenshot of a fresh round and wrong in play, and no assertion on `treadColorFor` alone can see it, since that function stays correct. Caught by the real-emit-path case and by the pool-turnover case that expires one player's marks before the other prints into them. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only. The replacement is `void colorHex;` rather than an empty string: the manifest validator requires a non-empty `replace` (lib.mjs, \"'replace' must be a non-empty string\"), and a no-op that still consumes the parameter expresses the deletion without leaving an unused-argument diagnostic behind it.",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ],
+    "killedBy": [
+      "tread trails carry their owner identity in VS (issue #284) does not let a POOLED decal keep the previous owner colour",
+      "tread trails carry their owner identity in VS (issue #284) prints each owner its own colour through the real emit path"
+    ]
+  },
+  {
+    "id": "tread-tint-ignores-the-campaign-gate",
+    "file": "src/render/tread-trails.ts",
+    "find": "  if (world.rules.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
+    "replace": "  if (!identityApplies(world)) return TREAD_COLOR;",
+    "expect": "killed",
+    "why": "The trail tint stops excluding `campaign-coop`, so a FOUR-PLAYER CO-OP campaign board prints identity-tinted trails. This is the exact defect the first implementation shipped and a screenshot caught: co-op clears the player-count gate -- four player tanks, four identity rings -- so `identityApplies` alone is not enough, and issue #284's scope says campaign trails stay neutral in the initial implementation. Single-player campaign is NOT the discriminating case here (it fails the player-count gate either way), which is why the test uses four co-op tanks and asserts the same four ARE tinted in ffa -- otherwise the case would pass against a build that tinted nothing. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ],
+    "killedBy": [
+      "tread trails carry their owner identity in VS (issue #284) leaves campaign trails neutral -- and for the same reason rings are"
+    ]
+  },
+  {
+    "id": "tank-track-position-drifts-from-the-model",
+    "file": "src/render/entities.ts",
+    "find": "      track.position.copy(trackPart.position);",
+    "replace": "      track.position.set(0, TRACK_H / 2, (trackIndex === 1 ? -1 : 1) * 0.3);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "A track position written out longhand at the consumer instead of taken from the shared model -- the exact shape `makeTank` had before issue #385, and the way an exported tank silently stops being the tank the game draws. The tracks move from the model's +/-0.375 (HULL_WIDTH/2 - TRACK_W/2) to +/-0.3, which pulls them visibly inward off the hull's edge. WHY THIS ENTRY EXISTS RATHER THAN A COMPARISON OF THE TWO BUILDERS: `makeTank` calls `tankParts()`, so a test that checked the model against itself would be comparing a function to its own output and could not fail. The risk is at the CONSUMER, and it is measured: with this mutation applied, `src/render/entities.test.ts` passes 90 of 90 -- the whole existing render suite is blind to it, because nothing there asserts where a track sits -- while `tank-model.test.ts` fails 1 of 7, on the case that compares the live scene graph's track offsets against the model's. That gap between 90-of-90 green and one named failure is the coverage this issue added. Scoped to tank-model.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/tank-model.test.ts"
+    ]
+  },
+  {
+    "id": "death-ring-ignores-the-reduced-motion-policy",
+    "file": "src/render/death-pulse.ts",
+    "find": "      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);",
+    "replace": "      r.mesh.scale.setScalar(1 + GROWTH * k);",
+    "expect": "killed",
+    "tests": [
+      "src/render/death-pulse.test.ts"
+    ],
+    "why": "Issue #289's whole point at this effect: the shockwave keeps its opacity fade and drops its growth under reduced motion. Ignoring the flag restores full expansion for a player who asked for less movement, and does so silently -- the ring still appears, still fades, and still recycles on the same frame, so nothing but the scale distinguishes the two builds.",
+    "killedBy": [
+      "death pulse under the reduced-motion policy (issue #289) stops the ring EXPANDING, and keeps it fading",
+      "death pulse under the reduced-motion policy (issue #289) takes the policy MID-FLIGHT, not only at the next death"
+    ]
+  },
+  {
+    "id": "contact-overlay-ignores-memory-expiry",
+    "file": "src/render/ai-contact.ts",
+    "find": "  if (tank.aiLastSeenPos !== undefined && (tank.aiLastSeenTicks ?? 0) > 0) {",
+    "replace": "  if (tank.aiLastSeenPos !== undefined) {",
+    "expect": "killed",
+    "tests": [
+      "src/render/ai-contact.test.ts"
+    ],
+    "why": "The overlay is the instrument #372's 'attentive, not omniscient' judgement is made through, so a wrong state here produces a wrong ruling rather than a cosmetic defect. Dropping the expiry makes a tank that has given up and started searching still read as 'remembering', which collapses two of the three states the issue asks the trace to distinguish. MEASURED: tools/gl/harness.ts does NOT catch this -- its three-state frames still differ, because the label text carries the difference (m55 against m0) even when the classification is wrong. The jsdom test is the only coverage that does.",
+    "killedBy": [
+      "contactStateOf tells the three states #372 names apart NONE: memory expired"
+    ]
+  },
+  {
+    "id": "blocked-fire-ring-drops-its-paired-audio-arm",
+    "file": "src/render/blocked-fire-ring.ts",
+    "find": "    if (cue !== 'ring' && cue !== 'ring-audio') return;",
+    "replace": "    if (cue !== 'ring') return;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/blocked-fire-ring.test.ts"
+    ],
+    "why": "blocked-fire-ring.ts's own cue gate, narrowed to the single `ring` arm so the paired `ring-audio` draws nothing. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 8 test(s) failed) against the tests this file had at the time, because `ring-audio` appeared nowhere in it -- not as a drawing case, not in the negative list. Same shape as the silent `ring-audio` the audio side shipped (see blocked-fire-audio-drops-the-ring-pairing), and pinned for the same reason: not a wrong branch but a MISSING one, which no assertion written per remembered case can fail on. Nothing else notices -- the flag still parses, renderer.ts still constructs the system for the paired cue, and every `ring` case still draws. #356's ruling is made by comparing arms, so a paired arm that silently drops half its channels produces a wrong ruling rather than a cosmetic defect. `draws for EVERY cue carrying `ring`, and for no other -- one row per cue` is the case that catches it; scoped to blocked-fire-ring.test.ts, and expectFailures counts that scoped run only."
+  },
+  {
+    "id": "blocked-fire-ring-freezes-instead-of-resting-under-reduced-motion",
+    "file": "src/render/blocked-fire-ring.ts",
+    "find": "      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + OVERSHOOT * (1 - k));",
+    "replace": "      if (!reducedMotion) r.mesh.scale.setScalar(1 + OVERSHOOT * (1 - k));",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-ring.test.ts"
+    ],
+    "why": "Restores the guard the current shape deliberately replaced -- skipping the scale term under reduced motion instead of writing a rest scale -- which blocked-fire-ring.test.ts names as its negative control in prose; this entry is what makes that prose executable. The defect is only reachable when the preference flips MID-FLIGHT: the ring freezes at whatever scale it had reached and sits visibly oversized for the rest of its life instead of closing onto the hull. `reduced motion keeps the cue but removes the travel` sets the preference BEFORE spawning and so stays green under it, which is precisely why one case is not enough here; only `snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight` fails. Same policy as death-ring-ignores-the-reduced-motion-policy, pinning the live toggle that entry's effect does not have. Scoped to blocked-fire-ring.test.ts; expectFailures counts that scoped run only.",
+    "killedBy": [
+      "blocked-fire ring (issue #356) snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight"
+    ]
+  }
+]

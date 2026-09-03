@@ -185,3 +185,31 @@ export function findUnreachableEntries(entries, relatedFilesFor) {
   }
   return problems;
 }
+
+/**
+ * Concatenate the entries of several manifest files (issue #505) in the order given --
+ * the loader passes them sorted by filename, so the order is stable and reviewable --
+ * refusing an id that appears in two files with BOTH paths named. Within one file a
+ * duplicate is `validateManifest`'s to catch; across files nothing else looks.
+ * @param {{ path: string, entries: any[] }[]} files
+ * @returns {any[]}
+ */
+export function mergeManifestFiles(files) {
+  /** @type {Map<string, string>} */
+  const seen = new Map();
+  const out = [];
+  for (const file of files) {
+    if (!Array.isArray(file.entries)) {
+      throw new Error(`manifest ${file.path}: must be a JSON array of entries`);
+    }
+    for (const entry of file.entries) {
+      const id = entry?.id;
+      if (typeof id === 'string' && seen.has(id) && seen.get(id) !== file.path) {
+        throw new Error(`manifest id "${id}" appears in both ${seen.get(id)} and ${file.path}`);
+      }
+      if (typeof id === 'string') seen.set(id, file.path);
+      out.push(entry);
+    }
+  }
+  return out;
+}

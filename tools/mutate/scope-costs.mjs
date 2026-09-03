@@ -9,9 +9,10 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { readManifest } from './run.mjs';
 
 const OUT = fileURLToPath(new URL('./scope-costs.json', import.meta.url));
-const MANIFEST = fileURLToPath(new URL('./manifest.json', import.meta.url));
+const MANIFEST = fileURLToPath(new URL('./manifests', import.meta.url));
 
 /**
  * Pure: entries carry `seconds`, the manifest says which scope each belongs to.
@@ -45,7 +46,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('usage: scope-costs.mjs <report.json> [more...]');
     process.exit(2);
   }
-  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const manifest = readManifest(MANIFEST);
   const entries = reports.flatMap((p) => JSON.parse(readFileSync(p, 'utf8')).entries);
   const costs = scopeCosts(entries, manifest);
   writeFileSync(OUT, JSON.stringify(costs, null, 2) + '\n');
