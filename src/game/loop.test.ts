@@ -288,6 +288,8 @@ interface Recorder {
   volumes: number[];
   resizes: Array<[number, number]>;
   refits: Array<[number, number, number]>;
+  /** One entry per `Renderer3D.worldReplaced()` call -- the level-switch announcement (#531). */
+  worldReplacements: number;
   restyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
   /** Every reduced-motion policy value pushed at the RENDERER (issue #289). */
   rendererReducedMotion: boolean[];
@@ -520,6 +522,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     volumes: [],
     resizes: [],
     refits: [],
+    worldReplacements: 0,
     restyles: [],
     rendererReducedMotion: [],
     previewCanvasesReceived: [],
@@ -809,6 +812,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         refit(w2: number, h2: number, b: number): void {
           rec.refits.push([w2, h2, b]);
+        },
+        worldReplaced(): void {
+          rec.worldReplacements += 1;
         },
         setPlayerStyle(hex: string | null, skin: string, accent: string | null): void {
           rec.restyles.push({ hex, skin, accent });
@@ -5212,6 +5218,26 @@ describe('startGameWith: per-level renderer refit', () => {
     h.setState('outcome-lose');
     h.hud.startRestart(); // retry the same level
     expect(h.rec.refits).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('announces the replaced world to the renderer on EVERY rebuild, same-size or not (#531)', () => {
+    // The composition this session's fix rests on, one layer above driver.test.ts: a
+    // real driver is wired here, so this proves `switchTo` -> `driver.reset` ->
+    // `renderer.worldReplaced()` is actually connected end to end and not merely
+    // available. Nothing else in this file can see that seam.
+    //
+    // A SAME-SIZE rebuild is the discriminating case, and why this sits beside the
+    // refit tests rather than reusing one: refit is guarded on the board's dimensions
+    // changing, and the streak issue #531 describes has nothing to do with dimensions.
+    // A fix hung off the refit call would pass a different-board test and still leave
+    // the tread trails streaking across a retry of the same level.
+    const h = boot(makeDeps({ levelCount: 1 }));
+    const atBoot = h.rec.worldReplacements;
+    h.setState('outcome-lose');
+    h.hud.startRestart();
+    expect(h.rec.refits).toEqual([]); // same board, so nothing refits...
+    expect(h.rec.worldReplacements).toBe(atBoot + 1); // ...and the world is still replaced
     h.handle.dispose();
   });
 });

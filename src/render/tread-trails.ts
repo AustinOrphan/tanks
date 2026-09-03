@@ -16,8 +16,10 @@ import { identityApplies, resolveOwnerColor } from '../presentation/identity';
  * `SimEvent` for "a tank moved". `sync(prev, curr)` is driven by WORLD STATE instead,
  * called every render frame with the same `(prev, curr)` pair `entities.sync` gets.
  *
- * `prev` is read for exactly one field -- `roundStartTick`, to detect a round
- * boundary or level switch, the same signal `entities.ts`'s own `snap` uses. It is
+ * `prev` is read for exactly one field -- `roundStartTick`, which detects a ROUND
+ * RESTART, half of the same signal `entities.ts`'s own `snap` uses; the other half, a
+ * level switch, arrives as the game layer's `worldReplaced()` announcement, because no
+ * comparison of sim state can see it (issue #531, and `sync` below). It is
  * NEVER read for tank position. That is deliberate, not an oversight: `death-pulse.ts`'s
  * own doc comment explains why a stateless diff of `prev` against `curr` is wrong for
  * a per-frame consumer -- a >=2-tick catch-up frame only ever exposes the LAST tick's
@@ -43,12 +45,24 @@ export interface TreadTrailSystem {
    * no distance and prints nothing, which is what keeps a parked tank from
    * overdrawing its own footprint frame after frame.
    *
-   * On a round boundary or level switch (`prev.roundStartTick !== curr.roundStartTick`,
-   * `entities.ts`'s own `snap` signal), every active decal is recycled immediately
-   * and every tracked anchor is dropped -- old marks would otherwise sit at
-   * coordinates that belong to a board that no longer exists.
+   * On a round restart (`prev.roundStartTick !== curr.roundStartTick`) or an announced
+   * level switch (`worldReplaced()`), every active decal is recycled immediately and
+   * every tracked anchor is dropped -- old marks would otherwise sit at coordinates
+   * that belong to a board that no longer exists, and the surviving anchor would make
+   * the very next call print a solid line from there to the new board's spawn.
    */
   sync(prev: World, curr: World): void;
+  /**
+   * The game layer announcing that the world was REPLACED wholesale -- a level switch --
+   * rather than stepped. Honoured by the next `sync`, exactly as a round restart is.
+   *
+   * Pushed rather than inferred (issue #531): `createWorld` stamps every world with
+   * `roundStartTick: 1`, so a level cleared on its FIRST round hands `sync` an incoming
+   * world whose `roundStartTick` matches the outgoing one's and the comparison stays
+   * silent. Measured on this module with the announcement ignored: two decals from a
+   * short drive became 158 in a straight line to the new spawn.
+   */
+  worldReplaced(): void;
   /** Ages every active decal by dt, fading it out; recycles any decal whose own
    * clock has run out. `dt` is the same real-seconds delta particles.update and
    * deathPulse.update take, already zeroed by `animationDt` while `paused` -- so a
@@ -192,6 +206,12 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
   // (or just revived/teleported) -- the very next tick only records its position,
   // it does not print from nowhere.
   const anchors = new Map<number, Vec2>();
+  // Latched by `worldReplaced()` and read by the next `sync`, because the two are
+  // separate events: `driver.reset` swaps the world between frames, and a level switch
+  // made while nothing is rendering (a menu, a stopped loop) must still be honoured by
+  // whichever frame comes next. Cleared on consumption, so it clears the board exactly
+  // once rather than on every frame that follows.
+  let worldWasReplaced = false;
 
   function makeDecal(): Decal {
     const mat = new THREE.MeshBasicMaterial({
@@ -258,11 +278,19 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
   }
 
   function sync(prev: World, curr: World): void {
-    // Same signal entities.ts's own `snap` uses: a round restart re-anchors this tick
-    // (world.ts's resetArena), and a level switch hands render() a brand-new World
-    // whose tick/roundStartTick never lines up with the old one's -- either way, old
-    // decals belong to a board that no longer applies.
-    if (prev.roundStartTick !== curr.roundStartTick) {
+    // Consumed unconditionally rather than inside the `||`, so a frame that is both an
+    // announced level switch and a round-restart boundary still leaves the latch clear
+    // instead of carrying the announcement into a later, continuous frame.
+    const replaced = worldWasReplaced;
+    worldWasReplaced = false;
+    // Same pair of discontinuities entities.ts's own `snap` reads. A round restart
+    // re-anchors roundStartTick in place (world.ts's resetArena), which this comparison
+    // sees. A level switch does not touch it at all: the incoming world is a different
+    // object that createWorld started at `roundStartTick: 1`, so whenever the outgoing
+    // world was also still in its first round the two are equal and only the game
+    // layer's announcement distinguishes them (issue #531). Either way the old decals
+    // belong to a board that no longer applies.
+    if (replaced || prev.roundStartTick !== curr.roundStartTick) {
       clearAll();
     }
     for (const t of curr.tanks) {
@@ -336,5 +364,9 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
     geo.dispose();
   }
 
-  return { sync, update, dispose };
+  function worldReplaced(): void {
+    worldWasReplaced = true;
+  }
+
+  return { sync, worldReplaced, update, dispose };
 }

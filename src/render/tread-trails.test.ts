@@ -333,6 +333,77 @@ describe('tread trails: round boundary and level switch', () => {
     tt.sync(newWorld, { ...newWorld, tanks: [makeTank(1, 500 + EMIT_SPACING, 500, 0)] });
     expect(decalMeshes(scene).length).toBe(2); // one ordinary pair, not a giant run
   });
+
+  it('clears on an announced level switch whose two worlds share roundStartTick (#531)', () => {
+    // The case the roundStartTick comparison structurally cannot see, and the one the
+    // test above is the NEGATIVE CONTROL for: `clears every active decal and every
+    // tracked anchor when roundStartTick changes` drives the same level switch with the
+    // numbers unequal, so it stays green whether or not the announcement is honoured.
+    // Only a switch between two worlds that agree on roundStartTick discriminates.
+    //
+    // Both worlds here come straight from createWorld, which stamps `roundStartTick: 1`
+    // unconditionally -- so this is the ordinary shape of clearing a level on the first
+    // attempt, not a contrived fixture. Measured against this module with the
+    // announcement ignored: the two decals below became 158 in a straight line to the
+    // new spawn.
+    //
+    // Mutation this catches: dropping the `replaced ||` half of `sync`'s guard.
+    const { scene, tt } = setup();
+    const start = makeTank(1, 0, 0, 0);
+    tt.sync(worldWith(start), worldWith(start));
+    tt.sync(worldWith(start), worldWith(makeTank(1, EMIT_SPACING, 0, 0)));
+    expect(decalMeshes(scene).length).toBe(2);
+
+    const oldWorld = worldWith(makeTank(1, EMIT_SPACING, 0, 0));
+    const newWorld = worldWith(makeTank(1, 14, 14, 0)); // a different board's spawn point
+    // Stated rather than assumed: if createWorld ever stops starting every world at the
+    // same tick, this test silently stops being about the first-round case at all.
+    expect(newWorld.roundStartTick).toBe(oldWorld.roundStartTick);
+
+    tt.worldReplaced();
+    tt.sync(oldWorld, newWorld);
+    expect(decalMeshes(scene).length).toBe(0);
+
+    // And the anchor with them: a short move from the new spawn must print one ordinary
+    // pair rather than reconnecting across the gap the switch opened.
+    tt.sync(newWorld, { ...newWorld, tanks: [makeTank(1, 14 + EMIT_SPACING, 14, 0)] });
+    expect(decalMeshes(scene).length).toBe(2);
+  });
+
+  it('spends the announcement on one sync and keeps printing afterwards', () => {
+    // Negative control for the over-correction: a latch that is set but never cleared
+    // wipes the board on every frame after the first level switch of the session, which
+    // reads as tread trails simply not working any more. Nothing above can see that --
+    // every other case in this file syncs at most twice after a clear.
+    //
+    // Mutation this catches: removing `worldWasReplaced = false;` from `sync`.
+    const { scene, tt } = setup();
+    const start = makeTank(1, 0, 0, 0);
+    tt.worldReplaced();
+    tt.sync(worldWith(start), worldWith(start));
+    // Four separate syncs of one EMIT_SPACING each, so a latch that survived even one
+    // extra frame would show up as fewer than the full eight decals here.
+    let x = 0;
+    for (let i = 0; i < 4; i++) {
+      const from = worldWith(makeTank(1, x, 0, 0));
+      x += EMIT_SPACING;
+      tt.sync(from, worldWith(makeTank(1, x, 0, 0)));
+    }
+    expect(decalMeshes(scene).length).toBe(8);
+  });
+
+  it('does not clear a board that was never announced and never changed round', () => {
+    // Negative control for the under-correction's opposite: `clearAll()` called
+    // unconditionally, which passes every "the board is empty afterwards" assertion in
+    // this describe block while erasing ordinary play.
+    const { scene, tt } = setup();
+    const start = makeTank(1, 0, 0, 0);
+    tt.sync(worldWith(start), worldWith(start));
+    tt.sync(worldWith(start), worldWith(makeTank(1, EMIT_SPACING, 0, 0)));
+    const stayed = worldWith(makeTank(1, EMIT_SPACING, 0, 0));
+    tt.sync(stayed, worldWith(makeTank(1, EMIT_SPACING * 2, 0, 0)));
+    expect(decalMeshes(scene).length).toBe(4);
+  });
 });
 
 describe('tread trails: dispose', () => {

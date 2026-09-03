@@ -1829,12 +1829,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 101,
+    "expectFailures": 102,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered. expectFailures moved 104 -> 101 when issue #324 removed the session's duplicate settings pushes: three loop.test.ts assertions that counted a page push AND a session push now count one, so they no longer fail on a slot that was never filled."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered. expectFailures moved 104 -> 101 when issue #324 removed the session's duplicate settings pushes: three loop.test.ts assertions that counted a page push AND a session push now count one, so they no longer fail on a slot that was never filled. Re-measured at 102 of 487 (route-host.test.ts 54 + loop.test.ts 433) for issue #531: the one added case is loop.test.ts's \"announces the replaced world to the renderer on EVERY rebuild, same-size or not (#531)\", which drives a rebuild through the session's Restart handler and so also fails when the slot is never filled. The failing SET was compared against the same mutation run on the parent commit, not the number renumbered: that one name added, none removed."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -3529,6 +3529,22 @@
     "killedBy": [
       "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
       "startGameWith: HUD wiring routes the mute button through the STORE, to the engine, and back to the button"
+    ]
+  },
+  {
+    "id": "world-swap-never-announced-to-the-renderer",
+    "file": "src/game/driver.ts",
+    "find": "      deps.renderer.worldReplaced();",
+    "replace": "      void deps.renderer;",
+    "expect": "killed",
+    "tests": [
+      "src/game/driver.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "The wiring issue #531's fix depends on, deleted: the driver swaps the world it renders from and never tells the renderer, so presentation is back to inferring the discontinuity from sim state and back to streaking tread marks across the board on a first-round level clear. Pinned at BOTH layers deliberately -- driver.test.ts proves `reset` makes the call before any frame can render the replaced world, and loop.test.ts proves `switchTo` actually reaches `reset` with a real driver in place, on a same-size rebuild where nothing refits. Neither alone is enough: the unit test passes against a loop that never calls `reset`, and the loop test passes against a driver that announces too late.",
+    "killedBy": [
+      "driver: lifecycle tells the renderer the world was replaced, before any frame can render it (#531)",
+      "startGameWith: per-level renderer refit announces the replaced world to the renderer on EVERY rebuild, same-size or not (#531)"
     ]
   }
 ]

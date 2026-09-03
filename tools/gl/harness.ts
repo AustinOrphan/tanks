@@ -617,13 +617,13 @@ check('render draws a frame without throwing', () => {
  * arena-01 geometry, so a tank can be placed and re-placed without risking a wall
  * underfoot (createRenderer's own W/H/BOUNDARY frame the camera and ground; nothing
  * requires the WORLD's own content to match that arena's actual layout). */
-function soloTankWorld(x: number, y: number): ReturnType<typeof createWorld> {
+function soloTankWorld(x: number, y: number, kind: Tank['kind'] = 'player'): ReturnType<typeof createWorld> {
   const tank: Tank = {
-    id: 1, kind: 'player', pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
+    id: 1, kind, pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
     desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
     aiState: 'idle', aiTimer: 0,
   };
-  const spawns: Spawn[] = [{ kind: 'player', pos: { x, y }, angle: 0 }];
+  const spawns: Spawn[] = [{ kind, pos: { x, y }, angle: 0 }];
   return createWorld({ walls: [], tanks: [tank], spawns, lives: 3 });
 }
 
@@ -669,6 +669,102 @@ check('tread trails (#231) reach the framebuffer through the real renderer.ts wi
   const moved = bytesDiffering(stillFrame, drivenFrame);
   if (moved === 0) {
     return 'a driven tank and a stationary tank at the SAME final pose rendered IDENTICAL frames -- tread-trails did not reach the framebuffer through renderer.ts';
+  }
+  return null;
+});
+
+check('a level switch announced to the real renderer clears the trail behind it (#531)', () => {
+  // Companion to the check above, and the one place the `worldReplaced()` forwarding
+  // added in renderer.ts is reachable at all: entities.ts and tread-trails.ts each own a
+  // jsdom-testable latch of their own, but the two-line hand-off between them and
+  // `Renderer3D` runs only inside `createRenderer`, which needs a real GL context.
+  //
+  // Same trick as the tread-trails check: three runs of the SAME number of renders,
+  // ending with the tank at the SAME pose, so the tank's own silhouette cannot account
+  // for any difference. The driven run walks in EMIT_SPACING steps and leaves marks; the
+  // switched run walks the identical path and then announces a level switch before a
+  // final frame; the still run never moves and can never have marks. If the
+  // announcement reaches the systems, the switched frame is the still frame.
+  const FINAL = { x: W / 2, y: H / 2 };
+  const START = { x: FINAL.x - 1.0, y: FINAL.y }; // 4 * EMIT_SPACING back
+  const STEPS = 4;
+
+  // An ENEMY tank, unlike the check above. Tread emission does not care about kind, but
+  // the spawn entrance does: `worldReplaced()` also opens a new round for the player's
+  // view, so a player tank would answer the announcement with an entrance ring and a
+  // fade, and this check could no longer tell a cleared trail from a dressed tank. That
+  // entrance is real behaviour and is pinned in entities.test.ts; here it is noise.
+  function frameFor(path: { x: number; y: number }[], announceAtEnd: boolean): Uint8Array {
+    const c = placedCanvas(800, 500, 0, 0, 800, 500);
+    const r = createRenderer(c, W, H, BOUNDARY);
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    let prev = soloTankWorld(path[0].x, path[0].y, 'brown');
+    for (const p of path) {
+      const curr = soloTankWorld(p.x, p.y, 'brown');
+      r.render(prev, curr, 1, [], 1 / 60);
+      prev = curr;
+    }
+    // The fifth frame every run pays, so the animation clock and the decal fade have
+    // advanced by the same amount in all three before the pixels are read.
+    if (announceAtEnd) r.worldReplaced();
+    const landed = soloTankWorld(FINAL.x, FINAL.y, 'brown');
+    r.render(landed, landed, 1, [], 1 / 60);
+    const px = grab(gl, c.width, c.height);
+    r.dispose();
+    c.remove();
+    return px;
+  }
+
+  const stillPath = Array.from({ length: STEPS }, () => FINAL);
+  const drivenPath = Array.from({ length: STEPS }, (_, i) => {
+    const t = (i + 1) / STEPS;
+    return { x: START.x + (FINAL.x - START.x) * t, y: START.y + (FINAL.y - START.y) * t };
+  });
+
+  const still = frameFor(stillPath, false);
+  const driven = frameFor(drivenPath, false);
+  const switched = frameFor(drivenPath, true);
+
+  // The premise: without the announcement this path really does leave marks on screen.
+  // Without this the check would pass against a renderer that draws no trails at all.
+  if (bytesDiffering(still, driven) === 0) {
+    return 'the driven path left no visible trail, so this check could not tell a clear from a no-op';
+  }
+  const residue = bytesDiffering(still, switched);
+  if (residue !== 0) {
+    return `announcing the level switch left ${residue} byte(s) of the old board's trail on screen -- renderer.ts did not forward worldReplaced() to the systems that hold it`;
+  }
+  return null;
+});
+
+check('a level switch announced to the real renderer reaches the tank views too (#531)', () => {
+  // The other half of the same two-line forwarding in renderer.ts. The check above can
+  // only see `treadTrails.worldReplaced()`, because it deliberately renders an enemy;
+  // this one renders a PLAYER and never moves it, so there are no decals to clear and
+  // the only thing an announcement can change on screen is what entities.ts does with
+  // it -- the entrance the new board's arrival starts.
+  const AT = { x: W / 2, y: H / 2 };
+  const FRAMES = 4;
+
+  function frameFor(announceAtEnd: boolean): Uint8Array {
+    const c = placedCanvas(800, 500, 0, 0, 800, 500);
+    const r = createRenderer(c, W, H, BOUNDARY);
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    const parked = soloTankWorld(AT.x, AT.y);
+    for (let i = 0; i < FRAMES; i++) r.render(parked, parked, 1, [], 1 / 60);
+    if (announceAtEnd) r.worldReplaced();
+    const landed = soloTankWorld(AT.x, AT.y);
+    r.render(landed, landed, 1, [], 1 / 60);
+    const px = grab(gl, c.width, c.height);
+    r.dispose();
+    c.remove();
+    return px;
+  }
+
+  const quiet = frameFor(false);
+  const announced = frameFor(true);
+  if (bytesDiffering(quiet, announced) === 0) {
+    return 'announcing a level switch changed nothing about a parked player tank -- renderer.ts did not forward worldReplaced() to entities.ts';
   }
   return null;
 });

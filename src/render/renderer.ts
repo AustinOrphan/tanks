@@ -26,6 +26,31 @@ export interface Renderer3D {
   /** Re-aim the scene at a new board size. In place: the GL context survives. */
   refit(worldWidth: number, worldHeight: number, boundary: number): void;
   /**
+   * The game layer announcing that the World handed to `render` was REPLACED wholesale
+   * -- a level switch -- rather than stepped forward from the previous one. Everything
+   * that carries state ACROSS frames (interpolation history, tread anchors) must drop
+   * it; the next `render` does exactly that, once.
+   *
+   * Issue #531. This exists because the inference it replaces is unsound, not merely
+   * inconvenient: presentation used to detect the discontinuity by comparing
+   * `roundStartTick` between the two worlds, and `createWorld` starts EVERY world at
+   * `roundStartTick: 1` while only `resetArena` ever moves it. A level cleared on its
+   * first attempt therefore hands the renderer a fresh world whose 1 matches the
+   * outgoing world's 1, the comparison stays silent, and the tread system walks the gap
+   * between the old board's coordinates and the new spawn printing decals the whole way
+   * -- measured on tread-trails.ts with this announcement ignored, two decals from a
+   * short drive became 158.
+   *
+   * A pushed announcement also fits the one-way-projection rule better than any repair
+   * of the inference would: a level switch is something the game layer DOES, at one
+   * site (`loop.ts`'s `switchTo`, through `driver.reset`), and it is the only layer that
+   * knows it happened. The alternative -- giving `World` a generation counter that only
+   * presentation reads -- would push a presentation concern into the sim's snapshot.
+   * `entities.ts`'s per-tank `revived` (issue #239) stays where it is: it is a different
+   * fact, true of ONE tank in a world that was neither replaced nor restarted.
+   */
+  worldReplaced(): void;
+  /**
    * The paint shop: restyle the player live. Null hex restores the roster default;
    * null accentHex means `auto` -- derive the pattern's second tone from the hull.
    */
@@ -191,6 +216,15 @@ export function createRenderer(
     ctx.resize(w, h);
   }
 
+  // Forwarded to each system that keeps cross-frame state, rather than latched here and
+  // passed down through `render`'s already long argument list: each system then owns the
+  // one-frame lifetime of its own latch and can be tested for it in jsdom, which
+  // `createRenderer` itself (a real GL context) cannot be.
+  function worldReplaced(): void {
+    entities.worldReplaced();
+    treadTrails.worldReplaced();
+  }
+
   function refit(w: number, h: number, boundaryRing: number): void {
     centre = { x: w / 2, y: h / 2 };
     ctx.refit(w, h, boundaryRing);
@@ -216,6 +250,7 @@ export function createRenderer(
     screenToGround,
     resize,
     refit,
+    worldReplaced,
     setPlayerStyle: (hex, skin, accentHex) => entities.setPlayerStyle(hex, skin, accentHex),
     // Forwarded, not stored: every consumer of the policy owns its own reduced treatment,
     // so the renderer is a router here rather than a second source of truth. Today that is

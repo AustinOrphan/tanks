@@ -172,6 +172,68 @@ describe('entity views — interpolation discontinuities', () => {
     views.dispose();
   });
 
+  it('snaps across an announced level switch, whose worlds agree on roundStartTick (#531)', () => {
+    // The blind spot in the comparison above. `createWorld` stamps `roundStartTick: 1`
+    // on every world it builds and only `resetArena` ever moves it, so a level cleared
+    // on the FIRST attempt hands sync two worlds whose numbers match -- and a fresh
+    // board's spawn is a teleport, not a tick of motion.
+    //
+    // Negative control, deliberately the two tests either side of this one:
+    // `snaps rather than lerps across a round boundary` proves the roundStartTick half
+    // still fires on its own, and `interpolates normally within a round` uses this
+    // test's exact fixture WITHOUT the announcement and demands the midpoint -- so an
+    // implementation that snapped unconditionally fails there rather than passing here
+    // for the wrong reason.
+    //
+    // Mutation this catches: dropping the `replaced ||` half of `snap`.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+
+    const prev = makeWorld();
+    prev.tanks[0].pos = { x: 10, y: 5 };
+    const curr = makeWorld();
+    curr.tanks[0].pos = { x: 11, y: 5 };
+    // Stated rather than assumed: this test is only about the first-round case for as
+    // long as createWorld keeps starting both worlds at the same tick.
+    expect(curr.roundStartTick).toBe(prev.roundStartTick);
+
+    views.worldReplaced();
+    views.sync(prev, curr, 0.5);
+    scene.updateMatrixWorld(true);
+
+    const group = scene.children.find((c) => c instanceof THREE.Group) as THREE.Group;
+    expect(group.position.x).toBeCloseTo(11, 9); // curr pose, not the 10.5 midpoint
+
+    views.dispose();
+  });
+
+  it('spends the level-switch announcement on one sync, then interpolates again', () => {
+    // Negative control for a latch that is set but never cleared: it would freeze
+    // interpolation for the rest of the session, turning every tank's motion into a
+    // 60 Hz stutter -- and no single-sync assertion anywhere in this file can see it.
+    //
+    // Mutation this catches: removing `worldWasReplaced = false;` from `sync`.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+
+    const first = makeWorld();
+    first.tanks[0].pos = { x: 10, y: 5 };
+    views.worldReplaced();
+    views.sync(first, first, 1);
+
+    const prev = makeWorld();
+    prev.tanks[0].pos = { x: 10, y: 5 };
+    const curr = makeWorld();
+    curr.tanks[0].pos = { x: 11, y: 5 };
+    views.sync(prev, curr, 0.5);
+    scene.updateMatrixWorld(true);
+
+    const group = scene.children.find((c) => c instanceof THREE.Group) as THREE.Group;
+    expect(group.position.x).toBeCloseTo(10.5, 9);
+
+    views.dispose();
+  });
+
   it('clamps alpha, so an overshooting accumulator cannot extrapolate', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
@@ -2162,6 +2224,44 @@ describe('spawn animation (#199)', () => {
     views.sync(prev, curr, 1, 0.016);
     // Mutation that breaks this: dropping the `enteredRound` half of the trigger.
     expect(findByName(scene, 'spawn-ring')).toBeTruthy();
+    views.dispose();
+  });
+
+  it('starts the entrance on an announced level switch, whose worlds agree on roundStartTick (#531)', () => {
+    // Same signal, the other consumer. `enteredRound` used to recompute the
+    // roundStartTick comparison locally instead of reading `snap`, so it inherited the
+    // identical blind spot: a level cleared on the first attempt builds a world that
+    // createWorld also stamped `roundStartTick: 1`, the comparison stays silent, and the
+    // player lands on the new board with no entrance at all -- while every OTHER level
+    // switch, arriving after a death has moved the number, plays one.
+    //
+    // Negative control: the test directly above drives the same entrance through a
+    // roundStartTick bump with no announcement, so `enteredRound = snap` cannot pass
+    // both by simply becoming `true`. `never starts a spawn entrance for an enemy tank`
+    // below pins that this trigger still respects the player-kind guard.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = alivePlayerWorld(undefined, 0);
+    const curr = alivePlayerWorld(undefined, 0);
+    expect(curr.roundStartTick).toBe(prev.roundStartTick);
+    views.worldReplaced();
+    views.sync(prev, curr, 1, 0.016);
+    // Mutation that breaks this: restoring the local
+    // `curr.roundStartTick !== prev.roundStartTick` in place of `enteredRound = snap`.
+    expect(findByName(scene, 'spawn-ring')).toBeTruthy();
+    views.dispose();
+  });
+
+  it('starts no entrance on an ordinary frame that was neither announced nor round-reset', () => {
+    // The negative control the two announcement tests need in this describe block: an
+    // `enteredRound` stuck at `true` would give every alive player an entrance ring on
+    // its very first sync, which reads as a permanent spawn effect.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = alivePlayerWorld(undefined, 0);
+    const curr = alivePlayerWorld(undefined, 1);
+    views.sync(prev, curr, 1, 0.016);
+    expect(findByName(scene, 'spawn-ring')).toBeUndefined();
     views.dispose();
   });
 
