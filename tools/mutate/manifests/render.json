@@ -596,5 +596,89 @@
     "killedBy": [
       "spawn animation (#199) starts the entrance on an announced level switch, whose worlds agree on roundStartTick (#531)"
     ]
+  },
+  {
+    "id": "blocked-fire-smoke-puffs-for-an-arm-that-is-not-its-own",
+    "file": "src/render/blocked-fire-smoke.ts",
+    "find": "    if (!cueDrives(cue, 'visual') || cue !== 'smoke') return;",
+    "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'smoke' && cue !== 'muzzle')) return;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-smoke.test.ts"
+    ],
+    "why": "This arm's own cue gate, widened so the cloud also puffs under `muzzle`. Same defect class as blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own, and worse here than for any earlier pair: `muzzle` and `smoke` draw at the SAME barrel, so the owner comparing them would be ranking a flash against a flash-plus-smoke and reading the difference as a preference between arms. Only the one-row-per-cue table can catch it -- every case written per remembered scenario passes, since `smoke` still puffs and null still draws nothing. MEASURED with that table's `it` deleted from the file: 0 of the 11 remaining tests failed (survived). With it: killed.",
+    "killedBy": [
+      "blocked-fire muzzle smoke (issue #356) puffs for EVERY cue carrying `smoke`, and for no other -- one row per cue"
+    ]
+  },
+  {
+    "id": "blocked-fire-smoke-puffs-at-the-tank-instead-of-the-barrel",
+    "file": "src/render/blocked-fire-smoke.ts",
+    "find": "      cl.origin.set(\n        owner.pos.x + cos * SHELL_MUZZLE_FORWARD,\n        BULLET_Y,\n        owner.pos.y + sin * SHELL_MUZZLE_FORWARD,\n      );",
+    "replace": "      cl.origin.set(owner.pos.x, BULLET_Y, owner.pos.y);",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-smoke.test.ts"
+    ],
+    "why": "Drops the muzzle offset, so the smoke rises out of the hull rather than out of the barrel. That is not cosmetic: this arm's whole claim is that the GUN cycled and produced smoke instead of a shell, and a cloud centred on the tank says nothing about the weapon -- it becomes a second tank-local treatment, which is the picture `ring` already occupies. The position is the same point bullets.ts hands a real `fire` event as its flash, so the sim's own muzzle plane is what is being discarded.",
+    "killedBy": [
+      "blocked-fire muzzle smoke (issue #356) leaves the MUZZLE, on the barrel centreline -- not the tank"
+    ]
+  },
+  {
+    "id": "blocked-fire-smoke-collapses-like-the-flash-it-must-not-resemble",
+    "file": "src/render/blocked-fire-smoke.ts",
+    "find": "      const size = (BIRTH_SIZE + (GROWN_SIZE - BIRTH_SIZE) * grow) * b.size;",
+    "replace": "      const size = (GROWN_SIZE - (GROWN_SIZE - BIRTH_SIZE) * grow) * b.size;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-smoke.test.ts"
+    ],
+    "why": "Inverts the growth, so the cloud shrinks as it fades. That is precisely blocked-fire-muzzle.ts's gesture (collapse plus fade toward SHRINK_TO) in grey, and it would collapse two of the four selectable visual arms into one treatment at one place -- the failure mode issue #356's comparison cannot survive, since arms that differ only in colour produce no ruling. The scale still changes every frame under this, so nothing that merely watched for movement would notice.",
+    "killedBy": [
+      "blocked-fire muzzle smoke (issue #356) reads as SMOKE, not as the flash: it EXPANDS and thins where the flash collapsed"
+    ]
+  },
+  {
+    "id": "blocked-fire-smoke-dies-with-the-flash-it-stands-beside",
+    "file": "src/render/blocked-fire-smoke.ts",
+    "find": "const LIFETIME_SECONDS = 0.75;",
+    "replace": "const LIFETIME_SECONDS = 0.07;",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-smoke.test.ts"
+    ],
+    "why": "Cuts the cloud to blocked-fire-muzzle.ts's own 0.07s. Duration is the property the owner's request turns on -- smoke lingers, a flash does not -- so an arm gone in a frame and a half is a grey flash whatever its texture says, and the two arms at this barrel would again be one treatment. Pinned as a BOUND rather than an exact value, since the number is feel: the tests ask only that the cue outlive the flash several times over and still end.",
+    "killedBy": [
+      "blocked-fire muzzle smoke (issue #356) drifts off the barrel and rises, and outlives the flash several times over"
+    ]
+  },
+  {
+    "id": "blocked-fire-smoke-glows-instead-of-obscuring",
+    "file": "src/render/blocked-fire-smoke.ts",
+    "find": "          transparent: true,\n          opacity: PEAK_OPACITY,\n          depthWrite: false,\n        }),",
+    "replace": "          transparent: true,\n          opacity: PEAK_OPACITY,\n          depthWrite: false,\n          blending: THREE.AdditiveBlending,\n        }),",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-smoke.test.ts"
+    ],
+    "why": "Makes the smoke additive, the treatment every other effect in this renderer uses for light -- sparks, muzzle flash, the mine glow. Additive smoke BRIGHTENS the felt and the hull behind it, which is the one thing smoke cannot do, and on this arena's dark ground it would read as the same white bloom the muzzle flash makes. The geometry, the colour, the motion and the lifetime all stay correct under this, so only an assertion about the blend mode itself can see it.",
+    "killedBy": [
+      "blocked-fire muzzle smoke (issue #356) is not made of light: desaturated grey, normally blended"
+    ]
+  },
+  {
+    "id": "blocked-fire-smoke-freezes-instead-of-resting-under-reduced-motion",
+    "file": "src/render/blocked-fire-smoke.ts",
+    "find": "      place(cl, k);",
+    "replace": "      if (!reducedMotion) place(cl, k);",
+    "expect": "killed",
+    "tests": [
+      "src/render/blocked-fire-smoke.test.ts"
+    ],
+    "why": "The landmine blocked-fire-ring.ts records, reproduced on this arm: honouring reduced motion by not animating, instead of by writing a rest placement every frame. `prefers-reduced-motion` is a live media query, so the defect is only reachable MID-FLIGHT -- a cloud already drifting away from the barrel freezes where it had got to and hangs there for the rest of its life. The test that sets the preference BEFORE spawning stays green under this, because that cloud is placed once at spawn and never needs moving again, which is exactly why one reduced-motion case is not enough here.",
+    "killedBy": [
+      "blocked-fire muzzle smoke (issue #356) snaps an ALREADY-DRIFTING cloud back to rest when reduced motion turns on mid-flight"
+    ]
   }
 ]

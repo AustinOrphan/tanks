@@ -583,11 +583,13 @@ describe('PLAYTEST_BUNDLE: the single list the parser and the doc both read', ()
 
 
 describe('parseDevFlags: blockedFire values are safe to paste into a query string (issue #497)', () => {
-  it('every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 16 registered values', () => {
-    // 5 when this was written for issue #497, 17 since issue #516 built the comparison
-    // matrix. The number is asserted so a cue added without a query-safe spelling fails
-    // here rather than silently joining the sweep below.
-    expect(BLOCKED_FIRE_CUES.size).toBe(16);
+  it('every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 17 registered values', () => {
+    // 5 when this was written for issue #497, and 17 now: issue #516 built the comparison
+    // matrix, issue #526 retired `turret` from it by making gun recoil unconditional, and
+    // the owner's "maybe a smoke type texture?" added `smoke`. The number is asserted so a
+    // cue added without a query-safe spelling fails here rather than silently joining the
+    // sweep below.
+    expect(BLOCKED_FIRE_CUES.size).toBe(17);
     for (const cue of BLOCKED_FIRE_CUES) {
       expect(parseDevFlags(`?dev=1&blockedFire=${cue}`).blockedFire, cue).toBe(cue);
     }

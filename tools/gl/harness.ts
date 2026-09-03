@@ -1993,7 +1993,7 @@ check('the three contact states are distinguishable ON SCREEN, not just in the c
  * magazine the day it moves, leaving this fixture measuring a half-lit strip while its
  * comment still claimed otherwise.
  */
-function blockedFireFrame(cue: 'ring' | 'muzzle' | 'pips' | null): Uint8Array {
+function blockedFireFrame(cue: 'ring' | 'muzzle' | 'smoke' | 'pips' | null): Uint8Array {
   const c = placedCanvas(800, 500, 0, 0, 800, 500);
   const r = createRenderer(c, W, H, BOUNDARY, { blockedFire: cue });
   const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
@@ -2030,24 +2030,30 @@ check('the blocked-fire ring (#356) reaches the framebuffer through renderer.ts'
   return null;
 });
 
-check('every #516 visual arm reaches the framebuffer, and none looks like another', () => {
-  // The ring check above, extended to the arms issue #516 adds -- and then some. Reaching
-  // the framebuffer is necessary but not sufficient for a COMPARISON: cues that all
-  // painted the same pixels would pass independent "did it draw" checks and still be
-  // one treatment wearing several names. So each arm is measured against the flag being off,
-  // AND against every other arm.
+check('every selectable visual arm reaches the framebuffer, and none looks like another', () => {
+  // The ring check above, extended to the arms issue #516 adds and the `smoke` arm the
+  // owner asked for after it -- and then some. Reaching the framebuffer is necessary but
+  // not sufficient for a COMPARISON: cues that all painted the same pixels would pass
+  // independent "did it draw" checks and still be one treatment wearing several names. So
+  // each arm is measured against the flag being off, AND against every other arm.
   //
-  // MEASURED on this tree, differing bytes out of 1,600,000, two frames after the refusal
-  // (so each arm is sampled part-way through its own decay, not at its peak), at the
-  // shipped cap of 5 -- `pips` draws one pip per capacity slot, so its own number moves
-  // with a cap retune while the other three do not:
+  // MEASURED in this checkout, differing bytes out of 1,600,000, two frames after the
+  // refusal (so each arm is sampled part-way through its own decay, not at its peak), at
+  // the shipped cap of 5 -- `pips` draws one pip per capacity slot, so its own number
+  // moves with a cap retune while the other three do not:
   //
-  //   off/ring   1306      ring/muzzle  1479      muzzle/pips  573
-  //   off/muzzle  183      ring/pips    1518
+  //   off/ring   1334      ring/muzzle  1509      muzzle/smoke  319
+  //   off/muzzle  225      ring/smoke   1589      muzzle/pips   615
+  //   off/smoke   312      ring/pips    1546      smoke/pips    702
   //   off/pips    390
   //
-  // A fourth arm, `turret`, was measured here until issue #526 retired it as a cue: the
-  // gun recoil it drew is now unconditional, so it appears in EVERY frame below including
+  // Those are swiftshader numbers on this machine and they are NOT stable across machines:
+  // the same three arms were recorded at 1306 / 183 / 390 against `off` when this check was
+  // written, so anti-aliasing alone moves a small arm's count by a fifth. That spread is the
+  // argument for the floors rather than for exact values.
+  //
+  // Another arm, `turret`, was measured here until issue #526 retired it as a cue: the gun
+  // recoil it drew is now unconditional, so it appears in EVERY frame below including
   // `off` and cancels out of every comparison rather than distinguishing one. Its own
   // framebuffer proof is the recoil check that follows.
   //
@@ -2057,11 +2063,13 @@ check('every #516 visual arm reaches the framebuffer, and none looks like anothe
   // arm rather than one number for all of them, because the arms are deliberately
   // different SIZES: a ring around the whole hull moves an order of magnitude more bytes
   // than a flash at the muzzle, and one floor generous enough for the ring would be
-  // unreachable for the flash. The pair floor is a single number because the
-  // smallest measured pair (muzzle/pips, 573) is already the tightest constraint.
-  const FLOORS = { ring: 400, muzzle: 60, pips: 120 } as const;
-  const PAIR_FLOOR = 150;
-  const arms = ['ring', 'muzzle', 'pips'] as const;
+  // unreachable for the flash. The pair floor stays a single number, now set by
+  // muzzle/smoke (319) -- unsurprisingly the tightest pair on the board, since those two
+  // arms are the only ones drawn at the same place. It is the pair worth watching: if a
+  // future retune ever let smoke read as a grey flash, this is the number that would say so.
+  const FLOORS = { ring: 400, muzzle: 60, smoke: 100, pips: 120 } as const;
+  const PAIR_FLOOR = 100;
+  const arms = ['ring', 'muzzle', 'smoke', 'pips'] as const;
   const off = blockedFireFrame(null);
   const frames = new Map<string, Uint8Array>(arms.map((a) => [a, blockedFireFrame(a)]));
   for (const arm of arms) {
