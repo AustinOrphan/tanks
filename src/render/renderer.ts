@@ -16,7 +16,7 @@ import { createMineDebug, type MineDebug } from './minedebug';
 import { createAiContact, type AiContact } from './ai-contact';
 import { createBlockedFireRingSystem, type BlockedFireRingSystem } from './blocked-fire-ring';
 import { createBlockedFireMuzzleSystem, type BlockedFireMuzzleSystem } from './blocked-fire-muzzle';
-import { createBlockedFireTurretSystem, type BlockedFireTurretSystem } from './blocked-fire-turret';
+import { createBarrelRecoilSystem } from './barrel-recoil';
 import { createBlockedFirePipsSystem, type BlockedFirePipsSystem } from './blocked-fire-pips';
 
 export interface Renderer3D {
@@ -83,10 +83,12 @@ export interface RendererOptions {
   readonly aiContact?: boolean;
   /**
    * `?dev=1&blockedFire=<cue>` (devflags.ts): which of issue #356's candidate refusal
-   * cues to show. Four of the five visual arms are built here -- `ring`/`ring-audio`
-   * (blocked-fire-ring.ts), `muzzle` (blocked-fire-muzzle.ts), `turret`
-   * (blocked-fire-turret.ts) and `pips` (blocked-fire-pips.ts); the fifth, `hud`, is a
-   * DOM surface and lives in game/blocked-fire-hud.ts. Null/absent draws nothing, and
+   * cues to show. Three of the four remaining visual arms are built here --
+   * `ring`/`ring-audio` (blocked-fire-ring.ts), `muzzle` (blocked-fire-muzzle.ts) and
+   * `pips` (blocked-fire-pips.ts); the fourth, `hud`, is a DOM surface and lives in
+   * game/blocked-fire-hud.ts. The arm that WON, gun recoil, is not among them: issue
+   * #526 made it unconditional (barrel-recoil.ts below), so it is not a cue any more.
+   * Null/absent draws nothing, and
    * each system re-checks the cue in its own `spawn` -- these constructor gates only
    * decide whether the scene objects exist at all.
    */
@@ -129,10 +131,10 @@ export function createRenderer(
   // cheapest possible "off", and the comparison is between one arm at a time.
   const blockedFireMuzzle: BlockedFireMuzzleSystem | null =
     options.blockedFire === 'muzzle' ? createBlockedFireMuzzleSystem(ctx.scene) : null;
-  // `entities`, not the scene: this arm moves the REAL turret and looks it up per frame
-  // through EntityViews.turretOf -- see blocked-fire-turret.ts.
-  const blockedFireTurret: BlockedFireTurretSystem | null =
-    options.blockedFire === 'turret' ? createBlockedFireTurretSystem(entities) : null;
+  // NOT gated on a cue, unlike every system around it: the gun kicks whenever it cycles,
+  // on a shot and on a refusal alike (issue #526). `entities`, not the scene, because it
+  // moves the REAL barrel and looks it up per frame through EntityViews.barrelOf.
+  const barrelRecoil = createBarrelRecoilSystem(entities);
   const blockedFirePips: BlockedFirePipsSystem | null =
     options.blockedFire === 'pips' ? createBlockedFirePipsSystem(ctx.scene) : null;
 
@@ -159,10 +161,12 @@ export function createRenderer(
     blockedFireRing?.update(dt);
     blockedFireMuzzle?.spawn(events, curr, options.blockedFire);
     blockedFireMuzzle?.update(dt);
-    // AFTER entities.sync, and load-bearing: sync writes the turret's rotation every
-    // frame, and this writes the recoil offset onto the object sync has already posed.
-    blockedFireTurret?.spawn(events, curr, options.blockedFire);
-    blockedFireTurret?.update(dt);
+    // After entities.sync, though no longer load-bearing the way it was when this moved
+    // the turret GROUP: sync writes `turret.rotation.y` every frame and never touches the
+    // barrel's own position, which entities.ts sets once at construction. Kept in place
+    // beside the muzzle flash because the two dress the same shot.
+    barrelRecoil.spawn(events, curr);
+    barrelRecoil.update(dt);
     // `curr` in update too: the pip strip follows its tank for the half-second it lives.
     blockedFirePips?.spawn(events, curr, options.blockedFire);
     blockedFirePips?.update(dt, curr);
@@ -198,7 +202,7 @@ export function createRenderer(
     aiContact?.dispose();
     blockedFireRing?.dispose();
     blockedFireMuzzle?.dispose();
-    blockedFireTurret?.dispose();
+    barrelRecoil.dispose();
     blockedFirePips?.dispose();
     entities.dispose();
     particles.dispose();
@@ -220,7 +224,7 @@ export function createRenderer(
       deathPulse.setReducedMotion(on);
       blockedFireRing?.setReducedMotion(on);
       blockedFireMuzzle?.setReducedMotion(on);
-      blockedFireTurret?.setReducedMotion(on);
+      barrelRecoil.setReducedMotion(on);
       blockedFirePips?.setReducedMotion(on);
     },
     dispose,

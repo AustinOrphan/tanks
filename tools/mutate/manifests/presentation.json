@@ -59,7 +59,7 @@
       "blocked-fire cue (issue #356) sounds for EVERY cue carrying `audio`, and for no other -- one row per cue",
       "blocked-fire cue: the arms are separable (issue #356) vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue",
       "blocked-fire ring (issue #356) draws for EVERY cue carrying `ring`, and for no other -- one row per cue",
-      "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 17 registered values",
+      "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) every documented cue pastes raw into ?dev=1&blockedFire=... and comes back as itself -- population: the 16 registered values",
       "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) no registered value of ANY valued flag changes meaning under query decoding -- population: every value in the registry",
       "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) the properly encoded legacy spellings stay accepted as aliases of the canonical cue"
     ]

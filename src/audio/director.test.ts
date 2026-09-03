@@ -240,7 +240,6 @@ describe('blocked-fire cue (issue #356)', () => {
     // false here permanently -- they carry no audio at all and must never sound, which
     // is what lets #356 attribute a preference to a channel rather than to a bundle.
     muzzle: false,
-    turret: false,
     pips: false,
     hud: false,
     'haptic-tap': false,
@@ -271,7 +270,7 @@ describe('blocked-fire cue (issue #356)', () => {
   });
 
   it('gives each audio arm its OWN voice -- one row per arm (issue #516)', () => {
-    // The table above is CHANNEL MEMBERSHIP: five arms all playing the baseline click
+    // The table above is CHANNEL MEMBERSHIP: the arms all playing the baseline click
     // would satisfy it completely. #516 exists to put five sounds in front of a person
     // who has to tell them apart at speed, so this pins what each arm actually plays.
     // MEASURED: collapsing director.ts's lookup to `BLOCKED_FIRE_BASELINE` left all 18 of

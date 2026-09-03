@@ -66,7 +66,7 @@ export function createBlockedFireHudCue(
     handle(events: SimEvent[], world: World): void {
       // The channel first, then the arm: `cueDrives` is the vocabulary's own answer to
       // "does this cue claim a screen at all" (presentation/blocked-fire.ts), and the
-      // identity check is which of the five visual arms it is. The same two-part gate
+      // identity check is which of the visual arms it is. The same two-part gate
       // every visual arm uses.
       if (!cueDrives(options.blockedFire, 'visual') || options.blockedFire !== 'hud') return;
       if (playerId === undefined) return;

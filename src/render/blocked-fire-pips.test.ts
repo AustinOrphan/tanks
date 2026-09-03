@@ -56,13 +56,12 @@ describe('blocked-fire capacity pips (issue #516, parent #356)', () => {
   it('draws for EVERY cue carrying `pips`, and for no other -- one row per cue', () => {
     // The table every blocked-fire consumer keeps. See blocked-fire-muzzle.test.ts's own
     // copy for why it is keyed off BLOCKED_FIRE_CUES rather than written per remembered
-    // case, and why the other four visual arms stay false here however they look.
+    // case, and why the other visual arms stay false here however they look.
     const carriesPips: Record<BlockedFireCue, boolean> = {
       pips: true,
       ring: false,
       'ring-audio': false,
       muzzle: false,
-      turret: false,
       hud: false,
       audio: false,
       click: false,

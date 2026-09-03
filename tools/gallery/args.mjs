@@ -216,9 +216,11 @@ export function parseArgs(argv) {
   if (out.blockedFire !== null) {
     // Named here rather than imported from src/presentation/blocked-fire.ts: this is a
     // plain .mjs the runner loads with no build step, so it cannot read a .ts export.
-    // Only the four VISUAL arms are accepted -- the audio and haptic arms have nothing
-    // to draw, and 'hud' has no HUD to draw into (see DEFAULTS.blockedFire).
-    const visual = ['ring', 'muzzle', 'turret', 'pips'];
+    // Only the remaining VISUAL arms are accepted -- the audio and haptic arms have
+    // nothing to draw, and 'hud' has no HUD to draw into (see DEFAULTS.blockedFire).
+    // 'turret' is absent because issue #526 retired it: gun recoil is unconditional
+    // shipped behaviour now, so the blocked-fire moment shows it with no flag at all.
+    const visual = ['ring', 'muzzle', 'pips'];
     if (!visual.includes(out.blockedFire)) {
       throw new Error(
         `--blocked-fire must be one of ${visual.join('|')}, got '${out.blockedFire}'`,

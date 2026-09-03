@@ -73,23 +73,27 @@ export interface EntityViews {
     spawnAnim?: SpawnAnimId,
   ): void;
   /**
-   * This tank's TURRET GROUP -- the dome and the barrel that rides on it -- or null when
-   * no view exists for that id (a dead tank, or one this sync has never seen).
+   * This tank's BARREL -- the gun tube alone, inside the turret group -- or null when no
+   * view exists for that id (a dead tank, or one this sync has never seen).
    *
-   * Exposed for exactly one caller, blocked-fire-turret.ts (issue #516's `turret` arm),
-   * which has to twitch the gun the player is already looking at: a recoil stutter drawn
-   * on a mesh of its own would be a second barrel beside the real one, not a barrel that
-   * moved. That effect writes `position.x` -- the turret's own local along-barrel axis,
-   * which `sync` never assigns (it writes `rotation.y` alone, and the group's `position`
-   * is set once at construction) -- so the two do not fight over a channel, and the
+   * Exposed for exactly one caller, barrel-recoil.ts (issue #526), which has to move the
+   * gun the player is already looking at: a recoil drawn on a mesh of its own would be a
+   * second barrel beside the real one, not a barrel that moved. That effect writes
+   * `position.x` -- the barrel's own local along-bore axis, which `sync` never assigns
+   * (it writes the turret's `rotation.y` alone, and each part's `position` is set once at
+   * construction) -- so the two do not fight over a channel, and the
    * effect returns the offset to zero when its life ends.
+   *
+   * The BARREL, not the turret group: recoil is the gun tube sliding back through its
+   * own ring, so the dome must stay put (issue #526). Moving the group moved both, which
+   * read as the whole turret rocking rather than a gun cycling.
    *
    * Deliberately NOT a general "give me the scene graph" accessor: a view is rebuilt
    * whenever the tank's kind or the player's paint generation changes, so the object
    * behind an id is not stable and a caller that latches one holds a corpse. Look it up
-   * per frame, as the turret arm does.
+   * per frame, as barrel-recoil.ts does.
    */
-  turretOf(tankId: number): THREE.Object3D | null;
+  barrelOf(tankId: number): THREE.Object3D | null;
   dispose(): void;
 }
 
@@ -242,6 +246,8 @@ interface SpawnViewState {
 interface TankView {
   group: THREE.Group;
   turret: THREE.Object3D;
+  /** The gun tube alone, inside `turret`. Recoil moves this and leaves the dome still. */
+  barrel: THREE.Object3D;
   /** Body/tracks/turret, scaled by the spawn animation -- see makeTank's own comment. */
   visual: THREE.Group;
   kind: TankKind;
@@ -639,7 +645,7 @@ export function createEntityViews(
   function makeTank(
     kind: TankKind,
     controlledBy?: number,
-  ): { group: THREE.Group; turret: THREE.Object3D; visual: THREE.Group } {
+  ): { group: THREE.Group; turret: THREE.Object3D; barrel: THREE.Object3D; visual: THREE.Group } {
     const group = new THREE.Group();
     // Everything that should shrink/grow with the spawn animation's tankScale --
     // body, tracks, turret -- lives under this SEPARATE group rather than directly
@@ -813,7 +819,7 @@ export function createEntityViews(
     visual.add(turret);
 
     scene.add(group);
-    return { group, turret, visual };
+    return { group, turret, barrel, visual };
   }
 
   /** Visual proportions of a shell. The sim's BULLET_RADIUS (0.1) is its collision size;
@@ -1567,8 +1573,8 @@ export function createEntityViews(
         spawnAnim,
       });
     },
-    turretOf(tankId: number): THREE.Object3D | null {
-      return tankViews.get(tankId)?.turret ?? null;
+    barrelOf(tankId: number): THREE.Object3D | null {
+      return tankViews.get(tankId)?.barrel ?? null;
     },
     dispose,
   };

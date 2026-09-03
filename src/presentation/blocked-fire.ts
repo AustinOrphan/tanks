@@ -3,7 +3,7 @@
  * semantic signal with consumers in three layers -- `game/haptics.ts` (buzz),
  * `audio/director.ts` (click), `game/blocked-fire-hud.ts` (the transient capacity line),
  * and, under `render/`, `blocked-fire-ring.ts`, `blocked-fire-muzzle.ts`,
- * `blocked-fire-turret.ts`, `blocked-fire-pips.ts` and `renderer.ts`'s construction gate
+ * `blocked-fire-pips.ts` and `renderer.ts`'s construction gate
  * -- chosen by the application (`game/devflags.ts` parses `?blockedFire=`) and
  * implemented by each projection for the arms that name its channel. Issue #473 moved
  * the vocabulary here from `game/devflags.ts` so the audio director and the renderer no
@@ -21,14 +21,21 @@
  * "multimodal against the strongest single channel" comparison is not itself limited to
  * one combination.
  *
- * The visual channel's other four arms (issue #516) are built and each has its own
- * artefact: `muzzle` a flash at the barrel opening cut short of a real discharge
- * (render/blocked-fire-muzzle.ts), `turret` a recoil stutter on the gun itself
- * (render/blocked-fire-turret.ts), `pips` a capacity strip on the felt beside the tank
+ * The visual channel's other arms (issue #516) are built and each has its own artefact:
+ * `muzzle` a flash at the barrel opening cut short of a real discharge
+ * (render/blocked-fire-muzzle.ts), `pips` a capacity strip on the felt beside the tank
  * (render/blocked-fire-pips.ts), and `hud` a transient capacity line off the arena
- * (game/blocked-fire-hud.ts, painted by hud.ts's signalShellCapacity). Deliberately four
- * different pictures rather than four sizes of one: #356 rules by comparison, and arms
- * that differ only in degree would produce no ruling.
+ * (game/blocked-fire-hud.ts, painted by hud.ts's signalShellCapacity). Deliberately
+ * different pictures rather than sizes of one: #356 rules by comparison, and arms that
+ * differ only in degree would produce no ruling.
+ *
+ * A FIFTH ARM, `turret`, IS GONE -- and it is the one that won. The owner ranked its gun
+ * recoil first and ruled it should play on every shot, not only on a refusal, so issue
+ * #526 made it unconditional shipped behaviour in render/barrel-recoil.ts. It is not
+ * listed here because nothing about it is selectable any more: a flag that toggles a
+ * motion which is always on would be a lie in the tooling. What a refusal looks like now
+ * is that same recoil arriving with no shell and no flash, which every remaining arm here
+ * is compared AGAINST rather than instead of.
  *
  * The audio and haptic arms landed alongside them in their own change, so every
  * single-channel arm the matrix names is now implemented. Still to come: #516's pairing of
@@ -46,11 +53,12 @@
  *
  * Seven of the eight consumers now key a table off this set -- director.test.ts (`audio`),
  * haptics.test.ts (`haptic`), and one per visual arm in blocked-fire-ring.test.ts,
- * blocked-fire-muzzle.test.ts, blocked-fire-turret.test.ts, blocked-fire-pips.test.ts and
+ * blocked-fire-muzzle.test.ts, blocked-fire-pips.test.ts and
  * blocked-fire-hud.test.ts -- so a new cue fails all seven until its channels are stated.
  * The eighth, renderer.ts's construction gate, is not among them: it has no sibling Vitest
  * file by policy (.claude/rules/rendering.md) and is reached only through the GL harness,
- * which exercises the four arena arms against each other but not the whole cue set.
+ * which exercises the three remaining arena arms against each other but not the whole
+ * cue set.
  */
 /**
  * The multimodal arms are spelled with a hyphen, not a plus, because these values are
@@ -65,7 +73,6 @@ export type BlockedFireCue =
   // Visual, tank- or weapon-local (issue #516's comparison matrix).
   | 'ring'
   | 'muzzle'
-  | 'turret'
   | 'pips'
   | 'hud'
   // Audio.
@@ -88,7 +95,6 @@ export type BlockedFireCue =
 export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([
   'ring',
   'muzzle',
-  'turret',
   'pips',
   'hud',
   'audio',
@@ -119,7 +125,6 @@ export type BlockedFireChannel = 'visual' | 'audio' | 'haptic';
 const CHANNELS: Readonly<Record<BlockedFireCue, readonly BlockedFireChannel[]>> = {
   ring: ['visual'],
   muzzle: ['visual'],
-  turret: ['visual'],
   pips: ['visual'],
   hud: ['visual'],
   audio: ['audio'],

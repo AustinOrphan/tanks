@@ -225,12 +225,14 @@ controlled slot so a respawning tank does not depend on which slot the moment us
 `--elements`/`--reach`/`--timer`/`--fill` are gallery-composition flags a
 moment scene does not consume either, but they are dropped silently rather than rejected.
 
-`--blocked-fire <ring|muzzle|turret|pips>` renders one of issue #356's candidate
+`--blocked-fire <ring|muzzle|pips>` renders one of issue #356's candidate
 shell-cap refusal cues, the same set the game's `?dev=1&blockedFire=` flag selects. It
 requires `--scene blocked-fire`, the moment that stages repeated refusals, and is
-rejected with any other scene rather than producing a clip with no cue in it. The four
+rejected with any other scene rather than producing a clip with no cue in it. Those three
 visual arms are the whole accepted set: the audio and haptic arms have nothing to draw,
-and `hud` draws into the DOM HUD, which no gallery page builds. This is the supported way
+and `hud` draws into the DOM HUD, which no gallery page builds. `turret` is gone from the
+set because issue #526 retired it as a cue -- gun recoil is unconditional shipped
+behaviour now, so the `blocked-fire` moment shows it with no flag at all. This is the supported way
 to review a refusal cue — the cues live between 0.07s and 0.55s, so a close view and a
 slowed clip (`--anim`, plus `--subdiv`/`--fps`) show one where an arena-framed capture
 of real play cannot.
