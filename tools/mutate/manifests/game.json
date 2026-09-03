@@ -208,16 +208,17 @@
   {
     "id": "session-outcome-label-keyed-on-identity",
     "file": "src/game/hud.ts",
-    "find": "      actionBtn.textContent = relaunchTarget === 'versus-setup' ? 'Versus Setup' : 'Retry';",
-    "replace": "      actionBtn.textContent = sessionKind === 'versus' ? 'Versus Setup' : 'Retry';",
+    "find": "    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Versus Setup';",
+    "replace": "    if (sessionKind === 'versus') return 'Versus Setup';",
     "expect": "killed",
-    "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Scoped to hud.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Re-anchored for issue #324's step S4: the label used to be written inline in setState from the boot-time `relaunchTarget`, and it now comes off `GameplayOutcome.action` in `outcomeActionLabel`, so the anchor moved with the code. The mutation is unchanged in substance -- both forms swap the click's destination for the session's identity. Scoped to hud.navigation.test.ts.",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: relaunch target -- the title/outcome affordance policy setSessionKind('versus') alone leaves the outcome action button reading 'Play Again'/'Retry'",
-      "hud: relaunch target -- the title/outcome affordance policy the win/lose action button reads 'Versus Setup' for a versus session's FINAL win and its lose -- truthful about what the click now does"
+      "hud: relaunch target -- the title/outcome affordance policy the win/lose action button reads 'Versus Setup' for a versus session's FINAL win and its lose -- truthful about what the click now does",
+      "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened"
     ]
   },
   {
@@ -1829,12 +1830,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 102,
+    "expectFailures": 103,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered. expectFailures moved 104 -> 101 when issue #324 removed the session's duplicate settings pushes: three loop.test.ts assertions that counted a page push AND a session push now count one, so they no longer fail on a slot that was never filled. Re-measured at 102 of 487 (route-host.test.ts 54 + loop.test.ts 433) for issue #531: the one added case is loop.test.ts's \"announces the replaced world to the renderer on EVERY rebuild, same-size or not (#531)\", which drives a rebuild through the session's Restart handler and so also fails when the slot is never filled. The failing SET was compared against the same mutation run on the parent commit, not the number renumbered: that one name added, none removed."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered. expectFailures tracks the size of loop.test.ts's suite rather than any property of this mutation, so it moves whenever tests are added to that file: 104 before issue #324 removed the session's duplicate settings pushes, 101 after, 102 with #324's outcome-projection coverage, and 103 once #531's world-swap announcement added its own case. Re-measured each time, never guessed."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -3545,6 +3546,90 @@
     "killedBy": [
       "driver: lifecycle tells the renderer the world was replaced, before any frame can render it (#531)",
       "startGameWith: per-level renderer refit announces the replaced world to the renderer on EVERY rebuild, same-size or not (#531)"
+    ]
+  },
+  {
+    "id": "outcome-summary-falls-back-to-the-records-payload",
+    "file": "src/game/hud.ts",
+    "find": "  function renderAttemptSummary(): void {\n    if (!outcomeData) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }\n    const r = outcomeData.attempt;",
+    "replace": "  function renderAttemptSummary(): void {\n    const source = outcomeData ?? statsData;\n    if (!source) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }\n    const r = source.attempt;",
+    "expect": "killed",
+    "why": "The migration issue #324's step S4 performs, written as the shortcut that would have made it invisible: keep the old source working beside the new one. Both payloads carry `attempt` counts, so a fallback still renders a plausible summary line -- built from the Records table's numbers, pushed by an application route, onto a panel a gameplay session owns. Every test that pushes an outcome passes under it, which is why the split needs an assertion of its own: the discriminating case is a HUD told ONLY the Records numbers, and that HUD must show no summary at all.",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "killedBy": [
+      "hud: the stats page the attempt summary reads the outcome projection, NOT the Records table it used to ride"
+    ]
+  },
+  {
+    "id": "outcome-coop-line-survives-a-versus-tally",
+    "file": "src/game/hud.ts",
+    "find": "    if (outcomeData?.tally !== 'coop') {",
+    "replace": "    if (outcomeData?.tally !== 'coop' && outcomeData?.tally !== 'ffa') {",
+    "expect": "killed",
+    "why": "The property merging setCoopKills and setVersusResults into one discriminated projection was for: a session has exactly one tally, so switching kinds cannot leave the previous kind's line standing under the new one. This widens the coop line's own gate to admit ffa, reproducing the two-setter failure mode inside the merged setter -- an ffa outcome then prints an enemy-kill line beside the player-versus-player one, reading the versus payload's slot kills as coop's. A solo outcome still hides it and a teams outcome still hides it, so the mutation is invisible to every per-line rendering test; only the mutual-exclusion assertion sees it.",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) the two results lines are mutually exclusive BY CONSTRUCTION, not by convention"
+    ]
+  },
+  {
+    "id": "outcome-label-frozen-at-panel-open",
+    "file": "src/game/hud.ts",
+    "find": "      actionBtn.textContent = outcomeActionLabel(shownState === 'outcome-win');",
+    "replace": "      // the button keeps whatever setState wrote when the panel opened",
+    "expect": "killed",
+    "why": "Half-applies the projection. The outcome panel opens on the winning frame's SimEvent and the session's push for that same frame arrives afterwards, so this leaves the tally painted from the newest push and the action button from whatever was known before it -- the ordering hazard `versusStocksVisible` documents at length one screen away, now in a setter feeding four elements instead of one. It survives every test that pushes its outcome before `setState`, which is the order a test writes by default and the opposite of the one production takes.",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened"
+    ]
+  },
+  {
+    "id": "outcome-projection-missing-at-boot",
+    "file": "src/game/loop.ts",
+    "find": "  // The outcome panel's opening state, stated rather than inherited: a session that is\n  // disposed before it ever produces an event still leaves the HUD holding a projection\n  // that describes THIS session's board, not the previous one's.\n  pushOutcome(world);",
+    "replace": "  // The outcome panel's opening state, stated rather than inherited: a session that is\n  // disposed before it ever produces an event still leaves the HUD holding a projection\n  // that describes THIS session's board, not the previous one's.",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Drops the opening projection. Invisible to every outcome assertion that reads `outcomePushes.at(-1)` after driving a frame, because the frame's own push overwrites the boot one -- which is exactly why this was uncovered when the projection was introduced, and why the test that kills it counts pushes BEFORE any frame runs. A session disposed before it produces a single event otherwise leaves the HUD describing the previous session's board.",
+    "killedBy": [
+      "startGameWith: the active campaign run (issues #153/#152) coop kill attribution, end to end (coop semantics plan) pushes an outcome projection AT BOOT, before any frame has run"
+    ]
+  },
+  {
+    "id": "outcome-projection-stale-across-a-board-switch",
+    "file": "src/game/loop.ts",
+    "find": "    // saying whatever the finished attempt said.\n    pushOutcome(world);",
+    "replace": "    // saying whatever the finished attempt said.",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Leaves the finished attempt's projection in place across a board switch. A Levels pick can land a coop session on a one-player board, so which tally the panel would show changes with the board -- the stale projection then describes a board that is no longer on screen. Same blind spot as the boot entry: only a test that counts pushes across the switch, rather than reading the last one after a frame, can see it.",
+    "killedBy": [
+      "startGameWith: the active campaign run (issues #153/#152) coop kill attribution, end to end (coop semantics plan) re-derives the outcome projection on a BOARD SWITCH, before the new board runs"
+    ]
+  },
+  {
+    "id": "outcome-surface-gate-survives-a-restart",
+    "file": "src/game/hud.ts",
+    "find": "    outcomeVisible = isOutcome;\n    if (s === 'playing' || atLaunch) return;",
+    "replace": "    if (s === 'playing' || atLaunch) return;\n    outcomeVisible = isOutcome;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "why": "Moves the flag's assignment back below `setState`'s early return, where it sat until this change. `playing` and `launch` both return before it, so the outcome -> playing transition -- the ordinary restart -- left the flag stuck `true` and every later push re-rendered the outcome lines and rewrote the action button behind an already-hidden panel. The natural placement, since every other line of that function's body is below the return; only a test that pushes an outcome DURING play can see it, because `.hud-panel` hides the result either way.",
+    "killedBy": [
+      "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) a push during PLAY repaints nothing -- the surface gate survives a restart"
     ]
   }
 ]

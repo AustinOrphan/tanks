@@ -45,6 +45,7 @@ import {
 } from './app-state';
 import type {
   CampaignRunSummary,
+  GameplayOutcome,
   HudBackdrop,
   HudRelaunchTarget,
   HudSessionKind,
@@ -232,10 +233,12 @@ interface Recorder {
   statAttemptStarts: number;
   statResets: number;
   statPushes: number;
-  /** Every value passed to hud.setCoopKills, in order. */
-  coopKillPushes: Array<number[] | null>;
-  /** Every value passed to hud.setVersusResults, in order. */
-  versusResultsPushes: Array<{ mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null>;
+  /**
+   * Every value passed to hud.setOutcome, in order -- the whole win/lose panel as one
+   * projection since issue #324's step S4, so a test reads the tally KIND and its
+   * numbers from the same entry instead of correlating two setters' call logs.
+   */
+  outcomePushes: GameplayOutcome[];
   /** Every value passed to hud.setVersusStocks, in order (Task 6, spec §3a). */
   versusStocksPushes: Array<{ slot: number; stock: number; team?: number }[] | null>;
   /** Every (show, initial) passed to hud.showVersusSetup, in order. */
@@ -507,8 +510,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     statAttemptStarts: 0,
     statResets: 0,
     statPushes: 0,
-    coopKillPushes: [],
-    versusResultsPushes: [],
+    outcomePushes: [],
     versusStocksPushes: [],
     versusSetupPushes: [],
     sessionKinds: [],
@@ -1171,11 +1173,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setStats: () => {
           rec.statPushes += 1;
         },
-        setCoopKills: (counts: number[] | null) => {
-          rec.coopKillPushes.push(counts === null ? null : [...counts]);
-        },
-        setVersusResults: (data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null) => {
-          rec.versusResultsPushes.push(data === null ? null : { mode: data.mode, kills: [...data.kills], deaths: [...data.deaths] });
+        setOutcome: (outcome: GameplayOutcome | null) => {
+          // Copied, not aliased: `coopKills`/`versusDeaths` are MUTATED in place by
+          // tallyCoopKills, so a recorder that kept the reference would show every
+          // earlier push holding the final frame's numbers.
+          if (outcome === null) return;
+          rec.outcomePushes.push(
+            outcome.tally === 'solo'
+              ? { ...outcome }
+              : outcome.tally === 'coop'
+                ? { ...outcome, kills: [...outcome.kills] }
+                : { ...outcome, kills: [...outcome.kills], deaths: [...outcome.deaths] },
+          );
         },
         setVersusStocks: (stocks: { slot: number; stock: number; team?: number }[] | null) => {
           rec.versusStocksPushes.push(stocks === null ? null : stocks.map((s) => ({ ...s })));
@@ -4236,12 +4245,53 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
   });
 
   describe('coop kill attribution, end to end (coop semantics plan)', () => {
-    // tallyCoopKills and hud.setCoopKills are each unit-tested directly (their own
+    // tallyCoopKills and the HUD's coop line are each unit-tested directly (their own
     // describe blocks), which is exactly the CLAUDE.md-named blindness: a unit test
-    // calling either directly cannot see whether onFrameEvents still calls them at
-    // all. This drives a REAL kill through a driven frame and checks the tally
+    // calling either directly cannot see whether onFrameEvents still pushes an outcome
+    // at all. This drives a REAL kill through a driven frame and checks the tally
     // reaches the HUD -- the composition, not the arithmetic.
-    it('a kill credited to P2 flows through tallyCoopKills into hud.setCoopKills, in a real driven frame', () => {
+    it('pushes an outcome projection AT BOOT, before any frame has run', () => {
+      // The opening state, and it has to be asserted before a frame because every other
+      // outcome test here reads `outcomePushes.at(-1)` only after driving one -- which a
+      // boot push cannot fail, since the frame's own push overwrites it. Deleting the
+      // boot `pushOutcome(world)` left all 630 tests in this file and the three hud
+      // suites green, which is the measured gap this closes.
+      //
+      // It matters because a session disposed before it produces a single event still
+      // leaves the HUD holding a projection, and without this push that projection
+      // describes the PREVIOUS session's board.
+      const h = boot();
+      expect(h.rec.outcomePushes.length, 'nothing was pushed before a frame ran').toBeGreaterThan(
+        0,
+      );
+      expect(h.rec.outcomePushes[0]).not.toBeNull();
+      h.handle.dispose();
+    });
+
+    it('re-derives the outcome projection on a BOARD SWITCH, before the new board runs', () => {
+      // The switchTo push, isolated the same way: count the pushes across the switch
+      // rather than reading the last one after a frame. A Levels pick can land a coop
+      // session on a one-player board, so the tally the panel would show can change with
+      // the board -- leaving the finished attempt's projection in place would describe a
+      // board that is no longer on screen.
+      // `levelCount: 2` so there is a level 2 to pick: with the default one-level
+      // campaign the pick indexes nothing and no world is built, which would make this
+      // test vacuous rather than failing.
+      const h = boot(makeDeps({ levelCount: 2, devFlags: { players: 2 } }));
+      const before = h.rec.outcomePushes.length;
+      const worldsBefore = h.rec.builtWorlds.length;
+      h.hud.pickLevel(1);
+      expect(h.rec.builtWorlds.length, 'the pick really did build a board').toBeGreaterThan(
+        worldsBefore,
+      );
+      expect(
+        h.rec.outcomePushes.length,
+        'the board switch pushed no outcome projection',
+      ).toBeGreaterThan(before);
+      h.handle.dispose();
+    });
+
+    it('a kill credited to P2 flows through tallyCoopKills into the coop outcome, in a real driven frame', () => {
       const h = boot(makeDeps({ devFlags: { players: 2 } }));
       const world = h.rec.builtWorlds[0];
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
@@ -4252,21 +4302,23 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       });
       h.setState('playing');
       h.fireFrame(20);
-      const last = h.rec.coopKillPushes.at(-1);
-      expect(last).not.toBeNull();
-      expect(last![1]).toBe(1); // P2's slot, attributed by tallyCoopKills
-      expect(last![0] ?? 0).toBe(0); // not misfiled onto P1's slot
+      const last = h.rec.outcomePushes.at(-1);
+      // The KIND as well as the numbers: a two-player campaign board is coop, and a
+      // dispatch that fell through to 'solo' would carry no kills to disagree with.
+      expect(last?.tally).toBe('coop');
+      const kills = last?.tally === 'coop' ? last.kills : [];
+      expect(kills[1]).toBe(1); // P2's slot, attributed by tallyCoopKills
+      expect(kills[0] ?? 0).toBe(0); // not misfiled onto P1's slot
       h.handle.dispose();
     });
 
     // n-player arc PR 4 (FFA + teams): the versus twin of the test above. tallyCoopKills
-    // (loop.test.ts's own describe block) and hud.setVersusResults (hud.test.ts) are each
-    // unit-tested directly -- neither can see whether onFrameEvents' mode dispatch
-    // (`isVersus` above) still routes a real frame's kill into setVersusResults instead of
-    // setCoopKills. Before this test, versusResultsPushes was recorded but nothing read
-    // it -- a dangling hook: the dispatch branch that fires when isVersus is true was
-    // exercised by no test in this file, only by the isVersus===false branch above.
-    it('a versus (ffa) kill flows through tallyCoopKills into hud.setVersusResults, and setCoopKills gets null, in a real driven frame', () => {
+    // (loop.test.ts's own describe block) and the HUD's versus line (hud.match.test.ts)
+    // are each unit-tested directly -- neither can see whether `pushOutcome`'s mode
+    // dispatch still types a real frame's kill as versus rather than coop. Before this
+    // test the versus branch was exercised by nothing in this file, only its coop
+    // sibling above.
+    it('a versus (ffa) kill flows through tallyCoopKills into an ffa outcome, never a coop one, in a real driven frame', () => {
       const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
       const world = h.rec.builtWorlds[0];
       // Confirms the fake levels.world() above actually threaded devFlags.mode into the
@@ -4282,14 +4334,14 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       });
       h.setState('playing');
       h.fireFrame(20);
-      const lastVersus = h.rec.versusResultsPushes.at(-1);
-      expect(lastVersus).not.toBeNull();
-      expect(lastVersus!.mode).toBe('ffa');
-      expect(lastVersus!.kills[1]).toBe(1); // P2's slot, attributed by tallyCoopKills
-      expect(lastVersus!.deaths[0]).toBe(1); // P1's slot died
-      // The coop line is suppressed while in a versus mode -- the two results lines are
-      // never both live at once (loop.ts's isVersus dispatch).
-      expect(h.rec.coopKillPushes.at(-1)).toBeNull();
+      const lastVersus = h.rec.outcomePushes.at(-1);
+      // The tally IS the mode: one field carries both "this is a versus session" and
+      // which versus, so the coop line cannot also be live -- what used to be a
+      // convention across two setters is now the payload's own discriminant.
+      expect(lastVersus?.tally).toBe('ffa');
+      const versus = lastVersus?.tally === 'ffa' ? lastVersus : null;
+      expect(versus?.kills[1]).toBe(1); // P2's slot, attributed by tallyCoopKills
+      expect(versus?.deaths[0]).toBe(1); // P1's slot died
       h.handle.dispose();
     });
   });

@@ -130,47 +130,96 @@ describe('hud: blocked-fire capacity flash (issue #516, parent #356)', () => {
 });
 
 describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent)', () => {
+  /** Every outcome carries an attempt tally; these tests are about the versus line. */
+  const NO_ATTEMPT = {
+    shotsFired: 0, shellKills: 0, mineKills: 0, deaths: 0, selfKills: 0,
+    friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0,
+  };
+  const versusLine = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-versus-results') as HTMLElement;
+
   it('win panel carries the ffa results line, per-slot kills/deaths', () => {
     const { hud: h, root } = mount();
-    h.setVersusResults({ mode: 'ffa', kills: [2, 0, 1], deaths: [1, 3, 0] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0, 1], deaths: [1, 3, 0] });
     h.setState('outcome-win');
-    const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
-    expect(line).toBe('P1: 2/1 · P2: 0/3 · P3: 1/0');
-    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(false);
+    expect(versusLine(root).textContent ?? '').toBe('P1: 2/1 · P2: 0/3 · P3: 1/0');
+    expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(false);
   });
 
   it('win panel carries the teams results line as PER-TEAM sums, not per-slot', () => {
     const { hud: h, root } = mount();
     // slots 0,2 -> team 0; slot 1 -> team 1 (teamOf(slot) = slot % 2).
-    h.setVersusResults({ mode: 'teams', kills: [2, 1, 3], deaths: [1, 4, 0] });
+    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 1, 3], deaths: [1, 4, 0] });
     h.setState('outcome-win');
-    const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
-    expect(line).toBe('Team 1: 5/1 · Team 2: 1/4');
+    expect(versusLine(root).textContent ?? '').toBe('Team 1: 5/1 · Team 2: 1/4');
   });
 
-  it('setVersusResults(null) keeps the line hidden even at win/lose', () => {
+  it('a push during PLAY repaints nothing -- the surface gate survives a restart', () => {
+    // `outcomeVisible` is the surface's half of the answer, and the restart path is where
+    // it used to go wrong: `setState` returns early for `playing`, so the assignment that
+    // clears the flag sat AFTER the return and the flag stayed `true` all the way through
+    // the next match. Every outcome push during play then re-rendered these lines and
+    // rewrote the action button behind a panel that was already hidden.
+    //
+    // Invisible in the product -- `.hud-panel` hides during play whatever these lines say
+    // -- so the assertion is about the gate rather than about pixels: the line keeps the
+    // text the OUTCOME left on it, and the push made during play does not reach it.
     const { hud: h, root } = mount();
-    h.setVersusResults(null);
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0], deaths: [0, 2] });
     h.setState('outcome-win');
-    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+    const atOutcome = versusLine(root).textContent ?? '';
+    expect(atOutcome).toBe('P1: 2/0 · P2: 0/2');
+
+    h.setState('playing');
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [9, 9], deaths: [9, 9] });
+    expect(versusLine(root).textContent ?? '', 'a push during play reached the DOM').toBe(atOutcome);
+
+    // ...and the gate reopens: the next outcome surface renders the push it was given,
+    // so this is not a flag stuck the other way.
+    h.setState('outcome-win');
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 3], deaths: [3, 1] });
+    expect(versusLine(root).textContent ?? '').toBe('P1: 1/3 · P2: 3/1');
+  });
+
+  it('a non-versus outcome keeps the line hidden even at win/lose', () => {
+    const { hud: h, root } = mount();
+    h.setOutcome({ tally: 'solo', action: 'campaign-levels', attempt: NO_ATTEMPT });
+    h.setState('outcome-win');
+    expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(true);
     h.setState('outcome-lose');
-    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+    expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(true);
+  });
+
+  it('the two results lines are mutually exclusive BY CONSTRUCTION, not by convention', () => {
+    // What merging setCoopKills and setVersusResults into one projection bought (issue
+    // #324, step S4). A world has exactly one `rules.mode`, so a session has exactly one
+    // tally -- and with the tally as the payload's discriminant, switching kinds cannot
+    // leave the previous kind's line standing underneath the new one. The old pair of
+    // setters could: each held its own data and each hid only its own line.
+    const { hud: h, root } = mount();
+    const coopLine = (): HTMLElement => root.querySelector('.hud-coop-kills') as HTMLElement;
+    h.setOutcome({ tally: 'coop', action: 'campaign-levels', attempt: NO_ATTEMPT, kills: [1, 2] });
+    h.setState('outcome-win');
+    expect(coopLine().classList.contains('hud-coop-kills--hidden')).toBe(false);
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 2], deaths: [2, 1] });
+    expect(coopLine().classList.contains('hud-coop-kills--hidden')).toBe(true);
+    expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(false);
   });
 
   it('the versus results line is hidden outside win/lose, even with live data set', () => {
     const { hud: h, root } = mount();
-    h.setVersusResults({ mode: 'ffa', kills: [1], deaths: [0] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1], deaths: [0] });
     h.setState('playing');
-    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+    expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(true);
   });
 
   it('updates live while the win panel is already open, same as the coop kill line', () => {
     const { hud: h, root } = mount();
-    h.setVersusResults({ mode: 'ffa', kills: [1, 0], deaths: [0, 1] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 0], deaths: [0, 1] });
     h.setState('outcome-win');
-    expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/0 · P2: 0/1');
-    h.setVersusResults({ mode: 'ffa', kills: [1, 1], deaths: [1, 1] });
-    expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/1 · P2: 1/1');
+    expect(versusLine(root).textContent).toBe('P1: 1/0 · P2: 0/1');
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 1], deaths: [1, 1] });
+    expect(versusLine(root).textContent).toBe('P1: 1/1 · P2: 1/1');
   });
 });
 

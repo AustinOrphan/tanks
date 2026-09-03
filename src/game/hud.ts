@@ -84,6 +84,49 @@ export type HudBackdrop = 'default' | 'felt';
  * `onStartRestart` lands it on a campaign board.
  */
 export type HudRelaunchTarget = 'campaign-levels' | 'versus-setup';
+
+/**
+ * EVERYTHING THE WIN/LOSE PANEL SAYS, as one push (issue #324, step S4).
+ *
+ * The panel used to be assembled from three unrelated setters: the attempt summary rode
+ * `setStats`, whose real job is the Records table on an application route; the coop kill
+ * line had `setCoopKills`; the versus tally had `setVersusResults`. Two of those existed
+ * only for this panel, and nothing typed stopped them disagreeing -- a session could
+ * leave a coop tally live under a versus one even though a world has exactly one
+ * `rules.mode`, so "the two results lines are never both live at once" was a convention
+ * `loop.ts` kept rather than a fact the HUD could rely on.
+ *
+ * One discriminated projection makes it a fact. `tally` names WHICH line this outcome
+ * has, and the fields belonging to the other lines are not on the object at all. It
+ * reuses the simulation's own `'ffa'`/`'teams'` words instead of pairing a `versus`
+ * discriminant with a `mode` field beside it, because there is one question here -- what
+ * does this panel tally? -- and it has exactly four answers.
+ *
+ * INDICES, NEVER COLOURS (issue #473). `kills` and `deaths` are indexed by slot
+ * (`Tank.controlledBy`), and `'teams'` is summed per team through `teamOf(slot)`. The
+ * HUD looks its hues up in `presentation/identity.ts`; a session hands over none.
+ */
+export type GameplayOutcome = {
+  /**
+   * The per-ATTEMPT tally the summary line reads (`stats.attempt()`, zeroed on every
+   * world build) -- never the lifetime column, which belongs to Records and reaches the
+   * HUD through `setStats`.
+   */
+  attempt: StatCounts;
+  /**
+   * What the panel's one action button DOES, in the same vocabulary the title screen's
+   * buttons use -- see `HudRelaunchTarget`, and `setRelaunchTarget` for the title half.
+   * It rides the outcome instead of being read back off the title's own copy because
+   * this button is on a panel the SESSION owns, and the label has to be true about where
+   * this session's click lands.
+   */
+  action: HudRelaunchTarget;
+} & (
+  | { tally: 'solo' }
+  | { tally: 'coop'; kills: number[] }
+  | { tally: 'ffa' | 'teams'; kills: number[]; deaths: number[] }
+);
+
 import type { StatCounts } from './stats';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
@@ -320,9 +363,8 @@ export interface Hud {
    */
   onFireTap(cb: () => void): void;
   /**
-   * Both tallies, pushed by the loop whenever they change. The HUD re-renders the
-   * stats table only while it is visible, and keeps the win/lose attempt-summary
-   * line live -- the winning kill is recorded a beat AFTER the state flips.
+   * THE RECORDS TABLE's two columns, pushed by the routes whenever they change. The HUD
+   * re-renders the table only while it is visible.
    *
    * `attempt` (not `run`, see stats.ts): a level-sized tally, zeroed on every
    * switchTo. The visible copy still reads "This run" -- that is user-facing
@@ -331,40 +373,42 @@ export interface Hud {
    * review of #156: renaming `hud-run-summary`/`runSummaryEl`/`renderRunSummary`
    * to their attempt-scoped names was trivial and safe, and is done; the visible
    * "This run: ..." copy is a separate, user-facing decision and stays as-is).
+   *
+   * The win/lose panel's attempt summary used to ride here too, which is what made a
+   * gameplay session push a Records-shaped payload just to keep one line of its own
+   * outcome screen fresh. That line reads `setOutcome` since issue #324's step S4; the
+   * same `attempt` counts reach the HUD twice because they answer two questions, on two
+   * surfaces, with two owners.
    */
   setStats(data: { lifetime: StatCounts; attempt: StatCounts }): void;
   /**
-   * Coop's per-player kill tally, indexed by slot (coop semantics plan,
-   * docs/superpowers/plans/2026-08-15-coop-semantics.md). `null` means "never show" --
-   * a 1P session, or coop that has not started -- not merely "hide right now"; the
-   * caller (loop.ts) derives this off the world's real player count, mirroring
-   * `setStats`' own attempt/lifetime split. Twin of `renderAttemptSummary`, toggled
-   * by the same win/lose visibility rule.
+   * THE WIN/LOSE PANEL, as one projection -- the attempt summary, whichever results line
+   * this session has, and what its action button does. See `GameplayOutcome` for the
+   * shape and for what the three setters it replaced could not say.
+   *
+   * `null` is "nothing to summarise": the three lines stay hidden even at win/lose, and
+   * the action button keeps its campaign wording. That is the state every HUD which
+   * never calls this is in -- every css and gallery fixture -- so a fixture renders
+   * exactly as it did before this method existed. `loop.ts` pushes a real outcome from
+   * boot onward and never pushes `null`.
+   *
+   * Pushed on every event-bearing frame, not once at the end: the winning kill is
+   * recorded a beat AFTER the state machine flips to `outcome-win`, so the panel is
+   * already open when the number that belongs on it arrives, and a push that lands then
+   * must repaint rather than be dropped.
    */
-  setCoopKills(counts: number[] | null): void;
-  /**
-   * Versus's per-player kill/death tally (n-player arc PR 4), the FFA/teams twin of
-   * `setCoopKills` -- same `null`-means-never-show convention, same toggle-on-win/lose
-   * lifecycle, but a genuinely different selector/line: `setCoopKills` is enemy-kill-
-   * only and campaign-coop-scoped; this is player-vs-player and ffa/teams-scoped. The
-   * two are mutually exclusive per session (a world has exactly one `mode`), but kept
-   * as separate calls/selectors rather than one payload with a mode field, so neither
-   * line's rendering has to branch on data it was never given for its own mode.
-   * `kills`/`deaths` are per-slot (`Tank.controlledBy`); `mode === 'teams'` renders a
-   * PER-TEAM sum (`teamOf(slot)`, sim/arena.ts) instead of per-slot, since teams mode
-   * cares which SIDE won, not which teammate scored -- see arena.ts's `teamOf`.
-   */
-  setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void;
+  setOutcome(outcome: GameplayOutcome | null): void;
   /**
    * The in-match per-player STOCK readout (spec §3a, owner addition 2026-08-21) --
-   * genuinely different lifecycle from `setVersusResults` just above: that one is a
-   * win/lose-only tally; this is a LIVE strip in the topbar, visible only while a
+   * genuinely different lifecycle from the versus tally `setOutcome` carries: that one
+   * is a win/lose-only summary; this is a LIVE strip in the topbar, visible only while a
    * versus session is actually being played (`playing`/`paused` -- wired into
    * setState's visibility toggles alongside every other state-gated element below),
    * hidden at title/win/lose/splash, where a live per-tick count would be meaningless
-   * (the match has not begun or is already over). `null` hides it entirely -- the same
-   * "never show" convention `setCoopKills`/`setVersusResults` already use; campaign
-   * sessions call this with `null` exactly once, at wiring, and never again (loop.ts).
+   * (the match has not begun or is already over). That opposite visibility rule is why
+   * it stayed its own setter when the win/lose lines merged into one projection. `null`
+   * hides it entirely -- "never show", not "hide right now"; campaign sessions call this
+   * with `null` exactly once, at wiring, and never again (loop.ts).
    *
    * One entry per active slot, `{ slot, stock, team? }` -- `team` present only in
    * 'teams' mode (loop.ts derives it straight off `Tank.team`, which loadArena stamps
@@ -595,8 +639,8 @@ export interface Hud {
    */
   setSessionKind(kind: HudSessionKind): void;
   /**
-   * WHAT THE BUTTONS DO -- the legacy title/outcome affordance policy, and the
-   * one thing that decides every kind-dependent button in this HUD:
+   * WHAT THE TITLE SCREEN'S BUTTONS DO -- the affordance policy for every
+   * kind-dependent control on the Main Menu:
    *
    *  - `'campaign-levels'` (the default): the shipped campaign title screen.
    *  - `'versus-setup'`: Continue hides -- it is the one title affordance that
@@ -620,14 +664,16 @@ export interface Hud {
    * Match" instead so it no longer reads as a campaign action while doing
    * exactly what it always has for a non-campaign session.
    *
-   * Also drives the win/lose action button's label (setState): "Play Again"/
-   * "Retry" becomes "Versus Setup", because for THIS target that click really
-   * does reopen the pane instead of rebuilding a board. That label belongs here
-   * and not on `setSessionKind` precisely because the click's destination is
-   * what the word has to be true about: `onStartRestart` routes a
-   * developer-flag versus session -- Versus by identity -- through
-   * `landOnCampaignBoard`, so "Versus Setup" there would name a pane the click
-   * never opens.
+   * The win/lose action button asks the SAME question -- "Play Again"/"Retry"
+   * becomes "Versus Setup" for this target, because that click really does
+   * reopen the pane instead of rebuilding a board -- but it no longer reads the
+   * answer from here. That panel belongs to a gameplay session, so since issue
+   * #324's step S4 the session states it on `GameplayOutcome.action`, which is
+   * the same `HudRelaunchTarget` vocabulary and carries the same warning: the
+   * word has to be true about the click's DESTINATION, and `onStartRestart`
+   * routes a developer-flag versus session -- Versus by identity -- through
+   * `landOnCampaignBoard`, so keying either surface on `setSessionKind` would
+   * name a pane the click never opens.
    */
   setRelaunchTarget(target: HudRelaunchTarget): void;
   /**
@@ -686,7 +732,7 @@ export interface Hud {
 /**
  * WHO OWNS EACH MEMBER of `Hud` (issue #324).
  *
- * `Hud` is one interface with 67 members spanning two different lifetimes: the persistent
+ * `Hud` is one interface with 66 members spanning two different lifetimes: the persistent
  * application shell, which exists before any match and outlives every match, and a single
  * gameplay session, which does not. Issue #468 separated those OWNERS in the code
  * (`route-host.ts` renders application routes with no session at all); this separates them
@@ -748,16 +794,18 @@ export type RouteHudKey =
 
 /**
  * What a live match may write, and the ONLY part of `Hud` a gameplay session should ever
- * hold. Fourteen members plus the lent `showToast`.
+ * hold. Thirteen members plus the lent `showToast`.
  *
- * Several of these are the per-kind status members issue #324 goes on to absorb into one
- * projection (`setLives`/`setEnemiesRemaining`/`setLevel`/`setSessionKind` and the versus
- * trio): they are gameplay-owned today and stay gameplay-owned after, so they are
- * classified here rather than being left unclassified pending that work.
+ * `setOutcome` is the first of the absorptions issue #324 promised: it replaced
+ * `setCoopKills` and `setVersusResults`, which left the interface with them (step S4).
+ * The per-kind status members still queued behind it -- `setLives`,
+ * `setEnemiesRemaining`, `setLevel`, `setSessionKind`, `setVersusStocks` -- are
+ * gameplay-owned today and stay gameplay-owned after, so they are classified here rather
+ * than being left unclassified pending that work.
  */
 export type GameplayHudKey =
   | 'setLives' | 'setEnemiesRemaining' | 'setLevel' | 'setSessionKind'
-  | 'setCoopKills' | 'setVersusResults' | 'setVersusStocks'
+  | 'setOutcome' | 'setVersusStocks'
   | 'setRoundPhase' | 'setShellCount' | 'signalShellCapacity'
   | 'signalPlayerDeath' | 'signalPlayerFire' | 'setTouchIndicator'
   | 'showAchievementToasts'
@@ -774,7 +822,8 @@ export type GameplayHud = Pick<Hud, GameplayHudKey>;
  * Every member of `Hud` is classified above. A member added without a role makes this
  * union non-`never` and the assignment below stops compiling -- which is the point: the
  * failure mode this guards against is not a wrong classification but an UNCLASSIFIED one,
- * silently reachable from everywhere, which is how the interface reached 67 members.
+ * silently reachable from everywhere, which is how it grew to the 67 members the
+ * classification first had to sort.
  */
 type UnclassifiedHudKey = Exclude<keyof Hud, HudFrameKey | RouteHudKey | GameplayHudKey>;
 const _everyHudMemberHasAnOwner: UnclassifiedHudKey extends never ? true : never = true;
@@ -1678,12 +1727,32 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     }
   }
 
+  /** The Records table's two columns, and nothing else -- see setStats. */
   let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
-  /** `null` means "never show" (1P, or coop that has not started) -- see setCoopKills. */
-  let coopKillsData: number[] | null = null;
-  /** `null` means "never show" (not a versus session, or one that has not started) --
-   *  see setVersusResults. */
-  let versusResultsData: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null = null;
+  /**
+   * The whole win/lose panel, as the session last stated it -- see `GameplayOutcome`.
+   * `null` is "nothing to summarise", which is where every fixture that never calls
+   * `setOutcome` stays, so all three lines below hide and the action button keeps its
+   * campaign wording.
+   */
+  let outcomeData: GameplayOutcome | null = null;
+  /**
+   * Whether a SURFACE that shows the outcome panel is up, maintained by `setState`
+   * alone.
+   *
+   * The `versusStocksVisible` variable further down documents, at length, the bug that
+   * comes of asking an element's own `--hidden` class this question instead: each render
+   * below re-hides its line whenever the data says the line has nothing to show, so the
+   * class conflates "the surface wants this visible" with "the last render happened to
+   * find data". The two disagree on exactly the path production takes -- `setState`
+   * flips to `outcome-win` on the winning frame's `SimEvent`, and the tally that belongs
+   * on the panel arrives afterwards in the same frame's `setOutcome` -- so a classList
+   * guard here would drop the first push into a freshly opened panel whenever the line
+   * was empty when it opened. Same lesson, written down once more because the three
+   * setters merged into `setOutcome` each carried that classList guard of their own, so
+   * a merge that kept the habit would have got it wrong three times at once.
+   */
+  let outcomeVisible = false;
   /** `null` means "never show" (not a versus session, campaign always passes this) --
    *  see setVersusStocks' own doc comment on the Hud interface. */
   let versusStocksData: { slot: number; stock: number; team?: number }[] | null = null;
@@ -1737,11 +1806,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   function renderAttemptSummary(): void {
-    if (!statsData) {
+    if (!outcomeData) {
       attemptSummaryEl.classList.add('hud-attempt-summary--hidden');
       return;
     }
-    const r = statsData.attempt;
+    const r = outcomeData.attempt;
     const kills = r.shellKills + r.mineKills;
     attemptSummaryEl.textContent =
       `This run: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
@@ -1749,37 +1818,40 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * Twin of renderAttemptSummary, one line below it. `coopKillsData === null` means
-   * "never show" -- covers both a 1P session and coop before its first setCoopKills
-   * call -- so the line stays hidden even at win/lose, unlike the attempt summary
-   * which only depends on statsData ever having been set once at boot.
+   * Twin of renderAttemptSummary, one line below it, and the reason a solo outcome is
+   * its own `tally` rather than a coop one with an empty array: a 1P session has no
+   * second player to report, so the line is absent rather than showing zeroes for a
+   * teammate who was never there.
    */
   function renderCoopKillLine(): void {
-    if (!coopKillsData) {
+    if (outcomeData?.tally !== 'coop') {
       coopKillsEl.classList.add('hud-coop-kills--hidden');
       return;
     }
-    const [p1, p2] = coopKillsData;
+    const [p1, p2] = outcomeData.kills;
     coopKillsEl.textContent = `P1: ${p1 ?? 0} · P2: ${p2 ?? 0}`;
     coopKillsEl.classList.remove('hud-coop-kills--hidden');
   }
 
   /**
-   * Twin of renderCoopKillLine, one line below it -- see setVersusResults' own doc
-   * comment for why this is a separate line rather than a mode branch inside that one.
-   * `mode === 'teams'` sums kills/deaths PER TEAM (`teamOf(slot)`) rather than showing
-   * one entry per slot: teams mode cares which SIDE won. ffa shows one entry per slot,
+   * Twin of renderCoopKillLine, one line below it -- a separate element rather than a
+   * branch inside that one, because the two say different things (enemies killed in
+   * campaign coop; players killed and lost in versus) and a session has exactly one of
+   * them, which is what `GameplayOutcome`'s `tally` now states.
+   *
+   * `'teams'` sums kills/deaths PER TEAM (`teamOf(slot)`) rather than showing one entry
+   * per slot: teams mode cares which SIDE won. `'ffa'` shows one entry per slot,
    * kills/deaths as `k/d`.
    */
   function renderVersusResultsLine(): void {
-    if (!versusResultsData) {
+    if (outcomeData?.tally !== 'ffa' && outcomeData?.tally !== 'teams') {
       versusResultsEl.classList.add('hud-versus-results--hidden');
       return;
     }
-    const { mode, kills, deaths } = versusResultsData;
+    const { tally, kills, deaths } = outcomeData;
     const slots = Math.max(kills.length, deaths.length);
     let text: string;
-    if (mode === 'teams') {
+    if (tally === 'teams') {
       const teamKills = [0, 0];
       const teamDeaths = [0, 0];
       for (let slot = 0; slot < slots; slot++) {
@@ -1797,6 +1869,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     }
     versusResultsEl.textContent = text;
     versusResultsEl.classList.remove('hud-versus-results--hidden');
+  }
+
+  /**
+   * The outcome panel's three lines, always together: they are one projection's three
+   * views, and rendering a subset is how they used to drift apart.
+   */
+  function renderOutcomeLines(): void {
+    renderAttemptSummary();
+    renderCoopKillLine();
+    renderVersusResultsLine();
   }
 
   /**
@@ -3201,6 +3283,29 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * WHAT THE WIN/LOSE PANEL'S ONE ACTION BUTTON SAYS -- the outcome twin of
+   * `applyTitleAffordances`, and the only place any of its four words are chosen.
+   *
+   * "Next Level" belongs to the level SEQUENCE, so it is read off `levelPos` and beats
+   * everything else: an intermediate clear advances whatever kind of session produced
+   * it. The final win and the loss both name where the relaunch LANDS, which is what
+   * `GameplayOutcome.action` states -- a versus session that reopens its setup pane must
+   * not promise "Play Again", and a developer-flag versus session, which `onStartRestart`
+   * routes through `landOnCampaignBoard`, must not promise "Versus Setup".
+   *
+   * Reads the outcome's own `action`, never `sessionKind` and no longer `relaunchTarget`:
+   * a session's outcome panel states its own destination now (issue #324, step S4), and
+   * the title screen's copy of the same policy is `setRelaunchTarget`'s business. With no
+   * outcome pushed at all -- every css and gallery fixture -- the campaign wording is the
+   * default, which is what this panel said before either setter existed.
+   */
+  function outcomeActionLabel(win: boolean): string {
+    if (win && levelPos && levelPos.current < levelPos.total) return 'Next Level';
+    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Versus Setup';
+    return win ? 'Play Again' : 'Retry';
+  }
+
+  /**
    * The Main Menu's one-line run summary (issue #226): "only the current mission and
    * remaining run lives needed to build confidence", and nothing else.
    *
@@ -4093,6 +4198,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // early: the final `else` renders a Game Over corpse screen, so any state that falls
     // through to it gets "Out of lives." written into the panel -- on a fresh page load,
     // that is the first thing a player would see.
+    // BEFORE the early return, because the flag is a claim about the SURFACE and both
+    // states this returns for are surfaces with no outcome panel. Assigning it only after
+    // the return left it stuck `true` across the outcome -> playing transition, which is
+    // the ordinary restart path: every later push then re-rendered the three lines and
+    // rewrote the action button behind a panel the surface transition had already hidden.
+    // Invisible, because `.hud-panel` is hidden during play whatever these lines say --
+    // but it made the variable's own doc comment false, and a gate that does not gate is
+    // worse than no gate the moment someone relies on it.
+    outcomeVisible = isOutcome;
     if (s === 'playing' || atLaunch) return;
     // Quit belongs to the pause panel AND the level-cleared panel. It used to be pause
     // alone, on the reasoning that "a quit button on the win panel would be a second,
@@ -4167,15 +4281,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // one function rather than four inline toggles here.
     applyTitleAffordances();
     actionBtn.classList.toggle('hud-action--hidden', atMainMenu);
-    // The attempt summary belongs to the END screens alone.
+    // THE OUTCOME PANEL'S THREE LINES belong to the END screens alone. The surface's
+    // half of the answer is recorded above, before the `playing` early return, in the
+    // variable `setOutcome` reads -- so a later push into an already-open panel repaints
+    // instead of consulting a class each render may have written for a reason of its own
+    // (see `outcomeVisible`), and a push during play repaints nothing at all.
     attemptSummaryEl.classList.toggle('hud-attempt-summary--hidden', !isOutcome);
-    if (isOutcome) renderAttemptSummary();
-    // Twin toggle for coop's kill line -- renderCoopKillLine re-hides it if
-    // coopKillsData is null (1P, or coop that has not started), even at outcome.
     coopKillsEl.classList.toggle('hud-coop-kills--hidden', !isOutcome);
     versusResultsEl.classList.toggle('hud-versus-results--hidden', !isOutcome);
-    if (isOutcome) renderCoopKillLine();
-    if (isOutcome) renderVersusResultsLine();
+    // Each render re-hides its own line when the outcome has nothing for it -- a solo
+    // session has no coop line, a campaign one no versus line, and a HUD that was never
+    // told an outcome has none of the three.
+    if (isOutcome) renderOutcomeLines();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       setSubtitle('The arena waits.');
@@ -4203,29 +4320,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       if (levelPos && levelPos.current < levelPos.total) {
         titleEl.textContent = `Level ${levelPos.current} cleared!`;
         setSubtitle('On to the next.');
-        actionBtn.textContent = 'Next Level';
       } else {
         titleEl.textContent = 'You Win!';
         setSubtitle('Arena cleared.');
-        // A setup-pane versus session's FINAL win never has a next level to advance to
-        // (its single synthetic level always lands here, not the `levelPos` branch
-        // above), and this click no longer restarts a match -- loop.ts's own
-        // `onStartRestart` reopens the setup pane instead. "Play Again" would be a lie
-        // about what the click does; "Versus Setup" says it. Paused's "Resume" and the
-        // intermediate "Next Level" above are both left alone -- neither click opens the
-        // pane, so relabeling either would be the same lie in reverse.
-        //
-        // Keyed on `relaunchTarget`, NOT `sessionKind`: `onStartRestart` branches on
-        // exactly this policy, so a developer-flag versus session -- Versus by
-        // identity, campaign-levels by target -- lands on a campaign board here and
-        // must keep reading "Play Again".
-        actionBtn.textContent = relaunchTarget === 'versus-setup' ? 'Versus Setup' : 'Play Again';
       }
+      actionBtn.textContent = outcomeActionLabel(true);
     } else {
       titleEl.textContent = 'Game Over';
       setSubtitle('Out of lives.');
-      // Same `relaunchTarget` reasoning as the win branch's label just above.
-      actionBtn.textContent = relaunchTarget === 'versus-setup' ? 'Versus Setup' : 'Retry';
+      actionBtn.textContent = outcomeActionLabel(false);
     }
   }
 
@@ -4477,15 +4580,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     setStats(data: { lifetime: StatCounts; attempt: StatCounts }): void {
       statsData = data;
       if (!statsView.classList.contains('hud-stats--hidden')) renderStatsTable();
-      if (!attemptSummaryEl.classList.contains('hud-attempt-summary--hidden')) renderAttemptSummary();
     },
-    setCoopKills(counts: number[] | null): void {
-      coopKillsData = counts;
-      if (!coopKillsEl.classList.contains('hud-coop-kills--hidden')) renderCoopKillLine();
-    },
-    setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void {
-      versusResultsData = data;
-      if (!versusResultsEl.classList.contains('hud-versus-results--hidden')) renderVersusResultsLine();
+    setOutcome(outcome: GameplayOutcome | null): void {
+      outcomeData = outcome;
+      // Nothing to repaint unless an outcome surface is actually up: the panel is where
+      // all four of these live, and `setState` renders them itself on the way in.
+      if (!outcomeVisible) return;
+      renderOutcomeLines();
+      // The action button too, because the destination rides the same push. In today's
+      // production this never changes a word -- `loop.ts` derives `action` from a
+      // boot-time relaunch target and re-sends the same value every frame -- but a panel
+      // that painted the tally from the newest push and the label from the oldest would
+      // be exactly the kind of half-applied projection this merge exists to rule out.
+      actionBtn.textContent = outcomeActionLabel(shownState === 'outcome-win');
     },
     setVersusStocks(stocks: { slot: number; stock: number; team?: number }[] | null): void {
       versusStocksData = stocks;
@@ -4562,7 +4669,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       reassignSlotCbs.push(cb);
     },
     // Unconditional, like setLevelSelect -- NOT gated on the panel being open (unlike
-    // setAchievements/setCoopKills' convention): "REPLACE, never append" means .hud-
+    // setAchievements/setOutcome's convention): "REPLACE, never append" means .hud-
     // controller-rows stays current regardless of visibility, so a boot-time push (before
     // the panel has ever opened) and a mid-session hotplug both land correctly whenever
     // the panel is next shown, with no separate "refresh on open" path to keep in sync.
