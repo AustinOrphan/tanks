@@ -80,6 +80,9 @@ const FALLBACK_FREQ: Record<string, number> = {
   'mine-boom': 70,
   // Low and short: the procedural fallback for a refusal must not read as a shot.
   'fire-blocked': 200,
+  // Thinner and far higher than the refusal above: the `click` arm's whole identity is
+  // that it has no body, and the degraded beep path should not hand it one.
+  'fire-blocked-click': 3200,
   victory: 520,
   defeat: 160,
 };

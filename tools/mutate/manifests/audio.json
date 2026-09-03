@@ -17,16 +17,45 @@
   {
     "id": "blocked-fire-audio-drops-the-ring-pairing",
     "file": "src/audio/director.ts",
-    "find": "            options.blockedFire === 'haptic-audio' ||\n            options.blockedFire === 'ring-audio') &&",
-    "replace": "            options.blockedFire === 'haptic-audio') &&",
+    "find": "if (cue != null && cueDrives(cue, 'audio') && e.ownerId === playerId) {",
+    "replace": "if (cue === 'audio' && e.ownerId === playerId) {",
     "expect": "killed",
     "tests": [
       "src/audio/director.test.ts"
     ],
-    "why": "director.ts's audio enumeration returned to the two arms it shipped with. This is the defect the surrounding change repaired rather than a hypothetical: `ring-audio` was added to BLOCKED_FIRE_CUES and wired on the render side while this list stayed at `audio` and `haptic-audio`, so the flag advertised a multimodal treatment that drew a ring in silence. Nothing else notices -- the flag still parses, devflags.test.ts still accepts the value, the ring still spawns, the haptic arm is unaffected, and every other audio cue still plays. The two cases that fail are `plays it for BOTH multimodal arms` and `sounds for EVERY cue carrying `audio`, and for no other -- one row per cue`; the second is the one that would have caught it without anyone remembering to add a case. Scoped to director.test.ts; expectFailures counts that scoped run only.",
+    "why": "director.ts's audio gate returned to the single arm it shipped with. This is the defect the surrounding change repaired rather than a hypothetical: `ring-audio` was added to BLOCKED_FIRE_CUES and wired on the render side while this gate stayed at `audio` and `haptic-audio`, so the flag advertised a multimodal treatment that drew a ring in silence. The gate is now ONE `cueDrives` call against the presentation layer's channel map, and this entry is re-anchored to it for issue #516: narrowing it to the baseline arm silences BOTH multimodal arms and all four of #516's new audio arms at once. Nothing else notices -- the flag still parses, devflags.test.ts still accepts every value, the ring still spawns, the haptic arms are unaffected, and every other audio cue still plays.",
     "killedBy": [
       "blocked-fire cue (issue #356) plays it for BOTH multimodal arms",
-      "blocked-fire cue (issue #356) sounds for EVERY cue carrying `audio`, and for no other -- one row per cue"
+      "blocked-fire cue (issue #356) sounds for EVERY cue carrying `audio`, and for no other -- one row per cue",
+      "blocked-fire cue (issue #356) gives each audio arm its OWN voice -- one row per arm (issue #516)"
+    ]
+  },
+  {
+    "id": "blocked-fire-audio-arms-collapse-to-one-voice",
+    "file": "src/audio/director.ts",
+    "find": "          const voice = BLOCKED_FIRE_ARMS[cue] ?? BLOCKED_FIRE_BASELINE;",
+    "replace": "          const voice = BLOCKED_FIRE_BASELINE;",
+    "expect": "killed",
+    "tests": [
+      "src/audio/director.test.ts"
+    ],
+    "why": "Every audio arm plays the shipped click again, so issue #516's audio column becomes five flag values for one sound. The channel gate is untouched and the one-row-per-cue membership table still passes -- each arm DOES sound -- which is exactly why that table alone could not catch this: MEASURED, this mutation left all 18 of director.test.ts's tests green before the per-arm voice table was added, and fails only that table now. What it destroys is the comparison #356 exists to run.",
+    "killedBy": [
+      "blocked-fire cue (issue #356) gives each audio arm its OWN voice -- one row per arm (issue #516)"
+    ]
+  },
+  {
+    "id": "blocked-fire-click-arm-grows-a-tone",
+    "file": "src/audio/synth.ts",
+    "find": "    noiseVoice(c, t, { duration: 0.012, peak: 0.11, type: 'highpass', from: 5200, to: 3800 }, r),\n  ],",
+    "replace": "    noiseVoice(c, t, { duration: 0.012, peak: 0.11, type: 'highpass', from: 5200, to: 3800 }, r),\n    toneVoice(c, t, { from: 210, to: 150, duration: 0.03, peak: 0.07, type: 'square' }, r),\n  ],",
+    "expect": "killed",
+    "tests": [
+      "src/audio/synth.test.ts"
+    ],
+    "why": "The `click` arm is the one audio arm that needed a recipe rather than a rate or a gain, and the reason is the layer it does NOT have: issue #516 asks it for \"a short dry mechanical click, no tone\". Giving it back the baseline's square body makes it the baseline refusal wearing a second flag value, and two arms that sound the same compare nothing. MEASURED: this mutation left all 16 of synth.test.ts's tests green before the click-arm case was added.",
+    "killedBy": [
+      "the blocked-fire `click` arm (issue #516) has NO tone layer at all -- the absent oscillator IS the design"
     ]
   }
 ]

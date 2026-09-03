@@ -851,6 +851,38 @@
     ]
   },
   {
+    "id": "blocked-fire-haptic-gate-drops-every-arm-but-the-baseline",
+    "file": "src/game/haptics.ts",
+    "find": "if (cue != null && cueDrives(cue, 'haptic') && e.ownerId === playerId) {",
+    "replace": "if (cue === 'haptic' && e.ownerId === playerId) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/haptics.test.ts"
+    ],
+    "why": "The haptic half of the gate audio/director.ts already got wrong once: an enumeration written arm by arm falls a cue behind the vocabulary, and the cue then advertises a channel it never reaches. Narrowing this one to the shipped arm silences the multimodal `haptic-audio` and all four of issue #516's new haptic arms, while the flag still parses, the audio arms still sound and every other pulse in this file is untouched -- a column of five haptic values that is really one.",
+    "killedBy": [
+      "blocked-fire cue: the arms are separable (issue #356) the multimodal arm vibrates AND (see director.test.ts) sounds",
+      "blocked-fire cue: the arms are separable (issue #356) vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue",
+      "blocked-fire cue: the arms are separable (issue #356) gives each haptic arm its OWN pattern -- one row per arm (issue #516)",
+      "blocked-fire cue: the arms are separable (issue #356) stays silent on a device with no vibration, and behind the haptics preference"
+    ]
+  },
+  {
+    "id": "blocked-fire-haptic-arms-collapse-to-one-pattern",
+    "file": "src/game/haptics.ts",
+    "find": "          vibrate(BLOCKED_FIRE_ARMS[cue] ?? BLOCKED_FIRE_PATTERN_MS);",
+    "replace": "          vibrate(BLOCKED_FIRE_PATTERN_MS);",
+    "expect": "killed",
+    "tests": [
+      "src/game/haptics.test.ts"
+    ],
+    "why": "Every haptic arm buzzes the shipped 8/24/8 double tap again, so issue #516's haptic column becomes five flag values for one feeling -- a hand asked to compare five identical buzzes. The channel gate is untouched and the one-row-per-cue membership table still passes, because each arm DOES buzz, which is why that table alone could not catch it: MEASURED, this mutation left all 30 of haptics.test.ts's tests green before the per-arm pattern table was added.",
+    "killedBy": [
+      "blocked-fire cue: the arms are separable (issue #356) gives each haptic arm its OWN pattern -- one row per arm (issue #516)",
+      "blocked-fire cue: the arms are separable (issue #356) stays silent on a device with no vibration, and behind the haptics preference"
+    ]
+  },
+  {
     "id": "launch-gate-ignored-on-reboot",
     "file": "src/game/route-host.ts",
     "find": "    initialRoute: deps.launchGate.dismissed() ? 'main-menu' : 'launch',",
