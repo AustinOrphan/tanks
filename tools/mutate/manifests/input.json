@@ -86,9 +86,9 @@
     "expect": "killed",
     "why": "A button, slider or select keeps only the keys it operates on; consuming every key makes M, P and Escape vanish with a slider or a button focused.",
     "tests": [
-      "src/input/ui-actions.test.ts",
+      "src/game/hud.navigation.test.ts",
       "src/input/input.test.ts",
-      "src/game/hud.test.ts"
+      "src/input/ui-actions.test.ts"
     ],
     "killedBy": [
       "consumesKey a button keeps Enter and Space (activation) but not Escape, the arrows or the driving keys",
@@ -153,8 +153,8 @@
     "replace": "  return ADJUSTABLE_KEYS.has(key);",
     "why": "A focused button must NOT keep the arrows: the roving-focus handler asks this rule first, and a button that consumed arrows froze keyboard navigation on the first focused menu button (found as a spinning walk test on 2026-09-02).",
     "tests": [
-      "src/input/ui-actions.test.ts",
-      "src/game/hud.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/input/ui-actions.test.ts"
     ],
     "expect": "killed",
     "killedBy": [
