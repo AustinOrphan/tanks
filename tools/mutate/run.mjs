@@ -126,9 +126,10 @@ const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.m
 export function parseArgs(argv) {
   /** @type {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
   const args = { manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null, changed: null, list: false };
-  // Every flag here takes a value; a flag at the end of the line, or followed by another
-  // flag, is refused by name rather than read as `undefined` and failed later somewhere
-  // that cannot say which flag was short.
+  // Every flag EXCEPT `--list` takes a value; one at the end of the line, or followed by
+  // another flag, is refused by name rather than read as `undefined` and failed later
+  // somewhere that cannot say which flag was short. `--list` is a bare boolean and does
+  // not go through `value`.
   const value = (/** @type {number} */ i) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith('--')) throw new Error(`${argv[i]} needs a value`);
@@ -805,7 +806,12 @@ export function baseManifestById(base, manifestArg, root) {
 function selectChanged(entries, ref, manifestArg, root) {
   const { base, changed } = changedFilesSince(ref, root);
   console.log(`[select] ${changed.length} file(s) changed since ${base.slice(0, 7)} (merge base with ${ref})`);
-  const sources = changed.filter((f) => existsSync(join(root, f)) && /\.(ts|tsx|js|mjs|css)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.startsWith('tools/mutate/manifests/'));
+  // `.json` is in the list because this repository imports data as modules -- the
+  // balance, tank, profile and arena tables under `src/sim/config/data/`, the audio
+  // suites -- so a change to one reaches its tests through the graph exactly as a `.ts`
+  // change does. Without it a balance-only PR would select nothing at all. The manifest
+  // files are excluded because nothing imports them: they are rule 2's business.
+  const sources = changed.filter((f) => existsSync(join(root, f)) && /\.(ts|tsx|js|mjs|css|json)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.startsWith('tools/mutate/manifests/'));
   const relatedTests = new Set();
   if (sources.length > 0) {
     for (const tests of relatedFilesForAll(sources, root).values()) for (const t of tests) relatedTests.add(t);
