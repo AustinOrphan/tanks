@@ -55,6 +55,23 @@ describe('blocked-fire ring (issue #356)', () => {
       'haptic-audio': false,
       ring: true,
       'ring-audio': true,
+      // The rest of issue #516's vocabulary, ALL permanently false here: this system draws
+      // the tank-local ring and nothing else. The other visual arms (muzzle, turret, pips,
+      // hud) are separate treatments in their own systems, so their rows stay false in this
+      // table however they are implemented -- and the audio and haptic arms never draw at
+      // all. Only `ring` and `ring-audio` belong to this system.
+      muzzle: false,
+      turret: false,
+      pips: false,
+      hud: false,
+      click: false,
+      clunk: false,
+      'thunk-soft': false,
+      'pitch-empty': false,
+      'haptic-tap': false,
+      'haptic-double': false,
+      'haptic-long': false,
+      'haptic-rise': false,
     };
     expect(Object.keys(carriesRing).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldDraw] of Object.entries(carriesRing)) {

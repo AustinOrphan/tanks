@@ -47,16 +47,85 @@
  * whole registry, and `devflags.ts` still accepts the properly encoded legacy `%2B`
  * spellings as aliases.
  */
-export type BlockedFireCue = 'haptic' | 'audio' | 'haptic-audio' | 'ring' | 'ring-audio';
+export type BlockedFireCue =
+  // Visual, tank- or weapon-local (issue #516's comparison matrix).
+  | 'ring'
+  | 'muzzle'
+  | 'turret'
+  | 'pips'
+  | 'hud'
+  // Audio.
+  | 'audio'
+  | 'click'
+  | 'clunk'
+  | 'thunk-soft'
+  | 'pitch-empty'
+  // Haptic.
+  | 'haptic'
+  | 'haptic-tap'
+  | 'haptic-double'
+  | 'haptic-long'
+  | 'haptic-rise'
+  // Multimodal.
+  | 'haptic-audio'
+  | 'ring-audio';
 // Typed against the union rather than inferred as `Set<string>`, so iterating the set
 // yields `BlockedFireCue` and a member the union does not name is a compile error here.
 export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([
-  'haptic',
-  'audio',
-  'haptic-audio',
   'ring',
+  'muzzle',
+  'turret',
+  'pips',
+  'hud',
+  'audio',
+  'click',
+  'clunk',
+  'thunk-soft',
+  'pitch-empty',
+  'haptic',
+  'haptic-tap',
+  'haptic-double',
+  'haptic-long',
+  'haptic-rise',
+  'haptic-audio',
   'ring-audio',
 ]);
+
+/**
+ * Which channel each cue BELONGS TO -- a vocabulary map, not a claim that anything is
+ * wired (issue #516). `cueDrives(cue, 'audio')` answers "is this cue mine" for a
+ * consumer in one place instead of each one listing members, but a cue can be named here
+ * and still be completely inert: the twelve arms the comparison matrix adds are
+ * classified from the day they are named and become audible, visible or felt only when a
+ * consumer implements them. Ownership, in other words, not behaviour. A multimodal arm
+ * belongs to more than one channel, which is why this is set-valued rather than a field.
+ */
+export type BlockedFireChannel = 'visual' | 'audio' | 'haptic';
+
+const CHANNELS: Readonly<Record<BlockedFireCue, readonly BlockedFireChannel[]>> = {
+  ring: ['visual'],
+  muzzle: ['visual'],
+  turret: ['visual'],
+  pips: ['visual'],
+  hud: ['visual'],
+  audio: ['audio'],
+  click: ['audio'],
+  clunk: ['audio'],
+  'thunk-soft': ['audio'],
+  'pitch-empty': ['audio'],
+  haptic: ['haptic'],
+  'haptic-tap': ['haptic'],
+  'haptic-double': ['haptic'],
+  'haptic-long': ['haptic'],
+  'haptic-rise': ['haptic'],
+  'haptic-audio': ['haptic', 'audio'],
+  'ring-audio': ['visual', 'audio'],
+};
+
+/** True when `cue` drives `channel`. Null (the shipped default) drives nothing. */
+export function cueDrives(cue: BlockedFireCue | null | undefined, channel: BlockedFireChannel): boolean {
+  return cue != null && CHANNELS[cue].includes(channel);
+}
 
 /** Narrow a raw string (a URL flag value) to a cue the union names. */
 export function isBlockedFireCue(raw: string): raw is BlockedFireCue {

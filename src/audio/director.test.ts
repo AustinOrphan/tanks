@@ -233,6 +233,22 @@ describe('blocked-fire cue (issue #356)', () => {
       'haptic-audio': true,
       ring: false,
       'ring-audio': true,
+      // The rest of issue #516's vocabulary, false here for two DIFFERENT reasons: the
+      // visual and haptic arms carry no audio at all and will never sound, while the four
+      // new audio arms (click, clunk, thunk-soft, pitch-empty) are named but not yet
+      // implemented and flip to true as each lands.
+      muzzle: false,
+      turret: false,
+      pips: false,
+      hud: false,
+      click: false,
+      clunk: false,
+      'thunk-soft': false,
+      'pitch-empty': false,
+      'haptic-tap': false,
+      'haptic-double': false,
+      'haptic-long': false,
+      'haptic-rise': false,
     };
     expect(Object.keys(carriesAudio).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldSound] of Object.entries(carriesAudio)) {
