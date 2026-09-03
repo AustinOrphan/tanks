@@ -59,13 +59,12 @@ describe('blocked-fire HUD cue (issue #516, parent #356)', () => {
     // fails the key comparison below.
     const carriesHud: Record<BlockedFireCue, boolean> = {
       hud: true,
-      // The other four visual arms are drawn in the ARENA by their own render systems and
+      // The other visual arms are drawn in the ARENA by their own render systems and
       // never touch this surface, which is the distinction #356 asks to compare: a cue on
       // the tank against a cue off it. The audio and haptic arms have no screen at all.
       ring: false,
       'ring-audio': false,
       muzzle: false,
-      turret: false,
       pips: false,
       audio: false,
       click: false,

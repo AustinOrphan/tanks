@@ -268,23 +268,25 @@ describe('gallery args', () => {
   });
 
   it('takes a blocked-fire cue only for the moment that stages a refusal', () => {
-    expect(parseArgs(['--scene', 'blocked-fire', '--blocked-fire', 'turret']).blockedFire).toBe(
-      'turret',
+    expect(parseArgs(['--scene', 'blocked-fire', '--blocked-fire', 'muzzle']).blockedFire).toBe(
+      'muzzle',
     );
     expect(parseArgs([]).blockedFire).toBeNull();
     // The point of the flag is a clip with a cue in it. Pairing it with any other scene
     // renders a tank that never refuses a shot, so it fails rather than producing a
     // silent no-cue clip that reads as "this arm does nothing".
-    expect(() => parseArgs(['--blocked-fire', 'turret'])).toThrow(/needs --scene blocked-fire/);
+    expect(() => parseArgs(['--blocked-fire', 'muzzle'])).toThrow(/needs --scene blocked-fire/);
     expect(() => parseArgs(['--scene', 'fire', '--blocked-fire', 'ring'])).toThrow(
       /needs --scene blocked-fire/,
     );
     // Only the four VISUAL arms: the audio and haptic arms have nothing to draw, and
     // 'hud' draws into the DOM HUD, which no gallery page builds.
-    for (const arm of ['ring', 'muzzle', 'turret', 'pips']) {
+    for (const arm of ['ring', 'muzzle', 'pips']) {
       expect(parseArgs(['--scene', 'blocked-fire', '--blocked-fire', arm]).blockedFire).toBe(arm);
     }
-    for (const arm of ['hud', 'audio', 'click', 'haptic', 'ring-audio', 'nonsense']) {
+    // 'turret' is in this list, not the one above: issue #526 retired it as a cue, so
+    // asking for it must fail rather than quietly render the recoil that now plays anyway.
+    for (const arm of ['turret', 'hud', 'audio', 'click', 'haptic', 'ring-audio', 'nonsense']) {
       expect(() => parseArgs(['--scene', 'blocked-fire', '--blocked-fire', arm])).toThrow(
         /--blocked-fire must be one of/,
       );

@@ -5,7 +5,7 @@ import { createDeathPulseSystem } from '../../src/render/death-pulse';
 import { createTreadTrailSystem } from '../../src/render/tread-trails';
 import { createBlockedFireRingSystem } from '../../src/render/blocked-fire-ring';
 import { createBlockedFireMuzzleSystem } from '../../src/render/blocked-fire-muzzle';
-import { createBlockedFireTurretSystem } from '../../src/render/blocked-fire-turret';
+import { createBarrelRecoilSystem } from '../../src/render/barrel-recoil';
 import { createBlockedFirePipsSystem } from '../../src/render/blocked-fire-pips';
 import type { BlockedFireCue } from '../../src/presentation/blocked-fire';
 import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
@@ -66,7 +66,7 @@ export interface MomentSceneOptions {
    * timeline is deterministic, and `--subdiv`/`--fps` slow the clip down, so a reviewer
    * comparing arms sees the same gesture each time.
    *
-   * Only the four visual arms render. The audio and haptic arms have nothing to draw,
+   * Only the three remaining visual arms render. The audio and haptic arms have nothing to draw,
    * and `hud` draws into the DOM HUD, which no gallery scene builds -- ask for one of
    * those and the cue-to-system mapping below matches nothing, so you get an unadorned
    * tank. The CLI refuses them for that reason (`args.mjs`), and it refuses a cue paired
@@ -185,15 +185,19 @@ export function buildMomentScene(
   // byte-identical without one -- see tread-trails.ts's own doc comment.
   const treadTrails = createTreadTrailSystem(scene);
   // Constructed by the same cue-to-system mapping as renderer.ts, so what the gallery
-  // shows is what the game would show for that flag. `views` is passed to the turret
-  // system directly: EntityViews already satisfies `TurretSource` (its `turretOf`), and
+  // shows is what the game would show for that flag. `views` is passed to the recoil
+  // system directly: EntityViews already satisfies `BarrelSource` (its `barrelOf`), and
   // the alternative -- a hand-written adapter -- would be a second, drift-prone copy of
   // the lookup the renderer uses.
   const cue = opts.blockedFire ?? null;
   const blockedFireRing =
     cue === 'ring' || cue === 'ring-audio' ? createBlockedFireRingSystem(scene) : null;
   const blockedFireMuzzle = cue === 'muzzle' ? createBlockedFireMuzzleSystem(scene) : null;
-  const blockedFireTurret = cue === 'turret' ? createBlockedFireTurretSystem(views) : null;
+  // NOT gated on the cue, unlike the arms around it: since issue #526 the gun kicks on
+  // every shot and every refusal as shipped behaviour, so the gallery shows it in every
+  // moment that fires -- which is also what makes a refusal legible here, as the one
+  // kick with no shell behind it.
+  const barrelRecoil = createBarrelRecoilSystem(views);
   const blockedFirePips = cue === 'pips' ? createBlockedFirePipsSystem(scene) : null;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
@@ -253,7 +257,7 @@ export function buildMomentScene(
       deathPulse.spawn(tl.events[fed], tl.worlds[fed], { enemyEnabled: true });
       blockedFireRing?.spawn(tl.events[fed], tl.worlds[fed], cue);
       blockedFireMuzzle?.spawn(tl.events[fed], tl.worlds[fed], cue);
-      blockedFireTurret?.spawn(tl.events[fed], tl.worlds[fed], cue);
+      barrelRecoil.spawn(tl.events[fed], tl.worlds[fed]);
       blockedFirePips?.spawn(tl.events[fed], tl.worlds[fed], cue);
       fed++;
     }
@@ -266,7 +270,7 @@ export function buildMomentScene(
     // land on the object sync has already posed or it is overwritten before it is drawn.
     blockedFireRing?.update(dt);
     blockedFireMuzzle?.update(dt);
-    blockedFireTurret?.update(dt);
+    barrelRecoil.update(dt);
     blockedFirePips?.update(dt, tl.worlds[a]);
     // Same prev/curr pair as views.sync above -- treadTrails reads only
     // roundStartTick off `prev`, never its tank positions (tread-trails.ts's own
@@ -284,7 +288,7 @@ export function buildMomentScene(
     treadTrails.dispose();
     blockedFireRing?.dispose();
     blockedFireMuzzle?.dispose();
-    blockedFireTurret?.dispose();
+    barrelRecoil.dispose();
     blockedFirePips?.dispose();
     renderer.dispose();
   }

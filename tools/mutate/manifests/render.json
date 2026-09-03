@@ -336,7 +336,7 @@
     "tests": [
       "src/render/blocked-fire-muzzle.test.ts"
     ],
-    "why": "The muzzle arm's own cue gate, widened so it also flashes for `ring` -- the exact shape of defect that shipped `ring-audio` silent (see blocked-fire-ring-drops-its-paired-audio-arm): not a wrong branch but a cue no assertion mentions. Issue #516 exists to make five visual treatments COMPARABLE, so an arm that also fires under another arm's flag corrupts the comparison rather than merely looking wrong -- the owner would be judging `ring` against `ring plus a muzzle flash`. Only the one-row-per-cue table can catch it: every case written per remembered scenario passes, since `muzzle` still flashes and null still draws nothing. MEASURED with the table's `it` deleted from the file: 0 of 8 remaining tests failed (survived). With it: killed.",
+    "why": "The muzzle arm's own cue gate, widened so it also flashes for `ring` -- the exact shape of defect that shipped `ring-audio` silent (see blocked-fire-ring-drops-its-paired-audio-arm): not a wrong branch but a cue no assertion mentions. Issue #516 exists to make the visual treatments COMPARABLE, so an arm that also fires under another arm's flag corrupts the comparison rather than merely looking wrong -- the owner would be judging `ring` against `ring plus a muzzle flash`. Only the one-row-per-cue table can catch it: every case written per remembered scenario passes, since `muzzle` still flashes and null still draws nothing. MEASURED with the table's `it` deleted from the file: 0 of 8 remaining tests failed (survived). With it: killed.",
     "killedBy": [
       "blocked-fire muzzle flash (issue #516, parent #356) flashes for EVERY cue carrying `muzzle`, and for no other -- one row per cue"
     ]
@@ -381,64 +381,6 @@
     "why": "The landmine blocked-fire-ring.ts records, reproduced on this arm: skipping the scale term under reduced motion instead of writing a rest scale freezes an ALREADY-LIVE flash at whatever size it had collapsed to when the preference flipped, rather than moving it to rest. Reachable only mid-flight, because `prefers-reduced-motion` is a live media query -- the test that sets the preference BEFORE spawning stays green under this, which is why one reduced-motion case is not enough.",
     "killedBy": [
       "blocked-fire muzzle flash (issue #516, parent #356) snaps an ALREADY-LIVE flash to full size when reduced motion turns on mid-flight"
-    ]
-  },
-  {
-    "id": "blocked-fire-turret-kicks-for-an-arm-that-is-not-its-own",
-    "file": "src/render/blocked-fire-turret.ts",
-    "find": "    if (!cueDrives(cue, 'visual') || cue !== 'turret') return;",
-    "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'turret' && cue !== 'ring')) return;",
-    "expect": "killed",
-    "tests": [
-      "src/render/blocked-fire-turret.test.ts"
-    ],
-    "why": "This arm's own cue gate, widened so the gun also stutters under `ring`. Same defect class and same rationale as blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own: only the one-row-per-cue table can fail on a cue no other assertion names, and an arm that fires under another arm's flag makes issue #356's ruling on a treatment nobody built. MEASURED with the table's `it` deleted from the file: 0 of 9 remaining tests failed (survived). With it: killed.",
-    "killedBy": [
-      "blocked-fire turret stutter (issue #516, parent #356) kicks for EVERY cue carrying `turret`, and for no other -- one row per cue"
-    ]
-  },
-  {
-    "id": "blocked-fire-turret-lunges-forward-instead-of-recoiling",
-    "file": "src/render/blocked-fire-turret.ts",
-    "find": "    return KICK * (1 - k) * Math.abs(Math.sin(k * Math.PI * 2 * CYCLES));",
-    "replace": "    return KICK * (1 - k) * Math.sin(k * Math.PI * 2 * CYCLES);",
-    "expect": "killed",
-    "tests": [
-      "src/render/blocked-fire-turret.test.ts"
-    ],
-    "why": "Drops the `abs`, so the second half of every cycle drives the turret FORWARD along the bore -- the gun lunging at the target. A recoil that pushes out is the visual language of firing, which is precisely the reading this arm exists to avoid: #356 needs the player to infer that the shot did not happen. The sign is not a detail here, it is the message.",
-    "killedBy": [
-      "blocked-fire turret stutter (issue #516, parent #356) recoils BACKWARD along the bore, never forward",
-      "blocked-fire turret stutter (issue #516, parent #356) STUTTERS -- two decaying bumps, not one push"
-    ]
-  },
-  {
-    "id": "blocked-fire-turret-pushes-once-instead-of-stuttering",
-    "file": "src/render/blocked-fire-turret.ts",
-    "find": "const CYCLES = 1;",
-    "replace": "const CYCLES = 0.5;",
-    "expect": "killed",
-    "tests": [
-      "src/render/blocked-fire-turret.test.ts"
-    ],
-    "why": "Halves the oscillation, leaving one smooth hump: the gun eases back and returns, which reads as a nudge or as the tank being bumped. The arm's claim is a STUTTER -- a mechanism that cycled and delivered nothing -- and two decaying bumps are what carry it. Issue #516 asks for arms that are genuinely different from one another; a single soft push is much closer to no cue at all than to the treatment being compared.",
-    "killedBy": [
-      "blocked-fire turret stutter (issue #516, parent #356) STUTTERS -- two decaying bumps, not one push"
-    ]
-  },
-  {
-    "id": "blocked-fire-turret-parks-the-gun-off-centre",
-    "file": "src/render/blocked-fire-turret.ts",
-    "find": "        rest(tankId);\n        active.delete(tankId);",
-    "replace": "        active.delete(tankId);",
-    "expect": "killed",
-    "tests": [
-      "src/render/blocked-fire-turret.test.ts"
-    ],
-    "why": "Drops the return-to-rest at the end of the stutter. This is the one arm that writes onto an object another system owns (entities.ts's turret group), on an axis `sync` never reassigns -- so the last frame's offset is PERMANENT: the tank drives on for the rest of the match with its turret sitting back on its ring, and every subsequent refusal leaves it a little further off. A cue that damages the thing it annotates is a correctness bug, not a taste one, which is why the offset's lifecycle is pinned as tightly as its shape.",
-    "killedBy": [
-      "blocked-fire turret stutter (issue #516, parent #356) puts the gun back at EXACTLY rest when the stutter ends",
-      "blocked-fire turret stutter (issue #516, parent #356) reduced motion holds ONE static offset instead of oscillating"
     ]
   },
   {
@@ -496,6 +438,78 @@
     "why": "Restores the shape review found on this PR: `follow` merely declines to reposition a strip whose owner is gone, instead of ending it. The strip then freezes where the tank died and stays lit for the rest of its 0.55s -- a capacity readout for a tank that no longer exists and can hold no shells, which reads as a rendering fault rather than as a cue. Reachable in ordinary play: half a second is long enough to be shot in, and #356's arms are judged in live matches. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 11 tests failed) against the file as it stood, because every other case keeps its tank alive for the whole effect. With `RETIRES the strip when its tank dies, or leaves the arena, mid-effect` present: killed.",
     "killedBy": [
       "blocked-fire capacity pips (issue #516, parent #356) RETIRES the strip when its tank dies, or leaves the arena, mid-effect"
+    ]
+  },
+  {
+    "id": "barrel-recoil-only-on-a-refusal",
+    "file": "src/render/barrel-recoil.ts",
+    "find": "      if (e.type !== 'fire' && e.type !== 'fire-blocked') continue;",
+    "replace": "      if (e.type !== 'fire-blocked') continue;",
+    "expect": "killed",
+    "tests": [
+      "src/render/barrel-recoil.test.ts"
+    ],
+    "why": "Reverts issue #526's inversion, leaving the recoil as the refusal-only cue it was as #516's `turret` arm. That is the SHAPE A READER EXPECTS from the file's history, which is what makes it worth pinning: the refusal reads only because the kick is something the player has already seen on every ordinary shot, so a recoil that appears exclusively when a shot is refused is a cue to be learned rather than an absence to be noticed -- the exact design the owner ruled against.",
+    "killedBy": [
+      "barrel recoil (issue #526, parent #356) kicks on a SHOT and on a REFUSAL alike -- that is the whole ruling"
+    ]
+  },
+  {
+    "id": "barrel-recoil-player-only",
+    "file": "src/render/barrel-recoil.ts",
+    "find": "      if (!owner || !owner.alive) continue;",
+    "replace": "      if (!owner || !owner.alive || owner.kind !== 'player') continue;",
+    "expect": "killed",
+    "tests": [
+      "src/render/barrel-recoil.test.ts"
+    ],
+    "why": "Restores the player-only gate this had as a refusal arm, where it was correct: an enemy's REFUSAL would have reported the enemy's ammunition state to the player. That reason does not survive #526 -- firing is already visible, the shell is right there -- and the gate now produces enemy guns that stay rigid while the player's kicks. A stale guard whose original justification has been removed is exactly the kind of thing a port forward reintroduces.",
+    "killedBy": [
+      "barrel recoil (issue #526, parent #356) recoils EVERY living tank, enemies included, and never a dead one"
+    ]
+  },
+  {
+    "id": "barrel-recoil-lunges-forward-instead-of-recoiling",
+    "file": "src/render/barrel-recoil.ts",
+    "find": "    return KICK * (1 - k) * Math.abs(Math.sin(k * Math.PI * 2 * CYCLES));",
+    "replace": "    return KICK * (1 - k) * Math.sin(k * Math.PI * 2 * CYCLES);",
+    "expect": "killed",
+    "tests": [
+      "src/render/barrel-recoil.test.ts"
+    ],
+    "why": "Drops the `abs`, so the second half of every cycle drives the barrel FORWARD along the bore -- the gun lunging at its target. Recoil is a backward motion by definition; a gun that thrusts out reads as something else entirely, and since #526 this plays on every shot, so the wrong sign would be on screen constantly rather than only on a refusal.",
+    "killedBy": [
+      "barrel recoil (issue #526, parent #356) recoils BACKWARD along the bore, never forward",
+      "barrel recoil (issue #526, parent #356) STUTTERS -- two decaying bumps, not one push"
+    ]
+  },
+  {
+    "id": "barrel-recoil-pushes-once-instead-of-stuttering",
+    "file": "src/render/barrel-recoil.ts",
+    "find": "const CYCLES = 1;",
+    "replace": "const CYCLES = 0.5;",
+    "expect": "killed",
+    "tests": [
+      "src/render/barrel-recoil.test.ts"
+    ],
+    "why": "Halves the oscillation, leaving one smooth hump: the gun eases back and returns, which reads as a nudge or as the tank being bumped rather than as a mechanism cycling. Two decaying bumps are what make it legible as the gun working, which is the whole basis on which a refusal is read as that same work delivering nothing.",
+    "killedBy": [
+      "barrel recoil (issue #526, parent #356) STUTTERS -- two decaying bumps, not one push"
+    ]
+  },
+  {
+    "id": "barrel-recoil-parks-the-gun-short",
+    "file": "src/render/barrel-recoil.ts",
+    "find": "        rest(tankId);\n        active.delete(tankId);",
+    "replace": "        active.delete(tankId);",
+    "expect": "killed",
+    "tests": [
+      "src/render/barrel-recoil.test.ts"
+    ],
+    "why": "Drops the return-to-rest at the end of the recoil. This writes onto an object another system owns (entities.ts's barrel mesh), on an axis `sync` never reassigns, so the last frame's offset is PERMANENT: the tank fights on with its gun sitting short in its ring, a little further back after every shot. As a dev-flagged refusal arm this leaked only for whoever set the flag; since #526 it would reach every player on every shot, which is what moves it from a blemish to a defect.",
+    "killedBy": [
+      "barrel recoil (issue #526, parent #356) puts the gun back at EXACTLY rest when the recoil ends",
+      "barrel recoil (issue #526, parent #356) reduced motion holds ONE static offset instead of oscillating"
     ]
   }
 ]

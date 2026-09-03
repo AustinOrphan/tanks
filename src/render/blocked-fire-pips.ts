@@ -58,7 +58,7 @@ export interface BlockedFirePipsSystem {
 /**
  * Feel constants. OWNER DECISIONS, stated rather than buried:
  *
- *  - 0.55s, by far the longest of the four visual arms, because this one is READ rather
+ *  - 0.55s, by far the longest of the visual arms, because this one is READ rather
  *    than merely noticed. It holds for the first 55% and fades over the rest.
  *  - Spent pips in a hot orange (0xff7a1a), deliberately NOT the ring's amber (0xffb020):
  *    the two arms are compared side by side and must not be remembered as one treatment.

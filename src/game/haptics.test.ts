@@ -392,7 +392,6 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
     // false here permanently -- they carry no haptic at all and must never buzz, which
     // is what lets #356 attribute a preference to a channel rather than to a bundle.
     muzzle: false,
-    turret: false,
     pips: false,
     hud: false,
     click: false,
@@ -420,7 +419,7 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
     }
   });
   it('gives each haptic arm its OWN pattern -- one row per arm (issue #516)', () => {
-    // The table above is CHANNEL MEMBERSHIP: five arms all buzzing the baseline double tap
+    // The table above is CHANNEL MEMBERSHIP: the arms all buzzing the baseline double tap
     // would satisfy it completely, and a hand asked to compare five identical buzzes is
     // not comparing anything. MEASURED: collapsing haptics.ts's lookup to
     // `BLOCKED_FIRE_PATTERN_MS` left all 30 of this file's tests green before this case

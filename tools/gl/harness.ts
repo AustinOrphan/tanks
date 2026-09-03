@@ -1879,7 +1879,7 @@ check('the three contact states are distinguishable ON SCREEN, not just in the c
  * magazine the day it moves, leaving this fixture measuring a half-lit strip while its
  * comment still claimed otherwise.
  */
-function blockedFireFrame(cue: 'ring' | 'muzzle' | 'turret' | 'pips' | null): Uint8Array {
+function blockedFireFrame(cue: 'ring' | 'muzzle' | 'pips' | null): Uint8Array {
   const c = placedCanvas(800, 500, 0, 0, 800, 500);
   const r = createRenderer(c, W, H, BOUNDARY, { blockedFire: cue });
   const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
@@ -1918,9 +1918,9 @@ check('the blocked-fire ring (#356) reaches the framebuffer through renderer.ts'
 
 check('every #516 visual arm reaches the framebuffer, and none looks like another', () => {
   // The ring check above, extended to the arms issue #516 adds -- and then some. Reaching
-  // the framebuffer is necessary but not sufficient for a COMPARISON: four cues that all
-  // painted the same pixels would pass four independent "did it draw" checks and still be
-  // one treatment wearing four names. So each arm is measured against the flag being off,
+  // the framebuffer is necessary but not sufficient for a COMPARISON: cues that all
+  // painted the same pixels would pass independent "did it draw" checks and still be
+  // one treatment wearing several names. So each arm is measured against the flag being off,
   // AND against every other arm.
   //
   // MEASURED on this tree, differing bytes out of 1,600,000, two frames after the refusal
@@ -1928,22 +1928,26 @@ check('every #516 visual arm reaches the framebuffer, and none looks like anothe
   // shipped cap of 5 -- `pips` draws one pip per capacity slot, so its own number moves
   // with a cap retune while the other three do not:
   //
-  //   off/ring   1306      ring/muzzle  1479      muzzle/turret  1581
-  //   off/muzzle  183      ring/turret  2665      muzzle/pips     573
-  //   off/turret 1448      ring/pips    1518      turret/pips    1838
+  //   off/ring   1306      ring/muzzle  1479      muzzle/pips  573
+  //   off/muzzle  183      ring/pips    1518
   //   off/pips    390
+  //
+  // A fourth arm, `turret`, was measured here until issue #526 retired it as a cue: the
+  // gun recoil it drew is now unconditional, so it appears in EVERY frame below including
+  // `off` and cancels out of every comparison rather than distinguishing one. Its own
+  // framebuffer proof is the recoil check that follows.
   //
   // The bad value is 0 in every case -- the flag off draws literally nothing -- so each
   // floor below sits at roughly a third of its own measured value: enough headroom for a
   // different GPU's anti-aliasing, nowhere near the zero a broken wiring produces. Per
-  // arm rather than one number for all four, because the arms are deliberately different
-  // SIZES: a ring around the whole hull moves an order of magnitude more bytes than a
-  // barrel sliding 0.07 units, and one floor generous enough for the ring would be
-  // unreachable for the muzzle flash. The pair floor is a single number because the
+  // arm rather than one number for all of them, because the arms are deliberately
+  // different SIZES: a ring around the whole hull moves an order of magnitude more bytes
+  // than a flash at the muzzle, and one floor generous enough for the ring would be
+  // unreachable for the flash. The pair floor is a single number because the
   // smallest measured pair (muzzle/pips, 573) is already the tightest constraint.
-  const FLOORS = { ring: 400, muzzle: 60, turret: 350, pips: 120 } as const;
+  const FLOORS = { ring: 400, muzzle: 60, pips: 120 } as const;
   const PAIR_FLOOR = 150;
-  const arms = ['ring', 'muzzle', 'turret', 'pips'] as const;
+  const arms = ['ring', 'muzzle', 'pips'] as const;
   const off = blockedFireFrame(null);
   const frames = new Map<string, Uint8Array>(arms.map((a) => [a, blockedFireFrame(a)]));
   for (const arm of arms) {
@@ -1959,6 +1963,126 @@ check('every #516 visual arm reaches the framebuffer, and none looks like anothe
         return `${arms[i]} and ${arms[j]} differ by only ${moved} bytes -- they are the same treatment on screen`;
       }
     }
+  }
+  return null;
+});
+
+/**
+ * One rendered frame `frames` updates after `event`, with the barrel recoil either
+ * animating or held at its reduced-motion offset.
+ *
+ * `Math.random` IS STUBBED for the duration. renderer.ts builds its particle system on the
+ * real `Math.random` (particles.ts's default, deliberately, so the shipped game's sparks
+ * never repeat), and a `fire` event spawns a muzzle burst -- so two frames of the same
+ * shot differ by a cloud of unrepeatable particles, which would swamp the barrel this
+ * check is trying to see. Reseeding to the same sequence before each render makes the
+ * particles byte-identical between the two frames, leaving the gun as the only thing that
+ * can differ. Restored in a finally, so no later check inherits a rigged clock.
+ */
+function recoilFrame(
+  event: 'fire' | 'fire-blocked' | null,
+  reducedMotion: boolean,
+  frames: number,
+): Uint8Array {
+  const real = Math.random;
+  // mulberry32 on a fixed seed -- the same generator tools/gallery/moment-scene.ts uses
+  // for the same reason, kept local rather than imported because harness.ts runs in the
+  // browser against src/ only.
+  let a = 0x9e3779b9;
+  Math.random = () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  // BEFORE createRenderer, and that order is the whole point: particles.ts takes its rng
+  // as a DEFAULT PARAMETER (`rng = Math.random`), which binds once when renderer.ts
+  // constructs the particle system. A stub installed after construction would leave the
+  // system holding the real generator and this fixture measuring an unrepeatable spark
+  // cloud -- passing, but for the wrong reason, and flaking across machines.
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY, {});
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const w = soloTankWorld(W / 2, H / 2);
+  try {
+    r.setReducedMotion(reducedMotion);
+    // A `fire` event carries the fields particles.ts's muzzle burst reads (`pos`), which
+    // a bare {type, ownerId} would not -- the burst throws on the missing vector rather
+    // than skipping, so the shape has to be the real one.
+    const events = (
+      event === 'fire'
+        ? [{ type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: W / 2, y: H / 2 }, angle: 0 }]
+        : event
+          ? [{ type: 'fire-blocked', ownerId: 1, reason: 'shell-cap' }]
+          : []
+    ) as unknown as Parameters<typeof r.render>[3];
+    r.render(w, w, 1, events, 1 / 60);
+    const none = [] as unknown as Parameters<typeof r.render>[3];
+    for (let i = 0; i < frames; i++) r.render(w, w, 1, none, 1 / 60);
+    return grab(gl, c.width, c.height);
+  } finally {
+    Math.random = real;
+    r.dispose();
+    c.remove();
+  }
+}
+
+check('the barrel recoils on a REFUSAL, in the framebuffer (#526)', () => {
+  // Nothing else on screen reacts to `fire-blocked` here: no shell spawns, particles.ts
+  // has no case for it, and no cue flag is set on this renderer. So every differing byte
+  // between these two frames is the gun moving -- the cleanest isolation available, and
+  // the reason the refusal is checked this way while the shot below needs a stub.
+  //
+  // MEASURED on this tree, two updates after the event: 391 differing bytes of
+  // 1,600,000, against EXACTLY 0 with the recoil's event gate severed. The separation is
+  // total, so the floor sits at a third of the live value -- clear of nothing at all, and
+  // loose enough for another GPU's anti-aliasing.
+  //
+  // Small compared with the 1448 this same comparison measured while the effect moved the
+  // whole turret GROUP, and that shrinkage is the point of #526: the dome no longer
+  // travels, so only the tube's own pixels move.
+  const rest = recoilFrame(null, false, 2);
+  const kicked = recoilFrame('fire-blocked', false, 2);
+  const moved = bytesDiffering(rest, kicked);
+  if (moved < 130) {
+    return `only ${moved} of ${rest.length} bytes changed on a refusal -- the recoil did not reach the framebuffer`;
+  }
+  // A CEILING as well as a floor, and it is the only thing pinning "the barrel, not the
+  // turret group" (issue #526's first bullet). Nothing else can: the Vitest tests drive a
+  // fake BarrelSource and never learn which real object it resolved to, and a floor alone
+  // passes MORE happily the more of the tank moves. Pointing `EntityViews.barrelOf` back
+  // at the turret group -- one word, the exact regression a reader of this file's history
+  // would make -- takes the dome along for the ride and lands here.
+  //
+  // MEASURED both ways on this tree: 391 bytes moving the barrel alone, 1330 moving the
+  // group. The ceiling sits between them with room on both sides.
+  if (moved > 800) {
+    return `${moved} of ${rest.length} bytes changed on a refusal -- far more than the barrel alone, so something bigger is moving (the turret dome?)`;
+  }
+  return null;
+});
+
+check('the barrel recoils on an ORDINARY SHOT too, in the framebuffer (#526)', () => {
+  // Issue #526's inversion is the thing under test: before it, a normal shot moved no gun
+  // at all. Proving it needs a different control from the refusal above, because a `fire`
+  // event ALSO spawns a muzzle burst -- comparing against no-event would measure mostly
+  // particles and pass just as well with the recoil ripped out.
+  //
+  // So both frames here fire, at the same tick, with the same seeded particles, and
+  // differ only in the reduced-motion preference: one gun is animating, the other holds
+  // #453's static offset. Sampled 5 updates in (k ~ 0.52 through a 0.16s life), where the
+  // animated curve has decayed almost to zero while the held offset is still 0.065 world
+  // units back -- close to the widest separation the two treatments ever reach.
+  //
+  // MEASURED on this tree: 289 differing bytes of 1,600,000, against EXACTLY 0 with the
+  // recoil's event gate severed -- so with the particles pinned, the gun is the only
+  // thing the reduced-motion preference changes in this frame. The floor sits at roughly
+  // a third of the live value.
+  const animating = recoilFrame('fire', false, 5);
+  const held = recoilFrame('fire', true, 5);
+  const moved = bytesDiffering(animating, held);
+  if (moved < 100) {
+    return `only ${moved} of ${animating.length} bytes changed between an animating and a held gun on a normal shot -- the recoil did not reach the framebuffer`;
   }
   return null;
 });
