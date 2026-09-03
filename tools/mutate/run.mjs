@@ -45,6 +45,7 @@
  *
  *   npm run mutate
  *   npm run mutate -- --manifest tools/mutate/manifests        # a directory: every *.json in it, by name
+ *   npm run mutate -- --changed origin/main [--list]           # only the entries the diff since that ref can affect
  *   npm run mutate -- --only skins-min-accent-delta-200
  *   npm run mutate -- --root /path/to/checkout
  *
@@ -69,6 +70,7 @@ import { tmpdir, availableParallelism } from 'node:os';
 import { join, isAbsolute, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyAt, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
+import { selectAffected } from './select.mjs';
 import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFailedError } from './orchestrate.mjs';
 
 /**
@@ -120,10 +122,10 @@ const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
 const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.meta.url));
 
 /** @param {string[]} argv
- * @returns {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null }} */
+ * @returns {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
 export function parseArgs(argv) {
-  /** @type {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null }} */
-  const args = { manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null };
+  /** @type {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
+  const args = { manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null, changed: null, list: false };
   // Every flag here takes a value; a flag at the end of the line, or followed by another
   // flag, is refused by name rather than read as `undefined` and failed later somewhere
   // that cannot say which flag was short.
@@ -138,6 +140,8 @@ export function parseArgs(argv) {
     else if (argv[i] === '--root') args.root = value(i++);
     else if (argv[i] === '--jobs') args.jobs = parseJobs(value(i++));
     else if (argv[i] === '--report') args.report = value(i++);
+    else if (argv[i] === '--changed') args.changed = value(i++);
+    else if (argv[i] === '--list') args.list = true;
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   return args;
@@ -754,6 +758,68 @@ async function runParallel(entries, jobs, root, reportPath) {
   return aggregateExitCodes(interrupted ? [...codes, 130] : codes);
 }
 
+/**
+ * The pull-request selection's git half (issue #506): the merge base of `ref` and HEAD,
+ * and every path that differs between them -- added, modified or deleted -- as the
+ * repository-relative names the manifest uses.
+ * @param {string} ref @param {string} root @returns {{ base: string, changed: string[] }}
+ */
+export function changedFilesSince(ref, root) {
+  const base = sh('git', ['merge-base', ref, 'HEAD'], root).trim();
+  const changed = sh('git', ['diff', '--name-only', base, 'HEAD'], root).split('\n').map((l) => l.trim()).filter(Boolean);
+  return { base, changed };
+}
+
+/**
+ * The manifest as it was at `base`, by id, for rule 2 (an entry whose text changed is
+ * selected). Read through git rather than a checkout: every file the current manifest
+ * directory holds, plus the single file the repository used before issue #505, so the
+ * selection can be exercised against history from either side of that split. A file
+ * that did not exist at `base` contributes nothing, which makes every entry in it new.
+ * @param {string} base @param {string} manifestArg @param {string} root
+ * @returns {Map<string, unknown>}
+ */
+export function baseManifestById(base, manifestArg, root) {
+  const byId = new Map();
+  const resolved = resolveManifestPath(root, manifestArg);
+  const rel = (/** @type {string} */ abs) => abs.startsWith(root) ? abs.slice(root.length).replace(/^\/+/, '') : abs;
+  const candidates = statSync(resolved).isDirectory()
+    ? [...readdirSync(resolved).filter((n) => n.endsWith('.json')).sort().map((n) => `${rel(resolved)}/${n}`), 'tools/mutate/manifest.json']
+    : [rel(resolved)];
+  for (const path of candidates) {
+    const res = spawnSync('git', ['show', `${base}:${path}`], { cwd: root, encoding: 'utf8' });
+    if (res.status !== 0) continue;
+    for (const entry of JSON.parse(res.stdout)) if (typeof entry?.id === 'string') byId.set(entry.id, entry);
+  }
+  return byId;
+}
+
+/**
+ * Narrow the run to what the diff since `ref` can affect (issue #506), printing every
+ * selected entry with its reasons. The module graph is asked, through the same
+ * reachability worker the preflight uses, which test files import any changed source
+ * that still exists; deleted files reach entries through rule 1 (their `file`) instead.
+ * @param {ManifestEntry[]} entries @param {string} ref @param {string} manifestArg @param {string} root
+ * @returns {ManifestEntry[]}
+ */
+function selectChanged(entries, ref, manifestArg, root) {
+  const { base, changed } = changedFilesSince(ref, root);
+  console.log(`[select] ${changed.length} file(s) changed since ${base.slice(0, 7)} (merge base with ${ref})`);
+  const sources = changed.filter((f) => existsSync(join(root, f)) && /\.(ts|tsx|js|mjs|css)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.startsWith('tools/mutate/manifests/'));
+  const relatedTests = new Set();
+  if (sources.length > 0) {
+    for (const tests of relatedFilesForAll(sources, root).values()) for (const t of tests) relatedTests.add(t);
+  }
+  const selection = selectAffected({ entries, baseById: baseManifestById(base, manifestArg, root), changed, relatedTests });
+  if (selection.all) {
+    console.log(`[select] every entry: ${selection.reason}`);
+    return entries;
+  }
+  for (const { entry, reasons } of selection.selected) console.log(`[select] ${entry.id}: ${reasons.join('; ')}`);
+  console.log(`[select] ${selection.selected.length} of ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} can be affected`);
+  return selection.selected.map((s) => s.entry);
+}
+
 async function run() {
   installSignalHandlers();
   const args = parseArgs(process.argv.slice(2));
@@ -768,10 +834,18 @@ async function run() {
   const allEntries = readManifest(manifestPath);
   validateManifest(allEntries);
 
-  const entries = args.only ? allEntries.filter((e) => e.id === args.only) : allEntries;
+  let entries = args.only ? allEntries.filter((e) => e.id === args.only) : allEntries;
   if (args.only && entries.length === 0) {
     console.error(`no manifest entry with id "${args.only}"`);
     process.exit(2);
+  }
+  if (args.changed !== null) {
+    entries = selectChanged(entries, args.changed, args.manifest, root);
+    if (args.list) return;
+    if (entries.length === 0) {
+      console.log('[select] nothing to run: the change cannot affect any manifest entry');
+      return;
+    }
   }
 
   // Every `tests` path too, not just `file`: a dirty-but-passing test file would

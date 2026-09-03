@@ -124,8 +124,9 @@ function verificationPolicyProblems(root: string, policy: string): string[] {
     ['current CI context', ci.includes('verify (current)')],
     ['floor CI context', ci.includes('verify (floor)')],
     ['visual CI context', ci.includes('visual')],
-    ['current CI runs the complete manifest on every change',
-      /`verify \(current\)` runs the complete mutation manifest under Node 24 on pull requests\s+and pushes to `main`/.test(ci)],
+    ['current CI runs the affected entries on pull requests and the complete manifest on main',
+      /`verify \(current\)` runs every mutation entry a pull request can affect[\s\S]{0,600}?the complete\s+mutation manifest under Node 24 on pushes to `main`/.test(ci)],
+    ['main is named the repository-wide authority', /`main`'s run is the repository-wide authority/.test(ci)],
     ['floor CI runs the representative smoke path',
       /`verify \(floor\)` runs[\s\S]*exact Node 22\.13\.0 plus `npm run mutate:smoke`/.test(ci)],
     ['floor CI does not claim complete per-change coverage',
@@ -283,9 +284,17 @@ describe('the instruction files', () => {
       '### Full local mutation-manifest exceptions',
       '### Routine full local mutation runs',
     );
+    // The weakening that matters since issue #506: a pull request legitimately runs only
+    // the entries its diff can affect, so the authority moved to `main`'s complete run.
+    // Sampling THERE, or dropping the sentence that names it authoritative, is what would
+    // leave no run that covers the repository.
     const weakenedCi = policy.replace(
-      'runs the complete mutation manifest under Node 24 on pull requests',
-      'runs selected mutation entries under Node 24 on pull requests',
+      'and the complete\n  mutation manifest under Node 24 on pushes to `main`',
+      'and a sample of the\n  mutation manifest under Node 24 on pushes to `main`',
+    );
+    const unauthoritativeMain = policy.replace(
+      "`main`'s run is the repository-wide authority",
+      "no run is the repository-wide authority",
     );
     const noFloorSmoke = policy.replace(
       'plus `npm run mutate:smoke`, one representative',
@@ -309,6 +318,7 @@ describe('the instruction files', () => {
       ['missing targeted mutations', noTargetedRoot, noTargetedPolicy],
       ['missing exception boundary', root, noExceptions],
       ['weakened current CI manifest', root, weakenedCi],
+      ['no authoritative main run', root, unauthoritativeMain],
       ['missing floor smoke', root, noFloorSmoke],
       ['missing scheduled floor manifest', root, noScheduledFloor],
       ['local compensation required', root, localCompensation],

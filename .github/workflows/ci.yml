@@ -33,6 +33,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The full history: a pull request's mutation step selects entries by the diff
+          # against origin/main (issue #506), which needs the merge base reachable.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -68,8 +72,17 @@ jobs:
       # the same complete manifest daily and on request under exact Node 22.13.0.
       # `--jobs auto` is the worktree pool (issue #502): one serial harness per detached
       # worktree, three at a time on this four-core runner, same outcomes as serial.
+      # A pull request runs only the entries its diff can affect (issue #506: the
+      # entry's file or tests changed, its text changed, a scoped test imports a changed
+      # module, or a declared `reads` file changed; harness, runner-config, dependency
+      # and workflow changes run everything); a push to main runs the complete set and
+      # is the repository-wide authority.
+      - name: Mutation manifest (affected, current)
+        if: matrix.label == 'current' && github.event_name == 'pull_request'
+        run: npm run mutate -- --jobs auto --changed origin/main
+
       - name: Mutation manifest (full, current)
-        if: matrix.label == 'current'
+        if: matrix.label == 'current' && github.event_name != 'pull_request'
         run: npm run mutate -- --jobs auto
 
       - name: Build

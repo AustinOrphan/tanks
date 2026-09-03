@@ -28,6 +28,7 @@ mutate --manifest path/to/manifest.json   # a different manifest: one file, or a
 mutate --only some-manifest-entry-id      # a single entry
 mutate --jobs auto                        # the worktree pool: N serial harnesses, one per detached worktree
 mutate --report out.json                  # per-entry outcomes and failed test names, for tooling
+mutate --changed origin/main [--list]     # only the entries the diff since that ref can affect (--list: show, do not run)
 mutate --root /path/to/checkout           # explicit project root (default: process.cwd())
 ```
 
@@ -55,6 +56,19 @@ shipped manifest.
 `--report path.json` writes one record per entry (outcome, counts, the failed test
 names) after a run; `tools/mutate/migrate-killed-by.mjs` turns such a report into
 `killedBy` lists for every counted entry without a population claim.
+
+## Selecting by change (`--changed`)
+
+`--changed <ref>` narrows a run to the entries the diff between `ref`'s merge base and
+HEAD can affect (issue #506), printing each with its reasons: the entry's mutated file
+or a scoped test is in the diff; the entry's own text changed or it is new (compared
+against the manifest at the merge base, through git); a scoped test imports a changed
+module (the reachability worker's graph, asked for every changed source that still
+exists); or a file the entry declares in `reads` changed -- the one input the graph
+cannot see, a test reading a file through `fs`. A change under `tools/mutate/` (other
+than the manifests), to `vite.config.*`, `package.json`, `package-lock.json`,
+`tsconfig*.json` or `.github/workflows/` runs everything. `--list` prints the selection
+without running it. Pull-request CI uses this; pushes to `main` run the complete set.
 
 ## The worktree pool (`--jobs`)
 

@@ -8,7 +8,7 @@
  * @typedef {{
  *   id: string, file: string, find: string, replace: string, why: string,
  *   expect: 'killed' | 'survives', tests: string[],
- *   occurrence?: number, expectFailures?: number, killedBy?: string[], equivalent?: boolean,
+ *   occurrence?: number, expectFailures?: number, killedBy?: string[], reads?: string[], equivalent?: boolean,
  * }} ManifestEntry
  */
 
@@ -139,6 +139,14 @@ export function validateEntry(entry, index) {
   // An entry with neither is outcome-only (killed or survives, nothing more). The harness
   // allows it -- fixtures and one-off probes use it -- and the shipped manifest's own
   // test (orchestrate.test.ts) is what requires every real killed entry to pin one.
+  // `reads` (issue #506): files a scoped test reads through `fs` rather than imports,
+  // which the module graph cannot see; the pull-request selection treats a change to one
+  // of them as a change to the entry's inputs.
+  if (entry.reads !== undefined) {
+    if (!Array.isArray(entry.reads) || entry.reads.length === 0 || !entry.reads.every((/** @type {any} */ r) => typeof r === 'string' && r.length > 0)) {
+      throw new Error(`manifest ${label}: "reads" must be a non-empty array of file paths when present`);
+    }
+  }
 }
 
 /** Validates the whole manifest: every entry, plus id uniqueness across the set.
