@@ -58,8 +58,9 @@ const BLOCKED_FIRE_BASELINE: BlockedFireVoice = { key: 'fire-blocked' };
  *   thunk-soft   "THE SAME GESTURE at low volume" -- so it must be the same key at the
  *                same rate as `clunk`, differing in gain and nothing else, or the
  *                experiment (does restraint read as intentional or as a bug?) is
- *                answering a different question. 0.3 is a clear step down without
- *                dropping under the arena bed.
+ *                answering a different question. 0.3 is a clear step down rather than a
+ *                token one; whether restraint that deep still READS as a cue, or as the
+ *                game failing to respond, is precisely what this arm is asking.
  *   pitch-empty  "a pitched-down variant of the NORMAL FIRE cue" -- the `cannon` key
  *                itself at rate 0.55, so the refusal is heard as the same action failing.
  *                Pulled to 0.7 gain because an unattenuated cannon IS the shot sound, and
