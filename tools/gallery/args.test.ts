@@ -267,6 +267,30 @@ describe('gallery args', () => {
     expect(() => parseArgs(['--scene', 'game', '--frames', '90'])).toThrow(/--burst N/);
   });
 
+  it('takes a blocked-fire cue only for the moment that stages a refusal', () => {
+    expect(parseArgs(['--scene', 'blocked-fire', '--blocked-fire', 'turret']).blockedFire).toBe(
+      'turret',
+    );
+    expect(parseArgs([]).blockedFire).toBeNull();
+    // The point of the flag is a clip with a cue in it. Pairing it with any other scene
+    // renders a tank that never refuses a shot, so it fails rather than producing a
+    // silent no-cue clip that reads as "this arm does nothing".
+    expect(() => parseArgs(['--blocked-fire', 'turret'])).toThrow(/needs --scene blocked-fire/);
+    expect(() => parseArgs(['--scene', 'fire', '--blocked-fire', 'ring'])).toThrow(
+      /needs --scene blocked-fire/,
+    );
+    // Only the four VISUAL arms: the audio and haptic arms have nothing to draw, and
+    // 'hud' draws into the DOM HUD, which no gallery page builds.
+    for (const arm of ['ring', 'muzzle', 'turret', 'pips']) {
+      expect(parseArgs(['--scene', 'blocked-fire', '--blocked-fire', arm]).blockedFire).toBe(arm);
+    }
+    for (const arm of ['hud', 'audio', 'click', 'haptic', 'ring-audio', 'nonsense']) {
+      expect(() => parseArgs(['--scene', 'blocked-fire', '--blocked-fire', arm])).toThrow(
+        /--blocked-fire must be one of/,
+      );
+    }
+  });
+
   it('keeps DEFAULTS immutable across parses', () => {
     // parseArgs spreads DEFAULTS; a shared `values` array would accumulate between calls.
     parseArgs(['--sweep', 'X', '--values', 'a,b']);

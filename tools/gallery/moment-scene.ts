@@ -3,6 +3,11 @@ import { createEntityViews } from '../../src/render/entities';
 import { createParticleSystem } from '../../src/render/particles';
 import { createDeathPulseSystem } from '../../src/render/death-pulse';
 import { createTreadTrailSystem } from '../../src/render/tread-trails';
+import { createBlockedFireRingSystem } from '../../src/render/blocked-fire-ring';
+import { createBlockedFireMuzzleSystem } from '../../src/render/blocked-fire-muzzle';
+import { createBlockedFireTurretSystem } from '../../src/render/blocked-fire-turret';
+import { createBlockedFirePipsSystem } from '../../src/render/blocked-fire-pips';
+import type { BlockedFireCue } from '../../src/presentation/blocked-fire';
 import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
 import { MOMENTS, simulateMoment } from './moments';
 import { VIEWS, timelineDt } from './subjects';
@@ -50,6 +55,26 @@ export interface MomentSceneOptions {
    * `buildGallery`'s plain `--elements tank` call.
    */
   spawnAnim: SpawnAnimId;
+  /**
+   * Which of issue #356's candidate refusal cues to render, mirroring the game's own
+   * `?dev=1&blockedFire=<cue>` flag; null renders none, which is the shipped default.
+   *
+   * These cues are why the gallery grew a `blocked-fire` moment. A refusal cue lives
+   * between 0.07s and 0.55s and moves a few hundred pixels; at the arena camera the
+   * whole tank is about 40px wide, so screen capture of real play could not show one
+   * legibly no matter how carefully it was timed. Here the camera sits on the tank, the
+   * timeline is deterministic, and `--subdiv`/`--fps` slow the clip down, so a reviewer
+   * comparing arms sees the same gesture each time.
+   *
+   * Only the four visual arms render. The audio and haptic arms have nothing to draw,
+   * and `hud` draws into the DOM HUD, which no gallery scene builds -- ask for one of
+   * those and the cue-to-system mapping below matches nothing, so you get an unadorned
+   * tank. The CLI refuses them for that reason (`args.mjs`), and it refuses a cue paired
+   * with any other moment, which is where a caller can be stopped before a browser is
+   * even launched. This field itself stays permissive, the same way `main.ts` reads
+   * `?skin=`/`?scene=` unvalidated so a hand-typed dev-server URL behaves predictably.
+   */
+  blockedFire?: BlockedFireCue | null;
 }
 
 export interface MomentProducerReport {
@@ -159,6 +184,17 @@ export function buildMomentScene(
   // position/orientation, so two renders of the same moment are already
   // byte-identical without one -- see tread-trails.ts's own doc comment.
   const treadTrails = createTreadTrailSystem(scene);
+  // Constructed by the same cue-to-system mapping as renderer.ts, so what the gallery
+  // shows is what the game would show for that flag. `views` is passed to the turret
+  // system directly: EntityViews already satisfies `TurretSource` (its `turretOf`), and
+  // the alternative -- a hand-written adapter -- would be a second, drift-prone copy of
+  // the lookup the renderer uses.
+  const cue = opts.blockedFire ?? null;
+  const blockedFireRing =
+    cue === 'ring' || cue === 'ring-audio' ? createBlockedFireRingSystem(scene) : null;
+  const blockedFireMuzzle = cue === 'muzzle' ? createBlockedFireMuzzleSystem(scene) : null;
+  const blockedFireTurret = cue === 'turret' ? createBlockedFireTurretSystem(views) : null;
+  const blockedFirePips = cue === 'pips' ? createBlockedFirePipsSystem(scene) : null;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
 
@@ -215,12 +251,23 @@ export function buildMomentScene(
     while (fed <= a) {
       particles.spawn(tl.events[fed]);
       deathPulse.spawn(tl.events[fed], tl.worlds[fed], { enemyEnabled: true });
+      blockedFireRing?.spawn(tl.events[fed], tl.worlds[fed], cue);
+      blockedFireMuzzle?.spawn(tl.events[fed], tl.worlds[fed], cue);
+      blockedFireTurret?.spawn(tl.events[fed], tl.worlds[fed], cue);
+      blockedFirePips?.spawn(tl.events[fed], tl.worlds[fed], cue);
       fed++;
     }
     // prev/curr one tick apart, so interpolated quantities animate rather than step.
     views.sync(tl.worlds[Math.max(0, a - 1)], tl.worlds[a], alpha, dt);
     particles.update(dt);
     deathPulse.update(dt);
+    // AFTER views.sync, matching renderer.ts, where the ordering is load-bearing for the
+    // turret arm: sync writes the turret's pose every frame, and the recoil offset has to
+    // land on the object sync has already posed or it is overwritten before it is drawn.
+    blockedFireRing?.update(dt);
+    blockedFireMuzzle?.update(dt);
+    blockedFireTurret?.update(dt);
+    blockedFirePips?.update(dt, tl.worlds[a]);
     // Same prev/curr pair as views.sync above -- treadTrails reads only
     // roundStartTick off `prev`, never its tank positions (tread-trails.ts's own
     // doc comment), so it is unaffected by this loop feeding events/spawn a
@@ -235,6 +282,10 @@ export function buildMomentScene(
     particles.dispose();
     deathPulse.dispose();
     treadTrails.dispose();
+    blockedFireRing?.dispose();
+    blockedFireMuzzle?.dispose();
+    blockedFireTurret?.dispose();
+    blockedFirePips?.dispose();
     renderer.dispose();
   }
 

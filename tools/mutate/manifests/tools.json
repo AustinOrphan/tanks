@@ -527,5 +527,47 @@
     "killedBy": [
       "selectAffected rule 4: a change to a file an entry declares it reads selects it; an undeclared non-module file does not"
     ]
+  },
+  {
+    "id": "gallery-blocked-fire-accepts-any-scene",
+    "file": "tools/gallery/args.mjs",
+    "find": "    if (out.scene !== 'blocked-fire') {",
+    "replace": "    if (false) {",
+    "expect": "killed",
+    "tests": [
+      "tools/gallery/args.test.ts"
+    ],
+    "why": "Drops the scene pairing, which is the whole reason the flag is guarded. Every other moment renders a tank that never refuses a shot, so --blocked-fire on one produces a clip with no cue in it -- indistinguishable from an arm that does nothing, and exactly the failure this tooling exists to end (the arena captures that showed nothing were what prompted it).",
+    "killedBy": [
+      "gallery args takes a blocked-fire cue only for the moment that stages a refusal"
+    ]
+  },
+  {
+    "id": "gallery-blocked-fire-accepts-non-visual-arms",
+    "file": "tools/gallery/args.mjs",
+    "find": "    const visual = ['ring', 'muzzle', 'turret', 'pips'];",
+    "replace": "    const visual = ['ring', 'muzzle', 'turret', 'pips', 'hud', 'audio', 'click', 'haptic'];",
+    "expect": "killed",
+    "tests": [
+      "tools/gallery/args.test.ts"
+    ],
+    "why": "Widens the allowlist to the cue vocabulary's non-visual arms. 'hud' is the sharp case: it is a real cue the game renders, but into the DOM HUD, which no gallery page builds -- accepting it yields an unadorned tank presented as the hud arm. The audio and haptic arms have nothing to draw at all.",
+    "killedBy": [
+      "gallery args takes a blocked-fire cue only for the moment that stages a refusal"
+    ]
+  },
+  {
+    "id": "gallery-blocked-fire-moment-magazine-not-full",
+    "file": "tools/gallery/moments.ts",
+    "find": "      for (let i = 0; i < cap; i++) {",
+    "replace": "      for (let i = 0; i < cap - 1; i++) {",
+    "expect": "killed",
+    "tests": [
+      "tools/gallery/moments.test.ts"
+    ],
+    "why": "Seeds one shell short of the cap. The moment then opens with a real shot rather than a refusal, so the pinned refusal ticks move and the clip's first gesture is a muzzle flash the reviewer would read as the cue. A magazine that is merely nearly full is the natural wrong version of this fixture.",
+    "killedBy": [
+      "every moment pins its events to exact ticks blocked-fire: each expected event fires on its declared tick \u2014 and on no other"
+    ]
   }
 ]
