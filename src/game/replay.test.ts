@@ -32,6 +32,7 @@ const META: ReplayMeta = {
   coopAttempts: true,
   mode: 'campaign-coop',
   friendlyFire: false,
+  aiTargetPerception: 'full',
 };
 
 /**
@@ -84,6 +85,9 @@ function worldFor(meta: ReplayMeta, playerCount = 1): World {
     meta.coopAttempts,
     meta.mode,
     meta.friendlyFire,
+    undefined, // stock: versus-only, not a ReplayMeta field
+    undefined, // teams: versus-only, not a ReplayMeta field
+    meta.aiTargetPerception,
   );
 }
 
@@ -272,6 +276,7 @@ describe('replayMetaFor', () => {
       coopAttempts: true,
       mode: 'campaign-coop',
       friendlyFire: false,
+      aiTargetPerception: 'full',
     });
   });
 
@@ -291,6 +296,7 @@ describe('replayMetaFor', () => {
       coopAttempts: true,
       mode: 'campaign-coop',
       friendlyFire: false,
+      aiTargetPerception: 'full',
     });
   });
 
@@ -310,6 +316,7 @@ describe('replayMetaFor', () => {
       coopAttempts: false,
       mode: 'campaign-coop',
       friendlyFire: false,
+      aiTargetPerception: 'full',
     });
   });
 
@@ -326,6 +333,7 @@ describe('replayMetaFor', () => {
       coopAttempts: true,
       mode: 'teams',
       friendlyFire: true,
+      aiTargetPerception: 'full',
     });
   });
 
