@@ -72,6 +72,24 @@ export interface EntityViews {
     slot?: number,
     spawnAnim?: SpawnAnimId,
   ): void;
+  /**
+   * This tank's TURRET GROUP -- the dome and the barrel that rides on it -- or null when
+   * no view exists for that id (a dead tank, or one this sync has never seen).
+   *
+   * Exposed for exactly one caller, blocked-fire-turret.ts (issue #516's `turret` arm),
+   * which has to twitch the gun the player is already looking at: a recoil stutter drawn
+   * on a mesh of its own would be a second barrel beside the real one, not a barrel that
+   * moved. That effect writes `position.x` -- the turret's own local along-barrel axis,
+   * which `sync` never assigns (it writes `rotation.y` alone, and the group's `position`
+   * is set once at construction) -- so the two do not fight over a channel, and the
+   * effect returns the offset to zero when its life ends.
+   *
+   * Deliberately NOT a general "give me the scene graph" accessor: a view is rebuilt
+   * whenever the tank's kind or the player's paint generation changes, so the object
+   * behind an id is not stable and a caller that latches one holds a corpse. Look it up
+   * per frame, as the turret arm does.
+   */
+  turretOf(tankId: number): THREE.Object3D | null;
   dispose(): void;
 }
 
@@ -1548,6 +1566,9 @@ export function createEntityViews(
         gen: (prev?.gen ?? 0) + 1,
         spawnAnim,
       });
+    },
+    turretOf(tankId: number): THREE.Object3D | null {
+      return tankViews.get(tankId)?.turret ?? null;
     },
     dispose,
   };

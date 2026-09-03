@@ -58,6 +58,7 @@ import type { StorageNamespace } from './storage';
 import type { SuiteContext } from '../audio/suites';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
+import { createBlockedFireHudCue } from './blocked-fire-hud';
 import {
   createGameStateMachine,
   type GameStateMachine,
@@ -1771,6 +1772,17 @@ export function startGameWith(
    */
   const slot = routeHost.attach();
   const { hud, sm, routeUi } = routeHost;
+  /**
+   * Issue #516's `hud` blocked-fire arm. Constructed here rather than behind a `GameDeps`
+   * seam because it needs nothing from the browser -- the audio and haptic arms sit behind
+   * seams only because an AudioEngine and `navigator.vibrate` do. Its gate, its
+   * controlling-player filter and its one-row-per-cue table live in blocked-fire-hud.ts;
+   * this line is wiring, and `handle` is called from onFrameEvents with the same frame
+   * events every other consumer of the stream sees.
+   */
+  const blockedFireHud = createBlockedFireHudCue(hud, playerId, {
+    blockedFire: deps.devFlags.blockedFire,
+  });
 
   /**
    * THE PRODUCTION CLASSIFIER (issue #316's finding 1).
@@ -2192,6 +2204,12 @@ export function startGameWith(
       if (playerId !== undefined && events.some((e) => e.type === 'fire' && e.ownerId === playerId)) {
         hud.signalPlayerFire();
       }
+      // The transient shell-capacity line (issue #516's `hud` arm), silent unless
+      // `?dev=1&blockedFire=hud` names it. Handed the CURRENT world, since the capacity it
+      // shows is read from the same resolved config `spawnBullet` enforced: the driver
+      // assigns `curr = result.world` before calling onFrameEvents, so this is the world
+      // the refusal happened in.
+      blockedFireHud.handle(events, driver.world);
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
@@ -2427,6 +2445,10 @@ export function startGameWith(
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     haptics.setPlayerId(playerId ?? -1);
+    // `playerId` itself, not `?? -1`: this arm takes `number | undefined` and treats
+    // undefined as "no tracked player, say nothing", which is the honest reading of a
+    // world with no player tank -- an id of -1 would be a tank id that can never match.
+    blockedFireHud.setPlayerId(playerId);
     enemiesAtRoundStart = countEnemies(world);
     const b = deps.levels.bounds(level);
     if (b.width !== shownBounds.width || b.height !== shownBounds.height || b.cellSize !== shownBounds.cellSize) {

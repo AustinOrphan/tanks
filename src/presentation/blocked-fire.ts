@@ -1,8 +1,10 @@
 /**
  * The blocked-fire CUE: which channel(s) tell the player their shot was refused. One
- * semantic signal with four consumers in three layers -- `game/haptics.ts` (buzz),
- * `audio/director.ts` (click), `render/blocked-fire-ring.ts` and `render/renderer.ts`
- * (ring) -- chosen by the application (`game/devflags.ts` parses `?blockedFire=`) and
+ * semantic signal with consumers in three layers -- `game/haptics.ts` (buzz),
+ * `audio/director.ts` (click), `game/blocked-fire-hud.ts` (the transient capacity line),
+ * and, under `render/`, `blocked-fire-ring.ts`, `blocked-fire-muzzle.ts`,
+ * `blocked-fire-turret.ts`, `blocked-fire-pips.ts` and `renderer.ts`'s construction gate
+ * -- chosen by the application (`game/devflags.ts` parses `?blockedFire=`) and
  * implemented by each projection for the arms that name its channel. Issue #473 moved
  * the vocabulary here from `game/devflags.ts` so the audio director and the renderer no
  * longer import the developer-flag parser to name a cue.
@@ -19,9 +21,19 @@
  * "multimodal against the strongest single channel" comparison is not itself limited to
  * one combination.
  *
- * Still to come: the weapon-local pulse and the transient HUD readout. Neither is omitted
- * for lack of a flag -- the flag is the part every arm shares -- but each needs its own
- * render artefact.
+ * The visual channel's other four arms (issue #516) are built and each has its own
+ * artefact: `muzzle` a flash at the barrel opening cut short of a real discharge
+ * (render/blocked-fire-muzzle.ts), `turret` a recoil stutter on the gun itself
+ * (render/blocked-fire-turret.ts), `pips` a capacity strip on the felt beside the tank
+ * (render/blocked-fire-pips.ts), and `hud` a transient capacity line off the arena
+ * (game/blocked-fire-hud.ts, painted by hud.ts's signalShellCapacity). Deliberately four
+ * different pictures rather than four sizes of one: #356 rules by comparison, and arms
+ * that differ only in degree would produce no ruling.
+ *
+ * The audio and haptic arms landed alongside them in their own change, so every
+ * single-channel arm the matrix names is now implemented. Still to come: #516's pairing of
+ * the strongest new visual with the strongest new audio, which the issue deliberately
+ * defers until the single-channel arms exist to choose between.
  */
 /**
  * Exported so each channel's suite can assert one row PER CUE rather than per remembered
@@ -32,11 +44,13 @@
  * own gate then went un-asserted for the paired cue (measured: narrowing it to
  * `cue !== 'ring'` left all 8 of that file's tests green).
  *
- * Three of the four consumers now key a table off this set -- director.test.ts (`audio`),
- * haptics.test.ts (`haptic`), blocked-fire-ring.test.ts (`ring`) -- so a sixth cue fails
- * them until its channels are stated. The fourth, renderer.ts's construction gate, is not
- * among them: it has no sibling Vitest file by policy (.claude/rules/rendering.md) and is
- * reached only through the GL harness, which exercises `ring` alone.
+ * Seven of the eight consumers now key a table off this set -- director.test.ts (`audio`),
+ * haptics.test.ts (`haptic`), and one per visual arm in blocked-fire-ring.test.ts,
+ * blocked-fire-muzzle.test.ts, blocked-fire-turret.test.ts, blocked-fire-pips.test.ts and
+ * blocked-fire-hud.test.ts -- so a new cue fails all seven until its channels are stated.
+ * The eighth, renderer.ts's construction gate, is not among them: it has no sibling Vitest
+ * file by policy (.claude/rules/rendering.md) and is reached only through the GL harness,
+ * which exercises the four arena arms against each other but not the whole cue set.
  */
 /**
  * The multimodal arms are spelled with a hyphen, not a plus, because these values are

@@ -410,6 +410,11 @@ describe('hud.css is syntactically whole', () => {
       // the default red resolves to no matter what colour is passed in.
       '.hud-damage', '.hud-damage--hit', '.hud-lives--hit', '--hud-damage-color',
       '.hud-shells', '.hud-shells--hidden', // dev shell count
+      // The blocked-fire capacity flash (issue #516's `hud` arm). Without the base rule
+      // the line has no `opacity: 0` to return to, so the last refusal's text sits over
+      // the arena for the rest of the session -- which is the permanent ammunition
+      // counter #356 rules out, arrived at by deleting a rule.
+      '.hud-capacity', '.hud-capacity--flash',
       '.hud-count', '.hud-count--hidden', '.hud-count--pop', // round-start countdown
       '.hud-level--hidden', // level progression: without it the empty chip always shows
       // title screen: without the hidden rule it covers the game from load and never

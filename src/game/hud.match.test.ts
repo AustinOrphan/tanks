@@ -62,6 +62,73 @@ describe('hud: dev shell count', () => {
   });
 });
 
+describe('hud: blocked-fire capacity flash (issue #516, parent #356)', () => {
+  function mount(): { root: HTMLElement; hud: ReturnType<typeof createHud> } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    return { root, hud: createHud(root) };
+  }
+
+  it('shows nothing until a shot is actually refused', () => {
+    // The base state, and the one that makes this the TRANSIENT arm: an empty element
+    // holding no text, running no animation, claiming nothing.
+    const { root, hud } = mount();
+    const el = root.querySelector('.hud-capacity') as HTMLElement;
+    expect(el.textContent).toBe('');
+    expect(el.className).not.toContain('hud-capacity--flash');
+    hud.dispose();
+  });
+
+  it('flashes the capacity the shot was refused against', () => {
+    // Both numbers: the capacity AND that all of it is spent, which is the inference
+    // #356 asks a treatment to produce -- capacity full, not cooldown or lost input.
+    const { root, hud } = mount();
+    hud.signalShellCapacity({ inFlight: 5, cap: 5 });
+    const el = root.querySelector('.hud-capacity') as HTMLElement;
+    expect(el.textContent).toBe('shells 5/5');
+    expect(el.className).toContain('hud-capacity--flash');
+    hud.dispose();
+  });
+
+  it('replays for a second refusal, so two refusals read as two', () => {
+    // Re-adding a class the element already has does NOT restart a CSS animation. Without
+    // the remove-and-reflow, a second refusal inside the animation window would be
+    // invisible -- and a held trigger against a full cap is exactly when refusals arrive
+    // in a row. Same mechanism, and same test shape, as signalPlayerDeath's own replay.
+    // MutationObserver delivers on a microtask, so drain it synchronously with
+    // takeRecords rather than waiting.
+    const { root, hud } = mount();
+    hud.signalShellCapacity({ inFlight: 5, cap: 5 });
+    const el = root.querySelector('.hud-capacity') as HTMLElement;
+    const obs = new MutationObserver(() => {});
+    obs.observe(el, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+    hud.signalShellCapacity({ inFlight: 5, cap: 5 });
+    const records = obs.takeRecords();
+    obs.disconnect();
+    const sawRemoval = records.some((r) => r.oldValue?.includes('hud-capacity--flash'));
+    expect(records.length).toBeGreaterThanOrEqual(2); // removed, then re-added
+    expect(sawRemoval).toBe(true);
+    expect(el.className).toContain('hud-capacity--flash');
+    hud.dispose();
+  });
+
+  it('is NOT the topbar readout, and does not turn into one', () => {
+    // #356's boundary: no permanent numeric ammunition HUD unless play evidence shows
+    // transient feedback is insufficient. Two structural halves of that here. It lives
+    // outside .hud-topbar, so it can never reserve a slot in that flex row the way the
+    // dev counter does -- which is what would make a refusal permanently widen the
+    // topbar from the first shot onward. And it leaves the dev readout alone: a session
+    // that never asked for `?dev=1&shellCount=1` still has no shell counter after a
+    // refusal.
+    const { root, hud } = mount();
+    hud.signalShellCapacity({ inFlight: 5, cap: 5 });
+    expect(root.querySelector('.hud-topbar .hud-capacity')).toBeNull();
+    expect(root.querySelector('.hud-capacity')).not.toBeNull();
+    expect(root.querySelector('.hud-shells')?.className).toContain('hud-shells--hidden');
+    hud.dispose();
+  });
+});
+
 describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent)', () => {
   it('win panel carries the ffa results line, per-slot kills/deaths', () => {
     const { hud: h, root } = mount();

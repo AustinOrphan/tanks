@@ -273,6 +273,22 @@ export interface Hud {
    */
   setShellCount(info: { inFlight: number; cap: number } | null): void;
   /**
+   * Issue #516's `hud` arm of the blocked-fire comparison: a TRANSIENT capacity line,
+   * shown for under a second when the active-shell cap refuses the controlling player's
+   * shot, and gone again on its own.
+   *
+   * Deliberately NOT `setShellCount` with a nicer style. That one is a READOUT -- pushed
+   * every frame behind `?dev=1&shellCount=1`, and it sits in the topbar until the flag is
+   * turned off -- and #356's boundary is explicit that a permanent numeric ammunition HUD
+   * is out of scope unless play evidence shows transient feedback is insufficient. This
+   * is the transient half that evidence has to be gathered against: a signal (like
+   * `signalPlayerDeath`), not a setter, with no state of its own and nothing to hide.
+   *
+   * The caller decides WHEN; `game/blocked-fire-hud.ts` owns the cue gate and the
+   * controlling-player filter, exactly as the audio and haptic arms own theirs.
+   */
+  signalShellCapacity(info: { inFlight: number; cap: number }): void;
+  /**
    * The player just lost a life. Losing one was previously invisible: the only
    * cue was the Lives number quietly decrementing in a corner, plus a sound --
    * and with no audio assets committed, that sound is a procedural blip.
@@ -781,6 +797,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            is why the whole bar is now hidden at the Main Menu too -- see setState. -->
     </div>
     <div class="hud-count hud-count--hidden"></div>
+    <!-- The blocked-fire capacity flash (issue #516's hud arm). Absolutely positioned
+         under the topbar rather than placed IN it, on purpose: a chip in the topbar flow
+         would reserve its width for the rest of the session after the first refusal,
+         which is the permanent ammunition counter #356 rules out. Nothing here until
+         signalShellCapacity fires, and nothing left of it afterwards. aria-hidden because
+         it duplicates a state the arena already shows, on every refused trigger pull. -->
+    <div class="hud-capacity" aria-hidden="true"></div>
     <div class="hud-damage" aria-hidden="true"></div>
     <!-- Where the thumbs are, drawn back on screen. Playtest feedback: with nothing
          rendered, the aiming thumb gave no clue which way the shot was going, and the
@@ -1228,6 +1251,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const appGroundEl = el.querySelector('.ui-app-ground') as HTMLElement;
   const countEl = el.querySelector('.hud-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
+  const capacityEl = el.querySelector('.hud-capacity') as HTMLElement;
   const versusStocksEl = el.querySelector('.hud-versus-stocks') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const splashEl = el.querySelector('.hud-splash') as HTMLElement;
@@ -4297,6 +4321,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // state worth seeing while developing.
       shellsEl.classList.toggle('hud-shells--full', info.inFlight >= info.cap);
       shellsEl.classList.remove('hud-shells--hidden');
+    },
+    signalShellCapacity(info: { inFlight: number; cap: number }): void {
+      // BOTH numbers, not just the cap: `5/5` says what the capacity is AND that all of
+      // it is spent, which is the inference #356 asks a treatment to produce (capacity
+      // full, rather than cooldown, lag or lost input). The wording matches the dev
+      // readout's on purpose -- the comparison is between placements and lifetimes, and a
+      // second vocabulary for the same fact would confound it.
+      capacityEl.textContent = `shells ${info.inFlight}/${info.cap}`;
+      // Restart the animation even if one is already running: two refusals in quick
+      // succession must read as two, the same trick signalPlayerDeath documents.
+      capacityEl.classList.remove('hud-capacity--flash');
+      void capacityEl.offsetWidth;
+      capacityEl.classList.add('hud-capacity--flash');
     },
     signalPlayerDeath(color: number): void {
       // Set before the (re)trigger below, so the very first paint of the replayed

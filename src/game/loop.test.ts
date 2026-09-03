@@ -11,7 +11,7 @@ import { QUALITY_PRESETS } from '../render/quality';
 import { ZERO_STATS } from './stats';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import type { AchievementContext, AchievementId } from './achievements';
-import { TANK_KINDS } from '../sim/config';
+import { TANK_KINDS, configFor } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
 import {
@@ -182,6 +182,8 @@ interface Recorder {
   typedOutcomes: TypedOutcome[];
   muted: boolean[];
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
+  /** Every transient capacity flash (issue #516's `hud` blocked-fire arm), in order. */
+  capacityFlashes: Array<{ inFlight: number; cap: number }>;
   roundPhases: Array<{ phase: string; secondsLeft: number } | null>;
   deathSignals: number;
   /** Every colour passed to signalPlayerDeath, in order -- death-pulse issue #200. */
@@ -473,6 +475,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     previewReducedMotion: [],
     settingsNotices: [],
     shellCounts: [],
+    capacityFlashes: [],
     roundPhases: [],
     deathSignals: 0,
     deathColors: [],
@@ -1110,6 +1113,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setModality: () => {},
         setVolume: (v: number) => rec.volumeEchoes.push(v),
         setShellCount: (i) => rec.shellCounts.push(i),
+        signalShellCapacity: (i) => rec.capacityFlashes.push(i),
         setLevel: (c: number, t: number) => rec.hudLevels.push([c, t]),
         setRoundPhase: (info) => rec.roundPhases.push(info),
         signalPlayerDeath: (color: number) => { rec.deathSignals += 1; rec.deathColors.push(color); },
@@ -4477,6 +4481,45 @@ describe('startGameWith: dev flags stay off by default', () => {
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.shellCounts).toHaveLength(0);
+    h.handle.dispose();
+  });
+
+  it('never flashes the blocked-fire capacity line with the flag off', () => {
+    // The shipped default: issue #356 requires its treatments to be compared before one
+    // is adopted, so a refusal in an ordinary session says nothing in the HUD. The vacuity
+    // guard is the test below, which reaches a real refusal on the same fixture.
+    const h = boot();
+    h.setState('playing');
+    for (let i = 1; i <= 400; i++) {
+      h.firePlayerShot();
+      h.fireFrame(i * 17);
+    }
+    expect(h.rec.capacityFlashes).toHaveLength(0);
+    h.handle.dispose();
+  });
+
+  it('flashes the capacity line on a REAL refusal under blockedFire=hud', () => {
+    // The composition the unit tests cannot prove (blocked-fire-hud.test.ts calls the cue
+    // directly): that loop.ts builds this arm, hands it the frame's events and the world
+    // they came from, and that a shot the simulation actually refused reaches the HUD.
+    // Driven, not injected -- the refusal comes from holding fire until the active-shell
+    // cap says no.
+    const h = boot(makeDeps({ devFlags: { blockedFire: 'hud' } }));
+    h.setState('playing');
+    let refused = false;
+    for (let i = 1; i <= 400 && !refused; i++) {
+      h.firePlayerShot();
+      h.fireFrame(i * 17);
+      refused = h.rec.directed.some((batch) =>
+        batch.some((e) => e.type === 'fire-blocked' && e.ownerId === h.rec.directorPlayerIds.at(-1)),
+      );
+    }
+    expect(refused, 'the player was never refused, so this proves nothing').toBe(true);
+    expect(h.rec.capacityFlashes.length, 'a refused shot said nothing in the HUD').toBeGreaterThan(0);
+    // The numbers are the simulation's own: at a capacity refusal the player is by
+    // definition holding every shell the resolved config allows.
+    const cap = configFor('player').weapon.maxActiveProjectiles;
+    expect(h.rec.capacityFlashes[0]).toEqual({ inFlight: cap, cap });
     h.handle.dispose();
   });
 

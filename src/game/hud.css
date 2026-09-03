@@ -1815,6 +1815,49 @@
   display: none;
 }
 
+/* ---- Blocked-fire capacity flash (issue #516's `hud` arm) ----------------------- */
+
+/*
+ * The TRANSIENT half of the shell-capacity question, and deliberately not a second
+ * `.hud-shells`. It is absolutely positioned just under the topbar instead of sitting in
+ * it: a chip in that flex row would claim its width permanently from the first refusal
+ * onward, which is the permanent ammunition counter issue #356 puts out of scope. Here it
+ * costs no layout at all, appears only while its animation runs, and leaves nothing
+ * behind -- `opacity: 0` is the base state, exactly as .hud-count's is between pops.
+ *
+ * pointer-events: none for the same load-bearing reason .hud-count carries it: the player
+ * is aiming through this strip of screen at the moment it appears, and a refused shot is
+ * usually followed immediately by another attempt.
+ */
+.hud-capacity {
+  position: absolute;
+  top: 56px; /* clear of the topbar row, and well above the arena's centre */
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  font-size: 20px;
+  font-weight: var(--hud-weight-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--hud-text-danger);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
+}
+
+.hud-capacity--flash {
+  animation: hud-capacity-flash 0.9s ease-out 1;
+}
+
+/* Arrives fast, holds long enough to be read, then leaves: a refusal is worth about a
+   second of the player's attention and no more. */
+@keyframes hud-capacity-flash {
+  0% { opacity: 0; transform: translateY(-6px); }
+  12% { opacity: 1; transform: none; }
+  65% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+
 /* ---- Versus in-match stock readout (spec §3a, owner addition 2026-08-21) --------- */
 
 /* One compact strip, alongside .hud-stat/.hud-shells in the topbar -- never an
@@ -2014,6 +2057,15 @@
   @keyframes hud-lives-pulse {
     0%, 100% { color: var(--hud-text); transform: none; }
     50% { color: #ff6a6a; transform: none; }
+  }
+  /* The capacity flash keeps its whole message -- it IS text -- and loses only the drop
+     it arrives on. Redefined rather than cancelled: `animation: none` would leave the
+     line at its `opacity: 0` base state and the cue would not appear at all. */
+  @keyframes hud-capacity-flash {
+    0% { opacity: 0; transform: none; }
+    12% { opacity: 1; transform: none; }
+    65% { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: none; }
   }
 }
 
