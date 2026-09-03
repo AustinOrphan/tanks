@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { defaultSlots } from './versus-setup';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type Hud } from './hud';
+import { createHud, type GameplayOutcome, type Hud } from './hud';
 import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { versusMapChoices, type VersusConfig } from './versus-config';
@@ -1250,6 +1250,20 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     };
   }
 
+  /**
+   * The outcome panel's half of this policy, which a session states on its own
+   * projection since issue #324's step S4 -- `setRelaunchTarget` still answers it for
+   * the title screen's buttons, and the two are asserted separately below.
+   */
+  const outcomeWithAction = (action: 'campaign-levels' | 'versus-setup'): GameplayOutcome => ({
+    tally: 'solo',
+    action,
+    attempt: {
+      shotsFired: 0, shellKills: 0, mineKills: 0, deaths: 0, selfKills: 0,
+      friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0,
+    },
+  });
+
   it("the default target ('campaign-levels'), never calling setRelaunchTarget, is byte-identical to the title screen before this method existed", () => {
     // Fails if the default relaunchTarget is ever 'versus-setup', or if
     // applyTitleAffordances changes anything a campaign session's title screen showed
@@ -1360,11 +1374,11 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
   });
 
   it("the win/lose action button reads 'Versus Setup' for a versus session's FINAL win and its lose -- truthful about what the click now does", () => {
-    // Fails if the label branch is missing, or reads deps/state other than
-    // relaunchTarget (e.g. always 'Versus Setup' regardless of target, which the
+    // Fails if the label branch is missing, or reads deps/state other than the
+    // outcome's own `action` (e.g. always 'Versus Setup' regardless of it, which the
     // campaign-target tests elsewhere in this file would also have caught).
     const { hud: h, root } = mount();
-    h.setRelaunchTarget('versus-setup');
+    h.setOutcome(outcomeWithAction('versus-setup'));
     h.setLevel(1, 1); // versus's single synthetic level -- always the FINAL win
     h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Versus Setup');
@@ -1372,9 +1386,28 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     expect(actionBtn(root).textContent).toBe('Versus Setup');
   });
 
+  it('the outcome label follows a projection that lands AFTER the panel opened', () => {
+    // The ordering production actually takes, and one the old boot-time-only source
+    // could not have been wrong about: the state machine flips to `outcome-win` on the
+    // winning frame's SimEvent, and the session's projection for that frame arrives
+    // afterwards. A panel that painted its tally from the newest push and its button
+    // from whatever was known when the panel opened would be half-applied -- so the
+    // label is re-derived on every push that lands while an outcome is up.
+    const { hud: h, root } = mount();
+    h.setLevel(1, 1); // the FINAL win -- the branch that carries the label
+    h.setState('outcome-win');
+    expect(actionBtn(root).textContent).toBe('Play Again'); // the default, nothing pushed
+    h.setOutcome(outcomeWithAction('versus-setup'));
+    expect(actionBtn(root).textContent).toBe('Versus Setup');
+    // ...and back again, so the assertion cannot pass on a setter that only ever
+    // writes the versus wording once.
+    h.setOutcome(outcomeWithAction('campaign-levels'));
+    expect(actionBtn(root).textContent).toBe('Play Again');
+  });
+
   it("leaves 'Resume' and 'Next Level' alone for a versus session -- neither click opens the pane, so relabeling either would be the same lie in reverse", () => {
     const { hud: h, root } = mount();
-    h.setRelaunchTarget('versus-setup');
+    h.setOutcome(outcomeWithAction('versus-setup'));
     h.setState('paused');
     expect(actionBtn(root).textContent).toBe('Resume');
     h.setLevel(1, 2); // an intermediate win -- not reachable for a real versus session
@@ -1444,8 +1477,9 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
   it("setSessionKind('versus') alone leaves the outcome action button reading 'Play Again'/'Retry'", () => {
     // The label names the click's DESTINATION, and loop.ts's onStartRestart routes a
     // developer-flag versus session through landOnCampaignBoard -- so 'Versus Setup'
-    // here would name a pane the click never opens. Fails if the label branch is
-    // keyed on sessionKind.
+    // here would name a pane the click never opens. Nothing is pushed to setOutcome,
+    // so this also pins the default: a HUD told only WHAT IS BEING PLAYED still says
+    // the campaign words. Fails if the label branch is keyed on sessionKind.
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
     h.setLevel(1, 1); // the FINAL win -- the branch that carries the label

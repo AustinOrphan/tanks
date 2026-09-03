@@ -1978,12 +1978,47 @@ export function startGameWith(
    * safely serves both. `versusDeaths` is the PR 4 addition `tallyCoopKills` needs only
    * for its ffa/teams branch -- unused, always empty, in campaign-coop. Per-attempt
    * scope, mirroring `attempt`'s own lifecycle: both reset at every `startAttempt()`
-   * call site below, since they feed the same win/lose panel. Fed to the HUD
-   * unconditionally -- whether either line actually shows is the HUD's own gate
-   * (`setCoopKills`/`setVersusResults`, dispatched below on `driver.world.rules.mode`).
+   * call site below, since they feed the same win/lose panel. Which of the two the
+   * panel actually shows is decided once, in `pushOutcome` just below, off the world's
+   * own `rules.mode`.
    */
   let coopKills: number[] = [];
   let versusDeaths: number[] = [];
+
+  /**
+   * THE WHOLE WIN/LOSE PANEL, in one push (issue #324, step S4) -- what used to be
+   * `hud.setCoopKills`, `hud.setVersusResults` and the attempt half of `hud.setStats`.
+   *
+   * The mode dispatch lives HERE rather than at each call site because it is one
+   * question with one answer per world: `rules.mode` is fixed for a world's whole life,
+   * so a session shows the versus tally or the coop one or neither, and the projection's
+   * `tally` says which. Splitting it across setters is what made "the two results lines
+   * are never both live at once" a rule the HUD had to trust rather than one it could
+   * see.
+   *
+   * Takes the world it is describing rather than reading `driver.world`. All three
+   * callers hand it the same object the driver holds -- the driver is CONSTRUCTED with
+   * the boot world, and `switchTo` calls `driver.reset(world)` before reaching here --
+   * so the parameter buys no different answer today. What it buys is that the agreement
+   * is checkable at the call site instead of being an ordering the reader has to trust,
+   * and that ordering is exactly what a future caller pushing before its reset would
+   * break. `countPlayerTanks` on that world, not the `playerCount` variable, for the
+   * same reason the tally itself is world-derived: the world is what the panel is about.
+   *
+   * `action` is the boot-time relaunch target, unchanged for the session's whole life --
+   * the outcome button names where its click LANDS, and no world build moves that.
+   */
+  function pushOutcome(forWorld: World): void {
+    const attempt = deps.stats.attempt();
+    const mode = forWorld.rules.mode;
+    if (mode === 'ffa' || mode === 'teams') {
+      hud.setOutcome({ tally: mode, attempt, action: relaunchTarget, kills: coopKills, deaths: versusDeaths });
+    } else if (countPlayerTanks(forWorld) >= 2) {
+      hud.setOutcome({ tally: 'coop', attempt, action: relaunchTarget, kills: coopKills });
+    } else {
+      hud.setOutcome({ tally: 'solo', attempt, action: relaunchTarget });
+    }
+  }
   /**
    * The stock readout's own no-thrash guard (Task 6, spec §3a): the joined key of the
    * LAST `stocks` array actually handed to `hud.setVersusStocks`, so a frame whose
@@ -2141,11 +2176,10 @@ export function startGameWith(
       // gating on an event arriving left the strip dark until whatever the first event
       // happened to be (typically a shot). Reads `w`, the world this callback is
       // actually handed (the post-step world for THIS frame), rather than reaching for
-      // `driver.world` the way onFrameEvents' own `isVersus`/setCoopKills/
-      // setVersusResults dispatch still does one section below (untouched, out of this
-      // relocation's scope) -- the two are the same world by the time either callback
-      // runs (driver.ts assigns `curr` before calling either), but `w` is the value
-      // this specific callback is actually given.
+      // `driver.world` the way onFrameEvents' own `pushOutcome` call still does one
+      // section below -- the two are the same world by the time either callback runs
+      // (driver.ts assigns `curr` before calling either), but `w` is the value this
+      // specific callback is actually given.
       const isVersusFrame = w.rules.mode === 'ffa' || w.rules.mode === 'teams';
       if (isVersusFrame) {
         // One entry per player-kind tank still in the world (never spliced, even once
@@ -2216,22 +2250,13 @@ export function startGameWith(
       // AFTER record, so an attempt feat sees the attempt that just finished.
       checkAchievements(pendingClear);
       pendingClear = null;
-      // Keep the HUD's copy fresh: the stats page re-renders only while visible, and
-      // the win/lose run-summary line updates a beat after the state flips -- the
-      // winning kill is in THIS batch, not the one before the panel opened.
+      // Keep the Records table's copy fresh: it re-renders only while visible.
       hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
-      // Gated on the WORLD's real player count, not the playerCount variable -- the same
-      // convention replayMetaFor uses, and the two never diverge in practice (the
-      // sandbox exclusion keeps playerCount and countPlayerTanks(world) in lockstep by
-      // construction). null means "never show", not merely "hide right now".
-      //
-      // n-player arc PR 4: dispatched on the world's own mode, mirroring resolveStatus's
-      // dispatch one layer up -- campaign-coop feeds ONLY the coop line (today's rule,
-      // unchanged), ffa/teams feed ONLY the versus line, so a session's two results
-      // lines are never both live at once.
-      const isVersus = driver.world.rules.mode === 'ffa' || driver.world.rules.mode === 'teams';
-      hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
-      hud.setVersusResults(isVersus ? { mode: driver.world.rules.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
+      // ...and the win/lose panel's, which is a different surface with a different
+      // owner. It updates a beat AFTER the state flips -- the winning kill is in THIS
+      // batch, not the one before the panel opened -- so this push lands into an
+      // already-open panel and the HUD repaints it.
+      pushOutcome(driver.world);
       // Task 6's in-match stock readout (spec §3a) is dispatched from `onSimulated`
       // below, NOT here -- see that callback's own comment for why. `onFrameEvents`
       // only fires `if (frameEvents.length > 0)` (driver.ts), so gating the readout on
@@ -2467,6 +2492,11 @@ export function startGameWith(
     coopKills = [];
     versusDeaths = [];
     hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+    // The win/lose panel starts the new attempt empty too. A board switch can change
+    // which tally the panel would show -- a Levels pick lands a coop session on a
+    // one-player board -- so the whole projection is re-derived here rather than left
+    // saying whatever the finished attempt said.
+    pushOutcome(world);
   }
 
   /**
@@ -2843,6 +2873,10 @@ export function startGameWith(
   coopKills = [];
   versusDeaths = [];
   hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+  // The outcome panel's opening state, stated rather than inherited: a session that is
+  // disposed before it ever produces an event still leaves the HUD holding a projection
+  // that describes THIS session's board, not the previous one's.
+  pushOutcome(world);
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
   hud.setAccentColor(deps.customization.accent());

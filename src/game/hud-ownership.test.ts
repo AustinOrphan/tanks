@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 /**
  * The boundary issue #324 draws, measured against the tree rather than asserted in prose.
  *
- * `hud.ts` classifies all 67 `Hud` members into `HudFrameKey` / `RouteHudKey` /
+ * `hud.ts` classifies all 66 `Hud` members into `HudFrameKey` / `RouteHudKey` /
  * `GameplayHudKey`, and a type-level guard there already fails the build if a member is
  * added without an owner. That guard cannot see CALL SITES, though, and call sites are
  * where the actual violation lives: `loop.ts` -- the gameplay session -- reaches straight
@@ -118,10 +118,13 @@ describe('HUD ownership boundary (issue #324)', () => {
       'showToast',
     ]);
     expect([...route].filter((k) => frame.has(k))).toEqual([]);
-    // Counts stated beside the population they came from: 67 members, of which showToast
-    // is counted twice, so the roles sum to 68.
-    expect(frame.size + route.size + gameplay.size).toBe(68);
-    expect(gameplay.size, 'what a live match may write').toBe(15);
+    // Counts stated beside the population they came from: 66 members, of which showToast
+    // is counted twice, so the roles sum to 67. Two fewer than #532 measured -- step S4
+    // merged setCoopKills and setVersusResults into the single setOutcome projection, so
+    // the interface SHRANK by one while gaining a member, which is the shape every
+    // remaining absorption step should have.
+    expect(frame.size + route.size + gameplay.size).toBe(67);
+    expect(gameplay.size, 'what a live match may write').toBe(14);
   });
 
   it('the gameplay session reaches ONLY gameplay members, plus the pinned debt', () => {

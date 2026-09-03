@@ -766,29 +766,47 @@ describe('hud: the stats page', () => {
 
   it('win panel carries the run summary line', () => {
     const { hud: h, root } = mount();
-    h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
+    h.setOutcome({ tally: 'solo', action: 'campaign-levels', attempt: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
     h.setState('outcome-win');
     const line = (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent ?? '';
     expect(line).toContain('3 kills');
     expect(line).toContain('50%');
     // And updates if the final batch lands after the panel opened -- the winning
     // kill is recorded a beat after the state flips.
-    h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
+    h.setOutcome({ tally: 'solo', action: 'campaign-levels', attempt: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
     expect((root.querySelector('.hud-attempt-summary') as HTMLElement).textContent).toContain('4 kills');
+  });
+
+  it('the attempt summary reads the outcome projection, NOT the Records table it used to ride', () => {
+    // The half of issue #324's step S4 a passing suite could otherwise hide. Both
+    // setters carry `attempt` counts, and before S4 one setter carried both surfaces --
+    // so a HUD that had only ever been told the Records numbers still wrote a summary
+    // line onto the win panel. This pins the split in both directions: `setStats` alone
+    // says nothing about the panel, and the outcome alone says everything.
+    const { hud: h, root } = mount();
+    const summary = (): HTMLElement => root.querySelector('.hud-attempt-summary') as HTMLElement;
+    h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 9, shotsFired: 9 } });
+    h.setState('outcome-win');
+    expect(summary().classList.contains('hud-attempt-summary--hidden')).toBe(true);
+    h.setOutcome({ tally: 'solo', action: 'campaign-levels', attempt: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
+    expect(summary().classList.contains('hud-attempt-summary--hidden')).toBe(false);
+    // The 3 the session stated, never the 9 Records holds -- a mutation that reverted
+    // the line to `statsData` would still show a summary here, just the wrong one.
+    expect(summary().textContent).toContain('3 kills');
   });
 
   it('win panel carries the coop kill line, twin of the attempt summary', () => {
     const { hud: h, root } = mount();
-    h.setCoopKills([3, 5]);
+    h.setOutcome({ tally: 'coop', action: 'campaign-levels', attempt: NONE, kills: [3, 5] });
     h.setState('outcome-win');
     const line = (root.querySelector('.hud-coop-kills') as HTMLElement).textContent ?? '';
     expect(line).toBe('P1: 3 · P2: 5');
     expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(false);
   });
 
-  it('setCoopKills(null) keeps the line hidden even at win/lose -- a 1P session', () => {
+  it('a solo outcome keeps the coop line hidden even at win/lose -- a 1P session', () => {
     const { hud: h, root } = mount();
-    h.setCoopKills(null);
+    h.setOutcome({ tally: 'solo', action: 'campaign-levels', attempt: NONE });
     h.setState('outcome-win');
     expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(true);
     h.setState('outcome-lose');
@@ -797,17 +815,17 @@ describe('hud: the stats page', () => {
 
   it('the coop kill line is hidden outside win/lose, even with live counts set', () => {
     const { hud: h, root } = mount();
-    h.setCoopKills([1, 2]);
+    h.setOutcome({ tally: 'coop', action: 'campaign-levels', attempt: NONE, kills: [1, 2] });
     h.setState('playing');
     expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(true);
   });
 
   it('updates live while the win panel is already open, same as the attempt summary', () => {
     const { hud: h, root } = mount();
-    h.setCoopKills([1, 0]);
+    h.setOutcome({ tally: 'coop', action: 'campaign-levels', attempt: NONE, kills: [1, 0] });
     h.setState('outcome-win');
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 0');
-    h.setCoopKills([1, 1]);
+    h.setOutcome({ tally: 'coop', action: 'campaign-levels', attempt: NONE, kills: [1, 1] });
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 1');
   });
 });
