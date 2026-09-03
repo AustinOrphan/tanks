@@ -64,6 +64,11 @@ export interface DriverDeps {
   input: { sample(): InputState[] };
   renderer: {
     render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
+    /**
+     * Told on every `reset`, before the world it replaced can be rendered again. See
+     * `reset` below for why the driver is the site that owes this call.
+     */
+    worldReplaced(): void;
   };
   director: { handle(events: SimEvent[]): void };
   /** haptics.ts's consumer, wired on the SAME terms as director -- see the call site below. */
@@ -108,7 +113,10 @@ export interface Driver {
   readonly prevWorld: World;
   start(): void;
   stop(): void;
-  /** Fresh round: prev = curr = world, accumulator dropped. */
+  /**
+   * Land on a new world: prev = curr = world, accumulator dropped, and the renderer
+   * told that its cross-frame state belongs to a board that no longer exists.
+   */
   reset(world: World): void;
 }
 
@@ -198,6 +206,18 @@ export function createDriver(deps: DriverDeps): Driver {
       curr = world;
       prev = world;
       acc = 0;
+      // The renderer is told HERE, and not by `loop.ts`'s `switchTo` beside its own call
+      // to this method, because this is the seam a replaced world cannot get past: the
+      // driver owns the only two references (`prev`, `curr`) that reach `render`, and
+      // both are reassigned immediately above. A future second caller of `reset`
+      // inherits the announcement instead of having to remember to make it.
+      //
+      // Why an announcement at all (issue #531): presentation used to infer a level
+      // switch by comparing `roundStartTick` across the two worlds, which cannot work --
+      // `createWorld` starts every world at 1, so a level cleared on its first round is
+      // indistinguishable from an ordinary frame and the tread trails streaked from the
+      // old board's coordinates to the new spawn. See renderer.ts's `worldReplaced`.
+      deps.renderer.worldReplaced();
     },
   };
 }

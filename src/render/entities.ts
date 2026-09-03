@@ -54,6 +54,18 @@ export interface EntityViews {
   /** `dt` drives animated skins; omitting it freezes them, which is what tests want. */
   sync(prev: World, curr: World, alpha: number, dt?: number): void;
   /**
+   * The game layer announcing that the world it renders from was REPLACED wholesale --
+   * a level switch -- rather than stepped. Consumed by the very next `sync`, which then
+   * treats every tank's pose as a teleport instead of motion (issue #531).
+   *
+   * A pushed announcement rather than something this module infers, because inference
+   * from sim state is what was broken: `prev.roundStartTick !== curr.roundStartTick`
+   * cannot see a level switch whose OUTGOING world was still in its first round, since
+   * `createWorld` starts every world at `roundStartTick: 1`. See renderer.ts's
+   * `worldReplaced` for the full argument.
+   */
+  worldReplaced(): void;
+  /**
    * The paint shop: override a co-op SLOT's hull colour (a CSS hex, null for the
    * roster default), skin, and the skin's accent tone (a CSS hex, null for `auto` --
    * derive the tone from the hull, as skins.ts always has). Takes effect on the next
@@ -332,6 +344,14 @@ export function createEntityViews(
   // the same one `view.group`'s own re-creation on a kind/gen change already had to
   // solve once.
   const tankViews = new Map<number, TankView>();
+
+  // Latched by `worldReplaced()` and consumed by the next `sync`, rather than read
+  // straight off the announcement, because the announcement and the frame that has to
+  // act on it are separate events: `driver.reset` swaps the world between frames, and a
+  // level switch made while nothing is rendering (a menu, a stopped loop) must still be
+  // honoured by whichever frame comes next. Cleared on consumption so it snaps exactly
+  // one frame -- a sticky flag would freeze interpolation for the rest of the session.
+  let worldWasReplaced = false;
 
   /** One co-op SLOT's paint-shop state -- see `styleFor` and `setPlayerStyle` below. */
   interface PlayerStyle {
@@ -1089,7 +1109,10 @@ export function createEntityViews(
       // back to its spawn within one tick while keeping its id and reviving it,
       // so a plain lerp drew the tank streaking across the arena for a frame on
       // every life lost. A tick can move a tank at most TANK_SPEED*DT, so any
-      // round-boundary jump is a teleport by definition, not motion.
+      // round-boundary jump is a teleport by definition, not motion. A level switch
+      // is the same teleport with a different cause, and reaches `snap` through the
+      // game layer's `worldReplaced()` announcement rather than through the sim
+      // state, for the reason `sync` sets out (issue #531).
       //
       // `revived` is the third, and the one `snap` cannot see (issue #239). A VS
       // stock respawn keeps the tank's id and does NOT restart the round, so
@@ -1125,7 +1148,13 @@ export function createEntityViews(
         // `revived` above is the same edge, read for the same reason -- one dead
         // `prevT` and a tank the loop already proved alive.
         const enteredRespawn = revived;
-        const enteredRound = curr.roundStartTick !== prev.roundStartTick;
+        // `snap` itself, not a second copy of the roundStartTick comparison. The two
+        // were always the same expression written twice, and while they agreed that
+        // was harmless; now that `snap` also carries the level-switch announcement,
+        // a local copy would leave the entrance ring keyed to the broken half of the
+        // signal -- silently skipped on exactly the first-attempt level clear issue
+        // #531 is about, and played on every other level switch.
+        const enteredRound = snap;
         if ((enteredRespawn || enteredRound) && !view.spawn) {
           // Per-slot selection: the player-facing picker UI that writes anything but the
           // default is still deferred (#201's own brief), but the render seam reads the
@@ -1513,9 +1542,22 @@ export function createEntityViews(
     // a max-steps clamp) would silently turn interpolation into extrapolation,
     // with entities overshooting and snapping back every tick.
     const a = Math.min(1, Math.max(0, alpha));
-    // resetArena re-anchors roundStartTick, which is the one signal that
-    // distinguishes a round boundary (teleports) from ordinary motion.
-    const snap = prev.roundStartTick !== curr.roundStartTick;
+    // Consumed unconditionally, before the `||` below could short-circuit past it: a
+    // frame that also crosses a round boundary must still clear the latch, or the
+    // announcement would leak forward and snap an unrelated later frame.
+    const replaced = worldWasReplaced;
+    worldWasReplaced = false;
+    // Two ways the pose history can break, and both have to be here.
+    //
+    // resetArena re-anchors roundStartTick within a world that keeps stepping, so a
+    // round restart is only ever visible as that number moving -- no announcement is
+    // made and none could be, since the sim does the teleporting mid-`step`.
+    //
+    // A level switch replaces the World object outright, and the comparison CANNOT see
+    // it: createWorld stamps every world with `roundStartTick: 1`, so a board cleared on
+    // its first attempt hands us an incoming world whose 1 matches the outgoing world's
+    // 1 (issue #531). The game layer says so instead.
+    const snap = replaced || prev.roundStartTick !== curr.roundStartTick;
     // Identity rings and shell tints both gate on this ONE flag, computed from the
     // CURRENT world so a level switch or (hypothetically) a shrinking player count is
     // picked up on the very next sync, the same way `snap` is. At playerCount 1 this
@@ -1553,6 +1595,9 @@ export function createEntityViews(
 
   return {
     sync,
+    worldReplaced(): void {
+      worldWasReplaced = true;
+    },
     setPlayerStyle(
       hex: string | null,
       skin: SkinId,

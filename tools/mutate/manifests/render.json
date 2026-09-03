@@ -511,5 +511,90 @@
       "barrel recoil (issue #526, parent #356) puts the gun back at EXACTLY rest when the recoil ends",
       "barrel recoil (issue #526, parent #356) reduced motion holds ONE static offset instead of oscillating"
     ]
+  },
+  {
+    "id": "tread-trail-level-switch-inferred-from-round-tick",
+    "file": "src/render/tread-trails.ts",
+    "find": "    if (replaced || prev.roundStartTick !== curr.roundStartTick) {",
+    "replace": "    if (prev.roundStartTick !== curr.roundStartTick) {",
+    "expect": "killed",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ],
+    "why": "Issue #531 itself, restored: the level switch stops being an announced fact and goes back to being inferred from `roundStartTick`, which cannot see it. `createWorld` stamps every world it builds with `roundStartTick: 1` and only `resetArena` ever moves it, so a level cleared on the FIRST attempt hands `sync` an incoming world whose 1 matches the outgoing world's 1, the guard stays silent, the tank's anchor survives at the previous board's coordinates, and the emit loop walks the gap in EMIT_SPACING steps printing the whole way. Measured on this module with the announcement ignored: two decals from a short drive became 158 in a straight line to the new spawn. Every pre-existing test in this file stayed green under exactly this mutation -- the round-boundary case drives the same switch with the two numbers UNEQUAL, so only a switch between two first-round worlds discriminates.",
+    "killedBy": [
+      "tread trails: round boundary and level switch clears on an announced level switch whose two worlds share roundStartTick (#531)"
+    ]
+  },
+  {
+    "id": "tread-trail-level-switch-latch-never-spent",
+    "file": "src/render/tread-trails.ts",
+    "find": "    const replaced = worldWasReplaced;\n    worldWasReplaced = false;",
+    "replace": "    const replaced = worldWasReplaced;",
+    "expect": "killed",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ],
+    "why": "The over-correction on the other side of the announcement: the latch is read but never spent, so the FIRST level switch of a session wipes the board on that frame and on every frame after it. Tread trails then look simply broken -- a tank prints one pair and it is gone by the next sync -- while every 'the board is empty after the switch' assertion in the file still passes, since they all stop syncing within a frame or two of the clear.",
+    "killedBy": [
+      "tread trails: round boundary and level switch spends the announcement on one sync and keeps printing afterwards"
+    ]
+  },
+  {
+    "id": "tread-trail-clears-on-every-frame",
+    "file": "src/render/tread-trails.ts",
+    "find": "    if (replaced || prev.roundStartTick !== curr.roundStartTick) {",
+    "replace": "    if (true) {",
+    "expect": "killed",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ],
+    "why": "The degenerate 'fix' that satisfies every clear-the-board assertion at once by clearing unconditionally, and the reason the level-switch cases each carry a control that keeps ordinary play printing. Named as the control for `tread-trail-level-switch-inferred-from-round-tick`: a guard that always fires and a guard that never fires are both wrong, and a test suite that only ever checks 'is the board empty afterwards' cannot tell them apart.",
+    "killedBy": [
+      "tread trails: round boundary and level switch does not clear a board that was never announced and never changed round"
+    ]
+  },
+  {
+    "id": "level-switch-snap-inferred-from-round-tick",
+    "file": "src/render/entities.ts",
+    "find": "    const snap = replaced || prev.roundStartTick !== curr.roundStartTick;",
+    "replace": "    const snap = prev.roundStartTick !== curr.roundStartTick;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "The sibling half of issue #531, in the signal `snap` and `enteredRound` now share. Reverting to the inference leaves `snap` blind to a level switch between two worlds that both still carry `createWorld`'s `roundStartTick: 1`, so the tank is lerped from the previous board's coordinates to the new spawn for a frame -- the exact streak the comment above the lerp claims to have covered -- and the player's entrance ring, keyed to the same flag, is skipped entirely on that transition while playing on every other level switch. Both consequences are pinned, because a fix to only one of them would look complete.",
+    "killedBy": [
+      "entity views \u2014 interpolation discontinuities snaps across an announced level switch, whose worlds agree on roundStartTick (#531)",
+      "spawn animation (#199) starts the entrance on an announced level switch, whose worlds agree on roundStartTick (#531)"
+    ]
+  },
+  {
+    "id": "level-switch-snap-latch-never-spent",
+    "file": "src/render/entities.ts",
+    "find": "    const replaced = worldWasReplaced;\n    worldWasReplaced = false;",
+    "replace": "    const replaced = worldWasReplaced;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "The announcement latch is read but never spent, so one level switch freezes interpolation for the rest of the session: every tank is drawn on its current-tick pose forever after and motion becomes a 60 Hz stutter. This is the same failure `render-respawn-teleport-applied-to-every-tank` describes from the per-tank side, reached from the world side instead, and no single-sync assertion anywhere in the file can see it -- it takes a sync that consumes the announcement followed by an ordinary one that must still interpolate.",
+    "killedBy": [
+      "entity views \u2014 interpolation discontinuities spends the level-switch announcement on one sync, then interpolates again"
+    ]
+  },
+  {
+    "id": "entrance-ring-reinfers-the-round-boundary",
+    "file": "src/render/entities.ts",
+    "find": "        const enteredRound = snap;",
+    "replace": "        const enteredRound = curr.roundStartTick !== prev.roundStartTick;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "The shape the file had before issue #531: the entrance trigger recomputing the roundStartTick comparison locally instead of reading the one `snap` the sync already resolved. The two agreed for as long as `snap` was that comparison, which is exactly why the duplication survived review; the moment `snap` also carries the level-switch announcement, the local copy silently keeps the broken half. The visible result is a player who gets no entrance effect at all on the one transition that reaches a new board without a death first, and one on every other. Nothing else in the file notices: the round-restart trigger it was written for still fires.",
+    "killedBy": [
+      "spawn animation (#199) starts the entrance on an announced level switch, whose worlds agree on roundStartTick (#531)"
+    ]
   }
 ]

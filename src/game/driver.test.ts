@@ -101,6 +101,7 @@ function harness(
   driver: Driver;
   raf: ReturnType<typeof fakeRaf>;
   renders: RenderCall[];
+  announcements: number[];
   directed: SimEvent[][];
   hapticsSaw: SimEvent[][];
   machineSaw: SimEvent[][];
@@ -112,6 +113,8 @@ function harness(
 } {
   const raf = fakeRaf();
   const renders: RenderCall[] = [];
+  /** `renders.length` at each `worldReplaced()` call -- see the renderer double below. */
+  const announcements: number[] = [];
   const directed: SimEvent[][] = [];
   const hapticsSaw: SimEvent[][] = [];
   const machineSaw: SimEvent[][] = [];
@@ -132,6 +135,12 @@ function harness(
     renderer: {
       render(prev, curr, alpha, events, dt): void {
         renders.push({ prev, curr, alpha, events, dt });
+      },
+      worldReplaced(): void {
+        // Pushed at the moment of the call, not counted, so a test can assert the
+        // announcement's ORDER against the renders around it -- the property that
+        // matters is that no frame renders a replaced world before hearing about it.
+        announcements.push(renders.length);
       },
     },
     director: {
@@ -171,6 +180,7 @@ function harness(
     driver,
     raf,
     renders,
+    announcements,
     directed,
     hapticsSaw,
     machineSaw,
@@ -599,5 +609,47 @@ describe('driver: lifecycle', () => {
     // half-tick survived the reset, this frame would tick.
     h.raf.fire(39);
     expect(h.driver.world.tick).toBe(0);
+  });
+
+  it('tells the renderer the world was replaced, before any frame can render it (#531)', () => {
+    // The driver is the seam that owes this call: it holds the only two world
+    // references (`prev`, `curr`) that reach `render`, and `reset` reassigns both. The
+    // renderer's cross-frame state -- interpolation history, tread anchors -- belongs to
+    // a board that no longer exists the instant those two lines run.
+    //
+    // Ordering, not just occurrence: presentation may not paint a replaced world before
+    // it has been told, so the announcement is recorded as the render count standing
+    // behind it. `announcements` in the harness above captures exactly that.
+    const h = harness();
+    h.driver.start();
+    h.raf.fire(25);
+    expect(h.renders).toHaveLength(1);
+
+    const fresh = createArenaWorld(99);
+    h.driver.reset(fresh);
+    // Announced with that one frame behind it, and no frame between the swap and the
+    // announcement. A `worldReplaced()` moved after the next render would read [2].
+    expect(h.announcements).toEqual([1]);
+
+    // 39 is 14ms on from the last frame, under DT, so this frame renders without
+    // stepping -- the pose the renderer sees is the replaced world untouched.
+    h.raf.fire(39);
+    expect(h.renders).toHaveLength(2);
+    expect(h.renders[1].curr).toBe(fresh);
+    expect(h.renders[1].prev).toBe(fresh);
+  });
+
+  it('announces nothing while it is merely stepping the world it already has', () => {
+    // Negative control for the obvious over-correction: announcing from the frame body
+    // rather than from `reset` would make every frame a discontinuity, and the renderer
+    // would drop its interpolation history 60 times a second while passing the test
+    // above. Frames here both simulate (25ms crosses DT) and hold still (a second fire
+    // under DT), so neither shape announces.
+    const h = harness();
+    h.driver.start();
+    h.raf.fire(25);
+    h.raf.fire(40);
+    expect(h.renders).toHaveLength(2);
+    expect(h.announcements).toEqual([]);
   });
 });
