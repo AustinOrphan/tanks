@@ -1,4 +1,4 @@
-import type { BlockedFireCue } from '../presentation/blocked-fire';
+import { cueDrives, type BlockedFireCue } from '../presentation/blocked-fire';
 import type { SimEvent } from '../sim/events';
 import type { Vec2 } from '../sim/types';
 import { MINE_BLAST_RADIUS, TANK_RADIUS } from '../sim/constants';
@@ -69,6 +69,65 @@ export const MINE_TRIP_PATTERN_MS: number[] = [22, 40, 22];
  * shot and must not out-shout one.
  */
 export const BLOCKED_FIRE_PATTERN_MS: number[] = [8, 24, 8];
+
+// ---- Issue #516's four extra haptic arms, so #356 has something to compare its baseline
+// against. Every number here is an owner decision made BY EYE, with no device in hand --
+// the same caveat the constants above carry -- and the tests pin the constants, not a
+// value anyone has claimed is right.
+//
+// THE SHAPES ARE THE EXPERIMENT. The baseline is two 8 ms taps 24 ms apart; if every arm
+// were another pair of taps at another spacing, a hand would be asked to grade five
+// versions of one idea. So the set spans the axes a hand can actually resolve: ONE pulse
+// (`tap`), a TIGHTER pair (`double`), a SUSTAINED buzz (`long`), and a GROWING pattern
+// (`rise`, the only one whose elements change size).
+//
+// WHAT THE WEB CANNOT DO, stated because #516 asks `haptic-long` for a "softer" buzz:
+// `navigator.vibrate` takes durations and NOTHING ELSE -- no amplitude, no waveform, no
+// envelope (haptics.ts's `VibrateFn` is that API's shape). So "softer" is not expressible
+// on the web path at all, and `haptic-long` implements the half that is: a single
+// sustained buzz. If a native build ever arrives through the injected `VibrateFn` seam,
+// intensity becomes expressible and this constant is where it would grow a companion.
+
+/** `haptic-tap`: one short pulse, and the smallest thing the API can say. */
+export const BLOCKED_FIRE_TAP_PULSE_MS = 10;
+
+/**
+ * `haptic-double`: two taps in half the time the baseline pair takes.
+ *
+ * Distinct from a successful shot (one 15 ms pulse) by SHAPE, and distinct from the
+ * baseline [8, 24, 8] by RHYTHM: a 10 ms gap is inside the window a hand reads as one
+ * stuttered event, where the baseline's 24 ms gap reads as two separate taps.
+ */
+export const BLOCKED_FIRE_DOUBLE_PATTERN_MS: number[] = [10, 10, 10];
+
+/**
+ * `haptic-long`: a single sustained buzz -- three times the fire pulse, and the only arm
+ * with no gap in it. Still well under MINE_NEAR_PULSE_MS (60 ms), because a refused shot
+ * must not out-buzz being caught in a blast.
+ */
+export const BLOCKED_FIRE_LONG_PULSE_MS = 45;
+
+/**
+ * `haptic-rise`: three pulses that DOUBLE, 6 -> 12 -> 24 ms, on a constant 18 ms gap.
+ *
+ * The arm that tests whether shape reads differently from length: growth is the only
+ * intensity ramp the duration-only API can express, and holding the gaps constant is what
+ * leaves growth as the single changing variable.
+ */
+export const BLOCKED_FIRE_RISE_PATTERN_MS: number[] = [6, 18, 12, 18, 24];
+
+/**
+ * Which pulse each arm feels like. Absent means the baseline pattern: the shipped
+ * `haptic` arm and the multimodal `haptic-audio`, whose haptic half is that baseline by
+ * definition -- it exists to test a channel PAIRING, so giving it its own pattern would
+ * confound the two questions.
+ */
+const BLOCKED_FIRE_ARMS: Readonly<Partial<Record<BlockedFireCue, number | number[]>>> = {
+  'haptic-tap': BLOCKED_FIRE_TAP_PULSE_MS,
+  'haptic-double': BLOCKED_FIRE_DOUBLE_PATTERN_MS,
+  'haptic-long': BLOCKED_FIRE_LONG_PULSE_MS,
+  'haptic-rise': BLOCKED_FIRE_RISE_PATTERN_MS,
+};
 
 /**
  * "Near" for the mine-detonate cue: the radius `detonateMine` actually kills at,
@@ -175,7 +234,8 @@ export function createHapticsDirector(
           vibrate(MINE_FUSE_WARN_PULSE_MS);
         }
         break;
-      case 'fire-blocked':
+      case 'fire-blocked': {
+        const cue = options.blockedFire;
         // Issue #356's haptic arm, and SILENT unless the flag names it -- the issue asks
         // for its treatments to be compared before one is adopted, so none of them may
         // become the default by being wired first.
@@ -189,13 +249,17 @@ export function createHapticsDirector(
         // held trigger cannot generate more than one refusal per fire cadence: the longest
         // unbroken burst is ONE tick at every cap measured (5, 4 and 3), against 38 ticks
         // before that change. The unbounded output #356 forbids is unreachable by spamming.
-        if (
-          (options.blockedFire === 'haptic' || options.blockedFire === 'haptic-audio') &&
-          e.ownerId === playerId
-        ) {
-          vibrate(BLOCKED_FIRE_PATTERN_MS);
+        //
+        // EVERY cue whose name carries `haptic` -- asked once, of the presentation layer's
+        // channel map (`cueDrives`, issue #516), rather than re-listed here where the
+        // audio director's twin enumeration once fell a cue behind. Which PATTERN it is
+        // stays this layer's business, because a vibration pattern is not vocabulary any
+        // other layer reads.
+        if (cue != null && cueDrives(cue, 'haptic') && e.ownerId === playerId) {
+          vibrate(BLOCKED_FIRE_ARMS[cue] ?? BLOCKED_FIRE_PATTERN_MS);
         }
         break;
+      }
       default: {
         // Exhaustiveness guard: a new SimEvent kind fails to compile here, the
         // same discipline audio/director.ts uses.

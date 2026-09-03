@@ -201,6 +201,13 @@ describe('blocked-fire cue (issue #356)', () => {
     d.handle([blocked(owner)]);
     return keys;
   };
+  /** The same, keeping the play OPTIONS: three of issue #516's arms are variations. */
+  const playedCalls = (cue: BlockedFireCue, owner = 7): PlayCall[] => {
+    const calls: PlayCall[] = [];
+    const engine = { play: (key: string, opts?: PlayCall['opts']) => calls.push({ key, opts }) };
+    createAudioDirector(engine as never, 7, { blockedFire: cue }).handle([blocked(owner)]);
+    return calls;
+  };
 
   it('stays silent with no flag, because the treatments have not been compared yet', () => {
     expect(played()).toEqual([]);
@@ -233,28 +240,29 @@ describe('blocked-fire cue (issue #356)', () => {
       'haptic-audio': true,
       ring: false,
       'ring-audio': true,
-      // The rest of issue #516's vocabulary, false here for two DIFFERENT reasons: the
-      // visual and haptic arms carry no audio at all and will never sound, while the four
-      // new audio arms (click, clunk, thunk-soft, pitch-empty) are named but not yet
-      // implemented and flip to true as each lands.
+      // The visual and haptic arms of issue #516's matrix: named in the vocabulary, and
+      // false here permanently -- they carry no audio at all and must never sound, which
+      // is what lets #356 attribute a preference to a channel rather than to a bundle.
       muzzle: false,
       turret: false,
       pips: false,
       hud: false,
-      click: false,
-      clunk: false,
-      'thunk-soft': false,
-      'pitch-empty': false,
       'haptic-tap': false,
       'haptic-double': false,
       'haptic-long': false,
       'haptic-rise': false,
+      // Issue #516's four extra audio arms, now implemented (director.ts's
+      // BLOCKED_FIRE_ARMS). This table is about CHANNEL MEMBERSHIP -- does this cue reach
+      // the speaker at all -- so it counts calls; WHICH sound each arm makes is a
+      // different contract, and has its own one-row-per-arm table below.
+      click: true,
+      clunk: true,
+      'thunk-soft': true,
+      'pitch-empty': true,
     };
     expect(Object.keys(carriesAudio).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldSound] of Object.entries(carriesAudio)) {
-      expect(played({ blockedFire: cue as BlockedFireCue })).toEqual(
-        shouldSound ? ['fire-blocked'] : [],
-      );
+      expect(playedCalls(cue as BlockedFireCue), cue).toHaveLength(shouldSound ? 1 : 0);
     }
   });
 

@@ -42,6 +42,7 @@ export type SfxKey =
   | 'mine-trip'
   | 'mine-boom'
   | 'fire-blocked'
+  | 'fire-blocked-click'
   | 'victory'
   | 'defeat';
 
@@ -211,6 +212,27 @@ const RECIPES: Record<
   'fire-blocked': (c, t, r) => [
     noiseVoice(c, t, { duration: 0.018, peak: 0.09, type: 'highpass', from: 4200, to: 3000 }, r),
     toneVoice(c, t, { from: 210, to: 150, duration: 0.03, peak: 0.07, type: 'square' }, r),
+  ],
+  /**
+   * Issue #516's `click` arm: the refusal with its BODY REMOVED.
+   *
+   * The one arm in that matrix that cannot be produced by varying an existing cue, and
+   * the reason is structural rather than a matter of taste: #516 asks for "a short dry
+   * mechanical click, NO TONE", and no playback rate or gain removes a layer. So this is
+   * the `fire-blocked` recipe minus its square blip -- a single 12 ms band of filtered
+   * noise, nothing oscillating anywhere in the graph. The other three audio arms are
+   * `rate`/`volume` variations of a cue that already exists (director.ts).
+   *
+   * Deliberately the ONLY single-layer recipe here. Every other sound in this file is
+   * two or three layers because a single oscillator is the old beep; this one is one
+   * layer because the absent layer IS the design, and synth.test.ts pins that it builds
+   * no oscillator at all rather than merely a quiet one.
+   *
+   * TIMBRE IS PROVISIONAL, like every cue here, and nobody has heard it: it ships behind
+   * `?dev=1&blockedFire=click` as one candidate among five, not as the adopted sound.
+   */
+  'fire-blocked-click': (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.012, peak: 0.11, type: 'highpass', from: 5200, to: 3800 }, r),
   ],
   // A rising pair: "armed" should sound like a state change, not an impact.
   'mine-arm': (c, t, r) => [

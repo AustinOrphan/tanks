@@ -386,10 +386,9 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
       'haptic-audio': true,
       ring: false,
       'ring-audio': false,
-      // The rest of issue #516's vocabulary, false here for two DIFFERENT reasons: the
-      // visual and audio arms carry no haptic at all and will never buzz, while the four
-      // new haptic arms (haptic-tap, haptic-double, haptic-long, haptic-rise) are named
-      // but not yet implemented and flip to true as each lands.
+      // The visual and audio arms of issue #516's matrix: named in the vocabulary, and
+      // false here permanently -- they carry no haptic at all and must never buzz, which
+      // is what lets #356 attribute a preference to a channel rather than to a bundle.
       muzzle: false,
       turret: false,
       pips: false,
@@ -398,14 +397,18 @@ describe('blocked-fire cue: the arms are separable (issue #356)', () => {
       clunk: false,
       'thunk-soft': false,
       'pitch-empty': false,
-      'haptic-tap': false,
-      'haptic-double': false,
-      'haptic-long': false,
-      'haptic-rise': false,
+      // Issue #516's four extra haptic arms, now implemented (haptics.ts's
+      // BLOCKED_FIRE_ARMS). This table is about CHANNEL MEMBERSHIP -- does this cue reach
+      // the hand at all -- so it counts pulses; WHICH pattern each arm feels like is a
+      // different contract, and has its own one-row-per-arm table below.
+      'haptic-tap': true,
+      'haptic-double': true,
+      'haptic-long': true,
+      'haptic-rise': true,
     };
     expect(Object.keys(carriesHaptic).sort()).toEqual([...BLOCKED_FIRE_CUES].sort());
     for (const [cue, shouldBuzz] of Object.entries(carriesHaptic)) {
-      expect(buzzed(cue as BlockedFireCue)).toEqual(shouldBuzz ? [BLOCKED_FIRE_PATTERN_MS] : []);
+      expect(buzzed(cue as BlockedFireCue), cue).toHaveLength(shouldBuzz ? 1 : 0);
     }
   });
 });
