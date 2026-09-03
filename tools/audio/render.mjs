@@ -153,7 +153,7 @@ try {
 
     if (opts.sfx) {
       const KEYS = ['cannon', 'cannon-enemy', 'ping', 'explosion', 'mine-drop',
-                    'mine-arm', 'mine-boom', 'fire-blocked', 'victory', 'defeat'];
+                    'mine-arm', 'mine-boom', 'fire-blocked', 'fire-blocked-click', 'victory', 'defeat'];
       const keys = opts.sfx === 'all' ? KEYS : [opts.sfx];
       for (const k of keys) if (!KEYS.includes(k)) return { error: `unknown sfx "${k}". known: ${KEYS.join(', ')}` };
       const span = opts.sfx === 'all' ? keys.length * 0.9 + 1 : 1.4;
