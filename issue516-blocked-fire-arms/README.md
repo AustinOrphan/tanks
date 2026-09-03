@@ -7,11 +7,13 @@ the decision is #356's.
 
 Rendered offline through the real synth by `npm run audio -- --arms <cue|all>`, which
 reads the same voice table the game plays from, so a clip cannot drift from what a match
-sounds like.
+sounds like. Gains are scaled the way `engine.ts` scales them rather than replaced, so the
+quiet arms are quiet here by the same ratio: `thunk-soft` peaks at 0.304 of `clunk`,
+matching its 0.3 multiplier.
 
 | File | Cue | What it is |
 | --- | --- | --- |
-| `audio-all-arms.wav` | all five, in order | baseline, click, clunk, thunk-soft, pitch-empty, 0.9 s apart |
+| `audio-all-arms.wav` | all five, in order | baseline, click, clunk, thunk-soft, pitch-empty, 0.9 s apart. `haptic-audio` and `ring-audio` are absent because they play the baseline voice, so rendering them would repeat the same sound |
 | `blocked-audio.wav` | `audio` | the shipped refusal cue, the baseline to beat |
 | `blocked-click.wav` | `click` | 12 ms of high-passed noise, no oscillator |
 | `blocked-clunk.wav` | `clunk` | the baseline at half rate: every frequency halved, every duration doubled |
