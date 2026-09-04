@@ -8,6 +8,7 @@ import {
   type StartIntent,
 } from './route-host';
 import { createAppSettings } from './app-settings';
+import type { AudioEngine } from '../audio/engine';
 import { createMemoryStorage, createStores, type GameStores } from './storage';
 import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIES } from './capabilities';
 import { createGameStateMachine } from './state';
@@ -125,6 +126,10 @@ interface Fixture {
   versusStarts: VersusConfig[];
   campaignRequests: () => number;
   previewDisposals: () => number;
+  /** Every call the page made on its one audio engine, in order (issue #485). */
+  audioCalls: string[];
+  /** How many engines `createAudio` minted; the page must take exactly one. */
+  audioBuilds: () => number;
   /** The page menu poller's pads and queued frames (issue #494). */
   pads: GamepadLike[];
   frames: Array<(now: number) => void>;
@@ -173,7 +178,39 @@ function fixture(
     now: 0,
     /** Listeners the route host registered on the page host, by event type. */
     hostListeners: new Map<string, Set<(e: Event) => void>>(),
+    /**
+     * Every call the page made on its ONE audio engine, in order (issue #485).
+     *
+     * Ordered strings rather than counters because the defect this file now covers was an
+     * ORDER -- a bed started and then stopped one call later -- and a set of counters
+     * records that as "one start, one stop" and looks healthy.
+     */
+    audioCalls: [] as string[],
+    /** How many engines `createAudio` minted. The page must take exactly one. */
+    audioBuilds: 0,
   };
+
+  /**
+   * The page's one engine (issue #485). Records the four calls the route host is allowed
+   * to make and throws on `dispose`, which the PAGE's own teardown may do but which
+   * nothing else may: an engine disposed under a live page is the failure mode
+   * `releaseAudio`'s doc in `loop.ts` describes, and a silent one.
+   */
+  const pageAudio = {
+    startMusic: () => box.audioCalls.push('start'),
+    stopMusic: () => box.audioCalls.push('stop'),
+    setMusicContext: (c: string) => box.audioCalls.push(`context:${c}`),
+    duckMusic: (d: boolean) => box.audioCalls.push(`duck:${d}`),
+    setMuted: (m: boolean) => box.audioCalls.push(`muted:${m}`),
+    setVolume: (v: number) => box.audioCalls.push(`volume:${v}`),
+    setMusicIntensity: () => {},
+    unlock: () => {},
+    play: () => {},
+    toggleMute: () => false,
+    isMuted: () => false,
+    getVolume: () => 1,
+    dispose: () => box.audioCalls.push('dispose'),
+  } as unknown as AudioEngine;
 
   const routeUiDeps: RouteUiDeps = {
     settings: stores.settings,
@@ -232,6 +269,13 @@ function fixture(
         if (at >= 0) box.frames.splice(at, 1);
       };
     },
+    // The PAGE's one engine, minted once and counted (issue #485). `createAudio` is the
+    // same seam a session is handed; in the browser it returns `shell.audio` on every
+    // call, and here it must be asked for exactly once by the host that outlives sessions.
+    createAudio: () => {
+      box.audioBuilds += 1;
+      return pageAudio;
+    },
     createHud: opts.realHud ? (r) => createHud(r) : () => hud.hud,
     // The REAL state machine. A fake over a surface variable cannot show that a
     // page-scoped machine resets its route on attach, which is one of this file's claims.
@@ -265,6 +309,9 @@ function fixture(
     versusStarts: box.versusStarts,
     campaignRequests: () => box.campaignRequests,
     previewDisposals: () => box.previewDisposals,
+    /** Every call the page made on its one engine, in order (issue #485). */
+    audioCalls: box.audioCalls,
+    audioBuilds: () => box.audioBuilds,
     pads: box.pads,
     frames: box.frames,
     advance: (ms: number) => {
@@ -996,9 +1043,9 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
   it('paints the stored audio and input settings, which no session-less page did before', () => {
     // Issue #226 made Settings the one durable home for mute and volume, so a page that
     // painted neither until a session existed would show a returning player "Mute" and a
-    // 0.6 slider over a store that says otherwise. DISPLAY only: the audio ENGINE is
-    // untouched here (issue #485 still owns that half), which is why nothing in this
-    // fixture's recorder sees a second owner.
+    // 0.6 slider over a store that says otherwise. This is the DISPLAY half;
+    // `applyAudioSettings` drives the engine from the same subscription (issue #485), and
+    // the test below is the one that proves the engine heard it.
     const f = fixture({
       seed: (stores) => {
         stores.settings.setMuted(true);
@@ -1012,6 +1059,113 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     // pressed redraws from the value the store actually accepted.
     f.stores.settings.setVolume(0.75);
     expect(f.hud.argsOf('setVolume').at(-1)).toEqual([0.75]);
+  });
+
+  it('MUTES THE ENGINE on a page with no session, not just the button (issue #485)', () => {
+    // The half issue #324 could not take. A returning player who had muted the game got a
+    // button that read "Muted" over an engine that was not muted, until the first match
+    // constructed a session and `applySettings` ran. That was survivable only while the
+    // page made no sound of its own -- and the menu bed in this same change removes that,
+    // so shipping the two apart would have played music to somebody who switched it off.
+    const f = fixture({
+      seed: (stores) => {
+        stores.settings.setMuted(true);
+        stores.settings.setVolume(0.25);
+      },
+    });
+    expect(f.host.hasSession(), 'the point is a page with no session').toBe(false);
+    expect(f.audioCalls, 'the engine never heard the stored settings').toContain('muted:true');
+    expect(f.audioCalls).toContain('volume:0.25');
+    // ...and it keeps hearing them. One subscription drives both halves, so a change made
+    // in Settings cannot reach the control while missing the engine.
+    f.stores.settings.setMuted(false);
+    expect(f.audioCalls.at(-2), 'a later change reached the button but not the engine').toBe(
+      'muted:false',
+    );
+  });
+
+  it('negative control: an UNMUTED save mutes nothing', () => {
+    // Without this, an `applyAudioSettings` that called `setMuted(true)` unconditionally
+    // -- or one that read the wrong field and happened to find a truthy value -- would
+    // satisfy the assertion above while muting every player who never asked.
+    const f = fixture();
+    expect(f.audioCalls).toContain('muted:false');
+    expect(f.audioCalls, 'a default save was muted').not.toContain('muted:true');
+  });
+
+  it('PLAYS THE MENU BED with no session in the slot, in order (issue #485)', () => {
+    // The defect this issue recorded: since #428 the page boots empty and since #429 every
+    // return to a route disposes the session, so the only thing that had ever started the
+    // music no longer existed on the Main Menu. A fresh load was silent until the first
+    // match, and silent again after every Quit.
+    //
+    // The exact SEQUENCE, matching the pin `loop.test.ts` already keeps on this trio: a
+    // context set before the bed exists is stored by the engine and applied on start, so
+    // swapping these two lines is invisible to counters and visible here.
+    const f = fixture();
+    expect(f.host.hasSession(), 'the point is a page with no session').toBe(false);
+    expect(f.audioCalls.filter((c: string) => !c.startsWith('muted:') && !c.startsWith('volume:'))).toEqual([
+      'start',
+      'context:menu',
+      'duck:false',
+    ]);
+  });
+
+  it('FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back', () => {
+    // The per-change half, and the half a construction-time call alone cannot cover:
+    // deleting `followMusic(location)` from the page's `sm.onChange` leaves the eager call
+    // at boot intact, so a suite that only checked the opening screen stayed green while
+    // the music stopped following the game entirely. Measured -- that mutation survived 80
+    // tests before this one existed.
+    const f = fixture({ launchDismissed: true });
+    const music = () => f.audioCalls.filter((c: string) => c.startsWith('context:') || c.startsWith('duck:'));
+    const from = music().length;
+
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign', level: 0 }, level: 0, seed: 1 } as never);
+    expect(music().slice(from), 'entering a match did not move the bed').toEqual([
+      'context:arena',
+      'duck:false',
+    ]);
+
+    // Pause DUCKS. A context change here would cut the bed and start another a beat later,
+    // which is what `duckMusic`'s own comment exists to prevent.
+    const atPause = music().length;
+    f.host.sm.pause();
+    expect(music().slice(atPause), 'pause did not duck, or changed suite').toEqual([
+      'context:arena',
+      'duck:true',
+    ]);
+
+    // ...and back to the menu, which is the arrival issue #485 is named for: this is the
+    // path that was silent, because the session that used to do this was disposed on it.
+    const atMenu = music().length;
+    f.host.sm.toMainMenu();
+    expect(music().slice(atMenu), 'returning to the menu left the arena bed playing').toEqual([
+      'context:menu',
+      'duck:false',
+    ]);
+  });
+
+  it('never stops the bed it started, and never disposes the page engine', () => {
+    // `stop` is the call that made the Main Menu silent -- the outgoing session's
+    // `releaseAudio` fired it one call after the page had set the menu context. Nothing the
+    // page does may reintroduce it, and `dispose` would be worse: it latches, so every
+    // later session would get a dead `AudioContext` and no sound at all, silently.
+    const f = fixture();
+    f.host.attach(CAMPAIGN).detach();
+    expect(f.audioCalls, 'something stopped the page bed').not.toContain('stop');
+    expect(f.audioCalls, 'something disposed the page engine').not.toContain('dispose');
+  });
+
+  it('takes the page engine exactly ONCE, however many sessions come and go', () => {
+    // `createAudio` returns `shell.audio` on every call in the browser, so asking twice is
+    // harmless there and wrong everywhere else: a host that minted an engine per use would
+    // read as correct against the real shell and silently split the bed under any other
+    // wiring.
+    const f = fixture();
+    f.host.attach(CAMPAIGN).detach();
+    f.stores.settings.setVolume(0.5);
+    expect(f.audioBuilds()).toBe(1);
   });
 
   it('paints the STORED haptics preference, not the effective one', () => {

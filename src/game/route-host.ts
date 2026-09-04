@@ -1,9 +1,9 @@
 import { createRouteUi, type RouteUi, type RouteUiDeps, type StyleSink } from './route-ui';
 import { createOutcomeClassifier, type GameStateMachine, type OutcomeContext } from './state';
-import { versusDraw } from './app-state';
+import { versusDraw, type AppLocation } from './app-state';
 import type { GameplayHud, Hud } from './hud';
 import type { RelaunchTarget } from './session-intent';
-import { isMuteHotkey, locationToHudSurface, type GameDeps } from './loop';
+import { isMuteHotkey, locationToHudSurface, musicContextFor, type GameDeps } from './loop';
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
 import type { GetGamepads } from '../input/gamepad';
 import type { UiAction } from '../input/ui-actions';
@@ -46,7 +46,7 @@ import type { Assignment, SlotSource } from '../input/assignment';
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
 export type RouteHostDeps = RouteUiDeps &
-  Pick<GameDeps, 'createStateMachine' | 'launchGate' | 'run' | 'devFlags'> & {
+  Pick<GameDeps, 'createStateMachine' | 'launchGate' | 'run' | 'devFlags' | 'createAudio'> & {
     /**
      * The page's ONE HUD factory.
      *
@@ -658,11 +658,87 @@ export function createRouteHost(
     // is the frame's half, and the frame is the page's.
     hud.setReducedMotion(effective.reducedMotion);
   };
-  paintSettingsControls();
-  const stopPaintingSettings = deps.effectiveSettings.subscribe(paintSettingsControls);
+  /**
+   * The page's ONE audio engine (issue #485).
+   *
+   * `createAudio` is the same seam a session is handed, and in the browser every call
+   * returns `shell.audio` -- the one instance, built once (`createBrowserDeps`). Taken
+   * ONCE here rather than per use because the page outlives every session, which is the
+   * whole reason this file may own the bed at all: a page with no session has been the
+   * ordinary state since issue #428, and audio owned by a session is audio the Main Menu
+   * cannot have.
+   */
+  const audio = deps.createAudio();
+
+  /**
+   * The ENGINE half of the settings the page already paints -- the half
+   * `paintSettingsControls` above deliberately does not touch, and the half issue #485
+   * records as having had no owner while the host is empty.
+   *
+   * A returning player who muted the game and came back got a mute BUTTON that read
+   * muted (that is the display half, and issue #324 fixed it) over an engine that was
+   * not, until the first match constructed a session and `applySettings` ran. Nothing was
+   * audible in between only because nothing was PLAYING in between -- and the menu bed
+   * below removes that accident, which is why these two land together rather than in
+   * sequence: page-owned music with session-owned mute would play the menu bed to
+   * somebody who had switched sound off.
+   *
+   * Only mute and volume. Touch scheme, fire mode and haptics stay on the session's
+   * `applySettings` (issue #485's own direction), because their consumers are the input
+   * controller and the haptics director, and neither exists on a page with no session.
+   */
+  const applyAudioSettings = (): void => {
+    const effective = deps.effectiveSettings.current();
+    audio.setMuted(effective.muted);
+    audio.setVolume(effective.volume);
+  };
+
+  /**
+   * The music follows the game, and the PAGE is what follows it (issue #485).
+   *
+   * Moved here from `loop.ts`, whole, rather than duplicated: a session that also drove
+   * the bed would be a second owner of one engine, and the repository has already paid
+   * for that once -- the settings controls painted from two places is exactly what issue
+   * #324's `paintSettingsControls` had to settle. `musicContextFor` is still imported
+   * from `loop.ts` because it is a pure `AppLocation -> SuiteContext` function with its
+   * own exhaustiveness guard, and moving it would have been churn with no owner change.
+   *
+   * `startMusic` is idempotent (engine.ts builds the bed once; music.ts's `start` returns
+   * early when its timer exists), so calling it on every location is not a restart.
+   */
+  const followMusic = (location: AppLocation): void => {
+    audio.startMusic();
+    audio.setMusicContext(musicContextFor(location));
+    // Pause DUCKS rather than stops, for the reason `duckMusic` itself gives: stopping
+    // discards the playlist's committed decisions and leaves the scheduler at an
+    // ambiguous position, while ducking touches only the gain.
+    audio.duckMusic(location.kind === 'gameplay' && location.phase.kind === 'paused');
+  };
+
+  /**
+   * Painted and applied ONCE at construction, then on every effective-settings change,
+   * through ONE subscription for the document.
+   *
+   * The order inside matters less than the fact that both halves are on the same
+   * registration: a display that redraws on a change the engine did not hear, or the
+   * reverse, is the two-owner bug in a smaller form.
+   */
+  const applyPageSettings = (): void => {
+    paintSettingsControls();
+    applyAudioSettings();
+  };
+  applyPageSettings();
+  const stopPaintingSettings = deps.effectiveSettings.subscribe(applyPageSettings);
 
   const stopPainting = sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
+    // BEFORE the session that is being left is disposed, and that ordering is the whole
+    // fix for issue #485's silent Main Menu. This subscription is registered at page
+    // construction and a session's is registered later, so on the change that sends the
+    // player back to a route the page has already moved the bed to the menu suite by the
+    // time `stopSession` runs -- and `releaseAudio` no longer stops it out from under
+    // that (loop.ts). `loop.test.ts` pins the order rather than trusting this comment.
+    followMusic(location);
     // Both Main Menu affordances that are claims about a SAVE rather than about a match --
     // whether a run is there to continue, and how far the Levels grid may reach -- re-read
     // on every arrival. Arrival is the right moment because the stores change while the
@@ -675,6 +751,14 @@ export function createRouteHost(
     }
   });
   hud.setState(locationToHudSurface(sm.location));
+  // ...and the bed, for the same reason the surface is painted here: the page opens on a
+  // location it was never notified of. `loop.ts` carried the identical eager call for the
+  // session it used to be ("this path bypasses sm.onChange"), and dropping it would leave
+  // the screen the player actually lands on -- Launch, or Main Menu once Launch is
+  // dismissed -- as the one screen with no music. Nothing is audible until the launch
+  // gesture unlocks the context; setting the suite now is what makes that gesture start
+  // the menu bed already in the right world rather than switching on arrival.
+  followMusic(sm.location);
 
   /**
    * Which input the player is using, for the prompts that name a key or a button (issue

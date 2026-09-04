@@ -964,13 +964,15 @@
   {
     "id": "session-disposes-the-page-audio-engine",
     "file": "src/game/loop.ts",
-    "find": "    releaseAudio: (engine) => engine.stopMusic(),",
+    "find": "    releaseAudio: () => {},",
     "replace": "    releaseAudio: (engine) => engine.dispose(),",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. MEASURED 1 of 12 on this tree. The prose denominator was already stale at this entry's \"1 of 6\": app-shell.test.ts held 8 cases before issue #470 and holds 12 after it, while the FAILURE count never moved from 1 -- population recomputed, not the pinned count.",
+    "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. The find string is the EMPTY release issue #485 left behind: the page owns the bed now, so the correct browser answer is to touch the engine at all, and both wrong answers -- disposing it, and the pre-#485 stopMusic that is its own entry -- are mutations of the same line.",
     "tests": [
       "src/game/app-shell.test.ts"
+    ],
+    "killedBy": [
+      "createBrowserDeps: the page-owned audio wiring (issue #317) hands every session the SAME engine, and releases it by touching NOTHING"
     ]
   },
   {
@@ -4460,6 +4462,91 @@
     "why": "Reject-to-null dropped, so `?dev=1&topbar=sparse` becomes a `TopbarTreatment` the HUD then looks up in its departures table and finds nothing for -- `topbarDepartures` returns undefined and the first `topbar.exceptionChip` read throws, taking the whole bar down on a typo. The same guard `menuTransition`, `mineWarn`, `blockedFire` and `backdrop` each carry, and the same reason: `spare-labelled` is a real arm name from this issue's first draft that was never built, so the near-miss is one the owner can actually type. MEASURED on this branch: killed, 1 of the 12 cases in the arm suite.",
     "killedBy": [
       "topbar: the flag that names an arm accepts every name in the vocabulary and nothing else -- population: the 6 registered arms"
+    ]
+  },
+  {
+    "id": "session-release-silences-the-page-bed",
+    "file": "src/game/loop.ts",
+    "find": "    releaseAudio: () => {},",
+    "replace": "    releaseAudio: (engine) => engine.stopMusic(),",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-shell.test.ts"
+    ],
+    "why": "Restores exactly the line issue #485 removed, and with it the defect the issue was filed for. The PAGE owns the music bed since #485 (route-host.ts's followMusic), and it moves the bed to the menu suite on the location change that precedes a session's disposal -- so a session that stops the music on release silences the Main Menu one call after the page started it. Measured sequence before the fix: start, context:menu, duck:false, stop, on every Quit and every Change Setup. Nothing at the session level fails, because the session being torn down is not the thing left silent. Distinct from the dispose() mutation on the same line: that one latches the engine shut for every LATER session, this one leaves the engine healthy and the page mute.",
+    "killedBy": [
+      "createBrowserDeps: the page-owned audio wiring (issue #317) hands every session the SAME engine, and releases it by touching NOTHING"
+    ]
+  },
+  {
+    "id": "page-music-stops-following-the-game",
+    "file": "src/game/route-host.ts",
+    "find": "    followMusic(location);",
+    "replace": "    void location;",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Removes the per-change half of the page's music ownership (issue #485), leaving the eager call at construction intact. The bed then starts in the menu suite and stays there forever: entering a match keeps the menu music, pausing never ducks, and finishing never returns. MEASURED: this mutation survived all 80 route-host cases before the 'FOLLOWS the game' case was written, because every other assertion about music reads the opening screen, which the eager call still paints. That is why the killer drives three location changes rather than asserting a call count.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
+    ]
+  },
+  {
+    "id": "page-music-never-starts-at-boot",
+    "file": "src/game/route-host.ts",
+    "find": "  followMusic(sm.location);",
+    "replace": "  void sm;",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Drops the eager call that covers the screen the page OPENS on, which no location change ever announces -- the same reason `hud.setState(locationToHudSurface(sm.location))` sits beside it. loop.ts carried the identical eager call for the session that used to own this, with a comment recording that a browser probe caught the silent title screen after the unit tests passed. Without it the first screen a player sees is the one screen with no music.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page PLAYS THE MENU BED with no session in the slot, in order (issue #485)"
+    ]
+  },
+  {
+    "id": "page-settings-never-reach-the-audio-engine",
+    "file": "src/game/route-host.ts",
+    "find": "    paintSettingsControls();\n    applyAudioSettings();",
+    "replace": "    paintSettingsControls();",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Reverts the page to painting the mute button and volume slider without telling the engine (issue #485). The display half alone is what issue #324 shipped, and it was survivable only while a page with no session made no sound; the menu bed in the same change removes that, so this mutation plays music to a player who muted the game and returned. The controls still read correctly, which is what makes it silent -- or rather, audible, in the one case where silence was asked for.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)",
+      "createRouteHost: the Main Menu is painted from the stores by the page negative control: an UNMUTED save mutes nothing"
+    ]
+  },
+  {
+    "id": "page-music-ignores-the-location-suite",
+    "file": "src/game/route-host.ts",
+    "find": "    audio.setMusicContext(musicContextFor(location));",
+    "replace": "    audio.setMusicContext('menu');",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Keeps the page following the game but collapses every suite onto the menu one, so a match is played to menu music and the arena bed is never heard. Separate from the two removal mutations above because it survives any assertion that only counts calls or checks that music is playing: the calls all happen, in order, with the wrong argument.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
+    ]
+  },
+  {
+    "id": "page-music-never-ducks-on-pause",
+    "file": "src/game/route-host.ts",
+    "find": "    audio.duckMusic(location.kind === 'gameplay' && location.phase.kind === 'paused');",
+    "replace": "    audio.duckMusic(false);",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Pause stops ducking, so the arena bed plays at full gain over the pause panel. The condition is the whole behaviour here -- duckMusic is still called on every change, with the right shape and the wrong answer -- and ducking rather than stopping is a decision engine.ts's own comment defends, because stopping discards the playlist's committed decisions and leaves the scheduler mid-phrase.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
     ]
   }
 ]
