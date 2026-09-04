@@ -11,11 +11,14 @@ paths:
 - Prove the gap first: apply the production mutation, observe the old test set stay green,
   add the test, and observe the mutation fail.
 - During local candidate verification, run every existing or new manifest entry relevant to
-  the behavior, code, and tests touched with `npm run mutate -- --only <id>`. Add or update
-  entries when the coverage contract changes; pin a new entry with `killedBy` (the vitest
-  full names of the tests that fail) and reserve an exact `expectFailures` for an entry
-  whose rationale states a population, since only counted entries need remeasuring when
-  tests are added to their scoped files.
+  the behavior, code, and tests touched with `npm run mutate -- --only <id>`. `--only` is
+  repeatable and accepts a comma list, so one invocation carries the whole selection; an
+  id matching no entry refuses the run and names every such id, and the closing tally
+  prints how many entries were requested beside how many ran. Add or update entries when
+  the coverage contract changes; pin a new entry with `killedBy` (the vitest full names of
+  the tests that fail) and reserve an exact `expectFailures` for an entry whose rationale
+  states a population, since only counted entries need remeasuring when tests are added to
+  their scoped files.
 - Do not run the complete manifest locally by default. Reserve `npm run mutate` or
   `npm run verify:full` for mutation-harness changes, broad manifest edits, CI mutation
   diagnosis, cross-cutting work that targeted selection cannot cover, or another named

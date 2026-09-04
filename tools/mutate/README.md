@@ -25,7 +25,7 @@ files is refused with both paths named.
 ```
 mutate                                    # tools/mutate/manifests/*.json under --root, all entries
 mutate --manifest path/to/manifest.json   # a different manifest: one file, or a directory of *.json files
-mutate --only some-manifest-entry-id      # a single entry
+mutate --only some-id                     # named entries: repeatable, and `--only a,b` is the same
 mutate --jobs auto                        # the worktree pool: N serial harnesses, one per detached worktree
 mutate --report out.json                  # per-entry outcomes and failed test names, for tooling
 mutate --changed origin/main [--list]     # only the entries the diff since that ref can affect (--list: show, do not run)
@@ -40,6 +40,24 @@ this workspace's declared Vitest dev dependency. `--root` defaults to `process.c
 which is already correct for the common case -- an `npm run` script's cwd is the
 directory holding the `package.json` that defines the script -- and exists as a flag
 for every other caller (a bin invoked from a subdirectory, a script that `cd`s first).
+
+## Selecting by id (`--only`)
+
+`--only` narrows a run to entries named by id. It accumulates across occurrences and
+splits each value on commas, so `--only a --only b`, `--only a,b` and `--only a --only
+b,c` all mean what they look like; ids repeated across those spellings count once. It
+used to be a single string that the last occurrence overwrote, which made
+`--only a --only b --only c` run one entry and report `1/1 mutation(s) ran ... 0
+mismatch(es)` -- a line indistinguishable from a clean sweep of all three (issue #529).
+
+Two properties keep an under-run from hiding again. Any id matching no entry refuses the
+whole run and names every such id, so one typo in a list of four stops the run instead of
+quietly costing three quarters of it. And the closing tally prints the requested count
+beside the ran/selected pair (`3/3 of 3 requested by --only mutation(s) ran: ...`), so
+the number to check is next to the number to check it against.
+
+Entries run in manifest order, not the order the ids were typed, because entries sharing
+an exact `tests` scope reuse one baseline only while they run consecutively.
 
 ## Naming the killer (`killedBy`)
 

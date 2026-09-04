@@ -598,5 +598,90 @@
       "audit classification (issue #538) includes CRITICAL, not just high",
       "audit classification (issue #538) the summary line is what a reader sees first says VULNERABLE with the counts and the packages"
     ]
+  },
+  {
+    "id": "mutate-only-flag-overwrites-repeats",
+    "file": "tools/mutate/run.mjs",
+    "find": "    else if (argv[i] === '--only') args.only.push(...onlyIds(value(i++)));",
+    "replace": "    else if (argv[i] === '--only') args.only = onlyIds(value(i++));",
+    "expect": "killed",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "why": "Issue #529 verbatim: the last --only occurrence wins and every earlier one is discarded. `--only a --only b --only c` then runs one entry and reports \"1/1 mutation(s) ran ... 0 mismatch(es)\", a line no reader can tell from a clean sweep of all three. Assignment is exactly what this flag did before the fix, so this is the regression the accumulation exists to prevent rather than an invented one.",
+    "killedBy": [
+      "parseArgs ACCUMULATES repeated --only instead of keeping the last one (issue #529)"
+    ]
+  },
+  {
+    "id": "mutate-only-flag-ignores-a-comma-list",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);",
+    "replace": "  const ids = [raw].map((s) => s.trim()).filter(Boolean);",
+    "expect": "killed",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "why": "Takes one --only value whole instead of splitting it, so `--only a,b,c` becomes the single id \"a,b,c\". That id matches nothing, so this particular regression stops the run rather than under-running it -- but it still turns a working spelling into a hard refusal. The test pins the comma list as a real multi-id spelling, not a name.",
+    "killedBy": [
+      "parseArgs splits one --only on commas, and mixes commas with repeats"
+    ]
+  },
+  {
+    "id": "mutate-only-missing-ids-are-a-silent-no-op",
+    "file": "tools/mutate/run.mjs",
+    "find": "  if (missing.length === 0) return null;",
+    "replace": "  if (missing.length >= 0) return null;",
+    "expect": "killed",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "why": "Drops the refusal, so an --only id matching no entry runs whatever else was named and reports a clean sweep of it. This is the pre-#529 hazard in its worst form: one typo among four ids costs three quarters of the work with nothing on screen saying so. A run either honours everything asked of it or stops.",
+    "killedBy": [
+      "selectOnly / missingOnlyReport still refuses a SINGLE unmatched id, naming it -- the pre-#529 property the multi-id case must not lose"
+    ]
+  },
+  {
+    "id": "mutate-only-missing-names-just-the-first-id",
+    "file": "tools/mutate/run.mjs",
+    "find": "    missing: ids.filter((id) => !present.has(id)),",
+    "replace": "    missing: ids.filter((id) => !present.has(id)).slice(0, 1),",
+    "expect": "killed",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "why": "Reports only the first unmatched id. The run still refuses, so the outcome looks right, but a reader fixes one typo, re-runs, and is stopped again by a second one the first refusal already knew about. \"Names the id\" has to mean every id in the list, which is the property the multi-id flag added and the single-id flag never had to have.",
+    "killedBy": [
+      "selectOnly / missingOnlyReport names EVERY id that matched nothing, not just the first -- one typo must not hide a second"
+    ]
+  },
+  {
+    "id": "mutate-run-summary-drops-the-requested-count",
+    "file": "tools/mutate/run.mjs",
+    "find": "  const asked = requested > 0 ? ` of ${requested} requested by --only` : '';",
+    "replace": "  const asked = '';",
+    "expect": "killed",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "why": "Restores the closing line issue #529 was reported against: ran over selected with no requested count beside it. Every number in the line stays correct, which is the point -- \"1/1 mutation(s) ran, 0 mismatch(es)\" is true and useless when three entries were asked for. The requested count is the only thing that makes an under-run legible.",
+    "killedBy": [
+      "formatRunSummary prints the requested count BESIDE the ran/selected pair when --only was used (issue #529)"
+    ]
+  },
+  {
+    "id": "mutate-only-echo-hides-the-total",
+    "file": "tools/mutate/run.mjs",
+    "find": "  return `[select] --only: ${entries.length} of ${total} entries: ${entries.map((e) => e.id).join(', ')}`;",
+    "replace": "  return `[select] --only: ${entries.length} entries: ${entries.map((e) => e.id).join(', ')}`;",
+    "expect": "killed",
+    "tests": [
+      "tools/mutate/orchestrate.test.ts"
+    ],
+    "why": "Drops the denominator from the pre-run echo. What is left still looks informative -- it names the count and the ids -- but it is exactly the shape that cannot show issue #529's defect: '1 entries: foo' reads as success whether one entry was requested or three were and two were dropped. The number that makes the line worth printing is the one it is compared against.",
+    "killedBy": [
+      "the pre-run --only echo (issue #529) names how many entries will run against how many exist, and lists them",
+      "the pre-run --only echo (issue #529) still reports the total when a single entry was selected"
+    ]
   }
 ]
