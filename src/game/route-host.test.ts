@@ -809,6 +809,45 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     ).toEqual(['reduced']);
   });
 
+  it('paints the STORED render-quality preset on a page with no session', () => {
+    // Issue #540's first acceptance criterion, from the side the page owns. `setQuality`
+    // reads `effective` rather than the store, unlike the haptics and motion pushes above,
+    // and the reason is that nothing gates quality: effective IS the stored preset
+    // (effective-settings.ts), so there is no second reading for an exception to protect.
+    // What matters here is the same thing either way -- the control opens showing the
+    // preset the player chose, on the Main Menu, which since issue #428 is where they are.
+    const f = fixture({ seed: (stores) => stores.settings.setQuality('low') });
+    expect(f.host.hasSession(), 'the point is a page with no session').toBe(false);
+    // NEGATIVE CONTROL: 'low' is not the shipped default, so a paint that skipped the
+    // stores entirely -- or a constant -- would have to disagree rather than coincide.
+    expect(f.stores.settings.snapshot().presentation.quality).toBe('low');
+    expect(f.hud.argsOf('setQuality').at(-1)).toEqual(['low']);
+  });
+
+  it('repaints the quality control from the value the STORE accepted, with no session', () => {
+    // The whole chain the page owns for this control, measured end to end on an empty
+    // page: the toggle's callback writes the store (route-ui.ts), the store notifies
+    // `effectiveSettings`, and its subscription repaints the button. A handler that echoed
+    // the click at the HUD instead would move the label and persist nothing, so the
+    // preset would be gone on the next reload and would never reach a renderer.
+    const f = fixture();
+    expect(f.host.hasSession()).toBe(false);
+    // NEGATIVE CONTROL on the pre-click state: the shipped default is 'high', so without
+    // this a chain that never ran could not be told from one that ran and agreed.
+    expect(f.stores.settings.snapshot().presentation.quality).toBe('high');
+    expect(f.hud.argsOf('setQuality').at(-1)).toEqual(['high']);
+
+    f.hud.fire('onQualityChange', 'medium');
+    expect(
+      f.stores.settings.snapshot().presentation.quality,
+      'the toggle did not reach the store',
+    ).toBe('medium');
+    expect(
+      f.hud.argsOf('setQuality').at(-1),
+      'the control was not repainted from the value the store accepted',
+    ).toEqual(['medium']);
+  });
+
   it('keeps painting settings while a session holds the slot', () => {
     // The early return this replaced (`if (live !== null) return;`) existed because
     // `loop.ts` pushed the same values from its own subscription, so two owners would

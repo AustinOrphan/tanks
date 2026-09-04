@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { QUALITY_PRESETS, DEFAULT_QUALITY_PRESET, qualityFor, type QualityPreset } from './quality';
+import { QUALITY_PRESETS, qualityFor } from './quality';
+import {
+  QUALITY_PRESET_IDS,
+  DEFAULT_QUALITY_PRESET,
+  type QualityPreset,
+} from '../presentation/quality';
 import { BILLOW_COUNT } from './muzzle-smoke';
 
 describe('QUALITY_PRESETS.high matches scene.ts literals exactly', () => {
@@ -49,7 +54,10 @@ describe('qualityFor', () => {
   });
 
   it('resolves each named preset to its own table entry -- population: all 3 QualityPreset values', () => {
-    const presets: QualityPreset[] = ['low', 'medium', 'high'];
+    // The population comes from the exported id list, not from a copy of it: since issue
+    // #540 those ids are also the domain of a stored player setting, so a preset added
+    // there must be swept here without an edit.
+    const presets: readonly QualityPreset[] = QUALITY_PRESET_IDS;
     for (const p of presets) {
       expect(qualityFor(p)).toEqual(QUALITY_PRESETS[p]);
     }

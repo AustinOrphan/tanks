@@ -5,8 +5,16 @@
  * rebuild per pass. A fifth knob joined them later and did not come from that issue:
  * `muzzleSmoke`, which governs how much of muzzle-smoke.ts's effect exists at all.
  *
+ * WHO PICKS ONE. A developer, through that flag, and -- since issue #540 -- the player,
+ * in Settings. The ids and the shipped default moved to `presentation/quality.ts` when
+ * that happened, because `game/settings.ts` and the Settings pane cannot import a module
+ * that names `THREE.ShadowMapType`; this file kept the table, which is the half that is
+ * genuinely renderer-owned. `loop.ts` resolves one preset per session through
+ * `qualityFor`, flag first and the stored preference behind it, so a sweep is still a URL
+ * change and a player's choice is still honoured when no flag is set.
+ *
  * Auto-detection from a device probe is explicitly OUT OF SCOPE here -- see the issue --
- * pending the on-device measurement spike. This only makes the knobs reachable.
+ * pending the on-device measurement spike. Nothing in this file reads the hardware.
  *
  * SCOPE: this governs the GAME scene (`createScene`) and the per-frame effect systems
  * `createRenderer` builds around it. Two other WebGL contexts build their own renderers
@@ -18,8 +26,10 @@
  * on-device sweep to justify, not a default.
  */
 import * as THREE from 'three';
-
-export type QualityPreset = 'low' | 'medium' | 'high';
+// The ids and the shipped default, from the layer that may name a player preference.
+// Issue #540 made this a Setting, and `game/settings.ts` cannot import a Three.js module
+// to learn what the player may pick -- see presentation/quality.ts for the whole reason.
+import { DEFAULT_QUALITY_PRESET, type QualityPreset } from '../presentation/quality';
 
 /**
  * How much of the muzzle-smoke effect (muzzle-smoke.ts) a preset may draw.
@@ -161,9 +171,6 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
     muzzleSmoke: null,
   },
 };
-
-/** The preset an absent or unrecognised `quality` flag resolves to: today's behaviour. */
-export const DEFAULT_QUALITY_PRESET: QualityPreset = 'high';
 
 /** `null` (flag absent, or a garbage value the dev-flags parser already rejected to
  * null) resolves to the default preset -- never to a guess at what was meant. */

@@ -196,18 +196,19 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
 }
 
 /**
- * The 20 registrations this module owns, and the boundary of the claim.
+ * The 21 registrations this module owns, and the boundary of the claim.
  *
  * Pinned as a SET rather than a count so that a handler quietly leaving for the session,
  * or a session handler quietly arriving here, names itself in the diff. The seven absent
  * ones are listed in `route-ui.ts`'s own doc comment with the reason each stays behind;
- * `onMotionChange` is the newest arrival, added by issue #289 with the Settings pane's
- * motion control, and `onRecordsOpen` came before it with issue #324's step S5.
+ * `onQualityChange` is the newest arrival, added by issue #540 with the Settings pane's
+ * render-quality control, `onMotionChange` came with #289's motion control, and
+ * `onRecordsOpen` before both with issue #324's step S5.
  */
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
-  'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin',
+  'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin', 'onQualityChange',
   'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onTouchSchemeChange', 'onVersusOpen',
   'onVersusStart', 'onVolumeChange',
 ];
@@ -263,6 +264,7 @@ describe('the application routes work with no gameplay session behind them', () 
     f.fire('onFireModeChange', 'button');
     f.fire('onHapticsChange', !before.deviceHaptics);
     f.fire('onMotionChange', 'reduced');
+    f.fire('onQualityChange', 'low');
     const after = f.deps.settings.snapshot().input;
     expect(after.touchScheme).toBe('point');
     expect(after.fireMode).toBe('button');
@@ -276,6 +278,13 @@ describe('the application routes work with no gameplay session behind them', () 
       f.deps.settings.snapshot().presentation.motion,
       'the motion toggle did not reach the store',
     ).toBe('reduced');
+    // Issue #540's control, same rule and the same reason: the handler persists and the
+    // page repaints. 'low' is not the shipped default ('high'), and the store refuses an
+    // id outside QUALITY_PRESET_IDS, so this is a move rather than a coincidence.
+    expect(
+      f.deps.settings.snapshot().presentation.quality,
+      'the quality toggle did not reach the store',
+    ).toBe('low');
   });
 
   it('Versus Start and Campaign reach their reboot seams from an empty page', () => {
@@ -470,6 +479,7 @@ describe('the application routes work with no gameplay session behind them', () 
     f.fire('onFireModeChange', 'button');
     f.fire('onHapticsChange', false);
     f.fire('onMotionChange', 'reduced');
+    f.fire('onQualityChange', 'low');
     f.fire('onCustomizeOpen');
     f.fire('onPickSkin', 'camo');
     f.fire('onCustomizeClose');
@@ -489,6 +499,7 @@ describe('the application routes work with no gameplay session behind them', () 
     expect(f.deps.customization.skin()).toBe('camo');
     expect(f.volume()).toBeCloseTo(0.4, 10);
     expect(f.deps.settings.snapshot().presentation.motion).toBe('reduced');
+    expect(f.deps.settings.snapshot().presentation.quality).toBe('low');
   });
 
   it('unlockedLevels answers from progress alone', () => {

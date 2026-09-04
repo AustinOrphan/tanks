@@ -545,6 +545,14 @@ export function createRouteHost(
     hud.setVolume(effective.volume);
     hud.setTouchScheme(effective.touchScheme);
     hud.setFireMode(effective.fireMode);
+    // The render-quality preset (issue #540), read from `effective` like the four pushes
+    // above it rather than from the store like the two below. Not an oversight: haptics and
+    // motion break the pattern because stored and effective genuinely differ there -- a
+    // capability gate on one, three states against a two-state policy on the other. Quality
+    // has neither. `effective.quality` is the stored preset unchanged
+    // (effective-settings.ts), so reading it here keeps the ONE rule "consumers read the
+    // effective layer" intact for a control that gains nothing from an exception.
+    hud.setQuality(effective.quality);
     // THE STORED PREFERENCE, not the effective one -- the first of the two reads here that
     // break the function's `effective` pattern, the motion control below being the other.
     // `haptics.setEnabled` (loop.ts) takes the effective value so a device with no

@@ -4015,5 +4015,157 @@
       "the content lift must not steal a child's own animation carries the exclusion on EVERY rule reaching an entering surface's children",
       "menu transitions in hud.css states the shipped content motion unconditionally, with no treatment class at all"
     ]
+  },
+  {
+    "id": "settings-serializer-writes-the-default-quality-preset",
+    "file": "src/game/settings.ts",
+    "find": "      quality: settings.presentation.quality,",
+    "replace": "      quality: DEFAULT_QUALITY_PRESET,",
+    "expect": "killed",
+    "tests": [
+      "src/game/settings.test.ts"
+    ],
+    "why": "The preset is accepted, applied and published, and what reaches storage is always the shipped default -- so the choice survives exactly as long as the tab does. Issue #540's first acceptance criterion is that it survives a RELOAD, and this is the way to fail it that leaves the whole feature looking correct in a session: the toggle moves, the store notifies, the next match honours it, and the player finds `High` again the following day. Written as the default rather than as a dropped field because a dropped field is the same bug wearing a shape the parser silently repairs.",
+    "killedBy": [
+      "createPlayerSettingsStore: defaults and persistence round-trips EVERY field through a fresh construction",
+      "parseSettingsPayload: stored data round-trips its own serialiser exactly"
+    ]
+  },
+  {
+    "id": "settings-accepts-an-unknown-quality-preset",
+    "file": "src/game/settings.ts",
+    "find": "      if (!QUALITY_IDS.has(q)) return;",
+    "replace": "      if (typeof q !== 'string') return;",
+    "expect": "killed",
+    "tests": [
+      "src/game/settings.test.ts"
+    ],
+    "why": "Validates the TYPE instead of the domain, which is the plausible way to write this guard and stores whatever string it is handed. That is worse here than for its siblings: the accepted value is carried to `qualityFor` when the next match builds its renderer, and that indexes `QUALITY_PRESETS` by the stored id -- so an off-list preset reaches the renderer as `undefined` rather than as a cheaper picture. It also breaks the refusal contract the whole store rests on: a refused value publishes nothing, which is what leaves a control showing what was actually accepted.",
+    "killedBy": [
+      "createPlayerSettingsStore: validation refuses an off-domain SETTER argument and keeps the accepted value",
+      "createPlayerSettingsStore: defaults and persistence does NOT publish a refused value"
+    ]
+  },
+  {
+    "id": "effective-settings-quality-ignores-the-store",
+    "file": "src/game/effective-settings.ts",
+    "find": "    quality: settings.presentation.quality,",
+    "replace": "    quality: 'high',",
+    "expect": "killed",
+    "tests": [
+      "src/game/effective-settings.test.ts",
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "Resolves the one setting that has nothing to resolve to a constant -- and picks the constant that makes it invisible to anyone testing on a machine that never needed a cheaper preset. Every layer downstream reads the effective value (the Settings control paints from it, `loop.ts` builds the renderer from it), so the store keeps the player's choice, the toggle keeps writing it, and nothing anywhere ever draws at anything but `high`. The three suites named here are the three consumers, which is why it takes all three to say where the value stopped.",
+    "killedBy": [
+      "resolveEffectiveSettings: audio, UI scale and quality pass through ungated passes the render-quality preset straight through, on any capability set",
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED render-quality preset on a page with no session",
+      "startGameWith: dev flags stay off by default builds the renderer with the STORED quality preset when no flag is set (issue #540)"
+    ]
+  },
+  {
+    "id": "quality-toggle-flips-its-own-label",
+    "file": "src/game/hud.ts",
+    "find": "  const handleQualityToggle = (): void => {\n    for (const cb of qualityChangeCbs) cb(NEXT_QUALITY[currentQuality]);\n  };",
+    "replace": "  const handleQualityToggle = (): void => {\n    for (const cb of qualityChangeCbs) cb(NEXT_QUALITY[currentQuality]);\n    currentQuality = NEXT_QUALITY[currentQuality];\n    renderQualityToggle();\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The control drawing itself from the CLICK instead of from the value the store accepted -- the same convention every Settings toggle beside it follows, and one `settings.ts` can genuinely refuse: `setQuality` drops an id outside QUALITY_PRESET_IDS, so a self-flipping label would advertise a preset that was never stored and keep advertising it until something else repainted. It looks correct in the ordinary case, which is exactly why it needs a test rather than a reviewer.",
+    "killedBy": [
+      "hud: the quality toggle (issue #540) taps the toggle and reports the NEXT preset in the cycle, from a real click at the button"
+    ]
+  },
+  {
+    "id": "quality-toggle-label-frozen-at-the-default",
+    "file": "src/game/hud.ts",
+    "find": "    qualityToggleBtn.textContent = QUALITY_LABEL[currentQuality];",
+    "replace": "    qualityToggleBtn.textContent = QUALITY_LABEL.high;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The button reads `Quality: High` whatever is stored, so a player who chose `low` opens Settings on `High` and one tap takes them to `Medium` -- away from what they wanted, in the direction they were trying to leave. Everything else keeps working: the preset is stored, the renderer honours it, the aria-label still changes. Only an assertion that the three states produce three different TEXTS catches a label pinned to one of them.",
+    "killedBy": [
+      "hud: the quality toggle (issue #540) shows the current preset, labelled so all three read as different"
+    ]
+  },
+  {
+    "id": "quality-toggle-hides-when-the-choice-applies",
+    "file": "src/game/hud.ts",
+    "find": "    qualityToggleBtn.title = `${QUALITY_HINT[currentQuality]} ${QUALITY_TIMING}`;",
+    "replace": "    qualityToggleBtn.title = QUALITY_HINT[currentQuality];",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Drops the one thing the label cannot show and the player cannot deduce. A session builds its renderer once, and two knobs in the preset cannot move afterwards at all (a GL context's antialias is fixed at creation, and `low` decides whether the muzzle-smoke system was ever constructed), so a change made mid-match lands on the next one. Without the sentence the control reads as broken in precisely the case it exists for: paused, mid-match, on a device that is struggling. Cheap to lose in a tidy-up, since the hint still describes the preset correctly.",
+    "killedBy": [
+      "hud: the quality toggle (issue #540) says WHEN the choice takes effect, which the label cannot show"
+    ]
+  },
+  {
+    "id": "route-host-quality-control-loses-the-stored-preset",
+    "file": "src/game/route-host.ts",
+    "find": "    hud.setQuality(effective.quality);",
+    "replace": "    hud.setQuality('high');",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "`paintSettingsControls` has been the single writer of the settings display since issue #532, so a constant here is the whole display: a returning player who chose `Low` opens Settings on `High` while their matches correctly run low, and the next tap moves them to `Medium` rather than to what the button claims. The render obeys the store throughout, which is what makes it silent -- the lie is only in the control that edits it.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED render-quality preset on a page with no session",
+      "createRouteHost: the Main Menu is painted from the stores by the page repaints the quality control from the value the STORE accepted, with no session"
+    ]
+  },
+  {
+    "id": "route-ui-quality-toggle-echoes-the-click-instead-of-the-store",
+    "file": "src/game/route-ui.ts",
+    "find": "  hud.onQualityChange((next) => {\n    deps.settings.setQuality(next);\n  });",
+    "replace": "  hud.onQualityChange((next) => {\n    hud.setQuality(next);\n  });",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-ui.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The handler that paints instead of persisting. The label moves under the finger so it looks like it worked, and nothing else happens at all: the preset is not saved, so it dies with the tab, and no session ever reads it -- which for this setting means the muzzle smoke the player is trying to switch off keeps drawing, match after match. The store is the only thing a settings handler is allowed to touch, and this is the mutation that says why.",
+    "killedBy": [
+      "the application routes work with no gameplay session behind them the settings routes write their stores",
+      "the application routes work with no gameplay session behind them drives every route while a real GameSessionHost stays EMPTY (issue #427)",
+      "createRouteHost: the Main Menu is painted from the stores by the page repaints the quality control from the value the STORE accepted, with no session"
+    ]
+  },
+  {
+    "id": "loop-renderer-ignores-the-stored-quality-preset",
+    "file": "src/game/loop.ts",
+    "find": "    quality: qualityFor(deps.devFlags.quality ?? deps.effectiveSettings.current().quality),",
+    "replace": "    quality: qualityFor(deps.devFlags.quality),",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Restores the pre-#540 line, which is the defect the issue was filed on rather than a hypothetical: the presets exist, the Settings control writes one, the store persists it, the page paints it back -- and the renderer still resolves `null` to `high` and draws everything. A player on a struggling device can now find the lever, pull it, watch the button agree with them, and see no change ever. Nothing fails, nothing looks broken, and the only witness is what the renderer was constructed with.",
+    "killedBy": [
+      "startGameWith: dev flags stay off by default builds the renderer with the STORED quality preset when no flag is set (issue #540)",
+      "startGameWith: dev flags stay off by default lets ?dev=1&quality= OVERRIDE the stored preset, without writing it"
+    ]
+  },
+  {
+    "id": "loop-quality-flag-stops-overriding-the-setting",
+    "file": "src/game/loop.ts",
+    "find": "    quality: qualityFor(deps.devFlags.quality ?? deps.effectiveSettings.current().quality),",
+    "replace": "    quality: qualityFor(deps.effectiveSettings.current().quality),",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "The other half of the same line, and the half a player never sees: `?dev=1&quality=low` silently does nothing, so the on-device sweep issue #113 defers -- the reason the flag exists at all -- reports whatever the machine's saved preference happens to be. The natural edit once a setting exists ('the setting is the source of truth now'), and wrong because a flag that must not write the player's save has no other way to be honoured.",
+    "killedBy": [
+      "startGameWith: dev flags stay off by default threads the quality dev flag through to the renderer",
+      "startGameWith: dev flags stay off by default lets ?dev=1&quality= OVERRIDE the stored preset, without writing it"
+    ]
   }
 ]

@@ -95,10 +95,13 @@ const MAY_IMPORT: Readonly<Record<Layer, ReadonlySet<Layer>>> = {
  *   preset for a session (CLAUDE.md: `main.ts` is wiring only, so the session's wiring
  *   lives here), and forwards the `?mineWarn=` treatment to the renderer it built.
  * - `route-ui.ts` owns the Customize preview's handle above a session (issue #427).
- * - `devflags.ts` validates `?quality=` and `?mineWarn=` against the renderer's own
- *   option vocabularies. Both are renderer-owned treatments a developer flag selects,
- *   not player-facing semantics; if either becomes a Setting, its NAMES move to
- *   presentation/ and this entry goes.
+ * - `devflags.ts` validates `?mineWarn=` against the renderer's own option vocabulary: a
+ *   renderer-owned treatment a developer flag selects, not player-facing semantics. It
+ *   validated `?quality=` the same way until issue #540, and this entry said in advance
+ *   what to do if that changed -- "if either becomes a Setting, its NAMES move to
+ *   presentation/". Quality became one, `QUALITY_PRESET_IDS` moved to
+ *   `presentation/quality.ts`, and `render/quality` left this line. The same offer stands
+ *   for `mineWarn`.
  * - `app-shell.ts` builds the page-scoped audio engine from the manifest (issue #317).
  * - `settings.ts` reads the audio manifest's DEFAULT_VOLUME -- the engine's
  *   default, not shared vocabulary. `hud.ts` was listed here for the same import until
@@ -122,7 +125,7 @@ const GAME_WIRING: Readonly<Record<string, readonly string[]>> = {
     'audio/director',
   ],
   './game/route-ui.ts': ['render/preview'],
-  './game/devflags.ts': ['render/quality', 'render/mine-warning'],
+  './game/devflags.ts': ['render/mine-warning'],
   './game/app-shell.ts': ['audio/engine', 'audio/manifest'],
   './game/settings.ts': ['audio/manifest'],
 };

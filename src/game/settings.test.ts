@@ -18,6 +18,8 @@ import {
   DEFAULT_TOUCH_SCHEME,
   DEFAULT_FIRE_MODE,
   DEFAULT_MUTED,
+  DEFAULT_QUALITY_PRESET,
+  QUALITY_PRESET_IDS,
   MOTION_PREFERENCES,
   UI_SCALES,
   SETTINGS_KEY,
@@ -26,6 +28,7 @@ import {
   FUTURE_SCHEMA_NOTICE,
   type MotionPreference,
   type PlayerSettings,
+  type QualityPreset,
   type UiScale,
 } from './settings';
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
@@ -68,9 +71,16 @@ describe('the schema constants', () => {
   });
 
   it('pins every documented default, so a silent retune fails here', () => {
-    // Population: all eight fields in PlayerSettings. Each is asserted against the
-    // literal the issue requires, not against its own constant -- comparing a constant
-    // to itself would pass whatever the constant became.
+    // Population: all NINE fields in PlayerSettings -- eight from issue #320 plus
+    // `presentation.quality`, added by #540. Each is asserted against the literal the
+    // issue requires, not against its own constant -- comparing a constant to itself
+    // would pass whatever the constant became.
+    //
+    // `quality` carries the sharpest version of that: `DEFAULT_QUALITY_PRESET` is the
+    // SAME constant `render/quality.ts` resolves an absent `?quality=` flag to, so the
+    // literal `'high'` here is what pins "adding the setting did not move the shipped
+    // render". A default of anything else is a visible change to every player who has
+    // never opened Settings.
     expect(DEFAULT_MUTED).toBe(false);
     expect(DEFAULT_VOLUME).toBe(0.6);
     expect(DEFAULT_TOUCH_SCHEME).toBe('stick');
@@ -79,6 +89,7 @@ describe('the schema constants', () => {
     expect(DEFAULT_CONTROLLER_RUMBLE).toBe(true);
     expect(DEFAULT_MOTION).toBe('system');
     expect(DEFAULT_UI_SCALE).toBe(100);
+    expect(DEFAULT_QUALITY_PRESET).toBe('high');
     expect(DEFAULT_SETTINGS).toEqual({
       audio: { muted: false, volume: 0.6 },
       input: {
@@ -87,7 +98,7 @@ describe('the schema constants', () => {
         deviceHaptics: true,
         controllerRumble: true,
       },
-      presentation: { motion: 'system', uiScale: 100 },
+      presentation: { motion: 'system', uiScale: 100, quality: 'high' },
     });
   });
 
@@ -127,6 +138,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
     a.setControllerRumble(false);
     a.setMotion('reduced');
     a.setUiScale(150);
+    a.setQuality('low');
     const expected: PlayerSettings = {
       audio: { muted: true, volume: 0.25 },
       input: {
@@ -135,7 +147,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
         deviceHaptics: false,
         controllerRumble: false,
       },
-      presentation: { motion: 'reduced', uiScale: 150 },
+      presentation: { motion: 'reduced', uiScale: 150, quality: 'low' },
     };
     expect(a.snapshot()).toEqual(expected);
     expect(createPlayerSettingsStore(localStorage).snapshot()).toEqual(expected);
@@ -164,6 +176,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
     store.setTouchScheme('joystick' as never);
     store.setUiScale(101 as UiScale);
     store.setMotion('sideways' as MotionPreference);
+    store.setQuality('ultra' as QualityPreset);
     store.setVolume(Number.NaN);
     expect(calls).toBe(0);
   });
@@ -171,7 +184,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
 
 describe('createPlayerSettingsStore: validation', () => {
   it('refuses an off-domain SETTER argument and keeps the accepted value', () => {
-    // Population: the four fields with a closed domain, each pushed past the types the
+    // Population: the five fields with a closed domain, each pushed past the types the
     // way untyped JS reaching this store would.
     const store = createPlayerSettingsStore(localStorage);
     store.setTouchScheme('point');
@@ -189,12 +202,19 @@ describe('createPlayerSettingsStore: validation', () => {
     store.setUiScale(125);
     store.setUiScale(137 as UiScale);
     expect(store.snapshot().presentation.uiScale).toBe(125);
+
+    // Issue #540's field. It matters more than it looks: the id is the domain of
+    // `?dev=1&quality=` too, and an accepted junk value would be handed to
+    // `qualityFor` when the next match builds its renderer.
+    store.setQuality('low');
+    store.setQuality('ultra' as QualityPreset);
+    expect(store.snapshot().presentation.quality).toBe('low');
   });
 
   it('accepts every value the real domain lists', () => {
-    // Population: all TOUCH_SCHEMES, all FIRE_MODES, all MOTION_PREFERENCES and all
-    // UI_SCALES, sourced from the exported lists rather than retyped, so a value added
-    // later is covered without an edit here.
+    // Population: all TOUCH_SCHEMES, all FIRE_MODES, all MOTION_PREFERENCES, all
+    // UI_SCALES and all QUALITY_PRESET_IDS, sourced from the exported lists rather than
+    // retyped, so a value added later is covered without an edit here.
     const store = createPlayerSettingsStore(localStorage);
     for (const id of TOUCH_SCHEMES) {
       store.setTouchScheme(id);
@@ -211,6 +231,10 @@ describe('createPlayerSettingsStore: validation', () => {
     for (const scale of UI_SCALES) {
       store.setUiScale(scale);
       expect(store.snapshot().presentation.uiScale, String(scale)).toBe(scale);
+    }
+    for (const id of QUALITY_PRESET_IDS) {
+      store.setQuality(id);
+      expect(store.snapshot().presentation.quality, id).toBe(id);
     }
   });
 
@@ -270,7 +294,7 @@ describe('parseSettingsPayload: stored data', () => {
         version: 1,
         audio: { muted: 'yes', volume: 0.25 },
         input: 7,
-        presentation: { motion: 'sideways', uiScale: 150 },
+        presentation: { motion: 'sideways', uiScale: 150, quality: 'ultra' },
       }),
     );
     expect(parsed.kind).toBe('current');
@@ -280,6 +304,10 @@ describe('parseSettingsPayload: stored data', () => {
     expect(parsed.settings.input).toEqual(DEFAULT_SETTINGS.input); // whole group junk
     expect(parsed.settings.presentation.motion).toBe(DEFAULT_MOTION); // junk
     expect(parsed.settings.presentation.uiScale).toBe(150); // its valid sibling survived
+    // A stored preset this build does not know defaults to the SHIPPED one rather than
+    // being carried through to `qualityFor`, which would index its table with a key it
+    // has no entry for.
+    expect(parsed.settings.presentation.quality).toBe(DEFAULT_QUALITY_PRESET); // junk
   });
 
   it('clamps a finite out-of-range stored volume and defaults a non-finite one', () => {
@@ -299,7 +327,7 @@ describe('parseSettingsPayload: stored data', () => {
     const settings: PlayerSettings = {
       audio: { muted: true, volume: 0.75 },
       input: { touchScheme: 'point', fireMode: 'double', deviceHaptics: false, controllerRumble: false },
-      presentation: { motion: 'full', uiScale: 125 },
+      presentation: { motion: 'full', uiScale: 125, quality: 'medium' },
     };
     const parsed = parseSettingsPayload(serializeSettings(settings));
     if (parsed.kind !== 'current') throw new Error('unreachable');

@@ -126,10 +126,12 @@ import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import {
   createPlayerSettingsStore,
   DEFAULT_VOLUME,
+  DEFAULT_QUALITY_PRESET,
   NOT_PERSISTED_NOTICE,
   SETTINGS_KEY,
   type MotionPreference,
   type PlayerSettingsStore,
+  type QualityPreset,
   type SettingsNotice,
 } from './settings';
 import {
@@ -390,7 +392,7 @@ interface Recorder {
   detectedPadsPushes: DetectedPad[][];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; savedQuality?: QualityPreset; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
   deps: GameDeps;
   /**
    * The page's route UI (issue #468), built ONCE per harness from `deps` -- the REAL
@@ -771,6 +773,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   settingsStore.setFireMode((opts.savedFireMode ?? 'tap') as FireMode);
   settingsStore.setDeviceHaptics(opts.savedHaptics ?? true);
   settingsStore.setControllerRumble(opts.savedControllerRumble ?? true);
+  settingsStore.setQuality(opts.savedQuality ?? DEFAULT_QUALITY_PRESET);
 
   /**
    * Capabilities default to ALL PRESENT so an existing test that says nothing about a
@@ -1196,6 +1199,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           rec.motionEchoes.push(p);
         },
         onMotionChange: () => {},
+        setQuality: () => {},
+        onQualityChange: () => {},
         setStats: () => {
           rec.statPushes += 1;
         },
@@ -4710,6 +4715,57 @@ describe('startGameWith: dev flags stay off by default', () => {
       expect(options.quality).toEqual(QUALITY_PRESETS[q]);
       h.handle.dispose();
     }
+  });
+
+  it('builds the renderer with the STORED quality preset when no flag is set (issue #540)', () => {
+    // The half a player can reach. Before #540 an absent flag meant `high` outright, so a
+    // stored preference had nowhere to land -- which is the whole defect: PR #546 made
+    // `low` decide whether muzzle smoke is drawn at all, and nobody playing the game could
+    // choose it. The value is read at construction, from the effective layer, so it is
+    // honoured by a session started from a Main Menu that never had one before it.
+    //
+    // Population: all 3 presets, seeded through the REAL store's own setter.
+    for (const q of ['low', 'medium', 'high'] as const) {
+      const h = boot(makeDeps({ savedQuality: q }));
+      const options = h.rec.rendererArgs[0][4] as { quality?: unknown };
+      expect(options.quality, q).toEqual(QUALITY_PRESETS[q]);
+      h.handle.dispose();
+    }
+    // NEGATIVE CONTROL, and issue #540's other hard requirement: a player who has never
+    // opened Settings still gets today's render exactly. `DEFAULT_QUALITY_PRESET` is the
+    // constant `qualityFor(null)` resolved to before this feature existed, so the two
+    // assertions together say the default moved nothing.
+    const untouched = boot(makeDeps());
+    expect(DEFAULT_QUALITY_PRESET).toBe('high');
+    expect(
+      (untouched.rec.rendererArgs[0][4] as { quality?: unknown }).quality,
+      'the default stopped reproducing the shipped render',
+    ).toEqual(QUALITY_PRESETS.high);
+    untouched.handle.dispose();
+  });
+
+  it('lets ?dev=1&quality= OVERRIDE the stored preset, without writing it', () => {
+    // How every other flag relates to the ordinary source it shadows (`seed`, `players`,
+    // `bots`, `mode`): `flag ?? source`. A developer sweeping a device must be able to
+    // force a preset without silently rewriting the player's saved choice, and must be
+    // able to force the one the player already stores away from.
+    const h = boot(makeDeps({ savedQuality: 'low', devFlags: { quality: 'high' } }));
+    expect((h.rec.rendererArgs[0][4] as { quality?: unknown }).quality).toEqual(
+      QUALITY_PRESETS.high,
+    );
+    expect(
+      h.deps.settings.snapshot().presentation.quality,
+      'the flag wrote itself into the player\'s settings',
+    ).toBe('low');
+    h.handle.dispose();
+
+    // NEGATIVE CONTROL: the same stored preset with no flag reaches the renderer, so the
+    // assertion above measures the override rather than a fixture that ignores storage.
+    const unflagged = boot(makeDeps({ savedQuality: 'low' }));
+    expect((unflagged.rec.rendererArgs[0][4] as { quality?: unknown }).quality).toEqual(
+      QUALITY_PRESETS.low,
+    );
+    unflagged.handle.dispose();
   });
 });
 

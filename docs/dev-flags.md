@@ -63,7 +63,7 @@ Notes:
 | `mineWarn` | `mineWarn` | `lance`, `slump`, `spike` | `null` | Draws the mine fuse and proximity warnings with a named experimental treatment (issue #276 playtest round); the shipped default is the glow + illumination pair. |
 | `mode` | `mode` | `ffa`, `teams` | `null` | Sets which versus mode a session builds with -- free-for-all or teams -- instead of the shipped campaign-coop rule (win as every enemy dead, or coop's shared lives). |
 | `players` | `players` | an integer 1-4 (1 is an explicit no-op; 2-4 add co-players) | `null` | Sets how many player-controlled tanks share the world -- couch co-op, generalized past two. |
-| `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter, and how much muzzle smoke is drawn) instead of the shipped `high` default. |
+| `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter, and how much muzzle smoke is drawn) for this session, overriding the player's stored Settings choice without changing it. |
 | `sandboxTanks` | `tanks` | a comma-separated multiset (repeats and order kept), each element one of the values below: `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
 | `sandboxWalls` | `walls` | a positive integer, bare or as `random:N` | `null` | Sets how many interior walls the sandbox scatters. |
 | `seed` | `seed` | a positive integer | `null` | Fixes the world's PRNG seed instead of deriving one from the clock, for a reproducible playthrough. |
@@ -86,7 +86,8 @@ Notes:
 - **players**: Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds for one player.
 - **players**: Excluded from writing to the active run: the shared life pool has no decided meaning against the single-player-shaped run record yet.
 - **quality**: Muzzle smoke (shipped by PR #537) is the one effect the preset governs: `high` draws all of it, `medium` one billow per cloud at half the cloud ceiling, and `low` does not build the system at all.
-- **quality**: This is the only way to turn the smoke down, and it is a developer flag rather than a Setting -- so an ordinary player cannot reach it.
+- **quality**: Since issue #540 the same three presets are a player setting (Settings -> Accessibility), stored in `tanks.settings.v1` and defaulting to `high`. This flag is the override on top of it, for sweeping a device without touching a save.
+- **quality**: Read once, when a session builds its renderer: a value set here applies from the next match, exactly like the setting it overrides.
 - **sandboxTanks**: Only read when `level=sandbox`.
 - **sandboxTanks**: Any unrecognised kind rejects the whole list to null rather than dropping entries.
 - **sandboxWalls**: Only read when `level=sandbox`.

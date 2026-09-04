@@ -18,10 +18,10 @@ import type { GameDeps } from './loop';
  * WHAT DECIDED THE SPLIT, measured on `loop.ts` rather than guessed: of its 25
  * `hud.on*` registrations, 15 reached no gameplay state at all and 3 more (the paint
  * shop's `onPick*`) reached it only through `restyle`'s renderer call. Those 18 came
- * here, and two later arrivals -- `onRecordsOpen`, added by issue #324's step S5 so the
- * page can paint the Records tables it now owns, and `onMotionChange`, the Accessibility
- * section's first control (issue #289) -- make 20 today, against `Hud`'s 27 registration
- * methods.
+ * here, and three later arrivals -- `onRecordsOpen`, added by issue #324's step S5 so the
+ * page can paint the Records tables it now owns, and the Accessibility section's two
+ * controls, `onMotionChange` (issue #289) and `onQualityChange` (issue #540) -- make 21
+ * today, against `Hud`'s 28 registration methods.
  * The other 7 belong to a live match and are registered by `route-host.ts` as trampolines
  * into whatever session holds its slot: three that START gameplay, two touch controls
  * that need the live `InputController`, `onReassignSlot` (which owns per-slot input
@@ -229,6 +229,13 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   // store may have refused and would leave the transitions running on the old one.
   hud.onMotionChange((next) => {
     deps.settings.setMotion(next);
+  });
+  // The store and nothing else, exactly like the motion handler above (issue #540). What
+  // differs is where the value lands afterwards: a session reads the accepted preset when
+  // it BUILDS its renderer, so this write reaches the picture at the next match rather
+  // than the frame after the click. The button's own hint says so.
+  hud.onQualityChange((next) => {
+    deps.settings.setQuality(next);
   });
 
   hud.onCustomizeOpen(() => {
