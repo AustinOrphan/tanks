@@ -492,7 +492,9 @@ export interface Hud {
    * the action button keeps its campaign wording. That is the state every HUD which
    * never calls this is in -- every css and gallery fixture -- so a fixture renders
    * exactly as it did before this method existed. `loop.ts` pushes a real outcome from
-   * boot onward and never pushes `null`.
+   * boot onward and never pushes `null`; the one `null` in production comes from
+   * `route-host.ts` when a session releases the slot, which is how a summary of a match
+   * that has ended stops being what the empty host is holding.
    *
    * Pushed on every event-bearing frame, not once at the end: the winning kill is
    * recorded a beat AFTER the state machine flips to `outcome-win`, so the panel is
@@ -733,7 +735,11 @@ export interface Hud {
   showVersusSetup(show: boolean, initial?: VersusConfig | null): void;
   /**
    * WHAT THE TITLE SCREEN'S BUTTONS DO -- the affordance policy for every
-   * kind-dependent control on the Main Menu:
+   * kind-dependent control on the Main Menu.
+   *
+   * Written by `route-host.ts` alone since issue #324's step S7: it pushes the shape a
+   * session declared when it took the gameplay slot, and pushes `'campaign-levels'` back
+   * when the slot is released. A session states this; it no longer writes it.
    *
    *  - `'campaign-levels'` (the default): the shipped campaign title screen.
    *  - `'versus-setup'`: Continue hides -- it is the one title affordance that
@@ -845,10 +851,12 @@ export interface Hud {
  * anchored in those lines keeps working, so the coverage contract survives a change that
  * alters no behaviour at all.
  *
- * These say who SHOULD own each member. `loop.ts` today still calls a number of
- * `RouteHudKey` members directly -- that gap is the remaining work of #324, and it is
- * pinned as an explicit, shrinking list in `hud-ownership.test.ts` so each step of the
- * migration deletes a line from it rather than quietly moving the goalposts.
+ * These said who SHOULD own each member while `loop.ts` still called `RouteHudKey`
+ * members directly; that gap was pinned as an explicit, shrinking list in
+ * `hud-ownership.test.ts`, and issue #324's step S7 emptied it. Step S8 then made the
+ * `Pick`s load-bearing rather than advisory: `route-host.ts` hands a session a
+ * `GameplayHud` and nothing else, so the classification is now what a session's HUD IS
+ * rather than a description of what it ought to be.
  */
 export type HudFrameKey =
   // Page chrome and dispatch. The frame is what the shell paints around whatever is
@@ -893,8 +901,14 @@ export type RouteHudKey =
   | 'setRelaunchTarget';
 
 /**
- * What a live match may write, and the ONLY part of `Hud` a gameplay session should ever
- * hold. Nine members plus the lent `showToast`.
+ * What a live match may write, and the ONLY part of `Hud` a gameplay session ever holds.
+ * Nine members plus the lent `showToast`.
+ *
+ * "Ever holds" literally, since issue #324's step S8: `GameplaySlot.hud` (route-host.ts)
+ * IS this `Pick`, forwarded member by member behind the slot's generation guard, and it is
+ * the only HUD `startGameWith` receives. Adding a member here therefore widens what a
+ * session may paint AND fails the build until that facade forwards it -- which is the
+ * review moment this classification exists to create.
  *
  * Both of issue #324's promised absorptions have landed. `setOutcome` (step S4) replaced
  * `setCoopKills` and `setVersusResults`; `setStatus` (step S6) replaced `setLives`,

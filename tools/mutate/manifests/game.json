@@ -2029,11 +2029,11 @@
     "find": "      const mine = ++generation;",
     "replace": "      const mine = generation;",
     "expect": "killed",
-    "expectFailures": 4,
+    "expectFailures": 5,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other. Re-measured at 2 of 37 in route-host.test.ts: the second case is \"a stale detach does not reshape the menu under the session that replaced it\", which the detach reset made observable -- with the generation stuck, the outgoing session's late detach reshapes the incoming one's menu. Re-measured at 4 of 62 for issue #324's step S5: the slot gained two reporting methods -- the controller assignment and the Versus Setup reopen -- and each has its own stale-capture case, both of which a stuck generation lets an outgoing session satisfy. The failing SET was compared, not the number renumbered."
+    "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other. Re-measured at 2 of 37 in route-host.test.ts: the second case is \"a stale detach does not reshape the menu under the session that replaced it\", which the detach reset made observable -- with the generation stuck, the outgoing session's late detach reshapes the incoming one's menu. Re-measured at 4 of 62 for issue #324's step S5: the slot gained two reporting methods -- the controller assignment and the Versus Setup reopen -- and each has its own stale-capture case, both of which a stuck generation lets an outgoing session satisfy. Re-measured at 5 of 75 for step S8, which gave the slot its guarded gameplay HUD: the added case is \"drops EVERY push from a session that has already been replaced\", the exhaustive stale-capture control for that facade. The previous four still fail, so the failing SET was compared, not the number renumbered."
   },
   {
     "id": "session-teardown-keeps-the-gameplay-slot",
@@ -2053,11 +2053,11 @@
     "find": "      if (deps.launchGate.dismissed()) sm.toMainMenu();",
     "replace": "      void deps.launchGate.dismissed();",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "The page-scoped state machine keeps whatever route the OUTGOING session left it on. Before this issue every Campaign<->Versus reboot built a fresh machine, which opened at Main Menu; a machine that now survives the reboot has to do that reset explicitly, or the incoming session is born mid-gameplay -- or at an outcome screen -- having never entered gameplay. That is the 'stale route state' issue #468's acceptance criteria name. 1 of 18, 'resets to Main Menu for a replacement session', which is the only case that drives the machine INTO gameplay before re-attaching."
+    "why": "The page-scoped state machine keeps whatever route the OUTGOING session left it on. Before this issue every Campaign<->Versus reboot built a fresh machine, which opened at Main Menu; a machine that now survives the reboot has to do that reset explicitly, or the incoming session is born mid-gameplay -- or at an outcome screen -- having never entered gameplay. That is the 'stale route state' issue #468's acceptance criteria name. 1 of 18, 'resets to Main Menu for a replacement session', which is the only case that drives the machine INTO gameplay before re-attaching. Re-measured at 2 of 75 for issue #324's step S7: the added case is the attach-ordering pin, which drives the same replacement and requires the route reset to actually paint before it can compare the two pushes. The original case still fails, so the failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-attach-resets-past-the-launch-gate",
@@ -2074,14 +2074,14 @@
   {
     "id": "route-host-clears-the-retained-versus-config-on-detach",
     "file": "src/game/route-host.ts",
-    "find": "          live = null;\n          // The menu goes back to the PAGE's shape.",
-    "replace": "          live = null;\n          versusConfig = null;\n          // The menu goes back to the PAGE's shape.",
+    "find": "          live = null;\n",
+    "replace": "          live = null;\n          versusConfig = null;\n",
     "expect": "killed",
     "expectFailures": 2,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "Clears the retained versus config when a session detaches, so quitting a match empties the Versus Setup form the player filled in. `session-host.ts` retains its own `lastVersusConfig` across a campaign detour for exactly this reason and says so; this is the same fact one layer up, where the pane can actually read it. Silent: the pane still opens, still works, and merely forgets. 1 of 18, 'survives the session that set it' -- the only case that reads the config back AFTER a detach. COUNT RE-MEASURED after PR #475's review fix: 1 -> 2. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered."
+    "why": "Clears the retained versus config when a session detaches, so quitting a match empties the Versus Setup form the player filled in. `session-host.ts` retains its own `lastVersusConfig` across a campaign detour for exactly this reason and says so; this is the same fact one layer up, where the pane can actually read it. Silent: the pane still opens, still works, and merely forgets. 1 of 18, 'survives the session that set it' -- the only case that reads the config back AFTER a detach. COUNT RE-MEASURED after PR #475's review fix: 1 -> 2. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered. RE-ANCHORED for issue #324's step S7, which inserted the generation retirement between `live = null;` and the comment the old anchor ran into: the anchor is now the assignment line alone, which is unique in this file and carries no neighbouring prose for a later edit to break. Count re-measured on this branch against the same scoped file, whose population grew from 37 to 75; the failing set is unchanged."
   },
   {
     "id": "route-host-snapshots-the-versus-config-instead-of-reading-it-live",
@@ -2226,8 +2226,8 @@
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 14,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause. RE-ANCHORED for issue #324's step S5: the arrival branch beside the surface paint gained the Levels grid alongside Continue, so the find string had to be re-cut around it. The replacement still keeps that whole branch, which is what leaves this entry isolating the surface paint and nothing else. Count re-measured on the new text: 14 of 495 (route-host.test.ts 62 + loop.test.ts 433), which the re-cut left where it was."
+    "expectFailures": 15,
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause. RE-ANCHORED for issue #324's step S5: the arrival branch beside the surface paint gained the Levels grid alongside Continue, so the find string had to be re-cut around it. The replacement still keeps that whole branch, which is what leaves this entry isolating the surface paint and nothing else. Count re-measured on the new text: 14 of 495 (route-host.test.ts 62 + loop.test.ts 433), which the re-cut left where it was. Re-measured at 15 of 511 (route-host.test.ts 75 + loop.test.ts 436) for issue #324's step S7: the added case is the attach-ordering pin, which cannot compare the relaunch push against the route reset's paint when the paint never happens. The previous 14 still fail, so the failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -2419,15 +2419,79 @@
   {
     "id": "route-host-detach-keeps-the-session-shaped-menu",
     "file": "src/game/route-host.ts",
-    "find": "          hud.setRelaunchTarget('campaign-levels');\n          hud.setStatus(null);\n",
-    "replace": "          void hud;\n",
+    "find": "          hud.setRelaunchTarget('campaign-levels');\n          clearGameplaySink();\n",
+    "replace": "          void clearGameplaySink;\n",
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Releasing the slot leaves the title shaped around the session that just left. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the live-detach case in route-host.test.ts and the versus-quit case in loop.test.ts; the stale-detach control passes either way. Re-anchored for issue #324's step S6: the page clears the bar with `setStatus(null)` -- it has no world and so can state no lives, enemy count or stock strip -- where it used to restate `setSessionKind('campaign')`. Count re-measured on this branch across the same two scoped files."
+    "expectFailures": 6,
+    "why": "Releasing the slot leaves the title shaped around the session that just left, and the arena's readouts on screen with it. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 6 of 511 across both scoped files (route-host.test.ts 75 + loop.test.ts 436): five in route-host.test.ts -- the live detach, the whole-sink clear, the stored touch scheme, the inert-on-release case (whose control detaches a live slot) and the retired-push case (which reads the cleared status back afterwards) -- plus the versus-quit case in loop.test.ts; the stale-detach control passes either way. Re-anchored for issue #324's step S6: the page clears the bar with a null status -- it has no world and so can state no lives, enemy count or stock strip -- where it used to restate `setSessionKind('campaign')`. Re-anchored again for step S7, which moved the four remaining retained clears into `clearGameplaySink` beside it; count re-measured on this branch across the same two scoped files, whose populations both grew."
+  },
+  {
+    "id": "route-host-detach-clears-only-the-topbar",
+    "file": "src/game/route-host.ts",
+    "find": "    hud.setOutcome(null);\n    hud.setRoundPhase(null);\n    hud.setShellCount(null);\n    hud.setTouchIndicator({\n      stick: null,\n      aim: null,\n      scheme: deps.effectiveSettings.current().touchScheme,\n      used: false,\n    });\n",
+    "replace": "    void hud;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Exactly the shape that shipped before issue #324's step S7: releasing the slot resets the relaunch target and the topbar status, and leaves every OTHER retained gameplay member holding the match that just ended. `hud.ts` keeps whatever it was last told, so the visible result is a finished match's outcome tally, a frozen 3-2-1 countdown chip, the `?dev=1&shellCount=1` readout and the player's last touch thumbs, all sitting over the Main Menu until something else overwrites them. Invisible to every pre-S7 assertion, which is why it is pinned separately from the entry above rather than folded into it: that one drops the whole reset and this one drops only the half S7 added. Pinned with killedBy rather than a count -- the claim is which members are emptied, not a population.",
+    "killedBy": [
+      "createRouteHost: releasing the slot gives the menu back its page shape empties the whole gameplay sink, not just the topbar (issue #324, step S7)",
+      "createRouteHost: releasing the slot gives the menu back its page shape carries the STORED touch scheme into the cleared indicator, not a hardcoded one"
+    ]
+  },
+  {
+    "id": "route-host-attach-never-shapes-the-menu-for-its-session",
+    "file": "src/game/route-host.ts",
+    "find": "      hud.setRelaunchTarget(session.relaunchTarget);\n",
+    "replace": "      void session;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "The page stops writing the title/outcome affordance policy, which since issue #324's step S7 makes it unwritten by anyone: `loop.ts` no longer pushes `setRelaunchTarget` at all, so a setup-pane versus match runs under whatever the last detach left -- `'campaign-levels'` -- and its title keeps offering Continue and Levels into a one-arena versus level system, the corpse-world resume `HudRelaunchTarget`'s own doc comment describes. The detach reset above survives this, so the empty-host half of the coverage stays green and only the attach half dies. Pinned with killedBy: the claim is that a specific declaration reaches the HUD, not a population.",
+    "killedBy": [
+      "createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7) pushes the incoming session's relaunch target, so the page is the only writer",
+      "createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7) pushes it BEFORE the route reset, so the menu never paints in the outgoing shape",
+      "createRouteHost: releasing the slot gives the menu back its page shape resets the relaunch target and clears the gameplay status when the live session detaches",
+      "startGameWith: campaign return from a versus session (Task 5b) a setup-pane versus session's construction pushes BOTH 'versus' identity and the 'versus-setup' relaunch target, exactly once each",
+      "quitting a versus match leaves a campaign-shaped Main Menu behind the empty host offers Continue/New Game/Levels/Versus, not the versus session's \"Start Match\""
+    ]
+  },
+  {
+    "id": "route-host-slot-hud-skips-the-generation-guard",
+    "file": "src/game/route-host.ts",
+    "find": "        setStatus: (status) => {\n          if (current()) hud.setStatus(status);\n        },",
+    "replace": "        setStatus: (status) => {\n          hud.setStatus(status);\n        },",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "One member of the gameplay HUD facade forwards without checking whether its session still holds the slot -- the state `loop.ts` was in before issue #324's step S8, when it held the page's raw `Hud` and no push was guarded at all. `session-host.ts` replaces a session by stopping the old one and starting the new one, and a frame already in flight when that happens then repaints the incoming match's topbar with the outgoing match's lives, enemy count or stock strip. `setStatus` is the member chosen because it is pushed on every simulated frame, so it is the one with a real window; the exhaustive case named below covers the other nine by driving each in turn from a retired slot. Pinned with killedBy: the claim is that a retired session paints nothing, not a population.",
+    "killedBy": [
+      "createRouteHost: the slot's gameplay HUD drops EVERY push from a session that has already been replaced",
+      "createRouteHost: the slot's gameplay HUD drops a push from a session that has detached, with nothing holding the slot"
+    ]
+  },
+  {
+    "id": "route-host-release-leaves-the-slot-live",
+    "file": "src/game/route-host.ts",
+    "find": "          generation += 1;\n",
+    "replace": "          void 0;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Releasing the slot clears `live` but leaves the generation counter where it is, so `current()` still answers true for the session that just left. Only the seven click trampolines go quiet (they read `live` directly); everything guarded on the generation stays live on a session that no longer exists -- a late `setControllers` repaints the Controllers panel for a finished match, a late `openVersusSetup` opens the pane over the Main Menu, a second `detach()` re-runs the resets, and since step S8 the whole gameplay HUD facade keeps painting, so a frame arriving after a quit restores the dead match's topbar over the empty host's cleared one. Pinned with killedBy: the claim is that release retires the slot, not a population.",
+    "killedBy": [
+      "createRouteHost: releasing the slot gives the menu back its page shape goes inert on release: a second detach, and every late report, does nothing",
+      "createRouteHost: the slot's gameplay HUD drops a push from a session that has detached, with nothing holding the slot"
+    ]
   },
   {
     "id": "route-host-never-re-sizes-the-grid-on-arrival",
@@ -3922,9 +3986,9 @@
       "src/game/loop.test.ts",
       "src/game/hud-ownership.test.ts"
     ],
-    "why": "Puts back ONE of the six HUD pushes issue #324 removed from `applySettings`. This is the regression the whole ownership boundary exists to stop, and it is worth pinning because it is invisible by inspection -- a second writer of a control looks like ordinary wiring next to the runtime pushes around it. Two independent nets catch it: loop.test.ts counts the boot pushes, and hud-ownership.test.ts reports `setMuted` as a session reaching an application route, which is what proves that guard is not decorative.",
+    "why": "Puts back ONE of the six HUD pushes issue #324 removed from `applySettings`. This is the regression the whole ownership boundary exists to stop, and it is worth pinning because it USED to be invisible by inspection -- a second writer of a control read as ordinary wiring next to the runtime pushes around it. Since step S8 it is not invisible at all, and that change is the point: `loop.ts`'s `hud` is the slot's ten-member `GameplayHud`, so this line does not typecheck and, run through esbuild by the harness, throws where it stands. The kill is therefore three-deep -- hud-ownership.test.ts still reports `setMuted` as a session reaching an application route, loop.test.ts's mute case still reads the boot pushes, and the loop suite at large now dies on the call itself. The wide blast radius is the evidence, not noise: the regression this entry pins can no longer be written.",
     "killedBy": [
-      "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
+      "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members: the debt list is empty",
       "startGameWith: HUD wiring routes the mute button through the STORE, to the engine, and back to the button"
     ]
   },
@@ -3938,9 +4002,9 @@
       "src/game/loop.test.ts",
       "src/game/hud-ownership.test.ts"
     ],
-    "why": "Puts back the Levels-grid push issue #324's step S5 removed from the session's construction block -- the sibling of `session-pushes-settings-display-to-the-hud`, and pinned for the same reason: a second writer of an application surface reads as ordinary wiring beside the gameplay pushes around it. This one is worse than a duplicate, because the two writers DISAGREE: a session's `deps.levels` is its OWN level system, which for a versus match is a single synthetic arena, so the last thing the HUD hears is a total of 1 -- read by `hud.ts` as \"not a choice\" -- and the empty host left behind after a versus match has no Levels button at all. Two independent nets catch it: hud-ownership.test.ts reports `setLevelSelect` as a session reaching an application route, and loop.test.ts's versus-quit case reads every total the grid was ever told. Re-anchored for issue #324's step S6. The old anchor carried the following line, the boot tail's `refreshStats(world)`, which that step renamed and pushed a comment in front of -- so the entry went FAILED-TO-APPLY. The anchor is now the `slot.setControllers` call delimited by its own newlines: indentation-scoped, which is what distinguishes this boot-time call from the identically-worded one inside `reassignSlot`, and carrying no neighbouring text for a later comment to break.",
+    "why": "Puts back the Levels-grid push issue #324's step S5 removed from the session's construction block -- the sibling of `session-pushes-settings-display-to-the-hud`, and pinned for the same reason: a second writer of an application surface reads as ordinary wiring beside the gameplay pushes around it. This one is worse than a duplicate, because the two writers DISAGREE: a session's `deps.levels` is its OWN level system, which for a versus match is a single synthetic arena, so the last thing the HUD hears is a total of 1 -- read by `hud.ts` as \"not a choice\" -- and the empty host left behind after a versus match has no Levels button at all. Three independent nets catch it since step S8: hud-ownership.test.ts reports `setLevelSelect` as a session reaching an application route, loop.test.ts's versus-quit case reads every total the grid was ever told, and the call itself no longer exists on the `GameplayHud` the session holds -- so it fails to typecheck and throws under the harness's esbuild run, which is why its failing set is now most of the loop suite rather than one case. Re-anchored for issue #324's step S6. The old anchor carried the following line, the boot tail's `refreshStats(world)`, which that step renamed and pushed a comment in front of -- so the entry went FAILED-TO-APPLY. The anchor is now the `slot.setControllers` call delimited by its own newlines: indentation-scoped, which is what distinguishes this boot-time call from the identically-worded one inside `reassignSlot`, and carrying no neighbouring text for a later comment to break.",
     "killedBy": [
-      "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
+      "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members: the debt list is empty",
       "quitting a versus match leaves a campaign-shaped Main Menu behind the empty host offers Continue/New Game/Levels/Versus, not the versus session's \"Start Match\""
     ]
   },

@@ -88,7 +88,6 @@ import {
 import {
   createHud,
   type GameplayStatus,
-  type Hud,
   type HudSurface,
   type VersusStock,
   SINGLE_PLAYER_DEATH_VIGNETTE,
@@ -96,7 +95,7 @@ import {
 import { browserHistoryHost } from './navigation';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from '../presentation/blocked-fire';
-import type { RouteHost, StartIntent } from './route-host';
+import type { GameplayRouteHost, RouteHostDeps, StartIntent } from './route-host';
 import { resolveOwnerColor } from '../presentation/identity';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
@@ -260,7 +259,6 @@ export interface GameDeps {
    * review, finding 1).
    */
   readonly createStateMachine: (config: GameStateMachineConfig) => GameStateMachine;
-  readonly createHud: (root: HTMLElement) => Hud;
   /**
    * The level sequence: how many levels exist, where this session starts, and how
    * to build the world for any of them. Injected as one object so a test can
@@ -987,6 +985,18 @@ function versusStocksOf(world: World): VersusStock[] | null {
 }
 
 /**
+ * Everything one browser page's wiring produces: a session's seams, plus the page-only
+ * HUD factory that `route-host.ts` -- and nothing else -- consumes.
+ *
+ * The intersection is what keeps `createHud` reachable by `main.ts`'s one route-host
+ * expression (`{ ...createBrowserDeps(shell), ... }`) while keeping it OFF the `GameDeps`
+ * a session is handed. Before issue #324's step S8 it was a `GameDeps` field, which meant
+ * `startGameWith` could have built itself a whole second `Hud` -- Settings sliders, Levels
+ * grid and all -- out of the bag of seams it takes for building worlds.
+ */
+export type BrowserPageDeps = GameDeps & Pick<RouteHostDeps, 'createHud'>;
+
+/**
  * A FUNCTION, not an exported const.
  *
  * A module-scope object literal holding `window` throws ReferenceError on
@@ -996,7 +1006,7 @@ function versusStocksOf(world: World): VersusStock[] | null {
  * read off globalThis so that a mis-call under node yields undefined at the use
  * site rather than a ReferenceError at import.
  */
-export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): GameDeps {
+export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): BrowserPageDeps {
   const search = globalThis.location?.search ?? '';
   const devFlags = parseDevFlags(search);
   // Resolved ONCE and shared by all six stores. It used to be resolved per
@@ -1036,9 +1046,11 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
     createHaptics: (playerId) =>
       createHapticsDirector(resolveVibrate(), playerId, { blockedFire: devFlags.blockedFire }),
     createStateMachine: createGameStateMachine,
-    // The pane needs the retained VS setup (issue #260) and `GameDeps.createHud` is
-    // deliberately still `(root) => Hud`: the store is a BROWSER-WIRING concern, so it
-    // is bound here rather than widened into the injected seam that ~200 tests build.
+    // The PAGE's HUD factory, bound here and typed on `RouteHostDeps` since issue #324's
+    // step S8 -- the seam it fills belongs to the route host, not to a session. The pane
+    // needs the retained VS setup (issue #260), and that store is a BROWSER-WIRING
+    // concern, so it is bound here rather than widened into the injected seam that ~200
+    // tests build.
     createHud: (root) =>
       createHud(root, {
         versusSetup: stores.versusSetup,
@@ -1048,8 +1060,8 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
         // HUD, which is what keeps the ~230 HUD tests off the History API entirely.
         history: browserHistoryHost(window),
         // Issue #542's menu transition. Bound here for the same reason the two above
-        // are: `GameDeps.createHud` stays `(root) => Hud`, so no injected HUD in a test
-        // grows a developer flag it has no opinion about.
+        // are: the seam stays `(root) => Hud`, so no injected HUD in a test grows a
+        // developer flag it has no opinion about.
         menuTransition: devFlags.menuTransition,
       }),
     levels: createLevelSystem(devFlags, run),
@@ -1210,8 +1222,12 @@ export function startGameWith(
    * It also REPLACES the old `uiRoot` parameter. A session had no use for the root
    * except to build a HUD in it, and the route host is built on that root one level up,
    * so keeping the argument would have left every caller passing an element nothing read.
+   *
+   * `GameplayRouteHost`, not the whole `RouteHost`, since issue #324's step S8: the page
+   * still passes its one real host, but the type a session sees carries no `hud`, so the
+   * only HUD in this function is the guarded gameplay facade the slot hands back.
    */
-  routeHost: RouteHost,
+  routeHost: GameplayRouteHost,
   /**
    * WHICH match the player just asked for (issue #428).
    *
@@ -1821,9 +1837,25 @@ export function startGameWith(
    * is TAKE the gameplay slot, fill it, and release it in `dispose()`. `attach()` is also
    * what resets the visible route, which is the job the freshly-constructed state machine
    * used to do on every Campaign<->Versus reboot.
+   *
+   * The `relaunchTarget` argument is this session's whole shape as far as the page is
+   * concerned (issue #324, step S7): the page writes the title and outcome buttons from
+   * it, so the last route-owned HUD member a session used to push is now something it
+   * DECLARES instead. What is deliberately not passed is the session KIND -- see
+   * `SessionShape` for why that rides the per-frame status push.
    */
-  const slot = routeHost.attach();
-  const { hud, sm, routeUi } = routeHost;
+  const slot = routeHost.attach({ relaunchTarget });
+  const { sm, routeUi } = routeHost;
+  /**
+   * THIS SESSION'S HUD: the ten gameplay members, behind the slot's generation guard.
+   *
+   * Not `routeHost.hud`, which no longer exists on the type a session is handed (issue
+   * #324, step S8). Two things follow, and both used to be one careful convention away
+   * from breaking: a route member cannot be called from here because it is not on the
+   * type, and a push from a session that has already been replaced lands nowhere, because
+   * every method on the facade re-checks the generation first.
+   */
+  const hud = slot.hud;
   /**
    * Issue #516's `hud` blocked-fire arm. Constructed here rather than behind a `GameDeps`
    * seam because it needs nothing from the browser -- the audio and haptic arms sit behind
@@ -2019,28 +2051,30 @@ export function startGameWith(
     hud.setStatus(status);
   }
 
-  // THE TWO SEPARATE HUD PROJECTIONS (issue #316 review, finding 1), both
-  // derived from the canonical model -- never from `deps.initialVersusConfig`,
-  // a URL read, or a `world.rules.mode` check.
+  // THE SESSION'S OWN HUD PROJECTION (issue #316 review, finding 1), derived
+  // from the canonical model -- never from `deps.initialVersusConfig`, a URL
+  // read, or a `world.rules.mode` check.
   //
-  // `setRelaunchTarget` is WHAT THE BUTTONS DO, and is fixed for the session
-  // (see `relaunchTarget` above). `setStatus` is WHAT IS BEING PLAYED, and is
-  // re-pushed from `switchTo` on every world build, because a Levels pick
-  // really does change it. Both are set here, before any setState/
-  // setContinueAvailable/setLevelSelect call below, so the very first render
-  // already reflects them.
+  // `setStatus` is WHAT IS BEING PLAYED, and it is re-pushed from `switchTo` on
+  // every world build, because a Levels pick really does change it. It is set
+  // here, before any setState call below, so the very first render already
+  // reflects it.
   //
-  // These were ONE call before this fix, and the collapse was a lie in the
-  // direction of the buttons: `?dev=1&mode=ffa` builds a genuine FFA world on
-  // the campaign level system, so the single call passed 'campaign' to keep
-  // Continue and Levels working -- and with it hid the versus stock strip and
-  // showed campaign Lives/Enemies for a match that has neither.
+  // ITS PAIR IS NO LONGER PUSHED FROM HERE. `setRelaunchTarget` -- WHAT THE
+  // BUTTONS DO -- is fixed for a session's whole life, so since issue #324's
+  // step S7 it is declared once, as the `relaunchTarget` this session handed
+  // `routeHost.attach()`, and the page is what writes it. The two must still be
+  // separate VALUES: they were one call before issue #316's fix, and the
+  // collapse was a lie in the direction of the buttons -- `?dev=1&mode=ffa`
+  // builds a genuine FFA world on the campaign level system, so the single call
+  // passed 'campaign' to keep Continue and Levels working, and with it hid the
+  // versus stock strip and showed campaign Lives/Enemies for a match that has
+  // neither.
   //
-  // The application ground is NOT pushed from here any more (issue #324, step S5). It is
+  // The application ground is NOT pushed from here either (issue #324, step S5). It is
   // page chrome that outlives every match, so `route-host.ts` reads the same `backdrop`
   // flag once at page construction -- which is what makes a page that never starts a
   // session stand on the right ground.
-  hud.setRelaunchTarget(relaunchTarget);
   pushStatus(world, currentDescriptor.kind, ordinalOf(level));
 
   /**

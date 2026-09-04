@@ -109,7 +109,7 @@ import {
   applyVersusToDeps,
   seedAssignment,
   versusAwareDeps,
-  type GameDeps,
+  type BrowserPageDeps,
   type HostWindow,
   type DevConsole,
   type DevConsoleTarget,
@@ -400,7 +400,7 @@ interface Recorder {
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; savedQuality?: QualityPreset; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
-  deps: GameDeps;
+  deps: BrowserPageDeps;
   /**
    * The page's route UI (issue #468), built ONCE per harness from `deps` -- the REAL
    * `createRouteHost` over the fakes, not a fake of it.
@@ -836,7 +836,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     },
   };
 
-  const deps: GameDeps = {
+  // `BrowserPageDeps`, not `GameDeps`: this ONE object is handed both to `startGameWith`
+  // (which reads the session's half) and to the real `createRouteHost` below (which reads
+  // `createHud`). Since issue #324's step S8 those halves are separate types, and the
+  // harness holds the intersection for the same reason `createBrowserDeps` returns it --
+  // production builds one page's wiring and hands each consumer the part it may see.
+  const deps: BrowserPageDeps = {
     createRenderer: (canvas, w, h, boundary, options) => {
       rec.rendererArgs.push([canvas, w, h, boundary, options]);
       return {
@@ -4205,7 +4210,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
   // only the renderer/audio/HUD/input collaborators stay fake, the same as every
   // other test in this file.
   describe('defect 1, reproduced with the REAL createLevelSystem + createRunStore (not the fake levels object above)', () => {
-    function realJumpDeps(): { deps: GameDeps; run: ReturnType<typeof createRunStore>; base: ReturnType<typeof makeDeps> } {
+    function realJumpDeps(): { deps: BrowserPageDeps; run: ReturnType<typeof createRunStore>; base: ReturnType<typeof makeDeps> } {
       const storage = createMemoryStorage();
       const run = createRunStore(storage);
       run.startNewRun(CAMPAIGN_LEVELS[0].id);
@@ -4213,7 +4218,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const jumpFlags: DevFlags = { ...DEV_FLAGS_OFF, level: 1 }; // ?dev=1&level=1 -> index 0
       const levels = createLevelSystem(jumpFlags, run);
       const base = makeDeps({ world: { ...createArenaWorld(1), lives: 2 } });
-      const deps: GameDeps = { ...base.deps, levels, run, devFlags: jumpFlags };
+      const deps: BrowserPageDeps = { ...base.deps, levels, run, devFlags: jumpFlags };
       return { deps, run, base };
     }
 
@@ -4264,7 +4269,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const sandboxFlags: DevFlags = { ...DEV_FLAGS_OFF, level: 'sandbox' };
       const levels = createLevelSystem(sandboxFlags, run);
       const base = makeDeps();
-      const deps: GameDeps = { ...base.deps, levels, run, devFlags: sandboxFlags };
+      const deps: BrowserPageDeps = { ...base.deps, levels, run, devFlags: sandboxFlags };
       const h = boot({ ...base, deps });
       h.hud.newGame();
       // Proves the handler actually ran (rather than the guard short-circuiting it
@@ -4299,7 +4304,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const jumpFlags: DevFlags = { ...DEV_FLAGS_OFF, level: 2 }; // ?dev=1&level=2 -> index 1
       const levels = createLevelSystem(jumpFlags, run);
       const base = makeDeps();
-      const deps: GameDeps = { ...base.deps, levels, run, devFlags: jumpFlags };
+      const deps: BrowserPageDeps = { ...base.deps, levels, run, devFlags: jumpFlags };
       const h = boot({ ...base, deps });
       h.hud.newGame();
       expect(run.active()).toEqual(savedRun); // byte-for-byte unchanged
@@ -6883,7 +6888,7 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
     base: ReturnType<typeof makeDeps>,
     config: VersusConfig,
     requestVersusSession?: (c: VersusConfig) => void,
-  ): GameDeps {
+  ): BrowserPageDeps {
     return {
       ...base.deps,
       devFlags: { ...base.deps.devFlags, players: config.players },
@@ -7054,7 +7059,7 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     base: ReturnType<typeof makeDeps>,
     config: VersusConfig,
     requestCampaignSession?: () => void,
-  ): GameDeps {
+  ): BrowserPageDeps {
     return {
       ...base.deps,
       devFlags: { ...base.deps.devFlags, players: config.players },
@@ -7232,7 +7237,7 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
    * never reads it anyway, per its own doc comment) and `devFlags` overridable, so H1's
    * `corpseBlock` fixture does not have to round-trip through a real `location.search`.
    */
-  function baseDeps(devFlags: Partial<DevFlags> = {}): GameDeps {
+  function baseDeps(devFlags: Partial<DevFlags> = {}): BrowserPageDeps {
     const deps = createBrowserDeps();
     return { ...deps, run: createRunStore(createMemoryStorage()), devFlags: { ...deps.devFlags, ...devFlags } };
   }

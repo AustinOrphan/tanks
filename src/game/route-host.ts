@@ -1,7 +1,8 @@
 import { createRouteUi, type RouteUi, type RouteUiDeps, type StyleSink } from './route-ui';
 import { createOutcomeClassifier, type GameStateMachine, type OutcomeContext } from './state';
 import { versusDraw } from './app-state';
-import type { Hud } from './hud';
+import type { GameplayHud, Hud } from './hud';
+import type { RelaunchTarget } from './session-intent';
 import { isMuteHotkey, locationToHudSurface, type GameDeps } from './loop';
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
 import type { GetGamepads } from '../input/gamepad';
@@ -45,7 +46,20 @@ import type { Assignment, SlotSource } from '../input/assignment';
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
 export type RouteHostDeps = RouteUiDeps &
-  Pick<GameDeps, 'createHud' | 'createStateMachine' | 'launchGate' | 'run' | 'devFlags'> & {
+  Pick<GameDeps, 'createStateMachine' | 'launchGate' | 'run' | 'devFlags'> & {
+    /**
+     * The page's ONE HUD factory.
+     *
+     * Declared HERE rather than on `GameDeps` (where it lived until issue #324's step S8)
+     * because this is the only caller: a session has not built a HUD since issue #468, and
+     * leaving the factory on the bag of seams `startGameWith` receives meant the session
+     * could still ask for a whole `Hud` -- every Settings slider and Main Menu button
+     * included -- from a dependency it was handed for building worlds. `createBrowserDeps`
+     * still BINDS it (the versus-setup store, the History host and the menu-transition flag
+     * are browser wiring, and that is where browser wiring lives); what changed is that the
+     * session's own view of those deps no longer names it.
+     */
+    readonly createHud: (root: HTMLElement) => Hud;
     /**
      * Menu-time gamepad input (issue #494): the pads the page's own poller reads -- the
      * union of every connected pad, never the `pad[i] -> slot[i]` routing a session uses
@@ -122,6 +136,25 @@ export type StartIntent =
  * place, and a slot that reproduced them would move the bug rather than fix it.
  */
 export interface GameplaySlot {
+  /**
+   * WHAT A LIVE MATCH MAY PAINT, and the only HUD a session ever holds (issue #324, S8).
+   *
+   * `GameplayHud` is `hud.ts`'s own classification of the ten members a match owns, so
+   * every application-route member -- the Settings sliders, the Levels grid, the Records
+   * tables, the relaunch target -- is simply absent from the type rather than present and
+   * discouraged. The debt list in `hud-ownership.test.ts` reached empty by S7; this is
+   * what stops it filling again, because the next session-shaped edit that reaches for a
+   * route member does not compile.
+   *
+   * A FACADE, not the HUD itself, and that is the second half. Every method here runs the
+   * same generation guard the callbacks above do, so a frame from a retired session --
+   * `startGameWith`'s driver can still deliver one after `boot.ts` has stopped it and
+   * started its replacement -- paints nothing. Before this, `loop.ts` held the raw `Hud`
+   * with no guard at all: the outgoing match's last status push landed on the incoming
+   * match's topbar, and nothing in the suite could see it because nothing typed the
+   * difference between the two sessions' HUDs.
+   */
+  readonly hud: GameplayHud;
   onStartRestart(cb: () => void): void;
   onLevelSelect(cb: (level: number) => void): void;
   onNewGame(cb: () => void): void;
@@ -198,19 +231,57 @@ export interface GameplaySlot {
    * detach from an outgoing session must not silently unhook the incoming one. That is
    * the same stale-capture failure `session-host.ts`'s two "stale-capture control" tests
    * exist to catch, one layer up.
+   *
+   * Releasing also EMPTIES the gameplay sink -- see `clearGameplaySink` in this file's
+   * implementation for what that is and why the page, not the session, does it.
    */
   detach(): void;
 }
 
-export interface RouteHost {
-  /** The page's one HUD. Built at construction, disposed only at page teardown. */
-  readonly hud: Hud;
+/**
+ * What the page needs to be TOLD about a session in order to shape the route UI around it
+ * (issue #324, step S7).
+ *
+ * One field, and the interesting part is which fact is NOT here: the session's KIND.
+ * `relaunchTarget` answers "what do the title and outcome BUTTONS do", which is settled
+ * for a session's whole life by the level system and reboot seam it was built with
+ * (`session-intent.ts`'s `RelaunchTarget`). The kind answers "what is being played", which
+ * is a property of each WORLD and changes under a Levels pick -- so it rides the per-frame
+ * status push instead, where a rebuild can restate it.
+ *
+ * The two genuinely disagree: `?dev=1&mode=ffa` builds a real FFA world (kind `'versus'`)
+ * on the campaign level system, so its buttons stay campaign-shaped. Collapsing them into
+ * one attach-time value is the defect `session-title-policy-reused-as-identity` pins in
+ * the mutation manifest, and it is the reason this carries the buttons alone.
+ */
+export interface SessionShape {
+  readonly relaunchTarget: RelaunchTarget;
+}
+
+/**
+ * The half of the page's route UI a gameplay session may reach (issue #324, step S8).
+ *
+ * `startGameWith` takes THIS, not `RouteHost`. The three members below are everything a
+ * session was actually using; what the narrowing removes is `hud` -- the whole 67-member
+ * interface, handed to a session that then had to be trusted not to touch 57 of them --
+ * along with `hasSession` and the page teardown's `dispose`, neither of which a session
+ * has any business calling.
+ */
+export interface GameplayRouteHost {
   /** The page's one state machine: which route or gameplay phase is showing. */
   readonly sm: GameStateMachine;
-  /** The page's one application-route controller (issue #427). */
-  readonly routeUi: RouteUi;
   /**
-   * Take the gameplay slot for a new session.
+   * The ONE application-route member a session drives: re-fitting the Customize preview
+   * when the window resizes.
+   *
+   * A `Pick` rather than the whole `RouteUi` because the session's window-resize listener
+   * happens to be the page's only one, not because a match has anything to say about the
+   * paint shop. Issue #427 owns giving the page its own listener; until then this is the
+   * narrowest shape that keeps the preview correctly sized.
+   */
+  readonly routeUi: Pick<RouteUi, 'resizePreview'>;
+  /**
+   * Take the gameplay slot for a new session, telling the page what shape it is.
    *
    * Invalidates any previous slot, so a session that forgot to detach cannot keep
    * receiving clicks -- `attach` is the authority on who is live, not `detach`.
@@ -222,7 +293,14 @@ export interface RouteHost {
    * mid-gameplay, at an outcome screen -- which is the "stale route state" issue #468's
    * acceptance criteria forbid.
    */
-  attach(): GameplaySlot;
+  attach(session: SessionShape): GameplaySlot;
+}
+
+export interface RouteHost extends GameplayRouteHost {
+  /** The page's one HUD. Built at construction, disposed only at page teardown. */
+  readonly hud: Hud;
+  /** The page's one application-route controller (issue #427). */
+  readonly routeUi: RouteUi;
   /** Is a session holding the slot right now? */
   hasSession(): boolean;
   /**
@@ -718,21 +796,115 @@ export function createRouteHost(
   // behind it holds a renderer.
   routeUi.setStyleSink((hex, skin, accentHex) => live?.style?.(hex, skin, accentHex));
 
+  /**
+   * EMPTY THE GAMEPLAY SINK: every retained thing on screen that only a world can state.
+   *
+   * Run when a session releases the slot, and the direction is the whole point. Until
+   * issue #324's step S7 the page's only defence against a dead session's readings was
+   * that each exit path remembered to push a menu-shaped value on its way out -- which is
+   * a list, and a list is what goes stale. `hud.ts` retains what it was last told (the
+   * topbar strip, the outcome lines, the countdown chip, the developer shell readout, the
+   * touch thumbs), so anything a quitting match failed to overwrite simply stayed up.
+   *
+   * The five members here are exactly the RETAINED half of `GameplayHudKey`; the other
+   * five (`signalShellCapacity`, `signalPlayerDeath`, `signalPlayerFire`,
+   * `showAchievementToasts`, `showToast`) are transient signals that expire on their own
+   * and have no cleared state to push.
+   *
+   * `null` throughout rather than a campaign-shaped substitute: a page has no world, so it
+   * can state no lives, no enemy count, no stock strip and no tally. The touch indicator
+   * is the one member with no `null` -- it always takes a shape -- so the page states the
+   * one that means "no thumbs down", carrying the player's own scheme from the store it
+   * owns rather than inventing a default the HUD would then draw with.
+   */
+  const clearGameplaySink = (): void => {
+    hud.setStatus(null);
+    hud.setOutcome(null);
+    hud.setRoundPhase(null);
+    hud.setShellCount(null);
+    hud.setTouchIndicator({
+      stick: null,
+      aim: null,
+      scheme: deps.effectiveSettings.current().touchScheme,
+      used: false,
+    });
+  };
+
   return {
     hud,
     sm,
     routeUi,
     hasSession: () => live !== null,
-    attach(): GameplaySlot {
+    attach(session): GameplaySlot {
       const state: SlotState = {};
       live = state;
       const mine = ++generation;
+      /**
+       * WHAT THE BUTTONS DO, pushed by the PAGE (issue #324, step S7).
+       *
+       * This was the last application-route member a gameplay session touched: `loop.ts`
+       * pushed its own `setRelaunchTarget` a few statements after taking the slot, which
+       * left the title's shape owned half by the page (which resets it on detach) and half
+       * by whichever session last remembered to state it. Taking it as an attach argument
+       * makes the page the single writer, and makes "a session that never says" impossible
+       * rather than merely unobserved.
+       *
+       * BEFORE `sm.toMainMenu()` below, so the route reset paints the INCOMING session's
+       * shape. Either order settles on the same buttons -- `hud.ts`'s
+       * `applyTitleAffordances` recomputes from whichever of its four inputs moved last --
+       * but pushing first means the Main Menu is never rendered wearing the outgoing
+       * session's affordances, not even for the one synchronous frame a Campaign<->Versus
+       * switch spends passing through it.
+       */
+      hud.setRelaunchTarget(session.relaunchTarget);
       // The route the outgoing session left behind is not the incoming one's. Guarded on
       // the gate so the FIRST attach of a document load -- where the machine is still at
       // `launch` and nothing has been dismissed -- leaves the splash up.
       if (deps.launchGate.dismissed()) sm.toMainMenu();
       const current = (): boolean => mine === generation;
+      /**
+       * THE GUARDED GAMEPLAY HUD (issue #324, step S8). See `GameplaySlot.hud`.
+       *
+       * Written out member by member rather than built by a loop over the key union,
+       * because an object literal typed `GameplayHud` is checked BOTH ways: a member added
+       * to `GameplayHudKey` and not forwarded here stops the build, and a member forwarded
+       * here that the classification does not call gameplay-owned stops it too. A
+       * `Proxy`, or a `for` loop over `Object.keys`, would silently accept either.
+       */
+      const guardedHud: GameplayHud = {
+        setStatus: (status) => {
+          if (current()) hud.setStatus(status);
+        },
+        setOutcome: (outcome) => {
+          if (current()) hud.setOutcome(outcome);
+        },
+        setRoundPhase: (info) => {
+          if (current()) hud.setRoundPhase(info);
+        },
+        setShellCount: (info) => {
+          if (current()) hud.setShellCount(info);
+        },
+        signalShellCapacity: (info) => {
+          if (current()) hud.signalShellCapacity(info);
+        },
+        signalPlayerDeath: (color) => {
+          if (current()) hud.signalPlayerDeath(color);
+        },
+        signalPlayerFire: () => {
+          if (current()) hud.signalPlayerFire();
+        },
+        setTouchIndicator: (t) => {
+          if (current()) hud.setTouchIndicator(t);
+        },
+        showAchievementToasts: (defs) => {
+          if (current()) hud.showAchievementToasts(defs);
+        },
+        showToast: (message) => {
+          if (current()) hud.showToast(message);
+        },
+      };
       return {
+        hud: guardedHud,
         onStartRestart(cb): void {
           if (current()) state.startRestart = cb;
         },
@@ -783,22 +955,32 @@ export function createRouteHost(
         detach(): void {
           if (!current()) return;
           live = null;
-          // The menu goes back to the PAGE's shape. `relaunchTarget` and the gameplay
-          // status are pushed only by a session, at its construction, and until this line
-          // nothing took them back: after a setup-pane versus match the empty host kept
-          // offering "Start Match" and "Campaign", and that "Start Match" -- with no
-          // session to dispatch to -- is a New Game, which replaced the player's campaign
-          // run with no confirmation. Reset on the way OUT rather than on the next attach,
-          // because the page can sit at the Main Menu with no session for as long as the
-          // player likes.
+          // RETIRE THE GENERATION TOO, so `current()` is false for everything this slot
+          // can still be asked to do afterwards -- which is the whole of it, since the
+          // slot object outlives the release in `startGameWith`'s closure.
           //
-          // `null` rather than a campaign-shaped status, since issue #324's step S6 gave
-          // the projection a word for this: there is no live session, so the page claims
-          // no session's identity, no level position and no stock strip. A page cannot
-          // state lives or an enemy count anyway -- those come from a world, and the
-          // whole point of this line is that there is not one.
+          // Without this, only the seven click trampolines went quiet (they read `live`),
+          // while every method that guards on `current()` stayed live on a session that no
+          // longer exists: a late `setControllers` would repaint the panel for a finished
+          // match, a late `openVersusSetup` would open the pane over the Main Menu, and
+          // `detach()` itself would run its resets a second time. Since step S8 it also
+          // covers the whole gameplay HUD facade, where the failure is visible: a frame
+          // that lands after a quit repaints the empty host's topbar with the match that
+          // just ended.
+          generation += 1;
+          // The menu goes back to the PAGE's shape, and the arena's readouts go away with
+          // the world that produced them. Until this pair nothing took either back: after
+          // a setup-pane versus match the empty host kept offering "Start Match" and
+          // "Campaign", and that "Start Match" -- with no session to dispatch to -- is a
+          // New Game, which replaced the player's campaign run with no confirmation.
+          //
+          // Reset on the way OUT rather than on the next attach, because the page can sit
+          // at the Main Menu with no session for as long as the player likes. That is also
+          // why the clear belongs here rather than in each session's teardown: the menu
+          // must be free of a dead match because the SLOT was emptied, not because the
+          // match that happened to end remembered to tidy up after itself.
           hud.setRelaunchTarget('campaign-levels');
-          hud.setStatus(null);
+          clearGameplaySink();
         },
       };
     },
