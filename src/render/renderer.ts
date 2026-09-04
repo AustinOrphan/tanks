@@ -4,7 +4,7 @@ import type { Vec2 } from '../sim/types';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import { createScene, type SceneContext } from './scene';
-import type { RenderQuality } from './quality';
+import { QUALITY_PRESETS, DEFAULT_QUALITY_PRESET, type RenderQuality } from './quality';
 import { createEntityViews, type EntityViews } from './entities';
 import type { MineWarnStyle } from './mine-warning';
 import { createParticleSystem, type ParticleSystem } from './particles';
@@ -16,7 +16,7 @@ import { createMineDebug, type MineDebug } from './minedebug';
 import { createAiContact, type AiContact } from './ai-contact';
 import { createBlockedFireRingSystem, type BlockedFireRingSystem } from './blocked-fire-ring';
 import { createBlockedFireMuzzleSystem, type BlockedFireMuzzleSystem } from './blocked-fire-muzzle';
-import { createMuzzleSmokeSystem } from './muzzle-smoke';
+import { createMuzzleSmokeSystem, type MuzzleSmokeSystem } from './muzzle-smoke';
 import { createBarrelRecoilSystem } from './barrel-recoil';
 import { createBlockedFirePipsSystem, type BlockedFirePipsSystem } from './blocked-fire-pips';
 
@@ -168,7 +168,18 @@ export function createRenderer(
   // smokes whenever it cycles, on a shot and on a refusal alike (issues #526 and #536).
   // The recoil takes `entities`, not the scene, because it moves the REAL barrel and looks
   // it up per frame through EntityViews.barrelOf; the smoke owns sprites of its own.
-  const muzzleSmoke = createMuzzleSmokeSystem(ctx.scene);
+  //
+  // The smoke IS gated on the quality preset, though, which is a different kind of gate and
+  // the reason this reads the resolved preset rather than passing `options.quality` on the
+  // way scene.ts's knobs are. `low` drops the effect entirely, and dropping it has to mean
+  // not building it: a system constructed and told to draw nothing still pays
+  // its `spawn` and `update` on every frame and still holds its pooled sprites in the
+  // scene. `options.quality` absent means today's shipped render, so it resolves to the
+  // same default scene.ts applies to its own four.
+  const quality = options.quality ?? QUALITY_PRESETS[DEFAULT_QUALITY_PRESET];
+  const muzzleSmoke: MuzzleSmokeSystem | null = quality.muzzleSmoke
+    ? createMuzzleSmokeSystem(ctx.scene, quality.muzzleSmoke)
+    : null;
   const barrelRecoil = createBarrelRecoilSystem(entities);
   const blockedFirePips: BlockedFirePipsSystem | null =
     options.blockedFire === 'pips' ? createBlockedFirePipsSystem(ctx.scene) : null;
@@ -208,8 +219,8 @@ export function createRenderer(
     // object the recoil is sliding, so nothing here is order-sensitive -- worth saying
     // plainly, because the line above it is order-sensitive for a reason that does not
     // apply to this one.
-    muzzleSmoke.spawn(events, curr);
-    muzzleSmoke.update(dt);
+    muzzleSmoke?.spawn(events, curr);
+    muzzleSmoke?.update(dt);
     // `curr` in update too: the pip strip follows its tank for the half-second it lives.
     blockedFirePips?.spawn(events, curr, options.blockedFire);
     blockedFirePips?.update(dt, curr);
@@ -266,7 +277,7 @@ export function createRenderer(
     blockedFireRing?.dispose();
     blockedFireMuzzle?.dispose();
     barrelRecoil.dispose();
-    muzzleSmoke.dispose();
+    muzzleSmoke?.dispose();
     blockedFirePips?.dispose();
     entities.dispose();
     particles.dispose();
@@ -290,7 +301,7 @@ export function createRenderer(
       blockedFireRing?.setReducedMotion(on);
       blockedFireMuzzle?.setReducedMotion(on);
       barrelRecoil.setReducedMotion(on);
-      muzzleSmoke.setReducedMotion(on);
+      muzzleSmoke?.setReducedMotion(on);
       blockedFirePips?.setReducedMotion(on);
     },
     dispose,

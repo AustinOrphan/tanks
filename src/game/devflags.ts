@@ -865,7 +865,14 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     values: [...QUALITY_PRESET_NAMES],
     description:
       'Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and ' +
-      'filter) instead of the shipped `high` default.',
+      'filter, and how much muzzle smoke is drawn) instead of the shipped `high` default.',
+    notes: [
+      'Muzzle smoke (shipped by PR #537) is the one effect the preset governs: `high` draws ' +
+        'all of it, `medium` one billow per cloud at half the cloud ceiling, and `low` does ' +
+        'not build the system at all.',
+      'This is the only way to turn the smoke down, and it is a developer flag rather ' +
+        'than a Setting -- so an ordinary player cannot reach it.',
+    ],
   },
   bots: {
     kind: 'valued',

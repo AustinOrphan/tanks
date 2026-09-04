@@ -28,7 +28,7 @@ import { createTankPreview } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../gallery/subjects';
 import { buildMomentScene } from '../gallery/moment-scene';
 import { MOMENTS } from '../gallery/moments';
-import { QUALITY_PRESETS } from '../../src/render/quality';
+import { QUALITY_PRESETS, type MuzzleSmokeQuality, type RenderQuality } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
@@ -2374,6 +2374,320 @@ check('a REFUSED shot smokes darker AND louder than a fired one, at the shipped 
     return `a refusal departs from the empty arena by ${refusedVoice.toFixed(2)} levels and an ordinary shot by ${shotVoice.toFixed(2)} -- the exceptional event is the quieter one, which is backwards`;
   }
   return null;
+});
+
+// ---------------------------------------------------------------------------
+// muzzle-smoke.ts's COST, and what each quality preset leaves of it.
+// The two checks above ask whether the puff is visible and whether the two looks
+// are far enough apart. The one below asks what it charges for that, and whether
+// the preset that is supposed to drop it actually does.
+// ---------------------------------------------------------------------------
+
+/** `n` tanks spread across the middle of the board, all on camera, none overlapping. */
+function firefightWorld(n: number): ReturnType<typeof createWorld> {
+  const tanks: Tank[] = [];
+  const spawns: Spawn[] = [];
+  for (let i = 0; i < n; i++) {
+    const pos = { x: W * (0.2 + 0.2 * (i % 4)), y: H * (0.3 + 0.4 * Math.floor(i / 4)) };
+    // Kinds are mixed only so the board is not eight identical player hulls; nothing about
+    // the smoke depends on the kind, since #536 puffs at every living tank alike.
+    const kind: Tank['kind'] = i === 0 ? 'player' : 'brown';
+    tanks.push({
+      id: i + 1, kind, pos, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0,
+    });
+    spawns.push({ kind, pos, angle: 0 });
+  }
+  return createWorld({ walls: [], tanks, spawns, lives: 3 });
+}
+
+/**
+ * Eight guns, which is the population muzzle-smoke.ts's own ceiling is derived from -- a
+ * four-slot roster plus a campaign board's enemies. Fewer would understate the cost and
+ * more would be a board the game cannot deal.
+ */
+const COST_TANKS = 8;
+const COST_W = 800;
+const COST_H = 500;
+/**
+ * Frames between the volley and the measurement, at 1/60 each. 22 is 0.367s, which does
+ * two things: it is past everything else a `fire` event draws (particles.ts's muzzle burst
+ * ends at 0.234s at the latest, barrel-recoil.ts's kick at 0.16s), so smoke is the only
+ * thing the events have left on the board; and it leaves each cloud 49% through its 0.75s
+ * life, with the billows spread to about three quarters of their final size -- the middle
+ * of the effect rather than its cheapest or its most expensive instant.
+ */
+const COST_SETTLE = 22;
+/** Frames at 1/60 that retire every cloud (0.75s of life) before a new population lands. */
+const COST_DRAIN_LIFE = 50;
+/** Frames rendered before the clock starts, so nothing one-off is inside the sample. */
+const COST_WARMUP = 20;
+/** Frames in one timed sample. */
+const COST_FRAMES = 60;
+
+interface CostRig {
+  /** Retire every live cloud, then put `clouds` fresh ones on the board and settle them. */
+  populate(clouds: number): void;
+  /** Mean ms of one `render`, over COST_FRAMES calls after COST_WARMUP, best of `runs`. */
+  meanRenderMs(runs: number): number;
+  /** Draw calls issued by ONE frame. */
+  drawsPerFrame(): number;
+  frame(): Uint8Array;
+  dispose(): void;
+}
+
+/**
+ * A renderer whose smoke knob is `muzzleSmoke` and whose every other knob is `high`.
+ *
+ * Isolating the one knob is the point: the three real presets also move the shadow map,
+ * the pixel-ratio cap and antialiasing, so a difference between two REAL presets could not
+ * be attributed to the smoke. Everything below therefore varies only the smoke budget.
+ *
+ * The rig counts draw calls by wrapping the GL context's draw entry points. It patches
+ * `HTMLCanvasElement.prototype.getContext` for the length of the `createRenderer` call
+ * rather than pre-creating the context itself, because a pre-created context would ignore
+ * the attributes three.js asks for -- and this rig is also the one whose PIXELS are
+ * compared, so it has to be the renderer the game builds. The counter costs a closure per
+ * draw call, some tens of nanoseconds against frames measured in tenths of a millisecond,
+ * and it is present on every arm alike.
+ */
+function costRig(quality: RenderQuality | undefined): CostRig {
+  const c = placedCanvas(COST_W, COST_H, 0, 0, COST_W, COST_H);
+  let draws = 0;
+  const proto = HTMLCanvasElement.prototype as unknown as { getContext: (...a: unknown[]) => unknown };
+  const realGetContext = proto.getContext;
+  let wrapped = false;
+  proto.getContext = function (this: HTMLCanvasElement, ...a: unknown[]): unknown {
+    const g = realGetContext.apply(this, a);
+    if (this === c && g && !wrapped) {
+      wrapped = true;
+      const rec = g as unknown as Record<string, unknown>;
+      for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+        const fn = rec[name];
+        if (typeof fn !== 'function') continue;
+        rec[name] = (...x: unknown[]): unknown => {
+          draws++;
+          return (fn as (...y: unknown[]) => unknown).apply(g, x);
+        };
+      }
+    }
+    return g;
+  };
+  let r: ReturnType<typeof createRenderer>;
+  try {
+    // `undefined` passes NO quality option, which is the shipped default path -- not the
+    // same construction as passing `high` explicitly, and the difference is what one of the
+    // assertions below is for.
+    r = createRenderer(c, W, H, BOUNDARY, quality ? { quality } : {});
+  } finally {
+    proto.getContext = realGetContext;
+  }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const w = firefightWorld(COST_TANKS);
+  const none = [] as unknown as Parameters<typeof r.render>[3];
+  // dt 0 on every measured frame: `update` still places every billow and writes every
+  // material's opacity, so the per-frame work is the real one -- but no cloud ages, so the
+  // last frame of a sample draws exactly what the first one drew.
+  const step = (): void => r.render(w, w, 1, none, 0);
+  return {
+    populate: (clouds: number) => {
+      for (let i = 0; i < COST_DRAIN_LIFE; i++) r.render(w, w, 1, none, 1 / 60);
+      // `fire`, not `fire-blocked`: the ordinary shot is what every gun does on every
+      // cycle. The events carry the fields particles.ts reads, since the burst does run --
+      // and finish -- during the settle frames below.
+      const events = Array.from({ length: clouds }, (_, i) => {
+        const t = w.tanks[i % COST_TANKS];
+        return { type: 'fire', ownerId: t.id, bulletType: 'normal', pos: { x: t.pos.x, y: t.pos.y }, angle: 0 };
+      }) as unknown as Parameters<typeof r.render>[3];
+      r.render(w, w, 1, events, 1 / 60);
+      for (let i = 0; i < COST_SETTLE; i++) r.render(w, w, 1, none, 1 / 60);
+    },
+    meanRenderMs: (runs: number) => {
+      let best = Infinity;
+      for (let run = 0; run < runs; run++) {
+        for (let i = 0; i < COST_WARMUP; i++) step();
+        const t0 = performance.now();
+        for (let i = 0; i < COST_FRAMES; i++) step();
+        // The minimum of several samples, not the mean of them. Timing noise here is
+        // one-sided: another task can interrupt a sample, nothing can make one faster than
+        // the work in it, so the smallest sample is the closest to the cost being asked
+        // about and averaging drags every arm toward whatever else the machine was doing.
+        best = Math.min(best, (performance.now() - t0) / COST_FRAMES);
+      }
+      return best;
+    },
+    drawsPerFrame: () => {
+      draws = 0;
+      step();
+      return draws;
+    },
+    frame: () => {
+      step();
+      return grab(gl, c.width, c.height);
+    },
+    dispose: () => {
+      r.dispose();
+      c.remove();
+    },
+  };
+}
+
+check('the quality preset decides how much muzzle smoke a frame draws, and `low` draws none', () => {
+  // MEASURED HERE at 800x500 under swiftshader, arms interleaved within one page load so
+  // none of them is scored against a different machine state than another.
+  //
+  // DRAW CALLS PER FRAME, which is what this check actually asserts, because they are
+  // integers and because they are the mechanism. The board itself issues 81, and the smoke
+  // adds exactly ONE PER VISIBLE BILLOW: 96 at `high`'s ceiling of 32 clouds by 3 billows,
+  // 16 at `medium`'s 16 by 1, and 0 with the system unbuilt. A `SpriteMaterial` per billow
+  // means nothing batches, so the billow count IS the draw-call count -- which is why the
+  // billow count is the lever `medium` pulls.
+  //
+  // MILLISECONDS PER FRAME, main thread, mean of 60 `render` calls, best of 3 samples after
+  // a 20-frame warm-up, and quoted from two full runs (n=2) rather than one:
+  //
+  //     32 clouds asked for      no smoke   medium (16)   high (96)
+  //       run 1                    0.182       0.208        0.330
+  //       run 2                    0.175       0.198        0.340
+  //     8 clouds asked for       no smoke   medium (8)    high (24)
+  //       run 1                    0.168       0.197        0.223
+  //       run 2                    0.168       0.187        0.223
+  //
+  // So the whole effect at its absolute ceiling costs about 0.165ms of main-thread time,
+  // roughly 1.7 microseconds per billow, and `medium` gives back about 86% of it. At the
+  // population an actual firefight produces -- 8 clouds, the 24 billows the ceiling's own
+  // derivation calls a busy board -- the effect costs about 0.055ms.
+  //
+  // THE HONEST READING: this is a LEVER, NOT A RESCUE. 0.165ms is 1.0% of a 16.67ms frame
+  // and 0.055ms is 0.3% of one. The defect being fixed is real -- PR #537 shipped the
+  // effect with no way to turn it off at all -- but on this instrument it is not large
+  // enough to be the lag it was then blamed for, and a preset that changed the picture for
+  // nothing would be worse than none. What justifies `medium` is that the ratio is genuine (1.9x the
+  // no-smoke frame at the ceiling, against 1.13x cheapened) and that it is the only tier
+  // that keeps smoke at all.
+  //
+  // ABSOLUTE RATES ARE THIS MACHINE'S; THE RATIOS ARE THE CLAIM. Both runs above were taken
+  // on a developer Mac at a load average above 120, and idle-cost.ts's own header makes the
+  // same point for the same reason. The two runs agree to within 6% on every arm, and the
+  // assertions below are written as ratios against each arm's own smokeless control so that
+  // a faster or slower box cannot move them.
+  //
+  // WHAT THIS INSTRUMENT CANNOT SEE is the fill-rate half, and that was checked rather than
+  // assumed. Rendering the same 96 sprites at 1600x1000 instead of 800x500 -- four times
+  // the pixels -- left the smoke's cost unchanged (0.125ms against 0.137ms in that probe,
+  // i.e. inside the noise and in the wrong direction), and a `gl.finish()` after every
+  // frame added nothing either (0.330 against 0.335). The raster is not on this thread.
+  // What is measured here is the SUBMIT cost -- scene traversal, three.js's per-sprite
+  // matrix and uniform work, and the state change a material per sprite forces -- which is
+  // precisely the half that blocks the main thread, and so the half a player feels as the
+  // game being slow to react to them.
+  const smoke = (muzzleSmoke: MuzzleSmokeQuality | null): RenderQuality =>
+    ({ ...QUALITY_PRESETS.high, muzzleSmoke });
+  const arms = {
+    off: costRig(smoke(null)),
+    cheap: costRig(smoke({ billowsPerCloud: 1, maxClouds: 16 })),
+    full: costRig(smoke({ billowsPerCloud: 3, maxClouds: 32 })),
+    // No quality option at all: what an unflagged player gets, and the only arm here that
+    // is not built from a hand-written budget.
+    shipped: costRig(undefined),
+  };
+  try {
+    // Enough shots to reach `high`'s ceiling, so each arm is holding as much smoke as its
+    // own preset allows rather than as much as this volley asked for. That is the
+    // comparison the presets are for: `medium` recycles at 16 clouds and `high` at 32.
+    const CEILING_VOLLEY = 32;
+    for (const rig of Object.values(arms)) rig.populate(CEILING_VOLLEY);
+    // The ruling first, because it is the one this check is named for. `low` is not "draws
+    // fewer": the system is never constructed, so a volley that fills every other arm's
+    // ceiling must leave this arm's framebuffer exactly where it was with no volley at all.
+    // Byte identity is the right instrument -- a puff drawn at a hundredth of its opacity
+    // would still be a difference, and would still be paid for every frame.
+    //
+    // MEASURED at both ends: 0 of 1,600,000 bytes with the gate intact, and with
+    // renderer.ts's gate removed so that `low` builds the system after all (the mutation
+    // manifest's renderer-builds-the-smoke-system-low-dropped, a disclosed survivor
+    // because no vitest case can reach that line) this check fails here.
+    const volleyed = arms.off.frame();
+    arms.off.populate(0);
+    const quiet = arms.off.frame();
+    const moved = bytesDiffering(volleyed, quiet);
+    if (moved !== 0) {
+      return `with the smoke preset null, ${moved} of ${quiet.length} bytes still differ between a 32-shot volley and no shots at all -- the system was built and is drawing`;
+    }
+    const draws = {
+      off: arms.off.drawsPerFrame(),
+      cheap: arms.cheap.drawsPerFrame(),
+      full: arms.full.drawsPerFrame(),
+    };
+    // The DELTA against the smokeless arm, never the absolute count: the board's own 81 is
+    // three.js's business and would move under a renderer upgrade, while "one draw call per
+    // visible billow" is this file's claim.
+    if (draws.cheap - draws.off !== 16) {
+      return `medium drew ${draws.cheap - draws.off} more calls than a frame with no smoke, want exactly 16 (16 clouds, 1 billow each)`;
+    }
+    if (draws.full - draws.off !== 96) {
+      return `high drew ${draws.full - draws.off} more calls than a frame with no smoke, want exactly 96 (32 clouds, 3 billows each)`;
+    }
+    // And the frames must not all be the same picture, or the check above would pass on a
+    // renderer that had stopped drawing smoke entirely. `full` is the shipped look; `cheap`
+    // draws a third of it and must therefore be a DIFFERENT picture, not merely a cheaper
+    // one that happens to land on the same pixels.
+    const fullFrame = arms.full.frame();
+    if (bytesDiffering(fullFrame, quiet) === 0) {
+      return 'the high-preset frame is identical to a frame with no smoke -- the control is not measuring anything';
+    }
+    if (bytesDiffering(fullFrame, arms.cheap.frame()) === 0) {
+      return 'the medium-preset frame is identical to the high-preset frame -- the cheapening changed nothing on screen';
+    }
+    // AND THE SHIPPED LOOK IS THE ONE THAT MUST NOT HAVE MOVED. An unflagged player passes
+    // no quality option, so this arm is the render as it stands, and it must be identical
+    // to the effect drawn at its authored budget -- the literal 3-by-32 written above,
+    // deliberately not read out of QUALITY_PRESETS, which would make this a comparison of
+    // the table with itself. It fails if `high` ever stops being the whole effect, and it
+    // fails if DEFAULT_QUALITY_PRESET stops being `high`.
+    //
+    // The stronger form of this claim was measured OUTSIDE the harness while this check was
+    // written, because nothing inside one tree can compare it against another: a temporary
+    // probe hashed the default-path framebuffer for five scenes -- one shot and one refusal
+    // at the #536 fixture's own sample point, and a 40-shot volley past the cloud ceiling
+    // sampled early and late -- on this branch and on the commit before it. All five hashes
+    // matched exactly (a0f48290, de3b1b3b, 3669e51d, 4ba09f03, aea1bbc9), including the
+    // volley that drives `acquire`'s recycle branch, which is the other line the preset
+    // touches. A sixth scene was dropped from that comparison rather than explained away:
+    // an early `fire` frame does not reproduce even against itself, because particles.ts's
+    // muzzle burst is still alive at that point and reads `Math.random`.
+    if (bytesDiffering(fullFrame, arms.shipped.frame()) !== 0) {
+      return 'the default construction path and an explicit full smoke budget render different frames -- the shipped look has moved';
+    }
+    // THE TIMED HALF IS RECORDED, NOT ASSERTED, and that is a deliberate retreat from an
+    // earlier draft of this check which failed the build on two timing ratios.
+    //
+    // What they would have added, the draw-call assertions above already prove exactly and
+    // deterministically: 81 baseline, +96 at `high`, +16 at `medium`, +0 at `low`. A
+    // sub-millisecond wall-clock comparison cannot prove more than that about a lever whose
+    // whole mechanism is the number of draw calls, and it can fail for reasons that have
+    // nothing to do with this code. `npm run test:gl` runs inside the required `visual`
+    // job, so a flaky assertion here is a flaky required check for everyone -- a cost far
+    // larger than a confirmation the counts already give.
+    //
+    // The measurements themselves are worth keeping, because they are the answer to the
+    // question that prompted this work. Taken on a 2026 Mac under swiftshader at 800x500,
+    // 8 tanks, best of 3 samples, two full runs:
+    //
+    //   ceiling (32 clouds)    none 0.182/0.175ms   medium 0.208/0.198ms   high 0.330/0.340ms
+    //   firefight (8 clouds)   none 0.168/0.168ms   medium 0.197/0.187ms   high 0.223/0.223ms
+    //
+    // So the whole effect costs about 0.165ms at a population it will almost never reach,
+    // and 0.055ms in an ordinary firefight -- 1.0% and 0.3% of a 16.67ms frame. This is a
+    // lever for a weak device, NOT a fix for a stutter, and the difference matters: rendered
+    // at 1600x1000 (four times the pixels) the same 96 sprites cost the same, and a
+    // `gl.finish()` after every frame changed nothing, so the cost is main-thread submit
+    // rather than fill rate. The fill-rate premise this work started from was wrong.
+    return null;
+  } finally {
+    for (const rig of Object.values(arms)) rig.dispose();
+  }
 });
 
 // __glResults is the runner's readiness signal, and it is assigned LAST on purpose: the

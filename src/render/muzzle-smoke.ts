@@ -3,6 +3,7 @@ import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import { SHELL_MUZZLE_FORWARD } from '../sim/constants';
 import { BULLET_Y } from './tank-model';
+import { FULL_MUZZLE_SMOKE, type MuzzleSmokeQuality } from './quality';
 
 /**
  * The gun smokes when it cycles (issue #536), and it smokes DIRTIER when nothing came out.
@@ -61,6 +62,32 @@ import { BULLET_Y } from './tank-model';
  * The refusal half rides along with that: an enemy's dark puff is legible only to someone
  * who was already watching that barrel, and the shell that did not appear leaks the same
  * fact anyway.
+ *
+ * HOW MUCH OF IT EXISTS IS A QUALITY DECISION, and this is the only effect in the renderer
+ * that has one. PR #537 shipped it unconditional, the owner reported the game "much
+ * laggier" afterwards, and the answer to that was to give it a way to be turned down:
+ * `RenderQuality.muzzleSmoke` (quality.ts) says how many billows a cloud draws and how many
+ * clouds may live, and a preset may say `null`, at which point `createRenderer` never
+ * builds this system at all. Nothing in this file reads a flag -- the budget arrives as a
+ * constructor argument.
+ *
+ * The shape of the cost is what makes this the effect with the knob: large, translucent,
+ * normally-blended sprites over already-shaded ground, each one carrying its own
+ * `SpriteMaterial` so nothing batches, up to `maxClouds` clouds multiplied by the billow
+ * count. Everything else this renderer draws is either opaque geometry the depth buffer
+ * rejects early or a handful of small additive quads.
+ *
+ * IT IS NOT, HOWEVER, THE LAG. Measured in tools/gl/harness.ts rather than assumed: the
+ * whole effect at its ceiling costs about 0.165ms of main-thread time per frame, 1% of a
+ * 16.67ms budget, and about 0.055ms at the population a real firefight produces. So what
+ * the budget fixes is that there was no lever at all, not that this was the thing that
+ * needed pulling -- and anyone arriving here from the lag report should read the harness's
+ * numbers before cutting anything else out of this file.
+ *
+ * What the cheapened tier costs the effect is the SHEAR: the paragraph above says the
+ * billow table exists so the cloud pulls apart as it rises, and one billow cannot do that.
+ * It is still a puff of the right colour, in the right place, expanding and thinning on the
+ * right curve, so both looks survive; only the way the cloud moves is poorer.
  */
 export interface MuzzleSmokeSystem {
   /** Puff at the muzzle of every living tank that fired or was refused this frame. */
@@ -99,24 +126,6 @@ const DRIFT_FORWARD = 0.28;
 const RISE = 0.3;
 /** Radians a billow turns over its whole life, times its own spin rate. Slow on purpose. */
 const SPIN = 0.5;
-/**
- * Clouds alive at once, before the next puff is dropped.
- *
- * DERIVED, not chosen. A gun cannot cycle faster than its own cooldown, and a refusal is
- * gated by the same cooldown as a shot (sim/cap-refusal-cooldown.test.ts records why: the
- * `fireCooldown <= 0` gate is upstream of `spawnBullet`, so a refused shot is not a free
- * one). The shortest cooldown config/difficulty.ts allows is 14 ticks, a hair under 0.24s,
- * against a 0.75s life -- so one gun can have 4 clouds in the air. The tank multiplier is
- * an UPPER BOUND, not a measured seat count: the player roster caps at 4 slots
- * (devflags.ts's `players` accepts 1-4) and a campaign board adds its enemies, so 8 guns
- * all firing at the floor cooldown is comfortably past anything shipped. 8 * 4 = 32, and
- * clouds are built lazily, so an ordinary duel still allocates a handful.
- *
- * Generous precisely so it is not reached -- but `acquire` still says what happens if it
- * is, rather than leaving the answer to whichever branch happens to run first.
- */
-const MAX_CLOUDS = 32;
-
 /**
  * What separates a shot from a refusal, and the MEASUREMENT that decided it.
  *
@@ -233,6 +242,23 @@ const BILLOWS: readonly {
   { along: 0.08, across: -0.09, lift: -0.02, size: 0.64, drift: 0.8, spin: 4.1 },
 ];
 
+/**
+ * How many billows the whole effect has, for the preset table to pin itself against.
+ *
+ * THE ORDER OF THE TABLE ABOVE IS LOAD-BEARING SINCE THE QUALITY BUDGET ARRIVED, which it
+ * was not before, and this is the only place that says so. A cloud draws a PREFIX of it --
+ * `RenderQuality.muzzleSmoke.billowsPerCloud` entries -- so entry 0 is the billow a
+ * cheapened cloud is left with, and it is the centred, largest, un-offset one on purpose.
+ * Reordering these three rows used to be free, because every cloud drew all of them; now
+ * it decides what `medium` looks like. Note that it is the POSITION that selects, not the
+ * row's contents: `place` pairs sprite i with BILLOWS[i], so a slice taken from the other
+ * end of the table would produce the same picture and only the ordering would have moved.
+ *
+ * Exported only so quality.ts's `high` preset can be asserted to draw ALL of them; nothing
+ * else has any business slicing this table.
+ */
+export const BILLOW_COUNT = BILLOWS.length;
+
 /** Texture resolution. 64 is the size mine-warning.ts's glow falloff settled on. */
 const TEX_SIZE = 64;
 
@@ -287,7 +313,17 @@ interface Cloud {
   fadePower: number;
 }
 
-export function createMuzzleSmokeSystem(scene: THREE.Scene): MuzzleSmokeSystem {
+export function createMuzzleSmokeSystem(
+  scene: THREE.Scene,
+  /**
+   * How much of the effect to draw -- see quality.ts. Defaulted to the whole of it rather
+   * than made mandatory because the two callers that are not the game renderer (the
+   * gallery's moment scene, and this file's own tests) want the authored effect and have
+   * no preset to hand; `createRenderer` always passes one, and does not call this at all
+   * when the preset says `null`.
+   */
+  quality: MuzzleSmokeQuality = FULL_MUZZLE_SMOKE,
+): MuzzleSmokeSystem {
   let reducedMotion = false;
   // One texture for every billow of every cloud, disposed once: `Material.dispose()` does
   // not release a bound map, which is the leak disposeMineGlowMesh exists to avoid.
@@ -296,7 +332,14 @@ export function createMuzzleSmokeSystem(scene: THREE.Scene): MuzzleSmokeSystem {
   const active: Cloud[] = [];
 
   function makeCloud(): Cloud {
-    const billows = BILLOWS.map((b) => {
+    // A PREFIX of the table, not all of it: `medium` draws one billow where `high` draws
+    // three, and entry 0 is the large centred one a cheapened cloud is left with (see
+    // BILLOW_COUNT). A prefix rather than any other slice so that the row a sprite is BUILT
+    // from is the row `place` will go on to address it by. Those two are independent today
+    // -- `place` indexes BILLOWS by position and overwrites the spin set below on the very
+    // first placement, so a suffix slice would render identically -- but a slice that
+    // disagreed with the placement would be a trap laid for the next reader.
+    const billows = BILLOWS.slice(0, quality.billowsPerCloud).map((b) => {
       const sprite = new THREE.Sprite(
         // NORMAL blending, unlike every other additive effect in this renderer. Additive
         // smoke would brighten the felt behind it, which is the one thing smoke never
@@ -330,7 +373,7 @@ export function createMuzzleSmokeSystem(scene: THREE.Scene): MuzzleSmokeSystem {
   function acquire(look: SmokeLook): Cloud | null {
     let cl = pool.pop();
     if (!cl) {
-      if (active.length >= MAX_CLOUDS) {
+      if (active.length >= quality.maxClouds) {
         // At budget, the OLDEST cloud is recycled rather than the newest puff skipped.
         // `active` is append-ordered and entries leave it as they expire, so index 0 is
         // the cloud nearest the end of its life -- already the thinnest on screen.
