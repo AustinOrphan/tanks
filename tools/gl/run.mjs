@@ -90,16 +90,41 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(String(e)));
-  await page.goto(`${BASE}tools/gl/harness.html`, { waitUntil: 'load' });
+  // `load` is a WEAK readiness signal here and the budget has to reflect that. The harness
+  // module uses top-level await, which makes it an async module the load event does not
+  // wait for -- so this resolves once vite has transformed and served the graph, long
+  // before any check has run, and the real signal is `__glResults` below. Playwright's
+  // default 30s is a transform budget rather than a work budget, and on a loaded machine
+  // with a cold vite cache it is not enough: this call is what failed, on a tree with no
+  // changes to the harness at all, before the guard below was ever reached. 120s, for the
+  // same reason the guard below is generous -- a bare TimeoutError with no check output
+  // reads as a broken harness rather than a slow one.
+  await page.goto(`${BASE}tools/gl/harness.html`, { waitUntil: 'load', timeout: 120000 });
   // A LIVENESS guard, not an assertion: nothing about the checks depends on this number,
-  // and a harness that hangs is caught just as well at 90s as at 30s. Raised from 30s
-  // because the margin got thin. Measured on this box (4 GB, swiftshader, no GPU) with a
-  // temporary probe around this call: 15676 / 15937 / 15977 ms (n=3, this branch), so 30s
-  // was ~1.9x the span -- against a 2-vCPU CI runner that is not a comfortable ratio, and
-  // an overrun surfaces as a bare TimeoutError with no check output, which reads as a
-  // broken harness rather than a slow one. Not a claim that the branch is fast: it added
-  // three WebGL contexts and ~1.8s of deliberate idle() waits, and that cost is real.
-  await page.waitForFunction(() => !!window.__glResults, undefined, { timeout: 90000 });
+  // and a harness that hangs is caught just as well at 600s as at 30s. It has now been
+  // raised twice, and the second raise is worth recording in full because the first one's
+  // measurement no longer describes any machine anyone runs this on.
+  //
+  // The 30s -> 90s raise was measured on a 4 GB CI-shaped box with no GPU: 15676 / 15937 /
+  // 15977 ms (n=3), so 90s was a comfortable ~5.6x. On a 2026 developer Mac, also under
+  // `--use-gl=swiftshader`, the same page took 87.6s -- five and a half times longer than
+  // the box the old margin was sized against, and 97% of the budget it was given. It was
+  // already failing here on the odd run before anything was added to it.
+  //
+  // What forced the second raise is not only that this branch's smoke-cost checks add four
+  // more WebGLRenderer constructions and their shader compiles. It is the SPREAD. Timed around
+  // this call on that Mac, this branch came in at 113s, 175s and (with a mutation applied
+  // that made every arm draw smoke) 411s, while the machine was doing other work in
+  // parallel -- which a developer's machine always is. A budget sized to the fastest of
+  // those turns an ordinary busy afternoon into a bare TimeoutError with no check output,
+  // and that reads as a broken harness rather than a slow one.
+  //
+  // 600s is therefore a ceiling for a HANG, not a budget for the work: the cost of setting
+  // it too low is a misleading failure on a page that would have answered, and the cost of
+  // setting it too high is waiting on one that never will. CI's own box is the fast case
+  // here, not the slow one, so this does not slow the `visual` job down -- it only stops
+  // the local run from lying about why it failed.
+  await page.waitForFunction(() => !!window.__glResults, undefined, { timeout: 600000 });
   const results = await page.evaluate(() => window.__glResults);
 
   let failed = 0;

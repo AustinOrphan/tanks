@@ -7,7 +7,7 @@
 // tools/gl/harness.ts.
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { createMuzzleSmokeSystem, SMOKE } from './muzzle-smoke';
+import { createMuzzleSmokeSystem, BILLOW_COUNT, SMOKE } from './muzzle-smoke';
 import { BULLET_Y } from './tank-model';
 import { createWorld, type World } from '../sim/world';
 import { SHELL_MUZZLE_FORWARD } from '../sim/constants';
@@ -393,6 +393,75 @@ describe('muzzle smoke (issue #536, parent #356)', () => {
     // Still a cue, still thinning: reduced motion removes the travel, not the information.
     expect(b.material.opacity).toBeLessThan(SMOKE.fired.peakOpacity);
     expect(billows(scene).length).toBeGreaterThan(0);
+  });
+
+  it('draws only as many billows per cloud as the quality preset asks for', () => {
+    // The quality budget's cheapening, and the reason it is the billow count that moves: each
+    // billow is its own sprite carrying its own SpriteMaterial, so one billow fewer is one
+    // draw call fewer as well as less of the screen covered. What a preset buys is measured
+    // in tools/gl/harness.ts; what it MEANS is here.
+    //
+    // Negative control: the default -- what the gallery, and every caller from before the
+    // budget existed, still gets -- must be the whole table, or "fewer" would be true of a
+    // system that had lost billows for some other reason.
+    const full = new THREE.Scene();
+    createMuzzleSmokeSystem(full).spawn([fired(1)], world([tank(1, 'player')]));
+    expect(billows(full)).toHaveLength(BILLOW_COUNT);
+
+    const cheap = new THREE.Scene();
+    createMuzzleSmokeSystem(cheap, { billowsPerCloud: 1, maxClouds: 32 }).spawn(
+      [fired(1)],
+      world([tank(1, 'player')]),
+    );
+    expect(billows(cheap)).toHaveLength(1);
+  });
+
+  it('a cheapened cloud is left with the BIGGEST billow, which is what the table\'s order decides', () => {
+    // What the quality budget made load-bearing about a table that had none of this riding
+    // on it before: a cloud draws a PREFIX of BILLOWS, so whichever billow is written first
+    // is the one `medium` keeps. Largest-first is the right order because the alternative
+    // leaves a cheapened puff two thirds the width of a full one -- a smaller cloud rather
+    // than a simpler one, which is not what a preset asking for less detail should produce.
+    //
+    // This is an assertion about the ORDER, not about the slice. Measured while writing it:
+    // taking the same count from the other end of the table survives every test in this
+    // file, because `place` pairs sprite i with BILLOWS[i] and so re-imposes the prefix's
+    // own geometry on whatever sprites exist. Only moving the rows moves the picture, which
+    // is what muzzle-smoke-billow-table-reordered-smallest-first pins.
+    //
+    // Negative control: the full cloud's own billows are not all the same size -- if they
+    // were, this assertion would hold under every ordering.
+    const full = new THREE.Scene();
+    createMuzzleSmokeSystem(full).spawn([fired(1)], world([tank(1, 'player')]));
+    const sizes = billows(full).map((b) => b.scale.x);
+    expect(Math.min(...sizes)).toBeLessThan(Math.max(...sizes));
+
+    const cheap = new THREE.Scene();
+    createMuzzleSmokeSystem(cheap, { billowsPerCloud: 1, maxClouds: 32 }).spawn(
+      [fired(1)],
+      world([tank(1, 'player')]),
+    );
+    expect(billows(cheap)[0].scale.x).toBeCloseTo(Math.max(...sizes), 9);
+  });
+
+  it('takes its cloud ceiling from the preset, not from a constant of its own', () => {
+    // The other half of the cheapening: `medium` halves how many clouds may live at once,
+    // which is what bounds the crowded frame rather than the ordinary one. A system built
+    // with a ceiling of 2 must recycle at 2 however many shots arrive.
+    //
+    // Negative control: the same volley against a ceiling of 8 leaves 8 clouds standing, so
+    // the assertion is reading the preset rather than some unrelated cap on this fixture.
+    const tight = new THREE.Scene();
+    const tightSys = createMuzzleSmokeSystem(tight, { billowsPerCloud: 1, maxClouds: 2 });
+    const roomy = new THREE.Scene();
+    const roomySys = createMuzzleSmokeSystem(roomy, { billowsPerCloud: 1, maxClouds: 8 });
+    const w = world([tank(1, 'player')]);
+    for (let i = 0; i < 20; i++) {
+      tightSys.spawn([fired(1)], w);
+      roomySys.spawn([fired(1)], w);
+    }
+    expect(billows(tight)).toHaveLength(2);
+    expect(billows(roomy)).toHaveLength(8);
   });
 
   it('dispose empties the scene', () => {

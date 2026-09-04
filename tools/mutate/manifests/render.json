@@ -792,5 +792,102 @@
     "killedBy": [
       "muzzle smoke (issue #536, parent #356) recycles the OLDEST cloud at budget, so the newest puff always survives"
     ]
+  },
+  {
+    "id": "quality-high-drops-a-billow-from-the-shipped-effect",
+    "file": "src/render/quality.ts",
+    "find": "export const FULL_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 3, maxClouds: 32 };",
+    "replace": "export const FULL_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 2, maxClouds: 32 };",
+    "expect": "killed",
+    "tests": [
+      "src/render/quality.test.ts"
+    ],
+    "why": "The whole risk the smoke's quality budget carries. `high` is the preset an absent `quality` flag resolves to, so it has to draw exactly what the tree drew before there was a preset at all -- and the cheapest way to break that is to take the cheapening one billow too far and apply it to the default as well. Nothing about the effect stops working under this: smoke still puffs, still darkens on a refusal, still expands and thins, and every other muzzle-smoke assertion stays green. Only an assertion that compares this number against muzzle-smoke.ts's OWN table length can see that the default has quietly stopped being the shipped look.",
+    "killedBy": [
+      "QUALITY_PRESETS.high matches scene.ts literals exactly muzzleSmoke draws EVERY billow the effect has -- pinned to the table, not to a copy of its length"
+    ]
+  },
+  {
+    "id": "quality-low-quietens-the-smoke-instead-of-dropping-it",
+    "file": "src/render/quality.ts",
+    "find": "    muzzleSmoke: null,",
+    "replace": "    muzzleSmoke: CHEAP_MUZZLE_SMOKE,",
+    "expect": "killed",
+    "tests": [
+      "src/render/quality.test.ts"
+    ],
+    "why": "Turns the owner's `low` ruling from 'dropped' into 'cheapened twice', which is the reading a maintainer tidying this table would find natural -- three tiers, three budgets, no special case. It is wrong for a reason that is not visible in the table: renderer.ts reads `null` to decide whether to CONSTRUCT the system, so a very small budget still pays `spawn` and `update` on every frame and still holds pooled sprites in the scene. The rendered difference is small and the structural difference is the whole point of the tier, so only an assertion that insists on null rather than on 'less' catches it.",
+    "killedBy": [
+      "medium and low are real steps down, not copies of high low DROPS the smoke rather than quietening it, and medium keeps a cheaper version"
+    ]
+  },
+  {
+    "id": "quality-medium-keeps-the-whole-smoke-effect",
+    "file": "src/render/quality.ts",
+    "find": "export const CHEAP_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 1, maxClouds: 16 };",
+    "replace": "export const CHEAP_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 3, maxClouds: 32 };",
+    "expect": "killed",
+    "tests": [
+      "src/render/quality.test.ts"
+    ],
+    "why": "Empties the middle tier: `medium` still names a smoke budget, and it is `high`'s. The ruling was three-way -- gone, cheapened, untouched -- so a medium equal to high leaves the owner with two tiers wearing three names, and the flag that was supposed to be the cheap-but-still-smoking option silently stops being one. Every other preset field still steps down, so a test that only checked the shadow map and the pixel-ratio cap would report a healthy table.",
+    "killedBy": [
+      "medium and low are real steps down, not copies of high medium draws fewer billows and holds fewer clouds than high, and still draws some"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-ignores-the-billow-budget",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "    const billows = BILLOWS.slice(0, quality.billowsPerCloud).map((b) => {",
+    "replace": "    const billows = BILLOWS.map((b) => {",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Accepts the preset and then draws the whole table anyway -- the shape a revert takes when someone restores the pre-budget line and leaves the parameter threaded. Everything about the cloud is still correct: right place, right tint, right growth, right lifetime, right ceiling. What is gone is the only lever that reduces draw calls, since a SpriteMaterial per billow means the billow count IS the draw-call count, so `medium` becomes `high` wearing a smaller ceiling and the tier stops paying for itself.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) draws only as many billows per cloud as the quality preset asks for",
+      "muzzle smoke (issue #536, parent #356) takes its cloud ceiling from the preset, not from a constant of its own"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-billow-table-reordered-smallest-first",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "  { along: 0.0, across: 0.0, lift: 0.0, size: 1.0, drift: 1.0, spin: 0.0 },\n  { along: 0.13, across: 0.07, lift: 0.04, size: 0.78, drift: 1.25, spin: 2.2 },\n  { along: 0.08, across: -0.09, lift: -0.02, size: 0.64, drift: 0.8, spin: 4.1 },",
+    "replace": "  { along: 0.08, across: -0.09, lift: -0.02, size: 0.64, drift: 0.8, spin: 4.1 },\n  { along: 0.13, across: 0.07, lift: 0.04, size: 0.78, drift: 1.25, spin: 2.2 },\n  { along: 0.0, across: 0.0, lift: 0.0, size: 1.0, drift: 1.0, spin: 0.0 },",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Reorders the billow table smallest-first. Before the smoke gained a quality budget this was FREE -- every cloud drew all three rows, so their order changed nothing anyone could see, and a maintainer sorting them by size or by offset would have been right that it did not matter. It matters now: a cloud draws a PREFIX, so the first row is the billow `medium` is left with, and this leaves a cheapened puff two thirds the width of a full one instead of the same cloud with less shear. `high` is genuinely unaffected, which is what makes it dangerous -- the default preset renders identically and only the cheapened tier degrades. Chosen over the alternative mutation of slicing from the other end of the table, which was MEASURED to survive this whole file: `place` pairs sprite i with BILLOWS[i], so a suffix slice re-imposes the prefix's own geometry and produces the same picture. The order is the only thing here that can actually be wrong.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) a cheapened cloud is left with the BIGGEST billow, which is what the table's order decides"
+    ]
+  },
+  {
+    "id": "muzzle-smoke-ignores-the-preset-s-cloud-ceiling",
+    "file": "src/render/muzzle-smoke.ts",
+    "find": "      if (active.length >= quality.maxClouds) {",
+    "replace": "      if (active.length >= FULL_MUZZLE_SMOKE.maxClouds) {",
+    "expect": "killed",
+    "tests": [
+      "src/render/muzzle-smoke.test.ts"
+    ],
+    "why": "Holds every preset to the full effect's ceiling, so the half of the cheapening aimed at the CROWDED frame stops working while the half aimed at the ordinary one keeps working. That is the failure mode worth pinning: a busy firefight is exactly when a frame is already expensive, and this leaves `medium` carrying 32 clouds there while every quiet-frame assertion about it still passes. The mutation reads a real constant of this file's own, so it looks like a tidy-up rather than a regression.",
+    "killedBy": [
+      "muzzle smoke (issue #536, parent #356) takes its cloud ceiling from the preset, not from a constant of its own"
+    ]
+  },
+  {
+    "id": "renderer-builds-the-smoke-system-low-dropped",
+    "file": "src/render/renderer.ts",
+    "find": "  const muzzleSmoke: MuzzleSmokeSystem | null = quality.muzzleSmoke\n    ? createMuzzleSmokeSystem(ctx.scene, quality.muzzleSmoke)\n    : null;",
+    "replace": "  const muzzleSmoke: MuzzleSmokeSystem | null = createMuzzleSmokeSystem(\n    ctx.scene,\n    quality.muzzleSmoke ?? undefined,\n  );",
+    "expect": "survives",
+    "expectFailures": 0,
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "A DISCLOSED SURVIVOR, not an equivalent mutant: the behaviour it removes is the whole of the `low` tier. Under this, `?dev=1&quality=low` builds the smoke system after all and draws the full effect, so the one preset whose ruling was 'dropped entirely' becomes the preset that draws the most. It survives because nothing vitest can run reaches the line -- createRenderer builds a WebGLRenderer, which jsdom cannot provide, and loop.test.ts (which does reach renderer.ts through loop.ts's import, and is named here so the harness can prove the scope is real) injects a recording fake instead of the real factory. What DOES kill it is tools/gl/harness.ts's 'the quality preset decides how much muzzle smoke a frame draws, and `low` draws none', in a real browser, measured at both ends: with the gate intact a 32-shot volley leaves the null-preset framebuffer byte-identical to a frame with no shots at all (0 of 1,600,000 bytes differ), and with the gate removed 5,907 of those bytes differ, because `low` then draws the FULL effect. Recorded here rather than left as a number in a PR body so the claim is re-derivable, and so that a vitest case which ever does cover this flips the entry to a mismatch instead of letting it go stale."
   }
 ]
