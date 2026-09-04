@@ -46,6 +46,7 @@ import {
 import type {
   CampaignRunSummary,
   GameplayOutcome,
+  GameplayStatus,
   HudBackdrop,
   HudRelaunchTarget,
   HudSessionKind,
@@ -256,15 +257,21 @@ interface Recorder {
    * numbers from the same entry instead of correlating two setters' call logs.
    */
   outcomePushes: GameplayOutcome[];
-  /** Every value passed to hud.setVersusStocks, in order (Task 6, spec §3a). */
+  /**
+   * Every value passed to hud.setStatus, in order -- THE WHOLE TOPBAR, as one projection
+   * since issue #324's step S6. The five traces below it are views onto this one list;
+   * see the fake's own comment for why they are kept.
+   */
+  statusPushes: Array<GameplayStatus | null>;
+  /** The `stocks` of every VERSUS status, in order (spec §3a). */
   versusStocksPushes: Array<{ slot: number; stock: number; team?: number }[] | null>;
   /** Every (show, initial) passed to hud.showVersusSetup, in order. */
   versusSetupPushes: Array<{ show: boolean; initial: VersusConfig | null }>;
   /**
-   * Every value passed to hud.setSessionKind, in order -- WHAT IS BEING PLAYED.
-   * Re-pushed on every world build, so this is a per-session TRACE, not a single
-   * value: a Levels pick on a campaign session appends 'practice', and landing
-   * back on its home board appends 'campaign' again.
+   * The `kind` of every status pushed, in order -- WHAT IS BEING PLAYED. Re-pushed on
+   * every world build, so this is a per-session TRACE, not a single value: a Levels pick
+   * on a campaign session appends 'practice', and landing back on its home board appends
+   * 'campaign' again.
    */
   sessionKinds: HudSessionKind[];
   /**
@@ -488,6 +495,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     hapticsEnabledCalls: [],
     levelBuilds: [],
     hudLevels: [],
+    statusPushes: [],
     seeds: [],
     worldPolicies: [],
     renders: [],
@@ -1140,8 +1148,6 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     createHud: (root) => {
       rec.hudRoots.push(root);
       return {
-        setLives: (n) => rec.lives.push(n),
-        setEnemiesRemaining: (n) => rec.enemies.push(n),
         setState: (s) => {
           rec.hudStates.push(s);
           rec.hudCallLog.push(`state:${s}`);
@@ -1152,7 +1158,6 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setVolume: (v: number) => rec.volumeEchoes.push(v),
         setShellCount: (i) => rec.shellCounts.push(i),
         signalShellCapacity: (i) => rec.capacityFlashes.push(i),
-        setLevel: (c: number, t: number) => rec.hudLevels.push([c, t]),
         setRoundPhase: (info) => rec.roundPhases.push(info),
         signalPlayerDeath: (color: number) => { rec.deathSignals += 1; rec.deathColors.push(color); },
         signalPlayerFire: () => { rec.fireSignals += 1; },
@@ -1216,9 +1221,6 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
                 ? { ...outcome, kills: [...outcome.kills] }
                 : { ...outcome, kills: [...outcome.kills], deaths: [...outcome.deaths] },
           );
-        },
-        setVersusStocks: (stocks: { slot: number; stock: number; team?: number }[] | null) => {
-          rec.versusStocksPushes.push(stocks === null ? null : stocks.map((s) => ({ ...s })));
         },
         setHullColor: (id: string) => {
           rec.hullEchoes.push(id);
@@ -1311,17 +1313,46 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           rec.versusSetupPushes.push({ show, initial: initial ?? null });
           rec.hudCallLog.push(`versusSetup:${show}`);
         },
-        // This fake has no real DOM, so it only records what loop.ts pushed --
-        // "the button is hidden" / "the strip is on screen" can only be asserted
-        // against the real hud.ts (hud.test.ts). What IS assertable here: which value
-        // was pushed to WHICH of the two setters, and in what order relative to other
-        // construction-time calls (rec.hudCallLog, mirroring setState/showVersusSetup's
-        // own shared log). The pair is the point: a regression that folded a
-        // developer-flag versus session back to Campaign for gameplay purposes shows up
-        // here as `sessionKinds` reading 'campaign' while `relaunchTargets` is unchanged.
-        setSessionKind: (kind: HudSessionKind) => {
-          rec.sessionKinds.push(kind);
-          rec.hudCallLog.push(`sessionKind:${kind}`);
+        // This fake has no real DOM, so it only records what loop.ts pushed -- "the
+        // button is hidden" / "the strip is on screen" can only be asserted against the
+        // real hud.ts (hud.match.test.ts). What IS assertable here: which value was
+        // pushed, and in what order relative to other construction-time calls
+        // (rec.hudCallLog, mirroring setState/showVersusSetup's own shared log). The
+        // status/relaunch PAIR is the point: a regression that folded a developer-flag
+        // versus session back to Campaign for gameplay purposes shows up here as
+        // `sessionKinds` reading 'campaign' while `relaunchTargets` is unchanged.
+        //
+        // ONE push, DECOMPOSED into the per-field traces the cases below read. Since
+        // issue #324's step S6 a session states its whole topbar at once, so `statusPushes`
+        // is the primary record and `sessionKinds`/`hudLevels`/`lives`/`enemies`/
+        // `versusStocksPushes` are views onto it -- kept because what each case is
+        // actually asking ("did the lives readout follow the world", "did the level chip
+        // follow the landing") did not change when the transport did. The views are NOT
+        // all appended per push: `lives`/`enemies` exist only on a campaign or practice
+        // status and `stocks` only on a versus one, which is the exclusion the projection
+        // makes structural -- so a case that reads an empty view is reading a session that
+        // genuinely never claimed that field.
+        setStatus: (status: GameplayStatus | null) => {
+          rec.statusPushes.push(status);
+          // `null` is the PAGE clearing the bar when a session releases the slot
+          // (route-host.ts), not a session describing itself -- so it is recorded in the
+          // primary list and in the call log, and appended to none of the per-field views
+          // below. A session that never runs still leaves a trace a case can read.
+          if (status === null) {
+            rec.hudCallLog.push('status:none');
+            return;
+          }
+          rec.sessionKinds.push(status.kind);
+          rec.hudLevels.push([status.mission, status.missions]);
+          rec.hudCallLog.push(`status:${status.kind}`);
+          if (status.kind === 'versus') {
+            rec.versusStocksPushes.push(
+              status.stocks === null ? null : status.stocks.map((e) => ({ ...e })),
+            );
+          } else {
+            rec.lives.push(status.lives);
+            rec.enemies.push(status.enemies);
+          }
         },
         setRelaunchTarget: (target: HudRelaunchTarget) => {
           rec.relaunchTargets.push(target);
@@ -3425,12 +3456,20 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
     h.handle.dispose();
   });
 
-  it('refreshes the HUD stats from the live world as the game runs', () => {
+  it('refreshes the HUD status from the live world as the game runs', () => {
+    // A COUNT of pushes stopped being the evidence at issue #324's step S6: the session
+    // states its whole topbar every simulated frame and skips a push whose projection is
+    // identical to the last, so "the setter was called again" is now true only when
+    // something actually moved. That is the property worth asserting anyway -- the
+    // readout must follow the world, not merely be re-sent -- so the world is changed
+    // under the running session and the next frame's push has to carry the new number.
     const h = boot();
     const before = h.rec.lives.length;
+    h.rec.builtWorlds[0].lives = 1; // the run just lost two, as far as the world is concerned
     h.setState('playing');
     h.fireFrame(20);
-    expect(h.rec.lives.length).toBeGreaterThan(before);
+    expect(h.rec.lives.length, 'a changed world produced no push at all').toBeGreaterThan(before);
+    expect(h.rec.lives.at(-1), 'the readout did not follow the world').toBe(1);
     h.handle.dispose();
   });
 
@@ -4506,14 +4545,24 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.handle.dispose();
     });
 
-    it("a campaign session gets exactly one null call at wiring, and never entries", () => {
+    it('a campaign session never states a stock strip at all -- not entries, and not a null', () => {
+      // This case used to read "exactly one null call at wiring": a campaign session had
+      // to reach for `setVersusStocks(null)` once, at construction, precisely because the
+      // strip's data was a separate member that would otherwise hold the PREVIOUS
+      // session's entries. Issue #324's step S6 made the exclusion structural -- a
+      // campaign status has no `stocks` field to set -- so the honest assertion is that
+      // no versus status is ever pushed, and the boot call that used to say so is gone.
       const h = boot(makeDeps());
       h.setState('playing');
       h.firePlayerShot();
       h.fireFrame(20);
       h.fireFrame(300);
       h.fireFrame(600);
-      expect(h.rec.versusStocksPushes).toEqual([null]);
+      expect(h.rec.versusStocksPushes).toEqual([]);
+      // The vacuity guard: an empty list would also be what a session that pushed NOTHING
+      // leaves behind, and that would pass while proving nothing.
+      expect(h.rec.statusPushes.length).toBeGreaterThan(0);
+      expect(new Set(h.rec.sessionKinds)).toEqual(new Set(['campaign']));
       h.handle.dispose();
     });
   });
@@ -7045,12 +7094,12 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     other.handle.dispose();
   });
 
-  it('setSessionKind runs before the very first setState push -- order pin', () => {
-    // hud.ts's real applyTitleAffordances reads sessionKind live, so this ordering is
-    // not load-bearing there the way Task 5's setState/showVersusSetup swap is -- but a
-    // FUTURE hud.ts that snapshotted sessionKind only at setState-time would need it,
-    // and this fails immediately if setSessionKind is ever moved after the constructor's
-    // first hud.setState/showVersusSetup calls.
+  it('the session states its status before its very first setState push -- order pin', () => {
+    // hud.ts's real `applyStatus` recomputes from both inputs whichever moved last, so
+    // this ordering is not load-bearing there the way Task 5's setState/showVersusSetup
+    // swap is -- but a FUTURE hud.ts that snapshotted the kind only at setState-time
+    // would need it, and this fails immediately if the status push is ever moved after
+    // the constructor's first hud.setState/showVersusSetup calls.
     //
     // Re-anchored by issue #428: the FIRST `state:` in the log is now the PAGE's, pushed
     // when the route host paints the opening surface before any session exists. The claim
@@ -7060,10 +7109,10 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
     const log = h.rec.hudCallLog;
     expect(log.findIndex((e) => e.startsWith('state:')), 'the page did not paint first').toBe(0);
-    const kindIndex = log.findIndex((e) => e.startsWith('sessionKind:'));
+    const kindIndex = log.findIndex((e) => e.startsWith('status:'));
     const stateIndex = log.findIndex((e, i) => i > 0 && e.startsWith('state:'));
     expect(kindIndex).toBeGreaterThanOrEqual(0);
-    expect(stateIndex, 'the session changed the screen before announcing its kind').toBeGreaterThan(kindIndex);
+    expect(stateIndex, 'the session changed the screen before announcing its status').toBeGreaterThan(kindIndex);
     h.handle.dispose();
   });
 
@@ -7099,15 +7148,18 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     // and never invokes the harness's own openCampaign trigger unprompted, mirroring
     // the identical-shaped control for openVersus/startVersus.
     //
-    // Asserted over EVERY entry rather than as a single-element array: the restart
-    // rebuilds the board through `switchTo`, which re-derives the descriptor and
-    // re-pushes the kind, so a length pin here would only be pinning how many world
-    // builds a restart happens to do. The claim that matters is that no entry is
-    // anything but 'campaign'.
+    // Asserted over EVERY entry rather than as a single-element array: the claim that
+    // matters is that no entry is anything but 'campaign', never how many entries there
+    // are. "The restart really did rebuild" is read off the WORLD BUILDS rather than off
+    // the kind trace, because since issue #324's step S6 a rebuild onto an identical
+    // board -- same level, same lives, same enemy count, which is exactly what a restart
+    // from level one produces -- is deduped and pushes nothing. A length pin there would
+    // now be pinning the dedup, not the rebuild.
     const h = boot(makeDeps());
+    const buildsBefore = h.rec.builtWorlds.length;
     h.setState('outcome-win');
     h.hud.startRestart();
-    expect(h.rec.sessionKinds.length).toBeGreaterThan(1); // the restart really did rebuild
+    expect(h.rec.builtWorlds.length, 'the restart really did rebuild').toBeGreaterThan(buildsBefore);
     expect(new Set(h.rec.sessionKinds)).toEqual(new Set(['campaign']));
     expect(h.rec.relaunchTargets).toEqual(['campaign-levels']); // boot-time, never re-pushed
     h.handle.dispose();
@@ -7990,16 +8042,23 @@ describe('startGameWith: canonical session identity at the production boundary',
       h.handle.dispose();
     });
 
-    it('?dev=1&mode=teams likewise, and its stock DATA is not pre-cleared the way a campaign session is', () => {
-      // The `hud.setVersusStocks(null)` boot call is keyed on the descriptor now, not
-      // on `initialVersusConfig`. Fails if that gate is re-derived from provenance:
-      // a developer-flag versus session would push a null the setup-pane one does not.
+    it('?dev=1&mode=teams likewise, and its stock strip comes from the WORLD, not from provenance', () => {
+      // What this case used to guard was a boot-time `setVersusStocks(null)` keyed on the
+      // descriptor rather than on `initialVersusConfig`, so that a developer-flag versus
+      // session did not push a null the setup-pane one skipped. Issue #324's step S6
+      // removed the asymmetry it was guarding: there is no pre-clearing call left, and a
+      // versus status derives its entries from the world it describes. The property that
+      // survives, and the one that made the old gate matter, is that a developer-flag
+      // session is treated as the genuine versus session it is -- so it states a strip,
+      // per slot, while a campaign session states none at all.
       const dev = boot(makeDeps({ devFlags: { mode: 'teams', players: 4 } }));
-      expect(dev.rec.versusStocksPushes).toEqual([]);
+      expect(dev.rec.sessionKinds.at(-1)).toBe('versus');
+      expect(dev.rec.versusStocksPushes.at(-1)?.map((e) => e.slot)).toEqual([0, 1, 2, 3]);
       dev.handle.dispose();
 
       const campaign = boot(makeDeps());
-      expect(campaign.rec.versusStocksPushes).toEqual([null]);
+      expect(campaign.rec.versusStocksPushes).toEqual([]);
+      expect(campaign.rec.sessionKinds.at(-1)).toBe('campaign');
       campaign.handle.dispose();
     });
 
@@ -8015,7 +8074,12 @@ describe('startGameWith: canonical session identity at the production boundary',
       });
       expect(lastKind(h)).toBe('versus');
       expect(h.rec.relaunchTargets).toEqual(['versus-setup']);
-      expect(h.rec.versusStocksPushes).toEqual([]);
+      // No assertion on the strip's CONTENT here, deliberately: this harness keys its
+      // real-versus-world branch on `opts.devFlags.mode`, which `versusDeps` does not
+      // set, so the world behind this setup-pane descriptor is coop-shaped and states no
+      // stocks. That is a fixture artefact, not a property -- the per-slot strip is
+      // asserted one case up, where the world really is a versus world. What this case
+      // owns is the PAIR: versus identity beside the versus-setup relaunch target.
       h.handle.dispose();
     });
 
@@ -8038,7 +8102,7 @@ describe('startGameWith: canonical session identity at the production boundary',
       // itself, from the landing level's descriptor -- which is why this asserts the
       // ORDER against `state:main-menu` rather than against a build.
       const log = h.rec.hudCallLog;
-      expect(log.lastIndexOf('sessionKind:campaign')).toBeLessThan(
+      expect(log.lastIndexOf('status:campaign')).toBeLessThan(
         log.lastIndexOf('state:main-menu'),
       );
       h.hud.startRestart(); // Continue
@@ -8766,7 +8830,11 @@ describe('quitting a versus match leaves a campaign-shaped Main Menu behind', ()
     h.hud.quitToTitle();
     expect(page.sessions()).toBe(1);
     expect(h.rec.relaunchTargets.at(-1)).toBe('campaign-levels');
-    expect(h.rec.sessionKinds.at(-1)).toBe('campaign');
+    // The page CLEARS the bar rather than restating a campaign session it does not have
+    // (issue #324, step S6). `sessionKinds` records only what a session claimed, so its
+    // last entry is still the quitting session's own landing push -- what says the host
+    // is empty is the `null` status the detach pushed after it.
+    expect(h.rec.statusPushes.at(-1)).toBeNull();
     // ...and the Levels grid is CAMPAIGN-sized throughout (issue #324, step S5).
     //
     // A versus session's own level system is one synthetic arena, so while the session

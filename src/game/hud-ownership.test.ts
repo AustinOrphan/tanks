@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 /**
  * The boundary issue #324 draws, measured against the tree rather than asserted in prose.
  *
- * `hud.ts` classifies all 71 `Hud` members into `HudFrameKey` / `RouteHudKey` /
+ * `hud.ts` classifies all 67 `Hud` members into `HudFrameKey` / `RouteHudKey` /
  * `GameplayHudKey`, and a type-level guard there already fails the build if a member is
  * added without an owner. That guard cannot see CALL SITES, though, and call sites are
  * where the actual violation lives: `loop.ts` -- the gameplay session -- reached straight
@@ -106,16 +106,18 @@ describe('HUD ownership boundary (issue #324)', () => {
       'showToast',
     ]);
     expect([...route].filter((k) => frame.has(k))).toEqual([]);
-    // Counts stated beside the population they came from: 71 members, of which showToast
-    // is counted twice, so the roles sum to 72. Four more than step S5 left, and all four
-    // are Settings controls of the same shape -- issue #289's motion pair (`setMotion`,
-    // `onMotionChange`) and issue #540's quality pair (`setQuality`, `onQualityChange`),
-    // classified as route members beside the touch-scheme, fire-mode and haptics pairs
-    // they were modelled on. Growth here is not automatically a regression: what this
-    // number guards is that a member arrived through a diff someone read, and the
-    // assertion below is what pins that a session still cannot reach any of them.
-    expect(frame.size + route.size + gameplay.size).toBe(72);
-    expect(gameplay.size, 'what a live match may write').toBe(14);
+    // Counts stated beside the population they came from: 67 members, of which showToast
+    // is counted twice, so the roles sum to 68. Four FEWER than the 72 that stood before
+    // issue #324's step S6, and the arithmetic is the whole of that step: five per-kind
+    // status members (`setLives`, `setEnemiesRemaining`, `setLevel`, `setSessionKind`,
+    // `setVersusStocks`) left, one discriminated `setStatus` arrived, and every one of
+    // those five was gameplay-owned, so the drop lands entirely on `gameplay`.
+    //
+    // Growth here is not automatically a regression and neither is a fall: what these
+    // numbers guard is that a member arrived or left through a diff someone read. The
+    // assertion below is what pins that a session still cannot reach a route member.
+    expect(frame.size + route.size + gameplay.size).toBe(68);
+    expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 
   it('the gameplay session reaches ONLY gameplay members, plus the pinned debt', () => {
@@ -154,7 +156,7 @@ describe('HUD ownership boundary (issue #324)', () => {
     // `hud.dispose()`", which is the page's job since #468 and must not read as a call.
     expect(loopSource).toContain('`hud.dispose()`');
     expect(hudCallsIn(loopSource).has('dispose')).toBe(false);
-    expect(hudCallsIn("hud.setLives(1); // hud.setStats(x)\n")).toEqual(new Set(['setLives']));
-    expect(hudCallsIn('/* hud.setSkin(a) */ hud.setLives(1);')).toEqual(new Set(['setLives']));
+    expect(hudCallsIn("hud.setStatus(s); // hud.setStats(x)\n")).toEqual(new Set(['setStatus']));
+    expect(hudCallsIn('/* hud.setSkin(a) */ hud.setStatus(s);')).toEqual(new Set(['setStatus']));
   });
 });

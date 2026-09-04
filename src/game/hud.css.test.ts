@@ -417,6 +417,11 @@ describe('hud.css is syntactically whole', () => {
       '.hud-capacity', '.hud-capacity--flash',
       '.hud-count', '.hud-count--hidden', '.hud-count--pop', // round-start countdown
       '.hud-level--hidden', // level progression: without it the empty chip always shows
+      // The Practice identity chip (issue #324, step S6). Without the base rule the chip
+      // is indistinguishable from the Lives/Enemies readings beside it, which is the
+      // whole thing it exists to fix; without the hidden rule it announces PRACTICE over
+      // a campaign run and a versus match alike.
+      '.hud-practice', '.hud-practice--hidden',
       // title screen: without the hidden rule it covers the game from load and never
       // leaves; the hint's pulse is the only cue that a press is what is wanted
       '.hud-splash', '.hud-splash--hidden', '.hud-splash-title', '.hud-splash-hint',
@@ -679,7 +684,7 @@ describe('hud.css is syntactically whole', () => {
     // button landed: 86 + 1 static button
     // (.hud-campaign-open), rendered unconditionally at construction (same convention
     // as every other title-panel button here) and hidden via CSS class rather than
-    // removed from the DOM -- this fixture never calls setSessionKind('versus'), so it
+    // removed from the DOM -- this fixture never pushes a versus status, so it
     // stays hidden throughout, exactly like .hud-continue/.hud-new-game/
     // .hud-versus-open above ALREADY are counted here whether shown or not.
     // 89 since issue #267: three difficulty buttons on the versus pane's one bot slot
@@ -1399,6 +1404,52 @@ describe('hud.css is syntactically whole', () => {
     expect(block('.hud-toasts')).toContain('z-index: 2'); // above topbar and panel
     for (const overlay of ['.hud-stats ', '.hud-customize ', '.hud-achievements ']) {
       expect(block(overlay), overlay).toContain('z-index: 0'); // under the topbar
+    }
+  });
+});
+
+/*
+ * The Practice identity chip's one visual claim (issue #324, step S6).
+ *
+ * The chip exists because a Practice topbar and a Campaign topbar were byte-identical
+ * before it -- measured, on the built app, at every captured viewport width. A chip that
+ * matched `.hud-stat` exactly would leave them very nearly identical again, so what is
+ * asserted is the DIFFERENCE from its neighbours rather than a literal value: same row,
+ * different weight and a ground of its own.
+ *
+ * The weight is read through `resolved()`, never `getComputedStyle` directly, because it
+ * is a token. Measured in this jsdom, before writing the case: the raw longhand comes
+ * back as the literal string "var(--hud-weight-strong)", and `Number()` of that is NaN --
+ * so every numeric comparison against it is false whatever the stylesheet says. The
+ * background needs no such help (jsdom resolves the literal rgba pair, measured as
+ * "rgba(255, 255, 255, 0.14)" against `.hud-stat`'s "rgba(0, 0, 0, 0)"), and it is read
+ * through the same helper only so both halves of the case read the same way.
+ */
+describe('hud.css: the Practice chip reads as an identity, not a fourth stat', () => {
+  it('carries a heavier weight and a ground its neighbours do not, live', () => {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const hud = createHud(root);
+    try {
+      const chip = root.querySelector('.hud-practice') as HTMLElement;
+      const stat = root.querySelector('.hud-campaign-stat') as HTMLElement;
+      expect(chip, 'the topbar has no Practice chip').not.toBeNull();
+      // Vacuity guard: both sides must resolve to a real weight, or the inequality below
+      // is comparing two empty strings.
+      expect(resolved(stat, 'fontWeight')).toMatch(/^\d+$/);
+      expect(resolved(chip, 'fontWeight')).toMatch(/^\d+$/);
+      expect(
+        Number(resolved(chip, 'fontWeight')),
+        'the chip is no heavier than the readings beside it',
+      ).toBeGreaterThan(Number(resolved(stat, 'fontWeight')));
+      // ...and a ground, which is what makes it read as a badge rather than as a word in
+      // the row. `.hud-stat` sets none, so this is the one property that separates them
+      // even in a forced-colours palette that flattens the weight.
+      expect(resolved(chip, 'backgroundColor')).not.toBe(resolved(stat, 'backgroundColor'));
+      expect(resolved(chip, 'backgroundColor')).not.toBe('');
+    } finally {
+      hud.dispose();
+      root.remove();
     }
   });
 });

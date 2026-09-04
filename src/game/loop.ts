@@ -68,6 +68,7 @@ import {
   type AppLocation,
   type ResolvedSession,
   type SessionDescriptor,
+  type SessionDescriptorKind,
   type VersusResult,
   legacyOutcomePresentation,
   resolveSession,
@@ -84,7 +85,14 @@ import {
   relaunchTargetFor,
   resolveBootSessionContext,
 } from './session-intent';
-import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import {
+  createHud,
+  type GameplayStatus,
+  type Hud,
+  type HudSurface,
+  type VersusStock,
+  SINGLE_PLAYER_DEATH_VIGNETTE,
+} from './hud';
 import { browserHistoryHost } from './navigation';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from '../presentation/blocked-fire';
@@ -947,6 +955,35 @@ function countEnemies(world: World): number {
     if (t.kind !== 'player' && t.alive) n += 1;
   }
   return n;
+}
+
+/**
+ * The versus stock strip's entries, derived from the world this frame produced.
+ *
+ * One entry per player-kind tank still IN the world -- never spliced, even once
+ * eliminated (world.ts's own comment on `alive: false` tanks). `slot` is `controlledBy`
+ * (`?? 0`, the same convention `tankForSlot`'s lookup uses) and `stock` is
+ * `stockRemaining` (`?? 0`, the "unstamped reads as already at zero" fallback that
+ * field's own doc comment on `Tank` names). `team` is carried through only for 'teams' --
+ * ffa tanks never have it stamped (loadArena), so it arrives `undefined` there, which is
+ * exactly what the optional `team?` on `VersusStock` expects.
+ *
+ * Sorted by `slot`, NOT left in `world.tanks`' own array order: today that order happens
+ * to match slot order (loadArena's grid-scan numbering), but nothing GUARANTEES it, and
+ * this is the one place a future tank-array reorder -- a respawn splice, a different
+ * spawn pass -- could silently reshuffle the strip, putting P1's entry after P2's.
+ * Sorting by the value that actually identifies "which player" closes that off
+ * structurally instead of relying on an incidental order staying true.
+ *
+ * `null` for a world that is not a versus world at all, which is what a campaign or
+ * practice board is: the strip has nothing to show there, ever.
+ */
+function versusStocksOf(world: World): VersusStock[] | null {
+  if (world.rules.mode !== 'ffa' && world.rules.mode !== 'teams') return null;
+  return world.tanks
+    .filter((t) => t.kind === 'player')
+    .map((t) => ({ slot: t.controlledBy ?? 0, stock: t.stockRemaining ?? 0, team: t.team }))
+    .sort((a, b) => a.slot - b.slot);
 }
 
 /**
@@ -1935,13 +1972,58 @@ export function startGameWith(
     pendingNotice = notice;
     flushSettingsNotice();
   });
+  /**
+   * The topbar's no-thrash guard: a serialization of the LAST status actually handed to
+   * `hud.setStatus`, so a frame whose projection is identical does not re-invoke the
+   * setter.
+   *
+   * It matters more than a guard on a change-driven setter would: the status is pushed
+   * from `onSimulated` (see that callback's own comment), which runs on EVERY 'playing'
+   * frame unconditionally at up to 60/s, and one of the things the projection carries is
+   * a stock strip whose render rebuilds four DOM elements. Without this the HUD would
+   * repaint that strip every frame of a live match, event or no event.
+   *
+   * `JSON.stringify` rather than a hand-joined key of the fields that matter, and that is
+   * deliberate: a hand-written key is a second place to remember when `GameplayStatus`
+   * grows a field, and forgetting it there does not fail a type check -- it silently
+   * drops updates to the new field. The objects are small (six fields, at most four stock
+   * entries) and built as literals, so the key is stable and cheap. `null` is the
+   * sentinel "never pushed yet", distinct from any real key.
+   */
+  let lastStatusKey: string | null = null;
+
+  /**
+   * THE TOPBAR, projected from the world it describes -- see `GameplayStatus`.
+   *
+   * The kind and the level ordinal are ARGUMENTS rather than reads of `currentDescriptor`
+   * and `level`, because the one caller that must not use those is the quit handler: it
+   * announces the LANDING the player is going back to, while both module variables still
+   * describe the board being abandoned. Making the caller state them is what stops that
+   * site quietly reading the stale pair, which is the mistake it invites.
+   *
+   * `versusStocksOf` returns `null` for any world that is not a versus world, so a
+   * campaign or practice session cannot fabricate a strip -- and the discriminated union
+   * means it cannot carry one at all.
+   */
+  function pushStatus(forWorld: World, kind: SessionDescriptorKind, mission: number): void {
+    const missions = deps.levels.levels.length;
+    const status: GameplayStatus =
+      kind === 'versus'
+        ? { kind, mission, missions, stocks: versusStocksOf(forWorld) }
+        : { kind, mission, missions, lives: forWorld.lives, enemies: countEnemies(forWorld) };
+    const key = JSON.stringify(status);
+    if (key === lastStatusKey) return;
+    lastStatusKey = key;
+    hud.setStatus(status);
+  }
+
   // THE TWO SEPARATE HUD PROJECTIONS (issue #316 review, finding 1), both
   // derived from the canonical model -- never from `deps.initialVersusConfig`,
   // a URL read, or a `world.rules.mode` check.
   //
   // `setRelaunchTarget` is WHAT THE BUTTONS DO, and is fixed for the session
-  // (see `relaunchTarget` above). `setSessionKind` is WHAT IS BEING PLAYED, and
-  // is re-pushed from `switchTo` on every world build, because a Levels pick
+  // (see `relaunchTarget` above). `setStatus` is WHAT IS BEING PLAYED, and is
+  // re-pushed from `switchTo` on every world build, because a Levels pick
   // really does change it. Both are set here, before any setState/
   // setContinueAvailable/setLevelSelect call below, so the very first render
   // already reflects them.
@@ -1951,20 +2033,13 @@ export function startGameWith(
   // the campaign level system, so the single call passed 'campaign' to keep
   // Continue and Levels working -- and with it hid the versus stock strip and
   // showed campaign Lives/Enemies for a match that has neither.
-  hud.setRelaunchTarget(relaunchTarget);
-  hud.setSessionKind(currentDescriptor.kind);
+  //
   // The application ground is NOT pushed from here any more (issue #324, step S5). It is
   // page chrome that outlives every match, so `route-host.ts` reads the same `backdrop`
   // flag once at page construction -- which is what makes a page that never starts a
   // session stand on the right ground.
-  // The stock strip's DATA, cleared once for a session that will never produce
-  // any. Keyed on the descriptor, like the strip's own visibility gate: a
-  // versus session -- setup-pane OR developer-flag -- skips this and lets
-  // `onSimulated`'s first 'playing' frame push real entries instead, exactly as
-  // a setup-pane match already did. For a campaign or practice session
-  // `world.rules.mode` is `'campaign-coop'`, so `onSimulated`'s `isVersusFrame`
-  // branch never fires and this null really is the only call it will ever make.
-  if (currentDescriptor.kind !== 'versus') hud.setVersusStocks(null);
+  hud.setRelaunchTarget(relaunchTarget);
+  pushStatus(world, currentDescriptor.kind, ordinalOf(level));
 
   /**
    * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
@@ -2031,19 +2106,6 @@ export function startGameWith(
       hud.setOutcome({ tally: 'solo', attempt, action: relaunchTarget });
     }
   }
-  /**
-   * The stock readout's own no-thrash guard (Task 6, spec §3a): the joined key of the
-   * LAST `stocks` array actually handed to `hud.setVersusStocks`, so a frame whose
-   * stocks are unchanged does not re-invoke the setter with an identical array. This
-   * matters MORE than it would if the dispatch were event-gated: it is dispatched from
-   * `onSimulated` (see that callback's own comment), which runs EVERY 'playing' frame
-   * unconditionally, at up to 60/s -- without this guard the HUD would re-render the
-   * strip every single frame of a live match, event or no event. `null` is the sentinel
-   * "never dispatched yet" -- distinct from any real key, since a real versus world
-   * always has at least one player-kind tank and therefore a non-empty joined key.
-   */
-  let lastVersusStocksKey: string | null = null;
-
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
       lifetime: deps.stats.lifetime(),
@@ -2062,9 +2124,18 @@ export function startGameWith(
     hud.showAchievementToasts(fresh);
   }
 
-  function refreshStats(w: World): void {
-    hud.setLives(w.lives);
-    hud.setEnemiesRemaining(countEnemies(w));
+  /**
+   * The whole topbar for the CURRENT session and level, plus the developer shell readout
+   * that sits beside it.
+   *
+   * The status half was three separate per-frame pushes (`setLives`,
+   * `setEnemiesRemaining`, and a stocks dispatch further down `onSimulated`) until issue
+   * #324's step S6; they are one call now, so a frame cannot leave the bar describing two
+   * different moments. `setShellCount` stays its own member: it is a developer overlay
+   * behind `?dev=1&shellCount=1`, not a statement about which session this is.
+   */
+  function refreshTopbar(w: World): void {
+    pushStatus(w, currentDescriptor.kind, ordinalOf(level));
     if (deps.devFlags.shellCount) {
       hud.setShellCount({ inFlight: playerShellsInFlight(w, playerId), cap: configFor('player').weapon.maxActiveProjectiles });
     }
@@ -2126,7 +2197,7 @@ export function startGameWith(
     stateMachine: sm,
     world,
     onSimulated(w): void {
-      refreshStats(w);
+      refreshTopbar(w);
       // The aim STICK needs EACH SLOT's own WORLD position to project a point from --
       // see setPlayerPosition's doc comment (`tankForSlot`, hoisted above, is the same
       // resolution the bot substitution uses). `null` when there is no tank for that
@@ -2183,49 +2254,18 @@ export function startGameWith(
       if (changedGamepadConnection) deps.effectiveSettings.refreshCapabilities();
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
-      // Task 6's in-match stock readout (spec §3a), dispatched HERE rather than from
-      // onFrameEvents below (review of this task's own first landing): onSimulated
-      // runs on EVERY 'playing' frame, unconditionally, including the pre-round
-      // countdown -- no `SimEvent` marks "a versus match/countdown has started", so
-      // gating on an event arriving left the strip dark until whatever the first event
-      // happened to be (typically a shot). Reads `w`, the world this callback is
-      // actually handed (the post-step world for THIS frame), rather than reaching for
-      // `driver.world` the way onFrameEvents' own `pushOutcome` call still does one
-      // section below -- the two are the same world by the time either callback runs
-      // (driver.ts assigns `curr` before calling either), but `w` is the value this
-      // specific callback is actually given.
-      const isVersusFrame = w.rules.mode === 'ffa' || w.rules.mode === 'teams';
-      if (isVersusFrame) {
-        // One entry per player-kind tank still in the world (never spliced, even once
-        // eliminated -- world.ts's own comment on `alive: false` tanks). `slot` =
-        // `controlledBy` (`?? 0`, the same convention `tankForSlot`'s own lookup uses
-        // above in this file); `stock` = `stockRemaining` (`?? 0`, the same "unstamped
-        // reads as already at zero" fallback that field's own doc comment on `Tank`
-        // names); `team` carried through only for 'teams' -- ffa tanks never have it
-        // stamped (loadArena), so it comes through `undefined` there, which is exactly
-        // what the optional `team?` on the HUD's own payload expects.
-        //
-        // Sorted by `slot`, NOT left in `w.tanks`' own array order: today that order
-        // happens to match slot order (loadArena's own grid-scan numbering), but
-        // nothing GUARANTEES it, and this is the one place a future tank-array reorder
-        // (a respawn splice, a different spawn pass ordering) could silently reshuffle
-        // the strip -- P1's own entry appearing after P2's, or the joined key changing
-        // shape for a stocks array that is semantically identical. Sorting by the
-        // value that actually identifies "which player" this is closes that off
-        // structurally rather than relying on today's incidental order staying true.
-        const stocks = w.tanks
-          .filter((t) => t.kind === 'player')
-          .map((t) => ({ slot: t.controlledBy ?? 0, stock: t.stockRemaining ?? 0, team: t.team }))
-          .sort((a, b) => a.slot - b.slot);
-        // The no-thrash guard -- see lastVersusStocksKey's own doc comment above for why
-        // this matters even more now that the dispatch runs every frame, not only
-        // event-bearing ones.
-        const key = stocks.map((s) => `${s.slot}:${s.stock}:${s.team ?? ''}`).join('|');
-        if (key !== lastVersusStocksKey) {
-          lastVersusStocksKey = key;
-          hud.setVersusStocks(stocks);
-        }
-      }
+      // The in-match stock readout (spec §3a) rides `refreshTopbar` at the top of this
+      // callback since issue #324's step S6, rather than being dispatched separately from
+      // here. It has always belonged in onSimulated rather than in onFrameEvents below
+      // (review of the readout's own first landing): onSimulated runs on EVERY 'playing'
+      // frame, unconditionally, including the pre-round countdown -- no `SimEvent` marks
+      // "a versus match has started", so gating on an event arriving left the strip dark
+      // until whatever the first event happened to be, typically a shot. `refreshTopbar`
+      // reads `w`, the world this callback is actually handed (the post-step world for
+      // THIS frame), rather than reaching for `driver.world` the way onFrameEvents' own
+      // `pushOutcome` call still does one section below -- the two are the same world by
+      // the time either callback runs (driver.ts assigns `curr` before calling either),
+      // but `w` is the value this specific callback is given.
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
@@ -2275,15 +2315,19 @@ export function startGameWith(
       // in THIS batch, not the one before the panel opened -- so this push lands into an
       // already-open panel and the HUD repaints it.
       pushOutcome(driver.world);
-      // Task 6's in-match stock readout (spec §3a) is dispatched from `onSimulated`
-      // below, NOT here -- see that callback's own comment for why. `onFrameEvents`
-      // only fires `if (frameEvents.length > 0)` (driver.ts), so gating the readout on
-      // an EVENT arriving left it dark for the whole pre-round countdown (no `SimEvent`
-      // marks "a versus match's countdown is running") and, in production, dropped its
-      // very first real update entirely -- `hud.setState('playing')` always runs before
-      // the first event-bearing frame, and the OLD `setVersusStocks` guard read that
-      // as "already hidden, do not render" (fixed in hud.ts; see `versusStocksVisible`'s
-      // own doc comment there for the full mechanism).
+      // The topbar status -- Lives, Enemies, the level chip and the versus stock strip --
+      // is NOT pushed from here. It rides `refreshTopbar` in `onSimulated` above, and the
+      // reason is this callback's own gate: `onFrameEvents` fires only
+      // `if (frameEvents.length > 0)` (driver.ts), so a status keyed on an EVENT arriving
+      // would leave the stock strip dark for the whole pre-round countdown -- no
+      // `SimEvent` marks "a versus match's countdown is running".
+      //
+      // It also dropped the strip's very first real update outright, and the ordering
+      // that did it is still true today:
+      // `hud.setState('playing')` always runs before the first event-bearing frame,
+      // so a guard that read the strip's own `--hidden` class back took a state the
+      // surface had set for "already hidden, do not render". hud.ts still copes with
+      // that, one projection later; see `versusStocksVisible`'s own doc comment there.
     },
   });
 
@@ -2473,13 +2517,16 @@ export function startGameWith(
     // silently would not.
     currentDescriptor = descriptorFor(sessionIdentity, ordinalOf(level));
     currentSession = resolveSession(currentDescriptor, world.seed, level.arenaId);
-    // The gameplay HUD's identity, re-pushed from THE SAME LINE the descriptor is
+    // The gameplay HUD's whole status, re-pushed from THE SAME LINE the descriptor is
     // derived on, so the two cannot fall out of step. This is what makes "a Levels
     // pick makes this session Practice" and "landing back on the home board makes
     // it Campaign again" visible to the HUD without any transition having to
-    // remember to say so. `relaunchTarget` is deliberately NOT re-pushed: it is a
-    // boot-time fact and no world build changes it.
-    hud.setSessionKind(currentDescriptor.kind);
+    // remember to say so -- and since issue #324's step S6 the level ordinal and the
+    // new board's lives and enemy count ride the same call, so there is no window in
+    // which the bar names one session and counts another's tanks.
+    // `relaunchTarget` is deliberately NOT re-pushed: it is a boot-time fact and no
+    // world build changes it.
+    pushStatus(world, currentDescriptor.kind, ordinalOf(level));
     // Reseeded here too -- see botSources' own doc comment above for why bots are
     // per-world, not per-session. Read off the CURRENT `assignment`, not the boot-time
     // `botSlots` set: a mid-session reassignment can have moved a slot to or from
@@ -2504,9 +2551,12 @@ export function startGameWith(
       renderer.refit(b.width, b.height, b.cellSize);
       shownBounds = b;
     }
-    hud.setLevel(ordinalOf(level), deps.levels.levels.length);
     driver.reset(world);
-    refreshStats(world);
+    // A second `refreshTopbar` after the world is installed. The push above already
+    // stated this board, so the status half is deduped away (`lastStatusKey`); what this
+    // call is still for is the developer shell readout, which needs the resolved
+    // `playerId` this function assigned a few lines up.
+    refreshTopbar(world);
     // A switch is a new ATTEMPT: the per-attempt tally starts over, the lifetime
     // rolls on. Deliberately NOT where the active RUN is touched -- switchTo only
     // builds a world; every caller above decides for itself whether this world is
@@ -2737,14 +2787,17 @@ export function startGameWith(
     // (the spec's rule for quit/refresh/reopen), which is why the deferred call passes
     // `false` -- unlike the game-over/completion restart in onStartRestart.
     //
-    // THE ONE STATED RESIDUAL. The topbar's campaign Lives/Enemies readout is projected
-    // from a WORLD (`refreshStats`), so with no world built here it keeps the abandoned
-    // session's numbers until the next build instead of the landing board's. Measured on
-    // the ENEMY COUNT, in a browser and in loop.test.ts; Lives rides the same call and is
-    // stale the same way but is not separately asserted -- see that test for why. The
-    // chrome does not belong on an application screen at all: making the gameplay HUD
-    // contextual is #324, and this issue's own criterion "gameplay-only HUD elements must
-    // not leak into application screens" is where it goes away.
+    // THE ONE STATED RESIDUAL, now stated at the call site instead of only in prose. The
+    // topbar's Lives/Enemies readout is projected from a WORLD, and this handler builds
+    // none -- so the status pushed below carries the ABANDONED world's numbers under the
+    // LANDING's kind and ordinal. That is exactly what the screen already showed before
+    // the merge, when nothing re-projected them at all; what changed is that the staleness
+    // is now visible in the argument rather than hidden in a call that was never made.
+    // Measured on the ENEMY COUNT, in a browser and in loop.test.ts; Lives rides the same
+    // call and is stale the same way but is not separately asserted -- see that test for
+    // why. The chrome does not belong on an application screen at all: the topbar is
+    // hidden at the Main Menu (hud.ts's setState), and a landing that builds its board
+    // replaces these numbers on the next push.
     //
     // WHAT IS DELIBERATELY LEFT STALE UNTIL THE LANDING BUILDS: `currentDescriptor` and
     // `currentSession` still describe the abandoned world, while the HUD has already been
@@ -2755,8 +2808,15 @@ export function startGameWith(
     // that does not exist yet.
     sessionIdentity = bootContext.identity;
     const landing = deps.levels.start;
-    hud.setSessionKind(descriptorFor(sessionIdentity, ordinalOf(landing)).kind);
-    hud.setLevel(ordinalOf(landing), deps.levels.levels.length);
+    // THE LANDING, not the board being left: `sessionIdentity` is re-read from the boot
+    // context one line above and the descriptor is derived FRESH from it, because
+    // `currentDescriptor` and `level` both still describe the abandoned world and both
+    // read plausible here. `driver.world` is passed knowingly -- see the residual above.
+    pushStatus(
+      driver.world,
+      descriptorFor(sessionIdentity, ordinalOf(landing)).kind,
+      ordinalOf(landing),
+    );
     pendingLanding = true;
     sm.toMainMenu();
   });
@@ -2879,7 +2939,9 @@ export function startGameWith(
   // The initial surface paint moved to `route-host.ts` with the subscription above; the
   // music did not, because it needs this session's audio engine.
   followMusic(sm.location); // this path bypasses sm.onChange
-  hud.setLevel(ordinalOf(level), deps.levels.levels.length);
+  // No level push here any more: the level ordinal rides the status projection, which
+  // this session already pushed above -- before any setState, so the very first render
+  // already knows which session it is drawing.
   deps.stats.startAttempt();
   coopKills = [];
   versusDeaths = [];
@@ -2900,7 +2962,7 @@ export function startGameWith(
   // rather than written -- see `slot.setControllers` for why an `Assignment` cannot be
   // read off a page-owned store the way everything above could.
   slot.setControllers(assignment, botsMayDrivePlayers);
-  refreshStats(world);
+  refreshTopbar(world);
 
   // The title screen leaves on ANY gesture. Both listeners are unconditional and the
   // state machine does the guarding -- `dismissLaunch` acts only from `launch` -- so a

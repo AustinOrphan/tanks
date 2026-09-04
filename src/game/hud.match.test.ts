@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest';
-import { createHud, type Hud } from './hud';
+import { createHud, type GameplayStatus, type Hud, type VersusStock } from './hud';
 import { configFor } from '../sim/config';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
@@ -223,6 +223,27 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
   });
 });
 
+/**
+ * A versus status carrying `stocks`, with the level position every status has.
+ *
+ * `missions: 1` throughout: a setup-pane versus match runs a one-level synthetic system,
+ * so the level chip stays hidden and these cases are about the strip alone. The
+ * `?dev=1&mode=ffa` session that DOES have a real ordinal is exercised in the level-chip
+ * block further down.
+ */
+const versusStatus = (stocks: VersusStock[] | null): GameplayStatus => ({
+  kind: 'versus',
+  mission: 1,
+  missions: 1,
+  stocks,
+});
+
+/** A campaign-board status. `lives`/`enemies` default to the shipped opening pair. */
+const boardStatus = (
+  kind: 'campaign' | 'practice',
+  over: Partial<{ mission: number; missions: number; lives: number; enemies: number }> = {},
+): GameplayStatus => ({ kind, mission: 1, missions: 1, lives: 3, enemies: 3, ...over });
+
 describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', () => {
   const strip = (root: HTMLElement): HTMLElement => root.querySelector('.hud-versus-stocks') as HTMLElement;
   const entries = (root: HTMLElement): HTMLElement[] =>
@@ -253,13 +274,14 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
     const { hud: h, root } = mount();
     // Production order (see the note below this block): the strip's visibility is
     // state-derived, so the session kind has to be set before `playing`.
-    h.setSessionKind('versus');
     h.setState('playing');
-    h.setVersusStocks([
-      { slot: 0, stock: 3, team: 0 },
-      { slot: 1, stock: 2, team: 1 },
-      { slot: 2, stock: 1, team: 2 },
-    ]);
+    h.setStatus(
+      versusStatus([
+        { slot: 0, stock: 3, team: 0 },
+        { slot: 1, stock: 2, team: 1 },
+        { slot: 2, stock: 1, team: 2 },
+      ]),
+    );
     expect(entries(root).map((e) => e.textContent)).toEqual(['P1 A 3', 'P2 B 2', 'P3 C 1']);
     // ...and the third team is a real hue, not the white fallback. This is the assertion
     // that would have failed while TEAM_COLORS had only two entries -- a 2v1v1 rendered
@@ -273,43 +295,95 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
     // format rather than a teams-only reinforcement, and FFA would grow a letter that
     // means nothing.
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
     h.setState('playing');
-    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
     expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2']);
   });
 
-  it('setVersusStocks(null) keeps the strip hidden even while playing', () => {
+  it('a versus status with null stocks keeps the strip hidden even while playing', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
-    h.setVersusStocks(null);
+    h.setStatus(versusStatus(null));
     h.setState('playing');
     expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(true);
   });
 
-  // The PRODUCTION order, not the data-then-state order every test above/below this one
-  // uses: loop.ts calls `hud.setState('playing')` BEFORE the first real
-  // `hud.setVersusStocks(entries)` call, because nothing marks "a versus match just
-  // started" as a SimEvent -- onFrameEvents (loop.ts) only fires once something has
-  // actually happened. Before this fix, that first setState('playing') ran
-  // renderVersusStocks against still-null data, which re-added `--hidden`; the OLD
-  // setVersusStocks guard then read that SAME class and silently dropped the very
-  // first real call, forever (nothing else touched the class until a later setState,
-  // e.g. a pause). Breaks if `setVersusStocks`'s render guard reads the DOM class
-  // instead of the state-derived `versusStocksVisible` variable.
-  it('production order -- setSessionKind then setState(playing) THEN setVersusStocks -- the strip still ends up visible with entries', () => {
+  /*
+   * THE ORDERING PAIR, and the reason step S6's merge is safe.
+   *
+   * `setStatus` and `setState` each carry half of "should the strip be showing", and
+   * either can arrive last. Production takes the order a test would not write by hand:
+   * `hud.setState('playing')` runs BEFORE the first status carrying stocks, because
+   * nothing marks "a versus match just started" as a SimEvent and the session's first
+   * populated push comes from a simulated frame. At that first `setState('playing')` the
+   * strip renders against no stocks at all and is left `--hidden` for a perfectly good
+   * DATA reason -- and a guard that read that class back to answer the STATE question
+   * dropped the first real entries permanently, until an unrelated `setState` (a pause)
+   * happened to revive them. That is a bug that shipped once.
+   *
+   * Both orders are asserted, and both matter, because the two ways of half-applying the
+   * merged projection fail in OPPOSITE directions -- measured, on this branch, by making
+   * each mistake on purpose and running this file:
+   *
+   *  - `applyStatus()` removed from `setState` (the projection applied only when the
+   *    session pushes it): 6 of 35 cases fail, and the failing one HERE is the reverse
+   *    order. Production still passes, because setState had already moved
+   *    `currentSurface` by the time the status arrived.
+   *  - `applyStatus()` removed from `setStatus` (applied only when the surface next
+   *    moves): 8 of 35 fail, and the failing one here is the PRODUCTION order.
+   *
+   * Neither mistake is caught by both cases, so a single ordering test would have left
+   * one of them shipping. The two together are what make "whichever arrives last, the bar
+   * lands in the same place" an assertion rather than a hope.
+   */
+  it('production order -- setState(playing) THEN the first status with stocks -- the strip still ends up visible with entries', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
     h.setState('playing');
-    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
     expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(false);
     expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2']);
   });
 
+  it('the reverse order -- status first, THEN setState(playing) -- lands on the same strip', () => {
+    const { hud: h, root } = mount();
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
+    h.setState('playing');
+    expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(false);
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2']);
+  });
+
+  it('a campaign status lands the same way in BOTH orders -- stats shown, strip down', () => {
+    // The other side of the projection under the same ordering pressure. A campaign
+    // status cannot carry stocks at all (the union has no field for them), so what is
+    // asserted here is the half a merged setter could still get wrong: the campaign
+    // stats' own gate and their numbers must not depend on whether the surface or the
+    // status moved last.
+    const statHidden = (root: HTMLElement): boolean =>
+      (root.querySelector('.hud-campaign-stat') as HTMLElement).classList.contains(
+        'hud-campaign-stat--hidden',
+      );
+    const stateFirst = mount();
+    stateFirst.hud.setState('playing');
+    stateFirst.hud.setStatus(boardStatus('campaign', { lives: 2, enemies: 1 }));
+    const dataFirst = mount();
+    dataFirst.hud.setStatus(boardStatus('campaign', { lives: 2, enemies: 1 }));
+    dataFirst.hud.setState('playing');
+    for (const { root } of [stateFirst, dataFirst]) {
+      expect(statHidden(root)).toBe(false);
+      expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
+      expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
+      expect(
+        (root.querySelector('.hud-versus-stocks') as HTMLElement).classList.contains(
+          'hud-versus-stocks--hidden',
+        ),
+      ).toBe(true);
+    }
+    stateFirst.hud.dispose();
+    dataFirst.hud.dispose();
+  });
+
   it('renders one entry per slot, with the slot number and stock count as its text', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
-    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
     h.setState('playing');
     expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2']);
     expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(false);
@@ -317,8 +391,7 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
 
   it('ffa entries are tinted from IDENTITY_RING_COLORS[slot], not a copied-out hex', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
-    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
     h.setState('playing');
     const es = entries(root);
     expect(es[0].style.color).toBe(expectedCssColor(IDENTITY_RING_COLORS[0]));
@@ -327,10 +400,9 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
 
   it("teams entries are tinted from TEAM_COLORS[team], not IDENTITY_RING_COLORS[slot]", () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
     // slot 0 carries team 1 deliberately -- if the dispatch dropped `team` and fell
     // through to the ffa branch, this would read IDENTITY_RING_COLORS[0] instead.
-    h.setVersusStocks([{ slot: 0, stock: 3, team: 1 }, { slot: 1, stock: 2, team: 0 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3, team: 1 }, { slot: 1, stock: 2, team: 0 }]));
     h.setState('playing');
     const es = entries(root);
     expect(es[0].style.color).toBe(expectedCssColor(TEAM_COLORS[1]));
@@ -340,8 +412,7 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
 
   it('hidden at title/win/lose even with entries set', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
-    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
     for (const s of ['main-menu', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(strip(root).classList.contains('hud-versus-stocks--hidden'), s).toBe(true);
@@ -350,19 +421,27 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
 
   it('visible at both playing and paused', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
-    h.setVersusStocks([{ slot: 0, stock: 3 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }]));
     for (const s of ['playing', 'paused'] as const) {
       h.setState(s);
       expect(strip(root).classList.contains('hud-versus-stocks--hidden'), s).toBe(false);
     }
   });
 
-  it('a campaign session never shows the strip, even with entries set -- the gate is sessionKind, not trusting loop.ts to never call this with entries', () => {
+  it('a campaign status takes the strip down again -- the exclusion is the projection, not a convention', () => {
+    // What this case used to be, and what the merge changed. It read "a campaign session
+    // never shows the strip even with entries set", and it could be written because
+    // `setVersusStocks` and `setSessionKind` were separate members: a caller COULD state
+    // versus stocks and campaign identity at once, and only a convention in loop.ts said
+    // it never would. `GameplayStatus` has no field for stocks on a campaign arm, so that
+    // case no longer compiles. What remains testable, and is what actually protects the
+    // player, is the transition: a live strip must come down the moment the session says
+    // it is a campaign board.
     const { hud: h, root } = mount();
-    // sessionKind defaults to 'campaign' -- no setSessionKind('versus') call.
-    h.setVersusStocks([{ slot: 0, stock: 3 }]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }]));
     h.setState('playing');
+    expect(strip(root).classList.contains('hud-versus-stocks--hidden'), 'setup').toBe(false);
+    h.setStatus(boardStatus('campaign'));
     expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(true);
   });
 });
@@ -375,7 +454,7 @@ describe('hud: campaign Lives/Enemies stats hidden during versus (issue #282)', 
 
   it('hides Lives/Enemies for a versus session in both playing and paused', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
+    h.setStatus(versusStatus(null));
     // Two stat elements exist (Lives, Enemies) -- fails silently (an empty sweep that
     // still passes) if the markup ever drops one, so the population is asserted here
     // rather than assumed.
@@ -388,33 +467,67 @@ describe('hud: campaign Lives/Enemies stats hidden during versus (issue #282)', 
 
   it('keeps Lives/Enemies visible and updating for a campaign session -- the negative control against over-hiding', () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('campaign');
+    h.setStatus(boardStatus('campaign'));
     for (const s of ['playing', 'paused'] as const) {
       h.setState(s);
       expect(hidden(root), s).toEqual([false, false]);
     }
-    h.setLives(2);
-    h.setEnemiesRemaining(1);
+    h.setStatus(boardStatus('campaign', { lives: 2, enemies: 1 }));
     expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
     expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
   });
 
   it("a session-kind switch restores the stats -- production reboots into a FRESH Hud per session (boot.ts's requestCampaignSession -> deps.startGame), so this exercises the stronger property that the gate tracks CURRENT kind rather than latching the first kind a Hud instance ever saw", () => {
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
+    h.setStatus(versusStatus(null));
     h.setState('playing');
     expect(hidden(root)).toEqual([true, true]);
 
-    h.setSessionKind('campaign');
+    h.setStatus(boardStatus('campaign'));
     expect(hidden(root)).toEqual([false, false]);
   });
 
-  it('a campaign session never hides the stats even if setVersusStocks somehow carried entries -- the gate is sessionKind, not versus data', () => {
+  it('PRACTICE shows the campaign stats, exactly as campaign does, and adds a chip of its own', () => {
+    // Both halves in one case, because they are one decision. Practice is a campaign
+    // board played in isolation: its lives and enemy count are as real there as in a run,
+    // so hiding them would be a shipped-behaviour regression on the Level-Select path --
+    // that is the first assertion, and the one a widened predicate (`kind !== 'campaign'`)
+    // breaks. The second is what issue #324 asked for and what was missing: before the
+    // chip, a Practice topbar and a Campaign topbar were byte-identical screenshots at
+    // every captured width, so nothing on screen said which board the player was on.
+    const chip = (root: HTMLElement): HTMLElement =>
+      root.querySelector('.hud-practice') as HTMLElement;
     const { hud: h, root } = mount();
-    // sessionKind defaults to 'campaign' -- no setSessionKind('versus') call.
-    h.setVersusStocks([{ slot: 0, stock: 3 }]);
+    h.setStatus(boardStatus('practice', { lives: 2, enemies: 1 }));
     h.setState('playing');
-    expect(hidden(root)).toEqual([false, false]);
+    expect(hidden(root), 'practice hid the stats it is meant to show').toEqual([false, false]);
+    expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
+    expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
+    expect(chip(root).classList.contains('hud-practice--hidden')).toBe(false);
+    expect(chip(root).textContent).toBe('Practice');
+  });
+
+  it('the Practice chip is DOWN for campaign and for versus -- the control that stops it being decoration', () => {
+    // Without this, a chip nailed permanently open would satisfy the case above while
+    // announcing PRACTICE over a campaign run and a versus match alike. The transition
+    // back is asserted too: the chip follows the CURRENT kind rather than latching the
+    // first one this Hud ever saw -- a Levels pick makes a campaign session Practice and
+    // landing back on its home board makes it Campaign again, both within one Hud.
+    const chipDown = (root: HTMLElement): boolean =>
+      (root.querySelector('.hud-practice') as HTMLElement).classList.contains(
+        'hud-practice--hidden',
+      );
+    const { hud: h, root } = mount();
+    expect(chipDown(root), 'a HUD that has never been told about a session').toBe(true);
+    h.setStatus(boardStatus('campaign'));
+    h.setState('playing');
+    expect(chipDown(root), 'campaign').toBe(true);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }]));
+    expect(chipDown(root), 'versus').toBe(true);
+    h.setStatus(boardStatus('practice'));
+    expect(chipDown(root), 'a Levels pick made this session Practice').toBe(false);
+    h.setStatus(boardStatus('campaign'));
+    expect(chipDown(root), 'landing back on the home board').toBe(true);
   });
 });
 

@@ -465,17 +465,22 @@ describe('createRouteHost: what a session REPORTS through the slot (issue #324, 
 });
 
 describe('createRouteHost: releasing the slot gives the menu back its page shape', () => {
-  it('resets the relaunch target and session kind when the live session detaches', () => {
+  it('resets the relaunch target and clears the gameplay status when the live session detaches', () => {
     // A versus session shapes the title around itself ("Start Match", a Campaign
     // button). The page has to take that back when the session goes, or an empty host
     // keeps offering a "Start Match" that is a New Game in disguise.
+    //
+    // `null`, not a campaign-shaped status: a page has no world, so it can state no
+    // lives, no enemy count and no stock strip. Since issue #324's step S6 the projection
+    // has a word for exactly that, and `null` is the assertion -- a page that pushed a
+    // fabricated campaign status would be claiming a session that does not exist.
     const f = fixture({ launchDismissed: true });
     const slot = f.host.attach();
     f.hud.hud.setRelaunchTarget('versus-setup');
-    f.hud.hud.setSessionKind('versus');
+    f.hud.hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: null });
     slot.detach();
     expect(f.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['campaign-levels']);
-    expect(f.hud.argsOf('setSessionKind').at(-1)).toEqual(['campaign']);
+    expect(f.hud.argsOf('setStatus').at(-1)).toEqual([null]);
   });
 
   it('a stale detach does not reshape the menu under the session that replaced it', () => {
@@ -485,7 +490,7 @@ describe('createRouteHost: releasing the slot gives the menu back its page shape
     const old = f.host.attach();
     f.host.attach();
     f.hud.hud.setRelaunchTarget('versus-setup');
-    f.hud.hud.setSessionKind('versus');
+    f.hud.hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: null });
     const before = f.hud.argsOf('setRelaunchTarget').length;
     old.detach();
     expect(f.hud.argsOf('setRelaunchTarget')).toHaveLength(before);

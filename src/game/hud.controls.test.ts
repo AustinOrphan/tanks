@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type Hud } from './hud';
+import { createHud, type GameplayStatus, type Hud } from './hud';
 import { SKINS, ACCENTS } from '../presentation/customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
@@ -96,27 +96,49 @@ describe('createHud volume control', () => {
 });
 
 describe('createHud stats', () => {
+  /** A campaign-board status; the two numbers are what these cases are about. */
+  const board = (lives: number, enemies: number): GameplayStatus => ({
+    kind: 'campaign',
+    mission: 1,
+    missions: 1,
+    lives,
+    enemies,
+  });
+
   it('renders lives and enemies remaining', () => {
     const { hud: h, root } = mount();
 
-    h.setLives(2);
-    h.setEnemiesRemaining(1);
+    h.setStatus(board(2, 1));
 
     expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
     expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
   });
 
   it('does not rewrite the text node when the value is unchanged', () => {
-    // loop.ts calls these every frame. textContent's setter replaces the text
-    // node even for an identical string, invalidating layout at 60 Hz for
-    // values that change a handful of times per round.
+    // loop.ts pushes a status on every simulated frame. textContent's setter replaces the
+    // text node even for an identical string, invalidating layout at 60 Hz for values
+    // that change a handful of times per round. The two pushes here are DISTINCT objects
+    // carrying the same numbers, which is what a per-frame projection actually hands over
+    // -- an identity check on the status would pass this case while writing every frame.
     const { hud: h, root } = mount();
-    h.setLives(3);
+    h.setStatus(board(3, 3));
     const node = (root.querySelector('.hud-lives') as HTMLElement).firstChild;
 
-    h.setLives(3);
+    h.setStatus(board(3, 3));
 
     expect((root.querySelector('.hud-lives') as HTMLElement).firstChild).toBe(node);
+  });
+
+  it('a versus status leaves the two numbers alone rather than blanking them', () => {
+    // The control for the memo above, and a statement about what `GameplayStatus`'s
+    // versus arm means: it has no lives and no enemy count, so there is nothing to write
+    // -- and the elements are hidden by their own class anyway. Blanking them would be
+    // invisible work that the memo would then have to un-do on the way back.
+    const { hud: h, root } = mount();
+    h.setStatus(board(2, 1));
+    h.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: [{ slot: 0, stock: 3 }] });
+    expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
+    expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
   });
 });
 

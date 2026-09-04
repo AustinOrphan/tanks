@@ -783,15 +783,22 @@ export function createRouteHost(
         detach(): void {
           if (!current()) return;
           live = null;
-          // The menu goes back to the PAGE's shape. `relaunchTarget` and the session kind
-          // are pushed only by a session, at its construction, and until this line nothing
-          // took them back: after a setup-pane versus match the empty host kept offering
-          // "Start Match" and "Campaign", and that "Start Match" -- with no session to
-          // dispatch to -- is a New Game, which replaced the player's campaign run with no
-          // confirmation. Reset on the way OUT rather than on the next attach, because the
-          // page can sit at the Main Menu with no session for as long as the player likes.
+          // The menu goes back to the PAGE's shape. `relaunchTarget` and the gameplay
+          // status are pushed only by a session, at its construction, and until this line
+          // nothing took them back: after a setup-pane versus match the empty host kept
+          // offering "Start Match" and "Campaign", and that "Start Match" -- with no
+          // session to dispatch to -- is a New Game, which replaced the player's campaign
+          // run with no confirmation. Reset on the way OUT rather than on the next attach,
+          // because the page can sit at the Main Menu with no session for as long as the
+          // player likes.
+          //
+          // `null` rather than a campaign-shaped status, since issue #324's step S6 gave
+          // the projection a word for this: there is no live session, so the page claims
+          // no session's identity, no level position and no stock strip. A page cannot
+          // state lives or an enemy count anyway -- those come from a world, and the
+          // whole point of this line is that there is not one.
           hud.setRelaunchTarget('campaign-levels');
-          hud.setSessionKind('campaign');
+          hud.setStatus(null);
         },
       };
     },

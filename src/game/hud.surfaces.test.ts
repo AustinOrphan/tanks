@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { createHud, type GameplayStatus, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 
 
@@ -741,18 +741,33 @@ describe('hud: round-start countdown', () => {
   });
 });
 
+/**
+ * A campaign status at a stated place in its level sequence (issue #324, step S6).
+ *
+ * The level position rides the status projection now, so every case that used to call
+ * `setLevel(current, total)` states a whole session instead. `lives`/`enemies` are the
+ * shipped opening pair and are inert here: nothing in these cases reads them.
+ */
+const atLevel = (mission: number, missions: number): GameplayStatus => ({
+  kind: 'campaign',
+  mission,
+  missions,
+  lives: 3,
+  enemies: 3,
+});
+
 describe('hud: level progression', () => {
   it('shows the level position once told, and only in a multi-level sequence', () => {
     const { hud: h, root } = mount();
     const chip = (): HTMLElement => root.querySelector('.hud-level') as HTMLElement;
-    expect(chip().className).toContain('hud-level--hidden'); // nothing until setLevel
+    expect(chip().className).toContain('hud-level--hidden'); // nothing until a status lands
 
-    h.setLevel(1, 2);
+    h.setStatus(atLevel(1, 2));
     expect(chip().className).not.toContain('hud-level--hidden');
     expect(chip().textContent).toContain('1/2');
 
     // A one-level sequence (the sandbox) shows no chip: "Level 1/1" is noise.
-    h.setLevel(1, 1);
+    h.setStatus(atLevel(1, 1));
     expect(chip().className).toContain('hud-level--hidden');
   });
 
@@ -761,19 +776,19 @@ describe('hud: level progression', () => {
     const title = (): string => (root.querySelector('.hud-title') as HTMLElement).textContent ?? '';
     const button = (): string => (root.querySelector('.hud-action') as HTMLElement).textContent ?? '';
 
-    h.setLevel(1, 2);
+    h.setStatus(atLevel(1, 2));
     h.setState('outcome-win');
     expect(title()).toContain('cleared');
     expect(button()).toBe('Next Level');
 
-    h.setLevel(2, 2);
+    h.setStatus(atLevel(2, 2));
     h.setState('outcome-win'); // re-renders unconditionally; the equal-state guard lives in state.ts, not here
     expect(title()).toBe('You Win!');
     expect(button()).toBe('Play Again');
   });
 
-  it('never says cleared before setLevel has been called at all', () => {
-    // A HUD that has not been told about levels behaves exactly as it always did.
+  it('never says cleared before any status has been pushed at all', () => {
+    // A HUD that has not been told about a session behaves exactly as it always did.
     const { hud: h, root } = mount();
     h.setState('outcome-win');
     expect((root.querySelector('.hud-title') as HTMLElement).textContent).toBe('You Win!');
@@ -1277,7 +1292,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     // Fails if the clearedIntermediate condition is dropped, or if the label is left as
     // "Quit to Title" -- wrong copy for leaving a level you just won.
     const { hud: h, root } = mount();
-    h.setLevel(2, 5);
+    h.setStatus(atLevel(2, 5));
     h.setState('outcome-win');
     expect(hidden(root)).toBe(false);
     expect(quitBtn(root).textContent).toBe('Main Menu');
@@ -1287,7 +1302,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     // The discriminator, and the reason `s === 'win'` alone is not the condition:
     // endRun has run by then, so there is no run to return to.
     const { hud: h, root } = mount();
-    h.setLevel(5, 5);
+    h.setStatus(atLevel(5, 5));
     h.setState('outcome-win');
     expect(hidden(root)).toBe(true);
   });
@@ -1296,7 +1311,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     // A loss ends the run too, so a cleared-level route out does not apply. Fails if the
     // condition widens from `s === 'win'` to "any end screen with levels left".
     const { hud: h, root } = mount();
-    h.setLevel(2, 5);
+    h.setStatus(atLevel(2, 5));
     h.setState('outcome-lose');
     expect(hidden(root)).toBe(true);
   });
@@ -1304,7 +1319,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
   it('still says Quit to Title when paused', () => {
     // The label is per-state, not a global rename: pause keeps its own wording.
     const { hud: h, root } = mount();
-    h.setLevel(2, 5);
+    h.setStatus(atLevel(2, 5));
     h.setState('paused');
     expect(hidden(root)).toBe(false);
     expect(quitBtn(root).textContent).toBe('Quit to Title');

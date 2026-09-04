@@ -55,11 +55,15 @@ export type HudLayerId =
  * does not import the model. A fourth descriptor kind is therefore a compile
  * error at `loop.ts`'s call site rather than a silent fold into `'campaign'`.
  *
- * Drives the GAMEPLAY surfaces only -- campaign Lives/Enemies stats and the
- * versus stock strip. It deliberately does NOT drive any button's label or
- * visibility; see `HudRelaunchTarget` for why those are a different question.
+ * Read off `GameplayStatus` since issue #324's step S6 rather than declared beside it,
+ * so the name and the projection's own discriminant cannot drift apart. What each kind
+ * SHOWS is stated there; this alias exists for the callers that pass a kind around
+ * without the rest of the status.
+ *
+ * It deliberately does NOT drive any button's label or visibility; see
+ * `HudRelaunchTarget` for why those are a different question.
  */
-export type HudSessionKind = 'campaign' | 'practice' | 'versus';
+export type HudSessionKind = GameplayStatus['kind'];
 
 /**
  * WHICH GROUND the application screens stand on -- see `setBackdrop`. Projected by
@@ -125,6 +129,88 @@ export type GameplayOutcome = {
   | { tally: 'solo' }
   | { tally: 'coop'; kills: number[] }
   | { tally: 'ffa' | 'teams'; kills: number[]; deaths: number[] }
+);
+
+/**
+ * One player's remaining stock in a versus match (spec §3a, owner addition 2026-08-21).
+ *
+ * INDICES, NEVER COLOURS (issue #473): `slot` is `Tank.controlledBy` and `team` is
+ * `Tank.team`, and the HUD looks the hue up for itself in `presentation/identity.ts` --
+ * `IDENTITY_RING_COLORS[slot]` in ffa, `TEAM_COLORS[team]` in teams, the same exported
+ * constants this slot's ring is tinted from, imported rather than copied out as literal
+ * hex so retuning either palette moves the readout with it. `team` is absent outside
+ * 'teams' mode, where `loadArena` stamps no side at all.
+ *
+ * Each entry renders its OWN element, because a joined string could not carry a per-slot
+ * tint, and the strip is placed in the topbar beside `.hud-stat`/`.hud-shells` --
+ * deliberately never an overlay on the arena.
+ */
+export type VersusStock = {
+  readonly slot: number;
+  readonly stock: number;
+  readonly team?: number;
+};
+
+/** The two campaign-board readouts, shared by the kinds that are played on one. */
+type BoardStatus = {
+  /** Lives left in this world -- `World.lives`, projected verbatim. */
+  readonly lives: number;
+  /** Enemy-kind tanks still standing, the objective's own countdown. */
+  readonly enemies: number;
+};
+
+/**
+ * EVERYTHING THE TOPBAR SAYS ABOUT THE LIVE SESSION, as one push (issue #324, step S6).
+ *
+ * The bar used to be assembled from five setters that no type related to each other:
+ * `setSessionKind` gated two surfaces, `setLives` and `setEnemiesRemaining` wrote the
+ * campaign stats unconditionally, `setLevel` owned the level chip, and `setVersusStocks`
+ * carried the versus strip. Nothing stopped them disagreeing -- a session could push
+ * versus stocks and campaign lives in the same breath, and the only thing that kept the
+ * bar honest was that `loop.ts` happened never to do it. Its own tests said so out loud:
+ * "a campaign session never hides the stats even if setVersusStocks somehow carried
+ * entries" was a case that could be written because the interface allowed it.
+ *
+ * One discriminated projection makes the exclusion a fact rather than a convention.
+ * `kind` names WHICH session this is, and the fields belonging to the other kinds are not
+ * on the object at all: a versus status has no `lives` to leak onto a stock strip, and a
+ * campaign status has no `stocks` to raise one.
+ *
+ * `mission`/`missions` are common to all three because every session has a place in a
+ * level sequence, versus included: a setup-pane match runs a one-level synthetic system
+ * (so the chip stays hidden, as `missions > 1` is false), while `?dev=1&mode=ffa` is a
+ * genuine versus session ON the campaign level system and its "Level 3/5" chip -- and the
+ * "Level 3 cleared!" panel that follows -- are as true there as in a run.
+ *
+ * WHAT EACH KIND PUTS ON SCREEN, and why the three differ:
+ *
+ *  - `'campaign'` -- Lives and Enemies, the run's own two numbers (issue #282).
+ *  - `'practice'` -- the SAME two, plus a Practice chip that says which they belong to.
+ *    A Level-Select board is a campaign board played in isolation, so its lives and enemy
+ *    count are as real there as in a run and hiding them would be a regression; what was
+ *    missing until step S6 is any way to tell the two apart, and the bar rendered
+ *    byte-identically in both (measured: the topbar screenshots were identical files at
+ *    every captured width). The chip is the whole difference.
+ *  - `'versus'` -- the per-slot stock strip and no campaign stats: a versus world has no
+ *    enemy-kind tanks, so `enemies` is always 0 there and could not tell "cleared" apart
+ *    from "versus", while `lives` reads as the campaign default beside a real stock
+ *    count. The strip is in-match chrome, shown only while `playing` or `paused` --
+ *    never at title/win/lose, where a live per-tick count is meaningless -- and `null`
+ *    stocks mean "nothing to show yet", which is where a versus session sits until its
+ *    first simulated frame.
+ *
+ * `null` (see `setStatus`) is "no live session", which is the state a HUD that has never
+ * started a match is in.
+ */
+export type GameplayStatus = {
+  /** 1-based position in THIS session's level sequence. */
+  readonly mission: number;
+  /** How many levels that sequence has. A one-level total shows no chip. */
+  readonly missions: number;
+} & (
+  | ({ readonly kind: 'campaign' } & BoardStatus)
+  | ({ readonly kind: 'practice' } & BoardStatus)
+  | { readonly kind: 'versus'; readonly stocks: readonly VersusStock[] | null }
 );
 
 import type { StatCounts } from './stats';
@@ -196,25 +282,27 @@ export interface CampaignRunSummary {
 
 export interface Hud {
   /**
-   * The campaign topbar stat -- loop.ts pushes this every frame regardless of session
-   * kind, since nothing marks "this is a versus world" as a `SimEvent`. The DOM element
-   * itself is hidden for a versus session by `setSessionKind` (issue #282: `lives` reads
-   * as the campaign default there, meaningless beside the stock readout), so this setter
-   * stays unconditional -- the visibility gate lives entirely on the hidden class, not
-   * here, the same division `setVersusStocks`'s data/gate split already uses.
+   * THE TOPBAR, as one projection -- who is playing, where they are in the level
+   * sequence, and whichever status readout that kind actually has (issue #324, step S6).
+   * See `GameplayStatus` for the shape and for what the five setters it replaced could
+   * not say.
+   *
+   * Pushed on every simulated frame, not on change: nothing marks "the lives changed" as
+   * a `SimEvent`, so the session states the whole status and the HUD decides what that
+   * costs. `loop.ts` skips a push whose projection is identical to the last one, which is
+   * what keeps a 60 Hz caller from re-rendering a strip that has not moved.
+   *
+   * `null` is "no live session": the campaign stats keep whatever they last read, the
+   * level chip and the versus strip hide, and no kind-specific identity is claimed. That
+   * is the state every HUD which never calls this is in -- every css and gallery fixture
+   * -- so a fixture renders exactly as it did before this method existed, and it is what
+   * `route-host.ts` pushes when a session releases the slot.
+   *
+   * WHAT IS BEING PLAYED, never what a button does: no label or affordance is keyed on
+   * `kind`, because `?dev=1&mode=ffa` is a genuine versus session whose buttons stay
+   * campaign-shaped. See `setRelaunchTarget`.
    */
-  setLives(n: number): void;
-  /** Twin of `setLives` just above -- same unconditional setter, same
-   *  `setSessionKind`-driven hidden class (a versus world has no enemy-kind tanks, so
-   *  `countEnemies` is always 0 there and could not tell "cleared" apart from "versus"
-   *  on its own). */
-  setEnemiesRemaining(n: number): void;
-  /**
-   * Where the session stands in the level sequence: drives the topbar chip and the
-   * win panel's copy (Next Level vs Play Again). A one-level total shows no chip --
-   * "Level 1/1" is noise, and the sandbox is exactly that.
-   */
-  setLevel(current: number, total: number): void;
+  setStatus(status: GameplayStatus | null): void;
   /**
    * The main menu's level select: `unlocked` of `total` levels are pickable
    * (1-based count; level 1 is always open). A one-level total hides the Levels button
@@ -412,33 +500,6 @@ export interface Hud {
    * must repaint rather than be dropped.
    */
   setOutcome(outcome: GameplayOutcome | null): void;
-  /**
-   * The in-match per-player STOCK readout (spec §3a, owner addition 2026-08-21) --
-   * genuinely different lifecycle from the versus tally `setOutcome` carries: that one
-   * is a win/lose-only summary; this is a LIVE strip in the topbar, visible only while a
-   * versus session is actually being played (`playing`/`paused` -- wired into
-   * setState's visibility toggles alongside every other state-gated element below),
-   * hidden at title/win/lose/splash, where a live per-tick count would be meaningless
-   * (the match has not begun or is already over). That opposite visibility rule is why
-   * it stayed its own setter when the win/lose lines merged into one projection. `null`
-   * hides it entirely -- "never show", not "hide right now"; campaign sessions call this
-   * with `null` exactly once, at wiring, and never again (loop.ts).
-   *
-   * One entry per active slot, `{ slot, stock, team? }` -- `team` present only in
-   * 'teams' mode (loop.ts derives it straight off `Tank.team`, which loadArena stamps
-   * ffa-never/teams-always, arena.ts). Each entry renders its OWN element (a joined
-   * string could not carry a per-slot inline tint) coloured from the SAME exported
-   * constants the rest of the identity system already uses for this slot's ring --
-   * `IDENTITY_RING_COLORS[slot]` in ffa, `TEAM_COLORS[team]` in teams -- imported here
-   * rather than copied out as literal hex, which is the drift hud.test.ts's own tint
-   * assertions are written to catch (retuning either palette must move this readout's
-   * colour too, with no second place to remember to edit).
-   *
-   * Placement is the topbar -- the screen edge the layout already reserves for
-   * `.hud-stat`/`.hud-shells` -- deliberately never an overlay on the arena; feel/size
-   * evidence against a real render is Task 7's job (screenshots), not this file's.
-   */
-  setVersusStocks(stocks: { slot: number; stock: number; team?: number }[] | null): void;
   /**
    * The Records page just opened, on either of its two tabs.
    *
@@ -671,37 +732,6 @@ export interface Hud {
    */
   showVersusSetup(show: boolean, initial?: VersusConfig | null): void;
   /**
-   * WHAT IS BEING PLAYED. Projected from the canonical `SessionDescriptor.kind`
-   * by `loop.ts` at every world build, so it tracks the descriptor rather than
-   * a boot-time guess -- a Levels pick that turns a campaign session into
-   * Practice arrives here, and so does the landing that turns it back.
-   *
-   * Gates the two GAMEPLAY surfaces whose correctness is a statement about the
-   * world, not about a button:
-   *
-   *  - the campaign Lives/Enemies stats, hidden for `'versus'` alone (issue
-   *    #282). Practice shows them, exactly as it always has -- a Level-Select
-   *    board is a campaign board being played in isolation, and its lives and
-   *    enemy count are as real there as anywhere;
-   *  - the in-match versus stock strip (spec section 3a), shown for `'versus'`
-   *    while playing or paused.
-   *
-   * NOT fixed for the session's life, and no caller may assume it is: both a
-   * Levels pick and the landing back on a session's home board re-derive it.
-   * Every consumer is recomputed from one place (`applySessionKindSurfaces`) so
-   * a later change lands on all of them at once, whatever order the calls come
-   * in.
-   *
-   * Deliberately NOT the gate for any button's label or visibility. A
-   * developer-flag versus session (`?dev=1&mode=ffa`) is genuinely `'versus'`
-   * here while its buttons stay campaign-shaped, because it still runs the
-   * campaign level system -- see `setRelaunchTarget`.
-   *
-   * Defaults to `'campaign'`, so a HUD that never calls this (every css/gallery
-   * fixture) renders byte-identical to before the method existed.
-   */
-  setSessionKind(kind: HudSessionKind): void;
-  /**
    * WHAT THE TITLE SCREEN'S BUTTONS DO -- the affordance policy for every
    * kind-dependent control on the Main Menu:
    *
@@ -801,7 +831,7 @@ export interface Hud {
 /**
  * WHO OWNS EACH MEMBER of `Hud` (issue #324).
  *
- * `Hud` is one interface with 71 members spanning two different lifetimes: the persistent
+ * `Hud` is one interface with 67 members spanning two different lifetimes: the persistent
  * application shell, which exists before any match and outlives every match, and a single
  * gameplay session, which does not. Issue #468 separated those OWNERS in the code
  * (`route-host.ts` renders application routes with no session at all); this separates them
@@ -864,18 +894,19 @@ export type RouteHudKey =
 
 /**
  * What a live match may write, and the ONLY part of `Hud` a gameplay session should ever
- * hold. Thirteen members plus the lent `showToast`.
+ * hold. Nine members plus the lent `showToast`.
  *
- * `setOutcome` is the first of the absorptions issue #324 promised: it replaced
- * `setCoopKills` and `setVersusResults`, which left the interface with them (step S4).
- * The per-kind status members still queued behind it -- `setLives`,
- * `setEnemiesRemaining`, `setLevel`, `setSessionKind`, `setVersusStocks` -- are
- * gameplay-owned today and stay gameplay-owned after, so they are classified here rather
- * than being left unclassified pending that work.
+ * Both of issue #324's promised absorptions have landed. `setOutcome` (step S4) replaced
+ * `setCoopKills` and `setVersusResults`; `setStatus` (step S6) replaced `setLives`,
+ * `setEnemiesRemaining`, `setLevel`, `setSessionKind` and `setVersusStocks` -- five
+ * members that between them said one thing, "what is this session and where does it
+ * stand", in five unrelated vocabularies. Four fewer members here than step S5 left, and
+ * the shrink is the point: a smaller gameplay surface is what makes the ownership
+ * boundary `hud-ownership.test.ts` pins something a reader can hold in mind.
  */
 export type GameplayHudKey =
-  | 'setLives' | 'setEnemiesRemaining' | 'setLevel' | 'setSessionKind'
-  | 'setOutcome' | 'setVersusStocks'
+  | 'setStatus'
+  | 'setOutcome'
   | 'setRoundPhase' | 'setShellCount' | 'signalShellCapacity'
   | 'signalPlayerDeath' | 'signalPlayerFire' | 'setTouchIndicator'
   | 'showAchievementToasts'
@@ -892,8 +923,12 @@ export type GameplayHud = Pick<Hud, GameplayHudKey>;
  * Every member of `Hud` is classified above. A member added without a role makes this
  * union non-`never` and the assignment below stops compiling -- which is the point: the
  * failure mode this guards against is not a wrong classification but an UNCLASSIFIED one,
- * silently reachable from everywhere, which is how it grew to the 67 members the
- * classification first had to sort.
+ * silently reachable from everywhere, which is how it grew to the 67 members this
+ * classification first had to sort. It reads 67 again today by coincidence rather than by
+ * standstill: four Settings members arrived after that count (issue #289's motion pair and
+ * issue #540's quality pair), and issue #324's step S6 took five status members away and
+ * gave back one. `hud-ownership.test.ts` is where the number is asserted, beside the
+ * arithmetic that produced it.
  */
 type UnclassifiedHudKey = Exclude<keyof Hud, HudFrameKey | RouteHudKey | GameplayHudKey>;
 const _everyHudMemberHasAnOwner: UnclassifiedHudKey extends never ? true : never = true;
@@ -1018,19 +1053,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          Menu only -- see setState, and the .ui-app-ground rule for why not on Launch. -->
     <div class="ui-app-ground ui-app-ground--hidden" aria-hidden="true"></div>
     <div class="hud-topbar">
+      <!-- The PRACTICE identity chip (issue #324, step S6). A Level-Select board shows
+           the same Lives and Enemies a run does -- they are as real there -- so before
+           this chip existed the two bars rendered byte-identically and nothing on screen
+           said which one the player was in. First in the row because it qualifies
+           everything after it: this is Practice's lives, not the run's. -->
+      <div class="hud-stat hud-practice hud-practice--hidden">Practice</div>
       <!-- hud-campaign-stat (issue #282): both are campaign-only concepts -- lives is
            the campaign default and a versus world has no enemy-kind tanks (countEnemies
            is always 0 there), so both would read as noise beside the stock readout below.
            The class carries no styling of its own (.hud-stat already does); only its
-           --hidden modifier, toggled from applySessionKindSurfaces, does anything. -->
+           --hidden modifier, toggled from applyStatus, does anything. -->
       <div class="hud-stat hud-campaign-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat hud-campaign-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
       <div class="hud-shells hud-shells--hidden"></div>
       <!-- The in-match stock readout (spec §3a): a topbar chip, same tier as
-           .hud-shells above -- never an overlay on the arena. Empty/hidden until
-           setVersusStocks hands it entries; see that setter's own doc comment on the
-           Hud interface for the full visibility rule. -->
+           .hud-shells above -- never an overlay on the arena. Empty/hidden until a
+           versus status carries entries; see GameplayStatus for the full visibility
+           rule. -->
       <div class="hud-versus-stocks hud-versus-stocks--hidden"></div>
       <!-- NO AUDIO PAIR HERE since issue #226. A Mute button and a volume slider sat in
            this bar on every surface including the Main Menu, which is what made audio
@@ -1527,8 +1568,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   // Both campaign-only topbar stats, hidden together for a versus session -- see
-  // applySessionKindSurfaces below and the markup comment above.
+  // applyStatus below and the markup comment above.
   const campaignStatEls = Array.from(el.querySelectorAll('.hud-campaign-stat')) as HTMLElement[];
+  /** The Practice identity chip -- the one topbar element only that kind raises. */
+  const practiceChip = el.querySelector('.hud-practice') as HTMLElement;
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
   const levelNum = el.querySelector('.hud-level-num') as HTMLElement;
   const panel = el.querySelector('.hud-panel') as HTMLElement;
@@ -1865,28 +1908,41 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * a merge that kept the habit would have got it wrong three times at once.
    */
   let outcomeVisible = false;
-  /** `null` means "never show" (not a versus session, campaign always passes this) --
-   *  see setVersusStocks' own doc comment on the Hud interface. */
-  let versusStocksData: { slot: number; stock: number; team?: number }[] | null = null;
   /**
-   * The surface+sessionKind visibility GATE for the stock strip, maintained here as its
-   * own variable rather than read back off `versusStocksEl`'s classList (fix, review of
-   * this task's own first landing). The DOM class is not a safe proxy for "should this
-   * be showing": `renderVersusStocks` ALSO writes that same class off `versusStocksData`
-   * alone (it re-adds `--hidden` whenever there is no data yet, regardless of state), so
-   * reading the class back conflated two different questions -- "are we in a state that
-   * wants this visible" and "did the last render happen to find data" -- and production
-   * hits exactly the case where they disagree: `setState('playing')` always runs BEFORE
-   * the first `setVersusStocks` call (no `SimEvent` marks "a versus match just started";
-   * `onFrameEvents` only fires once something has actually happened), so at that first
-   * `setState('playing')`, `renderVersusStocks` ran with `versusStocksData` still `null`
-   * and left the class `--hidden` -- and the OLD guard here
-   * (`!versusStocksEl.classList.contains(...)`) then read that same `--hidden` and
-   * refused to render the very first real `setVersusStocks` call, permanently (nothing
-   * else touches the class until the next `setState` call -- a pause, if the player
-   * happens to hit one). This variable is set ONLY by `setState`, never by
-   * `renderVersusStocks`, so a data-driven re-hide can never masquerade as a state-driven
-   * one.
+   * The whole topbar, as the session last stated it -- see `GameplayStatus`. `null` is
+   * "no live session", which is where every fixture that never calls `setStatus` stays.
+   */
+  let statusData: GameplayStatus | null = null;
+  /**
+   * The last Lives/Enemies actually WRITTEN to the DOM, so `applyStatus` can skip a write
+   * that changes nothing: textContent's setter tears down and rebuilds the text node even
+   * when the string is identical, and a session pushes its status on every simulated
+   * frame -- up to 60 a second -- for two numbers that move a handful of times a round.
+   *
+   * Declared here, beside the projection they are read against, rather than beside the
+   * other render memos further down: they are only ever compared with `statusData`, and
+   * `applyStatus` runs before those declarations are reached.
+   */
+  let lastLives: number | null = null;
+  let lastEnemies: number | null = null;
+  /**
+   * The surface+kind visibility GATE for the stock strip, maintained as its own variable
+   * rather than read back off `versusStocksEl`'s classList. The DOM class is not a safe
+   * proxy for "should this be showing": `renderVersusStocks` ALSO writes that same class
+   * off the stocks alone (it re-adds `--hidden` whenever there is no data yet, regardless
+   * of state), so reading the class back conflates two different questions -- "are we in
+   * a state that wants this visible" and "did the last render happen to find data" -- and
+   * production hits exactly the case where they disagree: `setState('playing')` always
+   * runs BEFORE the first status carrying stocks (no `SimEvent` marks "a versus match
+   * just started"; the session's first push with entries comes from `onSimulated`), so at
+   * that first `setState('playing')`, `renderVersusStocks` runs with no stocks and leaves
+   * the class `--hidden`. A guard that then read that same `--hidden` refused to render
+   * the very first real entries, permanently -- nothing else touches the class until the
+   * next `setState` call, a pause if the player happens to hit one. That is a SHIPPED
+   * bug, fixed once before by this variable, and merging five setters into one projection
+   * did not remove the hazard: it only moved where the state-vs-data distinction has to
+   * be drawn. It is drawn here. `applyStatus` assigns this from `statusData.kind` and
+   * `currentSurface`, both plain variables; `renderVersusStocks` never touches it.
    */
   let versusStocksVisible = false;
 
@@ -1994,21 +2050,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * The in-match stock strip -- see setVersusStocks' own doc comment on the Hud
-   * interface for the full contract. Rebuilt from scratch on every call (at most 4
-   * entries, the identity palette's own cap -- entities.ts's own IDENTITY_RING_COLORS
-   * comment) rather than diffed, the same "cheap enough to just rebuild" precedent
-   * renderAchievements/renderVersusSlotRows already use elsewhere in this file.
+   * The in-match stock strip -- see `VersusStock` and `GameplayStatus` for the contract.
+   * Rebuilt from scratch on every call (at most 4 entries, the identity palette's own cap
+   * -- entities.ts's own IDENTITY_RING_COLORS comment) rather than diffed, the same
+   * "cheap enough to just rebuild" precedent renderAchievements/renderVersusSlotRows
+   * already use elsewhere in this file.
    * ONE ELEMENT PER ENTRY, not one joined string like renderVersusResultsLine above:
    * each slot needs its OWN inline tint, which a single text node cannot carry part of.
+   *
+   * Takes the entries as an ARGUMENT rather than reading `statusData` itself, so the one
+   * caller that may render -- `applyStatus`, which has already decided the strip is
+   * visible AND that this is a versus session -- is the only place the two facts meet.
    */
-  function renderVersusStocks(): void {
+  function renderVersusStocks(stocks: readonly VersusStock[] | null): void {
     versusStocksEl.replaceChildren();
-    if (!versusStocksData || versusStocksData.length === 0) {
+    if (!stocks || stocks.length === 0) {
       versusStocksEl.classList.add('hud-versus-stocks--hidden');
       return;
     }
-    for (const entry of versusStocksData) {
+    for (const entry of stocks) {
       const span = document.createElement('span');
       span.className = 'hud-versus-stock-entry';
       // The TEAM LETTER beside the player number, in teams mode (issue #281). Colour is
@@ -2021,7 +2081,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // teams: TEAM_COLORS[team]; ffa (no `team` on the entry): IDENTITY_RING_COLORS[
       // slot] -- the SAME dispatch entities.ts's own ring/tint colouring uses at its
       // `mode === 'teams' ? teamColor(...) : identityColor(...)` site, imported rather
-      // than copied out as literal hex (see setVersusStocks' own doc comment). The
+      // than copied out as literal hex (see `VersusStock`'s own doc comment). The
       // `?? 0xffffff` fallback is unreached today -- both palettes cover every slot the
       // n-player cap (4) allows, and TEAM_COLORS covers all three teams issue #281 permits
       // -- kept only so a future out-of-range slot degrades to a colour rather than an NaN
@@ -3425,10 +3485,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   qualityToggleBtn.addEventListener('click', handleQualityToggle);
   qualityToggleBtn.addEventListener('click', blurIfPointer);
 
-  // Where the session stands in the level sequence, for the win panel's copy. Null
-  // until the loop calls setLevel, and a HUD never told about levels keeps its
-  // original single-arena wording.
-  let levelPos: { current: number; total: number } | null = null;
+  /**
+   * Whether this session has a level AFTER the one just cleared -- the win panel's copy
+   * ("Next Level" and "Level N cleared!") turns on it.
+   *
+   * Derived from `statusData` rather than kept as a second variable: the level position
+   * arrives on the status projection since issue #324's step S6, and a copy of it here
+   * would be one more thing that could disagree with the bar. A HUD never told about a
+   * session has no position at all and keeps its original single-arena wording.
+   */
+  const hasNextMission = (): boolean =>
+    statusData !== null && statusData.mission < statusData.missions;
   // Whether level select has anything to offer (more than one level). Gates the
   // Levels button's visibility together with the title state.
   let levelChoice = false;
@@ -3447,14 +3514,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash a button onto it.
   let shownState: HudSurface = 'launch';
-  // WHAT IS BEING PLAYED -- see setSessionKind's own doc comment on the Hud
-  // interface. Defaults to 'campaign' so a HUD that never calls setSessionKind
-  // (every css/gallery fixture) renders byte-identical to before this method
-  // existed.
-  let sessionKind: HudSessionKind = 'campaign';
-  // WHAT THE BUTTONS DO -- see setRelaunchTarget's own doc comment. A separate
-  // variable from `sessionKind` on purpose: they disagree for `?dev=1&mode=ffa`,
-  // which is a real versus session driven by campaign-shaped buttons.
+  // WHAT THE BUTTONS DO -- see setRelaunchTarget's own doc comment. A separate variable
+  // from the status projection's own `kind` on purpose: the two disagree for
+  // `?dev=1&mode=ffa`, a real versus session driven by campaign-shaped buttons.
   let relaunchTarget: HudRelaunchTarget = 'campaign-levels';
   /**
    * The surface `setState` was last CALLED with -- distinct from `shownState`,
@@ -3545,7 +3607,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * default, which is what this panel said before either setter existed.
    */
   function outcomeActionLabel(win: boolean): string {
-    if (win && levelPos && levelPos.current < levelPos.total) return 'Next Level';
+    if (win && hasNextMission()) return 'Next Level';
     if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Versus Setup';
     return win ? 'Play Again' : 'Retry';
   }
@@ -3594,51 +3656,66 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * The GAMEPLAY surfaces that depend on `sessionKind` -- the campaign
-   * Lives/Enemies stats and the versus stock strip -- recomputed together, for
-   * the same order-independence reason `applyTitleAffordances` exists: both
-   * `setState` and `setSessionKind` can be the call that last changed one of
-   * the two inputs, and a session's kind is no longer fixed for its life (a
-   * Levels pick makes a campaign session Practice; landing back on its home
-   * board makes it Campaign again). Whichever arrives last, the DOM lands in
-   * the same place.
+   * THE WHOLE TOPBAR, from one retained projection -- the Practice identity chip, the
+   * campaign Lives/Enemies stats, the level chip and the versus stock strip, recomputed
+   * TOGETHER on every input change.
    *
-   * Reads `sessionKind`, NEVER `relaunchTarget`: both surfaces are statements
-   * about the world being played, and `?dev=1&mode=ffa` really is a versus
-   * world -- the strip belongs on screen there even though that session's
-   * buttons stay campaign-shaped. It staying hidden was the defect this split
-   * removes.
+   * One function for the same order-independence reason `applyTitleAffordances` exists,
+   * and for the reason `setOutcome` learned one screen away: three of these elements read
+   * `statusData` and two read `currentSurface`, and either input can be the one that moved
+   * last. Recomputing all of them from both, every time, is what makes "the bar shows this
+   * session and no other" true whatever order the calls arrive in. A version that applied
+   * half the projection -- repainting the numbers from the newest push and the visibility
+   * from whatever was known before it -- is the failure mode a merged setter invites.
    *
-   * `hideCampaignStats` is `=== 'versus'`, NOT `!== 'campaign'`: Practice is a
-   * campaign board played in isolation and its lives/enemy count are as real
-   * there as in a run. Widening this to Practice would be a shipped-behaviour
-   * regression on the Level-Select path.
+   * Reads `statusData.kind`, NEVER `relaunchTarget`: every surface here is a statement
+   * about the world being played, and `?dev=1&mode=ffa` really is a versus world -- the
+   * strip belongs on screen there even though that session's buttons stay
+   * campaign-shaped. It staying hidden was the defect issue #316 removed.
    *
-   * The stock strip's own gate needs the surface too (it is in-match chrome,
-   * not a menu affordance): visible ONLY while a versus session is actually
-   * being played -- `playing` or `paused` -- never at main-menu/outcome/launch.
-   * Assigns the OUTER `versusStocksVisible` variable (see its own doc comment
-   * for why this must be a variable, never a classList read) -- `setVersusStocks`
-   * reads the SAME variable to decide whether to render, so the two can never
-   * disagree about "should this be showing" the way a class read could.
-   * `renderVersusStocks` still independently re-adds `--hidden` when there is no
-   * data yet (`setState('playing')` fires before the first real `setVersusStocks`
-   * call in production -- no `SimEvent` marks a versus match's own start): that
-   * is a SEPARATE, legitimate reason to hide ("nothing to show"), and is exactly
-   * why `versusStocksVisible` must not be read back off the DOM. Doing so once
-   * mistook that data-driven hide for a state-driven one and refused every
-   * subsequent `setVersusStocks` call until the next `setState` (a pause)
-   * revived it.
+   * The campaign stats hide for `'versus'` alone, NOT for `!== 'campaign'`: Practice is a
+   * campaign board played in isolation and its lives/enemy count are as real there as in
+   * a run. What Practice gets instead of a hidden row is a chip that says so.
+   *
+   * `null` -- no live session -- leaves the two stat numbers alone rather than blanking
+   * them. They are hidden behind `.hud-topbar--hidden` on every surface that can be up
+   * when nothing is being played (setState), so blanking would be invisible work, and a
+   * fixture that never calls `setStatus` must render byte-identically to the markup.
+   *
+   * The stock strip's gate needs the SURFACE too (it is in-match chrome, not a menu
+   * affordance): visible only while a versus session is actually being played --
+   * `playing` or `paused` -- never at main-menu/outcome/launch. It assigns
+   * `versusStocksVisible`, whose own doc comment carries the shipped bug that makes this
+   * a variable and never a classList read.
    */
-  function applySessionKindSurfaces(): void {
-    const versusSession = sessionKind === 'versus';
+  function applyStatus(): void {
+    const kind = statusData?.kind ?? null;
+    practiceChip.classList.toggle('hud-practice--hidden', kind !== 'practice');
     for (const statEl of campaignStatEls) {
-      statEl.classList.toggle('hud-campaign-stat--hidden', versusSession);
+      statEl.classList.toggle('hud-campaign-stat--hidden', kind === 'versus');
     }
+    if (statusData && statusData.kind !== 'versus') {
+      // textContent's setter tears down and rebuilds the text node even when the string
+      // is identical, and a session pushes this every simulated frame for numbers that
+      // change a handful of times a round -- so skip the write when nothing moved.
+      if (statusData.lives !== lastLives) {
+        lastLives = statusData.lives;
+        livesEl.textContent = String(statusData.lives);
+      }
+      if (statusData.enemies !== lastEnemies) {
+        lastEnemies = statusData.enemies;
+        enemiesEl.textContent = String(statusData.enemies);
+      }
+    }
+    // A one-level total shows no chip -- "Level 1/1" is noise, and both the sandbox and a
+    // setup-pane versus match are exactly that.
+    const showLevel = statusData !== null && statusData.missions > 1;
+    levelChip.classList.toggle('hud-level--hidden', !showLevel);
+    if (showLevel) levelNum.textContent = `${statusData!.mission}/${statusData!.missions}`;
     versusStocksVisible =
-      versusSession && (currentSurface === 'playing' || currentSurface === 'paused');
+      kind === 'versus' && (currentSurface === 'playing' || currentSurface === 'paused');
     versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);
-    if (versusStocksVisible) renderVersusStocks();
+    if (versusStocksVisible && statusData?.kind === 'versus') renderVersusStocks(statusData.stocks);
   }
 
   const handleLevelSelectOpen = (): void => {
@@ -4426,13 +4503,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      * paused, or reading an outcome over the board it belongs to.
      */
     topbarEl.classList.toggle('hud-topbar--hidden', atLaunch || atMainMenu);
-    // The in-match stock readout and the campaign stat row -- both keyed on the
-    // SESSION KIND, both recomputed in one place (`applySessionKindSurfaces`, see
-    // its own doc comment) so `setSessionKind` and `setState` cannot disagree
-    // whichever arrives last. Placed here, BEFORE the playing/launch early return
-    // just below, specifically so 'playing' itself is covered; `paused` is covered
-    // too since it falls through this far (its own early return is further down).
-    applySessionKindSurfaces();
+    // Everything INSIDE the bar, recomputed in one place (`applyStatus`, see its own doc
+    // comment) so `setStatus` and `setState` cannot disagree whichever arrives last --
+    // and production takes the order a test would not: `setState('playing')` runs before
+    // the first status carrying stocks. Placed here, BEFORE the playing/launch early
+    // return just below, specifically so 'playing' itself is covered; `paused` is
+    // covered too since it falls through this far (its own early return is further down).
+    applyStatus();
     // Launch and playing both want the menu panel gone. Launch returns BEFORE the
     // branches below for the same reason `paused` returns early: the final `else`
     // renders a Game Over corpse screen, so any state that falls through to it gets
@@ -4466,7 +4543,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // stays verdict-only for the same reason. Level select is a menu affair -- and only
     // when there is a choice to make (see setLevelSelect).
     const clearedIntermediate =
-      s === 'outcome-win' && !!levelPos && levelPos.current < levelPos.total;
+      s === 'outcome-win' && hasNextMission();
     shownState = s;
     /*
      * THE THREE MAIN-MENU REGIONS (issue #226), hidden as GROUPS rather than one button
@@ -4562,8 +4639,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       setSubtitle('');
     } else if (s === 'outcome-win') {
       // An intermediate win advances; only the LAST level's win is the game's.
-      if (levelPos && levelPos.current < levelPos.total) {
-        titleEl.textContent = `Level ${levelPos.current} cleared!`;
+      if (hasNextMission()) {
+        titleEl.textContent = `Level ${statusData!.mission} cleared!`;
         setSubtitle('On to the next.');
       } else {
         titleEl.textContent = 'You Win!';
@@ -4628,12 +4705,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (settingsVolumeEl.value !== text) settingsVolumeEl.value = text;
   }
 
-  // textContent's setter tears down and rebuilds the text node even when the
-  // string is identical. loop.ts calls these every frame for values that change
-  // a handful of times a round, so skip the write when nothing changed.
-  let lastLives: number | null = null;
-  let lastEnemies: number | null = null;
-  // Same reasoning as lastLives/lastEnemies, plus a second job: it is the signal
+  // Same reasoning as `applyStatus`'s lastLives/lastEnemies memo, plus a second job: it
+  // is the signal
   // setRoundPhase uses to tell "still the same second" from "a new one arrived",
   // which is what decides whether the pop animation restarts. Reset to null
   // whenever the countdown hides, so the next time it shows -- even mid-count,
@@ -4663,16 +4736,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   return {
-    setLives(n: number): void {
-      if (n === lastLives) return;
-      lastLives = n;
-      livesEl.textContent = String(n);
-    },
-    setLevel(current: number, total: number): void {
-      levelPos = { current, total };
-      const show = total > 1;
-      levelChip.classList.toggle('hud-level--hidden', !show);
-      if (show) levelNum.textContent = `${current}/${total}`;
+    setStatus(status: GameplayStatus | null): void {
+      statusData = status;
+      // Every element the bar has, from the one projection -- see applyStatus. There is
+      // no early return on an unchanged status: this setter is cheap by construction (two
+      // guarded text writes and four idempotent class toggles), and a guard here would be
+      // a second place that could decide the DOM is already right when it is not.
+      applyStatus();
     },
     setLevelSelect(unlocked: number, total: number): void {
       levelChoice = total > 1;
@@ -4730,11 +4800,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     onNewGame(cb: () => void): void {
       newGameCbs.push(cb);
-    },
-    setEnemiesRemaining(n: number): void {
-      if (n === lastEnemies) return;
-      lastEnemies = n;
-      enemiesEl.textContent = String(n);
     },
     setState,
     setMuted,
@@ -4838,17 +4903,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // that painted the tally from the newest push and the label from the oldest would
       // be exactly the kind of half-applied projection this merge exists to rule out.
       actionBtn.textContent = outcomeActionLabel(shownState === 'outcome-win');
-    },
-    setVersusStocks(stocks: { slot: number; stock: number; team?: number }[] | null): void {
-      versusStocksData = stocks;
-      // Reads the `versusStocksVisible` VARIABLE (set only by setState), NOT the
-      // element's own classList -- see that variable's doc comment for the production
-      // bug this fixes: `renderVersusStocks` writes `--hidden` for an ORTHOGONAL reason
-      // (no data yet), and a classList read here could not tell that apart from "the
-      // state says hide this", which meant the very first real call in a fresh versus
-      // match -- arriving after `setState('playing')` already rendered once against
-      // null data -- was silently dropped.
-      if (versusStocksVisible) renderVersusStocks();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);
@@ -4960,14 +5014,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       versusStartCbs.push(cb);
     },
     showVersusSetup,
-    setSessionKind(kind: HudSessionKind): void {
-      sessionKind = kind;
-      // Both kind-dependent gameplay surfaces, recomputed together and
-      // order-independently -- see applySessionKindSurfaces' own doc comment.
-      // Nothing here touches a button: a session's kind says what is being
-      // played, never what a click does.
-      applySessionKindSurfaces();
-    },
     setRelaunchTarget(target: HudRelaunchTarget): void {
       relaunchTarget = target;
       // Every consumer of this policy is a title/outcome BUTTON. The title ones
