@@ -963,8 +963,8 @@ export interface HudOptions {
    */
   readonly measure?: (el: HTMLElement) => Rect;
   /**
-   * Which menu-transition arm to run (issue #542's `?dev=1&menuTransition=` experiment).
-   * Absent, `null`, and `'fade'` are the same thing: the shipped crossfade.
+   * Which menu transition to run (issue #542's `?dev=1&menuTransition=` flag).
+   * Absent, `null`, and `'rise'` are the same thing: the shipped crossfade-plus-lift.
    *
    * A CONSTRUCTION argument rather than a setter, which is the opposite of
    * `setReducedMotion` and for the opposite reason. Reduced motion is a player setting
@@ -980,17 +980,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const el = document.createElement('div');
   el.className = 'hud';
   /*
-   * The experiment's modifier, on the HUD ROOT (issue #542).
+   * The alternative transition's modifier, on the HUD ROOT (issue #542).
    *
    * This element and no other, because it is the same element `transitionMs()` reads
-   * `--ui-transition-duration` off: an arm that moves the token (`fade-long`) is picked
-   * up through that one existing read, with no second definition of the duration in
-   * TypeScript and none needed. A class on `document.documentElement` would still
+   * `--ui-transition-duration` off: a treatment that moves the token (`fade-long`) is
+   * picked up through that one existing read, with no second definition of the duration
+   * in TypeScript and none needed. A class on `document.documentElement` would still
    * inherit the token down, but it would leak out of the HUD's own subtree and outlive
    * `dispose()`.
    *
-   * `fade` and absent both yield `null` here and add nothing, so the control arm is
-   * literally the shipped path -- see `menuTransitionClass`.
+   * `rise` and absent both yield `null` here and add nothing, so the SHIPPED transition
+   * is literally the shipped path -- see `menuTransitionClass`.
    */
   const treatmentClass = menuTransitionClass(opts.menuTransition ?? null);
   if (treatmentClass !== null) el.classList.add(treatmentClass);

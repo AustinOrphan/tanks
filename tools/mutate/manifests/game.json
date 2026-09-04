@@ -1132,14 +1132,14 @@
     "find": "  function transitionMs(): number {\n    if (reducedMotion) return 0;",
     "replace": "  function transitionMs(): number {",
     "expect": "killed",
-    "why": "The resolved reduced-motion policy reaching the HUD but never reaching the clock. `hud.setReducedMotion` still exists, loop.ts still pushes it on every `effectiveSettings` change, and the field is still assigned -- so the wiring entries in loop.test.ts (`pushes the same resolved policy to the HUD, and again when it changes`) all still pass; only the effect is gone. Issue #364's fifth criterion asks that a player who resolved reduced motion gets instant transitions, and this is the one line that makes the duration zero rather than merely recorded. `makes every transition instant under the RESOLVED reduced-motion policy` is the case that measures it, and it carries its own negative control in the same test: the motion-ON branch asserts the outgoing surface is still displayed and one extra timer is armed, so a suite that had been accidentally synchronous would fail there rather than pass here. Widened for issue #542: menu-transition.test.ts joins the scope because that issue's four arms rest on this same line and on nothing else. Two of them MOVE, which is precisely what the preference is about, and there is deliberately no `prefers-reduced-motion` rule for them -- the resolved policy is a player setting a media query cannot see, so this zero is the entire mechanism by which a moving arm collapses. Measured: with this line removed, the per-arm case is the one of that file's 12 that fails.",
+    "why": "The resolved reduced-motion policy reaching the HUD but never reaching the clock. `hud.setReducedMotion` still exists, loop.ts still pushes it on every `effectiveSettings` change, and the field is still assigned -- so the wiring entries in loop.test.ts (`pushes the same resolved policy to the HUD, and again when it changes`) all still pass; only the effect is gone. Issue #364's fifth criterion asks that a player who resolved reduced motion gets instant transitions, and this is the one line that makes the duration zero rather than merely recorded. `makes every transition instant under the RESOLVED reduced-motion policy` is the case that measures it, and it carries its own negative control in the same test: the motion-ON branch asserts the outgoing surface is still displayed and one extra timer is armed, so a suite that had been accidentally synchronous would fail there rather than pass here. Widened for issue #542: menu-transition.test.ts joins the scope because that issue's four transitions rest on this same line and on nothing else. Two of them MOVE -- one of those two is now the SHIPPED transition, so this is no longer about a flag but about what every player who resolved reduced motion gets -- and there is deliberately no `prefers-reduced-motion` rule for them, because the resolved policy is a player setting a media query cannot see. This zero is the entire mechanism by which the movement collapses. Measured after the adoption: with this line removed, the per-treatment case is the one of that file's 18 that fails. Its sweep now leads with the no-flag path rather than with `rise`, so the transition every player gets is the first thing this line is asked about.",
     "tests": [
       "src/game/hud.surfaces.test.ts",
       "src/game/menu-transition.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract makes every transition instant under the RESOLVED reduced-motion policy",
-      "menuTransition: every arm collapses to instant under RESOLVED reduced motion leaves no transition timer and no animation class, on all four arms"
+      "menuTransition: every treatment collapses to instant under RESOLVED reduced motion leaves no transition timer and no animation class, on the no-flag path and all four"
     ]
   },
   {
@@ -1181,53 +1181,84 @@
     ]
   },
   {
-    "id": "menu-transition-control-arm-gets-its-own-rule",
+    "id": "menu-transition-shipped-treatment-gets-its-own-rule",
     "file": "src/game/menu-transition.ts",
-    "find": "  if (treatment === null || treatment === 'fade') return null;",
+    "find": "  if (treatment === null || treatment === SHIPPED_MENU_TRANSITION) return null;",
     "replace": "  if (treatment === null) return null;",
     "expect": "killed",
-    "why": "The control arm stops BEING the shipped path and becomes a class of its own. This is the shape the feature would naturally have been written in -- one class per arm, uniform -- and it is wrong for the one reason issue #542 cares about: `fade` exists to be the thing every other arm is compared against, so it has to be the shipped cascade rather than a rule that restates it and can drift the first time the token or the keyframes move. Nothing visible changes today, because `.hud--menu-transition-fade` matches no rule in the stylesheet; the class simply appears on the HUD root and the comparison quietly stops having a control. Scoped to menu-transition.test.ts; the fade-identity cases measure it, one on the mounted DOM and one on the mapping itself.",
+    "why": "The shipped transition stops BEING the shipped path and becomes a class of its own. This is the shape the feature would naturally have been written in -- one class per treatment, uniform -- and it is wrong for the reason issue #542 settled on: whatever is DEFAULT must be the shipped cascade rather than a rule that restates it and can drift the first time the token or the keyframes move. Nothing visible changes today, because `.hud--menu-transition-rise` matches no rule in the stylesheet; the class simply appears on the HUD root and the identity quietly stops being true by construction. The entry is kept from the experiment and re-aimed rather than retired, because the property it protects MOVED when `rise` was adopted -- `fade` used to hold it -- and this is what makes the move stick. Scoped to menu-transition.test.ts; the identity cases measure it, one on the mounted DOM and one on the mapping itself.",
     "tests": [
       "src/game/menu-transition.test.ts"
     ],
     "killedBy": [
-      "menuTransition: the flag that names an arm maps every arm but the control to its own modifier class, and the control to none",
-      "menuTransition: `fade` reproduces the shipped transition exactly mounts the same DOM as an absent flag, with no modifier class anywhere"
+      "menuTransition: the flag that names a transition maps every treatment but the SHIPPED one to its own modifier class, and that one to none",
+      "menuTransition: the SHIPPED transition is the no-flag path itself mounts the same DOM as an absent flag, with no modifier class anywhere"
     ]
   },
   {
-    "id": "menu-transition-arm-never-reaches-the-hud",
+    "id": "menu-transition-never-reaches-the-hud",
     "file": "src/game/hud.ts",
     "find": "  if (treatmentClass !== null) el.classList.add(treatmentClass);",
     "replace": "  void treatmentClass;",
     "expect": "killed",
-    "why": "The flag parses, the registry documents it, the stylesheet carries every arm -- and nothing applies it, so every arm renders as the control. The failure is entirely silent: `parseDevFlags` still returns the arm, `devControls()` still offers it, the generated doc still lists it, and a playtester selecting `rise` sees the shipped fade and reports the arm as bad rather than as unwired. That is the same class of defect #497 records for `ring+audio`, where a cue reached the parser as a different string and was read as a broken cue. Scoped to menu-transition.test.ts, where the moving arms are read off the mounted stylesheet rather than off the option.",
+    "why": "The flag parses, the registry documents it, the stylesheet carries every alternative -- and nothing applies it, so every one of them renders as the shipped transition. The failure is entirely silent: `parseDevFlags` still returns the value, `devControls()` still offers it, the generated doc still lists it, and anyone selecting `fade` to check whether the new default caused a report sees the new default and concludes it did not. That is the same class of defect #497 records for `ring+audio`, where a cue reached the parser as a different string and was read as a broken cue. Scoped to menu-transition.test.ts, where every alternative is read off the mounted stylesheet rather than off the option.",
     "tests": [
       "src/game/menu-transition.test.ts"
     ],
     "killedBy": [
-      "menuTransition: `fade` reproduces the shipped transition exactly mounts the same DOM as an absent flag, with no modifier class anywhere",
-      "menuTransition: `fade` reproduces the shipped transition exactly resolves the same duration and animates the same keyframes as an absent flag",
-      "menuTransition: `fade` reproduces the shipped transition exactly settles on exactly the same tick as an absent flag",
-      "menuTransition: the duration arm goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
-      "menuTransition: the duration arm goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the control timing"
+      "menuTransition: the SHIPPED transition is the no-flag path itself mounts the same DOM as an absent flag, with no modifier class anywhere",
+      "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag",
+      "menuTransition: the SHIPPED transition is the no-flag path itself settles on exactly the same tick as an absent flag",
+      "menuTransition: `fade` still reproduces the pre-#542 transition crossfades at the shipped duration and moves no content at all",
+      "menuTransition: the duration treatment goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
+      "menuTransition: the duration treatment goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the shipped timing"
     ]
   },
   {
-    "id": "menu-transition-duration-arm-keeps-the-control-timing",
+    "id": "menu-transition-long-fade-keeps-the-shipped-timing",
     "file": "src/game/hud.css",
     "find": ".hud--menu-transition-fade-long {\n  --ui-transition-duration: 300ms;\n}",
     "replace": ".hud--menu-transition-fade-long {\n  --ui-transition-duration: 150ms;\n}",
     "expect": "killed",
-    "why": "The duration arm left at the control's own duration -- a second `fade` under another name. It is the arm that carries the experiment's discriminating power: without it a moving arm that reads better cannot be told apart from one that is simply slower, and the issue's own framing says a one-token change with no new keyframes is a possible answer. The mutation keeps the rule, the selector and the property, so every structural check in menu-transition.test.ts (one rule per arm, no arm inside the reduced-motion block, tokens rather than literals) still passes; only the TIMING moves, which is why the case that measures it advances fake timers to 299ms and asserts the outgoing surface is still displayed.",
+    "why": "The long fade left at the shipped duration -- a second `fade` under another name. It is the treatment that carried issue #542's discriminating power: without it a movement that reads better cannot be told apart from one that is simply slower, and the issue's own framing said a one-token change with no new keyframes was a possible answer. It stays selectable so that comparison can be RE-RUN rather than re-argued, which is worth nothing if it silently runs at the shipped duration. The mutation keeps the rule, the selector and the property, so every structural check in menu-transition.test.ts (which treatments own rules, nothing inside the reduced-motion block, tokens rather than literals) still passes; only the TIMING moves, which is why the case that measures it advances fake timers to 299ms and asserts the outgoing surface is still displayed.",
     "tests": [
       "src/game/menu-transition.test.ts"
     ],
     "killedBy": [
-      "menuTransition: `fade` reproduces the shipped transition exactly resolves the same duration and animates the same keyframes as an absent flag",
-      "menuTransition: `fade` reproduces the shipped transition exactly settles on exactly the same tick as an absent flag",
-      "menuTransition: the duration arm goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
-      "menuTransition: the duration arm goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the control timing"
+      "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag",
+      "menuTransition: the SHIPPED transition is the no-flag path itself settles on exactly the same tick as an absent flag",
+      "menuTransition: the duration treatment goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
+      "menuTransition: the duration treatment goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the shipped timing"
+    ]
+  },
+  {
+    "id": "menu-transition-fade-picks-up-the-shipped-lift",
+    "file": "src/game/hud.css",
+    "find": ".hud--menu-transition-fade .ui-surface--entering:not(.hud-splash) > *,\n.hud--menu-transition-fade-long .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+    "replace": ".hud--menu-transition-fade-long .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+    "expect": "killed",
+    "why": "The one way back to the pre-#542 transition quietly stops being one. `fade` drops out of the opacity-only pair, so it inherits the shipped lift and becomes a second name for the default -- while the flag, the registry, the generated doc and every structural check still say it is the old behaviour. This is the defect the whole rule exists to prevent, and it is the one the owner's ruling created: `fade` used to be the treatment with NO rule, reproducing the shipped path by construction, and adoption turned it into a rule that can drift. Nobody would notice from the game -- the transition would look right, because it would be the new one -- and the report it exists to answer ('did the new default cause this?') would come back 'no' every time. Scoped to menu-transition.test.ts, whose fade case pins the pre-#542 values as literals rather than diffing against a no-flag path that no longer means what it did.",
+    "tests": [
+      "src/game/menu-transition.test.ts"
+    ],
+    "killedBy": [
+      "menuTransition: `fade` still reproduces the pre-#542 transition crossfades at the shipped duration and moves no content at all",
+      "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag",
+      "menu transitions in hud.css gives the SHIPPED treatment no rule of its own, and every other one at least one"
+    ]
+  },
+  {
+    "id": "menu-transition-long-fade-picks-up-the-shipped-lift",
+    "file": "src/game/hud.css",
+    "find": ".hud--menu-transition-fade .ui-surface--entering:not(.hud-splash) > *,\n.hud--menu-transition-fade-long .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+    "replace": ".hud--menu-transition-fade .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+    "expect": "killed",
+    "why": "The same defect on the other opacity-only treatment, and worth its own entry because what it destroys is different: `fade-long` would become 'the shipped movement, but slower', which is precisely the confound it was built to rule out. Re-running issue #542's comparison with it would then credit duration for movement's effect -- the one wrong answer the treatment exists to prevent -- and its timing check would still pass, because the duration token is untouched and only the CONTENT animation moves.",
+    "tests": [
+      "src/game/menu-transition.test.ts"
+    ],
+    "killedBy": [
+      "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag"
     ]
   },
   {
@@ -1236,12 +1267,12 @@
     "find": "@keyframes ui-surface-rise-content {\n  from {\n    transform: translateY(16px);\n  }",
     "replace": "@keyframes ui-surface-rise-content {\n  from {\n    transform: translateY(0px);\n  }",
     "expect": "killed",
-    "why": "The movement arm wired end to end and moving by nothing: the class is applied, the animation is named, the duration and easing come from the tokens, and the content sits exactly where it will end up. Indistinguishable from the control on screen, and invisible to every other check here -- jsdom computes no animated value, so only the DECLARATION can be read, which is why the case that measures it matches the `from` step's transform against every identity spelling and carries those spellings as its own negative control. 16px was chosen off rendered frames precisely because a distance that is too small stops reading as travel; zero is that failure taken to its limit.",
+    "why": "The SHIPPED movement wired end to end and moving by nothing: the rule applies unconditionally, the animation is named, the duration and easing come from the tokens, and the content sits exactly where it will end up. That is issue #542 undone in one number, back to the crossfade the owner said they had never seen in action -- and back with no flag to reveal it, since this is the default now rather than an arm nobody selects. Invisible to every other check here: jsdom computes no animated value, so only the DECLARATION can be read, which is why the case that measures it matches the `from` step's transform against every identity spelling and carries those spellings as its own negative control. 16px was chosen off rendered frames precisely because a distance that is too small stops reading as travel; zero is that failure taken to its limit.",
     "tests": [
       "src/game/menu-transition.test.ts"
     ],
     "killedBy": [
-      "menu-transition arms in hud.css gives each moving arm keyframes that actually move, ending at no transform at all"
+      "menu transitions in hud.css gives each movement its keyframes, moving for real and ending at no transform at all"
     ]
   },
   {
@@ -1250,26 +1281,26 @@
     "find": "@keyframes ui-surface-settle-content {\n  from {\n    transform: scale(0.94);\n  }",
     "replace": "@keyframes ui-surface-settle-content {\n  from {\n    transform: scale(1);\n  }",
     "expect": "killed",
-    "why": "The same defect on the other movement arm, and worth its own entry because the identity is spelled differently: `scale(1)` rather than a zero translate, so a guard written only against `translateY(0)` would let this through. Both arms have to be non-trivial for the comparison to be about the KIND of movement rather than about which one happened to be wired.",
+    "why": "The same defect on the movement that was NOT adopted, and worth its own entry because the identity is spelled differently: `scale(1)` rather than a zero translate, so a guard written only against `translateY(0)` would let this through. `settle` stays selectable so `rise` can be re-compared against the alternative it beat rather than against a second copy of itself, which is exactly what a scale of 1 would make it.",
     "tests": [
       "src/game/menu-transition.test.ts"
     ],
     "killedBy": [
-      "menu-transition arms in hud.css gives each moving arm keyframes that actually move, ending at no transform at all"
+      "menu transitions in hud.css gives each movement its keyframes, moving for real and ending at no transform at all"
     ]
   },
   {
-    "id": "menu-transition-parser-accepts-any-arm-name",
+    "id": "menu-transition-parser-accepts-any-name",
     "file": "src/game/devflags.ts",
     "find": "  return isMenuTransition(raw) ? raw : null;",
     "replace": "  return raw as MenuTransition;",
     "expect": "killed",
-    "why": "Reject-to-null dropped, so `?menuTransition=swoosh` becomes a `MenuTransition` the HUD then turns into `.hud--menu-transition-swoosh` -- a class matching no rule, which renders as the control while the flag reports the arm as active. That is the failure mode the whole registry's reject-to-null idiom exists for (`backdrop`, `mineWarn` and `blockedFire` all state it): a playtester's typo silently observing the shipped behaviour and reporting it as the arm's. Scoped to menu-transition.test.ts, whose parser case sweeps the four registered arms and then five rejected spellings including a case variant and a space form.",
+    "why": "Reject-to-null dropped, so `?menuTransition=swoosh` becomes a `MenuTransition` the HUD then turns into `.hud--menu-transition-swoosh` -- a class matching no rule, which renders as the SHIPPED transition while the flag reports the treatment as active. That is the failure mode the whole registry's reject-to-null idiom exists for (`backdrop`, `mineWarn` and `blockedFire` all state it), and adoption sharpened it: the silent fallback used to be the old crossfade and is now the new default, so a mistyped `fade` observes exactly the behaviour it was typed to rule out. Scoped to menu-transition.test.ts, whose parser case sweeps the four registered names and then five rejected spellings including a case variant and a space form.",
     "tests": [
       "src/game/menu-transition.test.ts"
     ],
     "killedBy": [
-      "menuTransition: the flag that names an arm accepts every arm in the vocabulary and nothing else -- population: the 4 registered arms"
+      "menuTransition: the flag that names a transition accepts every name in the vocabulary and nothing else -- population: the 4 registered names"
     ]
   },
   {
@@ -3970,17 +4001,19 @@
     ]
   },
   {
-    "id": "menu-transition-arm-steals-a-child-animation",
+    "id": "menu-transition-lift-steals-a-child-animation",
     "file": "src/game/hud.css",
-    "find": ".hud--menu-transition-rise .ui-surface--entering:not(.hud-splash) > * {",
-    "replace": ".hud--menu-transition-rise .ui-surface--entering > * {",
+    "find": "\n.ui-surface--entering:not(.hud-splash) > * {",
+    "replace": "\n.ui-surface--entering > * {",
     "expect": "killed",
     "tests": [
       "src/game/menu-transition.test.ts"
     ],
-    "why": "Drops the splash exclusion from the rise arm, which is how the rule was first written. `animation` is one property per element and this selector is three classes against `.hud-splash-hint`'s one, so on an entering splash surface the arm REPLACES that hint's infinite `hud-splash-pulse` rather than joining it -- the hint stops pulsing for good while the arm is selected. Reachable rather than theoretical: `transitionTo` lists SPLASH_SURFACE, so it really does enter, and the hint really is a direct child. The defect is invisible from the arm's own navigation, which never touches the launch screen.",
+    "why": "Drops the splash exclusion from the SHIPPED content lift, which is how the rule was first written. `animation` is one property per element and this selector at (0,2,0) beats `.hud-splash-hint`'s (0,1,0), so on an entering splash surface the lift REPLACES that hint's infinite `hud-splash-pulse` rather than joining it -- 'Press any key or tap to begin' stops pulsing for the 150ms the splash is entering, then restarts from its first keyframe, so the hint holds full opacity while it lifts with the title and then pops down to 0.55. Measured on the mounted HUD rather than reasoned: removing the exclusion does not silence the pulse permanently, and the entry is worth keeping anyway because the window it spoils is the boot path. `createHud` ends with `setState('launch')`, which enters the splash on every page load, and the hint really is a direct child of it. Adoption is what makes this entry serious rather than tidy: while the lift was an arm nobody selected, the defect needed a flag to reach; it is now the first screen of every session, and it is invisible from the navigation the lift was designed on, which never touches the launch screen. The leading newline anchors the find to the unconditional rule -- the same selector text is the tail of all three alternatives' rules, so an unanchored find would be ambiguous and the harness would refuse it.",
     "killedBy": [
-      "the moving arms must not steal a child's own animation excludes the splash surface, whose hint owns an infinite pulse"
+      "the content lift must not steal a child's own animation leaves the splash hint pulsing while the splash enters -- shipped path and every treatment",
+      "the content lift must not steal a child's own animation carries the exclusion on EVERY rule reaching an entering surface's children",
+      "menu transitions in hud.css states the shipped content motion unconditionally, with no treatment class at all"
     ]
   }
 ]
