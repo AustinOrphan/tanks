@@ -515,8 +515,13 @@ describe('createRouteHost: taking the slot shapes the menu around the session (i
     const before = f.hud.calls.length;
     f.host.attach(VERSUS_SHAPE);
     const names = f.hud.calls.slice(before).map(([name]) => name);
-    // Both halves have to be in the slice, or the ordering claim is vacuous: a `-1` index
-    // for a missing `setState` would compare as "earliest" and pass.
+    // Both halves have to be in the slice, or the ordering claim is vacuous -- and the
+    // vacuity is not hypothetical: with the attach push deleted, `indexOf` returns -1 for
+    // it, and -1 is less than any real index, so the comparison below passes on a host
+    // that never shaped the menu at all. Measured with the mutation
+    // `route-host-attach-never-shapes-the-menu-for-its-session` applied, which this case
+    // survived until these two lines were here.
+    expect(names, 'the buttons were never pushed').toContain('setRelaunchTarget');
     expect(names, 'the route reset did not paint').toContain('setState');
     expect(names.indexOf('setRelaunchTarget'), 'the buttons were pushed after the paint').toBeLessThan(
       names.indexOf('setState'),

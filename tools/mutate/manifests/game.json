@@ -2426,8 +2426,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 5,
-    "why": "Releasing the slot leaves the title shaped around the session that just left, and the arena's readouts on screen with it. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 5 of 511 across both scoped files (route-host.test.ts 75 + loop.test.ts 436): four release cases in route-host.test.ts (the live detach, the whole-sink clear, the stored touch scheme, and the inert-on-release case, whose control detaches a live slot) and the versus-quit case in loop.test.ts; the stale-detach control passes either way. Re-anchored for issue #324's step S6: the page clears the bar with a null status -- it has no world and so can state no lives, enemy count or stock strip -- where it used to restate `setSessionKind('campaign')`. Re-anchored again for step S7, which moved the four remaining retained clears into `clearGameplaySink` beside it; count re-measured on this branch across the same two scoped files, whose populations both grew."
+    "expectFailures": 6,
+    "why": "Releasing the slot leaves the title shaped around the session that just left, and the arena's readouts on screen with it. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 6 of 511 across both scoped files (route-host.test.ts 75 + loop.test.ts 436): five in route-host.test.ts -- the live detach, the whole-sink clear, the stored touch scheme, the inert-on-release case (whose control detaches a live slot) and the retired-push case (which reads the cleared status back afterwards) -- plus the versus-quit case in loop.test.ts; the stale-detach control passes either way. Re-anchored for issue #324's step S6: the page clears the bar with a null status -- it has no world and so can state no lives, enemy count or stock strip -- where it used to restate `setSessionKind('campaign')`. Re-anchored again for step S7, which moved the four remaining retained clears into `clearGameplaySink` beside it; count re-measured on this branch across the same two scoped files, whose populations both grew."
   },
   {
     "id": "route-host-detach-clears-only-the-topbar",
@@ -2459,7 +2459,7 @@
       "createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7) pushes the incoming session's relaunch target, so the page is the only writer",
       "createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7) pushes it BEFORE the route reset, so the menu never paints in the outgoing shape",
       "createRouteHost: releasing the slot gives the menu back its page shape resets the relaunch target and clears the gameplay status when the live session detaches",
-      "startGameWith: canonical session identity at the production boundary a setup-pane versus session's construction pushes BOTH 'versus' identity and the 'versus-setup' relaunch target, exactly once each",
+      "startGameWith: campaign return from a versus session (Task 5b) a setup-pane versus session's construction pushes BOTH 'versus' identity and the 'versus-setup' relaunch target, exactly once each",
       "quitting a versus match leaves a campaign-shaped Main Menu behind the empty host offers Continue/New Game/Levels/Versus, not the versus session's \"Start Match\""
     ]
   },
