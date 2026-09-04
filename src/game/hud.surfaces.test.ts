@@ -764,11 +764,20 @@ describe('hud: level progression', () => {
 
     h.setStatus(atLevel(1, 2));
     expect(chip().className).not.toContain('hud-level--hidden');
-    expect(chip().textContent).toContain('1/2');
+    // Position without scale since issue #552's ruling: the chip says which board this
+    // is and not how many there are. The sequence LENGTH still decides whether the chip
+    // shows at all -- that is the next assertion -- so `missions` is read here even
+    // though it is no longer written. The `full` arm puts the denominator back, and
+    // `topbar-treatment.test.ts` is where every arm's text is asserted.
+    expect(chip().textContent).toBe('Level: 1');
 
-    // A one-level sequence (the sandbox) shows no chip: "Level 1/1" is noise.
+    // A one-level sequence (the sandbox) shows no chip: a lone "Level 1" is noise.
     h.setStatus(atLevel(1, 1));
     expect(chip().className).toContain('hud-level--hidden');
+    // NEGATIVE CONTROL for the reading above: the chip is the CURRENT position, so a
+    // status further along the same sequence renumbers it rather than repeating itself.
+    h.setStatus(atLevel(2, 4));
+    expect(chip().textContent).toBe('Level: 2');
   });
 
   it('offers Next Level on an intermediate win, Play Again on the final one', () => {
