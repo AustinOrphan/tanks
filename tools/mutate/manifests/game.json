@@ -169,7 +169,8 @@
       "src/game/loop.test.ts"
     ],
     "killedBy": [
-      "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=ffa reports VERSUS to the gameplay HUD while keeping campaign-shaped buttons"
+      "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=ffa reports VERSUS to the gameplay HUD while keeping campaign-shaped buttons",
+      "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=teams likewise, and its stock strip comes from the WORLD, not from provenance"
     ]
   },
   {
@@ -214,6 +215,10 @@
     "why": "The state issue #324's step S6 exists to leave, restored: a Practice topbar that is byte-identical to a Campaign one. That is not a hypothetical -- it is what shipped, and it was MEASURED before the change by driving the built app into each session kind and photographing the bar: campaign and practice produced identical PNG files at every captured width (390, 360, 1280, 1920 and a 200%-zoom 640). Nothing else on screen distinguishes the two, because everything else about a Practice board is deliberately the same as a run's: same Lives, same Enemies, same level chip. So this mutation changes exactly one class toggle and passes every layout, stat-visibility and stock-strip assertion in the suite; only a case that asserts the chip is up for practice AND down for the other two kinds can see it.",
     "tests": [
       "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and adds a chip of its own",
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) the Practice chip is DOWN for campaign and for versus -- the control that stops it being decoration"
     ]
   },
   {
@@ -225,6 +230,9 @@
     "why": "Half of the merged projection, in the direction a reader is most likely to call tidy: `setStatus` applies the projection, so why should `setState` apply it again? Because the two carry half of the answer each -- the strip's visibility is `kind` AND `surface` -- and either can move last. This mutation leaves the surface half stranded: a status that arrives while the surface is still the menu is rendered hidden and never revisited when play starts. MEASURED on this branch by making the edit and running the scoped file: 6 of 35 cases fail, and the ordering case that catches it is the DATA-FIRST one -- production's own state-then-data order still passes, which is why the pair of ordering cases exists rather than one.",
     "tests": [
       "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) the reverse order -- status first, THEN setState(playing) -- lands on the same strip"
     ]
   },
   {
@@ -236,6 +244,10 @@
     "why": "The mirror image of `status-applied-only-on-the-session-push`, and the one that reproduces the historical defect: the projection is retained but nothing repaints until the surface next moves. That is precisely production's order -- `hud.setState('playing')` runs before the first status carrying stocks -- so the strip stays dark for a whole live match until an unrelated `setState` (a pause) happens to revive it, which is the bug `versusStocksVisible`'s own doc comment records. MEASURED on this branch by making the edit and running the scoped file: 8 of 35 cases fail, and the ordering case that catches it is the PRODUCTION-order one, which the sibling mutation above leaves green. Two mutations, two directions, one property.",
     "tests": [
       "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) production order -- setState(playing) THEN the first status with stocks -- the strip still ends up visible with entries",
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) a campaign status lands the same way in BOTH orders -- stats shown, strip down"
     ]
   },
   {
@@ -1479,8 +1491,8 @@
     "find": "        : { kind, mission, missions, lives: forWorld.lives, enemies: countEnemies(forWorld) };",
     "replace": "        : { kind, mission, missions, lives: 3, enemies: countEnemies(forWorld) };",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "The topbar LIVES readout is the only projection of `world.lives`, and the constant it is replaced with is LIVES itself (balance.json `lives: 3`) -- so this mutation is invisible to any fixture whose board carries full lives. That was EVERY synthetic build until issue #386: `loop.test.ts`'s fake `levels.world` recorded its `lives` argument into `rec.levelBuilds` and then dropped it, spreading `opts.world ?? createArenaWorld(seed)` without stamping it, while the real `createWorldFor` does stamp it. Measured on a88d39e, before the fake was fixed: this exact mutation left 4008 of 4008 tests green across 170 of 170 test files -- the readout was unpinned repository-wide. The fake now applies `lives: lives ?? base.lives`, and THE STATED RESIDUAL test reads the readout across two builds whose arguments differ (a practice board taking arena.ts's own default, then Continue's run board carrying 2), so a constant can no longer satisfy both. Scoped to loop.test.ts; expectFailures counts that scoped run only. COUNT RE-MEASURED for issue #428: 1 -> 2, because the start-boundary suite reads the lives a fresh run was given, which is a second path through the same readout. The failing SET was compared, not the number renumbered. RE-ANCHORED for issue #324's step S6: the readout is a field of the one status projection rather than its own `hud.setLives` call, so the mutation now writes the constant into the payload. COUNT RE-MEASURED on this branch against the same scoped file.",
+    "expectFailures": 3,
+    "why": "The topbar LIVES readout is the only projection of `world.lives`, and the constant it is replaced with is LIVES itself (balance.json `lives: 3`) -- so this mutation is invisible to any fixture whose board carries full lives. That was EVERY synthetic build until issue #386: `loop.test.ts`'s fake `levels.world` recorded its `lives` argument into `rec.levelBuilds` and then dropped it, spreading `opts.world ?? createArenaWorld(seed)` without stamping it, while the real `createWorldFor` does stamp it. Measured on a88d39e, before the fake was fixed: this exact mutation left 4008 of 4008 tests green across 170 of 170 test files -- the readout was unpinned repository-wide. The fake now applies `lives: lives ?? base.lives`, and THE STATED RESIDUAL test reads the readout across two builds whose arguments differ (a practice board taking arena.ts's own default, then Continue's run board carrying 2), so a constant can no longer satisfy both. Scoped to loop.test.ts; expectFailures counts that scoped run only. COUNT RE-MEASURED for issue #428: 1 -> 2, because the start-boundary suite reads the lives a fresh run was given, which is a second path through the same readout. The failing SET was compared, not the number renumbered. RE-ANCHORED for issue #324's step S6: the readout is a field of the one status projection rather than its own `hud.setLives` call, so the mutation now writes the constant into the payload. COUNT RE-MEASURED for step S6 by comparing the FAILING SETS, not by renumbering: 2 -> 3. The two that failed before still fail -- `campaign-continue lands on the run's own level, with its lives` and `THE STATED RESIDUAL: the menu keeps the abandoned world's enemy count until a board is built`. The third is `refreshes the HUD status from the live world as the game runs`, which this same change rewrote: it used to prove the readout was re-sent by counting pushes, which the whole-projection dedup made meaningless, so it now changes the world under a running session and asserts the pushed number followed. That is a case this diff strengthened, and it happens to see this mutation too.",
     "tests": [
       "src/game/loop.test.ts"
     ]
@@ -1494,6 +1506,9 @@
     "why": "Drops the topbar's no-thrash guard. `refreshTopbar` runs from `onSimulated`, which fires on EVERY 'playing' frame unconditionally at up to 60/s, and the projection it pushes carries a stock strip whose render rebuilds one DOM element per slot -- so without this guard a live versus match repaints the strip sixty times a second for numbers that move a handful of times a round. Nothing about the rendered result changes, which is exactly why it needs an entry: every visibility, content and tint assertion in the suite passes under it. The guard generalises the per-stocks one that issue #324's step S6 replaced, and the case that measures it drives REAL shots through the sim across several frames rather than fabricating quiet ones.",
     "tests": [
       "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: the active campaign run (issues #153/#152) the in-match stock readout (Task 6, spec \u00a73a) firing (an event, but no stock change) across several frames does not re-push the status beyond the one triggering call"
     ]
   },
   {
