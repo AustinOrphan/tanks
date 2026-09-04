@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { createRouteHost, type RouteHost, type RouteHostDeps, type StartIntent } from './route-host';
+import {
+  createRouteHost,
+  type RouteHost,
+  type RouteHostDeps,
+  type SessionShape,
+  type StartIntent,
+} from './route-host';
 import { createAppSettings } from './app-settings';
 import { createMemoryStorage, createStores, type GameStores } from './storage';
 import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIES } from './capabilities';
@@ -10,6 +16,7 @@ import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { defaultSlots } from './versus-setup';
 import { createHud, type Hud } from './hud';
+import { ZERO_STATS } from './stats';
 import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
 import type { RouteUiDeps } from './route-ui';
@@ -28,6 +35,17 @@ import { MODALITY_SWITCH_MS } from './modality';
  * registered once and dispatched twice. Every assertion fires a trigger and counts what
  * actually happened.
  */
+
+/**
+ * The shape most cases attach with: an ordinary campaign session.
+ *
+ * Named rather than inlined 31 times so the two suites that care about the value -- the
+ * attach-time push and the detach-time reset -- can pass `VERSUS_SHAPE` and be obviously
+ * doing something different from every case that merely needs A session.
+ */
+const CAMPAIGN: SessionShape = { relaunchTarget: 'campaign-levels' };
+/** A setup-pane versus session: the one shape that makes the title read "Start Match". */
+const VERSUS_SHAPE: SessionShape = { relaunchTarget: 'versus-setup' };
 
 const CONFIG: VersusConfig = {
   mode: 'ffa',
@@ -274,7 +292,7 @@ const GAMEPLAY_HANDLERS = [
 
 /** Fill every gameplay handler on a slot, recording which fired and with what. */
 function fillSlot(host: RouteHost): { fired: Array<[string, unknown[]]>; slot: ReturnType<RouteHost['attach']> } {
-  const slot = host.attach();
+  const slot = host.attach(CAMPAIGN);
   const fired: Array<[string, unknown[]]> = [];
   for (const h of GAMEPLAY_HANDLERS) {
     (slot[h.slotName] as (cb: (...a: unknown[]) => void) => void)((...a: unknown[]) =>
@@ -289,8 +307,8 @@ describe('createRouteHost: one HUD, one machine, one route UI', () => {
     const f = fixture();
     expect(f.hud.registrations('onStartRestart')).toBe(1);
     // Two sessions' worth of attach/detach, and still one registration per name.
-    f.host.attach().detach();
-    f.host.attach().detach();
+    f.host.attach(CAMPAIGN).detach();
+    f.host.attach(CAMPAIGN).detach();
     for (const h of GAMEPLAY_HANDLERS) {
       expect(f.hud.registrations(h.hudName), `${h.hudName} was registered again`).toBe(1);
     }
@@ -300,8 +318,8 @@ describe('createRouteHost: one HUD, one machine, one route UI', () => {
     // The 19 `route-ui.ts` handlers. `createRouteUi` is called once by construction, and
     // the mutation that calls it per attach would double every one of these.
     const f = fixture();
-    f.host.attach().detach();
-    f.host.attach();
+    f.host.attach(CAMPAIGN).detach();
+    f.host.attach(CAMPAIGN);
     for (const name of ['onMuteToggle', 'onVersusOpen', 'onCampaignOpen', 'onCustomizeOpen', 'onResetStats']) {
       expect(f.hud.registrations(name), `${name} was registered again`).toBe(1);
     }
@@ -381,7 +399,7 @@ describe('createRouteHost: the gameplay slot', () => {
 
   it('a retired session cannot register a handler over the live one', () => {
     const f = fixture();
-    const first = f.host.attach();
+    const first = f.host.attach(CAMPAIGN);
     const second = fillSlot(f.host);
     const stale: string[] = [];
     first.onNewGame(() => stale.push('stale'));
@@ -393,7 +411,7 @@ describe('createRouteHost: the gameplay slot', () => {
 
   it('registration REPLACES within one slot, so a session cannot double itself', () => {
     const f = fixture();
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
     const fired: string[] = [];
     slot.onNewGame(() => fired.push('a'));
     slot.onNewGame(() => fired.push('b'));
@@ -419,7 +437,7 @@ describe('createRouteHost: what a session REPORTS through the slot (issue #324, 
     // leave a campaign session offering Bot -- or a versus session refusing it -- for as
     // long as the match lasted.
     const f = fixture();
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
     const assignment: SlotSource[] = [{ kind: 'keyboard' }, { kind: 'bot' }];
     slot.setControllers(assignment, true);
     expect(f.hud.argsOf('setControllers').at(-1)).toEqual([assignment]);
@@ -435,8 +453,8 @@ describe('createRouteHost: what a session REPORTS through the slot (issue #324, 
     // an outgoing session must not overwrite the incoming session's rows with a roster
     // that belongs to a match that is over.
     const f = fixture();
-    const old = f.host.attach();
-    f.host.attach().setControllers([{ kind: 'keyboard' }], false);
+    const old = f.host.attach(CAMPAIGN);
+    f.host.attach(CAMPAIGN).setControllers([{ kind: 'keyboard' }], false);
     const before = f.hud.argsOf('setControllers').length;
     old.setControllers([{ kind: 'bot' }, { kind: 'bot' }], true);
     expect(f.hud.argsOf('setControllers')).toHaveLength(before);
@@ -449,7 +467,7 @@ describe('createRouteHost: what a session REPORTS through the slot (issue #324, 
     // because the retained config outlives the match -- which is exactly why the session
     // must not open the pane itself with a config of its own.
     const f = fixture();
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
     slot.setVersusConfig(CONFIG);
     slot.openVersusSetup();
     expect(f.hud.argsOf('showVersusSetup')).toEqual([[true, CONFIG]]);
@@ -457,10 +475,72 @@ describe('createRouteHost: what a session REPORTS through the slot (issue #324, 
 
   it('a stale slot cannot reopen the pane', () => {
     const f = fixture();
-    const old = f.host.attach();
-    f.host.attach();
+    const old = f.host.attach(CAMPAIGN);
+    f.host.attach(CAMPAIGN);
     old.openVersusSetup();
     expect(f.hud.argsOf('showVersusSetup')).toEqual([]);
+  });
+});
+
+describe('createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7)', () => {
+  it('pushes the incoming session\'s relaunch target, so the page is the only writer', () => {
+    // The last route-owned HUD member a session touched. `loop.ts` used to push this
+    // itself a few statements after taking the slot, which left the title's shape owned
+    // half here (the detach reset below) and half there. Declaring it at attach makes the
+    // page the single writer AND makes "a session that never states it" unrepresentable.
+    const versus = fixture({ launchDismissed: true });
+    versus.host.attach(VERSUS_SHAPE);
+    expect(versus.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['versus-setup']);
+    // NEGATIVE CONTROL: a campaign session must get the other value, not merely "a"
+    // value. Without this, a host that pushed a constant -- or that echoed whatever the
+    // last detach left behind -- would satisfy the assertion above.
+    const campaign = fixture({ launchDismissed: true });
+    campaign.host.attach(CAMPAIGN);
+    expect(campaign.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['campaign-levels']);
+  });
+
+  it('pushes it BEFORE the route reset, so the menu never paints in the outgoing shape', () => {
+    // `attach` resets the visible route (`sm.toMainMenu()`), and that reset paints the
+    // Main Menu. Pushing the target after it would render the incoming session's menu
+    // wearing the outgoing session's buttons for one synchronous frame -- invisible in
+    // production, but it is the ordering that decides whether "Start Match" or "Continue"
+    // is what a Campaign<->Versus switch flashes through.
+    // The route has to actually MOVE for the reset to paint, so this is the replacement
+    // case: a campaign session in gameplay, then the versus session that takes its place.
+    // Attaching onto a host already sitting at the Main Menu emits no change at all.
+    const f = fixture({ launchDismissed: true });
+    const first = f.host.attach(CAMPAIGN);
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign', level: 0 }, level: 0, seed: 1 } as never);
+    first.detach();
+    const before = f.hud.calls.length;
+    f.host.attach(VERSUS_SHAPE);
+    const names = f.hud.calls.slice(before).map(([name]) => name);
+    // Both halves have to be in the slice, or the ordering claim is vacuous: a `-1` index
+    // for a missing `setState` would compare as "earliest" and pass.
+    expect(names, 'the route reset did not paint').toContain('setState');
+    expect(names.indexOf('setRelaunchTarget'), 'the buttons were pushed after the paint').toBeLessThan(
+      names.indexOf('setState'),
+    );
+  });
+
+  it('says nothing about the session KIND: the topbar still comes from a world', () => {
+    // Deliberately absent from `SessionShape`, and this is the assertion that keeps it
+    // absent. `?dev=1&mode=ffa` is a genuine versus session wearing campaign-shaped
+    // buttons, so a page that derived "what is being played" from "what the buttons do"
+    // would report Campaign for a real FFA match -- the collapse issue #316 removed, and
+    // the one `session-title-policy-reused-as-identity` pins in the mutation manifest.
+    const f = fixture({ launchDismissed: true });
+    const before = f.hud.argsOf('setStatus').length;
+    const slot = f.host.attach(VERSUS_SHAPE);
+    expect(f.hud.argsOf('setStatus'), 'attach invented a status from the button policy').toHaveLength(
+      before,
+    );
+    // ...and the session's own push is what fills it, which is the control: the topbar is
+    // not simply unreachable from here.
+    slot.hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: null });
+    expect(f.hud.argsOf('setStatus').at(-1)).toEqual([
+      { kind: 'versus', mission: 1, missions: 1, stocks: null },
+    ]);
   });
 });
 
@@ -475,26 +555,192 @@ describe('createRouteHost: releasing the slot gives the menu back its page shape
     // has a word for exactly that, and `null` is the assertion -- a page that pushed a
     // fabricated campaign status would be claiming a session that does not exist.
     const f = fixture({ launchDismissed: true });
-    const slot = f.host.attach();
-    f.hud.hud.setRelaunchTarget('versus-setup');
-    f.hud.hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: null });
+    const slot = f.host.attach(VERSUS_SHAPE);
+    slot.hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: null });
+    expect(f.hud.argsOf('setRelaunchTarget').at(-1), 'the attach did not shape the title').toEqual([
+      'versus-setup',
+    ]);
     slot.detach();
     expect(f.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['campaign-levels']);
     expect(f.hud.argsOf('setStatus').at(-1)).toEqual([null]);
   });
 
+  it('empties the whole gameplay sink, not just the topbar (issue #324, step S7)', () => {
+    // The five RETAINED gameplay members. `hud.ts` keeps whatever it was last told, so
+    // every one of these stayed on screen after a quit unless the session that ended
+    // happened to overwrite it: an outcome tally under the Main Menu, a frozen 3-2-1
+    // chip, the developer shell readout, the touch thumbs where the player let go.
+    //
+    // Pushed through `slot.hud`, which is how a real session fills them, and asserted as
+    // the LAST value of each -- the claim is what the HUD is left holding, not how many
+    // times it was told.
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach(CAMPAIGN);
+    slot.hud.setStatus({ kind: 'campaign', mission: 1, missions: 3, lives: 2, enemies: 4 });
+    slot.hud.setOutcome({ tally: 'solo', attempt: ZERO_STATS, action: 'campaign-levels' });
+    slot.hud.setRoundPhase({ phase: 'countdown', secondsLeft: 2 });
+    slot.hud.setShellCount({ inFlight: 2, cap: 3 });
+    slot.hud.setTouchIndicator({
+      stick: { originX: 1, originY: 2, x: 3, y: 4 },
+      aim: { originX: 5, originY: 6, x: 7, y: 8 },
+      scheme: 'stick',
+      used: true,
+    });
+    // NEGATIVE CONTROL: every member really is holding a live value first, so a clear
+    // that never ran cannot be mistaken for a HUD that was never told anything.
+    expect(f.hud.argsOf('setOutcome').at(-1)?.[0]).not.toBeNull();
+    expect(f.hud.argsOf('setRoundPhase').at(-1)?.[0]).not.toBeNull();
+    expect(f.hud.argsOf('setShellCount').at(-1)?.[0]).not.toBeNull();
+
+    slot.detach();
+
+    expect(f.hud.argsOf('setStatus').at(-1)).toEqual([null]);
+    expect(f.hud.argsOf('setOutcome').at(-1)).toEqual([null]);
+    expect(f.hud.argsOf('setRoundPhase').at(-1)).toEqual([null]);
+    expect(f.hud.argsOf('setShellCount').at(-1)).toEqual([null]);
+    // The one member with no `null`: it always takes a shape, so the page states the
+    // shape that means "no thumbs down" and carries the player's own scheme from the
+    // store it owns rather than inventing one.
+    expect(f.hud.argsOf('setTouchIndicator').at(-1)).toEqual([
+      { stick: null, aim: null, scheme: 'stick', used: false },
+    ]);
+  });
+
+  it('carries the STORED touch scheme into the cleared indicator, not a hardcoded one', () => {
+    // The scheme is a page-owned preference, so the emptied indicator states the
+    // player's. `hud.ts` early-returns on `used: false` today, which is exactly why a
+    // fabricated value here would be invisible until some later change stopped it doing
+    // so -- and then the first touch after a quit would draw the wrong aim affordance.
+    const f = fixture({ launchDismissed: true, seed: (stores) => stores.settings.setTouchScheme('point') });
+    // NEGATIVE CONTROL: 'point' is not the shipped default (the case above reads
+    // 'stick'), so a constant cannot coincide with both.
+    expect(f.stores.settings.snapshot().input.touchScheme).toBe('point');
+    f.host.attach(CAMPAIGN).detach();
+    expect(f.hud.argsOf('setTouchIndicator').at(-1)).toEqual([
+      { stick: null, aim: null, scheme: 'point', used: false },
+    ]);
+  });
+
+  it('goes inert on release: a second detach, and every late report, does nothing', () => {
+    // Releasing retires the slot's generation, not just the click trampolines. Before
+    // that, a detached session could still repaint the Controllers panel and reopen the
+    // Versus Setup pane over the empty host's Main Menu -- a match that has ended pushing
+    // its own roster onto a page that is not playing anything -- and a second `detach()`
+    // re-ran the resets the first one had already done.
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach(CAMPAIGN);
+    slot.setVersusConfig(CONFIG);
+    slot.detach();
+    const before = f.hud.calls.length;
+
+    slot.detach();
+    slot.setControllers([{ kind: 'bot' }], true);
+    slot.openVersusSetup();
+    expect(f.hud.calls.slice(before), 'a released slot still reached the page HUD').toEqual([]);
+
+    // NEGATIVE CONTROL: the same three calls on a LIVE slot all reach the HUD, so this is
+    // a claim about release rather than about methods that never do anything.
+    const live = f.host.attach(CAMPAIGN);
+    live.setControllers([{ kind: 'bot' }], true);
+    live.openVersusSetup();
+    const names = f.hud.calls.slice(before).map(([name]) => name);
+    expect(names).toContain('setControllers');
+    expect(names).toContain('showVersusSetup');
+    live.detach();
+    expect(f.hud.argsOf('setStatus').at(-1), 'the live slot could not release').toEqual([null]);
+  });
+
   it('a stale detach does not reshape the menu under the session that replaced it', () => {
     // The stale-capture control, same shape as the slot's own: an outgoing session's late
-    // detach must not undo what the incoming one just pushed.
+    // detach must not undo what the incoming one just pushed, nor blank the live match's
+    // topbar and outcome lines out from under it.
     const f = fixture({ launchDismissed: true });
-    const old = f.host.attach();
-    f.host.attach();
-    f.hud.hud.setRelaunchTarget('versus-setup');
-    f.hud.hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: null });
+    const old = f.host.attach(CAMPAIGN);
+    const live = f.host.attach(VERSUS_SHAPE);
+    live.hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: null });
     const before = f.hud.argsOf('setRelaunchTarget').length;
+    const statusBefore = f.hud.argsOf('setStatus').length;
     old.detach();
     expect(f.hud.argsOf('setRelaunchTarget')).toHaveLength(before);
     expect(f.hud.argsOf('setRelaunchTarget').at(-1)).toEqual(['versus-setup']);
+    expect(f.hud.argsOf('setStatus'), 'a dead session blanked the live topbar').toHaveLength(
+      statusBefore,
+    );
+  });
+});
+
+/**
+ * The slot's own HUD (issue #324, step S8).
+ *
+ * `loop.ts` held the page's raw `Hud` until this step: every route member was reachable,
+ * and no push was checked against the generation at all. These are the two properties the
+ * facade adds, and the second is the one nothing could see before -- a session is stopped
+ * and replaced by `boot.ts` (`session-host.ts`'s `replace`), and a frame already in flight
+ * when that happens used to land on the incoming match's topbar.
+ */
+describe('createRouteHost: the slot\'s gameplay HUD', () => {
+  /** Every member of `GameplayHud`, with an argument each, for the exhaustive guard case. */
+  const GAMEPLAY_PUSHES: ReadonlyArray<[string, (slot: ReturnType<RouteHost['attach']>) => void]> = [
+    ['setStatus', (s) => s.hud.setStatus(null)],
+    ['setOutcome', (s) => s.hud.setOutcome(null)],
+    ['setRoundPhase', (s) => s.hud.setRoundPhase(null)],
+    ['setShellCount', (s) => s.hud.setShellCount(null)],
+    ['signalShellCapacity', (s) => s.hud.signalShellCapacity({ inFlight: 3, cap: 3 })],
+    ['signalPlayerDeath', (s) => s.hud.signalPlayerDeath(0xb41e1e)],
+    ['signalPlayerFire', (s) => s.hud.signalPlayerFire()],
+    [
+      'setTouchIndicator',
+      (s) => s.hud.setTouchIndicator({ stick: null, aim: null, scheme: 'stick', used: true }),
+    ],
+    ['showAchievementToasts', (s) => s.hud.showAchievementToasts([])],
+    ['showToast', (s) => s.hud.showToast('Gamepad connected')],
+  ];
+
+  it('reaches the page HUD while the session holds the slot', () => {
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach(CAMPAIGN);
+    for (const [, push] of GAMEPLAY_PUSHES) push(slot);
+    expect(f.hud.calls.map(([name]) => name)).toEqual(
+      expect.arrayContaining(GAMEPLAY_PUSHES.map(([name]) => name)),
+    );
+    expect(f.hud.argsOf('showToast').at(-1)).toEqual(['Gamepad connected']);
+  });
+
+  it('drops EVERY push from a session that has already been replaced', () => {
+    // Exhaustive on purpose: a facade that guarded nine members and forwarded the tenth
+    // is the shape this whole step exists to rule out, and a spot check of one member
+    // cannot tell that apart from a facade that guards all ten.
+    const f = fixture({ launchDismissed: true });
+    const retired = f.host.attach(CAMPAIGN);
+    const live = f.host.attach(VERSUS_SHAPE);
+    const before = f.hud.calls.length;
+
+    for (const [, push] of GAMEPLAY_PUSHES) push(retired);
+    expect(
+      f.hud.calls.slice(before).map(([name]) => name),
+      'a retired session painted over the live one',
+    ).toEqual([]);
+
+    // NEGATIVE CONTROL: the same pushes from the LIVE slot all land, so an assertion of
+    // emptiness cannot be satisfied by a facade that forwards nothing at all.
+    for (const [, push] of GAMEPLAY_PUSHES) push(live);
+    expect(f.hud.calls.slice(before).map(([name]) => name)).toEqual(
+      GAMEPLAY_PUSHES.map(([name]) => name),
+    );
+  });
+
+  it('drops a push from a session that has detached, with nothing holding the slot', () => {
+    // The other retirement: quitting to the Main Menu leaves the host empty, and a frame
+    // that arrives afterwards must not repaint the menu's topbar with the match that just
+    // ended. Measured after the detach's own clears, so what is asserted is that the
+    // NULLS survive rather than that nothing was ever pushed.
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach(CAMPAIGN);
+    slot.detach();
+    const before = f.hud.calls.length;
+    slot.hud.setStatus({ kind: 'campaign', mission: 2, missions: 3, lives: 1, enemies: 5 });
+    expect(f.hud.calls.slice(before)).toEqual([]);
+    expect(f.hud.argsOf('setStatus').at(-1)).toEqual([null]);
   });
 });
 
@@ -610,7 +856,7 @@ describe('createRouteHost: the retained versus config', () => {
     // time, so a value copied into `routeDeps` at construction would be permanently null
     // -- the pane would never prefill at all.
     const f = fixture();
-    f.host.attach().setVersusConfig(CONFIG);
+    f.host.attach(CAMPAIGN).setVersusConfig(CONFIG);
     f.hud.fire('onVersusOpen');
     expect(f.hud.argsOf('showVersusSetup')).toEqual([[true, CONFIG]]);
   });
@@ -624,7 +870,7 @@ describe('createRouteHost: the retained versus config', () => {
    */
   it('survives the session that set it', () => {
     const f = fixture();
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
     slot.setVersusConfig(CONFIG);
     slot.detach();
 
@@ -646,12 +892,12 @@ describe('createRouteHost: the retained versus config', () => {
    */
   it('survives a campaign session started after it', () => {
     const f = fixture();
-    const versusSlot = f.host.attach();
+    const versusSlot = f.host.attach(CAMPAIGN);
     versusSlot.setVersusConfig(CONFIG);
     versusSlot.detach();
 
     // A campaign session: it has no versus config of its own, and must not say so.
-    f.host.attach();
+    f.host.attach(CAMPAIGN);
 
     f.hud.fire('onVersusOpen');
     expect(
@@ -974,7 +1220,7 @@ describe('createRouteHost: the route on attach', () => {
     // The Launch gate is a page-level handoff. A host that reset to Main Menu here would
     // skip the splash entirely -- and with it the gesture that unlocks the AudioContext.
     const f = fixture({ launchDismissed: false });
-    f.host.attach();
+    f.host.attach(CAMPAIGN);
     expect(f.host.sm.atLaunch).toBe(true);
   });
 
@@ -988,7 +1234,7 @@ describe('createRouteHost: the route on attach', () => {
    */
   it('resets to Main Menu for a replacement session', () => {
     const f = fixture({ launchDismissed: true });
-    const first = f.host.attach();
+    const first = f.host.attach(CAMPAIGN);
     f.host.sm.enterGameplay({
       descriptor: { kind: 'campaign', level: 0 },
       level: 0,
@@ -997,7 +1243,7 @@ describe('createRouteHost: the route on attach', () => {
     expect(f.host.sm.inGameplay).toBe(true);
 
     first.detach();
-    f.host.attach();
+    f.host.attach(CAMPAIGN);
     expect(f.host.sm.atMainMenu, 'the replacement session inherited a gameplay route').toBe(true);
   });
 });
@@ -1013,7 +1259,7 @@ describe('createRouteHost: the route on attach', () => {
 describe('createRouteHost: leaving gameplay (issue #429)', () => {
   /** Attach a session and put the machine into gameplay, the way a real start does. */
   function inGameplay(f: Fixture): ReturnType<RouteHost['attach']> {
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
     f.host.sm.enterGameplay({
       descriptor: { kind: 'campaign', level: 0 },
       level: 0,
@@ -1072,7 +1318,7 @@ describe('createRouteHost: leaving gameplay (issue #429)', () => {
    */
   it('a click at an application route disposes nothing', () => {
     const f = fixture({ launchDismissed: true });
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
     slot.onQuitToTitle(() => f.host.sm.toMainMenu());
 
     f.hud.fire('onQuitToTitle');
@@ -1110,7 +1356,7 @@ describe("createRouteHost: the HUD's own Back never leaves gameplay (issue #318)
     // state machine, so `leavingGameplay` sees no exit. A Back wired through
     // `toMainMenu` would dispose the session the player was about to resume.
     const f = fixture({ launchDismissed: true, realHud: true });
-    f.host.attach();
+    f.host.attach(CAMPAIGN);
     f.host.sm.enterGameplay({
       descriptor: { kind: 'campaign' },
       seed: 1,
@@ -1155,7 +1401,7 @@ describe('createRouteHost: disposal', () => {
   it('disposes the HUD and the live preview, and only from here', () => {
     const f = fixture();
     f.hud.fire('onCustomizeOpen');
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
 
     slot.detach();
     expect(f.hud.disposals(), 'a session teardown disposed the page HUD').toBe(0);
@@ -1233,7 +1479,7 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
 
   it('Start pauses a simulating session and resumes a paused one; every other action is dropped mid-play', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
-    f.host.attach();
+    f.host.attach(CAMPAIGN);
     f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
     expect(f.host.sm.isSimulating).toBe(true);
     // The MACHINE decides, not the DOM. Today no panel is displayed while a session
@@ -1266,7 +1512,7 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
 
   it('Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
-    f.host.attach();
+    f.host.attach(CAMPAIGN);
     f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
     f.host.sm.pause();
     (f.root.querySelector('.hud-controllers-open') as HTMLElement).dispatchEvent(
@@ -1292,7 +1538,7 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     // The poller's own edge state: A pressed at Pause (Resume, via confirm on the focused
     // action button) stays "held" through play, and the next Pause sees no fresh edge.
     const f = fixture({ launchDismissed: true, realHud: true });
-    const slot = f.host.attach();
+    const slot = f.host.attach(CAMPAIGN);
     // What a real session registers: the action button at Pause is Resume.
     slot.onStartRestart(() => {
       if (f.host.sm.isPaused) f.host.sm.resume();
@@ -1315,7 +1561,7 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
 
   it('disposal cancels the queued frame, and a frame that fires anyway emits nothing', () => {
     const f = fixture({ launchDismissed: true });
-    f.host.attach();
+    f.host.attach(CAMPAIGN);
     f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
     f.host.sm.pause();
     // Negative control for the emission claim: a live frame with Start held resumes.

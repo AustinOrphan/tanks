@@ -308,10 +308,15 @@ next subscriber. The same page/session split decides who paints the Main Menu: t
 paints what it can read from its own stores at construction and re-reads Continue on every
 arrival at the Main Menu (`route-host.ts`), because with the host booting empty (#428) a
 session's own construction-time paints happened for nobody -- a returning player's first
-Main Menu had no Continue and no Levels grid. A session still pushes the same values at
-its own construction, and the page resets the session-shaped affordances
-(`setRelaunchTarget`, `setSessionKind`) when the slot is released, so an empty host never
-offers a "Start Match" that is a New Game in disguise. What the page still does NOT own is
+Main Menu had no Continue and no Levels grid. Since #324's step S7 the page owns BOTH ends
+of the session-shaped affordances: `attach(session)` takes the incoming session's
+`relaunchTarget` and pushes it, and releasing the slot resets it and empties the whole
+retained gameplay sink (status, outcome, round phase, shell count, touch indicator), so an
+empty host never offers a "Start Match" that is a New Game in disguise and never shows a
+dead match's readouts. Step S8 then made that boundary structural: `GameplaySlot.hud` is
+`hud.ts`'s ten-member `GameplayHud`, forwarded behind the slot's generation guard, and it
+is the only HUD `startGameWith` receives -- so a session can neither reach a route member
+nor paint after it has been replaced. What the page still does NOT own is
 recorded in issue #485: menu music, and the AUDIO ENGINE half of the settings, both of
 which run through the session's `applySettings`/`followMusic` and go silent on the empty
 host. The DISPLAY half moved to the page with issue #226, because Settings became the one
