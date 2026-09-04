@@ -224,6 +224,7 @@ import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
+import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -1026,6 +1027,17 @@ export interface HudOptions {
    * every fake in `loop.test.ts` to model a value that never changes within a page load.
    */
   readonly menuTransition?: MenuTransition | null;
+  /**
+   * Which gameplay-topbar arm to render (issue #552's `?dev=1&topbar=` flag). Absent,
+   * `null` and `'full'` are the same thing: the shipped bar, with no override applied to
+   * it anywhere.
+   *
+   * A CONSTRUCTION argument for the same reason `menuTransition` is one -- a developer
+   * flag read once from the query string, where a setter would add a member to the `Hud`
+   * interface, its three ownership `Pick`s and every fake in `loop.test.ts` to model a
+   * value that cannot change within a page load.
+   */
+  readonly topbar?: TopbarTreatment | null;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -1046,6 +1058,23 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   const treatmentClass = menuTransitionClass(opts.menuTransition ?? null);
   if (treatmentClass !== null) el.classList.add(treatmentClass);
+  /**
+   * What issue #552's topbar arm changes about the shipped bar -- nothing, on the shipped
+   * path (see `topbar-treatment.ts`). Read once here, like the transition above, because
+   * it is a query-string flag; `applyStatus` is the one place that consults it.
+   *
+   * NO CLASS AND NO STYLESHEET RULE, deliberately, and the arms hide with the `--hidden`
+   * modifiers the bar already has. An arm cannot then change the metrics of a chip it
+   * only meant to remove, so what a capture compares is the same bar with something
+   * taken out of it rather than two differently-styled bars.
+   */
+  const topbar = topbarDepartures(opts.topbar ?? null);
+  /**
+   * The word each kind's chip carries under the mode-chip arms, bound to the HUD's own
+   * kind vocabulary: a fourth `HudSessionKind` is a compile error here rather than a chip
+   * that silently renders nothing for it.
+   */
+  const modeChipLabels: Record<HudSessionKind, string> = MODE_CHIP_LABELS;
   el.innerHTML = `
     <!-- The application backdrop (issue #317). FIRST in the markup so it paints under
          every other layer, and aria-hidden because it is scenery: it carries no content
@@ -1065,7 +1094,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            The class carries no styling of its own (.hud-stat already does); only its
            --hidden modifier, toggled from applyStatus, does anything. -->
       <div class="hud-stat hud-campaign-stat">Lives: <span class="hud-lives">3</span></div>
-      <div class="hud-stat hud-campaign-stat">Enemies: <span class="hud-enemies">3</span></div>
+      <!-- hud-enemy-stat is a HANDLE, not a style: issue #552's arms need the enemy
+           count alone, and the pair above is otherwise reachable only as an ordered
+           list. It has no rule of its own in hud.css and adds none to the cascade, so
+           the shipped bar renders exactly as it did before the comparison existed. -->
+      <div class="hud-stat hud-campaign-stat hud-enemy-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
       <div class="hud-shells hud-shells--hidden"></div>
       <!-- The in-match stock readout (spec §3a): a topbar chip, same tier as
@@ -1570,6 +1603,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // Both campaign-only topbar stats, hidden together for a versus session -- see
   // applyStatus below and the markup comment above.
   const campaignStatEls = Array.from(el.querySelectorAll('.hud-campaign-stat')) as HTMLElement[];
+  /** The enemy count on its own -- the only stat issue #552's arms remove by itself. */
+  const enemyStatEl = el.querySelector('.hud-enemy-stat') as HTMLElement;
   /** The Practice identity chip -- the one topbar element only that kind raises. */
   const practiceChip = el.querySelector('.hud-practice') as HTMLElement;
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
@@ -3687,13 +3722,35 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * `playing` or `paused` -- never at main-menu/outcome/launch. It assigns
    * `versusStocksVisible`, whose own doc comment carries the shipped bug that makes this
    * a variable and never a classList read.
+   *
+   * ISSUE #552's COMPARISON ARMS ENTER HERE AND NOWHERE ELSE, each written as an override
+   * after the shipped statement it qualifies rather than in place of it. With no arm
+   * selected -- every player, and every test that passes no `topbar` option -- not one of
+   * the four overrides runs, so the shipped bar is not a description this function keeps
+   * in step with the real one; it is the only thing that runs.
    */
   function applyStatus(): void {
     const kind = statusData?.kind ?? null;
     practiceChip.classList.toggle('hud-practice--hidden', kind !== 'practice');
+    // Issue #552's chip arm: the chip stops marking the exception and becomes a field
+    // every kind fills. Written AFTER the shipped toggle rather than instead of it, so
+    // the shipped bar is what runs when no arm is selected -- the same reason the
+    // shipped menu transition has no stylesheet rule of its own. `kind === null` (no
+    // live session) still hides it: there is no mode to read out. The label write is not
+    // memoised the way Lives and Enemies are below, and does not need to be: `loop.ts`
+    // drops a push whose projection is identical, so this runs when the status actually
+    // moves, for a string of at most eight characters, under a flag no player sets.
+    if (topbar.modeChips) {
+      practiceChip.classList.toggle('hud-practice--hidden', kind === null);
+      if (kind !== null) practiceChip.textContent = modeChipLabels[kind];
+    }
     for (const statEl of campaignStatEls) {
       statEl.classList.toggle('hud-campaign-stat--hidden', kind === 'versus');
     }
+    // The enemy-count arm, and ADD-only: the loop above has already decided the pair is
+    // hidden for a versus session, and an arm that took the count away must never be the
+    // thing that puts a campaign stat back on a versus bar.
+    if (topbar.dropEnemies) enemyStatEl.classList.add('hud-campaign-stat--hidden');
     if (statusData && statusData.kind !== 'versus') {
       // textContent's setter tears down and rebuilds the text node even when the string
       // is identical, and a session pushes this every simulated frame for numbers that
@@ -3711,9 +3768,23 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // setup-pane versus match are exactly that. Bound to a local rather than re-tested,
     // so the chip's text cannot be written from a status the visibility line did not
     // agree was showable.
-    const sequence = statusData !== null && statusData.missions > 1 ? statusData : null;
+    let sequence = statusData !== null && statusData.missions > 1 ? statusData : null;
+    // The other half of the chip arm (issue #552, question 5): a versus bar carries a
+    // `VS` chip instead of an ordinal. Only ever REMOVES a chip the shipped rule above
+    // already decided to show, and reachable only on the one versus session that has a
+    // multi-level sequence at all -- `?dev=1&mode=ffa`, which runs the campaign level
+    // system. A setup-pane match runs a one-level system, so its chip is already hidden
+    // by `missions > 1` (measured on the built app: that bar reads `P1 3  P2 3` and
+    // nothing else, at all five captured widths).
+    if (topbar.modeChips && sequence?.kind === 'versus') sequence = null;
     levelChip.classList.toggle('hud-level--hidden', sequence === null);
-    if (sequence) levelNum.textContent = `${sequence.mission}/${sequence.missions}`;
+    if (sequence) {
+      // The denominator arm: position without scale. The shipped form is the else, so a
+      // bar with no arm selected is written by the same expression it always was.
+      levelNum.textContent = topbar.dropDenominator
+        ? String(sequence.mission)
+        : `${sequence.mission}/${sequence.missions}`;
+    }
     versusStocksVisible =
       kind === 'versus' && (currentSurface === 'playing' || currentSurface === 'paused');
     versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);

@@ -15,6 +15,7 @@ import type { AiTargetPerception } from '../sim/types';
 import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
 import { BLOCKED_FIRE_CUES, isBlockedFireCue, type BlockedFireCue } from '../presentation/blocked-fire';
 import { MENU_TRANSITIONS, isMenuTransition, type MenuTransition } from './menu-transition';
+import { TOPBAR_TREATMENTS, isTopbarTreatment, type TopbarTreatment } from './topbar-treatment';
 
 export interface DevFlags {
   /**
@@ -345,6 +346,20 @@ export interface DevFlags {
    * treatment that does not exist.
    */
   menuTransition: MenuTransition | null;
+  /**
+   * Which gameplay-topbar arm the HUD renders (issue #552). `null` -- absent or
+   * unrecognised -- is the shipped bar, which is also what `full` names, because `full`
+   * IS that bar rather than a description of it (`topbar-treatment.ts`).
+   *
+   * The owner's notes on the bar are hedged questions ("probably, I think", "I don't
+   * know yet"), so the arms exist to be compared on a real board and ruled between,
+   * exactly as `menuTransition`'s four were. Nothing here is a decision.
+   *
+   * Reject-to-null, the same idiom as `backdrop`/`mineWarn`/`blockedFire`/
+   * `menuTransition`: `?topbar=sparse` keeps the shipped bar rather than guessing at the
+   * arm whose name was nearly typed.
+   */
+  topbar: TopbarTreatment | null;
 }
 
 /**
@@ -361,6 +376,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   mineTrigger: null,
   blockedFire: null,
   menuTransition: null,
+  topbar: null,
   mineReach: false,
   mineTimer: false,
   aiContact: false,
@@ -475,6 +491,13 @@ function asMenuTransition(params: URLSearchParams): MenuTransition | null {
   const raw = params.get('menuTransition');
   if (raw === null) return null;
   return isMenuTransition(raw) ? raw : null;
+}
+
+/** One of the six topbar arms, or null when absent or unrecognised. */
+function asTopbar(params: URLSearchParams): TopbarTreatment | null {
+  const raw = params.get('topbar');
+  if (raw === null) return null;
+  return isTopbarTreatment(raw) ? raw : null;
 }
 
 /** One of the named experimental treatments, or null when absent or unrecognised. */
@@ -592,6 +615,7 @@ export function parseDevFlags(search: string): DevFlags {
     mineTrigger: asMineTrigger(params),
     blockedFire: asBlockedFireCue(params),
     menuTransition: asMenuTransition(params),
+    topbar: asTopbar(params),
     mineReach: isOn(params, 'mineReach'),
     mineTimer: isOn(params, 'mineTimer'),
     aiContact: isOn(params, 'aiContact'),
@@ -964,6 +988,20 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
         'transition adds no class and has no rule of its own.',
       'Every value collapses to an instant change under resolved reduced motion, movement ' +
         'included.',
+    ],
+  },
+  topbar: {
+    kind: 'valued',
+    values: [...TOPBAR_TREATMENTS],
+    description:
+      'Renders the gameplay topbar as one of issue #552\'s comparison arms; `full` is the ' +
+      'shipped bar, and the others drop the enemy count, the level denominator, or both, ' +
+      'and label every session kind instead of marking Practice alone.',
+    notes: [
+      'Read once at HUD construction, so it takes a reload rather than applying mid-session.',
+      'Absent and `full` are the same path: the shipped bar is what runs when no arm ' +
+        'overrides it, not a rule that restates it.',
+      'A comparison, not a decision: the owner has ruled on none of it yet.',
     ],
   },
 };

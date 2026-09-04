@@ -49,7 +49,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (14)
+## Valued flags (15)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -67,6 +67,7 @@ Notes:
 | `sandboxTanks` | `tanks` | a comma-separated multiset (repeats and order kept), each element one of the values below: `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
 | `sandboxWalls` | `walls` | a positive integer, bare or as `random:N` | `null` | Sets how many interior walls the sandbox scatters. |
 | `seed` | `seed` | a positive integer | `null` | Fixes the world's PRNG seed instead of deriving one from the clock, for a reproducible playthrough. |
+| `topbar` | `topbar` | `full`, `spare`, `mode-chips`, `spare-chips`, `enemies-only`, `denominator-only` | `null` | Renders the gameplay topbar as one of issue #552's comparison arms; `full` is the shipped bar, and the others drop the enemy count, the level denominator, or both, and label every session kind instead of marking Practice alone. |
 
 Notes:
 
@@ -91,6 +92,9 @@ Notes:
 - **sandboxTanks**: Only read when `level=sandbox`.
 - **sandboxTanks**: Any unrecognised kind rejects the whole list to null rather than dropping entries.
 - **sandboxWalls**: Only read when `level=sandbox`.
+- **topbar**: Read once at HUD construction, so it takes a reload rather than applying mid-session.
+- **topbar**: Absent and `full` are the same path: the shipped bar is what runs when no arm overrides it, not a rule that restates it.
+- **topbar**: A comparison, not a decision: the owner has ruled on none of it yet.
 
 ## The `playtest` bundle
 
