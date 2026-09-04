@@ -45,9 +45,12 @@ function recordingHud(): {
   hud: Hud;
   handlers: Map<string, (...args: unknown[]) => unknown>;
   calls: string[];
+  /** Every non-`on*` call with its arguments, so a paint's VALUE can be read back. */
+  args: Array<[string, unknown[]]>;
 } {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
   const calls: string[] = [];
+  const args: Array<[string, unknown[]]> = [];
   const previewCanvas = document.createElement('canvas');
   const hud = new Proxy(
     {},
@@ -55,18 +58,19 @@ function recordingHud(): {
       get(_t, prop: string) {
         if (prop === 'previewCanvas') return previewCanvas;
         if (prop === 'previewRotateButtons') return [];
-        return (...args: unknown[]): unknown => {
-          if (prop.startsWith('on') && typeof args[0] === 'function') {
-            handlers.set(prop, args[0] as (...a: unknown[]) => unknown);
+        return (...argv: unknown[]): unknown => {
+          if (prop.startsWith('on') && typeof argv[0] === 'function') {
+            handlers.set(prop, argv[0] as (...a: unknown[]) => unknown);
             return undefined;
           }
           calls.push(prop);
+          args.push([prop, argv]);
           return undefined;
         };
       },
     },
   ) as unknown as Hud;
-  return { hud, handlers, calls };
+  return { hud, handlers, calls, args };
 }
 
 interface Fixture {
@@ -78,6 +82,8 @@ interface Fixture {
   fire: (name: string, ...args: unknown[]) => void;
   registered: () => string[];
   hudCalls: string[];
+  /** Every argument list one `Hud` setter was called with, oldest first. */
+  argsOf: (name: string) => unknown[][];
   hostEvents: string[];
   versusStarts: VersusConfig[];
   campaignRequests: () => number;
@@ -100,7 +106,7 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
     motion: createStaticReducedMotionSource(false),
   });
   const stores = appSettings.stores;
-  const { hud, handlers, calls } = recordingHud();
+  const { hud, handlers, calls, args } = recordingHud();
 
   const sm = createGameStateMachine({
     // A complete `OutcomeContext`. Neither arm is reachable from anything this file
@@ -175,6 +181,7 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
     },
     registered: () => [...handlers.keys()].sort(),
     hudCalls: calls,
+    argsOf: (name) => args.filter(([n]) => n === name).map(([, a]) => a),
     hostEvents: box.hostEvents,
     versusStarts: box.versusStarts,
     previewStyles: box.previewStyles,
@@ -189,17 +196,18 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
 }
 
 /**
- * The 18 registrations this module owns, and the boundary of the claim.
+ * The 19 registrations this module owns, and the boundary of the claim.
  *
  * Pinned as a SET rather than a count so that a handler quietly leaving for the session,
  * or a session handler quietly arriving here, names itself in the diff. The seven absent
- * ones are listed in `route-ui.ts`'s own doc comment with the reason each stays behind.
+ * ones are listed in `route-ui.ts`'s own doc comment with the reason each stays behind;
+ * `onRecordsOpen` is the newest arrival, added by issue #324's step S5.
  */
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMuteToggle',
   'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin',
-  'onResetProgress', 'onResetStats', 'onTouchSchemeChange', 'onVersusOpen',
+  'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onTouchSchemeChange', 'onVersusOpen',
   'onVersusStart', 'onVolumeChange',
 ];
 
@@ -346,6 +354,50 @@ describe('the application routes work with no gameplay session behind them', () 
     // stores are page-scoped, which is why these two handlers could move at all.
     expect(() => f.fire('onResetProgress')).not.toThrow();
     expect(f.deps.progress.highestCleared()).toBe(0);
+  });
+
+  it('paints Records from the page stores when the page opens -- both tables, from no session', () => {
+    // Issue #324, step S5: the gameplay session used to push these two on every
+    // event-bearing frame, because the HUD re-renders Records only while it is visible and
+    // nothing else could see the panel open. `hud.ts` shows the Records button at the
+    // Main Menu alone, so an open is the one instant the numbers can be read -- and the
+    // stores are page-owned, so reading them then cannot be behind.
+    const f = fixture();
+    const statsBefore = f.argsOf('setStats').length;
+    const achBefore = f.argsOf('setAchievements').length;
+    // The stores move while the page is closed, which is what a match does to them.
+    f.deps.stats.record(
+      [{ type: 'tank-destroyed', tankId: 2, kind: 'enemy', by: { ownerId: 7, source: 'shell' } }] as never,
+      7,
+    );
+    f.deps.achievements.check({
+      lifetime: f.deps.stats.lifetime(),
+      attempt: f.deps.stats.attempt(),
+      highestCleared: 0,
+      totalLevels: 1,
+      clearedLevel: 1,
+      livesLeft: 3,
+      tracksProgress: true,
+    });
+    // The negative control, and the one that makes the assertions below non-vacuous: a
+    // store write is not a paint. Without it, a route UI that pushed both setters on
+    // every store touch -- or one that had painted them at construction and never again
+    // -- would satisfy the readings that follow.
+    expect(f.argsOf('setStats').length, 'a store write is not a paint').toBe(statsBefore);
+    expect(f.argsOf('setAchievements').length).toBe(achBefore);
+
+    f.fire('onRecordsOpen');
+    expect(f.argsOf('setStats').at(-1)).toEqual([
+      { lifetime: f.deps.stats.lifetime(), attempt: f.deps.stats.attempt() },
+    ]);
+    expect((f.argsOf('setStats').at(-1)![0] as { lifetime: { shellKills: number } }).lifetime.shellKills).toBe(1);
+    // Both tabs from the one hook: Records is a single entry whose two panes share an
+    // origin (hud.ts), so a painter that refreshed only the Stats table would leave the
+    // Achievements tab showing whatever the last session happened to push.
+    expect(f.argsOf('setAchievements').at(-1)).toEqual([f.deps.achievements.earned()]);
+    expect((f.argsOf('setAchievements').at(-1)![0] as ReadonlySet<string>).has('first-blood')).toBe(
+      true,
+    );
   });
 
   it('preview resize and dispose are safe before the panel has ever opened', () => {

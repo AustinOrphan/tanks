@@ -692,6 +692,36 @@ describe('hud: the stats page', () => {
     expect(cell(root, 'Accuracy', 1)).toBe('--'); // 0 shots this run
   });
 
+  it('fires onRecordsOpen on an open of either tab, never on a close, and in time for the render', () => {
+    // The hook the page paints Records through (issue #324, step S5): the pane re-renders
+    // only while visible, so an open is the one instant a page-owned store can be read
+    // into it. Asserted by pushing FROM the callback and reading the RENDERED cell rather
+    // than by counting the call -- what has to be true is that the numbers the callback
+    // supplies are the ones on screen when the pane settles, which a count cannot say.
+    const { hud: h, root } = mount();
+    h.setStats({ lifetime: NONE, attempt: NONE });
+    let opens = 0;
+    h.onRecordsOpen(() => {
+      opens += 1;
+      h.setStats({ lifetime: SOME, attempt: NONE });
+    });
+    h.setState('main-menu');
+    expect(opens, 'nothing fires until the pane opens').toBe(0);
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(opens).toBe(1);
+    expect(cell(root, 'Shell kills', 0), 'the pane drew the callback\'s numbers').toBe('4');
+    // The Achievements tab is the same Records entry, reached by REPLACING the top layer,
+    // so it opens through the same hook rather than inheriting whatever Stats was told.
+    (root.querySelector('.hud-records-tab-achievements') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
+    expect(opens).toBe(2);
+    // ...and Back is not an open. Without this the hook could be fired from anything that
+    // touches the pane and still satisfy the counts above.
+    (root.querySelector('.hud-achievements-back') as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
+    expect(opens).toBe(2);
+  });
+
   it('the Records button lives on the title panel only', () => {
     const { hud: h, root } = mount();
     for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {

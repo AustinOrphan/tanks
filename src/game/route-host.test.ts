@@ -7,19 +7,20 @@ import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIE
 import { createGameStateMachine } from './state';
 import { createLevelSystem } from './levels';
 import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
-import { DEV_FLAGS_OFF } from './devflags';
+import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { defaultSlots } from './versus-setup';
 import { createHud, type Hud } from './hud';
 import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
 import type { RouteUiDeps } from './route-ui';
 import type { GamepadLike } from '../input/gamepad';
+import type { SlotSource } from '../input/assignment';
 import { MODALITY_SWITCH_MS } from './modality';
 
 /**
  * Issue #468's coverage, and the shape of it is the point.
  *
- * `hud.ts` APPENDS every `on*` callback and has no unregister at all -- 25 `push(cb)`
+ * `hud.ts` APPENDS every `on*` callback and has no unregister at all -- 26 `push(cb)`
  * methods, no `off`, no `delete`, no `splice`. So the failure this file exists to catch is
  * SILENT and additive: after one stop-and-start, a page-scoped HUD that let each session
  * register its own handlers would fire New Game twice on one click. Nothing counts
@@ -115,7 +116,12 @@ interface Fixture {
 }
 
 function fixture(
-  opts: { launchDismissed?: boolean; seed?: (stores: GameStores) => void; realHud?: boolean } = {},
+  opts: {
+    launchDismissed?: boolean;
+    seed?: (stores: GameStores) => void;
+    realHud?: boolean;
+    devFlags?: Partial<DevFlags>;
+  } = {},
 ): Fixture {
   const storage = createMemoryStorage();
   const appSettings = createAppSettings({
@@ -195,6 +201,10 @@ function fixture(
   const deps: RouteHostDeps = {
     ...routeUiDeps,
     run: stores.run,
+    // The page's own development flags (issue #324, step S5): the application ground is
+    // page chrome, so the host reads `backdrop` itself rather than waiting for a session
+    // to push one. `opts.devFlags` overrides exactly the fields a case is about.
+    devFlags: { ...DEV_FLAGS_OFF, ...opts.devFlags },
     menuGamepads: () => box.pads,
     now: () => box.now,
     requestFrame: (cb) => {
@@ -389,6 +399,68 @@ describe('createRouteHost: the gameplay slot', () => {
     slot.onNewGame(() => fired.push('b'));
     f.hud.fire('onNewGame');
     expect(fired).toEqual(['b']);
+  });
+});
+
+describe('createRouteHost: what a session REPORTS through the slot (issue #324, step S5)', () => {
+  /**
+   * The two application surfaces a session still has something to say about, and both go
+   * through the slot rather than through the HUD.
+   *
+   * Everything else #324's step S5 moved is a read of a page-owned store, so the page can
+   * simply do it. These two cannot be: an `Assignment` is built from the match's own
+   * player count, validated versus roles and the pads that were plugged in when it
+   * started, and the rematch destination is a fact about which session just finished. So
+   * the session reports and the page writes, which is what leaves one writer per surface.
+   */
+  it('paints the Controllers panel from what the session reports -- both halves, one call', () => {
+    // BOTH, from one report. The panel's candidate list is derived from the assignment
+    // and the bot-allowed flag together, so a report that delivered only the rows would
+    // leave a campaign session offering Bot -- or a versus session refusing it -- for as
+    // long as the match lasted.
+    const f = fixture();
+    const slot = f.host.attach();
+    const assignment: SlotSource[] = [{ kind: 'keyboard' }, { kind: 'bot' }];
+    slot.setControllers(assignment, true);
+    expect(f.hud.argsOf('setControllers').at(-1)).toEqual([assignment]);
+    expect(f.hud.argsOf('setBotAssignmentAllowed').at(-1)).toEqual([true]);
+    // A second report replaces both, which is what a mid-match reassignment is.
+    slot.setControllers([{ kind: 'none' }], false);
+    expect(f.hud.argsOf('setControllers').at(-1)).toEqual([[{ kind: 'none' }]]);
+    expect(f.hud.argsOf('setBotAssignmentAllowed').at(-1)).toEqual([false]);
+  });
+
+  it('a stale slot cannot repaint the Controllers panel under the session that replaced it', () => {
+    // The stale-capture control every slot method needs: a reassignment dispatched into
+    // an outgoing session must not overwrite the incoming session's rows with a roster
+    // that belongs to a match that is over.
+    const f = fixture();
+    const old = f.host.attach();
+    f.host.attach().setControllers([{ kind: 'keyboard' }], false);
+    const before = f.hud.argsOf('setControllers').length;
+    old.setControllers([{ kind: 'bot' }, { kind: 'bot' }], true);
+    expect(f.hud.argsOf('setControllers')).toHaveLength(before);
+    expect(f.hud.argsOf('setControllers').at(-1)).toEqual([[{ kind: 'keyboard' }]]);
+  });
+
+  it('reopens the Versus Setup pane prefilled with the config the PAGE retains', () => {
+    // A finished versus match's action button reads "Versus Setup" and goes back to the
+    // pane. The session decides that; the page decides what the pane is prefilled with,
+    // because the retained config outlives the match -- which is exactly why the session
+    // must not open the pane itself with a config of its own.
+    const f = fixture();
+    const slot = f.host.attach();
+    slot.setVersusConfig(CONFIG);
+    slot.openVersusSetup();
+    expect(f.hud.argsOf('showVersusSetup')).toEqual([[true, CONFIG]]);
+  });
+
+  it('a stale slot cannot reopen the pane', () => {
+    const f = fixture();
+    const old = f.host.attach();
+    f.host.attach();
+    old.openVersusSetup();
+    expect(f.hud.argsOf('showVersusSetup')).toEqual([]);
   });
 });
 
@@ -726,6 +798,46 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     f.fireHost('keydown', new KeyboardEvent('keydown', { key: 'm' }));
     expect(f.stores.settings.snapshot().audio.muted).toBe(false);
     expect(f.hud.argsOf('showToast').at(-1)).toEqual(['Sound on']);
+  });
+
+  it('paints the application ground the development flag names, and the default without one', () => {
+    // Issue #324, step S5. The ground is page chrome that outlives every match, and a
+    // session used to push it at its own construction -- so a page that never started one
+    // stood on whatever the markup happened to say. The default is stated rather than
+    // left implicit for the same reason it was in the session: an element's initial
+    // classes are not a projection.
+    expect(fixture({ devFlags: { backdrop: 'felt' } }).hud.argsOf('setBackdrop')).toEqual([
+      ['felt'],
+    ]);
+    // The negative control: a page with no flag must say 'default', not nothing and not
+    // 'felt'. Without it, an unconditional `hud.setBackdrop('felt')` would pass above.
+    expect(fixture().hud.argsOf('setBackdrop')).toEqual([['default']]);
+    // ...and an unrecognised value is the default too, which is what keeps the mapping
+    // from flag vocabulary to HUD vocabulary here rather than in the HUD.
+    expect(
+      fixture({ devFlags: { backdrop: 'marble' as never } }).hud.argsOf('setBackdrop'),
+    ).toEqual([['default']]);
+  });
+
+  it('re-sizes the Levels grid on every arrival at the Main Menu, and only there', () => {
+    // A level is cleared mid-match, where the grid is neither shown nor reachable --
+    // `hud.ts` puts the Levels button on the Main Menu alone. So the arrival back is both
+    // the first moment the new size can be seen and a moment that necessarily precedes
+    // seeing it. The session used to repaint at the win instead, which covered the same
+    // instant from the other side and covered nothing at all on a page with no session.
+    const f = fixture({ launchDismissed: true });
+    const before = f.hud.argsOf('setLevelSelect').length;
+    f.stores.progress.recordCleared(CAMPAIGN_LEVELS[0]);
+    // Two negative controls in one: clearing a level is not a paint, and neither is
+    // arriving at some OTHER route. Without them a host that repainted on every state
+    // change -- or on every store write -- would satisfy the assertion below.
+    expect(f.hud.argsOf('setLevelSelect'), 'a cleared level is not a paint').toHaveLength(before);
+    f.host.sm.toRoute('settings');
+    expect(f.hud.argsOf('setLevelSelect'), 'a non-menu route re-sized the grid').toHaveLength(
+      before,
+    );
+    f.host.sm.toMainMenu();
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([2, CAMPAIGN_LEVELS.length]);
   });
 
   it('re-reads Continue on every arrival at the Main Menu, and only there', () => {
