@@ -569,5 +569,34 @@
     "killedBy": [
       "every moment pins its events to exact ticks blocked-fire: each expected event fires on its declared tick \u2014 and on no other"
     ]
+  },
+  {
+    "id": "audit-reads-silence-as-a-clean-tree",
+    "file": "tools/audit/classify.mjs",
+    "find": "    return { kind: 'unreachable', detail: 'npm audit produced no output' };",
+    "replace": "    return { kind: 'clean' };",
+    "expect": "killed",
+    "tests": [
+      "tools/audit/classify.test.ts"
+    ],
+    "why": "Reads empty stdout as a clean tree. This is the dangerous direction and the plausible mistake: npm writes its endpoint errors to STDERR and leaves stdout empty when the request never completed, so \"no findings printed\" and \"no audit happened\" are identical from stdout alone. Under this the gate goes green during exactly the outage it cannot see -- worse than the red build issue #538 is about, because nobody investigates a pass.",
+    "killedBy": [
+      "audit classification (issue #538) an unreachable registry is NOT a vulnerability, and not a pass either reads EMPTY output as unreachable rather than clean"
+    ]
+  },
+  {
+    "id": "audit-threshold-drops-critical",
+    "file": "tools/audit/classify.mjs",
+    "find": "export const BLOCKING_SEVERITIES = ['high', 'critical'];",
+    "replace": "export const BLOCKING_SEVERITIES = ['high'];",
+    "expect": "killed",
+    "tests": [
+      "tools/audit/classify.test.ts"
+    ],
+    "why": "Drops `critical` from the blocking set. npm's own `--audit-level=high` INCLUDES critical, and re-expressing that flag as a hand-written list is where the inclusion gets lost -- the result reads as a stricter setting than `moderate` while letting the single worst class of advisory straight through. Nothing about the list's appearance would give it away.",
+    "killedBy": [
+      "audit classification (issue #538) includes CRITICAL, not just high",
+      "audit classification (issue #538) the summary line is what a reader sees first says VULNERABLE with the counts and the packages"
+    ]
   }
 ]
