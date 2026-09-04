@@ -88,7 +88,7 @@ const ATOMIC = {
   visual: 'node tools/visual/verify.mjs dist --check',
   roundtrip: 'node tools/visual/roundtrip.mjs dist',
   mutate: 'node tools/mutate/run.mjs',
-  'audit:prod': 'npm audit --omit=dev --audit-level=high',
+  'audit:prod': 'node tools/audit/prod.mjs',
   'issues:audit': 'node tools/issues/run.mjs audit',
   'issues:maintain': 'node tools/issues/run.mjs event',
   'issues:relationships': 'node tools/issues/migrate-relationships.mjs',
