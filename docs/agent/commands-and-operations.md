@@ -140,7 +140,6 @@ Specialized commands remain directly available:
 npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
 npm run capture -- --list                                  # list reproducible media recipes
 npm run mutate -- --only <id>                              # run one mutation entry
-npm run mutate -- --only <id> --only <id>                  # repeatable; --only a,b is the same
 npm run mutate -- --jobs auto                              # the whole manifest over a worktree pool (committed tree only)
 npm run mutate -- --changed origin/main --list             # which entries this branch's diff can affect, and why
 npm run mutate:smoke                                      # floor CI's representative entry
@@ -262,11 +261,7 @@ match what it declared, which is what turns a manifest entry from a transcript i
 something CI can check. **SURVIVES means the scoped vitest run does not catch it, not
 that `npm run verify:full` doesn't** -- this tool does not run the `typecheck` script as
 part of the verdict, so a type-only mutation can still be caught by the full gate even
-when every entry here reports SURVIVES. `--only <id>` narrows the run to named entries;
-it is repeatable and also accepts a comma list, so `--only a --only b` and `--only a,b`
-both run both. Any id matching no manifest entry refuses the whole run and names every
-such id, and the closing tally prints how many entries were requested beside how many
-ran, so an under-run is legible rather than reading as a clean sweep.
+when every entry here reports SURVIVES. `--only <id>` runs a single entry.
 
 `npm run mutate:smoke` selects `capture-prerequisite-error-drops-the-ci-pin`. Its
 browser-free four-test scope keeps floor feedback cheap while the real CLI still parses

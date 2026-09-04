@@ -745,9 +745,8 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
   });
 
   it('paints the STORED haptics preference, not the effective one', () => {
-    // One of the two controls `paintSettingsControls` draws from the STORE rather than
-    // from `effective` (the motion toggle is the other, below), and the only place the two
-    // can disagree on this page: the fixture runs under NO_CAPABILITIES, so
+    // The one asymmetry in `paintSettingsControls`, and the only place stored and
+    // effective can disagree on this page: the fixture runs under NO_CAPABILITIES, so
     // `deviceVibration` is false and the EFFECTIVE value is false however the store reads.
     //
     // The toggle EDITS the preference. Painting it from the effective value shows a switch
@@ -765,48 +764,6 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     expect(f.hud.argsOf('setHaptics').at(-1), 'the switch must not read as erased').toEqual([
       true,
     ]);
-  });
-
-  it('paints the STORED motion preference, and the resolved policy beside it', () => {
-    // Both halves, because neither can carry the other. `setMotion` takes the three-state
-    // preference the control EDITS -- painting it from `effective.reducedMotion` would
-    // collapse 'system' into a boolean and leave a player following their device unable to
-    // see, or return to, that state. `setReducedMotion` takes the resolved answer, which
-    // is what drives the transitions and completes the 'Match device' label.
-    const f = fixture({ seed: (stores) => stores.settings.setMotion('reduced') });
-    expect(f.host.hasSession(), 'the point is a page with no session').toBe(false);
-    expect(f.hud.argsOf('setMotion').at(-1)).toEqual(['reduced']);
-    expect(f.hud.argsOf('setReducedMotion').at(-1)).toEqual([true]);
-  });
-
-  it('lets the motion control change the policy IMMEDIATELY, with the menu open and no session', () => {
-    // Issue #364's fifth criterion, and the whole reason issue #289 is filed: the player
-    // changes this from the Main Menu, where -- since issue #428 -- there is no session at
-    // all. Everything the old push depended on is missing here, so this measures the
-    // complete chain the page owns: the toggle's callback writes the store, the store
-    // notifies `effectiveSettings`, and its subscription repaints BOTH the control and the
-    // resolved policy on the same tick. No reload, no match, no second visit to Settings.
-    const f = fixture();
-    expect(f.host.hasSession()).toBe(false);
-    // NEGATIVE CONTROL: the fixture's motion source reports no OS preference, so the
-    // default 'system' resolves to false. Without it a chain that never ran would be
-    // indistinguishable from one that ran and landed on the same answer.
-    expect(f.stores.settings.snapshot().presentation.motion).toBe('system');
-    expect(f.hud.argsOf('setReducedMotion').at(-1)).toEqual([false]);
-
-    f.hud.fire('onMotionChange', 'reduced');
-    expect(
-      f.stores.settings.snapshot().presentation.motion,
-      'the toggle did not reach the store',
-    ).toBe('reduced');
-    expect(
-      f.hud.argsOf('setReducedMotion').at(-1),
-      'the store moved but the resolved policy never reached the HUD',
-    ).toEqual([true]);
-    expect(
-      f.hud.argsOf('setMotion').at(-1),
-      'the control was not repainted from the value the store accepted',
-    ).toEqual(['reduced']);
   });
 
   it('keeps painting settings while a session holds the slot', () => {

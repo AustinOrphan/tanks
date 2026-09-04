@@ -444,8 +444,8 @@ describe('hud.css is syntactically whole', () => {
       '.hud-run-summary', '.hud-run-summary--hidden', '.hud-new-game--tertiary',
       // Settings (issue #226): the pane, its hidden rule, and the section machinery.
       // `.hud-settings-section--hidden` is what makes "only sections with relevant
-      // controls render" visible -- without it a section left empty by #227's capability
-      // hiding renders as a heading over nothing.
+      // controls render" visible -- without it Accessibility, which has no controls until
+      // #289/#290, renders as a heading over nothing.
       '.hud-settings', '.hud-settings--hidden', '.hud-settings-section',
       '.hud-settings-section--hidden', '.hud-settings-controls',
       '.hud-settings-volume', // the audio slider; its buttons are `.ui-btn--sm`
@@ -696,7 +696,7 @@ describe('hud.css is syntactically whole', () => {
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
     //                         + 1 friendly-fire toggle (Teams-only)
     //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
-    //   everything else  65  = the panels above (54 before issue #226, +10, +1)
+    //   everything else  64  = the panels above (54 before this issue, +10)
     //
     // The +10, itemised: OUT go the topbar Mute chip, the Main Menu's Stats button and
     // its Achievements button (-3). IN come Records, Settings and About & Legal on the
@@ -704,13 +704,10 @@ describe('hud.css is syntactically whole', () => {
     // (+4), the Settings pane's Controllers and About & Legal entries (+2), and the Back
     // buttons of Settings and About plus the confirmation's two answers (+4).
     //
-    // The +1 is issue #289's motion toggle, the first control the Settings pane's
-    // Accessibility section has ever held.
-    //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(118);
+    expect(buttons.length).toBe(117);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -805,8 +802,7 @@ describe('hud.css is syntactically whole', () => {
     // reason -- it is the quietest thing on the Main Menu and must not read as a peer of
     // the utility slabs above it.
     const small = ['.hud-settings-mute', '.hud-scheme-toggle', '.hud-firemode-toggle',
-      '.hud-haptics-toggle', '.hud-motion-toggle',
-      '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
+      '.hud-haptics-toggle', '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
       '.hud-settings-about', '.hud-about-open', '.hud-records-tab-stats',
       '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
@@ -1450,14 +1446,45 @@ describe('hud.css: the one application-transition definition (issue #364)', () =
     }
   });
 
-  it('declares the duration and the easing exactly once each, and nowhere as a literal', () => {
+  it('declares the duration and the easing in named places only, and nowhere as a literal', () => {
     // "No screen has its own copy" is a claim about the whole stylesheet, which the live
     // check above cannot make -- it only looks at the two rules it already knows about.
+    //
+    // WHY THIS IS NO LONGER A BARE COUNT OF ONE. Issue #542's `fade-long` arm exists to
+    // answer whether duration alone is the whole of the reported "I haven't seen them in
+    // action", and an arm that changes the duration has to declare one. Counting
+    // declarations would have forced that number into TypeScript instead, which is
+    // precisely the drift issue #364's first criterion forbids. So the check moved from
+    // HOW MANY to WHERE: the base declaration, plus the experiment's own arms, named
+    // exactly. A screen that gives itself a copy still fails, and so does an experiment
+    // arm nobody listed here.
     const text = stripComments(css);
-    for (const token of ['--ui-transition-duration', '--ui-transition-ease']) {
-      const declarations = [...text.matchAll(new RegExp(`${token}\\s*:`, 'g'))];
-      expect(declarations.length, `${token} is declared more than once`).toBe(1);
-    }
+    /** Every `selector { ... }` block's selector text, for the blocks declaring `token`. */
+    const declaringSelectors = (token: string): string[] => {
+      const out: string[] = [];
+      // Innermost blocks only, which is what `[^{}]*` on both sides buys: an `@media` or
+      // `@keyframes` wrapper can never match as the selector of a body containing braces,
+      // so a nested rule is attributed to its own selector rather than to its wrapper.
+      for (const [, selector, body] of text.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+        if (new RegExp(`${token}\\s*:`).test(body)) out.push(selector.trim());
+      }
+      return out;
+    };
+    expect(declaringSelectors('--ui-transition-ease'), 'the easing has one home').toEqual([
+      ':root',
+    ]);
+    // The base, then the ONE experiment arm whose variable is the duration. `rise` and
+    // `settle` are deliberately absent: they move at the control's own duration, which is
+    // what keeps `fade-long` a control for them rather than a slower sibling.
+    expect(declaringSelectors('--ui-transition-duration')).toEqual([
+      ':root',
+      '.hud--menu-transition-fade-long',
+    ]);
+    // Vacuity guard: the scanner really does find declarations, and really does reject a
+    // selector it was not told about. Without this, a regex that matched nothing would
+    // make both assertions above pass against an empty list.
+    expect(declaringSelectors('--ui-transition-duration').length).toBeGreaterThan(1);
+    expect(declaringSelectors('--no-such-token-anywhere')).toEqual([]);
     // Every rule that animates an application surface must go through the tokens. A
     // second copy would most naturally arrive as a literal duration inside one of these.
     for (const selector of CONTRACT_RULES) {
