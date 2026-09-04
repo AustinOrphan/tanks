@@ -2074,14 +2074,14 @@
   {
     "id": "route-host-clears-the-retained-versus-config-on-detach",
     "file": "src/game/route-host.ts",
-    "find": "          live = null;\n          // The menu goes back to the PAGE's shape.",
-    "replace": "          live = null;\n          versusConfig = null;\n          // The menu goes back to the PAGE's shape.",
+    "find": "          live = null;\n",
+    "replace": "          live = null;\n          versusConfig = null;\n",
     "expect": "killed",
     "expectFailures": 2,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "Clears the retained versus config when a session detaches, so quitting a match empties the Versus Setup form the player filled in. `session-host.ts` retains its own `lastVersusConfig` across a campaign detour for exactly this reason and says so; this is the same fact one layer up, where the pane can actually read it. Silent: the pane still opens, still works, and merely forgets. 1 of 18, 'survives the session that set it' -- the only case that reads the config back AFTER a detach. COUNT RE-MEASURED after PR #475's review fix: 1 -> 2. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered."
+    "why": "Clears the retained versus config when a session detaches, so quitting a match empties the Versus Setup form the player filled in. `session-host.ts` retains its own `lastVersusConfig` across a campaign detour for exactly this reason and says so; this is the same fact one layer up, where the pane can actually read it. Silent: the pane still opens, still works, and merely forgets. 1 of 18, 'survives the session that set it' -- the only case that reads the config back AFTER a detach. COUNT RE-MEASURED after PR #475's review fix: 1 -> 2. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered. RE-ANCHORED for issue #324's step S7, which inserted the generation retirement between `live = null;` and the comment the old anchor ran into: the anchor is now the assignment line alone, which is unique in this file and carries no neighbouring prose for a later edit to break. Count re-measured on this branch against the same scoped file, whose population grew from 37 to 75; the failing set is unchanged."
   },
   {
     "id": "route-host-snapshots-the-versus-config-instead-of-reading-it-live",
