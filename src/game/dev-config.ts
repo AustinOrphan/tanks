@@ -74,6 +74,9 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   enemyDeathPulse: 'Rendering',
   backdrop: 'Rendering',
   menuTransition: 'Rendering',
+  // With the two above rather than under Gameplay: all three name a TREATMENT of chrome
+  // the player looks at, and none of them changes a rule of the match being played.
+  topbar: 'Rendering',
 
   mineTrigger: 'Mines',
   mineReach: 'Mines',

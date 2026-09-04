@@ -1063,6 +1063,9 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // are: the seam stays `(root) => Hud`, so no injected HUD in a test grows a
         // developer flag it has no opinion about.
         menuTransition: devFlags.menuTransition,
+        // Issue #552's topbar arm, bound here for the same reason: a comparison flag no
+        // injected HUD in a test has an opinion about.
+        topbar: devFlags.topbar,
       }),
     levels: createLevelSystem(devFlags, run),
     progress,

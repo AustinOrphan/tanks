@@ -4290,5 +4290,96 @@
       "startGameWith: dev flags stay off by default threads the quality dev flag through to the renderer",
       "startGameWith: dev flags stay off by default lets ?dev=1&quality= OVERRIDE the stored preset, without writing it"
     ]
+  },
+  {
+    "id": "topbar-arm-keeps-the-enemy-count",
+    "file": "src/game/hud.ts",
+    "find": "    if (topbar.dropEnemies) enemyStatEl.classList.add('hud-campaign-stat--hidden');\n    if (statusData && statusData.kind !== 'versus') {",
+    "replace": "    if (statusData && statusData.kind !== 'versus') {",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "Issue #552's first question -- does the campaign bar need an enemy count -- answered by a build in which three of the six arms are secretly the same bar. `spare`, `spare-chips` and `enemies-only` would all render today's readings, the flag would still parse, the URL would still be honoured, and a comparison run from those captures would conclude that removing the count changes nothing. Measured before the guard was written: with this line gone the seven HUD and flag suites that existed before this change (373 cases) all still pass, which is exactly why the arm needed a case of its own.",
+    "killedBy": [
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+    ]
+  },
+  {
+    "id": "topbar-arm-never-labels-the-kind",
+    "file": "src/game/hud.ts",
+    "find": "    if (topbar.modeChips) {\n      practiceChip.classList.toggle('hud-practice--hidden', kind === null);\n      if (kind !== null) practiceChip.textContent = modeChipLabels[kind];\n    }\n    for (const statEl of campaignStatEls) {",
+    "replace": "    for (const statEl of campaignStatEls) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "The chip arms reduced to the shipped chip: PRACTICE still marks the exception and neither CAMPAIGN nor VS is ever written. That is the owner's own comment turned into a no-op -- the mode-readout design he asked to see would be judged from captures of the exception-marker design he already has, and `mode-chips` against `full` would differ on nothing but the versus level chip. It also removes the one write that makes the chip a FIELD rather than a fixed word, so a Levels pick mid-session could not change it.",
+    "killedBy": [
+      "topbar: the SHIPPED arm is the no-flag bar itself mounts the same topbar as an absent flag, at every session, with no class of its own",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session",
+      "topbar: what each arm says labels the kind it is actually showing, and labels nothing when no session is live",
+      "topbar: the two versus shapes, which question 5 conflates drops it under the chip arms, which is the only place that chip is reachable at all"
+    ]
+  },
+  {
+    "id": "topbar-chip-arm-keeps-the-versus-level-chip",
+    "file": "src/game/hud.ts",
+    "find": "    if (topbar.modeChips && sequence?.kind === 'versus') sequence = null;\n    levelChip.classList.toggle('hud-level--hidden', sequence === null);",
+    "replace": "    levelChip.classList.toggle('hud-level--hidden', sequence === null);",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "The half of the chip arm that answers issue #552's fifth question. Without it a versus bar under `mode-chips` reads `VS | Level: 1/5 | P1 3 P2 3` -- the ordinal the arm exists to replace, now sitting beside its replacement -- and the arm argues for adding a chip rather than for swapping one readout for another. Reachable on exactly one session (`?dev=1&mode=ffa`, the only versus with a multi-level sequence), which is precisely why nothing else in the suite notices: the setup-pane match has no chip to keep.",
+    "killedBy": [
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session",
+      "topbar: the two versus shapes, which question 5 conflates drops it under the chip arms, which is the only place that chip is reachable at all"
+    ]
+  },
+  {
+    "id": "topbar-arm-keeps-the-level-denominator",
+    "file": "src/game/hud.ts",
+    "find": "      levelNum.textContent = topbar.dropDenominator\n        ? String(sequence.mission)\n        : `${sequence.mission}/${sequence.missions}`;",
+    "replace": "      levelNum.textContent = `${sequence.mission}/${sequence.missions}`;",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "Issue #552's second question silently unasked: `spare`, `spare-chips` and `denominator-only` all keep `Level: 1/5`, so the captures that are supposed to show position-without-scale show scale. The mutation is the shipped line restored verbatim, which is what makes it the plausible edit -- a reviewer tidying a ternary back to the expression it wraps destroys three arms and no existing test, and the readings table is the only thing that says so.",
+    "killedBy": [
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+    ]
+  },
+  {
+    "id": "topbar-shipped-arm-departs-from-the-shipped-bar",
+    "file": "src/game/topbar-treatment.ts",
+    "find": "  full: NO_DEPARTURES,",
+    "replace": "  full: { dropEnemies: true, dropDenominator: false, modeChips: false },",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "The control drifting from the thing it is a control for -- the one failure this comparison cannot survive, because every arm is judged as a difference from `full`. A `full` that quietly drops the enemy count makes `enemies-only` look identical to the control and `spare` look like a denominator change alone, and the owner's ruling would be made against a bar no player has. The whole point of the departures shape is that the shipped arm names no departures at all; this is that property being false.",
+    "killedBy": [
+      "topbar: the flag that names an arm gives the SHIPPED arm no departures at all, and every other arm at least one",
+      "topbar: the flag that names an arm keeps the two single-removal arms genuinely single, and the paired arms their union",
+      "topbar: the SHIPPED arm is the no-flag bar itself mounts the same topbar as an absent flag, at every session, with no class of its own",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+    ]
+  },
+  {
+    "id": "topbar-flag-accepts-an-unbuilt-arm",
+    "file": "src/game/devflags.ts",
+    "find": "  return isTopbarTreatment(raw) ? raw : null;",
+    "replace": "  return raw as TopbarTreatment;",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "Reject-to-null dropped, so `?dev=1&topbar=sparse` becomes a `TopbarTreatment` the HUD then looks up in its departures table and finds nothing for -- `topbarDepartures` returns undefined and the first `topbar.dropEnemies` read throws, taking the whole bar down on a typo. The same guard `menuTransition`, `mineWarn`, `blockedFire` and `backdrop` each carry, and the same reason: `spare-labelled` is a real arm name from this issue's first draft that was never built, so the near-miss is one the owner can actually type.",
+    "killedBy": [
+      "topbar: the flag that names an arm accepts every name in the vocabulary and nothing else -- population: the 6 registered arms"
+    ]
   }
 ]
