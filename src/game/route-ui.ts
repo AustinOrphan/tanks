@@ -18,8 +18,10 @@ import type { GameDeps } from './loop';
  * WHAT DECIDED THE SPLIT, measured on `loop.ts` rather than guessed: of its 25
  * `hud.on*` registrations, 15 reached no gameplay state at all and 3 more (the paint
  * shop's `onPick*`) reached it only through `restyle`'s renderer call. Those 18 came
- * here, and `onRecordsOpen` -- added by issue #324's step S5 so the page can paint the
- * Records tables it now owns -- makes 19 today, against `Hud`'s 26 registration methods.
+ * here, and two later arrivals -- `onRecordsOpen`, added by issue #324's step S5 so the
+ * page can paint the Records tables it now owns, and `onMotionChange`, the Accessibility
+ * section's first control (issue #289) -- make 20 today, against `Hud`'s 27 registration
+ * methods.
  * The other 7 belong to a live match and are registered by `route-host.ts` as trampolines
  * into whatever session holds its slot: three that START gameplay, two touch controls
  * that need the live `InputController`, `onReassignSlot` (which owns per-slot input
@@ -218,6 +220,15 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   });
   hud.onHapticsChange((next) => {
     deps.settings.setDeviceHaptics(next);
+  });
+  // The store and nothing else (issue #289). The display comes back through
+  // `route-host.ts`'s `paintSettingsControls`, which the store's own notification wakes --
+  // so the label redraws from the value the store ACCEPTED, and the same notification is
+  // what makes the new policy reach `hud.setReducedMotion` on the same tick, with the pane
+  // still open. Echoing the clicked value at the HUD here would show a preference the
+  // store may have refused and would leave the transitions running on the old one.
+  hud.onMotionChange((next) => {
+    deps.settings.setMotion(next);
   });
 
   hud.onCustomizeOpen(() => {

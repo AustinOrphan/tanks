@@ -545,22 +545,31 @@ export function createRouteHost(
     hud.setVolume(effective.volume);
     hud.setTouchScheme(effective.touchScheme);
     hud.setFireMode(effective.fireMode);
-    // THE STORED PREFERENCE, not the effective one, and this is the only asymmetry in the
-    // function. `haptics.setEnabled` (loop.ts) takes the effective value so a device with
-    // no `navigator.vibrate` stays silent whatever the switch says -- but this toggle
-    // EDITS the preference, and showing it forced off would look like a dead control and
-    // suggest the preference had been erased, which issue #320 forbids. Hiding it where
-    // it cannot apply is issue #227's work.
+    // THE STORED PREFERENCE, not the effective one -- the first of the two reads here that
+    // break the function's `effective` pattern, the motion control below being the other.
+    // `haptics.setEnabled` (loop.ts) takes the effective value so a device with no
+    // `navigator.vibrate` stays silent whatever the switch says -- but this toggle EDITS
+    // the preference, and showing it forced off would look like a dead control and suggest
+    // the preference had been erased, which issue #320 forbids. Hiding it where it cannot
+    // apply is issue #227's work.
     //
     // It read `effective.deviceHaptics` while this block only ran on a session-less page
     // (issue #485), where it was a latent bug rather than a visible one: a supported
     // device reads the same either way, and an unsupported one had no session to correct
     // it. Making this the ONLY writer would have shipped that reading everywhere.
     hud.setHaptics(deps.settings.snapshot().input.deviceHaptics);
-    // The resolved motion policy, so an application transition becomes instant the moment
-    // the preference changes with the menu already open (issue #364, criterion 5). The
-    // gameplay renderer gets the same value from the session's own subscription
-    // (issue #289); this is the frame's half, and the frame is the page's.
+    // THE STORED PREFERENCE for the same reason haptics is, and a sharper one: the motion
+    // control has three states and the resolved policy has two, so painting it from
+    // `effective` would erase 'system' entirely -- a player following their device would
+    // find the control reading 'Full' or 'Reduced' and no way back to following it.
+    hud.setMotion(deps.settings.snapshot().presentation.motion);
+    // ...and the resolved policy, which is the half `setMotion` cannot carry. It makes an
+    // application transition instant the moment the preference changes with the menu
+    // already open (issue #364, criterion 5), and it completes the 'Match device' label,
+    // which is why it is pushed AFTER `setMotion` rather than before -- both orders settle
+    // to the same label, but this one paints the finished string once. The gameplay
+    // renderer gets the same value from the session's own subscription (issue #289); this
+    // is the frame's half, and the frame is the page's.
     hud.setReducedMotion(effective.reducedMotion);
   };
   paintSettingsControls();
