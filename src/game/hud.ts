@@ -137,6 +137,7 @@ import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
+import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -961,11 +962,38 @@ export interface HudOptions {
    * jsdom reports every rect as empty and geometry then has nothing to follow.
    */
   readonly measure?: (el: HTMLElement) => Rect;
+  /**
+   * Which menu-transition arm to run (issue #542's `?dev=1&menuTransition=` experiment).
+   * Absent, `null`, and `'fade'` are the same thing: the shipped crossfade.
+   *
+   * A CONSTRUCTION argument rather than a setter, which is the opposite of
+   * `setReducedMotion` and for the opposite reason. Reduced motion is a player setting
+   * that can change while the menu is open, so freezing it at boot would make the toggle
+   * appear broken; this is a developer flag read once from the query string, and a
+   * setter would add a member to the `Hud` interface, its three ownership `Pick`s and
+   * every fake in `loop.test.ts` to model a value that never changes within a page load.
+   */
+  readonly menuTransition?: MenuTransition | null;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const el = document.createElement('div');
   el.className = 'hud';
+  /*
+   * The experiment's modifier, on the HUD ROOT (issue #542).
+   *
+   * This element and no other, because it is the same element `transitionMs()` reads
+   * `--ui-transition-duration` off: an arm that moves the token (`fade-long`) is picked
+   * up through that one existing read, with no second definition of the duration in
+   * TypeScript and none needed. A class on `document.documentElement` would still
+   * inherit the token down, but it would leak out of the HUD's own subtree and outlive
+   * `dispose()`.
+   *
+   * `fade` and absent both yield `null` here and add nothing, so the control arm is
+   * literally the shipped path -- see `menuTransitionClass`.
+   */
+  const treatmentClass = menuTransitionClass(opts.menuTransition ?? null);
+  if (treatmentClass !== null) el.classList.add(treatmentClass);
   el.innerHTML = `
     <!-- The application backdrop (issue #317). FIRST in the markup so it paints under
          every other layer, and aria-hidden because it is scenery: it carries no content
