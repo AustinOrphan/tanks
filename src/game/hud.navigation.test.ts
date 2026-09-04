@@ -1534,7 +1534,14 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     h.setRelaunchTarget('versus-setup');
     h.setStatus(campaignStatus(1, 1));
     h.setState('playing');
-    for (const el of Array.from(root.querySelectorAll('.hud-campaign-stat'))) {
+    // The Lives stat alone, not every `.hud-campaign-stat`: issue #552's ruling drops the
+    // enemy count from the shipped bar for its own reasons, so a sweep of the pair would
+    // now be asserting that ruling here instead of this policy. The gate this case is
+    // about applies to both elements, and `topbar-treatment.test.ts` reads the pair under
+    // the `full` arm, where the enemy count is still on screen.
+    for (const el of Array.from(
+      root.querySelectorAll('.hud-campaign-stat:not(.hud-enemy-stat)'),
+    )) {
       expect(el.classList.contains('hud-campaign-stat--hidden')).toBe(false);
     }
     expect(
@@ -1545,13 +1552,17 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
   });
 
   it("a PRACTICE status shows the campaign stats, exactly as a campaign one does", () => {
-    // Practice is a campaign board played in isolation: its lives and enemy count are
-    // as real there as in a run. Fails if the stat gate is widened to `!== 'campaign'`,
-    // which is the tempting shape once the setter takes three kinds.
+    // Practice is a campaign board played in isolation: its lives are as real there as in
+    // a run. Fails if the stat gate is widened to `!== 'campaign'`, which is the tempting
+    // shape once the setter takes three kinds. Scoped past `.hud-enemy-stat` for the
+    // reason given in the case above -- the shipped bar drops that one on every kind, by
+    // #552's ruling and not by any identity policy.
     const practice = mount();
     practice.hud.setStatus({ kind: 'practice', mission: 1, missions: 1, lives: 3, enemies: 3 });
     practice.hud.setState('playing');
-    for (const el of Array.from(practice.root.querySelectorAll('.hud-campaign-stat'))) {
+    for (const el of Array.from(
+      practice.root.querySelectorAll('.hud-campaign-stat:not(.hud-enemy-stat)'),
+    )) {
       expect(el.classList.contains('hud-campaign-stat--hidden')).toBe(false);
     }
     // ...and its title affordances are campaign-shaped too.

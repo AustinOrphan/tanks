@@ -1,37 +1,42 @@
 /**
- * The gameplay-topbar comparison's vocabulary (issue #552).
+ * The gameplay topbar the game ships, and the alternatives still selectable beside it
+ * (issue #552).
  *
- * The owner's notes on the bar are questions, not a ruling: "the campaign top bar does
- * not really need an enemy count I think and it should not show the denominator of
- * levels, but just the current level, probably, I think", "Maybe we should have
- * 'campaign' in the top bar?", and on the chip, "Maybe even we could have 'vs' in there
- * too for versus idk". Every one of them carries an explicit hedge. So the arms here are a
- * COMPARISON to rule from -- the way #542's four menu transitions and #516/#356's cue
- * arms were settled -- and not an implementation of the notes as read.
+ * The owner's notes on the bar were questions -- "the campaign top bar does not really
+ * need an enemy count I think", "it should not show the denominator of levels, but just
+ * the current level, probably, I think", "Maybe we should have 'campaign' in the top
+ * bar?" -- so six arms were built behind `?dev=1&topbar=` and captured side by side, the
+ * way #542's menu transitions and #516/#356's cue arms were settled.
  *
- * WHAT EACH ARM SAYS, and which question it isolates:
+ * THE COMPARISON IS OVER AND `spare-chips` WON. The ruling, with its reasons:
  *
- *  - `full` -- today, unchanged. The control.
- *  - `spare` -- no enemy count, and `Level: 1` without the denominator. Both content
- *    removals together, which is how the notes pose them.
- *  - `mode-chips` -- CAMPAIGN / PRACTICE / VS on every kind, and versus's level chip
- *    gone. The chip stops being an exception marker and becomes a field that is always
- *    populated; the leading slot then holds a `VS` where versus's level chip was.
- *  - `spare-chips` -- both of the above, because a spare bar and a mode readout may only
- *    work as a pair: the chip is what a bar with two readings left can still be read by.
- *  - `enemies-only` / `denominator-only` -- ONE removal each. They are not partial
- *    versions of `spare`: the two removals are different losses (the enemy count is a
- *    restatement of a board the player can see; the denominator is the only thing that
- *    says how long the campaign is), and judging them as a package cannot tell a ruling
- *    about one from a ruling about the other.
+ *  - the enemy count "might just be noise and unnecessary", so it goes;
+ *  - `Level: 1` without the denominator, and NOT to save space -- "I don't want to
+ *    necessarily reveal how many levels there are";
+ *  - "I like the chips", so CAMPAIGN / PRACTICE / VS on every kind.
+ *
+ * Deliberately NOT the #526/#536 pattern of retiring the flag once a winner is chosen.
+ * Those retired theirs because the winner became unconditional and a flag toggling
+ * always-on behaviour is a lie. Here the alternatives stay genuinely selectable -- and
+ * `full` in particular has to stay reachable, because it is how anyone gets the
+ * pre-ruling bar back, which is what makes a regression report about the new default
+ * answerable rather than a matter of memory.
+ *
+ * THE ARM NAMES STILL DESCRIBE REMOVALS FROM `full`, because that is the vocabulary the
+ * ruling was made in and the strings in the URLs the owner already has. What INVERTED is
+ * the departures table below: it is keyed off the shipped bar, and the shipped bar is now
+ * the spare one. So `enemies-only` still means "the arm that removes only the enemy
+ * count" and is written here as the two restorations that leaves.
  *
  * DEPARTURES, NOT DESCRIPTIONS. `topbarDepartures` says what an arm CHANGES about the
- * shipped bar, and the shipped arm changes nothing -- so `full` is not a row that
- * restates today's bar and can drift from it, it is the absence of every override. That
- * is the same property `menu-transition.ts` gets from mapping the shipped treatment to
- * `null` instead of writing it a stylesheet rule of its own, arrived at differently
- * because these arms differ in TEXT (`Level: 1` against `Level: 1/5`, `VS` against no
- * chip at all) and no stylesheet can write text.
+ * shipped bar, and the shipped arm changes nothing -- so the default is not a row that
+ * restates the bar and can drift from it, it is the absence of every override. That is
+ * the same property `menu-transition.ts` gets from mapping the shipped treatment to
+ * `null` instead of writing it a stylesheet rule of its own, and it MOVED with the ruling
+ * exactly as that one did when `rise` took it from `fade` (#549): `full` used to hold it
+ * and now names three restorations. Arrived at differently, because these arms differ in
+ * TEXT (`Level: 1` against `Level: 1/5`, `VS` against no chip at all) and no stylesheet
+ * can write text.
  *
  * A module of its own rather than a block in `devflags.ts` or `hud.ts`, for the reason
  * `menu-transition.ts` and `presentation/blocked-fire.ts` both exist: the flag parser and
@@ -42,8 +47,8 @@
  */
 
 /**
- * The six arms. `full` is the control and the shipped bar; the other five are the
- * candidates the owner rules between.
+ * The six arms. `spare-chips` is the shipped bar; the other five stay selectable behind
+ * the dev flag, and `full` among them is the pre-ruling bar restored.
  */
 export type TopbarTreatment =
   | 'full'
@@ -58,16 +63,17 @@ export type TopbarTreatment =
  *
  * A named constant rather than a literal inside `topbarDepartures`, for the reason
  * `SHIPPED_MENU_TRANSITION` is one: the property being guarded is "whatever is DEFAULT
- * changes nothing", and if this comparison ends in a ruling the default moves. Every
- * guard is written against this constant, so a future ruling moves the guard with the
- * default rather than leaving it pointed at an arm that is no longer shipped.
+ * changes nothing", and that property has now had to move once -- `full` held it while
+ * the comparison ran, `spare-chips` holds it since the ruling. Every guard is written
+ * against this constant, so the next ruling moves the guard with the default rather than
+ * leaving it pointed at an arm that is no longer shipped.
  *
- * Annotated as `TopbarTreatment` rather than left to infer `'full'`, so a comparison
- * against it stays a runtime question: inferred, TypeScript would narrow past the check
- * in `topbarDepartures` and could fold a guard written against this constant into a
- * tautology.
+ * Annotated as `TopbarTreatment` rather than left to infer `'spare-chips'`, so a
+ * comparison against it stays a runtime question: inferred, TypeScript would narrow past
+ * the check in `topbarDepartures` and could fold a guard written against this constant
+ * into a tautology.
  */
-export const SHIPPED_TOPBAR_TREATMENT: TopbarTreatment = 'full';
+export const SHIPPED_TOPBAR_TREATMENT: TopbarTreatment = 'spare-chips';
 
 /**
  * Exported so a consumer's suite can assert one case PER ARM rather than per remembered
@@ -94,46 +100,65 @@ export function isTopbarTreatment(raw: string): raw is TopbarTreatment {
  * same three ideas and the two single-removal arms exist precisely so the combinations
  * can be taken apart. A table of six full descriptions would let two arms disagree about
  * what they share.
+ *
+ * All three read as RESTORATIONS now, which is the ruling's shape: the shipped bar is the
+ * spare one, so every alternative is something put back.
  */
 export interface TopbarDepartures {
   /**
-   * Drop the enemy count from a board session's bar (question 1). Lives stays: it is the
-   * run's own resource and is not restated anywhere on screen, while the enemy count is
-   * a number for a board the player is looking at.
+   * Put the enemy count back on a board session's bar.
+   *
+   * The shipped bar drops it, on the ruling that it "might just be noise and
+   * unnecessary": it is a number for a board the player is looking at, and the emptying
+   * board is the same information said better. Lives stays, because it is the run's own
+   * resource and is restated nowhere else on screen.
    */
-  readonly dropEnemies: boolean;
+  readonly restoreEnemies: boolean;
   /**
-   * Show `Level: 3` where the shipped bar shows `Level: 3/5` (question 2). Position
-   * without scale -- the chip stops saying how long the campaign is.
+   * Show `Level: 3/5` where the shipped bar shows `Level: 3`.
+   *
+   * The denominator did NOT go to save space. The comparison measured what it was worth
+   * in bar width and the ruling dismissed the question: space was never the motive, "I
+   * don't want to necessarily reveal how many levels there are." Worth knowing that the
+   * topbar is not the only
+   * place that says so -- `setLevelSelect` renders one button per level up to `total`,
+   * locked ones included, so the Levels panel still shows a five-level campaign as five
+   * buttons. Concealing campaign length properly is that panel's change to make, and a
+   * separate one; this is the bar reading as position rather than as progress.
    */
-  readonly dropDenominator: boolean;
+  readonly restoreDenominator: boolean;
   /**
-   * Label every kind (CAMPAIGN / PRACTICE / VS) instead of marking the exception
-   * (PRACTICE alone), and drop versus's level chip (questions 4 and 5).
+   * Go back to the chip that marks the EXCEPTION -- PRACTICE alone -- instead of the
+   * shipped chip that reads out the mode on every kind, and give versus its level chip
+   * back with it.
    *
    * ONE switch for both halves, deliberately: the second is what the first is FOR on a
-   * versus bar. A `VS` in the leading slot is the replacement for an ordinal that arm
-   * argues versus should not be carrying, so an arm that dropped the chip without
-   * labelling the kind would leave a hole where the eye has learned to look, and judging
-   * that would answer neither question.
+   * versus bar. The shipped `VS` sits in the leading slot where the ordinal was, so an
+   * arm that restored the exception-marker chip without restoring the ordinal would leave
+   * a hole where the eye has learned to look, and `full` would not be the pre-ruling bar.
+   *
+   * Versus losing the ordinal under the shipped bar is a DESIGN choice, not a fix. The
+   * versus a player reaches through Versus Setup runs a one-level system and has never
+   * shown a level chip at all; only `?dev=1&mode=ffa`, a versus world on the campaign
+   * level system, has one, and there the ordinal is genuinely true.
    */
-  readonly modeChips: boolean;
+  readonly exceptionChip: boolean;
 }
 
-/** The shipped bar: every switch false, so not one of `applyStatus`'s four overrides runs. */
+/** The shipped bar: every switch false, so not one of `applyStatus`'s three overrides runs. */
 const NO_DEPARTURES: TopbarDepartures = {
-  dropEnemies: false,
-  dropDenominator: false,
-  modeChips: false,
+  restoreEnemies: false,
+  restoreDenominator: false,
+  exceptionChip: false,
 };
 
 const DEPARTURES: Record<TopbarTreatment, TopbarDepartures> = {
-  full: NO_DEPARTURES,
-  spare: { dropEnemies: true, dropDenominator: true, modeChips: false },
-  'mode-chips': { dropEnemies: false, dropDenominator: false, modeChips: true },
-  'spare-chips': { dropEnemies: true, dropDenominator: true, modeChips: true },
-  'enemies-only': { dropEnemies: true, dropDenominator: false, modeChips: false },
-  'denominator-only': { dropEnemies: false, dropDenominator: true, modeChips: false },
+  full: { restoreEnemies: true, restoreDenominator: true, exceptionChip: true },
+  spare: { restoreEnemies: false, restoreDenominator: false, exceptionChip: true },
+  'mode-chips': { restoreEnemies: true, restoreDenominator: true, exceptionChip: false },
+  'spare-chips': NO_DEPARTURES,
+  'enemies-only': { restoreEnemies: false, restoreDenominator: true, exceptionChip: true },
+  'denominator-only': { restoreEnemies: true, restoreDenominator: false, exceptionChip: true },
 };
 
 /**
@@ -149,17 +174,23 @@ export function topbarDepartures(treatment: TopbarTreatment | null): TopbarDepar
 }
 
 /**
- * The word each kind's chip carries under `modeChips`.
+ * The word each kind's chip carries on the shipped bar.
  *
- * Practice keeps the word it already has, so the arm changes the OTHER two kinds and not
- * the one the chip was introduced for (#324 step S6). The stored casing is the markup's
- * -- `.hud-practice` sets `text-transform: uppercase`, so these render as CAMPAIGN,
- * PRACTICE and VS on screen while a screen reader gets the written form.
+ * Practice keeps the word it already had, and keeps it through the SAME element and the
+ * same `.hud-practice` class it has carried since #324 step S6 -- the chip was never
+ * duplicated or replaced, it was generalised. So the ruling changes the other two kinds
+ * and leaves untouched the one the chip was introduced for. The `exceptionChip` arms then
+ * write this same `Practice` back, which is why `full` reproduces the pre-ruling markup
+ * character for character rather than merely looking like it.
  *
- * `VS` rather than `Versus` because the chip's whole job in that arm is to sit in the
- * leading slot where versus's level chip was, and a versus bar already carries a per-slot
- * stock strip; the narrow viewports are where a long word would cost a wrap, and 360px is
- * the width the comparison has to survive.
+ * The stored casing is the markup's -- `.hud-practice` sets `text-transform: uppercase`,
+ * so these render as CAMPAIGN, PRACTICE and VS on screen while a screen reader gets the
+ * written form.
+ *
+ * `VS` rather than `Versus` because the chip's job on a versus bar is to sit in the
+ * leading slot where the level chip was, and that bar already carries a per-slot stock
+ * strip; the narrow viewports are where a long word would cost a wrap, and 360px is the
+ * width this has to survive.
  *
  * Keyed by the session kind's own three literals, and bound at the HUD to
  * `Record<HudSessionKind, string>` so a fourth kind is a compile error there rather than

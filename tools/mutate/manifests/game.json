@@ -203,22 +203,27 @@
       "src/game/hud.match.test.ts"
     ],
     "killedBy": [
-      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and adds a chip of its own"
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and wears its own word"
     ]
   },
   {
     "id": "practice-renders-as-campaign",
     "file": "src/game/hud.ts",
-    "find": "    practiceChip.classList.toggle('hud-practice--hidden', kind !== 'practice');",
+    "find": "    practiceChip.classList.toggle('hud-practice--hidden', kind === null);",
     "replace": "    practiceChip.classList.toggle('hud-practice--hidden', true);",
     "expect": "killed",
-    "why": "The state issue #324's step S6 exists to leave, restored: a Practice topbar that is byte-identical to a Campaign one. That is not a hypothetical -- it is what shipped, and it was MEASURED before the change by driving the built app into each session kind and photographing the bar: campaign and practice produced identical PNG files at every captured width (390, 360, 1280, 1920 and a 200%-zoom 640). Nothing else on screen distinguishes the two, because everything else about a Practice board is deliberately the same as a run's: same Lives, same Enemies, same level chip. So this mutation changes exactly one class toggle and passes every layout, stat-visibility and stock-strip assertion in the suite; only a case that asserts the chip is up for practice AND down for the other two kinds can see it.",
+    "why": "The state issue #324's step S6 exists to leave, restored: a Practice topbar that is byte-identical to a Campaign one. That is not a hypothetical -- it is what shipped, and it was MEASURED before the change by driving the built app into each session kind and photographing the bar: campaign and practice produced identical PNG files at every captured width (390, 360, 1280, 1920 and a 200%-zoom 640). RE-AIMED for #552's ruling, which made the chip a mode readout every kind fills: the visibility decision moved to the shipped line and the old find -- `kind !== 'practice'` at four spaces -- now matches the exception-marker departure as a substring, where it would have mutated the `full` arm and left every player's bar untouched. Nailed hidden, the chip stops distinguishing anything on ANY arm, which is the same defect the original entry named and now a wider one. RE-MEASURED after the re-aim: killed, 6 of the 47 cases across the two scoped files it now names.",
     "tests": [
-      "src/game/hud.match.test.ts"
+      "src/game/hud.match.test.ts",
+      "src/game/topbar-treatment.test.ts"
     ],
     "killedBy": [
-      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and adds a chip of its own",
-      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) the Practice chip is DOWN for campaign and for versus -- the control that stops it being decoration"
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and wears its own word",
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) the chip names whichever kind is live, and is DOWN with no session -- the control that stops it being decoration",
+      "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+      "topbar: what each arm says carries no chip and no enemy count before a session lands -- the cascade this suite reads is live",
+      "topbar: what each arm says gives Practice the chip it already had, and exactly one of it",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
     ]
   },
   {
@@ -238,7 +243,7 @@
   {
     "id": "status-applied-only-when-the-surface-moves",
     "file": "src/game/hud.ts",
-    "find": "      statusData = status;\n      // Every element the bar has, from the one projection -- see applyStatus. There is\n      // no early return on an unchanged status: this setter is cheap by construction (two\n      // guarded text writes and four idempotent class toggles), and a guard here would be\n      // a second place that could decide the DOM is already right when it is not.\n      applyStatus();",
+    "find": "      statusData = status;\n      // Every element the bar has, from the one projection -- see applyStatus. There is\n      // no early return on an unchanged status: this setter is cheap by construction --\n      // MEASURED on the shipped path by instrumenting DOMTokenList and Node.textContent\n      // through one campaign push, four text writes and six idempotent class writes --\n      // and a guard here would be a second place that could decide the DOM is already\n      // right when it is not.\n      //\n      // An earlier version of this comment said five class writes. It was recounted by\n      // reading the source rather than running it, and missed one; the numbers above came\n      // off an instrumented call.\n      applyStatus();",
     "replace": "      statusData = status;",
     "expect": "killed",
     "why": "The mirror image of `status-applied-only-on-the-session-push`, and the one that reproduces the historical defect: the projection is retained but nothing repaints until the surface next moves. That is precisely production's order -- `hud.setState('playing')` runs before the first status carrying stocks -- so the strip stays dark for a whole live match until an unrelated `setState` (a pause) happens to revive it, which is the bug `versusStocksVisible`'s own doc comment records. MEASURED on this branch by making the edit and running the scoped file: 8 of 35 cases fail, and the ordering case that catches it is the PRODUCTION-order one, which the sibling mutation above leaves green. Two mutations, two directions, one property.",
@@ -4292,79 +4297,154 @@
     ]
   },
   {
-    "id": "topbar-arm-keeps-the-enemy-count",
+    "id": "topbar-shipped-bar-keeps-the-enemy-count",
     "file": "src/game/hud.ts",
-    "find": "    if (topbar.dropEnemies) enemyStatEl.classList.add('hud-campaign-stat--hidden');\n    if (statusData && statusData.kind !== 'versus') {",
+    "find": "    enemyStatEl.classList.add('hud-campaign-stat--hidden');\n    // The arms that put it back, and REMOVE-only under the same versus rule the loop",
+    "replace": "    // The arms that put it back, and REMOVE-only under the same versus rule the loop",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts",
+      "src/game/hud.match.test.ts"
+    ],
+    "why": "Issue #552's ruling half-applied: the flag would still name six arms, `full` would still read `full`, and every player would still be looking at a bar with the enemy count the owner called \"noise and unnecessary\" on it. This is the ruling's first content decision reduced to a comment about itself. It is also the direction a reviewer takes when the line looks redundant beside the loop above -- the loop does hide this element, but only for versus, so deleting the add restores the count on every board. MEASURED on this branch: killed, 6 of the 47 cases in the two scoped files.",
+    "killedBy": [
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and wears its own word",
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) a session-kind switch restores the stats -- production reboots into a FRESH Hud per session (boot.ts's requestCampaignSession -> deps.startGame), so this exercises the stronger property that the gate tracks CURRENT kind rather than latching the first kind a Hud instance ever saw",
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) keeps Lives visible and both numbers updating for a campaign session -- the negative control against over-hiding",
+      "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+      "topbar: what each arm says carries no chip and no enemy count before a session lands -- the cascade this suite reads is live",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+    ]
+  },
+  {
+    "id": "topbar-arm-cannot-restore-the-enemy-count",
+    "file": "src/game/hud.ts",
+    "find": "    if (topbar.restoreEnemies && kind !== 'versus') {\n      enemyStatEl.classList.remove('hud-campaign-stat--hidden');\n    }\n    if (statusData && statusData.kind !== 'versus') {",
     "replace": "    if (statusData && statusData.kind !== 'versus') {",
     "expect": "killed",
     "tests": [
       "src/game/topbar-treatment.test.ts"
     ],
-    "why": "Issue #552's first question -- does the campaign bar need an enemy count -- answered by a build in which three of the six arms are secretly the same bar. `spare`, `spare-chips` and `enemies-only` would all render today's readings, the flag would still parse, the URL would still be honoured, and a comparison run from those captures would conclude that removing the count changes nothing. Measured before the guard was written: with this line gone the seven HUD and flag suites that existed before this change (373 cases) all still pass, which is exactly why the arm needed a case of its own.",
+    "why": "The other direction, and the one the ruling made load-bearing: `full` stops being the pre-ruling bar. Three arms -- `full`, `mode-chips` and `denominator-only` -- silently lose the enemy count, so the way back to what shipped before #552 no longer exists and a report of \"the old bar was better\" cannot be checked against anything. Nothing outside the arm suite notices, because every other HUD case now runs on the shipped bar where the count is gone by design. MEASURED on this branch: killed, 2 of the 12 cases in the arm suite -- and by only two, which is the point: no case outside it looks at a bar this mutation changes.",
     "killedBy": [
+      "topbar: `full` is the pre-ruling bar reproduces the bar `origin/main` renders, at every session, class for class",
       "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
     ]
   },
   {
-    "id": "topbar-arm-never-labels-the-kind",
+    "id": "topbar-shipped-bar-never-names-the-kind",
     "file": "src/game/hud.ts",
-    "find": "    if (topbar.modeChips) {\n      practiceChip.classList.toggle('hud-practice--hidden', kind === null);\n      if (kind !== null) practiceChip.textContent = modeChipLabels[kind];\n    }\n    for (const statEl of campaignStatEls) {",
+    "find": "    if (kind !== null) practiceChip.textContent = modeChipLabels[kind];",
+    "replace": "    if (kind !== null) practiceChip.textContent = modeChipLabels.practice;",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts",
+      "src/game/hud.match.test.ts"
+    ],
+    "why": "The chip stops being a FIELD and goes back to a fixed word, while still showing on every kind -- so a campaign run and a versus match both announce PRACTICE. Worse than the pre-ruling bar, which at least only said it where it was true, and exactly the failure the owner's \"I like the chips\" cannot survive: the chip that names the board names the wrong one. It also removes the one write that makes a Levels pick change the chip mid-session. MEASURED on this branch: killed, 6 of the 47 cases in the two scoped files.",
+    "killedBy": [
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) the chip names whichever kind is live, and is DOWN with no session -- the control that stops it being decoration",
+      "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+      "topbar: what each arm says carries no chip and no enemy count before a session lands -- the cascade this suite reads is live",
+      "topbar: what each arm says gives Practice the chip it already had, and exactly one of it",
+      "topbar: what each arm says labels the kind it is actually showing, and labels nothing when no session is live",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+    ]
+  },
+  {
+    "id": "topbar-arm-cannot-restore-the-exception-chip",
+    "file": "src/game/hud.ts",
+    "find": "    if (topbar.exceptionChip) {\n      practiceChip.classList.toggle('hud-practice--hidden', kind !== 'practice');\n      practiceChip.textContent = modeChipLabels.practice;\n    }\n    for (const statEl of campaignStatEls) {",
     "replace": "    for (const statEl of campaignStatEls) {",
     "expect": "killed",
     "tests": [
       "src/game/topbar-treatment.test.ts"
     ],
-    "why": "The chip arms reduced to the shipped chip: PRACTICE still marks the exception and neither CAMPAIGN nor VS is ever written. That is the owner's own comment turned into a no-op -- the mode-readout design he asked to see would be judged from captures of the exception-marker design he already has, and `mode-chips` against `full` would differ on nothing but the versus level chip. It also removes the one write that makes the chip a FIELD rather than a fixed word, so a Levels pick mid-session could not change it.",
+    "why": "Every arm becomes a mode-chip arm, so `full` shows CAMPAIGN and VS chips the pre-ruling bar never had and `spare` stops being the arm that isolates the content removals from the chip question. The two statements are one mutation because they are one decision: dropping only the text write would leave a chip that says the right nothing while showing, and dropping only the toggle would leave the word PRACTICE hidden under a bar that has already shown CAMPAIGN. MEASURED on this branch: killed, 4 of the 12 cases in the arm suite.",
     "killedBy": [
+      "topbar: `full` is the pre-ruling bar reproduces the bar `origin/main` renders, at every session, class for class",
       "topbar: the SHIPPED arm is the no-flag bar itself mounts the same topbar as an absent flag, at every session, with no class of its own",
-      "topbar: what each arm says reads exactly the comparison table, for every arm at every session",
-      "topbar: what each arm says labels the kind it is actually showing, and labels nothing when no session is live",
-      "topbar: the two versus shapes, which question 5 conflates drops it under the chip arms, which is the only place that chip is reachable at all"
+      "topbar: the two versus shapes, which question 5 conflated showed no level chip on a setup-pane match BEFORE the ruling either",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
     ]
   },
   {
-    "id": "topbar-chip-arm-keeps-the-versus-level-chip",
+    "id": "topbar-shipped-bar-keeps-the-versus-level-chip",
     "file": "src/game/hud.ts",
-    "find": "    if (topbar.modeChips && sequence?.kind === 'versus') sequence = null;\n    levelChip.classList.toggle('hud-level--hidden', sequence === null);",
+    "find": "    let sequence: GameplayStatus | null = inSequence?.kind === 'versus' ? null : inSequence;",
+    "replace": "    let sequence: GameplayStatus | null = inSequence;",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "The shipped versus bar carries `VS  Level: 1  P1 3  P2 3` -- the chip and the ordinal it was chosen to replace, side by side. The design the ruling adopted is that the VS chip TAKES the leading slot, not that a fourth reading joins the row. Reachable on exactly one session, `?dev=1&mode=ffa`, the only versus with a multi-level sequence, which is why nothing outside the arm suite sees it: a setup-pane match has no chip to keep. MEASURED on this branch: killed, 2 of the 12 cases in the arm suite.",
+    "killedBy": [
+      "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+    ]
+  },
+  {
+    "id": "topbar-arm-cannot-restore-the-versus-level-chip",
+    "file": "src/game/hud.ts",
+    "find": "    if (topbar.exceptionChip) sequence = inSequence;\n    levelChip.classList.toggle('hud-level--hidden', sequence === null);",
     "replace": "    levelChip.classList.toggle('hud-level--hidden', sequence === null);",
     "expect": "killed",
     "tests": [
       "src/game/topbar-treatment.test.ts"
     ],
-    "why": "The half of the chip arm that answers issue #552's fifth question. Without it a versus bar under `mode-chips` reads `VS | Level: 1/5 | P1 3 P2 3` -- the ordinal the arm exists to replace, now sitting beside its replacement -- and the arm argues for adding a chip rather than for swapping one readout for another. Reachable on exactly one session (`?dev=1&mode=ffa`, the only versus with a multi-level sequence), which is precisely why nothing else in the suite notices: the setup-pane match has no chip to keep.",
+    "why": "`full` loses the versus ordinal, so the arm that is supposed to BE the pre-ruling bar quietly keeps one of the ruling's changes. That is the specific way a control rots: it looks like the old bar everywhere anyone thinks to check -- campaign, practice, a setup-pane versus -- and differs only on the session that prompted issue #552's retracted fifth question in the first place. MEASURED on this branch: killed, 3 of the 12 cases in the arm suite.",
     "killedBy": [
-      "topbar: what each arm says reads exactly the comparison table, for every arm at every session",
-      "topbar: the two versus shapes, which question 5 conflates drops it under the chip arms, which is the only place that chip is reachable at all"
+      "topbar: `full` is the pre-ruling bar reproduces the bar `origin/main` renders, at every session, class for class",
+      "topbar: the two versus shapes, which question 5 conflated showed no level chip on a setup-pane match BEFORE the ruling either",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
     ]
   },
   {
-    "id": "topbar-arm-keeps-the-level-denominator",
+    "id": "topbar-shipped-bar-keeps-the-level-denominator",
     "file": "src/game/hud.ts",
-    "find": "      levelNum.textContent = topbar.dropDenominator\n        ? String(sequence.mission)\n        : `${sequence.mission}/${sequence.missions}`;",
+    "find": "      levelNum.textContent = topbar.restoreDenominator\n        ? `${sequence.mission}/${sequence.missions}`\n        : String(sequence.mission);",
     "replace": "      levelNum.textContent = `${sequence.mission}/${sequence.missions}`;",
     "expect": "killed",
     "tests": [
       "src/game/topbar-treatment.test.ts"
     ],
-    "why": "Issue #552's second question silently unasked: `spare`, `spare-chips` and `denominator-only` all keep `Level: 1/5`, so the captures that are supposed to show position-without-scale show scale. The mutation is the shipped line restored verbatim, which is what makes it the plausible edit -- a reviewer tidying a ternary back to the expression it wraps destroys three arms and no existing test, and the readings table is the only thing that says so.",
+    "why": "The ruling's second content decision undone for every player, and the plausible edit precisely because the result is the line this ternary replaced -- a reviewer tidying it back reads as a simplification and destroys three arms. The motive matters here: the denominator went so the bar does not reveal how long the campaign is, so this is not a cosmetic regression but the concealment reversed. MEASURED on this branch: killed, 3 of the 12 cases in the arm suite.",
     "killedBy": [
+      "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+      "topbar: what each arm says carries no chip and no enemy count before a session lands -- the cascade this suite reads is live",
+      "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+    ]
+  },
+  {
+    "id": "topbar-arm-cannot-restore-the-level-denominator",
+    "file": "src/game/hud.ts",
+    "find": "      levelNum.textContent = topbar.restoreDenominator\n        ? `${sequence.mission}/${sequence.missions}`\n        : String(sequence.mission);",
+    "replace": "      levelNum.textContent = String(sequence.mission);",
+    "expect": "killed",
+    "tests": [
+      "src/game/topbar-treatment.test.ts"
+    ],
+    "why": "The mirror image: `full`, `mode-chips` and `denominator-only` all read `Level: 1`, so the arm that exists to judge the denominator on its own says nothing about it and the pre-ruling bar is unreachable. Two entries on one ternary because collapsing it in either direction is the same tempting edit and they fail differently -- one changes what every player sees, the other only what a developer checking a regression sees, and the second is the one no other case in the repo would catch. MEASURED on this branch: killed, 3 of the 12 cases in the arm suite.",
+    "killedBy": [
+      "topbar: `full` is the pre-ruling bar reproduces the bar `origin/main` renders, at every session, class for class",
+      "topbar: the two versus shapes, which question 5 conflated showed no level chip on a setup-pane match BEFORE the ruling either",
       "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
     ]
   },
   {
     "id": "topbar-shipped-arm-departs-from-the-shipped-bar",
     "file": "src/game/topbar-treatment.ts",
-    "find": "  full: NO_DEPARTURES,",
-    "replace": "  full: { dropEnemies: true, dropDenominator: false, modeChips: false },",
+    "find": "  'spare-chips': NO_DEPARTURES,",
+    "replace": "  'spare-chips': { restoreEnemies: true, restoreDenominator: false, exceptionChip: false },",
     "expect": "killed",
     "tests": [
       "src/game/topbar-treatment.test.ts"
     ],
-    "why": "The control drifting from the thing it is a control for -- the one failure this comparison cannot survive, because every arm is judged as a difference from `full`. A `full` that quietly drops the enemy count makes `enemies-only` look identical to the control and `spare` look like a denominator change alone, and the owner's ruling would be made against a bar no player has. The whole point of the departures shape is that the shipped arm names no departures at all; this is that property being false.",
+    "why": "The default drifting from the bar it is supposed to BE -- the one failure this shape exists to make impossible. A `spare-chips` row that restates the shipped bar instead of naming no departures can disagree with it, and here it does: every player gets the enemy count back while the flag, the docs and the departures table all still say the shipped bar drops it. RE-AIMED by the ruling from `full`, which held this property while the comparison ran; the entry follows SHIPPED_TOPBAR_TREATMENT rather than a name, which is what made moving it a one-line edit. MEASURED on this branch: killed, 4 of the 12 cases in the arm suite.",
     "killedBy": [
-      "topbar: the flag that names an arm gives the SHIPPED arm no departures at all, and every other arm at least one",
-      "topbar: the flag that names an arm keeps the two single-removal arms genuinely single, and the paired arms their union",
       "topbar: the SHIPPED arm is the no-flag bar itself mounts the same topbar as an absent flag, at every session, with no class of its own",
+      "topbar: the flag that names an arm gives the SHIPPED arm no departures at all, and every other arm at least one",
+      "topbar: the flag that names an arm keeps the two single-removal arms genuinely single, measured against `full`",
       "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
     ]
   },
@@ -4377,7 +4457,7 @@
     "tests": [
       "src/game/topbar-treatment.test.ts"
     ],
-    "why": "Reject-to-null dropped, so `?dev=1&topbar=sparse` becomes a `TopbarTreatment` the HUD then looks up in its departures table and finds nothing for -- `topbarDepartures` returns undefined and the first `topbar.dropEnemies` read throws, taking the whole bar down on a typo. The same guard `menuTransition`, `mineWarn`, `blockedFire` and `backdrop` each carry, and the same reason: `spare-labelled` is a real arm name from this issue's first draft that was never built, so the near-miss is one the owner can actually type.",
+    "why": "Reject-to-null dropped, so `?dev=1&topbar=sparse` becomes a `TopbarTreatment` the HUD then looks up in its departures table and finds nothing for -- `topbarDepartures` returns undefined and the first `topbar.exceptionChip` read throws, taking the whole bar down on a typo. The same guard `menuTransition`, `mineWarn`, `blockedFire` and `backdrop` each carry, and the same reason: `spare-labelled` is a real arm name from this issue's first draft that was never built, so the near-miss is one the owner can actually type. MEASURED on this branch: killed, 1 of the 12 cases in the arm suite.",
     "killedBy": [
       "topbar: the flag that names an arm accepts every name in the vocabulary and nothing else -- population: the 6 registered arms"
     ]

@@ -446,6 +446,16 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
   });
 });
 
+/*
+ * Issue #282's gate, read on the bar issue #552's ruling ships.
+ *
+ * The pair is still two elements and the gate still governs both, but the shipped bar
+ * hides the enemy count on every kind now -- "noise and unnecessary" -- so the readings
+ * below are `[Lives, Enemies]` with Enemies down throughout, and the interesting column
+ * is Lives. That is not this describe's decision to make or unmake: it is asserted where
+ * it belongs, in `topbar-treatment.test.ts`, which reads the pair under the `full` arm
+ * where the count is still on screen and the versus gate is what takes it away.
+ */
 describe('hud: campaign Lives/Enemies stats hidden during versus (issue #282)', () => {
   const statEls = (root: HTMLElement): HTMLElement[] =>
     Array.from(root.querySelectorAll('.hud-campaign-stat')) as HTMLElement[];
@@ -465,13 +475,16 @@ describe('hud: campaign Lives/Enemies stats hidden during versus (issue #282)', 
     }
   });
 
-  it('keeps Lives/Enemies visible and updating for a campaign session -- the negative control against over-hiding', () => {
+  it('keeps Lives visible and both numbers updating for a campaign session -- the negative control against over-hiding', () => {
     const { hud: h, root } = mount();
     h.setStatus(boardStatus('campaign'));
     for (const s of ['playing', 'paused'] as const) {
       h.setState(s);
-      expect(hidden(root), s).toEqual([false, false]);
+      expect(hidden(root), s).toEqual([false, true]);
     }
+    // Both numbers keep being projected, including the one the shipped bar is not
+    // showing: the enemy count is a field of the same status, and the `full` arm reveals
+    // the element rather than switching a second source of truth back on.
     h.setStatus(boardStatus('campaign', { lives: 2, enemies: 1 }));
     expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
     expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
@@ -484,50 +497,65 @@ describe('hud: campaign Lives/Enemies stats hidden during versus (issue #282)', 
     expect(hidden(root)).toEqual([true, true]);
 
     h.setStatus(boardStatus('campaign'));
-    expect(hidden(root)).toEqual([false, false]);
+    expect(hidden(root)).toEqual([false, true]);
   });
 
-  it('PRACTICE shows the campaign stats, exactly as campaign does, and adds a chip of its own', () => {
+  it('PRACTICE shows the campaign stats, exactly as campaign does, and wears its own word', () => {
     // Both halves in one case, because they are one decision. Practice is a campaign
-    // board played in isolation: its lives and enemy count are as real there as in a run,
-    // so hiding them would be a shipped-behaviour regression on the Level-Select path --
-    // that is the first assertion, and the one a widened predicate (`kind !== 'campaign'`)
-    // breaks. The second is what issue #324 asked for and what was missing: before the
-    // chip, a Practice topbar and a Campaign topbar were byte-identical screenshots at
-    // every captured width, so nothing on screen said which board the player was on.
+    // board played in isolation: its lives are as real there as in a run, so hiding them
+    // would be a shipped-behaviour regression on the Level-Select path -- that is the
+    // first assertion, and the one a widened predicate (`kind !== 'campaign'`) breaks.
+    // The second is what issue #324 asked for and what was missing: before the chip, a
+    // Practice topbar and a Campaign topbar were byte-identical screenshots at every
+    // captured width, so nothing on screen said which board the player was on.
+    //
+    // #552's ruling generalised that chip into a mode readout rather than adding a
+    // second one, so the element, the class and the word are all the ones #324 shipped;
+    // what changed is that campaign and versus now fill the same field instead of
+    // leaving it empty.
     const chip = (root: HTMLElement): HTMLElement =>
       root.querySelector('.hud-practice') as HTMLElement;
     const { hud: h, root } = mount();
     h.setStatus(boardStatus('practice', { lives: 2, enemies: 1 }));
     h.setState('playing');
-    expect(hidden(root), 'practice hid the stats it is meant to show').toEqual([false, false]);
+    expect(hidden(root), 'practice hid the stat it is meant to show').toEqual([false, true]);
     expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
     expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
+    expect(root.querySelectorAll('.hud-practice').length, 'one chip, not a second one').toBe(1);
     expect(chip(root).classList.contains('hud-practice--hidden')).toBe(false);
     expect(chip(root).textContent).toBe('Practice');
   });
 
-  it('the Practice chip is DOWN for campaign and for versus -- the control that stops it being decoration', () => {
-    // Without this, a chip nailed permanently open would satisfy the case above while
-    // announcing PRACTICE over a campaign run and a versus match alike. The transition
-    // back is asserted too: the chip follows the CURRENT kind rather than latching the
-    // first one this Hud ever saw -- a Levels pick makes a campaign session Practice and
-    // landing back on its home board makes it Campaign again, both within one Hud.
-    const chipDown = (root: HTMLElement): boolean =>
-      (root.querySelector('.hud-practice') as HTMLElement).classList.contains(
-        'hud-practice--hidden',
-      );
+  it('the chip names whichever kind is live, and is DOWN with no session -- the control that stops it being decoration', () => {
+    // Without this, a chip nailed permanently open with one fixed word would satisfy the
+    // case above while announcing PRACTICE over a campaign run and a versus match alike.
+    // Since #552 the chip is a FIELD, so "not decoration" means it carries the current
+    // kind's own word rather than merely appearing and disappearing -- and both halves
+    // are asserted, because a chip left hidden still holds text.
+    //
+    // The transition back matters as much as the first reading: the chip follows the
+    // CURRENT kind rather than latching the first one this Hud ever saw -- a Levels pick
+    // makes a campaign session Practice and landing back on its home board makes it
+    // Campaign again, both within one Hud.
+    const chip = (root: HTMLElement): HTMLElement =>
+      root.querySelector('.hud-practice') as HTMLElement;
+    const reads = (root: HTMLElement): string | null =>
+      chip(root).classList.contains('hud-practice--hidden') ? null : chip(root).textContent;
     const { hud: h, root } = mount();
-    expect(chipDown(root), 'a HUD that has never been told about a session').toBe(true);
+    expect(reads(root), 'a HUD that has never been told about a session').toBeNull();
     h.setStatus(boardStatus('campaign'));
     h.setState('playing');
-    expect(chipDown(root), 'campaign').toBe(true);
+    expect(reads(root), 'campaign').toBe('Campaign');
     h.setStatus(versusStatus([{ slot: 0, stock: 3 }]));
-    expect(chipDown(root), 'versus').toBe(true);
+    expect(reads(root), 'versus').toBe('VS');
     h.setStatus(boardStatus('practice'));
-    expect(chipDown(root), 'a Levels pick made this session Practice').toBe(false);
+    expect(reads(root), 'a Levels pick made this session Practice').toBe('Practice');
     h.setStatus(boardStatus('campaign'));
-    expect(chipDown(root), 'landing back on the home board').toBe(true);
+    expect(reads(root), 'landing back on the home board').toBe('Campaign');
+    // NEGATIVE CONTROL, and the one that fails if the chip is ever nailed open: a HUD
+    // told the session is over stops naming a mode instead of keeping the last word up.
+    h.setStatus(null);
+    expect(reads(root), 'the session ended').toBeNull();
   });
 });
 

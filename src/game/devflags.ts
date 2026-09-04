@@ -348,12 +348,14 @@ export interface DevFlags {
   menuTransition: MenuTransition | null;
   /**
    * Which gameplay-topbar arm the HUD renders (issue #552). `null` -- absent or
-   * unrecognised -- is the shipped bar, which is also what `full` names, because `full`
-   * IS that bar rather than a description of it (`topbar-treatment.ts`).
+   * unrecognised -- is the shipped bar, which is also what `spare-chips` names, because
+   * that arm IS the bar rather than a description of it (`topbar-treatment.ts`).
    *
-   * The owner's notes on the bar are hedged questions ("probably, I think", "I don't
-   * know yet"), so the arms exist to be compared on a real board and ruled between,
-   * exactly as `menuTransition`'s four were. Nothing here is a decision.
+   * The comparison this flag was built for is over: `spare-chips` won and ships. The flag
+   * stays because the five alternatives stay genuinely selectable, exactly as
+   * `menuTransition`'s did after #542's ruling -- and `full` above all, since it is the
+   * pre-ruling bar and therefore how a report of "the old one was better" gets checked
+   * rather than remembered.
    *
    * Reject-to-null, the same idiom as `backdrop`/`mineWarn`/`blockedFire`/
    * `menuTransition`: `?topbar=sparse` keeps the shipped bar rather than guessing at the
@@ -493,7 +495,7 @@ function asMenuTransition(params: URLSearchParams): MenuTransition | null {
   return isMenuTransition(raw) ? raw : null;
 }
 
-/** One of the six topbar arms, or null when absent or unrecognised. */
+/** One of the six topbar arms, or null when absent or unrecognised -- the shipped bar. */
 function asTopbar(params: URLSearchParams): TopbarTreatment | null {
   const raw = params.get('topbar');
   if (raw === null) return null;
@@ -994,14 +996,16 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...TOPBAR_TREATMENTS],
     description:
-      'Renders the gameplay topbar as one of issue #552\'s comparison arms; `full` is the ' +
-      'shipped bar, and the others drop the enemy count, the level denominator, or both, ' +
-      'and label every session kind instead of marking Practice alone.',
+      'Renders the gameplay topbar as one of issue #552\'s alternatives to the shipped ' +
+      'bar; `spare-chips` ships, and the others put back the enemy count, the level ' +
+      'denominator, or both, and mark Practice alone instead of naming every session ' +
+      'kind. `full` is all three together: the bar as it read before the ruling.',
     notes: [
       'Read once at HUD construction, so it takes a reload rather than applying mid-session.',
-      'Absent and `full` are the same path: the shipped bar is what runs when no arm ' +
-        'overrides it, not a rule that restates it.',
-      'A comparison, not a decision: the owner has ruled on none of it yet.',
+      'Absent and `spare-chips` are the same path: the shipped bar is what runs when no ' +
+        'arm overrides it, not a rule that restates it.',
+      'The comparison is settled; these are the alternatives kept selectable, and `full` ' +
+        'is how anyone gets the pre-ruling bar back.',
     ],
   },
 };
