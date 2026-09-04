@@ -159,6 +159,10 @@ import type { VersusSetupStore } from './versus-setup-store';
 // offers exactly the states the store accepts, and a fourth invented here would be
 // refused on arrival with nothing to say why.
 import type { MotionPreference } from './settings';
+// The render-quality ids, from the presentation layer rather than from `render/quality.ts`
+// (issue #540). The HUD offers exactly the presets the store accepts, and it must not
+// import the Three.js table that says what each one costs -- see presentation/quality.ts.
+import { DEFAULT_QUALITY_PRESET, type QualityPreset } from '../presentation/quality';
 import {
   STICK_RADIUS_PX,
   stickVector,
@@ -568,6 +572,18 @@ export interface Hud {
   /** Fired with the NEXT preference in the cycle when the player taps the motion toggle. */
   onMotionChange(cb: (preference: MotionPreference) => void): void;
   /**
+   * Which render-quality preset the player has CHOSEN (issue #540), echoed back by the
+   * page after an accepted toggle -- the same convention every other Settings control
+   * follows: the button shows what was stored, not what was clicked.
+   *
+   * There is no resolved counterpart to push beside it, unlike `setMotion`. Quality has no
+   * capability gate and no OS preference behind it (effective-settings.ts), so the stored
+   * value IS the effective one and one setter carries the whole control.
+   */
+  setQuality(preset: QualityPreset): void;
+  /** Fired with the NEXT preset in the cycle when the player taps the quality toggle. */
+  onQualityChange(cb: (preset: QualityPreset) => void): void;
+  /**
    * The player just fired. Pulses the aim mark, so a tap that produced a shot is
    * distinguishable from a tap that did not -- on a phone the muzzle is under the
    * player's own hand, and the shell is gone before the eye gets there.
@@ -785,7 +801,7 @@ export interface Hud {
 /**
  * WHO OWNS EACH MEMBER of `Hud` (issue #324).
  *
- * `Hud` is one interface with 69 members spanning two different lifetimes: the persistent
+ * `Hud` is one interface with 71 members spanning two different lifetimes: the persistent
  * application shell, which exists before any match and outlives every match, and a single
  * gameplay session, which does not. Issue #468 separated those OWNERS in the code
  * (`route-host.ts` renders application routes with no session at all); this separates them
@@ -840,6 +856,7 @@ export type RouteHudKey =
   | 'previewCanvas' | 'previewRotateButtons' | 'onCustomizeOpen' | 'onCustomizeClose'
   | 'setTouchScheme' | 'onTouchSchemeChange' | 'setFireMode' | 'onFireModeChange'
   | 'setHaptics' | 'onHapticsChange' | 'setMotion' | 'onMotionChange'
+  | 'setQuality' | 'onQualityChange'
   | 'onReassignSlot' | 'setControllers' | 'setDetectedPads' | 'setBotAssignmentAllowed'
   | 'onControllersOpen' | 'onControllersClose'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
@@ -1423,6 +1440,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
                because two would make "whatever this device asks for" unsayable. Label and
                hint by renderMotionToggle. -->
           <button class="ui-btn ui-btn--sm hud-motion-toggle" type="button"></button>
+          <!-- How much the renderer draws (issue #540): the three presets that were
+               reachable only through '?dev=1&quality=' until a preset started deciding
+               whether muzzle smoke runs at all. Filed beside Motion because both answer
+               "how much of this do you want drawn"; it is the closest existing home, and
+               declaring a sixth section is issue #226's call, not this control's. Label
+               and hint by renderQualityToggle. -->
+          <button class="ui-btn ui-btn--sm hud-quality-toggle" type="button"></button>
         </div>
       </section>
       <section class="hud-settings-section" data-section="data" aria-labelledby="hud-settings-data">
@@ -1601,6 +1625,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const firemodeToggleBtn = el.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
   const hapticsToggleBtn = el.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
   const motionToggleBtn = el.querySelector('.hud-motion-toggle') as HTMLButtonElement;
+  const qualityToggleBtn = el.querySelector('.hud-quality-toggle') as HTMLButtonElement;
 
   const muteCbs: Array<() => void> = [];
   const volumeCbs: Array<(v: number) => void> = [];
@@ -3340,6 +3365,66 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   motionToggleBtn.addEventListener('click', handleMotionToggle);
   motionToggleBtn.addEventListener('click', blurIfPointer);
 
+  // The quality toggle: one button, three states, cycling like the motion toggle beside it
+  // (issue #540). Unlike that one it has no resolved half to report -- nothing gates it --
+  // so the label is a function of the stored preset alone.
+  //
+  // High/Medium/Low are the stored ids spelled as words, and that is a deliberate
+  // exception to the rule 'Motion' follows: 'system' is an implementation word a player
+  // cannot be expected to decode, whereas graphics quality is where every game a player
+  // has ever opened puts exactly these three. The HINT is what carries the meaning, since
+  // 'Medium' by itself says nothing about what is actually being cut.
+  const QUALITY_LABEL: Record<QualityPreset, string> = {
+    high: 'Quality: High',
+    medium: 'Quality: Medium',
+    low: 'Quality: Low',
+  };
+  const QUALITY_HINT: Record<QualityPreset, string> = {
+    high: 'Every effect at full strength: smooth edges, soft shadows and full muzzle smoke.',
+    medium: 'Cheaper shadows and edges, and lighter muzzle smoke.',
+    low: 'The cheapest picture: no smoothing, hard shadows, and no muzzle smoke at all.',
+  };
+  /**
+   * The one thing the label cannot show and the player would otherwise have to discover:
+   * a session's renderer is built once, so a change made here reaches the next match and
+   * not the one already running. Said on every state, because it is a property of the
+   * control rather than of any preset.
+   */
+  const QUALITY_TIMING = 'Takes effect when the next match starts.';
+  /**
+   * DOWNWARDS, unlike every other cycling toggle here, which simply walk their own list in
+   * declaration order. `high` is the default, and the player who goes looking for this
+   * control is the one whose device is struggling -- one tap should be the cheaper picture,
+   * not the same one they already have. It still wraps, so nothing is unreachable.
+   */
+  const NEXT_QUALITY: Record<QualityPreset, QualityPreset> = {
+    high: 'medium',
+    medium: 'low',
+    low: 'high',
+  };
+  // The shipped preset, so the button reads correctly for the fraction of a tick before
+  // `paintSettingsControls` pushes the stored one -- and reads correctly forever in a
+  // fixture that never pushes at all.
+  let currentQuality: QualityPreset = DEFAULT_QUALITY_PRESET;
+  function renderQualityToggle(): void {
+    qualityToggleBtn.textContent = QUALITY_LABEL[currentQuality];
+    qualityToggleBtn.title = `${QUALITY_HINT[currentQuality]} ${QUALITY_TIMING}`;
+    // No category word in front, for the same reason the motion toggle has none: the
+    // label already opens with 'Quality:'.
+    qualityToggleBtn.setAttribute(
+      'aria-label',
+      `${QUALITY_LABEL[currentQuality]}. ${QUALITY_HINT[currentQuality]} ${QUALITY_TIMING} ` +
+        `Tap to switch to ${QUALITY_LABEL[NEXT_QUALITY[currentQuality]]}.`,
+    );
+  }
+  renderQualityToggle();
+  const qualityChangeCbs: Array<(preset: QualityPreset) => void> = [];
+  const handleQualityToggle = (): void => {
+    for (const cb of qualityChangeCbs) cb(NEXT_QUALITY[currentQuality]);
+  };
+  qualityToggleBtn.addEventListener('click', handleQualityToggle);
+  qualityToggleBtn.addEventListener('click', blurIfPointer);
+
   // Where the session stands in the level sequence, for the win panel's copy. Null
   // until the loop calls setLevel, and a HUD never told about levels keeps its
   // original single-arena wording.
@@ -4938,6 +5023,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onMotionChange(cb: (preference: MotionPreference) => void): void {
       motionChangeCbs.push(cb);
     },
+    setQuality(preset: QualityPreset): void {
+      currentQuality = preset;
+      renderQualityToggle();
+    },
+    onQualityChange(cb: (preset: QualityPreset) => void): void {
+      qualityChangeCbs.push(cb);
+    },
     setAchievements(earned: ReadonlySet<AchievementId>): void {
       earnedIds = earned;
       // Only if the page is open: rebuilding a hidden list every frame-batch is
@@ -4993,6 +5085,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       hapticsToggleBtn.removeEventListener('click', blurIfPointer);
       motionToggleBtn.removeEventListener('click', handleMotionToggle);
       motionToggleBtn.removeEventListener('click', blurIfPointer);
+      qualityToggleBtn.removeEventListener('click', handleQualityToggle);
+      qualityToggleBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);
       achBackBtn.removeEventListener('click', blurIfPointer);
       levelSelectOpenBtn.removeEventListener('click', handleLevelSelectOpen);

@@ -926,7 +926,10 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // reaches it is the assertion that matters here -- a section rendering with a control
     // the arrows cannot land on is the failure `refreshSettingsSections` and
     // `focusableControls` share a predicate to prevent.
-    expect(totalControls, 'recount the panels above if this moves').toBe(77);
+    //
+    // 78 SINCE ISSUE #540: 11 in the Settings pane, the extra one being the render-quality
+    // toggle beside it in Accessibility. Same assertion, same reason.
+    expect(totalControls, 'recount the panels above if this moves').toBe(78);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );

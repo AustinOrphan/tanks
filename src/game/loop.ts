@@ -1594,9 +1594,20 @@ export function startGameWith(
     playerColor: deps.customization.hexFor(deps.customization.hull()),
     playerSkin: deps.customization.skin(),
     playerAccent: deps.customization.accentHexFor(deps.customization.accent()),
-    // `?dev=1&quality=low|medium|high`; a null flag resolves to `high`, today's shipped
-    // values -- see render/quality.ts.
-    quality: qualityFor(deps.devFlags.quality),
+    // WHICH PRESET THIS SESSION DRAWS AT (issue #540). The player's stored choice, which
+    // an explicit `?dev=1&quality=low|medium|high` overrides for the session without
+    // writing it -- the same `flag ?? ordinary source` shape as `seed`, `players`, `bots`
+    // and `mode` above, and the reason `asQuality` rejects an unrecognised value to null
+    // rather than guessing: null here has to mean "the player decides".
+    //
+    // Read through `effectiveSettings` rather than the store, like the touch scheme and
+    // fire mode below. Read ONCE, here, because that is the only moment a renderer exists
+    // to be configured: a preset changed in Settings mid-match cannot reach the live
+    // context (a WebGLRenderer's `antialias` is fixed when the context is created, and
+    // `low` decides whether the muzzle-smoke system was constructed at all), so it applies
+    // from the next match. That is also why the whole preset is applied at one moment
+    // instead of half of it live -- see hud.ts's `QUALITY_TIMING`, which tells the player.
+    quality: qualityFor(deps.devFlags.quality ?? deps.effectiveSettings.current().quality),
     // `?dev=1&enemyDeathPulse=1` (issue #200): player deaths always ring; this only
     // gates non-player ones. See death-pulse.ts's own doc comment.
     enemyDeathPulse: deps.devFlags.enemyDeathPulse,

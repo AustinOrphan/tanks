@@ -10,7 +10,7 @@
  */
 import type { TankKind, UnarmedTrigger, GameMode } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
-import type { QualityPreset } from '../render/quality';
+import { QUALITY_PRESET_IDS, type QualityPreset } from '../presentation/quality';
 import type { AiTargetPerception } from '../sim/types';
 import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
 import { BLOCKED_FIRE_CUES, isBlockedFireCue, type BlockedFireCue } from '../presentation/blocked-fire';
@@ -207,19 +207,21 @@ export interface DevFlags {
   coopPool: boolean;
   /**
    * A render quality preset -- `low` | `medium` | `high` -- see `render/quality.ts` for
-   * what each one sets (antialias, pixel ratio cap, shadow map size, shadow filter).
+   * what each one sets (antialias, pixel ratio cap, shadow map size, shadow filter, and
+   * how much muzzle smoke is drawn).
    *
-   * `null` when absent OR unrecognised, exactly like `mineTrigger`: it leaves the
-   * render's own default, which is `high`, today's shipped values. This makes an
-   * on-device sweep a URL change instead of a rebuild per pass -- auto-selecting a
-   * preset from a device probe is explicitly out of scope until that measurement
-   * spike runs (see issue #113); this only makes the knobs reachable.
+   * `null` when absent OR unrecognised, exactly like `mineTrigger`. What null resolves to
+   * MOVED with issue #540: it used to mean `high` outright, and now it means the player's
+   * stored preference (`settings.presentation.quality`), which itself defaults to `high`.
+   * A present flag overrides that preference for the session without writing it, the same
+   * `flag ?? ordinary source` shape `seed`, `players` and `mode` use in loop.ts -- so a
+   * sweep is still a URL change and still leaves the player's saved choice alone.
    *
-   * End state, per this file's flag-lifecycle rule: this flag is not a permanent user
-   * setting. It either ships as an auto-detected preset (device probe replaces the
-   * manual value, flag deleted) or gets deleted outright once the on-device sweep
-   * concludes low/medium/high are not worth keeping. It does not stay a dev-only knob
-   * indefinitely.
+   * End state, per this file's flag-lifecycle rule: the flag is not the feature any more,
+   * so what is left to decide is only whether the presets should be picked FOR the player.
+   * It goes when an on-device probe selects one (issue #113's deferred measurement spike),
+   * or when the sweep it exists to run concludes. The Settings control is what survives
+   * either way.
    */
   quality: QualityPreset | null;
   /**
@@ -392,7 +394,12 @@ const FALSY = new Set(['0', 'false', 'off', 'no']);
 
 const MINE_TRIGGERS = new Set(['none', 'proximity', 'bullet', 'both']);
 
-const QUALITY_PRESET_NAMES = new Set(['low', 'medium', 'high']);
+/**
+ * The accepted `?quality=` values, from the ONE list `settings.ts` and the Settings
+ * toggle also read. Retyping them here is what would let the flag drift from the
+ * preference it overrides -- and the flag's help text below prints this same array.
+ */
+const QUALITY_PRESET_NAMES: ReadonlySet<string> = new Set<string>(QUALITY_PRESET_IDS);
 
 const VERSUS_MODE_NAMES = new Set(['ffa', 'teams']);
 
@@ -868,13 +875,17 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     values: [...QUALITY_PRESET_NAMES],
     description:
       'Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and ' +
-      'filter, and how much muzzle smoke is drawn) instead of the shipped `high` default.',
+      'filter, and how much muzzle smoke is drawn) for this session, overriding the ' +
+      "player's stored Settings choice without changing it.",
     notes: [
       'Muzzle smoke (shipped by PR #537) is the one effect the preset governs: `high` draws ' +
         'all of it, `medium` one billow per cloud at half the cloud ceiling, and `low` does ' +
         'not build the system at all.',
-      'This is the only way to turn the smoke down, and it is a developer flag rather ' +
-        'than a Setting -- so an ordinary player cannot reach it.',
+      'Since issue #540 the same three presets are a player setting (Settings -> ' +
+        'Accessibility), stored in `tanks.settings.v1` and defaulting to `high`. This flag ' +
+        'is the override on top of it, for sweeping a device without touching a save.',
+      'Read once, when a session builds its renderer: a value set here applies from the ' +
+        'next match, exactly like the setting it overrides.',
     ],
   },
   bots: {

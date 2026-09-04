@@ -686,7 +686,7 @@ describe('hud.css is syntactically whole', () => {
     // (`defaultSlots(2)` is `[human, bot]`). They carry `.ui-btn`/`.ui-btn--sm`, so they
     // are inside this sweep rather than falling through to browser default styling --
     // which is exactly what the sweep is for.
-    // 117 since issue #226, up 10 from 107, and the delta is the Main Menu and Settings
+    // 119 today; it was 117 at issue #226, up 10 from 107, and that delta was the Main Menu and Settings
     // restructure rather than the kit growing. MEASURED at this fixture's state; the
     // arithmetic is recorded so the next change re-derives instead of adjusting a literal:
     //
@@ -696,7 +696,7 @@ describe('hud.css is syntactically whole', () => {
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
     //                         + 1 friendly-fire toggle (Teams-only)
     //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
-    //   everything else  65  = the panels above (54 before issue #226, +10, +1)
+    //   everything else  66  = the panels above (54 before issue #226, +10, +1, +1)
     //
     // The +10, itemised: OUT go the topbar Mute chip, the Main Menu's Stats button and
     // its Achievements button (-3). IN come Records, Settings and About & Legal on the
@@ -704,13 +704,14 @@ describe('hud.css is syntactically whole', () => {
     // (+4), the Settings pane's Controllers and About & Legal entries (+2), and the Back
     // buttons of Settings and About plus the confirmation's two answers (+4).
     //
-    // The +1 is issue #289's motion toggle, the first control the Settings pane's
-    // Accessibility section has ever held.
+    // The first +1 is issue #289's motion toggle, the first control the Settings pane's
+    // Accessibility section ever held; the second is issue #540's quality toggle, which
+    // put a second one beside it.
     //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(118);
+    expect(buttons.length).toBe(119);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -805,7 +806,7 @@ describe('hud.css is syntactically whole', () => {
     // reason -- it is the quietest thing on the Main Menu and must not read as a peer of
     // the utility slabs above it.
     const small = ['.hud-settings-mute', '.hud-scheme-toggle', '.hud-firemode-toggle',
-      '.hud-haptics-toggle', '.hud-motion-toggle',
+      '.hud-haptics-toggle', '.hud-motion-toggle', '.hud-quality-toggle',
       '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
       '.hud-settings-about', '.hud-about-open', '.hud-records-tab-stats',
       '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress'];

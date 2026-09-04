@@ -1,5 +1,5 @@
 import type { TouchScheme, FireMode } from '../input/touch';
-import type { PlayerSettings, UiScale, PlayerSettingsStore } from './settings';
+import type { PlayerSettings, UiScale, PlayerSettingsStore, QualityPreset } from './settings';
 import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from './capabilities';
 
 /**
@@ -20,6 +20,7 @@ import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from
  * | `controllerRumble` | stored `controllerRumble` AND `capabilities.controllerRumble`. |
  * | `reducedMotion` | `'system'` follows the OS; `'full'` is always false; `'reduced'` is always true. |
  * | `uiScale` | the stored preference. |
+ * | `quality` | the stored preference, UNGATED. Nothing here probes the GPU -- see below. |
  *
  * Touch scheme and fire mode are deliberately NOT gated on `capabilities.touch`. Gating
  * them would mean a hybrid device -- a laptop with a touchscreen, a tablet with a
@@ -27,6 +28,13 @@ import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from
  * probe answered differently, and it would pre-empt issue #227, which owns whether the
  * CONTROL is shown at all. A setting nobody can reach is a visibility question, not an
  * effective-value one.
+ *
+ * Render quality (issue #540) has no capability half to gate on: `capabilities.ts` reports
+ * what a platform CAN do, and "how fast is this GPU" is not a question it asks -- deciding
+ * a preset from a device probe is issue #113's deferred measurement spike, and until it
+ * runs the player's choice is the only answer there is. `?dev=1&quality=` overrides that
+ * choice, and does it in `loop.ts` where the renderer is built, not here: this function
+ * takes a store, a capability set and an OS preference, and a URL is none of the three.
  *
  * Neither gate ERASES anything. `capabilities.deviceVibration` going false makes the
  * effective value false while the stored `true` sits untouched, so unplugging and
@@ -46,6 +54,12 @@ export interface EffectiveSettings {
   readonly uiScale: UiScale;
   /** `uiScale` as a multiplier -- 100 -> 1, 125 -> 1.25. The form #290/#321 will multiply by. */
   readonly uiScaleFactor: number;
+  /**
+   * Which render-quality preset a new session should build with. A `QualityPreset` id, not
+   * a `RenderQuality` table: resolving the id to the table is `render/quality.ts`'s job and
+   * nothing in the game layer may name that type.
+   */
+  readonly quality: QualityPreset;
 }
 
 /**
@@ -69,6 +83,7 @@ export function resolveEffectiveSettings(
     reducedMotion: motion === 'system' ? systemReducedMotion : motion === 'reduced',
     uiScale: settings.presentation.uiScale,
     uiScaleFactor: settings.presentation.uiScale / 100,
+    quality: settings.presentation.quality,
   });
 }
 

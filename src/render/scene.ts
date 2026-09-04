@@ -13,7 +13,8 @@
 import * as THREE from 'three';
 import { createTextures, type TextureSet } from './textures';
 import { framedBounds, fitCameraToArea } from './framing';
-import { QUALITY_PRESETS, DEFAULT_QUALITY_PRESET, type RenderQuality } from './quality';
+import { QUALITY_PRESETS, type RenderQuality } from './quality';
+import { DEFAULT_QUALITY_PRESET } from '../presentation/quality';
 
 export interface SceneContext {
   scene: THREE.Scene;

@@ -1,5 +1,10 @@
 import { TOUCH_SCHEMES, FIRE_MODES, type TouchScheme, type FireMode } from '../input/touch';
 import { DEFAULT_VOLUME } from '../audio/manifest';
+import {
+  QUALITY_PRESET_IDS,
+  DEFAULT_QUALITY_PRESET,
+  type QualityPreset,
+} from '../presentation/quality';
 import { TOUCH_SETTINGS_KEY, readLegacyTouchSettings } from './touch-settings';
 
 /**
@@ -36,6 +41,15 @@ import { TOUCH_SETTINGS_KEY, readLegacyTouchSettings } from './touch-settings';
  * | `input.controllerRumble` | `true` | boolean | default | -- |
  * | `presentation.motion` | `'system'` | `MOTION_PREFERENCES` | default | refused |
  * | `presentation.uiScale` | `100` | `UI_SCALES` (100/125/150 percent) | default | refused |
+ * | `presentation.quality` | `DEFAULT_QUALITY_PRESET` (`'high'`) | `QUALITY_PRESET_IDS` | default | refused |
+ *
+ * `presentation.quality` arrived after the schema did (issue #540) and did NOT bump
+ * `SETTINGS_SCHEMA_VERSION`, deliberately. The bump exists for a payload this build cannot
+ * represent; a purely ADDITIVE field is the opposite case -- an old payload without it
+ * defaults like any absent field, and a build that predates it ignores the extra key
+ * instead of refusing to write. Bumping would have made every already-deployed build read
+ * the new payload as `'future'` and stop saving settings entirely, which is a real harm
+ * traded for nothing.
  *
  * Every field validates INDEPENDENTLY -- junk in one must never reset a sibling. That is
  * the property `tanks.touch.v1` already had (see touch-settings.ts's own comment) and it
@@ -102,6 +116,16 @@ export const DEFAULT_DEVICE_HAPTICS = true;
 export const DEFAULT_CONTROLLER_RUMBLE = true;
 export const DEFAULT_MOTION: MotionPreference = 'system';
 export const DEFAULT_UI_SCALE: UiScale = 100;
+/**
+ * Re-exported for the same reason `DEFAULT_VOLUME` is: consumers read ONE default.
+ *
+ * Sharper here, though. Issue #540's hard requirement is that giving the player a quality
+ * control does not move the shipped render, and `presentation/quality.ts` holds the
+ * constant `render/quality.ts`'s `qualityFor(null)` also resolves to -- so "the settings
+ * default IS the shipped preset" is one identity rather than two literals that agree
+ * today.
+ */
+export { DEFAULT_QUALITY_PRESET, QUALITY_PRESET_IDS, type QualityPreset };
 
 export interface AudioSettings {
   readonly muted: boolean;
@@ -120,6 +144,15 @@ export interface InputSettings {
 export interface PresentationSettings {
   readonly motion: MotionPreference;
   readonly uiScale: UiScale;
+  /**
+   * Which render-quality preset a match is built with (issue #540).
+   *
+   * Filed under `presentation` rather than a group of its own because it is what the
+   * player asks the game to DRAW, beside motion and UI scale -- and because the values
+   * come from `presentation/quality.ts`, which exists so this module can name them
+   * without importing the Three.js table that gives them meaning.
+   */
+  readonly quality: QualityPreset;
 }
 
 export interface PlayerSettings {
@@ -136,7 +169,11 @@ export const DEFAULT_SETTINGS: PlayerSettings = Object.freeze({
     deviceHaptics: DEFAULT_DEVICE_HAPTICS,
     controllerRumble: DEFAULT_CONTROLLER_RUMBLE,
   }),
-  presentation: Object.freeze({ motion: DEFAULT_MOTION, uiScale: DEFAULT_UI_SCALE }),
+  presentation: Object.freeze({
+    motion: DEFAULT_MOTION,
+    uiScale: DEFAULT_UI_SCALE,
+    quality: DEFAULT_QUALITY_PRESET,
+  }),
 });
 
 /**
@@ -233,6 +270,7 @@ export interface PlayerSettingsStore {
   setControllerRumble(v: boolean): void;
   setMotion(p: MotionPreference): void;
   setUiScale(s: UiScale): void;
+  setQuality(q: QualityPreset): void;
   /**
    * Restore the documented defaults and persist them.
    *
@@ -255,6 +293,7 @@ const SCHEME_IDS = new Set<string>(TOUCH_SCHEMES);
 const FIRE_MODE_IDS = new Set<string>(FIRE_MODES);
 const MOTION_IDS = new Set<string>(MOTION_PREFERENCES);
 const UI_SCALE_VALUES = new Set<number>(UI_SCALES);
+const QUALITY_IDS = new Set<string>(QUALITY_PRESET_IDS);
 
 /** Finite, in range, or null. NaN and both infinities fail `Number.isFinite`. */
 function acceptedVolume(v: unknown): number | null {
@@ -335,6 +374,7 @@ export function parseSettingsPayload(raw: string | null): ParsedPayload {
           typeof presentation.uiScale === 'number' && UI_SCALE_VALUES.has(presentation.uiScale)
             ? (presentation.uiScale as UiScale)
             : DEFAULT_UI_SCALE,
+        quality: acceptedFrom(presentation.quality, QUALITY_IDS, DEFAULT_QUALITY_PRESET),
       },
     }),
   };
@@ -354,6 +394,7 @@ export function serializeSettings(settings: PlayerSettings): string {
     presentation: {
       motion: settings.presentation.motion,
       uiScale: settings.presentation.uiScale,
+      quality: settings.presentation.quality,
     },
   });
 }
@@ -521,6 +562,10 @@ export function createPlayerSettingsStore(
     setUiScale(s: UiScale): void {
       if (!UI_SCALE_VALUES.has(s)) return;
       commit({ ...shadow, presentation: { ...shadow.presentation, uiScale: s } });
+    },
+    setQuality(q: QualityPreset): void {
+      if (!QUALITY_IDS.has(q)) return;
+      commit({ ...shadow, presentation: { ...shadow.presentation, quality: q } });
     },
     reset(): void {
       shadow = DEFAULT_SETTINGS;

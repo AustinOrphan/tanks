@@ -63,5 +63,23 @@
       "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) no registered value of ANY valued flag changes meaning under query decoding -- population: every value in the registry",
       "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) the properly encoded legacy spellings stay accepted as aliases of the canonical cue"
     ]
+  },
+  {
+    "id": "default-quality-preset-moves-off-the-shipped-one",
+    "file": "src/presentation/quality.ts",
+    "find": "export const DEFAULT_QUALITY_PRESET: QualityPreset = 'high';",
+    "replace": "export const DEFAULT_QUALITY_PRESET: QualityPreset = 'medium';",
+    "expect": "killed",
+    "tests": [
+      "src/render/quality.test.ts",
+      "src/game/settings.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "The single constant issue #540 had to leave alone. It answers two questions at once -- what an absent `?dev=1&quality=` resolves to, and what a player who has never opened Settings is given -- so moving it is a visible change to every existing player's render: softer shadows, less supersampling, and a muzzle-smoke effect cut to one billow, with nothing on screen to say why. That it is now ONE constant instead of two agreeing literals is what makes this mutation reach the render tests and the settings tests together, and that breadth is the point of the move.",
+    "killedBy": [
+      "DEFAULT_QUALITY_PRESET is high, so an absent flag reproduces the shipped render exactly",
+      "the schema constants pins every documented default, so a silent retune fails here",
+      "startGameWith: dev flags stay off by default builds the renderer with the STORED quality preset when no flag is set (issue #540)"
+    ]
   }
 ]

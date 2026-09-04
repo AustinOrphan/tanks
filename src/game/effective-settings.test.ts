@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_VOLUME,
   MOTION_PREFERENCES,
+  QUALITY_PRESET_IDS,
   UI_SCALES,
   type PlayerSettings,
 } from './settings';
@@ -34,7 +35,7 @@ function settings(overrides: Partial<PlayerSettings> = {}): PlayerSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
 
-describe('resolveEffectiveSettings: audio and UI scale pass through ungated', () => {
+describe('resolveEffectiveSettings: audio, UI scale and quality pass through ungated', () => {
   it('takes mute and volume straight from the stored preference', () => {
     // No capability gate: every platform that can play can also be silent, so an
     // effective mute that disagreed with the stored one could only ever be a bug.
@@ -44,6 +45,28 @@ describe('resolveEffectiveSettings: audio and UI scale pass through ungated', ()
       expect(eff.muted).toBe(true);
       expect(eff.volume).toBe(0.25);
     }
+  });
+
+  it('passes the render-quality preset straight through, on any capability set', () => {
+    // Issue #540. Quality is the second ungated closed-list preference (after touch scheme
+    // and fire mode), and it is ungated because there is nothing to gate it ON:
+    // `capabilities.ts` reports what a platform CAN do and never asks how fast its GPU is.
+    // Population: all QUALITY_PRESET_IDS x both capability sets = 6 combinations.
+    for (const quality of QUALITY_PRESET_IDS) {
+      for (const caps of [ALL_CAPABILITIES, NO_CAPABILITIES]) {
+        const eff = resolveEffectiveSettings(
+          settings({ presentation: { ...DEFAULT_SETTINGS.presentation, quality } }),
+          caps,
+          false,
+        );
+        expect(eff.quality, quality).toBe(quality);
+      }
+    }
+    // NEGATIVE CONTROL: two of the three swept values are NOT the shipped default, so a
+    // resolver that answered with a constant would have to disagree above rather than
+    // coincide -- and this states which constant it would have answered with.
+    expect(DEFAULT_SETTINGS.presentation.quality).toBe('high');
+    expect(QUALITY_PRESET_IDS).toContain('low');
   });
 
   it('reports UI scale as both the preset and a multiplier', () => {

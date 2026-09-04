@@ -412,6 +412,114 @@ describe('hud: the motion toggle (issue #289)', () => {
   });
 });
 
+/*
+ * ISSUE #540: the Settings -> Accessibility render-quality control.
+ *
+ * The gap it closes is the same shape as #289's: the presets have existed in
+ * `render/quality.ts` since #113 and `?dev=1&quality=` has selected one since, but nothing
+ * a player can reach ever did. That was tolerable while the presets tuned antialiasing and
+ * shadow resolution; PR #546 made `low` drop the muzzle-smoke effect outright, so the
+ * preset became a performance lever with no handle on it.
+ */
+describe('hud: the quality toggle (issue #540)', () => {
+  const toggle = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-quality-toggle') as HTMLButtonElement;
+
+  it('shows the current preset, labelled so all three read as different', () => {
+    const { hud: h, root } = mount();
+
+    h.setQuality('high');
+    const highLabel = toggle(root).textContent;
+    const highAria = toggle(root).getAttribute('aria-label');
+
+    h.setQuality('medium');
+    const mediumLabel = toggle(root).textContent;
+    expect(mediumLabel).not.toBe(highLabel);
+    expect(toggle(root).getAttribute('aria-label')).not.toBe(highAria);
+
+    h.setQuality('low');
+    expect(toggle(root).textContent).not.toBe(highLabel);
+    expect(toggle(root).textContent).not.toBe(mediumLabel);
+
+    // ...and each names its own preset, not merely a distinct string. Three labels that
+    // were only different would be satisfied by 'A', 'B', 'C'.
+    h.setQuality('high');
+    expect(toggle(root).textContent).toMatch(/high/i);
+    h.setQuality('medium');
+    expect(toggle(root).textContent).toMatch(/medium/i);
+    h.setQuality('low');
+    expect(toggle(root).textContent).toMatch(/low/i);
+  });
+
+  it('says WHEN the choice takes effect, which the label cannot show', () => {
+    // The one honest thing this control has to carry. A session builds its renderer once
+    // (loop.ts), and two of the preset's knobs cannot move afterwards at all -- a GL
+    // context's antialias is fixed at creation, and `low` decides whether the muzzle-smoke
+    // system was ever constructed -- so a change made during a match lands on the next
+    // one. Without this the control looks broken in exactly the case a player is most
+    // likely to try it: paused, mid-match, on a device that is struggling.
+    const { hud: h, root } = mount();
+    for (const preset of ['high', 'medium', 'low'] as const) {
+      h.setQuality(preset);
+      expect(toggle(root).title, preset).toMatch(/next match/i);
+      expect(toggle(root).getAttribute('aria-label'), preset).toMatch(/next match/i);
+    }
+    // NEGATIVE CONTROL: the hint is not ONLY the timing sentence -- each preset still
+    // describes what it does, or the promise of when would be all a player ever read.
+    h.setQuality('low');
+    const low = toggle(root).title;
+    h.setQuality('high');
+    expect(toggle(root).title, 'every preset shares one hint').not.toBe(low);
+  });
+
+  it('taps the toggle and reports the NEXT preset in the cycle, from a real click at the button', () => {
+    // Same composition-blindness reasoning as the toggles above: a real event at a real
+    // element, not just the callback. The cycle runs DOWNWARDS from the default, because
+    // the player who comes looking for this control wants a cheaper picture than the one
+    // they have -- and it wraps, so nothing is unreachable.
+    const { hud: h, root } = mount();
+    const seen: string[] = [];
+    h.onQualityChange((p) => seen.push(p));
+    h.setQuality('high');
+
+    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the toggle is not wired to anything').toEqual(['medium']);
+
+    // The button does NOT flip its own label -- it reports the choice and waits for the
+    // page's echo, the convention every Settings control here follows. `setQuality`
+    // refuses an id the store rejected, so a self-flipping label could show a preset that
+    // was never stored and keep showing it until something else repainted.
+    expect(toggle(root).textContent).toMatch(/high/i);
+
+    h.setQuality('medium'); // the page's echo
+    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen).toEqual(['medium', 'low']);
+
+    h.setQuality('low'); // the page's echo
+    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the third click did not wrap back to the shipped preset').toEqual([
+      'medium',
+      'low',
+      'high',
+    ]);
+  });
+
+  it('lives in the Settings pane, under Accessibility, beside the motion toggle', () => {
+    // Where it goes and why: it answers "how much of this do you want drawn", which is
+    // the question the motion control next to it answers for movement. Declaring a sixth
+    // Settings section is issue #226's call, not this control's.
+    const { root } = mount();
+    expect(toggle(root)).not.toBeNull();
+    const section = toggle(root).closest('.hud-settings-section') as HTMLElement;
+    expect(section, 'the toggle is not inside a Settings section').not.toBeNull();
+    expect(section.dataset.section).toBe('accessibility');
+    expect(
+      root.querySelector('.hud-motion-toggle')!.closest('.hud-settings-section'),
+      'the two presentation policies were split across sections',
+    ).toBe(section);
+  });
+});
+
 describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md)', () => {
   const openBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-controllers-open') as HTMLButtonElement;
@@ -641,14 +749,19 @@ describe('hud: the Settings sections (issue #226)', () => {
   });
 
   it('collapses a section whose last control is hidden, and brings it back -- the rule reads the DOM, not a list', () => {
-    // The property that makes this a rule rather than a list of section names: with
-    // Accessibility's one control hidden the section must be gone on the next open, with
-    // nothing in hud.ts changed, and it must return when the control does.
+    // The property that makes this a rule rather than a list of section names: with EVERY
+    // control in Accessibility hidden the section must be gone on the next open, with
+    // nothing in hud.ts changed, and it must return when they do.
     //
     // Hidden rather than removed, and by `display: none` specifically, because that is
     // exactly what a `--hidden` class resolves to and what #227 will do to a control the
     // device cannot use. It is also the same predicate `focusableControls` gives the
     // roving focus, so a section that renders always has somewhere for a D-pad to land.
+    //
+    // The section's controls are read out of the DOM rather than named: it held one
+    // (issue #289's motion toggle) until #540's quality toggle landed beside it, and a
+    // test that hid a chosen button would silently stop emptying the section the next
+    // time one arrives -- which is precisely how it would stop measuring the rule.
     //
     // The second half is the negative control: without it a `refreshSettingsSections` that
     // hid EVERY section, or one that had simply learned Accessibility's name, would pass
@@ -660,17 +773,15 @@ describe('hud: the Settings sections (issue #226)', () => {
         new MouseEvent('click'),
       );
     };
-    const motion = root.querySelector('.hud-motion-toggle') as HTMLButtonElement;
-    expect(
-      motion.closest('.hud-settings-section')!.getAttribute('data-section'),
-      'this test empties Accessibility by hiding the motion toggle',
-    ).toBe('accessibility');
+    const a11y = sections(root).find((el) => el.dataset.section === 'accessibility')!;
+    const controls = [...a11y.querySelectorAll('.hud-settings-controls > *')] as HTMLElement[];
+    expect(controls.length, 'Accessibility has no controls to hide').toBeGreaterThan(0);
 
-    motion.style.display = 'none';
+    for (const c of controls) c.style.display = 'none';
     open();
     expect(shown(root)).toEqual(['audio', 'controls', 'data', 'about']);
 
-    motion.style.display = '';
+    for (const c of controls) c.style.display = '';
     h.back();
     open();
     expect(shown(root)).toEqual(['audio', 'controls', 'accessibility', 'data', 'about']);

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 /**
  * The boundary issue #324 draws, measured against the tree rather than asserted in prose.
  *
- * `hud.ts` classifies all 69 `Hud` members into `HudFrameKey` / `RouteHudKey` /
+ * `hud.ts` classifies all 71 `Hud` members into `HudFrameKey` / `RouteHudKey` /
  * `GameplayHudKey`, and a type-level guard there already fails the build if a member is
  * added without an owner. That guard cannot see CALL SITES, though, and call sites are
  * where the actual violation lives: `loop.ts` -- the gameplay session -- reached straight
@@ -106,14 +106,15 @@ describe('HUD ownership boundary (issue #324)', () => {
       'showToast',
     ]);
     expect([...route].filter((k) => frame.has(k))).toEqual([]);
-    // Counts stated beside the population they came from: 69 members, of which showToast
-    // is counted twice, so the roles sum to 70. Two more than step S5 left, and both are
-    // the Settings pane's new motion control (issue #289) -- `setMotion` and
-    // `onMotionChange`, classified as route members beside the touch-scheme, fire-mode and
-    // haptics pairs they were modelled on. Growth here is not automatically a regression:
-    // what this number guards is that a member arrived through a diff someone read, and
-    // the assertion below is what pins that a session still cannot reach either of them.
-    expect(frame.size + route.size + gameplay.size).toBe(70);
+    // Counts stated beside the population they came from: 71 members, of which showToast
+    // is counted twice, so the roles sum to 72. Four more than step S5 left, and all four
+    // are Settings controls of the same shape -- issue #289's motion pair (`setMotion`,
+    // `onMotionChange`) and issue #540's quality pair (`setQuality`, `onQualityChange`),
+    // classified as route members beside the touch-scheme, fire-mode and haptics pairs
+    // they were modelled on. Growth here is not automatically a regression: what this
+    // number guards is that a member arrived through a diff someone read, and the
+    // assertion below is what pins that a session still cannot reach any of them.
+    expect(frame.size + route.size + gameplay.size).toBe(72);
     expect(gameplay.size, 'what a live match may write').toBe(14);
   });
 

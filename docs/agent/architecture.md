@@ -25,8 +25,9 @@ what it is given.
 `src/presentation/` owns the renderer-independent vocabulary that more than one layer
 reads: `identity.ts` (player-slot and team colours, team letters, `resolveOwnerColor`,
 `identityApplies`), `customization.ts` (the hull/accent/skin/spawn-animation catalog and
-`skinScroll`) and `blocked-fire.ts` (the blocked-fire cue set). It carries no DOM, no
-Three.js, no package, no persistence and no session orchestration, and it may name
+`skinScroll`), `blocked-fire.ts` (the blocked-fire cue set) and `quality.ts` (the
+render-quality preset ids and the shipped default). It carries no DOM, no Three.js, no
+package, no persistence and no session orchestration, and it may name
 simulation TYPES only. The direction rule: `main.ts`/`boot.ts` wire everything; `game/`
 imports `presentation/`, `input/` and `sim/`, and reaches `render/` or `audio/` only from
 the wiring modules listed in `GAME_WIRING` (loop, route-ui, devflags, app-shell, settings,
@@ -39,12 +40,16 @@ reverse import fails naming the file. Before it, `render/entities.ts` was the
 authoritative source of the identity colours the HUD painted, five render modules
 imported `game/customization.ts` to name a skin, and the audio director imported the
 developer-flag parser to name a cue; all three compiled, because TypeScript is content
-with a cycle of type imports. What stays put on purpose: `QualityPreset` and
-`MineWarnStyle` are renderer-owned treatments only a developer flag selects, so
-`devflags.ts` validates against `render/` directly (if either becomes a Setting, its
-names move here), and `DEFAULT_VOLUME` is the audio engine's default, read by
-`settings.ts` and `hud.ts`, whose one remaining reader is the Settings pane's slider
-(issue #226 retired the topbar's twin; #324 still owns splitting the HUD interface itself).
+with a cycle of type imports. `MineWarnStyle` stays put on purpose: it is a renderer-owned
+treatment only a developer flag selects, so `devflags.ts` validates against `render/`
+directly. `QualityPreset` was the same case until issue #540 made the presets a player
+setting, which is the move that entry offered in advance — the ids and
+`DEFAULT_QUALITY_PRESET` are `presentation/quality.ts` now, read by `settings.ts`, the
+Settings pane and `devflags.ts` alike, while the `RenderQuality` table they select stays
+in `render/quality.ts` because it names `THREE.ShadowMapType`. `DEFAULT_VOLUME` is the
+audio engine's default, read by `settings.ts` and `hud.ts`, whose one remaining reader is
+the Settings pane's slider (issue #226 retired the topbar's twin; #324 still owns
+splitting the HUD interface itself).
 
 **The step boundary takes a LIST.** `stepInputs(world, inputs: InputState[])` is the
 primitive and pairs `inputs[i]` with the i-th `kind === 'player'` tank in tank-array
@@ -135,6 +140,7 @@ distinguish "a key this build does not know" from "this key, written by a newer 
 | `input.controllerRumble` | `true` | boolean | default | a connected pad has an actuator | stored AND capable |
 | `presentation.motion` | `system` | `system` / `full` / `reduced` | default | live `prefers-reduced-motion` | `system` follows the OS; `full` is false; `reduced` is true |
 | `presentation.uiScale` | `100` | `100` / `125` / `150` percent | default | none | the stored value, plus a `uiScaleFactor` multiplier for #290/#321 |
+| `presentation.quality` | `high` (`DEFAULT_QUALITY_PRESET`) | `low` / `medium` / `high` | default | none — nothing probes the GPU | the stored value |
 
 Every field validates independently, so junk in one never resets a sibling. Touch scheme and
 fire mode are ungated on purpose: gating them on touch capability would rewrite a hybrid
@@ -310,11 +316,12 @@ recorded in issue #485: menu music, and the AUDIO ENGINE half of the settings, b
 which run through the session's `applySettings`/`followMusic` and go silent on the empty
 host. The DISPLAY half moved to the page with issue #226, because Settings became the one
 durable home for mute and volume and a preference whose only control lies is worse than one
-with no control at all: `route-host.ts` pushes the seven settings-driven values at the HUD
-at construction and on every store change -- mute, volume, touch scheme, fire mode, haptics,
-the motion preference and the resolved motion policy. It no longer early-returns while a
-session holds the slot: the session stopped pushing them, so the page is the single writer
-and Settings stays live during a match. The engine is untouched from there -- a stored mute reaches
+with no control at all: `route-host.ts` pushes the eight settings-driven values at the HUD
+at construction and on every store change -- mute, volume, touch scheme, fire mode,
+haptics, the motion preference, the resolved motion policy and the render-quality preset.
+It no longer early-returns while a session holds the slot: the session stopped pushing
+them, so the page is the single writer and Settings stays live during a match. The engine
+is untouched from there -- a stored mute reaches
 it through `applySettings` the moment a session exists, which is also the moment there is
 any audio for it to affect.
 
@@ -334,11 +341,17 @@ null` and the line degrades to the lives half rather than inventing a position. 
 declares five sections (Audio, Controls, Accessibility, Data, About & Legal) and renders only
 those with a visible control, measured with the same predicate the roving focus uses.
 Accessibility shipped empty, which is where the rule came from; #289's three-state motion
-toggle filled it, and #227's per-control capability hiding is what collapses a section that
-empties out, with no change there. That toggle writes only the settings store: the display
-comes back from `route-host.ts`'s `paintSettingsControls`, whose `effectiveSettings`
-subscription repaints the control and pushes the resolved policy to `hud.setReducedMotion`
-on the same tick, so the change lands with the pane open and no session behind it. The topbar is hidden at the Main Menu as well as at Launch: with the audio
+toggle filled it, #540's render-quality toggle joined it, and #227's per-control capability
+hiding is what collapses a section that empties out, with no change there. Both toggles
+write only the settings store: the display comes back from `route-host.ts`'s
+`paintSettingsControls`, whose `effectiveSettings` subscription repaints the control and
+pushes the resolved motion policy to `hud.setReducedMotion` on the same tick, so the change
+lands with the pane open and no session behind it. Quality is the one Settings choice a
+repaint cannot finish applying: `loop.ts` resolves it through `qualityFor` when a session
+BUILDS its renderer (`?dev=1&quality=` overriding the stored preset without writing it), so
+a change during a match takes effect at the next one — a GL context's antialias is fixed at
+creation and `low` decides whether the muzzle-smoke system exists at all. The control's own
+hint says so. The topbar is hidden at the Main Menu as well as at Launch: with the audio
 pair gone it carries in-match status only, and carrying an abandoned session's Lives and
 Enemies over a menu is the leak the issue names.
 
