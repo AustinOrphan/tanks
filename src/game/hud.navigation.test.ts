@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { defaultSlots } from './versus-setup';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type GameplayOutcome, type Hud } from './hud';
+import { createHud, type GameplayOutcome, type GameplayStatus, type Hud } from './hud';
 import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { versusMapChoices, type VersusConfig } from './versus-config';
@@ -1273,6 +1273,26 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     },
   });
 
+  /**
+   * The session's own half -- WHAT IS BEING PLAYED (issue #324, step S6). These cases
+   * exist to prove the two halves stay apart, so each one pushes exactly one of them.
+   * `mission`/`missions` are arguments because the outcome panel's copy reads them: a
+   * FINAL win is `1, 1` and an intermediate one is `1, 2`.
+   */
+  const versusStatus = (mission: number, missions: number): GameplayStatus => ({
+    kind: 'versus',
+    mission,
+    missions,
+    stocks: [{ slot: 0, stock: 3 }],
+  });
+  const campaignStatus = (mission: number, missions: number): GameplayStatus => ({
+    kind: 'campaign',
+    mission,
+    missions,
+    lives: 3,
+    enemies: 3,
+  });
+
   it("the default target ('campaign-levels'), never calling setRelaunchTarget, is byte-identical to the title screen before this method existed", () => {
     // Fails if the default relaunchTarget is ever 'versus-setup', or if
     // applyTitleAffordances changes anything a campaign session's title screen showed
@@ -1386,9 +1406,17 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     // Fails if the label branch is missing, or reads deps/state other than the
     // outcome's own `action` (e.g. always 'Versus Setup' regardless of it, which the
     // campaign-target tests elsewhere in this file would also have caught).
+    //
+    // The status pushed here is deliberately CAMPAIGN, not versus, even though a real
+    // versus-setup session is versus by identity: that is what makes the case
+    // discriminating. A versus status would let a label branch keyed on WHAT IS BEING
+    // PLAYED produce the right words for the wrong reason -- measured on this branch, the
+    // manifest entry `session-outcome-label-keyed-on-identity` stopped failing here the
+    // moment this fixture stated a versus kind. `1, 1` is still the FINAL-win branch,
+    // which is the one that carries the label.
     const { hud: h, root } = mount();
     h.setOutcome(outcomeWithAction('versus-setup'));
-    h.setLevel(1, 1); // versus's single synthetic level -- always the FINAL win
+    h.setStatus(campaignStatus(1, 1));
     h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Versus Setup');
     h.setState('outcome-lose');
@@ -1403,7 +1431,7 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     // from whatever was known when the panel opened would be half-applied -- so the
     // label is re-derived on every push that lands while an outcome is up.
     const { hud: h, root } = mount();
-    h.setLevel(1, 1); // the FINAL win -- the branch that carries the label
+    h.setStatus(campaignStatus(1, 1)); // the FINAL win -- the branch that carries the label
     h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Play Again'); // the default, nothing pushed
     h.setOutcome(outcomeWithAction('versus-setup'));
@@ -1419,7 +1447,8 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     h.setOutcome(outcomeWithAction('versus-setup'));
     h.setState('paused');
     expect(actionBtn(root).textContent).toBe('Resume');
-    h.setLevel(1, 2); // an intermediate win -- not reachable for a real versus session
+    h.setStatus(campaignStatus(1, 2)); // an intermediate win -- not reachable for a real
+    // versus session
     // (single synthetic level), but the label branch must not fire on it regardless
     h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Next Level');
@@ -1452,13 +1481,13 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
   // concepts back into one value would break exactly one of them.
   // -------------------------------------------------------------------------
 
-  it("setSessionKind('versus') alone changes NO title affordance -- identity is not the button policy", () => {
+  it("a versus STATUS alone changes NO title affordance -- identity is not the button policy", () => {
     // The developer-flag versus shape (`?dev=1&mode=ffa`): Versus identity, campaign
     // relaunch target. Fails if any button gate is keyed on sessionKind -- Continue
     // would vanish, New Game would read 'Start Match', and the Campaign button would
     // appear, on a session whose Continue and Levels still rebuild correct FFA worlds.
     const kindOnly = mount();
-    kindOnly.hud.setSessionKind('versus');
+    kindOnly.hud.setStatus(versusStatus(1, 1));
     kindOnly.hud.setContinueAvailable(true);
     kindOnly.hud.setLevelSelect(2, 4);
     kindOnly.hud.setState('main-menu');
@@ -1483,15 +1512,14 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     neither.hud.dispose();
   });
 
-  it("setSessionKind('versus') alone leaves the outcome action button reading 'Play Again'/'Retry'", () => {
+  it("a versus STATUS alone leaves the outcome action button reading 'Play Again'/'Retry'", () => {
     // The label names the click's DESTINATION, and loop.ts's onStartRestart routes a
     // developer-flag versus session through landOnCampaignBoard -- so 'Versus Setup'
     // here would name a pane the click never opens. Nothing is pushed to setOutcome,
     // so this also pins the default: a HUD told only WHAT IS BEING PLAYED still says
     // the campaign words. Fails if the label branch is keyed on sessionKind.
     const { hud: h, root } = mount();
-    h.setSessionKind('versus');
-    h.setLevel(1, 1); // the FINAL win -- the branch that carries the label
+    h.setStatus(versusStatus(1, 1)); // the FINAL win -- the branch that carries the label
     h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Play Again');
     h.setState('outcome-lose');
@@ -1504,8 +1532,8 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     // of a button-shape decision.
     const { hud: h, root } = mount();
     h.setRelaunchTarget('versus-setup');
+    h.setStatus(campaignStatus(1, 1));
     h.setState('playing');
-    h.setVersusStocks([{ slot: 0, stock: 3 }]);
     for (const el of Array.from(root.querySelectorAll('.hud-campaign-stat'))) {
       expect(el.classList.contains('hud-campaign-stat--hidden')).toBe(false);
     }
@@ -1516,12 +1544,12 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     ).toBe(true);
   });
 
-  it("setSessionKind('practice') shows the campaign stats, exactly as 'campaign' does", () => {
+  it("a PRACTICE status shows the campaign stats, exactly as a campaign one does", () => {
     // Practice is a campaign board played in isolation: its lives and enemy count are
     // as real there as in a run. Fails if the stat gate is widened to `!== 'campaign'`,
     // which is the tempting shape once the setter takes three kinds.
     const practice = mount();
-    practice.hud.setSessionKind('practice');
+    practice.hud.setStatus({ kind: 'practice', mission: 1, missions: 1, lives: 3, enemies: 3 });
     practice.hud.setState('playing');
     for (const el of Array.from(practice.root.querySelectorAll('.hud-campaign-stat'))) {
       expect(el.classList.contains('hud-campaign-stat--hidden')).toBe(false);
@@ -1547,19 +1575,18 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
       (root.querySelector('.hud-campaign-stat') as HTMLElement).classList.contains(
         'hud-campaign-stat--hidden',
       );
-    h.setSessionKind('campaign');
+    h.setStatus(campaignStatus(1, 1));
     h.setState('playing');
-    h.setVersusStocks([{ slot: 0, stock: 3 }]);
     expect(statHidden()).toBe(false);
     expect(stocksEl.classList.contains('hud-versus-stocks--hidden')).toBe(true);
 
     // ...now the same live session becomes versus, with NO intervening setState.
-    h.setSessionKind('versus');
+    h.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks: [{ slot: 0, stock: 3 }] });
     expect(statHidden()).toBe(true);
     expect(stocksEl.classList.contains('hud-versus-stocks--hidden')).toBe(false);
 
     // ...and back again.
-    h.setSessionKind('campaign');
+    h.setStatus(campaignStatus(1, 1));
     expect(statHidden()).toBe(false);
     expect(stocksEl.classList.contains('hud-versus-stocks--hidden')).toBe(true);
   });

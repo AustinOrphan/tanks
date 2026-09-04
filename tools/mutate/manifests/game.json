@@ -143,10 +143,10 @@
   {
     "id": "session-dev-flag-versus-reported-as-campaign",
     "file": "src/game/loop.ts",
-    "find": "    hud.setSessionKind(currentDescriptor.kind);\n    // Reseeded here too",
-    "replace": "    hud.setSessionKind('campaign');\n    // Reseeded here too",
+    "find": "    pushStatus(world, currentDescriptor.kind, ordinalOf(level));\n    // Reseeded here too",
+    "replace": "    pushStatus(world, 'campaign', ordinalOf(level));\n    // Reseeded here too",
     "expect": "killed",
-    "why": "The gameplay HUD's identity must come from the canonical descriptor, not from a boot-time guess. Pinning switchTo's push to 'campaign' is the shape issue #316's review found shipped: a developer-flag versus session (?dev=1&mode=ffa) built a genuine FFA world while telling the HUD it was Campaign, which hid the versus stock strip and left the campaign Lives/Enemies stats on screen. It also reintroduces the Practice/Campaign divergence on the menu Level-Select path. Scoped to loop.test.ts, whose 'Gameplay HUD identity comes from the descriptor' block asserts the kind at the production composition boundary; expectFailures counts that scoped run only.",
+    "why": "The gameplay HUD's identity must come from the canonical descriptor, not from a boot-time guess. RE-ANCHORED for issue #324's step S6, which folded `setSessionKind` into the one status projection at this same site. Pinning switchTo's push to 'campaign' is the shape issue #316's review found shipped: a developer-flag versus session (?dev=1&mode=ffa) built a genuine FFA world while telling the HUD it was Campaign, which hid the versus stock strip and left the campaign Lives/Enemies stats on screen. It also reintroduces the Practice/Campaign divergence on the menu Level-Select path. Scoped to loop.test.ts, whose 'Gameplay HUD identity comes from the descriptor' block asserts the kind at the production composition boundary; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/loop.test.ts"
     ],
@@ -161,15 +161,16 @@
   {
     "id": "session-title-policy-reused-as-identity",
     "file": "src/game/loop.ts",
-    "find": "\n  hud.setSessionKind(currentDescriptor.kind);\n",
-    "replace": "\n  hud.setSessionKind(relaunchTarget === 'versus-setup' ? 'versus' : 'campaign');\n",
+    "find": "\n  pushStatus(world, currentDescriptor.kind, ordinalOf(level));\n",
+    "replace": "\n  pushStatus(world, relaunchTarget === 'versus-setup' ? 'versus' : 'campaign', ordinalOf(level));\n",
     "expect": "killed",
-    "why": "The other direction of the same collapse: deriving the gameplay HUD's identity from the title/outcome affordance POLICY instead of from the descriptor. Structurally this is the pre-fix code, re-expressed through the new type, and it is exactly what makes a developer-flag versus session report Campaign to gameplay while a Levels pick stops reporting Practice at all. Scoped to loop.test.ts; expectFailures counts that scoped run only. Re-anchored 2026-08-28: the original find ran to the NEXT statement's comment (`// The stock strip's DATA`), so inserting the hud.setBackdrop projection between the two turned this entry into FAILED-TO-APPLY and `npm run mutate` into exit 1 while nothing about the behaviour changed. The anchor is now the call line delimited by its own newlines -- indentation-scoped, which is what distinguishes this boot-time push from the identically-worded one inside `switchTo` (indented one level deeper, re-derived on every world build), and it carries no neighbouring text for a later insertion to break.",
+    "why": "The other direction of the same collapse: deriving the gameplay HUD's identity from the title/outcome affordance POLICY instead of from the descriptor. Structurally this is the pre-fix code, re-expressed through the new type, and it is exactly what makes a developer-flag versus session report Campaign to gameplay while a Levels pick stops reporting Practice at all. Scoped to loop.test.ts; expectFailures counts that scoped run only. Re-anchored 2026-08-28: the original find ran to the NEXT statement's comment (`// The stock strip's DATA`), so inserting the hud.setBackdrop projection between the two turned this entry into FAILED-TO-APPLY and `npm run mutate` into exit 1 while nothing about the behaviour changed. The anchor is now the call line delimited by its own newlines -- indentation-scoped, which is what distinguishes this boot-time push from the identically-worded one inside `switchTo` (indented one level deeper, re-derived on every world build), and it carries no neighbouring text for a later insertion to break. Re-anchored again for issue #324's step S6: the boot push is now the status projection rather than `setSessionKind`, and the anchor stays what it was -- the call line delimited by its own newlines, indentation-scoped so it cannot match switchTo's identically-worded push one level deeper.",
     "tests": [
       "src/game/loop.test.ts"
     ],
     "killedBy": [
-      "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=ffa reports VERSUS to the gameplay HUD while keeping campaign-shaped buttons"
+      "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=ffa reports VERSUS to the gameplay HUD while keeping campaign-shaped buttons",
+      "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=teams likewise, and its stock strip comes from the WORLD, not from provenance"
     ]
   },
   {
@@ -194,29 +195,73 @@
   {
     "id": "session-practice-hides-campaign-stats",
     "file": "src/game/hud.ts",
-    "find": "    const versusSession = sessionKind === 'versus';",
-    "replace": "    const versusSession = sessionKind !== 'campaign';",
+    "find": "      statEl.classList.toggle('hud-campaign-stat--hidden', kind === 'versus');",
+    "replace": "      statEl.classList.toggle('hud-campaign-stat--hidden', kind !== 'campaign');",
     "expect": "killed",
-    "why": "The tempting widening once setSessionKind takes three kinds. Practice is a campaign board played in isolation and its Lives/Enemies are as real there as in a run, so hiding them is a shipped-behaviour regression on the non-developer Level-Select path -- and it would also surface the versus stock strip for practice. Kept as a permanent entry because nothing about the code's shape argues against the wider predicate; only the test does. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "why": "The tempting widening, now that the projection's own discriminant takes three kinds. Practice is a campaign board played in isolation and its Lives/Enemies are as real there as in a run, so hiding them is a shipped-behaviour regression on the non-developer Level-Select path -- and it would also surface the versus stock strip for practice. Kept as a permanent entry because nothing about the code's shape argues against the wider predicate; only the test does. RE-ANCHORED for issue #324's step S6: the predicate moved out of `applySessionKindSurfaces` (deleted) into `applyStatus`, and reads the status projection's `kind` instead of a `sessionKind` variable. The property is unchanged and so is the mutation's shape. Rescoped from hud.navigation.test.ts to hud.match.test.ts, where the case that measures it now lives beside the Practice chip it shares a decision with. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
     "tests": [
-      "src/game/hud.navigation.test.ts"
+      "src/game/hud.match.test.ts"
     ],
     "killedBy": [
-      "hud: relaunch target -- the title/outcome affordance policy setSessionKind('practice') shows the campaign stats, exactly as 'campaign' does"
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and adds a chip of its own"
+    ]
+  },
+  {
+    "id": "practice-renders-as-campaign",
+    "file": "src/game/hud.ts",
+    "find": "    practiceChip.classList.toggle('hud-practice--hidden', kind !== 'practice');",
+    "replace": "    practiceChip.classList.toggle('hud-practice--hidden', true);",
+    "expect": "killed",
+    "why": "The state issue #324's step S6 exists to leave, restored: a Practice topbar that is byte-identical to a Campaign one. That is not a hypothetical -- it is what shipped, and it was MEASURED before the change by driving the built app into each session kind and photographing the bar: campaign and practice produced identical PNG files at every captured width (390, 360, 1280, 1920 and a 200%-zoom 640). Nothing else on screen distinguishes the two, because everything else about a Practice board is deliberately the same as a run's: same Lives, same Enemies, same level chip. So this mutation changes exactly one class toggle and passes every layout, stat-visibility and stock-strip assertion in the suite; only a case that asserts the chip is up for practice AND down for the other two kinds can see it.",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and adds a chip of its own",
+      "hud: campaign Lives/Enemies stats hidden during versus (issue #282) the Practice chip is DOWN for campaign and for versus -- the control that stops it being decoration"
+    ]
+  },
+  {
+    "id": "status-applied-only-on-the-session-push",
+    "file": "src/game/hud.ts",
+    "find": "    applyStatus();\n    // Launch and playing both want the menu panel gone.",
+    "replace": "    // the status is applied when the session next pushes one\n    // Launch and playing both want the menu panel gone.",
+    "expect": "killed",
+    "why": "Half of the merged projection, in the direction a reader is most likely to call tidy: `setStatus` applies the projection, so why should `setState` apply it again? Because the two carry half of the answer each -- the strip's visibility is `kind` AND `surface` -- and either can move last. This mutation leaves the surface half stranded: a status that arrives while the surface is still the menu is rendered hidden and never revisited when play starts. MEASURED on this branch by making the edit and running the scoped file: 6 of 35 cases fail, and the ordering case that catches it is the DATA-FIRST one -- production's own state-then-data order still passes, which is why the pair of ordering cases exists rather than one.",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) the reverse order -- status first, THEN setState(playing) -- lands on the same strip"
+    ]
+  },
+  {
+    "id": "status-applied-only-when-the-surface-moves",
+    "file": "src/game/hud.ts",
+    "find": "      statusData = status;\n      // Every element the bar has, from the one projection -- see applyStatus. There is\n      // no early return on an unchanged status: this setter is cheap by construction (two\n      // guarded text writes and four idempotent class toggles), and a guard here would be\n      // a second place that could decide the DOM is already right when it is not.\n      applyStatus();",
+    "replace": "      statusData = status;",
+    "expect": "killed",
+    "why": "The mirror image of `status-applied-only-on-the-session-push`, and the one that reproduces the historical defect: the projection is retained but nothing repaints until the surface next moves. That is precisely production's order -- `hud.setState('playing')` runs before the first status carrying stocks -- so the strip stays dark for a whole live match until an unrelated `setState` (a pause) happens to revive it, which is the bug `versusStocksVisible`'s own doc comment records. MEASURED on this branch by making the edit and running the scoped file: 8 of 35 cases fail, and the ordering case that catches it is the PRODUCTION-order one, which the sibling mutation above leaves green. Two mutations, two directions, one property.",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) production order -- setState(playing) THEN the first status with stocks -- the strip still ends up visible with entries",
+      "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) a campaign status lands the same way in BOTH orders -- stats shown, strip down"
     ]
   },
   {
     "id": "session-outcome-label-keyed-on-identity",
     "file": "src/game/hud.ts",
     "find": "    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Versus Setup';",
-    "replace": "    if (sessionKind === 'versus') return 'Versus Setup';",
+    "replace": "    if (statusData?.kind === 'versus') return 'Versus Setup';",
     "expect": "killed",
-    "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Re-anchored for issue #324's step S4: the label used to be written inline in setState from the boot-time `relaunchTarget`, and it now comes off `GameplayOutcome.action` in `outcomeActionLabel`, so the anchor moved with the code. The mutation is unchanged in substance -- both forms swap the click's destination for the session's identity. Scoped to hud.navigation.test.ts.",
+    "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Re-anchored for issue #324's step S4: the label used to be written inline in setState from the boot-time `relaunchTarget`, and it now comes off `GameplayOutcome.action` in `outcomeActionLabel`, so the anchor moved with the code. The mutation is unchanged in substance -- both forms swap the click's destination for the session's identity. Scoped to hud.navigation.test.ts. Re-expressed for issue #324's step S6: the identity it wrongly reaches for is the status projection's own `kind` now that `sessionKind` is not a variable of its own. The mutation is the same mistake -- reading WHAT IS BEING PLAYED to decide what a BUTTON says -- and it still has to compile to be worth running.",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
-      "hud: relaunch target -- the title/outcome affordance policy setSessionKind('versus') alone leaves the outcome action button reading 'Play Again'/'Retry'",
+      "hud: relaunch target -- the title/outcome affordance policy a versus STATUS alone leaves the outcome action button reading 'Play Again'/'Retry'",
       "hud: relaunch target -- the title/outcome affordance policy the win/lose action button reads 'Versus Setup' for a versus session's FINAL win and its lose -- truthful about what the click now does",
       "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened"
     ]
@@ -1012,10 +1057,10 @@
   {
     "id": "quit-announces-the-abandoned-session-kind",
     "file": "src/game/loop.ts",
-    "find": "    hud.setSessionKind(descriptorFor(sessionIdentity, ordinalOf(landing)).kind);",
-    "replace": "    hud.setSessionKind(currentDescriptor.kind);",
+    "find": "      descriptorFor(sessionIdentity, ordinalOf(landing)).kind,",
+    "replace": "      currentDescriptor.kind,",
     "expect": "killed",
-    "why": "The THIRD `hud.setSessionKind` push, added by issue #317 when Quit stopped riding a world build to get its identity onto the menu -- and the mistake that site invites, because `currentDescriptor` is in scope and reads correct. It is precisely what the handler's own comment marks as DELIBERATELY STALE: after a quit, `currentDescriptor` still describes the world the player abandoned, so reusing it tells the HUD PRACTICE for a session whose Continue lands on the campaign board. WHAT THIS DOES AND DOES NOT PIN, stated because the difference is easy to overstate: today's hud.ts branches only on `sessionKind === 'versus'` (applySessionKindSurfaces), so practice and campaign render identically and this mutation changes nothing on screen. It is a contract violation at loop.ts's composition boundary -- the same contract `session-dev-flag-versus-reported-as-campaign` and `session-title-policy-reused-as-identity` pin from the OTHER two push sites, neither of which can reach this one -- and the one #324's contextual HUD would start reading. Nothing about the world, the seed or the run moves either, so none of the navigation-only counting assertions can see it. `a Levels pick reports PRACTICE, and leaving restores CAMPAIGN before the board is built` is the case that measures it, at its post-quit `lastKind` assertion. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "why": "The THIRD `hud.setSessionKind` push, added by issue #317 when Quit stopped riding a world build to get its identity onto the menu -- and the mistake that site invites, because `currentDescriptor` is in scope and reads correct. It is precisely what the handler's own comment marks as DELIBERATELY STALE: after a quit, `currentDescriptor` still describes the world the player abandoned, so reusing it tells the HUD PRACTICE for a session whose Continue lands on the campaign board. WHAT THIS NOW PINS, and it changed with issue #324's step S6: hud.ts no longer renders practice and campaign identically -- a Practice status raises a chip that says so -- so telling the HUD PRACTICE for a session whose Continue lands on the campaign board is a visible lie on the way to the menu, not only a contract violation at loop.ts's composition boundary. RE-ANCHORED onto the kind argument of the quit handler's `pushStatus` call; the mistake the site invites is unchanged, because `currentDescriptor` is still in scope and still reads correct. It is a contract violation at loop.ts's composition boundary -- the same contract `session-dev-flag-versus-reported-as-campaign` and `session-title-policy-reused-as-identity` pin from the OTHER two push sites, neither of which can reach this one -- and the one #324's contextual HUD would start reading. Nothing about the world, the seed or the run moves either, so none of the navigation-only counting assertions can see it. `a Levels pick reports PRACTICE, and leaving restores CAMPAIGN before the board is built` is the case that measures it, at its post-quit `lastKind` assertion. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/loop.test.ts"
     ],
@@ -1026,10 +1071,10 @@
   {
     "id": "quit-announces-the-abandoned-level",
     "file": "src/game/loop.ts",
-    "find": "    hud.setLevel(ordinalOf(landing), deps.levels.levels.length);",
-    "replace": "    hud.setLevel(ordinalOf(level), deps.levels.levels.length);",
+    "find": "      ordinalOf(landing),\n    );",
+    "replace": "      ordinalOf(level),\n    );",
     "expect": "killed",
-    "why": "The other half of the quit's presentation claim, and the half that is visibly wrong. The topbar level chip is on screen at the Main Menu -- `setState` hides the topbar for `launch` alone -- so reading the ABANDONED `level` instead of the `landing` makes the menu announce the level the player just left while Continue resumes onto `deps.levels.start`. The slip is one word: `level` is module-scoped and in scope at this line, `landing` is the local this handler introduced, and the readout is exactly what the eager `landOnCampaignBoard(false)` rebuild used to get right for free -- which is what makes it the thing a deferral is most likely to drop. No world, seed or run moves, so none of the navigation-only counting assertions can see it; neither can the level-chip assertion in `Quit to Title returns to the title having built NOTHING`, whose fixture gives the abandoned level and the landing the SAME ordinal. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "why": "The other half of the quit's presentation claim, and the half that is visibly wrong. The topbar level chip is on screen at the Main Menu -- `setState` hides the topbar for `launch` alone -- so reading the ABANDONED `level` instead of the `landing` makes the menu announce the level the player just left while Continue resumes onto `deps.levels.start`. The slip is one word: `level` is module-scoped and in scope at this line, `landing` is the local this handler introduced, and the readout is exactly what the eager `landOnCampaignBoard(false)` rebuild used to get right for free -- which is what makes it the thing a deferral is most likely to drop. No world, seed or run moves, so none of the navigation-only counting assertions can see it; neither can the level-chip assertion in `Quit to Title returns to the title having built NOTHING`, whose fixture gives the abandoned level and the landing the SAME ordinal. Scoped to loop.test.ts; expectFailures counts that scoped run only. RE-ANCHORED for issue #324's step S6: the level ordinal is an argument of the quit handler's one `pushStatus` call rather than its own `hud.setLevel`. The slip is the same one word, and it is now one line below the session-kind argument the sibling entry guards -- two arguments of one call, each with its own stale-variable temptation in scope.",
     "tests": [
       "src/game/loop.test.ts"
     ],
@@ -1443,13 +1488,27 @@
   {
     "id": "campaign-lives-readout-ignores-the-world",
     "file": "src/game/loop.ts",
-    "find": "    hud.setLives(w.lives);",
-    "replace": "    hud.setLives(3);",
+    "find": "        : { kind, mission, missions, lives: forWorld.lives, enemies: countEnemies(forWorld) };",
+    "replace": "        : { kind, mission, missions, lives: 3, enemies: countEnemies(forWorld) };",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "The topbar LIVES readout is the only projection of `world.lives`, and the constant it is replaced with is LIVES itself (balance.json `lives: 3`) -- so this mutation is invisible to any fixture whose board carries full lives. That was EVERY synthetic build until issue #386: `loop.test.ts`'s fake `levels.world` recorded its `lives` argument into `rec.levelBuilds` and then dropped it, spreading `opts.world ?? createArenaWorld(seed)` without stamping it, while the real `createWorldFor` does stamp it. Measured on a88d39e, before the fake was fixed: this exact mutation left 4008 of 4008 tests green across 170 of 170 test files -- the readout was unpinned repository-wide. The fake now applies `lives: lives ?? base.lives`, and THE STATED RESIDUAL test reads the readout across two builds whose arguments differ (a practice board taking arena.ts's own default, then Continue's run board carrying 2), so a constant can no longer satisfy both. Scoped to loop.test.ts; expectFailures counts that scoped run only. COUNT RE-MEASURED for issue #428: 1 -> 2, because the start-boundary suite reads the lives a fresh run was given, which is a second path through the same readout. The failing SET was compared, not the number renumbered.",
+    "expectFailures": 3,
+    "why": "The topbar LIVES readout is the only projection of `world.lives`, and the constant it is replaced with is LIVES itself (balance.json `lives: 3`) -- so this mutation is invisible to any fixture whose board carries full lives. That was EVERY synthetic build until issue #386: `loop.test.ts`'s fake `levels.world` recorded its `lives` argument into `rec.levelBuilds` and then dropped it, spreading `opts.world ?? createArenaWorld(seed)` without stamping it, while the real `createWorldFor` does stamp it. Measured on a88d39e, before the fake was fixed: this exact mutation left 4008 of 4008 tests green across 170 of 170 test files -- the readout was unpinned repository-wide. The fake now applies `lives: lives ?? base.lives`, and THE STATED RESIDUAL test reads the readout across two builds whose arguments differ (a practice board taking arena.ts's own default, then Continue's run board carrying 2), so a constant can no longer satisfy both. Scoped to loop.test.ts; expectFailures counts that scoped run only. COUNT RE-MEASURED for issue #428: 1 -> 2, because the start-boundary suite reads the lives a fresh run was given, which is a second path through the same readout. The failing SET was compared, not the number renumbered. RE-ANCHORED for issue #324's step S6: the readout is a field of the one status projection rather than its own `hud.setLives` call, so the mutation now writes the constant into the payload. COUNT RE-MEASURED for step S6 by comparing the FAILING SETS, not by renumbering: 2 -> 3. The two that failed before still fail -- `campaign-continue lands on the run's own level, with its lives` and `THE STATED RESIDUAL: the menu keeps the abandoned world's enemy count until a board is built`. The third is `refreshes the HUD status from the live world as the game runs`, which this same change rewrote: it used to prove the readout was re-sent by counting pushes, which the whole-projection dedup made meaningless, so it now changes the world under a running session and asserts the pushed number followed. That is a case this diff strengthened, and it happens to see this mutation too.",
     "tests": [
       "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "status-pushed-again-for-an-unchanged-projection",
+    "file": "src/game/loop.ts",
+    "find": "    const key = JSON.stringify(status);\n    if (key === lastStatusKey) return;\n    lastStatusKey = key;",
+    "replace": "    const key = JSON.stringify(status);\n    lastStatusKey = key;",
+    "expect": "killed",
+    "why": "Drops the topbar's no-thrash guard. `refreshTopbar` runs from `onSimulated`, which fires on EVERY 'playing' frame unconditionally at up to 60/s, and the projection it pushes carries a stock strip whose render rebuilds one DOM element per slot -- so without this guard a live versus match repaints the strip sixty times a second for numbers that move a handful of times a round. Nothing about the rendered result changes, which is exactly why it needs an entry: every visibility, content and tint assertion in the suite passes under it. The guard generalises the per-stocks one that issue #324's step S6 replaced, and the case that measures it drives REAL shots through the sim across several frames rather than fabricating quiet ones.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: the active campaign run (issues #153/#152) the in-match stock readout (Task 6, spec \u00a73a) firing (an event, but no stock change) across several frames does not re-push the status beyond the one triggering call"
     ]
   },
   {
@@ -2360,7 +2419,7 @@
   {
     "id": "route-host-detach-keeps-the-session-shaped-menu",
     "file": "src/game/route-host.ts",
-    "find": "          hud.setRelaunchTarget('campaign-levels');\n          hud.setSessionKind('campaign');\n",
+    "find": "          hud.setRelaunchTarget('campaign-levels');\n          hud.setStatus(null);\n",
     "replace": "          void hud;\n",
     "tests": [
       "src/game/route-host.test.ts",
@@ -2368,7 +2427,7 @@
     ],
     "expect": "killed",
     "expectFailures": 2,
-    "why": "Releasing the slot leaves the title shaped around the session that just left. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the live-detach case in route-host.test.ts and the versus-quit case in loop.test.ts; the stale-detach control passes either way."
+    "why": "Releasing the slot leaves the title shaped around the session that just left. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the live-detach case in route-host.test.ts and the versus-quit case in loop.test.ts; the stale-detach control passes either way. Re-anchored for issue #324's step S6: the page clears the bar with `setStatus(null)` -- it has no world and so can state no lives, enemy count or stock strip -- where it used to restate `setSessionKind('campaign')`. Count re-measured on this branch across the same two scoped files."
   },
   {
     "id": "route-host-never-re-sizes-the-grid-on-arrival",
@@ -3872,14 +3931,14 @@
   {
     "id": "session-pushes-the-levels-grid-to-the-hud",
     "file": "src/game/loop.ts",
-    "find": "  slot.setControllers(assignment, botsMayDrivePlayers);\n  refreshStats(world);\n",
-    "replace": "  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  slot.setControllers(assignment, botsMayDrivePlayers);\n  refreshStats(world);\n",
+    "find": "\n  slot.setControllers(assignment, botsMayDrivePlayers);\n",
+    "replace": "\n  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  slot.setControllers(assignment, botsMayDrivePlayers);\n",
     "expect": "killed",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/hud-ownership.test.ts"
     ],
-    "why": "Puts back the Levels-grid push issue #324's step S5 removed from the session's construction block -- the sibling of `session-pushes-settings-display-to-the-hud`, and pinned for the same reason: a second writer of an application surface reads as ordinary wiring beside the gameplay pushes around it. This one is worse than a duplicate, because the two writers DISAGREE: a session's `deps.levels` is its OWN level system, which for a versus match is a single synthetic arena, so the last thing the HUD hears is a total of 1 -- read by `hud.ts` as \"not a choice\" -- and the empty host left behind after a versus match has no Levels button at all. Two independent nets catch it: hud-ownership.test.ts reports `setLevelSelect` as a session reaching an application route, and loop.test.ts's versus-quit case reads every total the grid was ever told.",
+    "why": "Puts back the Levels-grid push issue #324's step S5 removed from the session's construction block -- the sibling of `session-pushes-settings-display-to-the-hud`, and pinned for the same reason: a second writer of an application surface reads as ordinary wiring beside the gameplay pushes around it. This one is worse than a duplicate, because the two writers DISAGREE: a session's `deps.levels` is its OWN level system, which for a versus match is a single synthetic arena, so the last thing the HUD hears is a total of 1 -- read by `hud.ts` as \"not a choice\" -- and the empty host left behind after a versus match has no Levels button at all. Two independent nets catch it: hud-ownership.test.ts reports `setLevelSelect` as a session reaching an application route, and loop.test.ts's versus-quit case reads every total the grid was ever told. Re-anchored for issue #324's step S6. The old anchor carried the following line, the boot tail's `refreshStats(world)`, which that step renamed and pushed a comment in front of -- so the entry went FAILED-TO-APPLY. The anchor is now the `slot.setControllers` call delimited by its own newlines: indentation-scoped, which is what distinguishes this boot-time call from the identically-worded one inside `reassignSlot`, and carrying no neighbouring text for a later comment to break.",
     "killedBy": [
       "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
       "quitting a versus match leaves a campaign-shaped Main Menu behind the empty host offers Continue/New Game/Levels/Versus, not the versus session's \"Start Match\""

@@ -576,10 +576,35 @@
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
-/* Issue #282: the campaign Lives/Enemies stats, hidden for a versus session (setSessionKind
+/* Issue #282: the campaign Lives/Enemies stats, hidden for a versus session (applyStatus
  * in hud.ts). The class alone does nothing -- this is the dead-CSS failure hud.css.test.ts
  * exists to catch, same precedent as every other `--hidden` rule in this file. */
 .hud-campaign-stat--hidden {
+  display: none;
+}
+
+/* The PRACTICE identity chip (issue #324, step S6). Practice shows the same Lives and
+ * Enemies a campaign run does -- they are as real on a Level-Select board -- so before
+ * this chip the two bars were byte-identical screenshots and only the chip tells them
+ * apart. It is therefore a LABEL, not a stat: no colon, no number, and its own weight and
+ * ground so the eye reads it as "which mode" rather than as a fourth reading.
+ *
+ * Everything about its metrics comes from `.hud-stat`, which it also carries: the topbar's
+ * safe-area padding and both narrow-viewport font steps already apply to that class, so
+ * the chip shrinks with its neighbours instead of needing a breakpoint of its own. */
+.hud-practice {
+  font-weight: var(--hud-weight-strong);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px var(--hud-space-2);
+  border-radius: var(--hud-radius-sm);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Without this the chip announces PRACTICE over a campaign run and a versus match alike
+ * -- the dead-CSS failure hud.css.test.ts exists to catch, and here it would also be a
+ * lie about which session is on screen. */
+.hud-practice--hidden {
   display: none;
 }
 
@@ -2155,8 +2180,11 @@
 }
 
 /* Task 5b's Campaign button (docs/superpowers/sdd/2026-08-21-versus-setup-menu/
- * task-5b-brief.md): hidden unless setSessionKind('versus') AND the title state both
- * hold -- see hud.ts's applyTitleAffordances for the combined gate. */
+ * task-5b-brief.md): hidden unless the RELAUNCH TARGET is 'versus-setup' AND the title
+ * state both hold -- see hud.ts's applyTitleAffordances for the combined gate. The target,
+ * never the session kind: `?dev=1&mode=ffa` is a genuine versus session whose buttons stay
+ * campaign-shaped, so keying this on identity would offer a Campaign button to a session
+ * already running the campaign level system. */
 .hud-campaign-open--hidden {
   display: none;
 }
