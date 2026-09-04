@@ -1454,14 +1454,13 @@ describe('hud.css: the one application-transition definition (issue #364)', () =
     // "No screen has its own copy" is a claim about the whole stylesheet, which the live
     // check above cannot make -- it only looks at the two rules it already knows about.
     //
-    // WHY THIS IS NO LONGER A BARE COUNT OF ONE. Issue #542's `fade-long` arm exists to
-    // answer whether duration alone is the whole of the reported "I haven't seen them in
-    // action", and an arm that changes the duration has to declare one. Counting
-    // declarations would have forced that number into TypeScript instead, which is
-    // precisely the drift issue #364's first criterion forbids. So the check moved from
-    // HOW MANY to WHERE: the base declaration, plus the experiment's own arms, named
-    // exactly. A screen that gives itself a copy still fails, and so does an experiment
-    // arm nobody listed here.
+    // WHY THIS IS NO LONGER A BARE COUNT OF ONE. Issue #542's `fade-long` is a selectable
+    // alternative whose entire content is a longer duration, so it has to declare one.
+    // Counting declarations would have forced that number into TypeScript instead, which
+    // is precisely the drift issue #364's first criterion forbids. So the check moved from
+    // HOW MANY to WHERE: the base declaration, plus every rule allowed to move it, named
+    // exactly. A screen that gives itself a copy still fails, and so does an alternative
+    // nobody listed here.
     const text = stripComments(css);
     /** Every `selector { ... }` block's selector text, for the blocks declaring `token`. */
     const declaringSelectors = (token: string): string[] => {
@@ -1477,9 +1476,11 @@ describe('hud.css: the one application-transition definition (issue #364)', () =
     expect(declaringSelectors('--ui-transition-ease'), 'the easing has one home').toEqual([
       ':root',
     ]);
-    // The base, then the ONE experiment arm whose variable is the duration. `rise` and
-    // `settle` are deliberately absent: they move at the control's own duration, which is
-    // what keeps `fade-long` a control for them rather than a slower sibling.
+    // The base, then the ONE alternative whose whole content is the duration. The shipped
+    // transition is absent from this list because it declares nothing -- it lifts the
+    // entering content at the base value, which is what "the default has no rule of its
+    // own" means here -- and `settle` is absent because it moves at that same value. Only
+    // `fade-long` touches the clock, which is what keeps it separable from the movements.
     expect(declaringSelectors('--ui-transition-duration')).toEqual([
       ':root',
       '.hud--menu-transition-fade-long',

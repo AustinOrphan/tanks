@@ -1010,7 +1010,7 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
         // `null` where `history.pushState` is missing, and absent from every injected
         // HUD, which is what keeps the ~230 HUD tests off the History API entirely.
         history: browserHistoryHost(window),
-        // Issue #542's menu-transition arm. Bound here for the same reason the two above
+        // Issue #542's menu transition. Bound here for the same reason the two above
         // are: `GameDeps.createHud` stays `(root) => Hud`, so no injected HUD in a test
         // grows a developer flag it has no opinion about.
         menuTransition: devFlags.menuTransition,

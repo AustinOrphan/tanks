@@ -2380,6 +2380,61 @@
   animation: ui-surface-in var(--ui-transition-duration) var(--ui-transition-ease);
 }
 
+/*
+ * ...and the arriving screen's CONTENT rises into place behind that fade (issue #542).
+ *
+ * WHY THE CROSSFADE ALONE WAS NOT ENOUGH. The owner, on the shipped build: "transitions
+ * between menus seem to not work? Or at least I haven't seen them in action?" Nothing was
+ * broken -- two full-bleed surfaces occupying the same rectangle, crossfading over 150ms,
+ * is close to imperceptible by construction. Issue #542 compared four treatments rather
+ * than arguing about it, and the owner's ruling on the clips was `rise`. The three it was
+ * judged against are still selectable through `?dev=1&menuTransition=`; the block at the
+ * end of this file is what they do.
+ *
+ * IT MOVES THE CONTENT, NOT THE SURFACE. Every application surface is a full-bleed
+ * `position: absolute; inset: 0` flex column carrying a scrim background (`.hud-panel` at
+ * rgba(20, 24, 30, 0.55), the pages at `--hud-scrim-page`). Translating that BOX drags
+ * its scrim with it and exposes a strip of un-scrimmed screen along one edge for the whole
+ * transition, which is a seam rather than a transition. Since every surface centres a flex
+ * COLUMN, an identical translate on each direct child is exactly a translate of the group
+ * -- the content moves, the sheet it is printed on stays put.
+ *
+ * `:not(.hud-splash)` because `animation` is ONE property per element, and this selector
+ * at (0,2,0) beats `.hud-splash-hint`'s (0,1,0): an entering surface whose child already
+ * animates has that animation REPLACED rather than joined. The splash hint's
+ * `hud-splash-pulse` is exactly that case -- an infinite pulse on a direct child of a
+ * surface that really does enter, and enters on the boot path rather than on some
+ * navigation nobody takes: `createHud` ends with `setState('launch')`, which lifts the
+ * splash out of its hidden class, so `ui-surface--entering` sits on that surface for the
+ * 150ms until the settle on EVERY page load.
+ *
+ * What the exclusion buys was measured rather than assumed, because the obvious reading
+ * overstates it. Removing it does not silence the hint for good: the class comes off at
+ * the settle and the hint's own rule wins again. It costs a hitch on the one screen a
+ * player sees before anything else -- the hint held at full opacity while it lifts with
+ * the title, then dropping to the pulse's 0.55 as a fresh pulse starts from its first
+ * keyframe. Small, but unconditional and first.
+ *
+ * Scoped at the SURFACE rather than by naming the child, because the rule is about which
+ * surfaces this motion is for: Launch is not a menu. Any future surface whose children own
+ * animations belongs on this exclusion for the same reason, and `menu-transition.test.ts`
+ * pins both halves -- the splash hint's pulse surviving, and the roster of every class in
+ * this file that owns an `animation` -- so a second such child cannot be added silently.
+ *
+ * DELIBERATELY NOT REPEATED IN THE `prefers-reduced-motion` BLOCK, for the reason
+ * `--ui-transition-duration`'s own comment gives at length: transitions follow the
+ * RESOLVED policy, not the raw media query, and a copy of that decision here would be the
+ * second source of truth that comment exists to prevent. Nothing is needed anyway.
+ * `hud.ts`'s `transitionMs()` returns 0 under resolved reduced motion, and at 0 the runner
+ * settles synchronously inside the same task that began the transition -- the entering
+ * class is added and removed before any frame is painted, so the keyframes below never
+ * run. Movement is precisely what that preference is about, and this is where it
+ * collapses.
+ */
+.ui-surface--entering:not(.hud-splash) > * {
+  animation: ui-surface-rise-content var(--ui-transition-duration) var(--ui-transition-ease);
+}
+
 .ui-surface--leaving {
   animation: ui-surface-out var(--ui-transition-duration) var(--ui-transition-ease) forwards;
   /* Out of the layout for the whole fade. Two application surfaces are siblings in the
@@ -2429,111 +2484,32 @@
   }
 }
 
-/* ---- The menu-transition EXPERIMENT (issue #542) ----------------------------------
+/* 16px, upward. Chosen off rendered frames rather than guessed, and the frames are why
+ * the number is larger than a reader might expect.
  *
- * Four arms behind `?dev=1&menuTransition=<id>`, comparing what a screen change should
- * look like. The owner reported never having seen a transition at all on the shipped
- * build; the rules above are why, and none of them is broken. Every arm is judged
- * against `fade`, and the winner ships unconditionally with this whole block and the
- * flag deleted -- the shape issues #526 and #536 already used to retire an experiment.
+ * THE MEASUREMENT IT RESTS ON. `--ui-transition-ease` is `cubic-bezier(0.2, 0, 0, 1)`,
+ * steeply front-loaded, and the arriving surface is still nearly transparent while that
+ * front half runs. Traced in Chromium on the production build, Main Menu -> Settings at
+ * 1280x800, sampling computed style on every animation frame: the crossfade occupies 18
+ * frames, and the entering surface is still at 0.20 opacity on the second and only passes
+ * 0.41 on the third. So the portion of any movement a player can actually SEE is only what
+ * is left AFTER the content becomes legible.
  *
- * `fade` HAS NO RULE HERE. It is the shipped path itself, reached by applying no
- * modifier class (`menu-transition.ts`'s `menuTransitionClass`), so "an absent flag and
- * `menuTransition=fade` render identically" is true by construction rather than by a
- * rule that restates the values above and can drift from them.
+ * The same navigation was then captured at 4, 6, 10, 16 and 24px, each screenshotted at a
+ * fixed FRACTION of the animation (the duration token stretched to 3000ms so an
+ * intermediate state could be caught at all -- the eased geometry is a function of the
+ * fraction, not of the clock). At the quarter mark, where the arriving content has just
+ * become legible, the residual offsets measured 1.7, 2.4, 4.2, 6.8 and 9.4px. The 4px
+ * frame is indistinguishable from a plain crossfade -- the content is already where it
+ * will end up before it can be read, which is the very complaint issue #542 exists to
+ * answer -- and at 24px the column visibly comes in from off-position, a different and
+ * much louder effect than "the screen arrived". At 16px there is still 7.3px of travel
+ * left at the frame where the content first passes half opacity, with 14 of the
+ * animation's 18 frames to spend it in.
  *
- * THE MEASUREMENT EVERY CONSTANT BELOW RESTS ON. `--ui-transition-ease` is
- * `cubic-bezier(0.2, 0, 0, 1)`, which is steeply front-loaded, and the arriving surface
- * is still nearly transparent while that front half runs. Traced in Chromium on the
- * production build, Main Menu -> Settings at 1280x800, sampling computed style on every
- * animation frame: the crossfade occupies 18 frames, and the entering surface is still
- * at 0.20 opacity on the second and only passes 0.41 on the third -- by which frame the
- * `rise` arm's own trace shows its 16px translate has already spent 6.5px of its travel,
- * and 8.7px by the fourth at 0.54. So the portion of any movement a player can actually
- * SEE is only what is left AFTER the content becomes legible, which is why both
- * amplitudes below are larger than the small numbers a reader might expect, and why they
- * were chosen off rendered frames rather than from taste.
- *
- * WHY THE MOVING ARMS MOVE THE CONTENT AND NOT THE SURFACE. Every application surface
- * is a full-bleed `position: absolute; inset: 0` flex column carrying a scrim background
- * (`.hud-panel` at rgba(20, 24, 30, 0.55), the pages at `--hud-scrim-page`). Translating
- * or scaling that BOX drags its scrim with it and exposes a strip of un-scrimmed screen
- * along one edge for the whole transition, which is a seam rather than a transition.
- * Since every surface centres a flex COLUMN, an identical translate on each direct child
- * is exactly a translate of the group -- the content moves, the sheet it is printed on
- * stays put. Scale is the one place that shorthand is not exact and the comment must say
- * so: each child grows about its own centre rather than the column spreading about a
- * shared one, so the six blocks of the Settings page gain size without gaining
- * separation. That reads as the screen settling into focus, which is the arm's intent,
- * and is stated here so a reader is not left inferring a group transform that is not
- * happening.
- *
- * DELIBERATELY NOT IN THE `prefers-reduced-motion` BLOCK, for the reason
- * `--ui-transition-duration`'s own comment gives at length: transitions follow the
- * RESOLVED policy, not the raw media query, and a copy of that decision here would be
- * the second source of truth that comment exists to prevent. Nothing is needed anyway.
- * `hud.ts`'s `transitionMs()` returns 0 under resolved reduced motion, and at 0 the
- * runner settles synchronously inside the same task that began the transition -- the
- * entering class is added and removed before any frame is painted, so no keyframe below
- * ever runs. Movement is precisely what that preference is about, and this is where it
- * collapses; `menu-transition.test.ts` asserts it per arm.
- */
-
-/* `fade-long`: the DURATION arm. Opacity only, and the sole thing it changes is the one
- * token every transition already reads, so `transitionMs()` picks the new value up
- * through its existing single read and no second constant exists anywhere.
- *
- * 300ms, exactly double the control. A doubling rather than a nudge because the arm has
- * to answer "is duration the whole problem?", and a value inside the 120-180ms budget
- * the shipped 150ms sits mid-range of could not: two neighbouring values inside one
- * budget produce no ruling. Traced on the production build: the control paints 18
- * animation frames spanning 142ms, 17 of them at an intermediate opacity, and this arm
- * 36 frames spanning 292ms with 34 intermediate -- twice as much change on screen for
- * the eye to catch. Whether that is too long for a screen the player passes through over
- * and over is exactly what the comparison is for; this arm exists to be rejected as
- * readily as adopted. */
-.hud--menu-transition-fade-long {
-  --ui-transition-duration: 300ms;
-}
-
-/* `rise` and `settle`: the MOVEMENT arms, both at the control's own duration. They keep
- * `--ui-transition-duration` untouched on purpose -- `fade-long` already owns the
- * duration variable, and an arm that moved AND slowed could not tell the reader which
- * half it had to thank. One variable per arm. */
-
-/* `:not(.hud-splash)` because `animation` is ONE property per element and this selector
- * wins: three classes against `.hud-splash-hint`'s one, so an entering surface whose child
- * already animates has that animation replaced rather than joined. The splash hint's
- * `hud-splash-pulse` is exactly that case -- an infinite pulse on a direct child of a
- * surface that really does enter (`transitionTo` lists SPLASH_SURFACE), so without this it
- * stops pulsing for good the moment either moving arm is selected.
- *
- * Scoped at the SURFACE rather than by naming the child, because the rule is about which
- * surfaces this experiment is for: Launch is not a menu, and the arms are a comparison of
- * MENU transitions. Any future surface whose children own animations belongs on this
- * exclusion for the same reason -- `menu-transition.test.ts` pins the splash case so a
- * third one cannot be added silently. */
-
-.hud--menu-transition-rise .ui-surface--entering:not(.hud-splash) > * {
-  animation: ui-surface-rise-content var(--ui-transition-duration) var(--ui-transition-ease);
-}
-
-.hud--menu-transition-settle .ui-surface--entering:not(.hud-splash) > * {
-  animation: ui-surface-settle-content var(--ui-transition-duration) var(--ui-transition-ease);
-}
-
-/* 16px, upward. Chosen off rendered frames rather than guessed: the same navigation was
- * captured at 4, 6, 10, 16 and 24px, each screenshotted at a fixed FRACTION of the
- * animation (the duration token stretched to 3000ms so an intermediate state could be
- * caught at all -- the eased geometry is a function of the fraction, not of the clock).
- * At the quarter mark, where the arriving content has just become legible, the residual
- * offsets measured 1.7, 2.4, 4.2, 6.8 and 9.4px. The 4px frame is indistinguishable from
- * the control -- the content is already where it will end up before it can be read,
- * which is the very complaint this issue exists to answer -- and at 24px the column
- * visibly comes in from off-position, a different and much louder effect than "the
- * screen arrived". On the arm as it now stands, 16px still has 7.3px of travel left at
- * the frame where the content first passes half opacity, with 14 of the animation's 18
- * frames to spend it in. */
+ * `transform: none` rather than `translateY(0)` at the end, so the element leaves the
+ * animation with no transform at all and creates no containing block for anything
+ * absolutely positioned inside it afterwards. */
 @keyframes ui-surface-rise-content {
   from {
     transform: translateY(16px);
@@ -2543,15 +2519,105 @@
   }
 }
 
-/* 0.94, growing to 1. Matched to `rise` by AMPLITUDE, so the two arms differ in KIND of
- * movement rather than in amount of it and the ruling is about which picture reads
+/* ---- The menu transitions the shipped one was chosen over (issue #542) -------------
+ *
+ * Three alternatives behind `?dev=1&menuTransition=<id>`, kept selectable after the
+ * comparison rather than deleted with it. The owner's ruling was "I think rise is the way
+ * to go. Default to that and leave the rest selectable still via flags or whatever."
+ *
+ * `rise` HAS NO RULE HERE, and that is the whole point of this block's shape. It is the
+ * shipped path itself, up beside `.ui-surface--entering` where the rest of issue #364's
+ * motion contract lives, reached by applying no modifier class at all
+ * (`menu-transition.ts`'s `menuTransitionClass`). So "an absent flag and
+ * `menuTransition=rise` render identically" is true by construction rather than by a rule
+ * that restates the shipped values and is free to drift from them.
+ *
+ * That inverted when `rise` was adopted: `fade` used to be the treatment with no rule, and
+ * now needs an explicit one. Which is the right direction -- the DEFAULT is what must
+ * never be restated, and an alternative that says "not the default" has something of its
+ * own to say.
+ *
+ * Every rule below overrides the shipped content motion and therefore repeats its
+ * `:not(.hud-splash)` exclusion, for the reason that rule's own comment gives: `animation`
+ * is one property per element, and a selector that reached the splash hint would replace
+ * its infinite `hud-splash-pulse` rather than join it. `menu-transition.test.ts` checks
+ * the hint on the shipped path AND on every treatment, so an override added here without
+ * the exclusion fails rather than quietly stopping the title screen's pulse.
+ *
+ * None of this is repeated inside the `prefers-reduced-motion` block, and nothing needs to
+ * be: `transitionMs()` returns 0 under the RESOLVED policy and the entering class is added
+ * and removed before a frame is painted, so no keyframe here or above ever runs. That is
+ * the same reasoning `--ui-transition-duration`'s comment sets out, and stating it a
+ * second time in a media query would be the second source of truth it forbids -- and would
+ * be wrong for the player who chose `full` motion against an OS asking for `reduce`.
+ */
+
+/* `fade` and `fade-long`: opacity only, the transition as it was before issue #542.
+ *
+ * One rule for the pair because that is one fact -- these are the two treatments with no
+ * movement -- rather than two coincidentally identical declarations. `animation: none`
+ * rather than a longhand, so the entering content leaves with the shorthand's every
+ * component at its initial value and no fragment of the shipped motion survives.
+ *
+ * CANCELLING IS NOT OBVIOUSLY THE SAME AS NEVER HAVING HAD ONE, so it was checked in
+ * Chromium on the production build rather than argued. Main Menu -> Settings with the
+ * duration token stretched to 2000ms, sampling the entering page's first child: under the
+ * default it reports `animation-name: ui-surface-rise-content` and residual translates of
+ * 13.5, 6.3, 1.9 and 0.2px as the surface's opacity climbs 0.154 -> 0.607 -> 0.880 ->
+ * 0.985; under `fade` the same child reports `animation-name: none` and `transform: none`
+ * at every one of those samples, while its opacity runs 0.158 -> 0.608 -> 0.881 -> 0.986
+ * -- the same curve, differing only by where in a frame each of two separate page loads
+ * happened to be sampled. The cancel leaves no trace of the motion and none of itself.
+ *
+ * `fade` is why the flag was not retired with the experiment. It is the one way back to
+ * the pre-#542 transition, which is what makes a regression report about the new default
+ * answerable rather than a matter of memory -- so this rule is load-bearing rather than
+ * archival, and `menu-transition.test.ts` pins the values it has to reproduce, which is
+ * all jsdom can do: it computes no animated value, so the capture above is the only place
+ * the two treatments are compared as a browser actually renders them. */
+.hud--menu-transition-fade .ui-surface--entering:not(.hud-splash) > *,
+.hud--menu-transition-fade-long .ui-surface--entering:not(.hud-splash) > * {
+  animation: none;
+}
+
+/* `fade-long`: the same crossfade at double the duration, and the sole thing it changes is
+ * the one token every transition already reads, so `transitionMs()` picks the new value up
+ * through its existing single read and no second constant exists anywhere.
+ *
+ * 300ms, exactly double. A doubling rather than a nudge because the treatment had to
+ * answer "is duration the whole problem?", and a value inside the 120-180ms budget the
+ * shipped 150ms sits mid-range of could not: two neighbouring values inside one budget
+ * produce no ruling. Traced on the production build: a 150ms crossfade paints 18 animation
+ * frames spanning 142ms, 17 of them at an intermediate opacity, and this one 36 frames
+ * spanning 292ms with 34 intermediate. It answered the question in the negative -- the
+ * movement treatments read better than the long fade -- and stays selectable so the
+ * comparison can be re-run rather than re-argued. */
+.hud--menu-transition-fade-long {
+  --ui-transition-duration: 300ms;
+}
+
+/* `settle`: the movement `rise` was chosen over -- a slight scale up rather than a
+ * translate, at the shipped duration.
+ *
+ * Scale is the one place "an identical transform on each child is a transform of the
+ * group" is not exact, and this is where a reader would otherwise infer a group transform
+ * that is not happening: each child grows about its OWN centre rather than the column
+ * spreading about a shared one, so the six blocks of the Settings page gain size without
+ * gaining separation. That reads as the screen settling into focus, which was the
+ * treatment's intent. */
+.hud--menu-transition-settle .ui-surface--entering:not(.hud-splash) > * {
+  animation: ui-surface-settle-content var(--ui-transition-duration) var(--ui-transition-ease);
+}
+
+/* 0.94, growing to 1. Matched to the shipped `rise` by AMPLITUDE, so the two differ in
+ * KIND of movement rather than in amount of it and the ruling was about which picture read
  * better rather than about which was given more room. The Settings page's widest block
  * measures 449.1px at rest, so a scale of s starts each of its vertical edges displaced
  * 449.1 * (1 - s) / 2: the candidates 0.98, 0.96, 0.94 and 0.90 start at 4.5, 9.0, 13.5
  * and 22.5px, and 13.5px is the nearest of those to `rise`'s 16px. Corroborated on the
  * rendered frames from the same sweep -- at the quarter mark those four rendered that
  * block at 445.6, 442.1, 440.7 and 431.6px, so 0.98 had moved each edge 1.8px, which is
- * indistinguishable from the control and is exactly the failure this issue exists to
+ * indistinguishable from a plain crossfade and is exactly the failure issue #542 exists to
  * fix. `transform: none` rather than `scale(1)` at the end, so the element leaves the
  * animation with no transform at all and creates no containing block for anything
  * absolutely positioned inside it afterwards. */

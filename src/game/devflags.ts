@@ -326,18 +326,21 @@ export interface DevFlags {
    */
   blockedFire: BlockedFireCue | null;
   /**
-   * Which menu-transition arm the HUD runs between application surfaces (issue #542).
-   * `null` -- absent or unrecognised -- is the shipped 150ms opacity crossfade, which is
-   * also what the `fade` arm names, because `fade` IS that path rather than a copy of it.
+   * Which menu transition the HUD runs between application surfaces (issue #542).
+   * `null` -- absent or unrecognised -- is the shipped 150ms crossfade plus a 16px upward
+   * lift on the entering content, which is also what the `rise` value names, because
+   * `rise` IS that path rather than a copy of it.
    *
-   * The owner reported never having seen a transition on the shipped build. Nothing is
-   * broken; the question is whether a near-imperceptible crossfade is the intent, and the
-   * issue settles it by comparison. `fade-long` isolates duration and `rise`/`settle`
-   * isolate movement, so whichever arm wins names its own cause.
+   * The owner reported never having seen a transition on the shipped build; nothing was
+   * broken, a 150ms opacity-only crossfade between two surfaces sharing one rectangle is
+   * simply near-imperceptible. Four treatments were compared and `rise` was adopted. The
+   * other three stay selectable rather than being deleted with the experiment -- `fade`
+   * above all, because it is the one way back to the pre-#542 transition and therefore
+   * the thing a regression report about the new default is answered with.
    *
    * Reject-to-null, the same idiom as `backdrop`/`mineWarn`/`blockedFire`:
-   * `?menuTransition=swoosh` keeps the shipped transition rather than guessing at an arm
-   * that does not exist.
+   * `?menuTransition=swoosh` keeps the shipped transition rather than guessing at a
+   * treatment that does not exist.
    */
   menuTransition: MenuTransition | null;
 }
@@ -460,7 +463,7 @@ function asBackdrop(params: URLSearchParams): BackdropTreatment | null {
   return BACKDROP_TREATMENTS.has(raw) ? (raw as BackdropTreatment) : null;
 }
 
-/** One of the four experiment arms, or null when absent or unrecognised. */
+/** One of the four named transitions, or null when absent or unrecognised. */
 function asMenuTransition(params: URLSearchParams): MenuTransition | null {
   const raw = params.get('menuTransition');
   if (raw === null) return null;
@@ -941,12 +944,14 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...MENU_TRANSITIONS],
     description:
-      'Runs a named menu-transition arm between application surfaces (issue #542); ' +
-      '`fade` is the shipped 150ms opacity crossfade and the control the rest are judged ' +
-      'against.',
+      'Runs a named menu transition between application surfaces (issue #542); `rise` is ' +
+      'the shipped 150ms crossfade plus a 16px upward lift, and `fade` is the ' +
+      'opacity-only transition that shipped before it.',
     notes: [
       'Read once at HUD construction, so it takes a reload rather than applying mid-session.',
-      'Every arm collapses to an instant change under resolved reduced motion, movement ' +
+      'Absent and `rise` are the same path, not merely the same result: the shipped ' +
+        'transition adds no class and has no rule of its own.',
+      'Every value collapses to an instant change under resolved reduced motion, movement ' +
         'included.',
     ],
   },
