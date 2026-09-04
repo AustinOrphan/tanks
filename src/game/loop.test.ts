@@ -1623,7 +1623,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           ...base,
           tanks,
           // The real createWorldFor stamps its `lives` argument onto the world it returns,
-          // and loop.ts's `refreshStats` projects `world.lives` straight to the topbar.
+          // and loop.ts's status projection carries `world.lives` straight to the topbar.
           // While this branch DROPPED the argument, every synthetic build echoed the
           // fixture's own count, so the LIVES readout could only ever be observed pushing
           // ONE number however its callers varied it. Measured on a88d39e: replacing
@@ -4472,7 +4472,8 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.handle.dispose();
     });
 
-    // Twin of the versus-results test just above: setVersusStocks (hud.test.ts) and
+    // Twin of the versus-results test just above: the stock strip's own rendering
+    // (hud.match.test.ts) and
     // the derivation itself are each unit-testable in isolation, but neither can see
     // whether onSimulated's isVersusFrame branch actually calls the setter on a real,
     // driven frame. Reuses the exact bullet-on-P1 fixture the results test above
@@ -8338,13 +8339,15 @@ describe('startGameWith: canonical session identity at the production boundary',
 
     it("THE STATED RESIDUAL: the menu keeps the abandoned world's enemy count until a board is built", () => {
       // Not a claim that this is right -- a pin on what deferring the world build costs,
-      // so it is reviewable instead of discovered. `refreshStats` projects the topbar's
-      // campaign chrome from a WORLD, and a quit no longer builds one, so on the menu it
-      // reads the session the player just left. Removing gameplay chrome from
-      // application screens is #324, and that is what dissolves this.
+      // so it is reviewable instead of discovered. The topbar's campaign chrome is
+      // projected from a WORLD, and a quit no longer builds one, so on the menu it reads
+      // the session the player just left. Since issue #324's step S6 the quit handler
+      // states that staleness in its own argument (`pushStatus(driver.world, ...)`)
+      // rather than leaving it to a call it never makes -- the numbers on screen are
+      // unchanged, and what changed is that a reader of loop.ts can see them.
       //
-      // BOTH halves are measured now. `setLives` rides the SAME `refreshStats` call and
-      // goes stale in the same way. It went unasserted while the fake's world builder
+      // BOTH halves are measured. Lives and Enemies ride the SAME push and go stale
+      // together. It went unasserted while the fake's world builder
       // ignored its `lives` argument and echoed one constant, which would have made a
       // lives assertion measure the fixture rather than production (#386); the fake now
       // stamps the argument, so the readout varies with the board it was built for.
@@ -8372,14 +8375,15 @@ describe('startGameWith: canonical session identity at the production boundary',
       expect(h.rec.lives.at(-1), 'lives was re-projected without a world').toBe(practiceLives);
 
       // ...and it is genuinely stale rather than coincidentally equal: Continue builds
-      // the run's board, and the same `refreshStats` call that pushes Lives pushes this.
+      // the run's board, and the same push that carries Lives carries this.
       h.hud.startRestart();
       expect(h.rec.enemies.at(-1)).toBe(2); // level 2 of the fixture, the run's own board
       // The knob proven live: a SECOND build with a different `lives` argument moves the
-      // readout off the practice board's count. Measured: replacing `hud.setLives(w.lives)`
-      // with the constant 3 fails exactly this test, 1 of 397 in this file. On a88d39e,
-      // before the fake stamped its argument, that same mutation left all 4008 tests in
-      // the repo green -- see the `campaign-lives-readout-ignores-the-world` manifest entry.
+      // readout off the practice board's count. Measured on this branch: replacing the
+      // status projection's `lives: forWorld.lives` with the constant 3 fails this test,
+      // one of 3 it fails in this file. On a88d39e, before the fake stamped its argument,
+      // the equivalent mutation left all 4008 tests in the repo green -- see the
+      // `campaign-lives-readout-ignores-the-world` manifest entry.
       expect(h.rec.lives.at(-1), "the run's carried count, not the practice board's").toBe(2);
       expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: 2 });
       h.handle.dispose();

@@ -543,7 +543,7 @@ export interface Hud {
    * rather than doing any WebGL of its own: hud.ts constructs no WebGL context and
    * builds no `three` object of its own, which is what lets hud.test.ts keep running
    * under plain jsdom. (It DOES import render/entities' plain
-   * IDENTITY_RING_COLORS/TEAM_COLORS number arrays -- see setVersusStocks' own doc
+   * IDENTITY_RING_COLORS/TEAM_COLORS number arrays -- see `VersusStock`'s own doc
    * comment -- a value import, not a WebGL one; measured under this file's own jsdom
    * suite before landing, since `entities.ts` pulls in `three` at module scope too.)
    */
@@ -765,8 +765,8 @@ export interface Hud {
    * the same `HudRelaunchTarget` vocabulary and carries the same warning: the
    * word has to be true about the click's DESTINATION, and `onStartRestart`
    * routes a developer-flag versus session -- Versus by identity -- through
-   * `landOnCampaignBoard`, so keying either surface on `setSessionKind` would
-   * name a pane the click never opens.
+   * `landOnCampaignBoard`, so keying either surface on the status projection's
+   * own `kind` would name a pane the click never opens.
    */
   setRelaunchTarget(target: HudRelaunchTarget): void;
   /**
@@ -3708,10 +3708,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       }
     }
     // A one-level total shows no chip -- "Level 1/1" is noise, and both the sandbox and a
-    // setup-pane versus match are exactly that.
-    const showLevel = statusData !== null && statusData.missions > 1;
-    levelChip.classList.toggle('hud-level--hidden', !showLevel);
-    if (showLevel) levelNum.textContent = `${statusData!.mission}/${statusData!.missions}`;
+    // setup-pane versus match are exactly that. Bound to a local rather than re-tested,
+    // so the chip's text cannot be written from a status the visibility line did not
+    // agree was showable.
+    const sequence = statusData !== null && statusData.missions > 1 ? statusData : null;
+    levelChip.classList.toggle('hud-level--hidden', sequence === null);
+    if (sequence) levelNum.textContent = `${sequence.mission}/${sequence.missions}`;
     versusStocksVisible =
       kind === 'versus' && (currentSurface === 'playing' || currentSurface === 'paused');
     versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);
@@ -4542,8 +4544,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // there is no run to return to and the panel is genuinely verdict-only there. Lose
     // stays verdict-only for the same reason. Level select is a menu affair -- and only
     // when there is a choice to make (see setLevelSelect).
-    const clearedIntermediate =
-      s === 'outcome-win' && hasNextMission();
+    const clearedIntermediate = s === 'outcome-win' && hasNextMission();
     shownState = s;
     /*
      * THE THREE MAIN-MENU REGIONS (issue #226), hidden as GROUPS rather than one button
@@ -4639,8 +4640,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       setSubtitle('');
     } else if (s === 'outcome-win') {
       // An intermediate win advances; only the LAST level's win is the game's.
-      if (hasNextMission()) {
-        titleEl.textContent = `Level ${statusData!.mission} cleared!`;
+      if (statusData !== null && hasNextMission()) {
+        titleEl.textContent = `Level ${statusData.mission} cleared!`;
         setSubtitle('On to the next.');
       } else {
         titleEl.textContent = 'You Win!';

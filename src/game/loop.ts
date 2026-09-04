@@ -1980,15 +1980,17 @@ export function startGameWith(
    * It matters more than a guard on a change-driven setter would: the status is pushed
    * from `onSimulated` (see that callback's own comment), which runs on EVERY 'playing'
    * frame unconditionally at up to 60/s, and one of the things the projection carries is
-   * a stock strip whose render rebuilds four DOM elements. Without this the HUD would
-   * repaint that strip every frame of a live match, event or no event.
+   * a stock strip whose render rebuilds one DOM element per slot -- four at the n-player
+   * cap. Without this the HUD would repaint that strip every frame of a live match, event
+   * or no event.
    *
    * `JSON.stringify` rather than a hand-joined key of the fields that matter, and that is
    * deliberate: a hand-written key is a second place to remember when `GameplayStatus`
    * grows a field, and forgetting it there does not fail a type check -- it silently
-   * drops updates to the new field. The objects are small (six fields, at most four stock
-   * entries) and built as literals, so the key is stable and cheap. `null` is the
-   * sentinel "never pushed yet", distinct from any real key.
+   * drops updates to the new field. The objects are small -- five fields on a campaign or
+   * practice status, four on a versus one plus at most four stock entries -- and built as
+   * literals, so the key is stable and cheap. `null` is the sentinel "never pushed yet",
+   * distinct from any real key.
    */
   let lastStatusKey: string | null = null;
 
