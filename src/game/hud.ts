@@ -229,8 +229,10 @@ export interface Hud {
   /**
    * Whether Continue has anything to resume: true iff an active campaign run exists.
    * A separate signal from setLevelSelect's `unlocked` on purpose -- see that doc
-   * comment. The loop pushes this from wherever the run's existence can change: boot,
-   * New Game, quitting to title, and game-over/campaign-completion.
+   * comment. `route-host.ts` pushes it at page construction and on every arrival at the
+   * Main Menu, which since issue #324's step S5 is the only place it is pushed from: the
+   * run changes while the player is in a match, and an arrival is both the first moment
+   * the button can be seen and one that necessarily precedes seeing it.
    */
   setContinueAvailable(available: boolean): void;
   /**
@@ -363,8 +365,10 @@ export interface Hud {
    */
   onFireTap(cb: () => void): void;
   /**
-   * THE RECORDS TABLE's two columns, pushed by the routes whenever they change. The HUD
-   * re-renders the table only while it is visible.
+   * THE RECORDS TABLE's two columns, pushed by the routes when the page is opened (see
+   * `onRecordsOpen`) and after a reset. The HUD re-renders the table only while it is
+   * visible, which is what makes an open-time push complete rather than a sampling of a
+   * value that keeps moving.
    *
    * `attempt` (not `run`, see stats.ts): a level-sized tally, zeroed on every
    * switchTo. The visible copy still reads "This run" -- that is user-facing
@@ -425,6 +429,25 @@ export interface Hud {
    * evidence against a real render is Task 7's job (screenshots), not this file's.
    */
   setVersusStocks(stocks: { slot: number; stock: number; team?: number }[] | null): void;
+  /**
+   * The Records page just opened, on either of its two tabs.
+   *
+   * The hook that lets Records be painted by whoever OWNS the numbers rather than by
+   * whoever happens to be playing (issue #324, step S5). Both tables re-render from this
+   * HUD's own retained copy of the counts, and that copy has to come from somewhere: the
+   * gameplay session used to push it on every event-bearing frame, which is what kept the
+   * page's construction-time copy from going stale across a match. With the session's
+   * push gone there is nothing between construction and the open -- and nothing needs to
+   * be, because the page's stores are current at every instant and this pane is reachable
+   * from the Main Menu alone. A per-frame push becomes a per-open read.
+   *
+   * Fired for the Stats tab and the Achievements tab alike, because Records is ONE entry
+   * with two tabs (see `handleRecordsOpen`) and a tab switch reopens the sibling through
+   * the same layer machinery. No paired close: unlike `onCustomizeClose` and
+   * `onControllersClose`, nothing here owns a resource whose lifetime must match the
+   * panel's -- see `onVersusOpen` for the same reasoning about the setup pane.
+   */
+  onRecordsOpen(cb: () => void): void;
   /** Two-click-confirmed on the stats page. */
   onResetStats(cb: () => void): void;
   /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
@@ -472,7 +495,10 @@ export interface Hud {
    */
   onCustomizeOpen(cb: () => void): void;
   onCustomizeClose(cb: () => void): void;
-  /** The earned set, pushed by the loop whenever it changes. Re-renders if open. */
+  /**
+   * The earned set, pushed by the routes when the Records page is opened (see
+   * `onRecordsOpen`) and after a progress reset. Re-renders if open.
+   */
   setAchievements(earned: ReadonlySet<AchievementId>): void;
   /**
    * Announce newly earned achievements. One toast each, self-expiring; several
@@ -540,15 +566,15 @@ export interface Hud {
    */
   onReassignSlot(cb: (slot: number, source: SlotSource) => void): void;
   /**
-   * The session-held `Assignment` to render, pushed by `loop.ts` at boot and after every
-   * accepted `reassignSlot`. Only re-renders if the panel is open (same convention
-   * `setAchievements` uses) -- rebuilding a hidden panel's rows on every tick's worth of
-   * reassignments would be wasted work.
+   * The `Assignment` to render, pushed by `route-host.ts` from what the live session
+   * reports through its slot -- at the session's construction and after every accepted
+   * `reassignSlot` (issue #324, step S5). Unconditional, unlike `setAchievements`: see
+   * the implementation's own comment for why the rows stay current while hidden.
    */
   setControllers(assignment: Assignment): void;
   /**
-   * The panel's live candidate-pad list, pushed by `loop.ts` while `.hud-controllers` is
-   * open (see `onControllersOpen`/`onControllersClose`) -- one call on open (`getGamepads`
+   * The panel's live candidate-pad list, pushed by `route-ui.ts` while `.hud-controllers`
+   * is open (see `onControllersOpen`/`onControllersClose`) -- one call on open (`getGamepads`
    * read once immediately, since the browser's `gamepadconnected`/`gamepaddisconnected`
    * events fire only on CHANGE) and one per hotplug event after that. A `'gamepad'`-kind
    * row's connected/disconnected display is DERIVED from this list, not a separate flag:
@@ -599,7 +625,7 @@ export interface Hud {
    * `showControllers`/`showCustomize` use: focus-the-pane on open, closed
    * unconditionally by `setState` (every OTHER state change hides it, same as every
    * sibling subpanel). `initial`, when supplied and TRUTHY, reseeds the pane's own
-   * selections; omitting the argument AND passing `null` (`loop.ts`'s own
+   * selections; omitting the argument AND passing `null` (`route-ui.ts`'s own
    * `deps.initialVersusConfig ?? null` for "nothing retained yet") both leave the
    * pane's PERSISTED session-local selections untouched rather than resetting them to
    * a hardcoded default -- so Back, then Versus again, keeps whatever was last chosen
@@ -677,12 +703,14 @@ export interface Hud {
    */
   setRelaunchTarget(target: HudRelaunchTarget): void;
   /**
-   * WHICH TREATMENT the application backdrop draws (issue #317). A boot-time fact,
-   * pushed once beside `setRelaunchTarget`: nothing in a session changes it.
+   * WHICH TREATMENT the application backdrop draws (issue #317). A PAGE-lifetime fact,
+   * pushed once by `route-host.ts` at construction: nothing in a session changes it, and
+   * since issue #324's step S5 no session pushes it either -- the ground is chrome the
+   * application routes stand on, so a page that never starts a match still has one.
    *
    * `'default'` is the flat application ground every player sees. `'felt'` is the green
    * tabletop the adopted ruling kept as a switchable alternative rather than as dead
-   * CSS, reached through `?dev=1&backdrop=felt` -- `loop.ts` reads the flag, so the HUD
+   * CSS, reached through `?dev=1&backdrop=felt` -- the page reads the flag, so the HUD
    * takes a named treatment rather than a query string. A named union, not a boolean,
    * because #366 adds further treatments to this same layer.
    *
@@ -781,7 +809,7 @@ export type RouteHudKey =
   | 'onNewGame' | 'onCampaignOpen'
   | 'setMuted' | 'setVolume' | 'onMuteToggle' | 'onVolumeChange'
   | 'onStartRestart' | 'onQuitToTitle' | 'onPauseTap' | 'onMineTap' | 'onFireTap'
-  | 'setStats' | 'onResetStats' | 'onResetProgress' | 'setAchievements'
+  | 'setStats' | 'onResetStats' | 'onResetProgress' | 'setAchievements' | 'onRecordsOpen'
   | 'setHullColor' | 'onPickHullColor' | 'setSkin' | 'onPickSkin'
   | 'setAccentColor' | 'onPickAccentColor'
   | 'previewCanvas' | 'previewRotateButtons' | 'onCustomizeOpen' | 'onCustomizeClose'
@@ -1697,6 +1725,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const customizeCloseCbs: Array<() => void> = [];
   const controllersOpenCbs: Array<() => void> = [];
   const controllersCloseCbs: Array<() => void> = [];
+  const recordsOpenCbs: Array<() => void> = [];
   let currentAssignment: Assignment = [];
   let currentDetectedPads: readonly DetectedPad[] = [];
   /** Fails closed: see setBotAssignmentAllowed's doc comment on the Hud interface. */
@@ -2216,10 +2245,27 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     armedReset = { btn, timer: setTimeout(disarmReset, 4000) };
   }
 
+  /**
+   * Hand the Records tables their numbers, immediately before the pane renders them.
+   *
+   * Placed before the render rather than after it (the order `showCustomize` and
+   * `showControllers` use) so the pane is drawn once from the values it is about to show.
+   * That is a saving, not a correctness point -- `setStats` and `setAchievements` both
+   * re-render while their pane is visible, so either order settles on the same table.
+   *
+   * Unguarded, unlike those two callbacks: a redundant fire here re-reads a store and
+   * re-renders a table, where theirs would build a second WebGL context or leak a pair of
+   * window listeners. That is why Records needs no `wasOpen` snapshot and no close hook.
+   */
+  function paintRecords(): void {
+    for (const cb of recordsOpenCbs) cb();
+  }
+
   function showStats(show: boolean): void {
     disarmReset(); // entering OR leaving, no reset stays one click from firing
     if (show) {
       swapSurface(openSurface(), STATS_SURFACE, () => {
+        paintRecords();
         renderStatsTable();
         // The PANE, not its first button -- see the roving-focus doc comment below on why
         // every panel-open transition focuses the container rather than a control.
@@ -2283,6 +2329,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function showAchievements(show: boolean): void {
     if (show) {
       swapSurface(openSurface(), ACH_SURFACE, () => {
+        paintRecords();
         renderAchievements();
         achView.focus();
       });
@@ -2900,10 +2947,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   });
   /**
    * The Versus button, while its click is being dispatched -- and `null` at every other
-   * moment. `showVersusSetup(true)` is public and is also called from loop.ts for the
-   * post-match "Versus Setup" reopen, where no control invoked the pane; recording the
-   * opener only around the button's own callback loop is what keeps that reopen's Back
-   * landing on the container rather than on a button nobody pressed.
+   * moment. `showVersusSetup(true)` is public and is also called for the post-match
+   * "Versus Setup" reopen -- `route-ui.ts`'s `openVersusSetup`, reached through the route
+   * host's slot -- where no control invoked the pane; recording the opener only around
+   * the button's own callback loop is what keeps that reopen's Back landing on the
+   * container rather than on a button nobody pressed.
    */
   let versusOpener: HTMLElement | null = null;
 
@@ -4698,6 +4746,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // the RUNNING session (the campaign refuses it), and the setup pane is a versus
       // pane, where Bot is always a legitimate slot role -- `defaultSlots` makes it the
       // default for every slot after the first.
+    },
+    onRecordsOpen(cb: () => void): void {
+      recordsOpenCbs.push(cb);
     },
     onControllersOpen(cb: () => void): void {
       controllersOpenCbs.push(cb);

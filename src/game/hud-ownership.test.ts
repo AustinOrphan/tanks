@@ -3,17 +3,17 @@ import { describe, it, expect } from 'vitest';
 /**
  * The boundary issue #324 draws, measured against the tree rather than asserted in prose.
  *
- * `hud.ts` classifies all 66 `Hud` members into `HudFrameKey` / `RouteHudKey` /
+ * `hud.ts` classifies all 67 `Hud` members into `HudFrameKey` / `RouteHudKey` /
  * `GameplayHudKey`, and a type-level guard there already fails the build if a member is
  * added without an owner. That guard cannot see CALL SITES, though, and call sites are
- * where the actual violation lives: `loop.ts` -- the gameplay session -- reaches straight
- * into Settings sliders, the Records table and the Main Menu's level list today.
+ * where the actual violation lives: `loop.ts` -- the gameplay session -- reached straight
+ * into Settings sliders, the Records table and the Main Menu's level list.
  *
  * So this pins the violations as an EXPLICIT, SHRINKING list. Every remaining step of
  * #324 deletes entries from `SESSION_REACHES_ROUTE_UI`; nothing may add one. That makes
  * the migration's progress a number a reviewer can read, and -- more importantly -- makes
  * a NEW violation fail immediately rather than being absorbed into a boundary everyone
- * already believes is broken.
+ * already believes is broken. One entry is left, and it belongs to step S7.
  *
  * Source is read with the same `import.meta.glob(..., '?raw')` scan
  * `dependency-direction.test.ts` uses, for the same reason: the question is what the file
@@ -36,18 +36,6 @@ const hudSource = rawModules['./hud.ts'];
  * than as a list of complaints. These are NOT acceptable: they are the debt, written down.
  */
 const SESSION_REACHES_ROUTE_UI: Readonly<Record<string, string>> = {
-  // S5 -- the shell repaints application surfaces from the stores, on route arrival.
-  setContinueAvailable: 'S5',
-  setStats: 'S5',
-  setAchievements: 'S5',
-  setLevelSelect: 'S5',
-  setControllers: 'S5',
-  setBotAssignmentAllowed: 'S5',
-  showVersusSetup: 'S5',
-  setHullColor: 'S5',
-  setSkin: 'S5',
-  setAccentColor: 'S5',
-  setBackdrop: 'S5',
   // S7 -- the host pushes this when it hands a session the slot.
   setRelaunchTarget: 'S7',
 };
@@ -118,12 +106,13 @@ describe('HUD ownership boundary (issue #324)', () => {
       'showToast',
     ]);
     expect([...route].filter((k) => frame.has(k))).toEqual([]);
-    // Counts stated beside the population they came from: 66 members, of which showToast
-    // is counted twice, so the roles sum to 67. Two fewer than #532 measured -- step S4
-    // merged setCoopKills and setVersusResults into the single setOutcome projection, so
-    // the interface SHRANK by one while gaining a member, which is the shape every
-    // remaining absorption step should have.
-    expect(frame.size + route.size + gameplay.size).toBe(67);
+    // Counts stated beside the population they came from: 67 members, of which showToast
+    // is counted twice, so the roles sum to 68. One MORE than step S4 left, and that is
+    // the shape of this step rather than a regression: S5 moved eleven application
+    // surfaces off the session, and the Records page -- the one of them a session pushed
+    // because nothing else could see the panel open -- needed `onRecordsOpen` before the
+    // page could paint it. Eleven call sites deleted for one member added.
+    expect(frame.size + route.size + gameplay.size).toBe(68);
     expect(gameplay.size, 'what a live match may write').toBe(14);
   });
 

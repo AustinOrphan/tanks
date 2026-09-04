@@ -256,7 +256,11 @@ interface Recorder {
    * a test that only watched one of them could not see that.
    */
   relaunchTargets: HudRelaunchTarget[];
-  /** Every value passed to hud.setBackdrop, in order -- WHICH GROUND the menu stands on. */
+  /**
+   * Every value passed to hud.setBackdrop, in order -- WHICH GROUND the menu stands on.
+   * The PAGE's push since issue #324's step S5, so a fixture that never starts a session
+   * still records one.
+   */
   backdrops: HudBackdrop[];
   /**
    * Every value passed to hud.setReducedMotion, in order (issue #364).
@@ -424,6 +428,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     toggleHaptics(v: boolean): void;
     pickLevel(i: number): void;
     newGame(): void;
+    openRecords(): void;
     resetStats(): void;
     resetProgress(): void;
     pickHull(id: HullColorId): void;
@@ -635,6 +640,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onTouchSchemeChange = (_s: TouchScheme): void => {};
   let onFireModeChange = (_m: FireMode): void => {};
   let onHapticsChange = (_on: boolean): void => {};
+  let onRecordsOpen = (): void => {};
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
   let onPickSkin = (_id: SkinId): void => {};
@@ -1224,6 +1230,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         showToast: (message: string) => {
           rec.plainToasts.push(message);
         },
+        onRecordsOpen: (cb: () => void) => {
+          onRecordsOpen = cb;
+        },
         onResetStats: (cb: () => void) => {
           onResetStats = cb;
         },
@@ -1261,9 +1270,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onControllersClose: (cb: () => void) => {
           onControllersClose = cb;
         },
-        // Task 5's own wiring: loop.ts subscribes both, and calls showVersusSetup
-        // itself (on Versus-button open and on a finished versus session's rematch
-        // path) -- recorded here the same way onQuitToTitle/onStartRestart's
+        // Task 5's own wiring, page-owned since issue #427 and reached through the
+        // slot since #324's step S5: `route-ui.ts` subscribes both and is the one caller
+        // of `showVersusSetup`, for the Versus button and for a finished versus session's
+        // rematch alike. Recorded here the same way onQuitToTitle/onStartRestart's
         // subscriptions are, with this harness's own openVersus/startVersus trigger
         // (below, mirroring openControllers) driving the recorded callback.
         onVersusOpen: (cb: () => void) => {
@@ -1733,6 +1743,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       toggleHaptics: (v: boolean) => onHapticsChange(v),
       pickLevel: (i) => onPickLevel(i),
       newGame: () => onNewGame(),
+      openRecords: () => onRecordsOpen(),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
       pickSkin: (id: SkinId) => onPickSkin(id),
@@ -3990,10 +4001,18 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     });
 
     it('Continue availability reflects whether a run exists, refreshed at every arrival at the title screen', () => {
+      // Every reading here is the PAGE's (issue #324, step S5): the session stopped
+      // pushing Continue at the moments it changed the run, because the only moment the
+      // button is on screen is an arrival at the Main Menu, and the page re-reads the
+      // store at every one of those. New Game leaves for gameplay on the same click, so
+      // the run it creates is reported by the next arrival rather than by the click.
       const h = boot(makeDeps({ levelCount: 2 }));
       expect(h.rec.continueAvailable.at(-1), 'boot: no run yet').toBe(false);
       h.hud.newGame();
-      expect(h.rec.continueAvailable.at(-1), 'New Game just created one').toBe(true);
+      expect(h.rec.continueAvailable.at(-1), 'still in gameplay, nothing repainted').toBe(false);
+      h.setState('main-menu');
+      expect(h.rec.continueAvailable.at(-1), 'New Game created one').toBe(true);
+      h.setState('playing');
       h.setState('outcome-lose'); // game over ends the run
       h.setState('main-menu'); // arriving at the title screen refreshes the signal
       expect(h.rec.continueAvailable.at(-1), 'the run that just ended is gone').toBe(false);
@@ -5080,13 +5099,18 @@ describe('startGameWith: the main menu', () => {
     h2.handle.dispose();
   });
 
-  it('records the cleared level AT the win, and refreshes the unlock state', () => {
-    // At the win event, not the Next Level click: quitting after a win keeps the
-    // unlock.
+  it('records the cleared level AT the win, and the page re-sizes the grid on the way back', () => {
+    // Recording happens at the win event, not at the Next Level click: quitting after a
+    // win keeps the unlock. The GRID is a separate claim with a separate owner since
+    // issue #324's step S5 -- the page re-reads the progress store on arrival at the Main
+    // Menu, which is where the Levels button lives and therefore the first moment the new
+    // size can be seen.
     const h = boot(makeDeps({ levelCount: 2 }));
     h.setState('playing');
     h.setState('outcome-win');
     expect(h.rec.cleared).toEqual([1]);
+    expect(h.rec.levelSelects.at(-1), 'nothing re-sizes the grid mid-match').toEqual([1, 2]);
+    h.setState('main-menu');
     expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]);
     h.handle.dispose();
   });
@@ -6356,6 +6380,12 @@ describe('startGameWith: achievements wiring', () => {
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.toasts).toEqual([['boots-on-ground']]);
+    // The TOAST is the session's; the Records page's earned list is the page's since
+    // issue #324's step S5, read from the same store when the page is opened. The
+    // intermediate assertion is the negative control: a session that still pushed the set
+    // itself would satisfy the one below without the open.
+    expect(h.rec.achPushes.length, 'nothing repaints Records mid-match').toBe(pushesBefore);
+    h.hud.openRecords();
     expect(h.rec.achPushes.length).toBe(pushesBefore + 1);
     expect(h.rec.achPushes.at(-1)).toEqual(['boots-on-ground']);
     h.handle.dispose();
@@ -8645,6 +8675,24 @@ describe('quitting a versus match leaves a campaign-shaped Main Menu behind', ()
     expect(page.sessions()).toBe(1);
     expect(h.rec.relaunchTargets.at(-1)).toBe('campaign-levels');
     expect(h.rec.sessionKinds.at(-1)).toBe('campaign');
+    // ...and the Levels grid is CAMPAIGN-sized throughout (issue #324, step S5).
+    //
+    // A versus session's own level system is one synthetic arena, so while the session
+    // pushed the grid itself it pushed a total of 1 -- which `hud.ts` reads as "not a
+    // choice" and hides the Levels button for. Measured in this session by restoring that
+    // push (the manifest entry `session-pushes-the-levels-grid-to-the-hud`): the totals
+    // this fixture records become 3, 3, 1, 3, where the 1 is the versus session and the
+    // final 3 is the arrival repaint this step adds. On `main`, where the arrival painted
+    // only Continue, that 1 was the last word and the empty host left behind after a
+    // versus match had no Levels button at all.
+    //
+    // Asserted over EVERY push rather than the last, because it is the versus session
+    // getting a word in at all that was the defect.
+    expect(
+      h.rec.levelSelects.filter(([, total]) => total !== 3),
+      'a versus session sized the campaign Levels grid to its own arena list',
+    ).toEqual([]);
+    expect(h.rec.levelSelects.at(-1)).toEqual([1, 3]);
   });
 });
 

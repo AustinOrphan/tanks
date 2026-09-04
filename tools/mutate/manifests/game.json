@@ -995,15 +995,17 @@
   },
   {
     "id": "backdrop-flag-never-reaches-the-hud",
-    "file": "src/game/loop.ts",
+    "file": "src/game/route-host.ts",
     "find": "\n  hud.setBackdrop(deps.devFlags.backdrop === 'felt' ? 'felt' : 'default');\n",
     "replace": "\n  hud.setBackdrop('default');\n",
     "expect": "killed",
-    "why": "The one wire between `?dev=1&backdrop=felt` and the screen, cut. Every `.ui-app-ground--felt` rule in hud.css becomes unreachable -- exactly the dead CSS the adopted ruling refused (\"B stays in the code as a switchable alternative ... reachable through a `dev=1` development flag rather than left as dead CSS\") -- and it goes silently: the flag still parses, `FLAG_REGISTRY` still generates its row in docs/dev-flags.md, hud.css.test.ts's presence sweep still finds both felt selectors, and `setBackdrop` is still called once on every boot. Same class as `devflags-developer-mode-gate-always-off` above -- a development gate that goes permanently off for the real browser while the suite stays green. Deliberately NOT mutated to the defensive shape (`if (deps.devFlags.backdrop === 'felt') hud.setBackdrop('felt')`, which drops only the UNCONDITIONAL default push): the markup ships no `--felt` class today, so that edit changes nothing on screen, and pinning it would pin a property whose defect is currently invisible. Anchored on the call line delimited by its own newlines -- the shape `session-title-policy-reused-as-identity` above had to be re-cut to after this very statement was inserted beside it. `pushes the felt treatment for ?dev=1&backdrop=felt, and nothing else does` is the case that measures it, and that case's `mineReach` half is the negative control keeping an unrelated developer flag from satisfying this line. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "why": "The one wire between `?dev=1&backdrop=felt` and the screen, cut. Every `.ui-app-ground--felt` rule in hud.css becomes unreachable -- exactly the dead CSS the adopted ruling refused (\"B stays in the code as a switchable alternative ... reachable through a `dev=1` development flag rather than left as dead CSS\") -- and it goes silently: the flag still parses, `FLAG_REGISTRY` still generates its row in docs/dev-flags.md, hud.css.test.ts's presence sweep still finds both felt selectors, and `setBackdrop` is still called once on every page. Same class as `devflags-developer-mode-gate-always-off` -- a development gate that goes permanently off for the real browser while the suite stays green. Deliberately NOT mutated to the defensive shape (`if (deps.devFlags.backdrop === 'felt') hud.setBackdrop('felt')`, which drops only the UNCONDITIONAL default push): the markup ships no `--felt` class today, so that edit changes nothing on screen, and pinning it would pin a property whose defect is currently invisible. RE-ANCHORED for issue #324's step S5: the application ground is page chrome that outlives every match, so the push moved from the gameplay session's construction to `route-host.ts`'s. The line, the mutation and the flag reading are unchanged; only the file and the killing tests moved, and the page's own case -- which covers a page that never starts a session, a reading the session's push could not make -- joins the session-harness one that measured it before.",
     "tests": [
+      "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
     "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the application ground the development flag names, and the default without one",
       "startGameWith: campaign return from a versus session (Task 5b) pushes the felt treatment for ?dev=1&backdrop=felt, and nothing else does"
     ]
   },
@@ -1843,11 +1845,11 @@
     "find": "      const mine = ++generation;",
     "replace": "      const mine = generation;",
     "expect": "killed",
-    "expectFailures": 2,
+    "expectFailures": 4,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other. Re-measured at 2 of 37 in route-host.test.ts: the second case is \"a stale detach does not reshape the menu under the session that replaced it\", which the detach reset made observable -- with the generation stuck, the outgoing session's late detach reshapes the incoming one's menu."
+    "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other. Re-measured at 2 of 37 in route-host.test.ts: the second case is \"a stale detach does not reshape the menu under the session that replaced it\", which the detach reset made observable -- with the generation stuck, the outgoing session's late detach reshapes the incoming one's menu. Re-measured at 4 of 62 for issue #324's step S5: the slot gained two reporting methods -- the controller assignment and the Versus Setup reopen -- and each has its own stale-capture case, both of which a stuck generation lets an outgoing session satisfy. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "session-teardown-keeps-the-gameplay-slot",
@@ -1903,11 +1905,11 @@
     "find": "    get initialVersusConfig(): VersusConfig | null {\n      return versusConfig;\n    },",
     "replace": "    initialVersusConfig: versusConfig,",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "Replaces the live getter with a value copied at construction. `route-ui.ts` reads `deps.initialVersusConfig` at CLICK time, and the route host is built before any session exists, so a snapshot is permanently `null`: the Versus Setup pane never prefills at all, for anyone, ever. Compiles cleanly and reads like a simplification, which is what makes it worth pinning. 2 of 18: 'is read LIVE, so a config set after construction reaches the pane' and 'survives the session that set it'. The third case, 'starts null, so a fresh page opens the pane on an empty form', keeps passing by construction -- it asserts the value this mutation hardcodes, which is what makes the trio a real discrimination rather than a single-value echo. COUNT RE-MEASURED after PR #475's review fix: 2 -> 3. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered."
+    "why": "Replaces the live getter with a value copied at construction. `route-ui.ts` reads `deps.initialVersusConfig` at CLICK time, and the route host is built before any session exists, so a snapshot is permanently `null`: the Versus Setup pane never prefills at all, for anyone, ever. Compiles cleanly and reads like a simplification, which is what makes it worth pinning. 2 of 18: 'is read LIVE, so a config set after construction reaches the pane' and 'survives the session that set it'. The third case, 'starts null, so a fresh page opens the pane on an empty form', keeps passing by construction -- it asserts the value this mutation hardcodes, which is what makes the trio a real discrimination rather than a single-value echo. COUNT RE-MEASURED after PR #475's review fix: 2 -> 3. The new case 'survives a campaign session started after it' reads the retained config back through `showVersusSetup`, so it fails under this mutation too. The failing SET was compared, not the number renumbered. Re-measured at 4 of 62 for issue #324's step S5: the post-match reopen now goes through the slot rather than through the HUD, so 'reopens the Versus Setup pane prefilled with the config the PAGE retains' reads the retained value back the same way and fails here too. The failing SET was compared, not the number renumbered."
   },
   {
     "id": "route-host-passes-session-scoped-request-seams-to-the-routes",
@@ -2033,15 +2035,15 @@
   {
     "id": "route-host-never-paints-the-surface",
     "file": "src/game/route-host.ts",
-    "find": "  const stopPainting = sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // Continue is a claim about the run store, re-read on every arrival at the Main Menu.\n    // A live session's own subscriber makes the same refresh for the arrivals it sees; this\n    // one covers the arrivals no session does -- the first after Launch, and every one\n    // after a session has been disposed.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n  hud.setState(locationToHudSurface(sm.location));\n",
-    "replace": "  const stopPainting = sm.onChange((location) => {\n    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n  });\n",
+    "find": "  const stopPainting = sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // Both Main Menu affordances that are claims about a SAVE rather than about a match --\n    // whether a run is there to continue, and how far the Levels grid may reach -- re-read\n    // on every arrival. Arrival is the right moment because the stores change while the\n    // player is somewhere else: a run ends and a level is cleared during gameplay, and a\n    // session is disposed on the way back here (issue #429), so the page must read them\n    // again rather than trust the last value anything painted.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') {\n      paintContinue();\n      paintLevelSelect();\n    }\n  });\n  hud.setState(locationToHudSurface(sm.location));\n",
+    "replace": "  const stopPainting = sm.onChange((location) => {\n    if (location.kind === 'route' && location.route.kind === 'main-menu') {\n      paintContinue();\n      paintLevelSelect();\n    }\n  });\n",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 14,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause."
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause. RE-ANCHORED for issue #324's step S5: the arrival branch beside the surface paint gained the Levels grid alongside Continue, so the find string had to be re-cut around it. The replacement still keeps that whole branch, which is what leaves this entry isolating the surface paint and nothing else. Count re-measured on the new text: 14 of 495 (route-host.test.ts 62 + loop.test.ts 433), which the re-cut left where it was."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -2170,28 +2172,28 @@
   {
     "id": "route-host-paints-nothing-for-the-empty-host",
     "file": "src/game/route-host.ts",
-    "find": "  hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });\n  hud.setAchievements(deps.achievements.earned());\n  hud.setHullColor(deps.customization.hull());\n  hud.setSkin(deps.customization.skin());\n  hud.setAccentColor(deps.customization.accent());\n  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  paintContinue();\n",
+    "find": "  hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });\n  hud.setAchievements(deps.achievements.earned());\n  hud.setHullColor(deps.customization.hull());\n  hud.setSkin(deps.customization.skin());\n  hud.setAccentColor(deps.customization.accent());\n  paintLevelSelect();\n  paintContinue();\n",
     "replace": "  // the page paints nothing: a session will, if one ever starts\n",
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 6,
-    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness. Re-measured at 6 of 482 for issue #226: the page now also paints the active run's SUMMARY and the stored audio/input settings at construction, so the two cases that pin those fail here too."
+    "expectFailures": 9,
+    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness. Re-measured at 6 of 482 for issue #226: the page now also paints the active run's SUMMARY and the stored audio/input settings at construction, so the two cases that pin those fail here too. Re-measured at 9 of 495 (route-host.test.ts 62 + loop.test.ts 433) for issue #324's step S5, and the GROWTH is the step's whole point rather than test churn: the gameplay session used to paint Records, the earned set and the three paint-shop swatches at its own construction, so four loop.test.ts cases about those boot echoes passed with this block deleted. With the session's duplicates gone the page is the only writer, and removing its paints is now visible to them too."
   },
   {
     "id": "route-host-never-re-reads-continue-on-arrival",
     "file": "src/game/route-host.ts",
-    "find": "    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();\n",
-    "replace": "    void location;\n",
+    "find": "      paintContinue();\n",
+    "replace": "      void 0;\n",
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "The page paints Continue once, at construction, and never again. A live session's own subscriber refreshes it on the arrivals it sees, so the only arrivals this loses are the ones after a session has been disposed (issue #429) -- which, with the session's subscriber now released at disposal, is every arrival the player makes from a route. The page must re-read the run store, not trust the last value a since-dead session painted. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the arrival case in each, both of which end a run while the page is away on another route."
+    "expectFailures": 3,
+    "why": "The page paints Continue once, at construction, and never again. A live session's own subscriber refreshes it on the arrivals it sees, so the only arrivals this loses are the ones after a session has been disposed (issue #429) -- which, with the session's subscriber now released at disposal, is every arrival the player makes from a route. The page must re-read the run store, not trust the last value a since-dead session painted. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the arrival case in each, both of which end a run while the page is away on another route. RE-ANCHORED and re-measured at 3 of 495 (route-host.test.ts 62 + loop.test.ts 433) for issue #324's step S5. The arrival branch now paints the Levels grid beside Continue, so the find narrowed to the Continue call alone and the grid got its own entry; the third failure is loop.test.ts's Continue-availability case, which since the session stopped pushing the signal reads it through this arrival."
   },
   {
     "id": "session-dispose-keeps-observing-the-page-machine",
@@ -2242,6 +2244,127 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "Releasing the slot leaves the title shaped around the session that just left. After a setup-pane versus match the empty host keeps offering \"Start Match\" and \"Campaign\"; with no session to dispatch to, that \"Start Match\" is a New Game, which replaced the player's campaign run with no confirmation. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the live-detach case in route-host.test.ts and the versus-quit case in loop.test.ts; the stale-detach control passes either way."
+  },
+  {
+    "id": "route-host-never-re-sizes-the-grid-on-arrival",
+    "file": "src/game/route-host.ts",
+    "find": "      paintLevelSelect();\n",
+    "replace": "      void 0;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "The page sizes the Levels grid once, at construction, and never again -- so a level cleared during a match is never offered. The grid is unreachable between the clear and the arrival (hud.ts shows the Levels button at the Main Menu alone), which is exactly why the arrival is the moment that has to repaint it and why nothing else can: the session's own win-time push was removed by issue #324's step S5, and with this line gone there is no writer left for the change. Pinned with killedBy rather than a count: the claim is a specific arrival, not a population.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page re-sizes the Levels grid on every arrival at the Main Menu, and only there",
+      "startGameWith: the main menu records the cleared level AT the win, and the page re-sizes the grid on the way back"
+    ]
+  },
+  {
+    "id": "route-ui-never-paints-records-on-open",
+    "file": "src/game/route-ui.ts",
+    "find": "  hud.onRecordsOpen(paintRecords);\n",
+    "replace": "  void paintRecords;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-ui.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "The page stops painting Records when the page is opened, which since issue #324's step S5 is the ONLY time anything paints it: the gameplay session's per-frame push is gone, and the two tables re-render from the HUD's own retained copy. The visible result is a Records page frozen at whatever the reset buttons last wrote -- zeros on a fresh page, however much has been played since. Silent otherwise: the stores keep counting, `onResetStats`/`onResetProgress` still repaint, and the panel still opens.",
+    "killedBy": [
+      "the application routes work with no gameplay session behind them paints Records from the page stores when the page opens -- both tables, from no session",
+      "startGameWith: achievements wiring toasts newly earned achievements and pushes the fresh set to the HUD"
+    ]
+  },
+  {
+    "id": "hud-records-open-never-fires-for-the-stats-tab",
+    "file": "src/game/hud.ts",
+    "find": "      swapSurface(openSurface(), STATS_SURFACE, () => {\n        paintRecords();\n",
+    "replace": "      swapSurface(openSurface(), STATS_SURFACE, () => {\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The Stats tab opens without asking anyone for its numbers. This is one of the two call sites the hook has -- the Achievements tab's is the sibling entry -- and they are pinned separately because either can rot alone: Records is one menu entry with two panes, and a hook wired to only one of them leaves that tab showing whatever was last pushed for the other. Invisible to every fake-HUD test, which never runs a transition; only the real HUD can see it.",
+    "killedBy": [
+      "hud: the stats page fires onRecordsOpen on an open of either tab, never on a close, and in time for the render"
+    ]
+  },
+  {
+    "id": "hud-records-open-never-fires-for-the-achievements-tab",
+    "file": "src/game/hud.ts",
+    "find": "      swapSurface(openSurface(), ACH_SURFACE, () => {\n        paintRecords();\n",
+    "replace": "      swapSurface(openSurface(), ACH_SURFACE, () => {\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The Achievements tab's half of the same hook -- see the Stats sibling above for why the two are separate entries. Reached by a tab switch, which REPLACES the top layer rather than stacking one (hud.ts's `openLayer`), so this really is a second open and really does need its own fire.",
+    "killedBy": [
+      "hud: the stats page fires onRecordsOpen on an open of either tab, never on a close, and in time for the render"
+    ]
+  },
+  {
+    "id": "route-host-slot-drops-the-controller-report",
+    "file": "src/game/route-host.ts",
+    "find": "          hud.setBotAssignmentAllowed(botsMayDrivePlayers);\n          hud.setControllers(assignment);\n",
+    "replace": "          void assignment;\n          void botsMayDrivePlayers;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "What a session reports about its controller assignment reaches nothing. The Controllers panel shows no rows at all -- `currentAssignment` (hud.ts) defaults to the empty array and no other caller fills it -- so a co-op player has no way to see or change who is driving which slot, and `botAssignmentAllowedNow` stays at its fail-closed false for a versus match that legitimately allows bots. Since issue #324's step S5 this method is the only writer of either member: the session reports through the slot rather than writing the HUD, because an `Assignment` is the one thing on the panel that cannot be read off a page-owned store.",
+    "killedBy": [
+      "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) paints the Controllers panel from what the session reports -- both halves, one call",
+      "startGameWith: the controller assignment panel's wiring (docs/superpowers/plans/2026-08-17-controller-assignment.md) pushes hud.setControllers with the boot-derived assignment",
+      "startGameWith: bots may not drive a player tank in the campaign (boundary enforcement) tells the hud whether to offer the candidate, matching the same rule"
+    ]
+  },
+  {
+    "id": "route-host-slot-lets-a-stale-session-repaint-the-panel",
+    "file": "src/game/route-host.ts",
+    "find": "        setControllers(assignment, botsMayDrivePlayers): void {\n          if (!current()) return;\n",
+    "replace": "        setControllers(assignment, botsMayDrivePlayers): void {\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The stale-capture control for the report, the same shape `route-host-attach-does-not-invalidate-the-old-slot` pins for registration. A reassignment dispatched into an outgoing session -- or any late report from one -- would overwrite the incoming session's rows with a roster belonging to a match that is over, and the bot-allowed flag with it. `attach` is the authority on who is live, so every slot method has to ask.",
+    "killedBy": [
+      "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) a stale slot cannot repaint the Controllers panel under the session that replaced it"
+    ]
+  },
+  {
+    "id": "route-host-slot-drops-the-versus-setup-reopen",
+    "file": "src/game/route-host.ts",
+    "find": "          if (current()) routeUi.openVersusSetup();\n",
+    "replace": "          void routeUi;\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "A finished versus match's action button reads \"Versus Setup\" and then does nothing: the machine goes to the Main Menu and the pane never opens, so the rematch flow the versus-setup plan specifies -- back to the pane, prefilled with the match just played, players/map/stock changeable -- dead-ends at the title screen. Since issue #324's step S5 the session asks through the slot instead of calling `showVersusSetup` itself, which is what lets the PAGE decide what the pane is prefilled with from the config it retains past the disposal that same click causes.",
+    "killedBy": [
+      "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) reopens the Versus Setup pane prefilled with the config the PAGE retains",
+      "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's \"Play Again\": returns to the setup pane, not a rebuilt match win: lands on title, reopens the pane with the retained config, and rebuilds nothing"
+    ]
+  },
+  {
+    "id": "route-host-slot-lets-a-stale-session-reopen-the-pane",
+    "file": "src/game/route-host.ts",
+    "find": "          if (current()) routeUi.openVersusSetup();\n",
+    "replace": "          routeUi.openVersusSetup();\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The stale-capture half of the reopen, distinct from the entry above: the call still works for the live session, so only a case that reopens from a RELEASED slot can see it. Without the guard a session that has been replaced can throw the Versus Setup pane over whatever the incoming one is showing, which is the same class of defect the slot's registration guard exists to stop.",
+    "killedBy": [
+      "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) a stale slot cannot reopen the pane"
+    ]
   },
   {
     "id": "route-host-painter-outlives-the-page",
@@ -3530,6 +3653,22 @@
     "killedBy": [
       "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
       "startGameWith: HUD wiring routes the mute button through the STORE, to the engine, and back to the button"
+    ]
+  },
+  {
+    "id": "session-pushes-the-levels-grid-to-the-hud",
+    "file": "src/game/loop.ts",
+    "find": "  slot.setControllers(assignment, botsMayDrivePlayers);\n  refreshStats(world);\n",
+    "replace": "  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  slot.setControllers(assignment, botsMayDrivePlayers);\n  refreshStats(world);\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/hud-ownership.test.ts"
+    ],
+    "why": "Puts back the Levels-grid push issue #324's step S5 removed from the session's construction block -- the sibling of `session-pushes-settings-display-to-the-hud`, and pinned for the same reason: a second writer of an application surface reads as ordinary wiring beside the gameplay pushes around it. This one is worse than a duplicate, because the two writers DISAGREE: a session's `deps.levels` is its OWN level system, which for a versus match is a single synthetic arena, so the last thing the HUD hears is a total of 1 -- read by `hud.ts` as \"not a choice\" -- and the empty host left behind after a versus match has no Levels button at all. Two independent nets catch it: hud-ownership.test.ts reports `setLevelSelect` as a session reaching an application route, and loop.test.ts's versus-quit case reads every total the grid was ever told.",
+    "killedBy": [
+      "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
+      "quitting a versus match leaves a campaign-shaped Main Menu behind the empty host offers Continue/New Game/Levels/Versus, not the versus session's \"Start Match\""
     ]
   },
   {

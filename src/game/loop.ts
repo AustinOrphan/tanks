@@ -1938,13 +1938,10 @@ export function startGameWith(
   // showed campaign Lives/Enemies for a match that has neither.
   hud.setRelaunchTarget(relaunchTarget);
   hud.setSessionKind(currentDescriptor.kind);
-  // WHICH GROUND the application screens stand on (issue #317). A third boot-time
-  // projection, and the only one a development flag decides: `null` -- absent or an
-  // unrecognised value -- is the shipped flat ground, and the mapping happens HERE
-  // rather than in the HUD so the HUD keeps its own vocabulary and never imports the
-  // flag module. Pushed unconditionally, so a session that boots with no flag actively
-  // states the default rather than relying on the element's initial classes.
-  hud.setBackdrop(deps.devFlags.backdrop === 'felt' ? 'felt' : 'default');
+  // The application ground is NOT pushed from here any more (issue #324, step S5). It is
+  // page chrome that outlives every match, so `route-host.ts` reads the same `backdrop`
+  // flag once at page construction -- which is what makes a page that never starts a
+  // session stand on the right ground.
   // The stock strip's DATA, cleared once for a session that will never produce
   // any. Keyed on the descriptor, like the strip's own visibility gate: a
   // versus session -- setup-pane OR developer-flag -- skips this and lets
@@ -2044,8 +2041,10 @@ export function startGameWith(
     };
     const fresh = deps.achievements.check(ctx);
     if (fresh.length === 0) return;
+    // The TOAST only. The Records page's earned list is repainted by the page when the
+    // page is opened (issue #324, step S5) -- `deps.achievements` is the same store the
+    // route UI reads, so a list read at open cannot be behind a set written mid-match.
     hud.showAchievementToasts(fresh);
-    hud.setAchievements(deps.achievements.earned());
   }
 
   function refreshStats(w: World): void {
@@ -2250,11 +2249,15 @@ export function startGameWith(
       // AFTER record, so an attempt feat sees the attempt that just finished.
       checkAchievements(pendingClear);
       pendingClear = null;
-      // Keep the Records table's copy fresh: it re-renders only while visible.
-      hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
-      // ...and the win/lose panel's, which is a different surface with a different
-      // owner. It updates a beat AFTER the state flips -- the winning kill is in THIS
-      // batch, not the one before the panel opened -- so this push lands into an
+      // The Records table used to be repainted from here, every event-bearing frame, so
+      // that a page which re-renders only while visible was never stale. The page reads
+      // `deps.stats` when the Records page opens instead (issue #324, step S5), which is
+      // the only instant the numbers can be seen and is reachable from the Main Menu
+      // alone -- so a per-frame push was buying a freshness nothing could observe.
+      //
+      // The win/lose panel is a different surface with a different owner, and it still
+      // updates from here. It updates a beat AFTER the state flips -- the winning kill is
+      // in THIS batch, not the one before the panel opened -- so this push lands into an
       // already-open panel and the HUD repaints it.
       pushOutcome(driver.world);
       // Task 6's in-match stock readout (spec §3a) is dispatched from `onSimulated`
@@ -2294,13 +2297,16 @@ export function startGameWith(
    * bot's own RNG stream (keyed by its own slot number) is untouched. A slot LOSING
    * `'bot'` has its entry deleted the same way, incrementally.
    */
-  function reassignSlot(slot: number, source: SlotSource): void {
+  function reassignSlot(playerSlot: number, source: SlotSource): void {
     // The boundary's second enforcement point. The panel does not OFFER `'bot'` when it
     // is disallowed, so this is unreachable through the UI -- which is exactly why it is
     // here: a rule enforced only by the thing that draws the buttons is one stale DOM
     // node or one new caller away from not being a rule.
     if (source.kind === 'bot' && !botsMayDrivePlayers) return;
-    const next = reassign(assignment, slot, source);
+    // `playerSlot`, not `slot`: this session's hold on the page's route UI is also called
+    // `slot` (`routeHost.attach()`), and the panel row's index and that hold are two
+    // different things which the reporting call at the end of this function needs apart.
+    const next = reassign(assignment, playerSlot, source);
     const changed: number[] = [];
     for (let i = 0; i < next.length; i++) {
       const prev = assignment[i];
@@ -2336,11 +2342,12 @@ export function startGameWith(
     for (const i of changed) {
       gamepadConnectedPrev[i] = slotGamepadConnected(i);
     }
-    // Refresh the panel's own display. setControllers rebuilds unconditionally
-    // (see hud.ts) so this always re-renders, open or not -- cheap, and it is what
-    // lets hud.css.test.ts's mountEveryButton fixture drive rows without opening
-    // the panel first.
-    hud.setControllers(assignment);
+    // Refresh the panel's own display, THROUGH THE SLOT (issue #324, step S5): the
+    // Controllers panel is an application surface, so the page writes it and this session
+    // only reports what changed. `route-host.ts` rebuilds unconditionally, open or not --
+    // cheap, and it is what lets hud.css.test.ts's mountEveryButton fixture drive rows
+    // without opening the panel first.
+    slot.setControllers(assignment, botsMayDrivePlayers);
   }
   /**
    * The one thing the application routes cannot do alone: the paint shop restyles the
@@ -2408,7 +2415,10 @@ export function startGameWith(
         // a moment later by this very call. loop.test.ts pins the order with a case
         // that fails if the two calls are swapped.
         sm.toMainMenu();
-        hud.showVersusSetup(true, deps.initialVersusConfig ?? null);
+        // Through the SLOT (issue #324, step S5): this session decides that its own
+        // rematch goes back to the pane, and the page decides what the pane is prefilled
+        // with, from the config it retains across the disposal this click causes.
+        slot.openVersusSetup();
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
@@ -2491,7 +2501,9 @@ export function startGameWith(
     // attempt, not just at boot -- see coopKills' own comment for why.
     coopKills = [];
     versusDeaths = [];
-    hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+    // No Records push for the new attempt: the page reads `deps.stats` when the Records
+    // page opens (issue #324, step S5), and `startAttempt` above has already reset the
+    // store this reads.
     // The win/lose panel starts the new attempt empty too. A board switch can change
     // which tally the panel would show -- a Levels pick lands a coop session on a
     // one-player board -- so the whole projection is re-derived here rather than left
@@ -2553,7 +2565,6 @@ export function startGameWith(
     }
     const lives = campaignActive() ? deps.run.active()?.livesRemaining : undefined;
     switchTo(startLevel, lives);
-    if (deps.levels.tracksProgress) hud.setContinueAvailable(deps.run.active() !== null);
   }
 
   slot.onLevelSelect((picked) => {
@@ -2629,7 +2640,6 @@ export function startGameWith(
     if (campaignActive()) {
       const fresh = deps.run.startNewRun(deps.levels.levels[0].id);
       switchTo(deps.levels.levels[0], fresh.livesRemaining);
-      hud.setContinueAvailable(true);
     } else {
       // Sandbox or dev jump: no run write at all -- just a fresh board at levels[0],
       // the same "New Game" affordance a campaign-owning session gets, minus the
@@ -2779,8 +2789,6 @@ export function startGameWith(
     // must not be dropped either.
     flushSettingsNotice();
     const nowPlaying = location.kind === 'gameplay' && location.phase.kind === 'playing';
-    const nowAtMainMenu =
-      location.kind === 'route' && location.route.kind === 'main-menu';
     // The shipped screens and the run bookkeeping below still work in terms of
     // "did this end well", so the typed outcome is flattened through the
     // explicitly-named compatibility projection rather than by re-deriving a
@@ -2809,7 +2817,6 @@ export function startGameWith(
     // unlock real levels.
     if (nowWon && deps.levels.tracksProgress) {
       deps.progress.recordCleared(level);
-      hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
     }
     // Latched, not evaluated here -- see pendingClear. Outside the tracksProgress
     // guard on purpose: the sandbox unlocks no levels but a feat performed there is
@@ -2836,12 +2843,6 @@ export function startGameWith(
         if (next !== null) deps.run.advanceLevel(next.id, driver.world.lives);
       }
     }
-    // Refreshed on every arrival at the Main Menu -- covers boot (the initial
-    // call below), quitting, and a game-over/completion restart's later return
-    // to Main Menu -- rather than only at the moments above, so this can never
-    // go stale relative to whatever landOnCampaignBoard/onNewGame most recently
-    // decided.
-    if (nowAtMainMenu) hud.setContinueAvailable(deps.run.active() !== null);
     // The driver stops sampling while paused and only sample() resets the fire/mine
     // latches, so a Space pressed around or during a pause would mine on the first
     // resumed tick. At the state change, so hotkey, blur and any future pause trigger
@@ -2864,27 +2865,26 @@ export function startGameWith(
   // music did not, because it needs this session's audio engine.
   followMusic(sm.location); // this path bypasses sm.onChange
   hud.setLevel(ordinalOf(level), deps.levels.levels.length);
-  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
-  // Boot is an arrival at the title screen too (splash precedes it, but the button
-  // states must already be right underneath) -- see the matching sm.onChange main-menu
-  // refresh above, which covers every LATER arrival.
-  hud.setContinueAvailable(deps.run.active() !== null);
   deps.stats.startAttempt();
   coopKills = [];
   versusDeaths = [];
-  hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   // The outcome panel's opening state, stated rather than inherited: a session that is
   // disposed before it ever produces an event still leaves the HUD holding a projection
   // that describes THIS session's board, not the previous one's.
   pushOutcome(world);
-  hud.setHullColor(deps.customization.hull());
-  hud.setSkin(deps.customization.skin());
-  hud.setAccentColor(deps.customization.accent());
-  // Mute, volume, touch scheme, fire mode and haptics are all pushed by
-  // `applySettings()`, called the moment the HUD exists -- see its own doc comment.
-  hud.setAchievements(deps.achievements.earned());
-  hud.setBotAssignmentAllowed(botsMayDrivePlayers);
-  hud.setControllers(assignment);
+  // NO APPLICATION-SURFACE PUSHES HERE any more (issue #324, step S5). Continue, the
+  // Levels grid, Records and the paint shop's selected swatches were all pushed from this
+  // block at every session construction, over values `route-host.ts` had already painted
+  // from the same page-owned stores -- and the application ground was pushed further up.
+  // A second writer of a surface this session does not own is the boundary #324 draws,
+  // and the duplicate was invisible only because the two agreed. The page's copy is the
+  // one that exists before any session does, and now the only one. (Settings' own
+  // controls left earlier, from `applySettings`; see its comment.)
+  //
+  // What is left is what only a session knows. The controller assignment is REPORTED
+  // rather than written -- see `slot.setControllers` for why an `Assignment` cannot be
+  // read off a page-owned store the way everything above could.
+  slot.setControllers(assignment, botsMayDrivePlayers);
   refreshStats(world);
 
   // The title screen leaves on ANY gesture. Both listeners are unconditional and the

@@ -8,7 +8,7 @@ import type { GetGamepads } from '../input/gamepad';
 import type { UiAction } from '../input/ui-actions';
 import { createModalityTracker, type Modality } from './modality';
 import type { VersusConfig } from './versus-config';
-import type { SlotSource } from '../input/assignment';
+import type { Assignment, SlotSource } from '../input/assignment';
 
 /**
  * The PAGE's application-route UI, owned above every gameplay session (issue #468).
@@ -22,7 +22,7 @@ import type { SlotSource } from '../input/assignment';
  * HUD.
  *
  * WHY A SLOT RATHER THAN A SECOND ROUND OF REGISTRATIONS. `hud.ts` APPENDS every
- * `on*` callback onto a per-name list and has no unregister at all -- all 25 of its
+ * `on*` callback onto a per-name list and has no unregister at all -- all 26 of its
  * registration methods are `push(cb)` returning `void`, and there is no `off`, no
  * `delete`, no `splice` anywhere in the file. So a page-scoped HUD that let each session
  * register its own handlers would, after one stop-and-start, hold TWO copies of every
@@ -45,7 +45,7 @@ import type { SlotSource } from '../input/assignment';
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
 export type RouteHostDeps = RouteUiDeps &
-  Pick<GameDeps, 'createHud' | 'createStateMachine' | 'launchGate' | 'run'> & {
+  Pick<GameDeps, 'createHud' | 'createStateMachine' | 'launchGate' | 'run' | 'devFlags'> & {
     /**
      * Menu-time gamepad input (issue #494): the pads the page's own poller reads -- the
      * union of every connected pad, never the `pad[i] -> slot[i]` routing a session uses
@@ -165,6 +165,34 @@ export interface GameplaySlot {
    * retained one. A caller with nothing to say now has nothing to call.
    */
   setVersusConfig(config: VersusConfig): void;
+  /**
+   * The Controllers panel's session-dependent half: who is driving each player slot, and
+   * whether `'bot'` may be offered as a source at all.
+   *
+   * ONE call for both, because they are one projection of one fact: `renderControllerRows`
+   * (hud.ts) derives each row's candidate list from the assignment AND the flag together.
+   * A reporter that could send one without the other is a reporter that could leave the
+   * rows disagreeing with the sources offered for them.
+   *
+   * Genuinely session-scoped, unlike the rest of what the shell paints: an `Assignment`
+   * is built from the match's player count, its validated versus roles and the pads that
+   * were plugged in when it started, and it is mutated by the panel for as long as the
+   * match lasts. There is no page-owned store to read it from, so the session reports it
+   * here and the shell -- which owns every application surface (issue #324) -- is what
+   * writes the HUD.
+   */
+  setControllers(assignment: Assignment, botsMayDrivePlayers: boolean): void;
+  /**
+   * Return to the retained Versus Setup pane, the way a finished versus match's action
+   * button does.
+   *
+   * The session decides WHETHER (only a setup-pane versus session has anything to go back
+   * to -- see `loop.ts`'s `relaunchTarget`); the shell decides WHAT the pane is prefilled
+   * with, because the retained configuration is page state that outlives the match that
+   * produced it. Callers pair this with the `sm.toMainMenu()` that precedes it: `setState`
+   * closes every pane on a surface change, so opening first would have the open undone.
+   */
+  openVersusSetup(): void;
   /**
    * Release the slot. Idempotent, and INERT once another session has taken it -- a late
    * detach from an outgoing session must not silently unhook the incoming one. That is
@@ -414,10 +442,11 @@ export function createRouteHost(
    * levels in the stores: after the Launch gesture, `rec.continueAvailable` and
    * `rec.levelSelects` were both empty.
    *
-   * Everything here is a READ of a page-owned store the route UI already holds. Nothing a
-   * session owns -- the attempt counter, the topbar level chip, the settings-driven
-   * controls -- is painted from here; a session still pushes its own values at its own
-   * construction, and the page's copy is the one that exists before any session does.
+   * Everything here is a READ of a page-owned store the route UI already holds, and since
+   * issue #324's step S5 the page is the ONLY writer of them: the session's duplicate
+   * pushes are gone, so there is one owner per surface rather than two that happened to
+   * agree. What a session still paints is what only a session knows -- the topbar level
+   * chip, the live status counts, the outcome projection -- and none of it is here.
    */
   /**
    * The active run, as both signals the Main Menu needs (issue #226): whether Continue is
@@ -446,13 +475,41 @@ export function createRouteHost(
       lives: run.livesRemaining,
     });
   };
+  /**
+   * How much of the campaign the Levels grid may offer, from the permanent progress store.
+   *
+   * Re-read on arrival at the Main Menu rather than at the moment progress changes, and
+   * that is the whole reason it is a function. A level is cleared mid-match, where the
+   * grid is not on screen and cannot be reached -- `hud.ts` shows the Levels button at
+   * the Main Menu only -- so the arrival is both the first moment the new value can be
+   * seen and a moment that necessarily happens before it is. The session used to push
+   * this from its own win handler, which covered the same instant from the other side and
+   * covered nothing on a page with no session.
+   */
+  const paintLevelSelect = (): void => {
+    hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
+  };
   hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   hud.setAchievements(deps.achievements.earned());
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
   hud.setAccentColor(deps.customization.accent());
-  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
+  paintLevelSelect();
   paintContinue();
+  /**
+   * WHICH GROUND the application screens stand on (issue #317), and the only paint here a
+   * development flag decides: `null` -- absent or an unrecognised value -- is the shipped
+   * flat ground, and the mapping happens at this layer rather than in the HUD so the HUD
+   * keeps its own vocabulary and never imports the flag module.
+   *
+   * The page's flag, not a session's. `applyVersusToDeps` widens a session's `devFlags`
+   * with the match's own mode, players and bot count and leaves `backdrop` alone, so the
+   * two readings agree -- but the ground is page chrome that outlives every match, and a
+   * session pushing it meant a page which never started one stood on whatever the markup
+   * happened to say. Pushed unconditionally, so a page with no flag actively states the
+   * default rather than relying on the element's initial classes.
+   */
+  hud.setBackdrop(deps.devFlags.backdrop === 'felt' ? 'felt' : 'default');
 
   /**
    * THE SETTINGS-DRIVEN CONTROLS, painted by the PAGE (issue #226).
@@ -511,11 +568,16 @@ export function createRouteHost(
 
   const stopPainting = sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
-    // Continue is a claim about the run store, re-read on every arrival at the Main Menu.
-    // A live session's own subscriber makes the same refresh for the arrivals it sees; this
-    // one covers the arrivals no session does -- the first after Launch, and every one
-    // after a session has been disposed.
-    if (location.kind === 'route' && location.route.kind === 'main-menu') paintContinue();
+    // Both Main Menu affordances that are claims about a SAVE rather than about a match --
+    // whether a run is there to continue, and how far the Levels grid may reach -- re-read
+    // on every arrival. Arrival is the right moment because the stores change while the
+    // player is somewhere else: a run ends and a level is cleared during gameplay, and a
+    // session is disposed on the way back here (issue #429), so the page must read them
+    // again rather than trust the last value anything painted.
+    if (location.kind === 'route' && location.route.kind === 'main-menu') {
+      paintContinue();
+      paintLevelSelect();
+    }
   });
   hud.setState(locationToHudSurface(sm.location));
 
@@ -688,6 +750,18 @@ export function createRouteHost(
           // NOT guarded on `current()`: this is retained page state, not a hook into the
           // live session, and the config a session was built from stays true after it.
           versusConfig = config;
+        },
+        setControllers(assignment, botsMayDrivePlayers): void {
+          if (!current()) return;
+          // Two HUD members for one report, in the order the session's own boot push used
+          // before this moved. Either order settles on the same rows -- both setters
+          // re-render from the pair -- so what the single method buys is that there is no
+          // way to push one of them and not the other.
+          hud.setBotAssignmentAllowed(botsMayDrivePlayers);
+          hud.setControllers(assignment);
+        },
+        openVersusSetup(): void {
+          if (current()) routeUi.openVersusSetup();
         },
         detach(): void {
           if (!current()) return;

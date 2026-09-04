@@ -16,12 +16,14 @@ import type { GameDeps } from './loop';
  * because the session was the only thing that ever wired them up.
  *
  * WHAT DECIDED THE SPLIT, measured on `loop.ts` rather than guessed: of its 25
- * `hud.on*` registrations, 15 reach no gameplay state at all and 3 more (the paint
- * shop's `onPick*`) reach it only through `restyle`'s renderer call. Those 18 are here.
- * The remaining 7 stay with the session and are listed in `startGameWith` beside the
- * call that builds this: three that START gameplay, two touch controls that need the
- * live `InputController`, `onReassignSlot` (which owns per-slot input sources), and
- * `onQuitToTitle`, whose return-to-route bookkeeping belongs to issue #429.
+ * `hud.on*` registrations, 15 reached no gameplay state at all and 3 more (the paint
+ * shop's `onPick*`) reached it only through `restyle`'s renderer call. Those 18 came
+ * here, and `onRecordsOpen` -- added by issue #324's step S5 so the page can paint the
+ * Records tables it now owns -- makes 19 today, against `Hud`'s 26 registration methods.
+ * The other 7 belong to a live match and are registered by `route-host.ts` as trampolines
+ * into whatever session holds its slot: three that START gameplay, two touch controls
+ * that need the live `InputController`, `onReassignSlot` (which owns per-slot input
+ * sources), and `onQuitToTitle`.
  *
  * The one thing here that a session-less page cannot do is push the style triple at the
  * gameplay renderer. That is `setStyleSink`, and its ABSENCE is the normal state rather
@@ -34,6 +36,18 @@ export interface RouteUi {
    * style -- a future settings import would want the same one-call refresh.
    */
   restyle(): void;
+  /**
+   * Open the Versus Setup pane over whatever is showing, prefilled with the retained
+   * configuration.
+   *
+   * The Versus button's own handler is one call to this, and so is the route host's
+   * reopen for a finished versus match (issue #324, step S5). That second caller is why
+   * it is exposed at all: the pane is an application surface, so the shell has to be able
+   * to open it without the session that just ended reaching into the HUD to do it -- and
+   * both openers must prefill from the same retained config, which only this module can
+   * read (`deps.initialVersusConfig` is a live getter over the host's own copy).
+   */
+  openVersusSetup(): void;
   /**
    * The mute toggle, shared with `loop.ts`'s M hotkey.
    *
@@ -170,9 +184,10 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     deps.settings.setVolume(v);
   });
 
-  hud.onVersusOpen(() => {
+  function openVersusSetup(): void {
     hud.showVersusSetup(true, deps.initialVersusConfig ?? null);
-  });
+  }
+  hud.onVersusOpen(openVersusSetup);
   // `?.`: `requestVersusSession` is optional (GameDeps' own doc comment) so every
   // existing test/caller that builds a GameDeps with no reboot seam at all keeps
   // compiling AND keeps working -- a Start click reaching here with nothing wired to
@@ -265,9 +280,33 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     deps.host.removeEventListener('gamepaddisconnected', onGamepadHotplug);
   });
 
+  /**
+   * Everything the Records page shows, read from the page's own stores.
+   *
+   * The stores are current at every instant -- a session records INTO them rather than
+   * keeping a copy -- so there is no moment at which reading them is early or late. That
+   * is what lets the page own this surface outright (issue #324, step S5) where the
+   * gameplay session used to push the same two values on every event-bearing frame: the
+   * frames were only ever a way of not missing a change, and a page that reads on open
+   * cannot miss one.
+   */
+  function paintRecords(): void {
+    hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+    hud.setAchievements(deps.achievements.earned());
+  }
+
+  // Both tabs, on every open -- see `onRecordsOpen`'s own doc comment. The Records button
+  // is shown at the Main Menu only (hud.ts hides it elsewhere), so this fires exactly
+  // when the tables are about to be read and never during a match.
+  hud.onRecordsOpen(paintRecords);
+
   hud.onResetStats(() => {
     deps.stats.resetLifetime();
-    hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+    // Through the shared painter, which also re-reads the achievements half this button
+    // does not touch. That is a repaint of an unchanged set, not a claim that Reset stats
+    // clears anything else: one painter for one surface is what stops the two tabs
+    // acquiring separate refresh rules.
+    paintRecords();
   });
 
   hud.onResetProgress(() => {
@@ -275,7 +314,7 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     // Achievements are progress, not statistics: this is the one reset that clears
     // them, and Reset stats deliberately leaves them alone.
     deps.achievements.reset();
-    hud.setAchievements(deps.achievements.earned());
+    paintRecords();
     // Levels re-lock immediately: the select the player is looking at must not keep
     // offering a level the save no longer justifies.
     hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
@@ -283,6 +322,7 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
 
   return {
     restyle,
+    openVersusSetup,
     toggleMute,
     unlockedLevels,
     resizePreview(): void {
