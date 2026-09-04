@@ -14,7 +14,6 @@ import type { QualityPreset } from '../render/quality';
 import type { AiTargetPerception } from '../sim/types';
 import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
 import { BLOCKED_FIRE_CUES, isBlockedFireCue, type BlockedFireCue } from '../presentation/blocked-fire';
-import { MENU_TRANSITIONS, isMenuTransition, type MenuTransition } from './menu-transition';
 
 export interface DevFlags {
   /**
@@ -325,21 +324,6 @@ export interface DevFlags {
    * the default rather than guessing at a treatment that does not exist.
    */
   blockedFire: BlockedFireCue | null;
-  /**
-   * Which menu-transition arm the HUD runs between application surfaces (issue #542).
-   * `null` -- absent or unrecognised -- is the shipped 150ms opacity crossfade, which is
-   * also what the `fade` arm names, because `fade` IS that path rather than a copy of it.
-   *
-   * The owner reported never having seen a transition on the shipped build. Nothing is
-   * broken; the question is whether a near-imperceptible crossfade is the intent, and the
-   * issue settles it by comparison. `fade-long` isolates duration and `rise`/`settle`
-   * isolate movement, so whichever arm wins names its own cause.
-   *
-   * Reject-to-null, the same idiom as `backdrop`/`mineWarn`/`blockedFire`:
-   * `?menuTransition=swoosh` keeps the shipped transition rather than guessing at an arm
-   * that does not exist.
-   */
-  menuTransition: MenuTransition | null;
 }
 
 /**
@@ -355,7 +339,6 @@ export const DEV_FLAGS_OFF: DevFlags = {
   seed: null,
   mineTrigger: null,
   blockedFire: null,
-  menuTransition: null,
   mineReach: false,
   mineTimer: false,
   aiContact: false,
@@ -458,13 +441,6 @@ function asBackdrop(params: URLSearchParams): BackdropTreatment | null {
   const raw = params.get('backdrop');
   if (raw === null) return null;
   return BACKDROP_TREATMENTS.has(raw) ? (raw as BackdropTreatment) : null;
-}
-
-/** One of the four experiment arms, or null when absent or unrecognised. */
-function asMenuTransition(params: URLSearchParams): MenuTransition | null {
-  const raw = params.get('menuTransition');
-  if (raw === null) return null;
-  return isMenuTransition(raw) ? raw : null;
 }
 
 /** One of the named experimental treatments, or null when absent or unrecognised. */
@@ -581,7 +557,6 @@ export function parseDevFlags(search: string): DevFlags {
     seed: asSeed(params, 'seed'),
     mineTrigger: asMineTrigger(params),
     blockedFire: asBlockedFireCue(params),
-    menuTransition: asMenuTransition(params),
     mineReach: isOn(params, 'mineReach'),
     mineTimer: isOn(params, 'mineTimer'),
     aiContact: isOn(params, 'aiContact'),
@@ -929,19 +904,6 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Draws the mine fuse and proximity warnings with a named experimental treatment ' +
       '(issue #276 playtest round); the shipped default is the glow + illumination pair.',
-  },
-  menuTransition: {
-    kind: 'valued',
-    values: [...MENU_TRANSITIONS],
-    description:
-      'Runs a named menu-transition arm between application surfaces (issue #542); ' +
-      '`fade` is the shipped 150ms opacity crossfade and the control the rest are judged ' +
-      'against.',
-    notes: [
-      'Read once at HUD construction, so it takes a reload rather than applying mid-session.',
-      'Every arm collapses to an instant change under resolved reduced motion, movement ' +
-        'included.',
-    ],
   },
 };
 

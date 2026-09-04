@@ -128,6 +128,7 @@ import {
   DEFAULT_VOLUME,
   NOT_PERSISTED_NOTICE,
   SETTINGS_KEY,
+  type MotionPreference,
   type PlayerSettingsStore,
   type SettingsNotice,
 } from './settings';
@@ -223,6 +224,20 @@ interface Recorder {
   settingsNotices: SettingsNotice[];
   /** Every value echoed back to the HUD (hud.setHaptics), in order. */
   hapticsEchoes: boolean[];
+  /**
+   * Every value echoed back to the HUD's motion control (hud.setMotion), in order.
+   *
+   * Recorded rather than swallowed so the VALUE can be asserted: this control carries the
+   * three-state stored preference, and painting it from the resolved two-state policy
+   * would erase 'system'.
+   *
+   * It cannot say WHO pushed. `boot()` wires one fake HUD for the page and the session
+   * alike, so an entry here means "something pushed", not "the session did" -- the
+   * session's abstinence is guarded structurally instead, by `hud-ownership.test.ts`
+   * reading loop.ts's own source. An earlier version of this comment claimed the
+   * distinction; it never held.
+   */
+  motionEchoes: MotionPreference[];
   playerPosPushes: number;
   lastPlayerPos: { x: number; y: number } | null;
   touchPushes: TouchIndicator[];
@@ -505,6 +520,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     fireModeEchoes: [],
     hapticsStoreSets: [],
     hapticsEchoes: [],
+    motionEchoes: [],
     playerPosPushes: 0,
     lastPlayerPos: null,
     touchPushes: [],
@@ -1176,6 +1192,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onHapticsChange: (cb: (v: boolean) => void) => {
           onHapticsChange = cb;
         },
+        setMotion: (p: MotionPreference) => {
+          rec.motionEchoes.push(p);
+        },
+        onMotionChange: () => {},
         setStats: () => {
           rec.statPushes += 1;
         },
@@ -2823,6 +2843,22 @@ describe('startGameWith: reduced motion reaches the preview through the effectiv
     const h = boot(makeDeps({ systemReducedMotion: true }));
     expect(h.rec.reducedMotions.length, 'nothing was pushed at construction').toBeGreaterThan(0);
     expect(h.rec.reducedMotions[0]).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('the motion control is painted with the STORED preference, not the resolved policy', () => {
+    // What `motionEchoes` is actually for. The control has three states and the resolved
+    // policy has two, so painting it from `effective` would erase 'system' with no way
+    // back to it -- the same shape as the haptics asymmetry beside it in
+    // `paintSettingsControls`, and a sharper case, because 'system' is the default.
+    //
+    // This boot resolves to REDUCED, so a paint that leaked the policy would read
+    // 'reduced' here while the store still says 'system'.
+    const h = boot(makeDeps({ systemReducedMotion: true }));
+    expect(h.rec.motionEchoes.at(-1), 'the control was painted from the resolved policy').toBe(
+      'system',
+    );
+    expect(h.rec.reducedMotions.at(-1), 'the policy still resolved to reduced').toBe(true);
     h.handle.dispose();
   });
 

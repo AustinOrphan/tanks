@@ -47,6 +47,7 @@
  *   npm run mutate -- --manifest tools/mutate/manifests        # a directory: every *.json in it, by name
  *   npm run mutate -- --changed origin/main [--list]           # only the entries the diff since that ref can affect
  *   npm run mutate -- --only skins-min-accent-delta-200
+ *   npm run mutate -- --only a-first-id --only a-second-id      # repeatable, and `--only a,b` is the same thing
  *   npm run mutate -- --root /path/to/checkout
  *
  * Exit codes: 0 clean, every entry matched its declared outcome. 1 ran clean but at
@@ -122,10 +123,10 @@ const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
 const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.meta.url));
 
 /** @param {string[]} argv
- * @returns {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
+ * @returns {{ manifest: string, only: string[], root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
 export function parseArgs(argv) {
-  /** @type {{ manifest: string, only: string | null, root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
-  const args = { manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null, changed: null, list: false };
+  /** @type {{ manifest: string, only: string[], root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
+  const args = { manifest: 'tools/mutate/manifests', only: [], root: process.cwd(), jobs: 1, report: null, changed: null, list: false };
   // Every flag EXCEPT `--list` takes a value; one at the end of the line, or followed by
   // another flag, is refused by name rather than read as `undefined` and failed later
   // somewhere that cannot say which flag was short. `--list` is a bare boolean and does
@@ -137,7 +138,7 @@ export function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--manifest') args.manifest = value(i++);
-    else if (argv[i] === '--only') args.only = value(i++);
+    else if (argv[i] === '--only') args.only.push(...onlyIds(value(i++)));
     else if (argv[i] === '--root') args.root = value(i++);
     else if (argv[i] === '--jobs') args.jobs = parseJobs(value(i++));
     else if (argv[i] === '--report') args.report = value(i++);
@@ -145,7 +146,41 @@ export function parseArgs(argv) {
     else if (argv[i] === '--list') args.list = true;
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
+  // De-duplicated across every occurrence, first-seen order kept: `--only a --only a`
+  // asked for one entry, and the requested count this run reports itself against (see
+  // formatRunSummary) has to be the number of DISTINCT entries asked for, or "2
+  // requested, 1 ran" would read as a silently dropped entry when nothing was dropped.
+  args.only = [...new Set(args.only)];
   return args;
+}
+
+/**
+ * The ids one `--only` occurrence names. `--only` is repeatable AND accepts a comma
+ * list, because both are shapes people actually type and neither can be told from the
+ * other by intent: this flag used to be `args.only = value(i++)`, a single string, so
+ * `--only a --only b --only c` silently kept only `c` and reported "1/1 mutation(s)
+ * ran", indistinguishable from a clean sweep of all three (issue #529). Under-running a
+ * sweep is precisely what produces a green local run and a red `verify (current)`, so
+ * both spellings now accumulate and neither can drop an id quietly.
+ *
+ * Splitting on a comma is safe against the ids this tool addresses: all 478 ids in the
+ * shipped manifests (the whole population, swept with this commit's tree) match
+ * [a-z0-9.-]+ and none contains a comma, and the README documents that shape. It is not
+ * ENFORCED by validateEntry, which accepts any non-empty string -- but an id that did
+ * contain a comma would split into halves that match nothing, and the unmatched-id
+ * refusal names them and stops the run. Loud and wrong beats quiet and wrong, which is
+ * the whole point of this flag's fix.
+ *
+ * An occurrence that names no id at all (`--only ""`, `--only ,`) is refused rather
+ * than folded away: an empty accumulated list means "no filter, run everything", so
+ * swallowing it would turn a typo into a full-manifest run. Same refusal
+ * tools/baseline/args.mjs gives `--browser ,`.
+ * @param {string} raw @returns {string[]}
+ */
+function onlyIds(raw) {
+  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (ids.length === 0) throw new Error('--only needs a value (one or more manifest entry ids)');
+  return ids;
 }
 
 /**
@@ -587,6 +622,50 @@ export function formatResult(result, index, count, entry) {
   return `${head} ... ${result.status}${equiv} (${result.detail}) -- ${tag}`;
 }
 
+/**
+ * The closing tally. `requested` is how many distinct ids `--only` named (0 when the
+ * flag was not used), and it is printed BESIDE the ran/selected pair because the number
+ * a reader needs to check is "did this run everything I asked for?" -- issue #529's
+ * whole complaint was a run that reported "1/1 mutation(s) ran ... 0 mismatch(es)" for
+ * three requested ids, a line indistinguishable from a clean sweep. Two of three
+ * entries were skipped and nothing on screen said so.
+ *
+ * `selected` is what survived every narrowing (`--only`, then `--changed`) and
+ * `results.length` is what actually ran, so ran < selected means an interruption and
+ * selected < requested means a narrowing dropped something -- both now visible in one
+ * line. Pure and exported so those relationships are testable without a run.
+ * @param {readonly MutationResult[]} results @param {number} selected @param {number} requested
+ * @returns {string}
+ */
+export function formatRunSummary(results, selected, requested = 0) {
+  const count = (/** @type {string} */ status) => results.filter((r) => r.status === status).length;
+  const asked = requested > 0 ? ` of ${requested} requested by --only` : '';
+  return (
+    `${results.length}/${selected}${asked} mutation(s) ran: ${count(STATUS.KILLED)} killed, ` +
+    `${count(STATUS.SURVIVES)} survives, ${count(STATUS.FAILED_TO_APPLY)} failed-to-apply, ` +
+    `${count(STATUS.BASELINE_RED)} baseline-red, ${count(STATUS.ERROR)} error -- ` +
+    `${results.filter((r) => !r.matches).length} mismatch(es) vs. declared outcome`
+  );
+}
+
+/**
+ * The pre-run `--only` echo.
+ *
+ * Extracted rather than inlined at its one call site so it can be asserted, which is the
+ * whole reason it exists: this line is the second line of defence for issue #529, and a
+ * guard nothing tests is a guard that can be deleted or garbled without anyone noticing.
+ * `formatRunSummary` above is extracted for the same reason.
+ *
+ * Echoed BEFORE the run, not only in the closing tally: a sweep can take minutes, and the
+ * mistake this surfaces -- asking for more entries than are about to run -- is worth
+ * seeing at second zero rather than after the wait.
+ * @param {readonly { id: string }[]} entries @param {number} total
+ * @returns {string}
+ */
+export function formatSelectionEcho(entries, total) {
+  return `[select] --only: ${entries.length} of ${total} entries: ${entries.map((e) => e.id).join(', ')}`;
+}
+
 // Registered inside main(), not at module scope: this file is imported (for
 // parseArgs/formatResult/dirtyReport/runTestsReal) by orchestrate.test.ts, which runs
 // inside the NORMAL `npm test` vitest process -- installing a SIGINT/SIGTERM handler at
@@ -796,6 +875,52 @@ export function baseManifestById(base, manifestArg, root) {
 }
 
 /**
+ * Narrow the run to the entries `--only` named. Pure, so the property that matters --
+ * every requested id either selects an entry or is reported missing -- is testable
+ * without a manifest on disk.
+ *
+ * Selection keeps MANIFEST order rather than the order the ids were typed: entries
+ * sharing an exact `tests` scope sit together in a manifest file, and `runManifest`
+ * reuses a completed baseline only across consecutively-run entries of the same scope,
+ * so obeying the command line's order could pay for the same baseline twice.
+ *
+ * `missing` is every requested id that matched nothing, not just the first. A run asked
+ * for four ids and given one typo should say which one, once, before spending minutes
+ * on the other three -- and reporting only the first would hide a second typo until the
+ * next attempt.
+ * @param {ManifestEntry[]} entries @param {readonly string[]} ids
+ * @returns {{ entries: ManifestEntry[], missing: string[] }}
+ */
+export function selectOnly(entries, ids) {
+  if (ids.length === 0) return { entries, missing: [] };
+  const wanted = new Set(ids);
+  const present = new Set(entries.map((e) => e.id));
+  return {
+    entries: entries.filter((e) => wanted.has(e.id)),
+    missing: ids.filter((id) => !present.has(id)),
+  };
+}
+
+/**
+ * The refusal for `--only` ids that match no entry. Every unmatched id is named, and
+ * the message says how many of how many were asked for, because the failure this whole
+ * flag's fix exists to prevent is a sweep that quietly ran fewer entries than requested
+ * (issue #529): a run that cannot honour part of what it was asked for must stop, not
+ * proceed with the remainder and report a clean sweep of it.
+ * @param {readonly string[]} missing @param {readonly string[]} requested
+ * @returns {string | null}
+ */
+export function missingOnlyReport(missing, requested) {
+  if (missing.length === 0) return null;
+  const names = missing.map((id) => `  ${id}`).join('\n');
+  return (
+    `refusing to start: ${missing.length} of the ${requested.length} id(s) given to --only ` +
+    `match no manifest entry:\n${names}\n` +
+    'nothing was run -- check the spelling (`--only` accepts repeats and comma lists) and re-run.'
+  );
+}
+
+/**
  * Narrow the run to what the diff since `ref` can affect (issue #506), printing every
  * selected entry with its reasons. The module graph is asked, through the same
  * reachability worker the preflight uses, which test files import any changed source
@@ -840,11 +965,17 @@ async function run() {
   const allEntries = readManifest(manifestPath);
   validateManifest(allEntries);
 
-  let entries = args.only ? allEntries.filter((e) => e.id === args.only) : allEntries;
-  if (args.only && entries.length === 0) {
-    console.error(`no manifest entry with id "${args.only}"`);
+  const selection = selectOnly(allEntries, args.only);
+  const missingReport = missingOnlyReport(selection.missing, args.only);
+  if (missingReport) {
+    console.error(missingReport);
     process.exit(2);
   }
+  let entries = selection.entries;
+  // Echoed BEFORE the run, not only in the closing tally: a sweep can take minutes, and
+  // the mistake this line exists to surface -- asking for more entries than are about
+  // to run -- is worth seeing at second zero rather than after the wait.
+  if (args.only.length > 0) console.log(formatSelectionEcho(entries, allEntries.length));
   if (args.changed !== null) {
     entries = selectChanged(entries, args.changed, args.manifest, root);
     if (args.list) return;
@@ -950,18 +1081,7 @@ async function run() {
     return;
   }
 
-  const killed = results.filter((r) => r.status === STATUS.KILLED).length;
-  const survives = results.filter((r) => r.status === STATUS.SURVIVES).length;
-  const failedToApply = results.filter((r) => r.status === STATUS.FAILED_TO_APPLY).length;
-  const baselineRed = results.filter((r) => r.status === STATUS.BASELINE_RED).length;
-  const errors = results.filter((r) => r.status === STATUS.ERROR).length;
-  const mismatches = results.filter((r) => !r.matches).length;
-
-  console.log(
-    `\n${results.length}/${entries.length} mutation(s) ran: ${killed} killed, ${survives} survives, ` +
-    `${failedToApply} failed-to-apply, ${baselineRed} baseline-red, ${errors} error -- ` +
-    `${mismatches} mismatch(es) vs. declared outcome`,
-  );
+  console.log(`\n${formatRunSummary(results, entries.length, args.only.length)}`);
 
   const wasInterrupted = results.some((r) => r.status === STATUS.INTERRUPTED);
   if (wasInterrupted) {

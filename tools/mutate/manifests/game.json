@@ -1132,14 +1132,12 @@
     "find": "  function transitionMs(): number {\n    if (reducedMotion) return 0;",
     "replace": "  function transitionMs(): number {",
     "expect": "killed",
-    "why": "The resolved reduced-motion policy reaching the HUD but never reaching the clock. `hud.setReducedMotion` still exists, loop.ts still pushes it on every `effectiveSettings` change, and the field is still assigned -- so the wiring entries in loop.test.ts (`pushes the same resolved policy to the HUD, and again when it changes`) all still pass; only the effect is gone. Issue #364's fifth criterion asks that a player who resolved reduced motion gets instant transitions, and this is the one line that makes the duration zero rather than merely recorded. `makes every transition instant under the RESOLVED reduced-motion policy` is the case that measures it, and it carries its own negative control in the same test: the motion-ON branch asserts the outgoing surface is still displayed and one extra timer is armed, so a suite that had been accidentally synchronous would fail there rather than pass here. Widened for issue #542: menu-transition.test.ts joins the scope because that issue's four arms rest on this same line and on nothing else. Two of them MOVE, which is precisely what the preference is about, and there is deliberately no `prefers-reduced-motion` rule for them -- the resolved policy is a player setting a media query cannot see, so this zero is the entire mechanism by which a moving arm collapses. Measured: with this line removed, the per-arm case is the one of that file's 12 that fails.",
+    "why": "The resolved reduced-motion policy reaching the HUD but never reaching the clock. `hud.setReducedMotion` still exists, loop.ts still pushes it on every `effectiveSettings` change, and the field is still assigned -- so the wiring entries in loop.test.ts (`pushes the same resolved policy to the HUD, and again when it changes`) all still pass; only the effect is gone. Issue #364's fifth criterion asks that a player who resolved reduced motion gets instant transitions, and this is the one line that makes the duration zero rather than merely recorded. `makes every transition instant under the RESOLVED reduced-motion policy` is the case that measures it, and it carries its own negative control in the same test: the motion-ON branch asserts the outgoing surface is still displayed and one extra timer is armed, so a suite that had been accidentally synchronous would fail there rather than pass here. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
-      "src/game/hud.surfaces.test.ts",
-      "src/game/menu-transition.test.ts"
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
-      "createHud application transition contract makes every transition instant under the RESOLVED reduced-motion policy",
-      "menuTransition: every arm collapses to instant under RESOLVED reduced motion leaves no transition timer and no animation class, on all four arms"
+      "createHud application transition contract makes every transition instant under the RESOLVED reduced-motion policy"
     ]
   },
   {
@@ -1171,105 +1169,13 @@
     "find": "  animation: ui-surface-in var(--ui-transition-duration) var(--ui-transition-ease);",
     "replace": "  animation: ui-surface-in 150ms cubic-bezier(0.2, 0, 0, 1);",
     "expect": "killed",
-    "why": "The stylesheet half of criterion 1: the entering rule stops reading the tokens and writes the numbers itself. Nothing about the animation changes on screen -- same 150ms, same curve -- which is precisely why a screenshot, a frame capture and every behavioural timing assertion in hud.test.ts stay green: hud.ts reads the TOKEN for its timer, and the token is still declared. What breaks is the criterion, silently: the leaving rule and the entering rule now have separate definitions, and moving `--ui-transition-duration` moves only one of them. `declares the duration and the easing in named places only, and nowhere as a literal` is the case that measures it, matching a literal duration and a literal `cubic-bezier` inside each contract rule's own body, with a preceding null-check so a renamed rule fails rather than vacuously passes. That case was renamed for issue #542: it used to COUNT declarations of the token and now names the selectors allowed to carry one, because `fade-long` has to declare a duration and counting would have forced that number into TypeScript -- the very drift criterion 1 forbids. The half this entry rests on is unchanged. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "why": "The stylesheet half of criterion 1: the entering rule stops reading the tokens and writes the numbers itself. Nothing about the animation changes on screen -- same 150ms, same curve -- which is precisely why a screenshot, a frame capture and every behavioural timing assertion in hud.test.ts stay green: hud.ts reads the TOKEN for its timer, and the token is still declared. What breaks is the criterion, silently: the leaving rule and the entering rule now have separate definitions, and moving `--ui-transition-duration` moves only one of them. `declares the duration and the easing exactly once each, and nowhere as a literal` is the case that measures it, matching a literal duration and a literal `cubic-bezier` inside each contract rule's own body, with a preceding null-check so a renamed rule fails rather than vacuously passes. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/hud.css.test.ts"
     ],
     "killedBy": [
-      "hud.css: the one application-transition definition (issue #364) declares the duration and the easing in named places only, and nowhere as a literal",
+      "hud.css: the one application-transition definition (issue #364) declares the duration and the easing exactly once each, and nowhere as a literal",
       "hud.css: the one application-transition definition (issue #364) gives both contract rules their duration and easing from the tokens, live"
-    ]
-  },
-  {
-    "id": "menu-transition-control-arm-gets-its-own-rule",
-    "file": "src/game/menu-transition.ts",
-    "find": "  if (treatment === null || treatment === 'fade') return null;",
-    "replace": "  if (treatment === null) return null;",
-    "expect": "killed",
-    "why": "The control arm stops BEING the shipped path and becomes a class of its own. This is the shape the feature would naturally have been written in -- one class per arm, uniform -- and it is wrong for the one reason issue #542 cares about: `fade` exists to be the thing every other arm is compared against, so it has to be the shipped cascade rather than a rule that restates it and can drift the first time the token or the keyframes move. Nothing visible changes today, because `.hud--menu-transition-fade` matches no rule in the stylesheet; the class simply appears on the HUD root and the comparison quietly stops having a control. Scoped to menu-transition.test.ts; the fade-identity cases measure it, one on the mounted DOM and one on the mapping itself.",
-    "tests": [
-      "src/game/menu-transition.test.ts"
-    ],
-    "killedBy": [
-      "menuTransition: the flag that names an arm maps every arm but the control to its own modifier class, and the control to none",
-      "menuTransition: `fade` reproduces the shipped transition exactly mounts the same DOM as an absent flag, with no modifier class anywhere"
-    ]
-  },
-  {
-    "id": "menu-transition-arm-never-reaches-the-hud",
-    "file": "src/game/hud.ts",
-    "find": "  if (treatmentClass !== null) el.classList.add(treatmentClass);",
-    "replace": "  void treatmentClass;",
-    "expect": "killed",
-    "why": "The flag parses, the registry documents it, the stylesheet carries every arm -- and nothing applies it, so every arm renders as the control. The failure is entirely silent: `parseDevFlags` still returns the arm, `devControls()` still offers it, the generated doc still lists it, and a playtester selecting `rise` sees the shipped fade and reports the arm as bad rather than as unwired. That is the same class of defect #497 records for `ring+audio`, where a cue reached the parser as a different string and was read as a broken cue. Scoped to menu-transition.test.ts, where the moving arms are read off the mounted stylesheet rather than off the option.",
-    "tests": [
-      "src/game/menu-transition.test.ts"
-    ],
-    "killedBy": [
-      "menuTransition: `fade` reproduces the shipped transition exactly mounts the same DOM as an absent flag, with no modifier class anywhere",
-      "menuTransition: `fade` reproduces the shipped transition exactly resolves the same duration and animates the same keyframes as an absent flag",
-      "menuTransition: `fade` reproduces the shipped transition exactly settles on exactly the same tick as an absent flag",
-      "menuTransition: the duration arm goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
-      "menuTransition: the duration arm goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the control timing"
-    ]
-  },
-  {
-    "id": "menu-transition-duration-arm-keeps-the-control-timing",
-    "file": "src/game/hud.css",
-    "find": ".hud--menu-transition-fade-long {\n  --ui-transition-duration: 300ms;\n}",
-    "replace": ".hud--menu-transition-fade-long {\n  --ui-transition-duration: 150ms;\n}",
-    "expect": "killed",
-    "why": "The duration arm left at the control's own duration -- a second `fade` under another name. It is the arm that carries the experiment's discriminating power: without it a moving arm that reads better cannot be told apart from one that is simply slower, and the issue's own framing says a one-token change with no new keyframes is a possible answer. The mutation keeps the rule, the selector and the property, so every structural check in menu-transition.test.ts (one rule per arm, no arm inside the reduced-motion block, tokens rather than literals) still passes; only the TIMING moves, which is why the case that measures it advances fake timers to 299ms and asserts the outgoing surface is still displayed.",
-    "tests": [
-      "src/game/menu-transition.test.ts"
-    ],
-    "killedBy": [
-      "menuTransition: `fade` reproduces the shipped transition exactly resolves the same duration and animates the same keyframes as an absent flag",
-      "menuTransition: `fade` reproduces the shipped transition exactly settles on exactly the same tick as an absent flag",
-      "menuTransition: the duration arm goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
-      "menuTransition: the duration arm goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the control timing"
-    ]
-  },
-  {
-    "id": "menu-transition-rise-moves-nothing",
-    "file": "src/game/hud.css",
-    "find": "@keyframes ui-surface-rise-content {\n  from {\n    transform: translateY(16px);\n  }",
-    "replace": "@keyframes ui-surface-rise-content {\n  from {\n    transform: translateY(0px);\n  }",
-    "expect": "killed",
-    "why": "The movement arm wired end to end and moving by nothing: the class is applied, the animation is named, the duration and easing come from the tokens, and the content sits exactly where it will end up. Indistinguishable from the control on screen, and invisible to every other check here -- jsdom computes no animated value, so only the DECLARATION can be read, which is why the case that measures it matches the `from` step's transform against every identity spelling and carries those spellings as its own negative control. 16px was chosen off rendered frames precisely because a distance that is too small stops reading as travel; zero is that failure taken to its limit.",
-    "tests": [
-      "src/game/menu-transition.test.ts"
-    ],
-    "killedBy": [
-      "menu-transition arms in hud.css gives each moving arm keyframes that actually move, ending at no transform at all"
-    ]
-  },
-  {
-    "id": "menu-transition-settle-scales-nothing",
-    "file": "src/game/hud.css",
-    "find": "@keyframes ui-surface-settle-content {\n  from {\n    transform: scale(0.94);\n  }",
-    "replace": "@keyframes ui-surface-settle-content {\n  from {\n    transform: scale(1);\n  }",
-    "expect": "killed",
-    "why": "The same defect on the other movement arm, and worth its own entry because the identity is spelled differently: `scale(1)` rather than a zero translate, so a guard written only against `translateY(0)` would let this through. Both arms have to be non-trivial for the comparison to be about the KIND of movement rather than about which one happened to be wired.",
-    "tests": [
-      "src/game/menu-transition.test.ts"
-    ],
-    "killedBy": [
-      "menu-transition arms in hud.css gives each moving arm keyframes that actually move, ending at no transform at all"
-    ]
-  },
-  {
-    "id": "menu-transition-parser-accepts-any-arm-name",
-    "file": "src/game/devflags.ts",
-    "find": "  return isMenuTransition(raw) ? raw : null;",
-    "replace": "  return raw as MenuTransition;",
-    "expect": "killed",
-    "why": "Reject-to-null dropped, so `?menuTransition=swoosh` becomes a `MenuTransition` the HUD then turns into `.hud--menu-transition-swoosh` -- a class matching no rule, which renders as the control while the flag reports the arm as active. That is the failure mode the whole registry's reject-to-null idiom exists for (`backdrop`, `mineWarn` and `blockedFire` all state it): a playtester's typo silently observing the shipped behaviour and reporting it as the arm's. Scoped to menu-transition.test.ts, whose parser case sweeps the four registered arms and then five rejected spellings including a case variant and a space form.",
-    "tests": [
-      "src/game/menu-transition.test.ts"
-    ],
-    "killedBy": [
-      "menuTransition: the flag that names an arm accepts every arm in the vocabulary and nothing else -- population: the 4 registered arms"
     ]
   },
   {
@@ -1585,7 +1491,7 @@
     "replace": "  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.14);\n  border-radius: 9px;",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "Puts the customize rotate buttons back to the 34px literal they carried before issue #352, which is below the 44 CSS px touch floor Apple/WCAG state and the repo declares as `--hud-control-min`. Nothing else notices: the board still renders, the cluster still fits on one row (it is 40px narrower, not wider), no layout moves that a screenshot diff would catch, and jsdom does no layout so no computed-size assertion anywhere in the suite can see it -- which is exactly why the guard this kills asserts the DECLARATION rather than the rendered box. Measured: KILLED, 1 of 56 in hud.css.test.ts, the 'sized to be hit' case -- re-measured after issue #542 edited that file (the file has grown from the 50 cases this was first counted against; the failing set is still the one case). The token half of that guard is deliberately NOT the target here: lowering `--hud-control-min` itself would also resize `.hud-level-btn` and `.hud-swatch`, so it would be a different and broader defect; this entry isolates the one control the issue was about. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "why": "Puts the customize rotate buttons back to the 34px literal they carried before issue #352, which is below the 44 CSS px touch floor Apple/WCAG state and the repo declares as `--hud-control-min`. Nothing else notices: the board still renders, the cluster still fits on one row (it is 40px narrower, not wider), no layout moves that a screenshot diff would catch, and jsdom does no layout so no computed-size assertion anywhere in the suite can see it -- which is exactly why the guard this kills asserts the DECLARATION rather than the rendered box. Measured: KILLED, 1 of 50 in hud.css.test.ts, the 'sized to be hit' case. The token half of that guard is deliberately NOT the target here: lowering `--hud-control-min` itself would also resize `.hud-level-btn` and `.hud-swatch`, so it would be a different and broader defect; this entry isolates the one control the issue was about. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/hud.css.test.ts"
     ]
@@ -3539,10 +3445,83 @@
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Issue #226: 'only sections with relevant controls should render'. Accessibility ships declared and empty -- its motion and UI-scale controls are issues #289/#290 -- so without the rule Settings opens on a heading over nothing, which is the 'permanently disabled settings players have to decode' the UI direction rules out. It is also the mechanism #227 leans on: hide every control in a section on capability and the section must collapse with no further change here.",
+    "why": "Issue #226: 'only sections with relevant controls should render'. Accessibility shipped declared and EMPTY, which is where the rule came from; issue #289's motion toggle filled it, so every declared section has a control today and the rule is measured on a section emptied at runtime instead -- a control hidden by `display: none`, which is what a `--hidden` class resolves to and what #227's capability hiding will do. Without the rule that section opens as a heading over nothing, the 'permanently disabled settings players have to decode' the UI direction rules out.",
     "killedBy": [
-      "hud: the Settings sections (issue #226) declares the issue's five sections and renders only the ones with controls",
-      "hud: the Settings sections (issue #226) renders a section as soon as it HAS a control -- the rule reads the DOM, not a list"
+      "hud: the Settings sections (issue #226) collapses a section whose last control is hidden, and brings it back -- the rule reads the DOM, not a list"
+    ]
+  },
+  {
+    "id": "motion-toggle-flips-its-own-label",
+    "file": "src/game/hud.ts",
+    "find": "  const handleMotionToggle = (): void => {\n    for (const cb of motionChangeCbs) cb(NEXT_MOTION[currentMotion]);\n  };",
+    "replace": "  const handleMotionToggle = (): void => {\n    for (const cb of motionChangeCbs) cb(NEXT_MOTION[currentMotion]);\n    currentMotion = NEXT_MOTION[currentMotion];\n    renderMotionToggle();\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The control drawing itself from the CLICK instead of from the value the store accepted -- the same convention the aim-scheme, fire-mode and haptics toggles follow, and the one `settings.ts` can actually refuse: `setMotion` drops an id outside MOTION_PREFERENCES, so a self-flipping label would show a preference that was never stored and would keep showing it until something else repainted. It also looks correct in the ordinary case, which is exactly why it needs a test rather than a reviewer.",
+    "killedBy": [
+      "hud: the motion toggle (issue #289) taps the toggle and reports the NEXT preference in the cycle, from a real click at the button"
+    ]
+  },
+  {
+    "id": "motion-label-hides-the-resolved-policy",
+    "file": "src/game/hud.ts",
+    "find": "    const resolved = currentMotion === 'system' ? ` (${reducedMotion ? 'reduced' : 'full'})` : '';",
+    "replace": "    const resolved = '';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Issue #289's own report: 'Transitions between menus seem to not work? Or at least I haven't seen them in action?'. With the OS asking for reduced motion, a menu that never animates and a control reading only 'Match device' leave nothing on screen connecting the two -- which is the state that made the missing control hard to even diagnose. 'Full' and 'Reduced' name their own answers; 'Match device' is the one state that cannot, so it is the one that reports the resolved policy.",
+    "killedBy": [
+      "hud: the motion toggle (issue #289) reports the RESOLVED policy on Match device, which is the state its own name cannot say"
+    ]
+  },
+  {
+    "id": "motion-label-reports-the-policy-on-every-state",
+    "file": "src/game/hud.ts",
+    "find": "    const resolved = currentMotion === 'system' ? ` (${reducedMotion ? 'reduced' : 'full'})` : '';",
+    "replace": "    const resolved = ` (${reducedMotion ? 'reduced' : 'full'})`;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The negative control for the entry above, as a production defect rather than an assertion: appending the resolved policy everywhere still makes 'Match device' report it, so a suite that only checked that half would stay green while the pane rendered 'Motion: Full (reduced)' -- a label that contradicts itself on the two states a player chose deliberately.",
+    "killedBy": [
+      "hud: the motion toggle (issue #289) reports the RESOLVED policy on Match device, which is the state its own name cannot say"
+    ]
+  },
+  {
+    "id": "route-host-motion-control-loses-the-stored-preference",
+    "file": "src/game/route-host.ts",
+    "find": "    hud.setMotion(deps.settings.snapshot().presentation.motion);",
+    "replace": "    hud.setMotion('system');",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "`paintSettingsControls` has been the single writer of the settings display since issue #532, so a constant here is the whole display: a returning player who chose 'Reduced' opens Settings on 'Match device' while the game correctly runs reduced, and one more tap moves them to 'Full' rather than to what the button claims. The transitions keep obeying the store throughout, which is what makes this silent.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED motion preference, and the resolved policy beside it",
+      "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session"
+    ]
+  },
+  {
+    "id": "route-ui-motion-toggle-echoes-the-click-instead-of-the-store",
+    "file": "src/game/route-ui.ts",
+    "find": "  hud.onMotionChange((next) => {\n    deps.settings.setMotion(next);\n  });",
+    "replace": "  hud.onMotionChange((next) => {\n    hud.setMotion(next);\n  });",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-ui.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The handler that paints instead of persisting. The label moves under the finger, so it looks like it worked -- and nothing else does: the preference is not saved, `effectiveSettings` never republishes, and `hud.setReducedMotion` never fires, so the transitions the player is trying to change carry on exactly as before. That is issue #364's fifth criterion and the whole point of issue #289, and it is why the store is the only thing a settings handler is allowed to touch.",
+    "killedBy": [
+      "the application routes work with no gameplay session behind them the settings routes write their stores",
+      "the application routes work with no gameplay session behind them drives every route while a real GameSessionHost stays EMPTY (issue #427)",
+      "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session"
     ]
   },
   {
@@ -3720,6 +3699,22 @@
     ]
   },
   {
+    "id": "route-host-paints-the-settings-once-and-never-again",
+    "file": "src/game/route-host.ts",
+    "find": "  const stopPaintingSettings = deps.effectiveSettings.subscribe(paintSettingsControls);",
+    "replace": "  const stopPaintingSettings = (): void => {};",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The construction-time paint survives and every control still opens showing the stored value, so Settings looks right until the player touches it -- and then the control they just pressed never redraws, because this subscription is the only thing that answers the store. Issue #364's fifth criterion is specifically about the change landing WITH THE PANE OPEN, which is this line and not the call above it, and issue #289's motion toggle is the control where the consequence is visible rather than merely stale: the resolved policy stops reaching `hud.setReducedMotion`, so the transitions the player is trying to change carry on until a reload.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the stored audio and input settings, which no session-less page did before",
+      "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session",
+      "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot"
+    ]
+  },
+  {
     "id": "route-host-haptics-toggle-reads-the-effective-value",
     "file": "src/game/route-host.ts",
     "find": "    hud.setHaptics(deps.settings.snapshot().input.deviceHaptics);",
@@ -3728,7 +3723,7 @@
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "Reads the effective value for a control that EDITS the stored preference -- the one asymmetry in this function, and the tempting edit, since every other line beside it reads `effective`. On a device without vibration the switch then shows forced-off, which reads as the preference having been erased: what issue #320 forbids. This was the code until #324, harmless only because the block ran on session-less pages where `loop.ts` corrected it; making the page the sole writer would have shipped it everywhere.",
+    "why": "Reads the effective value for a control that EDITS the stored preference -- one of only two lines in this function that read the store rather than `effective`, which is what makes it the tempting edit. On a device without vibration the switch then shows forced-off, which reads as the preference having been erased: what issue #320 forbids. This was the code until #324, harmless only because the block ran on session-less pages where `loop.ts` corrected it; making the page the sole writer would have shipped it everywhere.",
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED haptics preference, not the effective one"
     ]
@@ -3866,17 +3861,18 @@
     ]
   },
   {
-    "id": "menu-transition-arm-steals-a-child-animation",
-    "file": "src/game/hud.css",
-    "find": ".hud--menu-transition-rise .ui-surface--entering:not(.hud-splash) > * {",
-    "replace": ".hud--menu-transition-rise .ui-surface--entering > * {",
+    "id": "motion-control-painted-from-the-resolved-policy",
+    "file": "src/game/route-host.ts",
+    "find": "    hud.setMotion(deps.settings.snapshot().presentation.motion);",
+    "replace": "    hud.setMotion(effective.reducedMotion ? 'reduced' : 'full');",
     "expect": "killed",
     "tests": [
-      "src/game/menu-transition.test.ts"
+      "src/game/loop.test.ts",
+      "src/game/route-host.test.ts"
     ],
-    "why": "Drops the splash exclusion from the rise arm, which is how the rule was first written. `animation` is one property per element and this selector is three classes against `.hud-splash-hint`'s one, so on an entering splash surface the arm REPLACES that hint's infinite `hud-splash-pulse` rather than joining it -- the hint stops pulsing for good while the arm is selected. Reachable rather than theoretical: `transitionTo` lists SPLASH_SURFACE, so it really does enter, and the hint really is a direct child. The defect is invisible from the arm's own navigation, which never touches the launch screen.",
+    "why": "Paints the motion control from the RESOLVED policy instead of the stored preference -- the tempting edit, since every other line in `paintSettingsControls` but the haptics one reads `effective`. The control has three states and the policy has two, so this erases 'system' with no way back to it: a player on the default sees 'Full' or 'Reduced', and choosing either leaves them unable to return to following their device. Sharper than the haptics case, because 'system' is what everyone starts on.",
     "killedBy": [
-      "the moving arms must not steal a child's own animation excludes the splash surface, whose hint owns an infinite pulse"
+      "startGameWith: reduced motion reaches the preview through the effective seam the motion control is painted with the STORED preference, not the resolved policy"
     ]
   }
 ]

@@ -137,7 +137,6 @@ import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
-import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -154,6 +153,11 @@ import {
   type VersusSetupProblem,
 } from './versus-setup';
 import type { VersusSetupStore } from './versus-setup-store';
+// The motion preference's THREE-STATE vocabulary, from the store that owns it, for the
+// same reason `TouchScheme` and `FireMode` come from `input/touch.ts` below: the control
+// offers exactly the states the store accepts, and a fourth invented here would be
+// refused on arrival with nothing to say why.
+import type { MotionPreference } from './settings';
 import {
   STICK_RADIUS_PX,
   stickVector,
@@ -548,6 +552,21 @@ export interface Hud {
   /** Fired with the FLIPPED value when the player taps the haptics toggle. */
   onHapticsChange(cb: (on: boolean) => void): void;
   /**
+   * Which of the three motion states the player has CHOSEN (issue #289), echoed back by
+   * the page after an accepted toggle -- same convention as `setTouchScheme`/`setFireMode`:
+   * the control shows what was stored, not what was clicked.
+   *
+   * The stored preference, deliberately, not the boolean `setReducedMotion` carries. This
+   * is the control that EDITS the preference, so it has to be able to show 'system' as
+   * itself; a page painting it from the resolved policy would collapse 'system' into
+   * whichever of 'full'/'reduced' the OS happened to say and leave the player no way back.
+   * The resolved policy still reaches the label -- see `setReducedMotion` -- because
+   * 'system' is the one state whose name does not say what is currently happening.
+   */
+  setMotion(preference: MotionPreference): void;
+  /** Fired with the NEXT preference in the cycle when the player taps the motion toggle. */
+  onMotionChange(cb: (preference: MotionPreference) => void): void;
+  /**
    * The player just fired. Pulses the aim mark, so a tap that produced a shot is
    * distinguishable from a tap that did not -- on a phone the muzzle is under the
    * player's own hand, and the shell is gone before the eye gets there.
@@ -725,10 +744,14 @@ export interface Hud {
    * A setter rather than a `createHud` argument, for the same reason `setMuted` is one:
    * the player can change this in Settings with the menu open, and a construction
    * parameter would freeze whichever answer was true at boot -- which for this setting
-   * means the toggle appears to do nothing until a reload. Pushed from `loop.ts`'s single
-   * `effectiveSettings` subscription alongside mute, volume and haptics.
+   * means the toggle appears to do nothing until a reload. Pushed from `route-host.ts`'s
+   * single `effectiveSettings` subscription alongside mute, volume, haptics and
+   * `setMotion`.
    *
-   * True drives every application transition to zero duration (issue #364, criterion 5).
+   * True drives every application transition to zero duration (issue #364, criterion 5),
+   * and it also completes the Accessibility toggle's "Match device" label: that is the one
+   * of the three motion states whose own name cannot say whether motion is being reduced
+   * right now, and a player unable to tell is why issue #289 exists.
    */
   setReducedMotion(on: boolean): void;
   /**
@@ -761,7 +784,7 @@ export interface Hud {
 /**
  * WHO OWNS EACH MEMBER of `Hud` (issue #324).
  *
- * `Hud` is one interface with 66 members spanning two different lifetimes: the persistent
+ * `Hud` is one interface with 69 members spanning two different lifetimes: the persistent
  * application shell, which exists before any match and outlives every match, and a single
  * gameplay session, which does not. Issue #468 separated those OWNERS in the code
  * (`route-host.ts` renders application routes with no session at all); this separates them
@@ -815,7 +838,7 @@ export type RouteHudKey =
   | 'setAccentColor' | 'onPickAccentColor'
   | 'previewCanvas' | 'previewRotateButtons' | 'onCustomizeOpen' | 'onCustomizeClose'
   | 'setTouchScheme' | 'onTouchSchemeChange' | 'setFireMode' | 'onFireModeChange'
-  | 'setHaptics' | 'onHapticsChange'
+  | 'setHaptics' | 'onHapticsChange' | 'setMotion' | 'onMotionChange'
   | 'onReassignSlot' | 'setControllers' | 'setDetectedPads' | 'setBotAssignmentAllowed'
   | 'onControllersOpen' | 'onControllersClose'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
@@ -938,38 +961,11 @@ export interface HudOptions {
    * jsdom reports every rect as empty and geometry then has nothing to follow.
    */
   readonly measure?: (el: HTMLElement) => Rect;
-  /**
-   * Which menu-transition arm to run (issue #542's `?dev=1&menuTransition=` experiment).
-   * Absent, `null`, and `'fade'` are the same thing: the shipped crossfade.
-   *
-   * A CONSTRUCTION argument rather than a setter, which is the opposite of
-   * `setReducedMotion` and for the opposite reason. Reduced motion is a player setting
-   * that can change while the menu is open, so freezing it at boot would make the toggle
-   * appear broken; this is a developer flag read once from the query string, and a
-   * setter would add a member to the `Hud` interface, its three ownership `Pick`s and
-   * every fake in `loop.test.ts` to model a value that never changes within a page load.
-   */
-  readonly menuTransition?: MenuTransition | null;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const el = document.createElement('div');
   el.className = 'hud';
-  /*
-   * The experiment's modifier, on the HUD ROOT (issue #542).
-   *
-   * This element and no other, because it is the same element `transitionMs()` reads
-   * `--ui-transition-duration` off: an arm that moves the token (`fade-long`) is picked
-   * up through that one existing read, with no second definition of the duration in
-   * TypeScript and none needed. A class on `document.documentElement` would still
-   * inherit the token down, but it would leak out of the HUD's own subtree and outlive
-   * `dispose()`.
-   *
-   * `fade` and absent both yield `null` here and add nothing, so the control arm is
-   * literally the shipped path -- see `menuTransitionClass`.
-   */
-  const treatmentClass = menuTransitionClass(opts.menuTransition ?? null);
-  if (treatmentClass !== null) el.classList.add(treatmentClass);
   el.innerHTML = `
     <!-- The application backdrop (issue #317). FIRST in the markup so it paints under
          every other layer, and aria-hidden because it is scenery: it carries no content
@@ -1353,12 +1349,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          SECTIONS ARE DECLARED, AND AN EMPTY ONE DOES NOT RENDER. Each section is a
          <section class="hud-settings-section"> whose controls live in one
          .hud-settings-controls child, and 'refreshSettingsSections' hides any section
-         with no visible control in it. Accessibility is declared here with none: motion
-         and UI-scale controls are issues #289/#290, and the settings MODEL already
-         carries both fields ('presentation.motion', 'presentation.uiScale') with no HUD
-         to drive them. So the rule is exercised on the shipped build rather than written
-         for a future one, and #227's per-control capability hiding collapses a section
-         that empties out with no further change here. -->
+         with no visible control in it. Accessibility shipped declared and EMPTY until
+         issue #289, which is why the rule exists at all; it now carries the motion
+         toggle and renders like the rest. The rule is what #227's per-control capability
+         hiding leans on in the other direction -- hide every control in a section and it
+         collapses with no further change here -- and #290's UI-scale control is the next
+         thing to land beside the motion toggle. -->
     <div class="hud-settings hud-settings--hidden" tabindex="-1" aria-labelledby="hud-settings-title">
       <h1 id="hud-settings-title">Settings</h1>
       <section class="hud-settings-section" data-section="audio" aria-labelledby="hud-settings-audio">
@@ -1384,9 +1380,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
                by renderFireModeToggle. -->
           <button class="ui-btn ui-btn--sm hud-firemode-toggle" type="button"></button>
           <!-- Whether haptics.ts's vibrate calls fire at all. Filed under Controls rather
-               than Accessibility deliberately: it is feedback FROM an input device, it
-               lives under 'input' in the settings model, and the Accessibility section is
-               reserved for the motion and scale policies #289/#290 add. -->
+               than Accessibility deliberately: it is feedback FROM an input device and it
+               lives under 'input' in the settings model, where Accessibility holds the
+               presentation policies -- motion below, and the UI scale #290 adds. -->
           <button class="ui-btn ui-btn--sm hud-haptics-toggle" type="button"></button>
           <!-- The durable Controllers entry the Main Menu gave up. -->
           <button class="ui-btn ui-btn--sm hud-settings-controllers" type="button">Controllers</button>
@@ -1394,7 +1390,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       </section>
       <section class="hud-settings-section" data-section="accessibility" aria-labelledby="hud-settings-a11y">
         <h2 id="hud-settings-a11y">Accessibility</h2>
-        <div class="hud-settings-controls"></div>
+        <div class="hud-settings-controls">
+          <!-- How much nonessential movement the game plays (issue #289). Three states,
+               because two would make "whatever this device asks for" unsayable. Label and
+               hint by renderMotionToggle. -->
+          <button class="ui-btn ui-btn--sm hud-motion-toggle" type="button"></button>
+        </div>
       </section>
       <section class="hud-settings-section" data-section="data" aria-labelledby="hud-settings-data">
         <h2 id="hud-settings-data">Data</h2>
@@ -1571,6 +1572,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const schemeToggleBtn = el.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
   const firemodeToggleBtn = el.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
   const hapticsToggleBtn = el.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
+  const motionToggleBtn = el.querySelector('.hud-motion-toggle') as HTMLButtonElement;
 
   const muteCbs: Array<() => void> = [];
   const volumeCbs: Array<(v: number) => void> = [];
@@ -2385,8 +2387,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    *
    * Called on every open rather than once at construction, because the inputs are not
    * fixed for the HUD's life: #227 hides individual touch/haptic controls on capability,
-   * and #289/#290 add the Accessibility controls that make that section non-empty. Both
-   * land as changes to which controls are visible, with nothing to add here.
+   * and #290 still adds a UI-scale control beside the motion toggle #289 put in
+   * Accessibility. Both land as changes to which controls are visible, with nothing to
+   * add here.
    *
    * Deliberately NOT reading `getComputedStyle` on the section itself -- that is what
    * this function writes -- and deliberately counting controls, not children: the Data
@@ -3255,6 +3258,59 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   hapticsToggleBtn.addEventListener('click', handleHapticsToggle);
   hapticsToggleBtn.addEventListener('click', blurIfPointer);
+
+  // The motion toggle: one button, three states, cycling like the fire-mode toggle, and
+  // the first control the Accessibility section has ever held (issue #289).
+  //
+  // Named for what the game DOES, never for the stored ids. 'system' in particular is an
+  // implementation word for "whatever this device already asks for", and a player who has
+  // never opened an OS accessibility pane has no reason to connect the two.
+  const MOTION_LABEL: Record<MotionPreference, string> = {
+    system: 'Motion: Match device',
+    full: 'Motion: Full',
+    reduced: 'Motion: Reduced',
+  };
+  const MOTION_HINT: Record<MotionPreference, string> = {
+    system: 'Follow this device\'s own reduced-motion setting.',
+    full: 'Play every menu transition and effect at full strength.',
+    reduced: 'Cut menu transitions and nonessential movement, whatever the device asks for.',
+  };
+  const NEXT_MOTION: Record<MotionPreference, MotionPreference> = {
+    system: 'full',
+    full: 'reduced',
+    reduced: 'system',
+  };
+  let currentMotion: MotionPreference = 'system';
+  /**
+   * 'Match device' is the ONE state whose name does not say what is currently happening,
+   * so it -- and only it -- reports the resolved answer `setReducedMotion` pushed.
+   *
+   * That gap is the bug issue #289 was filed under: a player whose OS asks for reduced
+   * motion had no control at all, and the first thing they need after finding one is to
+   * know which way the device is currently pointing. 'Full' and 'Reduced' are their own
+   * answers and get no suffix, which is also what keeps this from reading as noise on the
+   * two states a player picked deliberately.
+   */
+  function renderMotionToggle(): void {
+    const resolved = currentMotion === 'system' ? ` (${reducedMotion ? 'reduced' : 'full'})` : '';
+    motionToggleBtn.textContent = MOTION_LABEL[currentMotion] + resolved;
+    motionToggleBtn.title = MOTION_HINT[currentMotion];
+    // No category word in front, unlike the three toggles above: theirs open with 'Aim:',
+    // 'Fire:' and 'Haptics:', so a prefix names the thing being set. This label already
+    // opens with 'Motion:', and prefixing it would read out 'Motion: Motion: Match device'.
+    motionToggleBtn.setAttribute(
+      'aria-label',
+      `${MOTION_LABEL[currentMotion] + resolved}. ${MOTION_HINT[currentMotion]} ` +
+        `Tap to switch to ${MOTION_LABEL[NEXT_MOTION[currentMotion]]}.`,
+    );
+  }
+  renderMotionToggle();
+  const motionChangeCbs: Array<(preference: MotionPreference) => void> = [];
+  const handleMotionToggle = (): void => {
+    for (const cb of motionChangeCbs) cb(NEXT_MOTION[currentMotion]);
+  };
+  motionToggleBtn.addEventListener('click', handleMotionToggle);
+  motionToggleBtn.addEventListener('click', blurIfPointer);
 
   // Where the session stands in the level sequence, for the win panel's copy. Null
   // until the loop calls setLevel, and a HUD never told about levels keeps its
@@ -4818,6 +4874,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     setReducedMotion(on: boolean): void {
       reducedMotion = on;
+      // The Accessibility toggle's 'Match device' state reads this, so the label has to
+      // move when the resolved answer does -- which happens with the pane open whenever
+      // the OS preference flips, and no click is involved. See renderMotionToggle.
+      renderMotionToggle();
     },
     onCampaignOpen(cb: () => void): void {
       campaignOpenCbs.push(cb);
@@ -4842,6 +4902,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     onHapticsChange(cb: (on: boolean) => void): void {
       hapticsChangeCbs.push(cb);
+    },
+    setMotion(preference: MotionPreference): void {
+      currentMotion = preference;
+      renderMotionToggle();
+    },
+    onMotionChange(cb: (preference: MotionPreference) => void): void {
+      motionChangeCbs.push(cb);
     },
     setAchievements(earned: ReadonlySet<AchievementId>): void {
       earnedIds = earned;
@@ -4896,6 +4963,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       firemodeToggleBtn.removeEventListener('click', blurIfPointer);
       hapticsToggleBtn.removeEventListener('click', handleHapticsToggle);
       hapticsToggleBtn.removeEventListener('click', blurIfPointer);
+      motionToggleBtn.removeEventListener('click', handleMotionToggle);
+      motionToggleBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);
       achBackBtn.removeEventListener('click', blurIfPointer);
       levelSelectOpenBtn.removeEventListener('click', handleLevelSelectOpen);
