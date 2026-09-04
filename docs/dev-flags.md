@@ -49,7 +49,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (14)
+## Valued flags (13)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -58,7 +58,6 @@ Notes:
 | `blockedFire` | `blockedFire` | `ring`, `muzzle`, `pips`, `hud`, `audio`, `click`, `clunk`, `thunk-soft`, `pitch-empty`, `haptic`, `haptic-tap`, `haptic-double`, `haptic-long`, `haptic-rise`, `haptic-audio`, `ring-audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default is silent. Issue #356 compares several treatments before adopting one. |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
-| `menuTransition` | `menuTransition` | `fade`, `fade-long`, `rise`, `settle` | `null` | Runs a named menu-transition arm between application surfaces (issue #542); `fade` is the shipped 150ms opacity crossfade and the control the rest are judged against. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |
 | `mineWarn` | `mineWarn` | `lance`, `slump`, `spike` | `null` | Draws the mine fuse and proximity warnings with a named experimental treatment (issue #276 playtest round); the shipped default is the glow + illumination pair. |
 | `mode` | `mode` | `ffa`, `teams` | `null` | Sets which versus mode a session builds with -- free-for-all or teams -- instead of the shipped campaign-coop rule (win as every enemy dead, or coop's shared lives). |
@@ -75,8 +74,6 @@ Notes:
 - **bots**: A bot-claimed slot never builds its slot's real controller -- its own dedicated gamepad reader (`pad[i] -> slot[i]`).
 - **bots**: Not excluded from the sandbox, unlike `players`: the sandbox always resolves to one slot, and `bots=1` there is the same substitution `autoplay=1` already does.
 - **level**: A jump does not consume, restore, advance, or complete the active run.
-- **menuTransition**: Read once at HUD construction, so it takes a reload rather than applying mid-session.
-- **menuTransition**: Every arm collapses to an instant change under resolved reduced motion, movement included.
 - **mode**: Unrecognised or absent leaves the campaign-coop default.
 - **mode**: Strips every enemy spawn from the built arena: versus modes have no AI opponents.
 - **players**: Composes freely with `gamepad`: slot 0's optional pad[0] merge and every co-player slot's own dedicated pad index (`pad[i] -> slot[i]`) read different indices of the same pads array, so they never collide.

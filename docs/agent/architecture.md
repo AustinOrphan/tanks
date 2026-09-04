@@ -310,9 +310,11 @@ recorded in issue #485: menu music, and the AUDIO ENGINE half of the settings, b
 which run through the session's `applySettings`/`followMusic` and go silent on the empty
 host. The DISPLAY half moved to the page with issue #226, because Settings became the one
 durable home for mute and volume and a preference whose only control lies is worse than one
-with no control at all: `route-host.ts` pushes the five settings-driven values at the HUD at
-construction and on every store change, and early-returns while a session holds the slot so
-the two owners never both paint. The engine is untouched from there -- a stored mute reaches
+with no control at all: `route-host.ts` pushes the seven settings-driven values at the HUD
+at construction and on every store change -- mute, volume, touch scheme, fire mode, haptics,
+the motion preference and the resolved motion policy. It no longer early-returns while a
+session holds the slot: the session stopped pushing them, so the page is the single writer
+and Settings stays live during a match. The engine is untouched from there -- a stored mute reaches
 it through `applySettings` the moment a session exists, which is also the moment there is
 any audio for it to affect.
 
@@ -330,10 +332,13 @@ imports campaign data, and the HUD names no simulation module, so `route-host.ts
 layer that can order one; an id this build's campaign does not contain reports `mission:
 null` and the line degrades to the lives half rather than inventing a position. Settings
 declares five sections (Audio, Controls, Accessibility, Data, About & Legal) and renders only
-those with a visible control, measured with the same predicate the roving focus uses --
-Accessibility ships empty until #289/#290, which is what exercises the rule on the shipped
-build, and #227's per-control capability hiding collapses a section that empties with no
-change there. The topbar is hidden at the Main Menu as well as at Launch: with the audio
+those with a visible control, measured with the same predicate the roving focus uses.
+Accessibility shipped empty, which is where the rule came from; #289's three-state motion
+toggle filled it, and #227's per-control capability hiding is what collapses a section that
+empties out, with no change there. That toggle writes only the settings store: the display
+comes back from `route-host.ts`'s `paintSettingsControls`, whose `effectiveSettings`
+subscription repaints the control and pushes the resolved policy to `hud.setReducedMotion`
+on the same tick, so the change lands with the pane open and no session behind it. The topbar is hidden at the Main Menu as well as at Launch: with the audio
 pair gone it carries in-match status only, and carrying an abandoned session's Lives and
 Enemies over a menu is the leak the issue names.
 

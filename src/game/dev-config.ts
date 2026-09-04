@@ -73,7 +73,6 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   quality: 'Rendering',
   enemyDeathPulse: 'Rendering',
   backdrop: 'Rendering',
-  menuTransition: 'Rendering',
 
   mineTrigger: 'Mines',
   mineReach: 'Mines',
