@@ -15,7 +15,7 @@ import { createLevelSystem } from './levels';
 import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { defaultSlots } from './versus-setup';
-import { createHud, type Hud } from './hud';
+import { createHud, type GameplayHud, type Hud } from './hud';
 import { ZERO_STATS } from './stats';
 import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
@@ -684,8 +684,17 @@ describe('createRouteHost: releasing the slot gives the menu back its page shape
  * when that happens used to land on the incoming match's topbar.
  */
 describe('createRouteHost: the slot\'s gameplay HUD', () => {
-  /** Every member of `GameplayHud`, with an argument each, for the exhaustive guard case. */
-  const GAMEPLAY_PUSHES: ReadonlyArray<[string, (slot: ReturnType<RouteHost['attach']>) => void]> = [
+  /**
+   * Every member of `GameplayHud`, with an argument each, for the exhaustive guard case.
+   *
+   * The name is typed `keyof GameplayHud`, so a member that is renamed or removed fails
+   * the build here rather than quietly dropping out of the sweep. The COUNT is asserted
+   * below against the same ten `hud-ownership.test.ts` states, which is the half a type
+   * cannot check: a member ADDED to the union would compile fine as an absence.
+   */
+  const GAMEPLAY_PUSHES: ReadonlyArray<
+    [keyof GameplayHud, (slot: ReturnType<RouteHost['attach']>) => void]
+  > = [
     ['setStatus', (s) => s.hud.setStatus(null)],
     ['setOutcome', (s) => s.hud.setOutcome(null)],
     ['setRoundPhase', (s) => s.hud.setRoundPhase(null)],
@@ -702,6 +711,11 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
   ];
 
   it('reaches the page HUD while the session holds the slot', () => {
+    // Ten, the number `hud-ownership.test.ts` asserts `GameplayHudKey` holds. Stated here
+    // because the sweep below is only exhaustive if this list is: a member added to the
+    // union would make the facade forward it and leave this list one short, and nothing
+    // else in either file would notice.
+    expect(GAMEPLAY_PUSHES, 'GameplayHud has ten members').toHaveLength(10);
     const f = fixture({ launchDismissed: true });
     const slot = f.host.attach(CAMPAIGN);
     for (const [, push] of GAMEPLAY_PUSHES) push(slot);
