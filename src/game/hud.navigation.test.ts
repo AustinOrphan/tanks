@@ -1406,9 +1406,17 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     // Fails if the label branch is missing, or reads deps/state other than the
     // outcome's own `action` (e.g. always 'Versus Setup' regardless of it, which the
     // campaign-target tests elsewhere in this file would also have caught).
+    //
+    // The status pushed here is deliberately CAMPAIGN, not versus, even though a real
+    // versus-setup session is versus by identity: that is what makes the case
+    // discriminating. A versus status would let a label branch keyed on WHAT IS BEING
+    // PLAYED produce the right words for the wrong reason -- measured on this branch, the
+    // manifest entry `session-outcome-label-keyed-on-identity` stopped failing here the
+    // moment this fixture stated a versus kind. `1, 1` is still the FINAL-win branch,
+    // which is the one that carries the label.
     const { hud: h, root } = mount();
     h.setOutcome(outcomeWithAction('versus-setup'));
-    h.setStatus(versusStatus(1, 1)); // versus's single synthetic level -- always the FINAL win
+    h.setStatus(campaignStatus(1, 1));
     h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Versus Setup');
     h.setState('outcome-lose');

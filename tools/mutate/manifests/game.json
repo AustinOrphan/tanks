@@ -3931,14 +3931,14 @@
   {
     "id": "session-pushes-the-levels-grid-to-the-hud",
     "file": "src/game/loop.ts",
-    "find": "  slot.setControllers(assignment, botsMayDrivePlayers);\n  refreshShellCount(world);\n",
-    "replace": "  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  slot.setControllers(assignment, botsMayDrivePlayers);\n  refreshShellCount(world);\n",
+    "find": "\n  slot.setControllers(assignment, botsMayDrivePlayers);\n",
+    "replace": "\n  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);\n  slot.setControllers(assignment, botsMayDrivePlayers);\n",
     "expect": "killed",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/hud-ownership.test.ts"
     ],
-    "why": "Puts back the Levels-grid push issue #324's step S5 removed from the session's construction block -- the sibling of `session-pushes-settings-display-to-the-hud`, and pinned for the same reason: a second writer of an application surface reads as ordinary wiring beside the gameplay pushes around it. This one is worse than a duplicate, because the two writers DISAGREE: a session's `deps.levels` is its OWN level system, which for a versus match is a single synthetic arena, so the last thing the HUD hears is a total of 1 -- read by `hud.ts` as \"not a choice\" -- and the empty host left behind after a versus match has no Levels button at all. Two independent nets catch it: hud-ownership.test.ts reports `setLevelSelect` as a session reaching an application route, and loop.test.ts's versus-quit case reads every total the grid was ever told. Re-anchored for issue #324's step S6: the boot tail's `refreshStats(world)` is now `refreshShellCount(world)` -- the status it used to push rides one earlier call, so that a wrong kind at the descriptor line cannot be repaired by a second push here. The anchor and the restored line are otherwise unchanged.",
+    "why": "Puts back the Levels-grid push issue #324's step S5 removed from the session's construction block -- the sibling of `session-pushes-settings-display-to-the-hud`, and pinned for the same reason: a second writer of an application surface reads as ordinary wiring beside the gameplay pushes around it. This one is worse than a duplicate, because the two writers DISAGREE: a session's `deps.levels` is its OWN level system, which for a versus match is a single synthetic arena, so the last thing the HUD hears is a total of 1 -- read by `hud.ts` as \"not a choice\" -- and the empty host left behind after a versus match has no Levels button at all. Two independent nets catch it: hud-ownership.test.ts reports `setLevelSelect` as a session reaching an application route, and loop.test.ts's versus-quit case reads every total the grid was ever told. Re-anchored for issue #324's step S6. The old anchor carried the following line, the boot tail's `refreshStats(world)`, which that step renamed and pushed a comment in front of -- so the entry went FAILED-TO-APPLY. The anchor is now the `slot.setControllers` call delimited by its own newlines: indentation-scoped, which is what distinguishes this boot-time call from the identically-worded one inside `reassignSlot`, and carrying no neighbouring text for a later comment to break.",
     "killedBy": [
       "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members, plus the pinned debt",
       "quitting a versus match leaves a campaign-shaped Main Menu behind the empty host offers Continue/New Game/Levels/Versus, not the versus session's \"Start Match\""
