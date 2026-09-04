@@ -2125,20 +2125,31 @@ export function startGameWith(
   }
 
   /**
-   * The whole topbar for the CURRENT session and level, plus the developer shell readout
-   * that sits beside it.
+   * The developer shell readout, behind `?dev=1&shellCount=1`.
    *
-   * The status half was three separate per-frame pushes (`setLives`,
-   * `setEnemiesRemaining`, and a stocks dispatch further down `onSimulated`) until issue
-   * #324's step S6; they are one call now, so a frame cannot leave the bar describing two
-   * different moments. `setShellCount` stays its own member: it is a developer overlay
-   * behind `?dev=1&shellCount=1`, not a statement about which session this is.
+   * Its own function rather than a branch inside the status push, and separately called
+   * from the two world-build sites, because it needs the RESOLVED `playerId` -- which
+   * `switchTo` assigns after it has already stated the new board's status. It is also not
+   * a statement about which session this is: it is an overlay a developer turned on.
    */
-  function refreshTopbar(w: World): void {
-    pushStatus(w, currentDescriptor.kind, ordinalOf(level));
+  function refreshShellCount(w: World): void {
     if (deps.devFlags.shellCount) {
       hud.setShellCount({ inFlight: playerShellsInFlight(w, playerId), cap: configFor('player').weapon.maxActiveProjectiles });
     }
+  }
+
+  /**
+   * The whole topbar for the CURRENT session and level, plus the shell readout beside it.
+   *
+   * The per-FRAME path, and the only caller that reads `currentDescriptor` and `level`
+   * rather than being handed them: a frame is always about the board being played. The
+   * status half was three separate per-frame pushes (`setLives`, `setEnemiesRemaining`,
+   * and a stocks dispatch further down `onSimulated`) until issue #324's step S6; they
+   * are one call now, so a frame cannot leave the bar describing two different moments.
+   */
+  function refreshTopbar(w: World): void {
+    pushStatus(w, currentDescriptor.kind, ordinalOf(level));
+    refreshShellCount(w);
   }
 
   // The denominator for musical intensity. Re-read on every world rebuild, since
@@ -2552,11 +2563,13 @@ export function startGameWith(
       shownBounds = b;
     }
     driver.reset(world);
-    // A second `refreshTopbar` after the world is installed. The push above already
-    // stated this board, so the status half is deduped away (`lastStatusKey`); what this
-    // call is still for is the developer shell readout, which needs the resolved
-    // `playerId` this function assigned a few lines up.
-    refreshTopbar(world);
+    // The SHELL READOUT only. This board's status was stated once already, up beside the
+    // descriptor it was derived from, and restating it here from `currentDescriptor` would
+    // make that first push unfalsifiable: a wrong kind at the descriptor line would be
+    // silently repaired one screen later by a second call reading the same variable
+    // correctly. Measured -- with both calls in place, the manifest entry that pins the
+    // descriptor-derived kind SURVIVED.
+    refreshShellCount(world);
     // A switch is a new ATTEMPT: the per-attempt tally starts over, the lifetime
     // rolls on. Deliberately NOT where the active RUN is touched -- switchTo only
     // builds a world; every caller above decides for itself whether this world is
@@ -2962,7 +2975,11 @@ export function startGameWith(
   // rather than written -- see `slot.setControllers` for why an `Assignment` cannot be
   // read off a page-owned store the way everything above could.
   slot.setControllers(assignment, botsMayDrivePlayers);
-  refreshTopbar(world);
+  // The shell readout, for the same reason `switchTo` calls only this half: the session
+  // stated its status once, before any setState, and a second push here reading
+  // `currentDescriptor` would repair a wrong kind at that first site instead of exposing
+  // it.
+  refreshShellCount(world);
 
   // The title screen leaves on ANY gesture. Both listeners are unconditional and the
   // state machine does the guarding -- `dismissLaunch` acts only from `launch` -- so a
