@@ -358,13 +358,12 @@
     "find": "    audio.setMuted(effective.muted);\n    audio.setVolume(effective.volume);",
     "replace": "    audio.setMuted(false);\n    audio.setVolume(0.6);",
     "expect": "killed",
-    "why": "Mute and volume are the two settings that had NO store at all before issue #320 -- they were fields on the audio engine, so every reload and every internal session replacement silently restored DEFAULT_VOLUME, unmuted. Pinning the boot values to the literals they used to be is exactly that defect. MOVED from loop.ts to route-host.ts by issue #485, which gave the PAGE the engine: the two lines are the same two lines, on the page's own subscription instead of a session's, and the defect they guard is now reachable on a page that never starts a match at all. Distinct from page-settings-never-reach-the-audio-engine, which deletes the call; this one keeps it and corrupts the values, so a test that only checks the engine was told something survives it.",
+    "why": "Mute and volume are the two settings that had NO store at all before issue #320 -- they were fields on the audio engine, so every reload and every internal session replacement silently restored DEFAULT_VOLUME, unmuted. Pinning the boot values to the literals they used to be is exactly that defect. MOVED from loop.ts to route-host.ts by issue #485, which gave the PAGE the engine: the two lines are the same two lines, on the page's own subscription instead of a session's, and the defect they guard is now reachable on a page that never starts a match at all. Distinct from page-settings-never-reach-the-audio-engine, which deletes the call; this one keeps it and corrupts the values, so a test that only checks the engine was told something survives it. The negative control on the sibling entry is deliberately NOT a killer here: it seeds an UNMUTED save, so `setMuted(false)` is the answer it already expects and the corruption is invisible to it. Only the muted-save case can see this one.",
     "tests": [
       "src/game/route-host.test.ts"
     ],
     "killedBy": [
-      "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)",
-      "createRouteHost: the Main Menu is painted from the stores by the page negative control: an UNMUTED save mutes nothing"
+      "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)"
     ]
   },
   {
@@ -3969,7 +3968,8 @@
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page paints the stored audio and input settings, which no session-less page did before",
       "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session",
-      "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot"
+      "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot",
+      "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)"
     ]
   },
   {
