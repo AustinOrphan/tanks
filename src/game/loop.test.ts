@@ -4507,13 +4507,19 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     });
 
     // The no-thrash control: onSimulated runs on EVERY 'playing' frame, event or no
-    // event, so without the dedup guard EVERY frame of a live match would re-invoke the
-    // setter -- a frame where the player fires but nothing dies is just one easy way to
+    // event, so without the dedup guard EVERY frame of a live match would re-push the
+    // topbar -- a frame where the player fires but nothing dies is just one easy way to
     // prove it (firing is a REAL, common in-match action, not a contrived quiet frame).
     // h.firePlayerShot() drives a REAL shot through the sim (not a fabricated event),
     // so this measures the actual dedup guard in loop.ts, not a fixture that never
     // calls it.
-    it('firing (an event, but no stock change) across several frames does not re-invoke the setter beyond the one triggering call', () => {
+    //
+    // The guard is on the WHOLE projection since issue #324's step S6, not on the stocks
+    // alone -- it has to be, because one push now carries the level position and the
+    // campaign readouts too, and skipping it on the strength of the stocks would drop a
+    // life the player just lost. Read here through the stocks view, which is what this
+    // fixture moves and what makes an extra push visible.
+    it('firing (an event, but no stock change) across several frames does not re-push the status beyond the one triggering call', () => {
       const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
       // Teleport P1 into arena-01's fully-open top band before play starts (the same
       // reach-into-the-initial-world idiom the kill test above uses for its bullet).
@@ -4539,9 +4545,11 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
         h.firePlayerShot();
         h.fireFrame(20 + i * 250); // spaced past the weapon cooldown, a real shot each time
       }
-      // Breaks (fails to stay at afterFirstShot) if loop.ts's `key !== lastVersusStocksKey`
-      // guard is removed -- measured by deleting it locally and confirming this goes red.
-      expect(h.rec.versusStocksPushes.length, 'unchanged stocks re-invoked the setter').toBe(afterFirstShot);
+      // Breaks (fails to stay at afterFirstShot) if loop.ts's `key !== lastStatusKey`
+      // guard is removed. Pinned as the manifest entry
+      // `status-pushed-again-for-an-unchanged-projection`, which does exactly that
+      // deletion; measured on this branch, it is the ONE case in this file that fails.
+      expect(h.rec.versusStocksPushes.length, 'an unchanged status was pushed again').toBe(afterFirstShot);
       h.handle.dispose();
     });
 
