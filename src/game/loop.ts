@@ -221,6 +221,11 @@ export interface GameDeps {
    * Required, not optional-with-a-`dispose()`-default, for that exact reason: the two
    * fields must agree, and a caller that wires a shared `createAudio` and forgets this
    * one would half-wire the pair. `tsc` refuses instead.
+   *
+   * The BROWSER's answer became "nothing at all" in issue #485, when the page took the
+   * music bed. That is a change of answer, not of question: a caller whose `createAudio`
+   * mints one engine per session still disposes here, and which of the two a caller is
+   * remains exactly what this field exists to state.
    */
   readonly releaseAudio: (engine: AudioEngine) => void;
   /**
@@ -1033,10 +1038,23 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
     // context a session resumed is still resumed for the next one, which is what keeps
     // skipping the splash from trading a redundant screen for a silent menu.
     createAudio: () => shell.audio,
-    // ...and therefore NOT `dispose()`. Stopping the bed is the whole release: it ends the
-    // outgoing session's music (without which the abandoned level's bed would play on
-    // under the new menu) and leaves the engine and its resumed context alive.
-    releaseAudio: (engine) => engine.stopMusic(),
+    // ...and therefore NOT `dispose()`, and since issue #485 not `stopMusic()` either.
+    //
+    // NOTHING is the correct release for a browser session, because the page owns the bed
+    // (`route-host.ts`'s `followMusic`) and a session was never playing one to release.
+    // Stopping it here is precisely what left the Main Menu silent: the page's own
+    // subscriber -- registered first, at construction, so it runs first -- had already
+    // moved the bed to the menu suite by the time the session it was leaving was disposed,
+    // and this call then silenced the page's music one line later. `loop.test.ts` pins
+    // that ordering, because the fix is the ordering and a comment is not evidence of it.
+    //
+    // The SEAM stays required rather than being deleted with its body. It is what says who
+    // owns the engine, and the answer differs by caller: this one hands out a page-owned
+    // engine and must not tear it down, while a caller whose `createAudio` mints an engine
+    // per session -- `loop.test.ts`'s session harness does exactly that -- still disposes
+    // here. A caller that wired one half and forgot the other would half-wire ownership,
+    // which is why `tsc` still refuses to let it default.
+    releaseAudio: () => {},
     launchGate: {
       dismissed: () => shell.launchDismissed(),
       dismiss: () => shell.dismissLaunch(),
@@ -1922,8 +1940,16 @@ export function startGameWith(
    * made a versus reboot silently unmute.
    *
    * Now every handler does exactly one thing: write the store. This function is what runs
-   * afterwards, from the two subscriptions below, and it is the only writer of runtime
-   * audio/input/haptics/HUD state from settings.
+   * afterwards, from the two subscriptions below, and it is the only writer of the runtime
+   * input/haptics state this SESSION owns.
+   *
+   * The audio ENGINE is no longer among them (issue #485). `audio.setMuted` and
+   * `audio.setVolume` stood here until the page gained a bed of its own to apply them to:
+   * a session is the wrong owner for a preference that has to hold while no session
+   * exists, and since issue #428 that is every page before its first match. They now run
+   * from `route-host.ts`'s `applyAudioSettings`, on the page's own subscription to this
+   * same handle -- not in both places, because one engine with two writers is the bug
+   * issue #324 spent `paintSettingsControls` settling for the display side.
    *
    * Note which side each consumer is given:
    *
@@ -1942,8 +1968,6 @@ export function startGameWith(
    */
   function applySettings(): void {
     const effective = deps.effectiveSettings.current();
-    audio.setMuted(effective.muted);
-    audio.setVolume(effective.volume);
     input.setTouchScheme(effective.touchScheme);
     input.setFireMode(effective.fireMode);
     haptics.setEnabled(effective.deviceHaptics);
@@ -2878,32 +2902,24 @@ export function startGameWith(
   slot.onReassignSlot(reassignSlot);
 
   /**
-   * The music follows the game rather than merely starting and stopping.
+   * The music is NOT followed here any more (issue #485).
    *
-   * Shared by the state-change path and BOOT. Boot matters: the initial title
-   * panel is pushed straight to the HUD without going through the state
-   * machine, so hanging this off onChange alone left the title screen silent --
-   * which is the very gap this change exists to close, and the browser probe
-   * caught it.
+   * `followMusic` stood in this file, driven by the same `sm.onChange` below, until the
+   * page took the bed. Two things it did are now impossible for a session to do
+   * correctly: play the menu suite on a page that has no session (since issue #428, every
+   * page before its first match), and survive its own disposal (since issue #429, every
+   * return to an application route). The measured symptom was a Main Menu that started
+   * the bed from the outgoing session's subscriber and then silenced it from that same
+   * session's teardown, one call later.
+   *
+   * `musicContextFor` stays exported from this file -- `route-host.ts` imports it -- for
+   * the reason it was worth writing exhaustively in the first place: it is a pure
+   * `AppLocation -> SuiteContext` function whose `never` branch makes a new route a
+   * compile error, and that property belongs to the mapping, not to whoever calls it.
+   *
+   * What a session still owns is the part that needs a WORLD: `setMusicIntensity` from
+   * the live enemy count, and `unlock()` from its own gesture handlers.
    */
-  function followMusic(location: AppLocation): void {
-    // startMusic is idempotent, so a resume passing back through `playing` does
-    // not double-start anything -- but NOT via the `music.playing()` check,
-    // which guards the Howl branch the game never reaches. On the generated-bed
-    // path that actually runs, `if (!bed)` builds the bed once (engine.ts) and
-    // `bed.start()` returns early when its timer already exists (music.ts).
-    // It runs for EVERY location: routes (launch/main-menu/settings/...),
-    // gameplay phases (playing/paused/outcome) all have music, and each is a
-    // context the director moves to through the same handled join a suite
-    // change uses.
-    audio.startMusic();
-    audio.setMusicContext(musicContextFor(location));
-    // Pause DUCKS rather than stops. Stopping discards the playlist's committed
-    // decisions and leaves the scheduler at an ambiguous position -- exactly
-    // what produced both blockers in the suite-wiring review -- while ducking
-    // touches only the gain, so resuming is seamless.
-    audio.duckMusic(location.kind === 'gameplay' && location.phase.kind === 'paused');
-  }
 
   const stopObserving = sm.onChange((location) => {
     // No `hud.setState` here: since issue #428 the PAGE paints which screen is showing
@@ -2939,7 +2955,6 @@ export function startGameWith(
     if (!nowPlaying) {
       hud.setTouchIndicator({ ...input.touchIndicator(), stick: null, aim: null });
     }
-    followMusic(location);
     // Progress is recorded AT the win, not at the Next Level click: quitting after a
     // win keeps the unlock. The sandbox records nothing -- a test rig must not
     // unlock real levels.
@@ -2991,7 +3006,6 @@ export function startGameWith(
 
   // The initial surface paint moved to `route-host.ts` with the subscription above; the
   // music did not, because it needs this session's audio engine.
-  followMusic(sm.location); // this path bypasses sm.onChange
   // No level push here any more: the level ordinal rides the status projection, which
   // this session already pushed above -- before any setState, so the very first render
   // already knows which session it is drawing.

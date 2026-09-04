@@ -974,9 +974,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     readDetectedPads: () => detectedPadsFixture,
     // SESSION-owned audio, which is what a single-session test is about: the engine this
     // harness hands out is rebuilt per session, so releasing it means disposing it. The
-    // PAGE-owned wiring production uses since issue #317 (one engine, released with
-    // `stopMusic`) is `createBrowserDeps`', and `bootPageOn` below reproduces it exactly
-    // for the reboot tests -- the two differ, so neither stands in for the other.
+    // PAGE-owned wiring production uses is `createBrowserDeps`' -- one engine, released by
+    // doing NOTHING since issue #485 gave the page the bed -- and `bootPageOn` below
+    // reproduces it exactly for the reboot tests. The two differ, so neither stands in for
+    // the other; this one is also the reason `releaseAudio` is a seam rather than a
+    // hard-coded teardown call, since the right answer genuinely depends on who minted the
+    // engine.
     releaseAudio: (engine) => engine.dispose(),
     // Page-scoped, like the shell's: `harnessLaunchDismissed` lives in THIS closure, not
     // in the returned deps, so a second session built on the same `makeDeps()` sees the
@@ -8641,11 +8644,16 @@ function bootPageOn(
             reqVersus,
             reqCampaign,
           ),
-          // `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
-          // harness's own default is session-owned (`releaseAudio` disposes), which would
+          // `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly -- including
+          // the empty `releaseAudio` it became in issue #485, because the page owns the
+          // bed now and a session has none to release. Reproduced rather than approximated
+          // on purpose: a harness that kept stopping the music here would keep the tests
+          // below green against a production wiring that no longer does it, which is the
+          // failure mode of a fixture drifting from the thing it stands in for. The
+          // harness's own DEFAULT is session-owned (`releaseAudio` disposes), which would
           // hand the second session an engine the first one had already latched shut.
           createAudio: () => shellAudio,
-          releaseAudio: (engine) => engine.stopMusic(),
+          releaseAudio: () => {},
           launchGate: {
             dismissed: () => shell.launchDismissed(),
             dismiss: () => shell.dismissLaunch(),
@@ -8951,11 +8959,18 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
     ).not.toContain('launch');
   });
 
-  it('the reboot stops the outgoing bed and leaves the PAGE audio engine alive', () => {
-    // The failure this pins: with a surviving engine, a session that tore down without
-    // stopping its bed would leave the abandoned level's music playing under the new
-    // menu. The opposite failure is disposing it -- `dispose()` LATCHES (engine.ts), so
-    // `ensureCtx` returns null forever afterwards and every later session is silent.
+  it('the reboot leaves the PAGE bed playing, and the page engine alive', () => {
+    // REVERSED by issue #485, and worth stating as a reversal rather than quietly
+    // rewriting: this used to pin exactly one `stopMusic` per retired session, because a
+    // session owned the bed and an abandoned level's music would otherwise play on under
+    // the new screen. The page owns the bed now, so the same defect is prevented a better
+    // way -- the page moves the SUITE on the location change, which is a handled join
+    // rather than a cut, and stopping would be the defect: it is what left the Main Menu
+    // silent after every Quit.
+    //
+    // The other failure is unchanged and still the worse one: disposing LATCHES
+    // (engine.ts), so `ensureCtx` returns null forever afterwards and every later session
+    // is silent with nothing thrown.
     const h = makeDeps();
     const page = bootPageOn(h);
     page.pointerdown();
@@ -8965,8 +8980,8 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
 
     expect(
       h.rec.musicStops - stopsBefore,
-      'the abandoned session left its music bed running under the new session',
-    ).toBe(1);
+      'a retired session stopped the page bed out from under the page',
+    ).toBe(0);
     expect(
       h.rec.disposed,
       'a session disposed the PAGE audio engine, latching it shut for every later one',
@@ -9119,16 +9134,55 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     ).toHaveLength(0);
   });
 
-  it('never lets a session dispose the page audio engine, and stops each outgoing bed', () => {
-    // Two failures, opposite directions. Disposing latches the engine shut (engine.ts's
-    // `ensureCtx` returns null forever afterwards) so every later session is silent with
-    // nothing thrown; NOT stopping the bed leaves the abandoned level's music playing
-    // under the new screen. One stop per retired session is the contract.
+  it('THE MAIN MENU IS NOT SILENT after a Quit -- the defect issue #485 recorded', () => {
+    // The end-to-end statement of the whole issue, through the production boundary: a real
+    // route host, a real state machine, a real session started and quit, one page-owned
+    // engine. Before this change the recorded sequence on this path ended
+    // `... context:menu, duck:false, stop` -- the outgoing session's own subscriber set the
+    // menu suite and its teardown then silenced it one call later, so the player was
+    // returned to a Main Menu that stayed quiet until they started another match.
+    //
+    // Asserted on the TAIL rather than the whole sequence: what matters is the state the
+    // player is left in, and pinning every call from boot would make this fail on any
+    // unrelated suite change while saying nothing more about the silence.
+    const h = makeDeps();
+    const page = bootPageOn(h, { startEmpty: true });
+    page.pointerdown();
+    page.start();
+    page.sm.toMainMenu();
+
+    expect(h.rec.audioCalls.slice(-2), 'the Main Menu was left on the wrong bed').toEqual([
+      'context:menu',
+      'duck:false',
+    ]);
+    expect(h.rec.audioCalls, 'something stopped the page bed').not.toContain('stop');
+    // The denominators, so a green result cannot come from nothing having happened: a
+    // session really was created, and it really had taken the bed to the arena before the
+    // menu took it back.
+    expect(page.sessions(), 'the session under test was never created').toBe(1);
+    expect(h.rec.audioCalls.slice(-5, -2)).toEqual(['context:arena', 'duck:false', 'start']);
+    // What this does NOT cover, stated rather than implied: `bootPageOn` services its own
+    // stop requests, so the session is still live here and this is the ROUTE half of the
+    // criterion. The disposal half -- that retiring a session leaves the page bed alone --
+    // is the two reboot cases below, which count `musicStops` across five real sessions.
+  });
+
+  it('never lets a session dispose the page audio engine, or stop the page bed', () => {
+    // The whole route -- four sessions started and retired -- and the page's music
+    // survives all of it (issue #485). Both numbers were rewritten by that issue: the stop
+    // count was 4, one per retired session, back when a session owned the bed.
+    //
+    // Disposing remains the silent catastrophe: it latches (engine.ts's `ensureCtx`
+    // returns null forever afterwards), so every later session plays nothing and throws
+    // nothing.
     const h = makeDeps();
     const stopsBefore = h.rec.musicStops;
     runTheRoute(h);
     expect(h.rec.disposed, 'a session disposed the shell audio engine').not.toContain('audio');
-    expect(h.rec.musicStops - stopsBefore, 'an outgoing session left its bed running').toBe(4);
+    expect(
+      h.rec.musicStops - stopsBefore,
+      'a retired session stopped the page bed; the Main Menu goes silent from here',
+    ).toBe(0);
   });
 
   it('never replays the Launch gate, and never paints a retired session over the new one', () => {

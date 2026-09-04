@@ -89,11 +89,18 @@ describe('createAppShell: disposal', () => {
 });
 
 describe('createBrowserDeps: the page-owned audio wiring (issue #317)', () => {
-  it('hands every session the SAME engine, and releases it by STOPPING rather than disposing', () => {
+  it('hands every session the SAME engine, and releases it by touching NOTHING', () => {
     // This is the wiring `main.ts` ships and no other test enters. Getting either half
-    // wrong is silent: a fresh engine per session reintroduces the ordering gap the
-    // splash used to cover, and a releasing `dispose()` latches the engine shut
-    // (engine.ts) so every session after the first is silent with nothing thrown.
+    // wrong is silent. A fresh engine per session reintroduces the ordering gap the splash
+    // used to cover. A releasing `dispose()` latches the engine shut (engine.ts) so every
+    // session after the first is silent with nothing thrown.
+    //
+    // And a releasing `stopMusic()` -- which is what this shipped until issue #485 --
+    // silences the PAGE's bed, because the page owns the music now (`route-host.ts`) and
+    // has already moved it to the menu suite by the time the session it is leaving is
+    // released. That was the measured Main Menu silence: start, context:menu, duck:false,
+    // then stop, in that order, on every Quit. An empty release is the whole fix, so an
+    // empty recorder is the whole assertion.
     const { shell, audio } = build();
     const first = createBrowserDeps(shell);
     const second = createBrowserDeps(shell);
@@ -101,7 +108,7 @@ describe('createBrowserDeps: the page-owned audio wiring (issue #317)', () => {
     expect(second.createAudio(), 'the second session got a different engine').toBe(shell.audio);
 
     first.releaseAudio(first.createAudio());
-    expect(audio, 'releasing a session disposed the PAGE engine').toEqual(['stopMusic']);
+    expect(audio, 'releasing a session touched the PAGE engine').toEqual([]);
   });
 
   it('reads and writes the shell\'s Launch gate, both directions', () => {

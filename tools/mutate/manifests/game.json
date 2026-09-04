@@ -354,14 +354,16 @@
   },
   {
     "id": "settings-boot-ignores-persisted-audio",
-    "file": "src/game/loop.ts",
+    "file": "src/game/route-host.ts",
     "find": "    audio.setMuted(effective.muted);\n    audio.setVolume(effective.volume);",
     "replace": "    audio.setMuted(false);\n    audio.setVolume(0.6);",
     "expect": "killed",
-    "expectFailures": 4,
-    "why": "`applySettings` is the one place a settings value reaches a runtime consumer, and mute/volume are the two that had NO store at all before issue #320 -- they were fields on the audio engine, so every reload and every internal session replacement silently restored DEFAULT_VOLUME, unmuted. Pinning the boot values to the literals they used to be is exactly that defect. Killed by loop.test.ts's 'boots audio and both sliders from the PERSISTED mute and volume' and the mute/volume routing tests. NOTE that hud.test.ts CANNOT kill this: it builds the HUD directly and asserts the slider renders at DEFAULT_VOLUME, which stays true whether or not loop.ts ever pushes the stored value -- the kill has to enter through startGameWith with a fake audio engine, which is why the declared tests are loop.test.ts's. 4 of 366 in the scoped run.",
+    "why": "Mute and volume are the two settings that had NO store at all before issue #320 -- they were fields on the audio engine, so every reload and every internal session replacement silently restored DEFAULT_VOLUME, unmuted. Pinning the boot values to the literals they used to be is exactly that defect. MOVED from loop.ts to route-host.ts by issue #485, which gave the PAGE the engine: the two lines are the same two lines, on the page's own subscription instead of a session's, and the defect they guard is now reachable on a page that never starts a match at all. Distinct from page-settings-never-reach-the-audio-engine, which deletes the call; this one keeps it and corrupts the values, so a test that only checks the engine was told something survives it. The negative control on the sibling entry is deliberately NOT a killer here: it seeds an UNMUTED save, so `setMuted(false)` is the answer it already expects and the corruption is invisible to it. Only the muted-save case can see this one.",
     "tests": [
-      "src/game/loop.test.ts"
+      "src/game/route-host.test.ts"
+    ],
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)"
     ]
   },
   {
@@ -964,13 +966,15 @@
   {
     "id": "session-disposes-the-page-audio-engine",
     "file": "src/game/loop.ts",
-    "find": "    releaseAudio: (engine) => engine.stopMusic(),",
+    "find": "    releaseAudio: () => {},",
     "replace": "    releaseAudio: (engine) => engine.dispose(),",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. MEASURED 1 of 12 on this tree. The prose denominator was already stale at this entry's \"1 of 6\": app-shell.test.ts held 8 cases before issue #470 and holds 12 after it, while the FAILURE count never moved from 1 -- population recomputed, not the pinned count.",
+    "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. The find string is the EMPTY release issue #485 left behind: the page owns the bed now, so the correct browser answer is to touch the engine at all, and both wrong answers -- disposing it, and the pre-#485 stopMusic that is its own entry -- are mutations of the same line.",
     "tests": [
       "src/game/app-shell.test.ts"
+    ],
+    "killedBy": [
+      "createBrowserDeps: the page-owned audio wiring (issue #317) hands every session the SAME engine, and releases it by touching NOTHING"
     ]
   },
   {
@@ -2224,15 +2228,15 @@
   {
     "id": "route-host-never-paints-the-surface",
     "file": "src/game/route-host.ts",
-    "find": "  const stopPainting = sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // Both Main Menu affordances that are claims about a SAVE rather than about a match --\n    // whether a run is there to continue, and how far the Levels grid may reach -- re-read\n    // on every arrival. Arrival is the right moment because the stores change while the\n    // player is somewhere else: a run ends and a level is cleared during gameplay, and a\n    // session is disposed on the way back here (issue #429), so the page must read them\n    // again rather than trust the last value anything painted.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') {\n      paintContinue();\n      paintLevelSelect();\n    }\n  });\n  hud.setState(locationToHudSurface(sm.location));\n",
-    "replace": "  const stopPainting = sm.onChange((location) => {\n    if (location.kind === 'route' && location.route.kind === 'main-menu') {\n      paintContinue();\n      paintLevelSelect();\n    }\n  });\n",
+    "find": "  const stopPainting = sm.onChange((location) => {\n    hud.setState(locationToHudSurface(location));\n    // The bed follows the route, and it is the ONLY thing that moves it: a session no\n    // longer touches the music at all, and its release is empty (`loop.ts`), so leaving\n    // gameplay is a suite CHANGE rather than a stop followed by nothing. That is issue\n    // #485's silent Main Menu -- the outgoing session used to set the menu suite from its\n    // own subscriber and then silence it from its own teardown, one call later.\n    //\n    // Pinned in two places, because one covers the route and the other the disposal:\n    // `route-host.test.ts`'s \"FOLLOWS the game\" drives gameplay, pause and the menu back,\n    // and `loop.test.ts`'s reboot cases count `musicStops` at zero across five real\n    // sessions started and retired over the whole route.\n    followMusic(location);\n    // Both Main Menu affordances that are claims about a SAVE rather than about a match --\n    // whether a run is there to continue, and how far the Levels grid may reach -- re-read\n    // on every arrival. Arrival is the right moment because the stores change while the\n    // player is somewhere else: a run ends and a level is cleared during gameplay, and a\n    // session is disposed on the way back here (issue #429), so the page must read them\n    // again rather than trust the last value anything painted.\n    if (location.kind === 'route' && location.route.kind === 'main-menu') {\n      paintContinue();\n      paintLevelSelect();\n    }\n  });\n  hud.setState(locationToHudSurface(sm.location));\n  // ...and the bed, for the same reason the surface is painted here: the page opens on a\n  // location it was never notified of. `loop.ts` carried the identical eager call for the\n  // session it used to be (\"this path bypasses sm.onChange\"), and dropping it would leave\n  // the screen the player actually lands on -- Launch, or Main Menu once Launch is\n  // dismissed -- as the one screen with no music. Nothing is audible until the launch\n  // gesture unlocks the context; setting the suite now is what makes that gesture start\n  // the menu bed already in the right world rather than switching on arrival.\n  followMusic(sm.location);\n",
+    "replace": "  const stopPainting = sm.onChange((location) => {\n    followMusic(location);\n    if (location.kind === 'route' && location.route.kind === 'main-menu') {\n      paintContinue();\n      paintLevelSelect();\n    }\n  });\n  followMusic(sm.location);\n",
     "tests": [
       "src/game/loop.test.ts",
       "src/game/route-host.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 15,
-    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause. RE-ANCHORED for issue #324's step S5: the arrival branch beside the surface paint gained the Levels grid alongside Continue, so the find string had to be re-cut around it. The replacement still keeps that whole branch, which is what leaves this entry isolating the surface paint and nothing else. Count re-measured on the new text: 14 of 495 (route-host.test.ts 62 + loop.test.ts 433), which the re-cut left where it was. Re-measured at 15 of 511 (route-host.test.ts 75 + loop.test.ts 436) for issue #324's step S7: the added case is the attach-ordering pin, which cannot compare the relaunch push against the route reset's paint when the paint never happens. The previous 14 still fail, so the failing SET was compared, not the number renumbered."
+    "why": "The page stops telling the HUD which screen is showing. Before issue #428 a session owned this subscription, which was survivable only because a session existed from the first frame; with the page booting empty, a HUD that only a session ever painted shows the player nothing -- no splash, no Main Menu, and therefore no button with which to start the session that would have painted them. 9 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421), re-measured after the page took over the Main Menu paints and the Continue refresh moved into the same subscription; the replacement keeps that refresh so this entry still isolates the surface paint. The route-host case is the direct one; the loop.test.ts eight are every case that reads `rec.hudStates`, which is what makes this hard to satisfy accidentally: the surface has to reach the HUD for the splash, the menu, gameplay, pause and the outcome screens alike. Re-measured at 10 of 462 (route-host.test.ts 38 + loop.test.ts 424) once the disposal case joined route-host.test.ts: its live-painter control expects the route change before disposal to paint. Re-measured at 11 of 465 (route-host.test.ts 39 + loop.test.ts 426) with #318's route-host case in the file: a real HUD that is never painted has no Controllers button to open at Pause. RE-ANCHORED for issue #324's step S5: the arrival branch beside the surface paint gained the Levels grid alongside Continue, so the find string had to be re-cut around it. The replacement still keeps that whole branch, which is what leaves this entry isolating the surface paint and nothing else. Count re-measured on the new text: 14 of 495 (route-host.test.ts 62 + loop.test.ts 433), which the re-cut left where it was. Re-measured at 15 of 511 (route-host.test.ts 75 + loop.test.ts 436) for issue #324's step S7: the added case is the attach-ordering pin, which cannot compare the relaunch push against the route reset's paint when the paint never happens. The previous 14 still fail, so the failing SET was compared, not the number renumbered. The find/replace pair grew in issue #485: the same block now also carries the page's music, and the mutation deliberately KEEPS both followMusic calls so that what is removed is still exactly the surface painting -- a replacement that dropped the music too would fail the audio cases and stop measuring the thing this entry is named for."
   },
   {
     "id": "route-host-forwards-the-launch-key-to-the-session",
@@ -3954,17 +3958,18 @@
   {
     "id": "route-host-paints-the-settings-once-and-never-again",
     "file": "src/game/route-host.ts",
-    "find": "  const stopPaintingSettings = deps.effectiveSettings.subscribe(paintSettingsControls);",
+    "find": "  const stopPaintingSettings = deps.effectiveSettings.subscribe(applyPageSettings);",
     "replace": "  const stopPaintingSettings = (): void => {};",
     "expect": "killed",
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "The construction-time paint survives and every control still opens showing the stored value, so Settings looks right until the player touches it -- and then the control they just pressed never redraws, because this subscription is the only thing that answers the store. Issue #364's fifth criterion is specifically about the change landing WITH THE PANE OPEN, which is this line and not the call above it, and issue #289's motion toggle is the control where the consequence is visible rather than merely stale: the resolved policy stops reaching `hud.setReducedMotion`, so the transitions the player is trying to change carry on until a reload.",
+    "why": "The construction-time paint survives and every control still opens showing the stored value, so Settings looks right until the player touches it -- and then the control they just pressed never redraws, because this subscription is the only thing that answers the store. Issue #364's fifth criterion is specifically about the change landing WITH THE PANE OPEN, which is this line and not the call above it, and issue #289's motion toggle is the control where the consequence is visible rather than merely stale: the resolved policy stops reaching `hud.setReducedMotion`, so the transitions the player is trying to change carry on until a reload. The subscribed function became `applyPageSettings` in issue #485, which drives the display and the audio engine from this ONE registration; killing the subscription therefore strands both halves, and the audio cases fail beside the display ones.",
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page paints the stored audio and input settings, which no session-less page did before",
       "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session",
-      "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot"
+      "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot",
+      "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)"
     ]
   },
   {
@@ -4460,6 +4465,91 @@
     "why": "Reject-to-null dropped, so `?dev=1&topbar=sparse` becomes a `TopbarTreatment` the HUD then looks up in its departures table and finds nothing for -- `topbarDepartures` returns undefined and the first `topbar.exceptionChip` read throws, taking the whole bar down on a typo. The same guard `menuTransition`, `mineWarn`, `blockedFire` and `backdrop` each carry, and the same reason: `spare-labelled` is a real arm name from this issue's first draft that was never built, so the near-miss is one the owner can actually type. MEASURED on this branch: killed, 1 of the 12 cases in the arm suite.",
     "killedBy": [
       "topbar: the flag that names an arm accepts every name in the vocabulary and nothing else -- population: the 6 registered arms"
+    ]
+  },
+  {
+    "id": "session-release-silences-the-page-bed",
+    "file": "src/game/loop.ts",
+    "find": "    releaseAudio: () => {},",
+    "replace": "    releaseAudio: (engine) => engine.stopMusic(),",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-shell.test.ts"
+    ],
+    "why": "Restores exactly the line issue #485 removed, and with it the defect the issue was filed for. The PAGE owns the music bed since #485 (route-host.ts's followMusic), and it moves the bed to the menu suite on the location change that precedes a session's disposal -- so a session that stops the music on release silences the Main Menu one call after the page started it. Measured sequence before the fix: start, context:menu, duck:false, stop, on every Quit and every Change Setup. Nothing at the session level fails, because the session being torn down is not the thing left silent. Distinct from the dispose() mutation on the same line: that one latches the engine shut for every LATER session, this one leaves the engine healthy and the page mute.",
+    "killedBy": [
+      "createBrowserDeps: the page-owned audio wiring (issue #317) hands every session the SAME engine, and releases it by touching NOTHING"
+    ]
+  },
+  {
+    "id": "page-music-stops-following-the-game",
+    "file": "src/game/route-host.ts",
+    "find": "    followMusic(location);",
+    "replace": "    void location;",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Removes the per-change half of the page's music ownership (issue #485), leaving the eager call at construction intact. The bed then starts in the menu suite and stays there forever: entering a match keeps the menu music, pausing never ducks, and finishing never returns. MEASURED: this mutation survived all 80 route-host cases before the 'FOLLOWS the game' case was written, because every other assertion about music reads the opening screen, which the eager call still paints. That is why the killer drives three location changes rather than asserting a call count.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
+    ]
+  },
+  {
+    "id": "page-music-never-starts-at-boot",
+    "file": "src/game/route-host.ts",
+    "find": "  followMusic(sm.location);",
+    "replace": "  void sm;",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Drops the eager call that covers the screen the page OPENS on, which no location change ever announces -- the same reason `hud.setState(locationToHudSurface(sm.location))` sits beside it. loop.ts carried the identical eager call for the session that used to own this, with a comment recording that a browser probe caught the silent title screen after the unit tests passed. Without it the first screen a player sees is the one screen with no music.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page PLAYS THE MENU BED with no session in the slot, in order (issue #485)"
+    ]
+  },
+  {
+    "id": "page-settings-never-reach-the-audio-engine",
+    "file": "src/game/route-host.ts",
+    "find": "    paintSettingsControls();\n    applyAudioSettings();",
+    "replace": "    paintSettingsControls();",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Reverts the page to painting the mute button and volume slider without telling the engine (issue #485). The display half alone is what issue #324 shipped, and it was survivable only while a page with no session made no sound; the menu bed in the same change removes that, so this mutation plays music to a player who muted the game and returned. The controls still read correctly, which is what makes it silent -- or rather, audible, in the one case where silence was asked for.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)",
+      "createRouteHost: the Main Menu is painted from the stores by the page negative control: an UNMUTED save mutes nothing"
+    ]
+  },
+  {
+    "id": "page-music-ignores-the-location-suite",
+    "file": "src/game/route-host.ts",
+    "find": "    audio.setMusicContext(musicContextFor(location));",
+    "replace": "    audio.setMusicContext('menu');",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Keeps the page following the game but collapses every suite onto the menu one, so a match is played to menu music and the arena bed is never heard. Separate from the two removal mutations above because it survives any assertion that only counts calls or checks that music is playing: the calls all happen, in order, with the wrong argument.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
+    ]
+  },
+  {
+    "id": "page-music-never-ducks-on-pause",
+    "file": "src/game/route-host.ts",
+    "find": "    audio.duckMusic(location.kind === 'gameplay' && location.phase.kind === 'paused');",
+    "replace": "    audio.duckMusic(false);",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Pause stops ducking, so the arena bed plays at full gain over the pause panel. The condition is the whole behaviour here -- duckMusic is still called on every change, with the right shape and the wrong answer -- and ducking rather than stopping is a decision engine.ts's own comment defends, because stopping discards the playlist's committed decisions and leaves the scheduler mid-phrase.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
     ]
   }
 ]
