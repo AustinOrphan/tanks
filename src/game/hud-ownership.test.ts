@@ -175,6 +175,13 @@ describe('HUD ownership boundary (issue #324)', () => {
   it('the gameplay session reaches ONLY gameplay members: the debt list is empty', () => {
     // The assertion that shrank to nothing. `loop.ts` is the session; every
     // application-route member it calls is a place a match can repaint the Main Menu.
+    //
+    // NON-VACUITY FIRST: the scan has to be finding loop.ts's real calls, or an empty
+    // violation list means only that the scanner went quiet. `setStatus` is the topbar
+    // push every frame makes, so it is the one call that cannot disappear while a session
+    // still projects anything at all.
+    const called = hudCallsIn(loopSource);
+    expect(called.has('setStatus'), 'the scan found no gameplay calls in loop.ts').toBe(true);
     expect(violationsIn(loopSource)).toEqual(Object.keys(SESSION_REACHES_ROUTE_UI).sort());
     expect(Object.keys(SESSION_REACHES_ROUTE_UI), 'issue #324 finished the migration').toEqual([]);
   });
