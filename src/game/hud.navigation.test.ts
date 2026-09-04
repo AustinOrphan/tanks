@@ -896,7 +896,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // here at all, because they render only under Teams -- which this fixture cannot now
     // reach at two players.
     //
-    // 76 SINCE ISSUE #226, up 4 from 72, and every part of that delta was the Main Menu and
+    // 76 SINCE ISSUE #226, up 4 from 72, and every part of the delta is the Main Menu and
     // Settings restructure. Re-measured per container at this fixture's state rather than
     // adjusted: 8 (Main Menu) + 24 (Customize) + 3 (Records/Stats) + 4 (Levels) + 27
     // (Versus setup) + 9 (Settings) + 1 (About & Legal) = 76.
@@ -920,13 +920,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     //
     // The Records pane holds at 3: the two reset buttons it gave up were replaced,
     // one for one, by the two tab buttons.
-    //
-    // 77 SINCE ISSUE #289: the Settings pane goes from 9 to 10 with the motion toggle,
-    // which is the first control its Accessibility section has ever held. That the walk
-    // reaches it is the assertion that matters here -- a section rendering with a control
-    // the arrows cannot land on is the failure `refreshSettingsSections` and
-    // `focusableControls` share a predicate to prevent.
-    expect(totalControls, 'recount the panels above if this moves').toBe(77);
+    expect(totalControls, 'recount the panels above if this moves').toBe(76);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );

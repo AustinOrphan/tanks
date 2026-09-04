@@ -288,127 +288,14 @@ describe('hud: the haptics toggle', () => {
 
   it('lives in the Settings pane, under Controls rather than Accessibility', () => {
     // The placement is a decision, not an accident: device vibration is feedback FROM an
-    // input device and lives under `input` in the settings model, while Accessibility
-    // holds the presentation policies -- the motion control issue #289 added, and the
-    // UI-scale one #290 will.
+    // input device and lives under `input` in the settings model, while Accessibility is
+    // reserved for the motion and UI-scale policies issues #289/#290 add.
     const { root } = mount();
     const toggle = root.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
     const section = toggle.closest('.hud-settings-section') as HTMLElement;
     expect(section, 'the toggle is not inside a Settings section').not.toBeNull();
     expect(section.dataset.section).toBe('controls');
-  });
-});
-
-/*
- * ISSUE #289: the Settings -> Accessibility motion control.
- *
- * The gap it closes is not a missing policy -- `effective-settings.ts` has resolved
- * `presentation.motion` since #320 and `transitionMs` has honoured it since #364 -- but a
- * missing CONTROL. A player whose device asks for reduced motion lost every menu
- * transition with nothing anywhere to say so or override it.
- */
-describe('hud: the motion toggle (issue #289)', () => {
-  const toggle = (root: HTMLElement): HTMLButtonElement =>
-    root.querySelector('.hud-motion-toggle') as HTMLButtonElement;
-
-  it('shows the current preference, labelled so all three read as different', () => {
-    const { hud: h, root } = mount();
-
-    h.setMotion('system');
-    const systemLabel = toggle(root).textContent;
-    const systemAria = toggle(root).getAttribute('aria-label');
-
-    h.setMotion('full');
-    const fullLabel = toggle(root).textContent;
-    expect(fullLabel).not.toBe(systemLabel);
-    expect(toggle(root).getAttribute('aria-label')).not.toBe(systemAria);
-
-    h.setMotion('reduced');
-    expect(toggle(root).textContent).not.toBe(systemLabel);
-    expect(toggle(root).textContent).not.toBe(fullLabel);
-
-    // ...and in PLAYER language, not the stored ids. 'system' in particular is an
-    // implementation word: the label has to say what it does, and the three labels being
-    // merely distinct would be satisfied by printing the raw ids.
-    h.setMotion('system');
-    expect(toggle(root).textContent).toMatch(/device/i);
-    h.setMotion('full');
-    expect(toggle(root).textContent).toMatch(/full/i);
-    expect(toggle(root).textContent).not.toMatch(/system/i);
-    h.setMotion('reduced');
-    expect(toggle(root).textContent).toMatch(/reduced/i);
-  });
-
-  it('reports the RESOLVED policy on Match device, which is the state its own name cannot say', () => {
-    // The owner's report is the case: with the device asking for reduced motion, a menu
-    // that never animates and a control reading "Match device" leave nothing on screen to
-    // connect the two. `setReducedMotion` carries the resolved answer, and it must move
-    // the label whenever it moves -- including with no click at all, which is what an OS
-    // preference flipping while the pane is open looks like.
-    const { hud: h, root } = mount();
-    h.setMotion('system');
-
-    h.setReducedMotion(false);
-    const followingFull = toggle(root).textContent ?? '';
-    h.setReducedMotion(true);
-    const followingReduced = toggle(root).textContent ?? '';
-    expect(followingReduced).not.toBe(followingFull);
-    expect(followingReduced).toMatch(/reduced/i);
-    expect(followingFull).not.toMatch(/reduced/i);
-
-    // NEGATIVE CONTROL: the two states a player picked deliberately already say what they
-    // do, and must NOT pick up a suffix that repeats it or -- worse -- contradicts it.
-    // Without this, a label that simply appended the resolved policy everywhere would pass
-    // the assertions above while rendering "Motion: Full (reduced)".
-    for (const resolved of [false, true]) {
-      h.setMotion('full');
-      h.setReducedMotion(resolved);
-      const full = toggle(root).textContent;
-      h.setReducedMotion(!resolved);
-      expect(toggle(root).textContent, 'Full moved with a policy it does not follow').toBe(full);
-    }
-  });
-
-  it('taps the toggle and reports the NEXT preference in the cycle, from a real click at the button', () => {
-    // Same composition-blindness reasoning as the scheme and fire-mode toggles: drive a
-    // real event at a real element rather than only invoking the callback.
-    const { hud: h, root } = mount();
-    const seen: string[] = [];
-    h.onMotionChange((p) => seen.push(p));
-    h.setMotion('system');
-
-    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(seen, 'the toggle is not wired to anything').toEqual(['full']);
-
-    // The button does NOT flip its own label -- it only reports the choice. The page
-    // echoes the ACCEPTED value back via setMotion once the store has taken it, same
-    // convention as the scheme and fire-mode toggles, so the label must not move until
-    // that echo arrives.
-    expect(toggle(root).textContent).toMatch(/device/i);
-
-    h.setMotion('full'); // the page's echo
-    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(seen).toEqual(['full', 'reduced']);
-
-    h.setMotion('reduced'); // the page's echo
-    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(seen, 'the third click did not wrap back to following the device').toEqual([
-      'full',
-      'reduced',
-      'system',
-    ]);
-  });
-
-  it('lives in the Settings pane, under Accessibility', () => {
-    // Where the issue puts it, and the reason the Accessibility section was declared empty
-    // for as long as it was. A motion policy is presentation, not input -- it belongs
-    // beside the UI-scale control #290 adds, not with the touch controls.
-    const { root } = mount();
-    expect(toggle(root)).not.toBeNull();
-    const section = toggle(root).closest('.hud-settings-section') as HTMLElement;
-    expect(section, 'the toggle is not inside a Settings section').not.toBeNull();
-    expect(section.dataset.section).toBe('accessibility');
   });
 });
 
@@ -618,13 +505,12 @@ describe('hud: the Settings sections (issue #226)', () => {
       .filter((el) => !el.classList.contains('hud-settings-section--hidden'))
       .map((el) => el.dataset.section);
 
-  it('declares the issue\'s five sections, and every one of them now has a control to show', () => {
+  it('declares the issue\'s five sections and renders only the ones with controls', () => {
     // The issue names Audio, Controls, Accessibility, Data, About & Legal, and then:
-    // "Only sections with relevant controls should render." Accessibility shipped declared
-    // and EMPTY, which is how that rule came to be exercised on the build itself; issue
-    // #289's motion toggle is the control it was declared for, so all five render now.
-    // The rule has not gone anywhere -- the test below measures it on a section emptied
-    // out, which is the state #227's capability hiding will produce at runtime.
+    // "Only sections with relevant controls should render." Accessibility is declared
+    // with none -- the motion and UI-scale controls are issues #289/#290, and the
+    // settings MODEL already carries both fields with no HUD to drive them -- so the rule
+    // is exercised on the shipped build rather than written for a future one.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     (root.querySelector('.hud-settings-open') as HTMLButtonElement).dispatchEvent(
@@ -637,22 +523,15 @@ describe('hud: the Settings sections (issue #226)', () => {
       'data',
       'about',
     ]);
-    expect(shown(root)).toEqual(['audio', 'controls', 'accessibility', 'data', 'about']);
+    expect(shown(root)).toEqual(['audio', 'controls', 'data', 'about']);
   });
 
-  it('collapses a section whose last control is hidden, and brings it back -- the rule reads the DOM, not a list', () => {
-    // The property that makes this a rule rather than a list of section names: with
-    // Accessibility's one control hidden the section must be gone on the next open, with
-    // nothing in hud.ts changed, and it must return when the control does.
-    //
-    // Hidden rather than removed, and by `display: none` specifically, because that is
-    // exactly what a `--hidden` class resolves to and what #227 will do to a control the
-    // device cannot use. It is also the same predicate `focusableControls` gives the
-    // roving focus, so a section that renders always has somewhere for a D-pad to land.
-    //
-    // The second half is the negative control: without it a `refreshSettingsSections` that
-    // hid EVERY section, or one that had simply learned Accessibility's name, would pass
-    // the first assertion.
+  it('renders a section as soon as it HAS a control -- the rule reads the DOM, not a list', () => {
+    // The negative control for the test above, and the property that makes this a rule
+    // rather than a hardcoded exclusion: reveal a control inside Accessibility and the
+    // section must appear on the next open, with nothing in hud.ts changed. This is also
+    // the shape #227 relies on in the other direction -- hide every control in a section
+    // on capability and the section collapses on its own.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     const open = (): void => {
@@ -660,17 +539,15 @@ describe('hud: the Settings sections (issue #226)', () => {
         new MouseEvent('click'),
       );
     };
-    const motion = root.querySelector('.hud-motion-toggle') as HTMLButtonElement;
-    expect(
-      motion.closest('.hud-settings-section')!.getAttribute('data-section'),
-      'this test empties Accessibility by hiding the motion toggle',
-    ).toBe('accessibility');
-
-    motion.style.display = 'none';
     open();
-    expect(shown(root)).toEqual(['audio', 'controls', 'data', 'about']);
+    expect(shown(root), 'the fixture must start with Accessibility empty').not.toContain(
+      'accessibility',
+    );
 
-    motion.style.display = '';
+    const a11y = sections(root).find((el) => el.dataset.section === 'accessibility')!;
+    const control = document.createElement('button');
+    control.textContent = 'Reduce motion';
+    (a11y.querySelector('.hud-settings-controls') as HTMLElement).appendChild(control);
     h.back();
     open();
     expect(shown(root)).toEqual(['audio', 'controls', 'accessibility', 'data', 'about']);
