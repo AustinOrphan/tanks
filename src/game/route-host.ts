@@ -732,12 +732,16 @@ export function createRouteHost(
 
   const stopPainting = sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
-    // BEFORE the session that is being left is disposed, and that ordering is the whole
-    // fix for issue #485's silent Main Menu. This subscription is registered at page
-    // construction and a session's is registered later, so on the change that sends the
-    // player back to a route the page has already moved the bed to the menu suite by the
-    // time `stopSession` runs -- and `releaseAudio` no longer stops it out from under
-    // that (loop.ts). `loop.test.ts` pins the order rather than trusting this comment.
+    // The bed follows the route, and it is the ONLY thing that moves it: a session no
+    // longer touches the music at all, and its release is empty (`loop.ts`), so leaving
+    // gameplay is a suite CHANGE rather than a stop followed by nothing. That is issue
+    // #485's silent Main Menu -- the outgoing session used to set the menu suite from its
+    // own subscriber and then silence it from its own teardown, one call later.
+    //
+    // Pinned in two places, because one covers the route and the other the disposal:
+    // `route-host.test.ts`'s "FOLLOWS the game" drives gameplay, pause and the menu back,
+    // and `loop.test.ts`'s reboot cases count `musicStops` at zero across five real
+    // sessions started and retired over the whole route.
     followMusic(location);
     // Both Main Menu affordances that are claims about a SAVE rather than about a match --
     // whether a run is there to continue, and how far the Levels grid may reach -- re-read
