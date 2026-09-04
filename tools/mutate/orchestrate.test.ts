@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
-import { parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest } from './run.mjs';
+import { parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, formatRunSummary, formatSelectionEcho, selectOnly, missingOnlyReport, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest } from './run.mjs';
 import { scopeCosts } from './scope-costs.mjs';
 import { selectAffected, entryText } from './select.mjs';
 import type { ManifestEntry } from './lib.mjs';
@@ -689,12 +689,42 @@ describe('computeExitCode', () => {
 
 describe('parseArgs', () => {
   it('defaults to the shipped manifest, no --only filter, and root = process.cwd()', () => {
-    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifests', only: null, root: process.cwd(), jobs: 1, report: null, changed: null, list: false });
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifests', only: [], root: process.cwd(), jobs: 1, report: null, changed: null, list: false });
   });
 
   it('accepts --manifest, --only and --root overrides', () => {
     expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3', '--report', 'out.json', '--changed', 'origin/main', '--list']))
-      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere', jobs: 3, report: 'out.json', changed: 'origin/main', list: true });
+      .toEqual({ manifest: 'x.json', only: ['my-id'], root: '/elsewhere', jobs: 3, report: 'out.json', changed: 'origin/main', list: true });
+  });
+
+  it('ACCUMULATES repeated --only instead of keeping the last one (issue #529)', () => {
+    // The bug verbatim: `--only a --only b --only c` parsed as `args.only = 'c'`, so two
+    // of the three requested entries were silently dropped and the run reported a clean
+    // sweep of the one it kept.
+    expect(parseArgs(['--only', 'a', '--only', 'b', '--only', 'c']).only).toEqual(['a', 'b', 'c']);
+    // Negative control for "accumulates": ONE occurrence must still yield exactly one id,
+    // so a filter of [] (run everything) or a growing list across calls would both fail.
+    expect(parseArgs(['--only', 'a']).only, 'one occurrence is still one id').toEqual(['a']);
+    expect(parseArgs([]).only, 'no occurrence is an empty filter, not a stale one').toEqual([]);
+  });
+
+  it('splits one --only on commas, and mixes commas with repeats', () => {
+    expect(parseArgs(['--only', 'a,b,c']).only).toEqual(['a', 'b', 'c']);
+    expect(parseArgs(['--only', ' a , b ']).only, 'surrounding spaces are not part of an id').toEqual(['a', 'b']);
+    expect(parseArgs(['--only', 'a,b', '--only', 'c']).only).toEqual(['a', 'b', 'c']);
+  });
+
+  it('de-duplicates ids, first-seen order, so the requested count is the count of DISTINCT entries', () => {
+    expect(parseArgs(['--only', 'b', '--only', 'a', '--only', 'b']).only).toEqual(['b', 'a']);
+    expect(parseArgs(['--only', 'a,a']).only).toEqual(['a']);
+  });
+
+  it('refuses an --only occurrence that names no id -- an empty list would mean "run everything"', () => {
+    for (const empty of ['', ',', ' , ']) {
+      expect(() => parseArgs(['--only', empty]), JSON.stringify(empty)).toThrow(/--only needs a value/);
+    }
+    // Negative control: a real id beside the separators is not refused.
+    expect(parseArgs(['--only', ',a,']).only).toEqual(['a']);
   });
 
   it('rejects an unknown flag rather than silently ignoring it', () => {
@@ -706,6 +736,94 @@ describe('parseArgs', () => {
       expect(() => parseArgs([flag, '--jobs', '2']), `${flag} before another flag`).toThrow(/needs a value/);
     }
     expect(parseArgs(['--report', 'out.json', '--jobs', '2']).report, 'a real value still parses').toBe('out.json');
+  });
+});
+
+describe('the pre-run --only echo (issue #529)', () => {
+  it('names how many entries will run against how many exist, and lists them', () => {
+    // The line a reader checks at second zero. Its job is to make "I asked for three and
+    // one is about to run" visible BEFORE a sweep that can take minutes -- so both
+    // numbers and the ids have to be in it.
+    const line = formatSelectionEcho([{ id: 'alpha' }, { id: 'beta' }] as never[], 478);
+    expect(line).toContain('2 of 478');
+    expect(line).toContain('alpha, beta');
+  });
+
+  it('still reports the total when a single entry was selected', () => {
+    // The one-entry case is the common one, and the case where a bare "1 mutation(s) ran"
+    // reads as success. The total is what makes it checkable.
+    expect(formatSelectionEcho([{ id: 'solo' }] as never[], 478)).toContain('1 of 478');
+  });
+});
+
+describe('selectOnly / missingOnlyReport', () => {
+  const entries = ['alpha', 'beta', 'gamma'].map((id) => ({ id })) as unknown as ManifestEntry[];
+
+  it('selects EVERY id asked for, not just one, and reports nothing missing', () => {
+    const { entries: picked, missing } = selectOnly(entries, ['alpha', 'gamma']);
+    expect(picked.map((e) => e.id)).toEqual(['alpha', 'gamma']);
+    expect(missing).toEqual([]);
+    // Negative control for "every": one id still selects exactly that one entry.
+    expect(selectOnly(entries, ['beta']).entries.map((e) => e.id)).toEqual(['beta']);
+  });
+
+  it('keeps MANIFEST order, not the order the ids were typed -- consecutive same-scope entries share a baseline', () => {
+    expect(selectOnly(entries, ['gamma', 'alpha']).entries.map((e) => e.id)).toEqual(['alpha', 'gamma']);
+  });
+
+  it('an empty id list is no filter at all -- every entry, untouched', () => {
+    expect(selectOnly(entries, []).entries).toBe(entries);
+  });
+
+  it('names EVERY id that matched nothing, not just the first -- one typo must not hide a second', () => {
+    const { entries: picked, missing } = selectOnly(entries, ['alpha', 'typo-one', 'typo-two']);
+    expect(missing).toEqual(['typo-one', 'typo-two']);
+    const report = missingOnlyReport(missing, ['alpha', 'typo-one', 'typo-two']);
+    expect(report).toMatch(/typo-one/);
+    expect(report).toMatch(/typo-two/);
+    expect(report, 'the refusal says how many of how many were asked for').toMatch(/2 of the 3 id\(s\)/);
+    // The entries that DID match are still selected -- the refusal is what stops the run,
+    // and this is the negative control proving the selection is not silently emptied.
+    expect(picked.map((e) => e.id)).toEqual(['alpha']);
+  });
+
+  it('is null when nothing is missing -- the negative control for the refusal above', () => {
+    expect(missingOnlyReport([], ['alpha'])).toBeNull();
+  });
+
+  it('still refuses a SINGLE unmatched id, naming it -- the pre-#529 property the multi-id case must not lose', () => {
+    const { missing } = selectOnly(entries, ['nope']);
+    expect(missing).toEqual(['nope']);
+    expect(missingOnlyReport(missing, ['nope'])).toMatch(/nope/);
+  });
+});
+
+describe('formatRunSummary', () => {
+  const ran = (id: string, status: string, matches = true) => ({ id, status, matches, detail: 'd' });
+
+  it('prints the requested count BESIDE the ran/selected pair when --only was used (issue #529)', () => {
+    // The line the bug produced was "1/1 mutation(s) ran ... 0 mismatch(es)" for three
+    // requested ids: legible only as a clean sweep. The requested count is what makes
+    // an under-run readable at all.
+    const line = formatRunSummary([ran('a', STATUS.KILLED)], 1, 3);
+    expect(line).toMatch(/1\/1 of 3 requested by --only mutation\(s\) ran/);
+  });
+
+  it('omits the requested clause entirely when --only was not used -- a full run has nothing to compare against', () => {
+    expect(formatRunSummary([ran('a', STATUS.KILLED)], 1, 0)).toMatch(/^1\/1 mutation\(s\) ran/);
+    expect(formatRunSummary([ran('a', STATUS.KILLED)], 1, 0)).not.toMatch(/requested/);
+  });
+
+  it('counts each status and the mismatches separately', () => {
+    const line = formatRunSummary(
+      [ran('a', STATUS.KILLED), ran('b', STATUS.SURVIVES), ran('c', STATUS.FAILED_TO_APPLY, false), ran('d', STATUS.BASELINE_RED, false), ran('e', STATUS.ERROR, false)],
+      5, 0,
+    );
+    expect(line).toMatch(/5\/5 mutation\(s\) ran: 1 killed, 1 survives, 1 failed-to-apply, 1 baseline-red, 1 error -- 3 mismatch\(es\)/);
+  });
+
+  it('shows ran < selected when a run stopped early, rather than reporting the shortfall as a complete run', () => {
+    expect(formatRunSummary([ran('a', STATUS.KILLED)], 4, 4)).toMatch(/1\/4 of 4 requested/);
   });
 });
 
