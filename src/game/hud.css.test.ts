@@ -444,8 +444,8 @@ describe('hud.css is syntactically whole', () => {
       '.hud-run-summary', '.hud-run-summary--hidden', '.hud-new-game--tertiary',
       // Settings (issue #226): the pane, its hidden rule, and the section machinery.
       // `.hud-settings-section--hidden` is what makes "only sections with relevant
-      // controls render" visible -- without it Accessibility, which has no controls until
-      // #289/#290, renders as a heading over nothing.
+      // controls render" visible -- without it a section left empty by #227's capability
+      // hiding renders as a heading over nothing.
       '.hud-settings', '.hud-settings--hidden', '.hud-settings-section',
       '.hud-settings-section--hidden', '.hud-settings-controls',
       '.hud-settings-volume', // the audio slider; its buttons are `.ui-btn--sm`
@@ -696,7 +696,7 @@ describe('hud.css is syntactically whole', () => {
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
     //                         + 1 friendly-fire toggle (Teams-only)
     //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
-    //   everything else  64  = the panels above (54 before this issue, +10)
+    //   everything else  65  = the panels above (54 before issue #226, +10, +1)
     //
     // The +10, itemised: OUT go the topbar Mute chip, the Main Menu's Stats button and
     // its Achievements button (-3). IN come Records, Settings and About & Legal on the
@@ -704,10 +704,13 @@ describe('hud.css is syntactically whole', () => {
     // (+4), the Settings pane's Controllers and About & Legal entries (+2), and the Back
     // buttons of Settings and About plus the confirmation's two answers (+4).
     //
+    // The +1 is issue #289's motion toggle, the first control the Settings pane's
+    // Accessibility section has ever held.
+    //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(117);
+    expect(buttons.length).toBe(118);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -802,7 +805,8 @@ describe('hud.css is syntactically whole', () => {
     // reason -- it is the quietest thing on the Main Menu and must not read as a peer of
     // the utility slabs above it.
     const small = ['.hud-settings-mute', '.hud-scheme-toggle', '.hud-firemode-toggle',
-      '.hud-haptics-toggle', '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
+      '.hud-haptics-toggle', '.hud-motion-toggle',
+      '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
       '.hud-settings-about', '.hud-about-open', '.hud-records-tab-stats',
       '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));

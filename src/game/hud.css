@@ -1220,8 +1220,9 @@
 /*
  * A SECTION WITH NO CONTROLS DOES NOT RENDER (issue #226's "only sections with relevant
  * controls should render"). `refreshSettingsSections` decides which; without this rule
- * the class it writes does nothing, and Accessibility -- empty until #289/#290 add the
- * motion and scale controls -- would show as a heading over nothing.
+ * the class it writes does nothing and such a section shows as a heading over nothing.
+ * Accessibility was the empty one this was written for until issue #289 gave it the
+ * motion toggle; #227's capability hiding is what will empty a section at runtime.
  */
 .hud-settings-section--hidden {
   display: none;

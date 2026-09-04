@@ -196,16 +196,17 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
 }
 
 /**
- * The 19 registrations this module owns, and the boundary of the claim.
+ * The 20 registrations this module owns, and the boundary of the claim.
  *
  * Pinned as a SET rather than a count so that a handler quietly leaving for the session,
  * or a session handler quietly arriving here, names itself in the diff. The seven absent
  * ones are listed in `route-ui.ts`'s own doc comment with the reason each stays behind;
- * `onRecordsOpen` is the newest arrival, added by issue #324's step S5.
+ * `onMotionChange` is the newest arrival, added by issue #289 with the Settings pane's
+ * motion control, and `onRecordsOpen` came before it with issue #324's step S5.
  */
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
-  'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMuteToggle',
+  'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
   'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin',
   'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onTouchSchemeChange', 'onVersusOpen',
   'onVersusStart', 'onVolumeChange',
@@ -255,18 +256,26 @@ describe('the application routes work with no gameplay session behind them', () 
   it('the settings routes write their stores', () => {
     const f = fixture();
     const before = f.deps.settings.snapshot().input;
-    // Non-default values from the shipped enums ('stick'|'point', 'tap'|'double'|'button'):
-    // the stores REFUSE an unknown id and keep the default, so a made-up value here would
-    // make this test pass while measuring nothing.
+    // Non-default values from the shipped enums ('stick'|'point', 'tap'|'double'|'button',
+    // 'system'|'full'|'reduced'): the stores REFUSE an unknown id and keep the default, so
+    // a made-up value here would make this test pass while measuring nothing.
     f.fire('onTouchSchemeChange', 'point');
     f.fire('onFireModeChange', 'button');
     f.fire('onHapticsChange', !before.deviceHaptics);
+    f.fire('onMotionChange', 'reduced');
     const after = f.deps.settings.snapshot().input;
     expect(after.touchScheme).toBe('point');
     expect(after.fireMode).toBe('button');
     // Asserted as a MOVE off the stored default rather than against a literal, so this
     // cannot start passing vacuously if the shipped default ever changes to match.
     expect(after.deviceHaptics).toBe(!before.deviceHaptics);
+    // The motion control's handler writes the STORE and nothing else (issue #289) -- the
+    // display comes back through the page's own repaint. 'reduced' is not the shipped
+    // default ('system'), which is what makes this a move rather than a coincidence.
+    expect(
+      f.deps.settings.snapshot().presentation.motion,
+      'the motion toggle did not reach the store',
+    ).toBe('reduced');
   });
 
   it('Versus Start and Campaign reach their reboot seams from an empty page', () => {
@@ -460,6 +469,7 @@ describe('the application routes work with no gameplay session behind them', () 
     f.fire('onTouchSchemeChange', 'point');
     f.fire('onFireModeChange', 'button');
     f.fire('onHapticsChange', false);
+    f.fire('onMotionChange', 'reduced');
     f.fire('onCustomizeOpen');
     f.fire('onPickSkin', 'camo');
     f.fire('onCustomizeClose');
@@ -478,6 +488,7 @@ describe('the application routes work with no gameplay session behind them', () 
     // ran rather than being no-ops that trivially touch nothing.
     expect(f.deps.customization.skin()).toBe('camo');
     expect(f.volume()).toBeCloseTo(0.4, 10);
+    expect(f.deps.settings.snapshot().presentation.motion).toBe('reduced');
   });
 
   it('unlockedLevels answers from progress alone', () => {

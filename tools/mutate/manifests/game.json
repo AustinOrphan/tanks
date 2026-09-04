@@ -3445,10 +3445,83 @@
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Issue #226: 'only sections with relevant controls should render'. Accessibility ships declared and empty -- its motion and UI-scale controls are issues #289/#290 -- so without the rule Settings opens on a heading over nothing, which is the 'permanently disabled settings players have to decode' the UI direction rules out. It is also the mechanism #227 leans on: hide every control in a section on capability and the section must collapse with no further change here.",
+    "why": "Issue #226: 'only sections with relevant controls should render'. Accessibility shipped declared and EMPTY, which is where the rule came from; issue #289's motion toggle filled it, so every declared section has a control today and the rule is measured on a section emptied at runtime instead -- a control hidden by `display: none`, which is what a `--hidden` class resolves to and what #227's capability hiding will do. Without the rule that section opens as a heading over nothing, the 'permanently disabled settings players have to decode' the UI direction rules out.",
     "killedBy": [
-      "hud: the Settings sections (issue #226) declares the issue's five sections and renders only the ones with controls",
-      "hud: the Settings sections (issue #226) renders a section as soon as it HAS a control -- the rule reads the DOM, not a list"
+      "hud: the Settings sections (issue #226) collapses a section whose last control is hidden, and brings it back -- the rule reads the DOM, not a list"
+    ]
+  },
+  {
+    "id": "motion-toggle-flips-its-own-label",
+    "file": "src/game/hud.ts",
+    "find": "  const handleMotionToggle = (): void => {\n    for (const cb of motionChangeCbs) cb(NEXT_MOTION[currentMotion]);\n  };",
+    "replace": "  const handleMotionToggle = (): void => {\n    for (const cb of motionChangeCbs) cb(NEXT_MOTION[currentMotion]);\n    currentMotion = NEXT_MOTION[currentMotion];\n    renderMotionToggle();\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The control drawing itself from the CLICK instead of from the value the store accepted -- the same convention the aim-scheme, fire-mode and haptics toggles follow, and the one `settings.ts` can actually refuse: `setMotion` drops an id outside MOTION_PREFERENCES, so a self-flipping label would show a preference that was never stored and would keep showing it until something else repainted. It also looks correct in the ordinary case, which is exactly why it needs a test rather than a reviewer.",
+    "killedBy": [
+      "hud: the motion toggle (issue #289) taps the toggle and reports the NEXT preference in the cycle, from a real click at the button"
+    ]
+  },
+  {
+    "id": "motion-label-hides-the-resolved-policy",
+    "file": "src/game/hud.ts",
+    "find": "    const resolved = currentMotion === 'system' ? ` (${reducedMotion ? 'reduced' : 'full'})` : '';",
+    "replace": "    const resolved = '';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Issue #289's own report: 'Transitions between menus seem to not work? Or at least I haven't seen them in action?'. With the OS asking for reduced motion, a menu that never animates and a control reading only 'Match device' leave nothing on screen connecting the two -- which is the state that made the missing control hard to even diagnose. 'Full' and 'Reduced' name their own answers; 'Match device' is the one state that cannot, so it is the one that reports the resolved policy.",
+    "killedBy": [
+      "hud: the motion toggle (issue #289) reports the RESOLVED policy on Match device, which is the state its own name cannot say"
+    ]
+  },
+  {
+    "id": "motion-label-reports-the-policy-on-every-state",
+    "file": "src/game/hud.ts",
+    "find": "    const resolved = currentMotion === 'system' ? ` (${reducedMotion ? 'reduced' : 'full'})` : '';",
+    "replace": "    const resolved = ` (${reducedMotion ? 'reduced' : 'full'})`;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "The negative control for the entry above, as a production defect rather than an assertion: appending the resolved policy everywhere still makes 'Match device' report it, so a suite that only checked that half would stay green while the pane rendered 'Motion: Full (reduced)' -- a label that contradicts itself on the two states a player chose deliberately.",
+    "killedBy": [
+      "hud: the motion toggle (issue #289) reports the RESOLVED policy on Match device, which is the state its own name cannot say"
+    ]
+  },
+  {
+    "id": "route-host-motion-control-loses-the-stored-preference",
+    "file": "src/game/route-host.ts",
+    "find": "    hud.setMotion(deps.settings.snapshot().presentation.motion);",
+    "replace": "    hud.setMotion('system');",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "`paintSettingsControls` has been the single writer of the settings display since issue #532, so a constant here is the whole display: a returning player who chose 'Reduced' opens Settings on 'Match device' while the game correctly runs reduced, and one more tap moves them to 'Full' rather than to what the button claims. The transitions keep obeying the store throughout, which is what makes this silent.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED motion preference, and the resolved policy beside it",
+      "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session"
+    ]
+  },
+  {
+    "id": "route-ui-motion-toggle-echoes-the-click-instead-of-the-store",
+    "file": "src/game/route-ui.ts",
+    "find": "  hud.onMotionChange((next) => {\n    deps.settings.setMotion(next);\n  });",
+    "replace": "  hud.onMotionChange((next) => {\n    hud.setMotion(next);\n  });",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-ui.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The handler that paints instead of persisting. The label moves under the finger, so it looks like it worked -- and nothing else does: the preference is not saved, `effectiveSettings` never republishes, and `hud.setReducedMotion` never fires, so the transitions the player is trying to change carry on exactly as before. That is issue #364's fifth criterion and the whole point of issue #289, and it is why the store is the only thing a settings handler is allowed to touch.",
+    "killedBy": [
+      "the application routes work with no gameplay session behind them the settings routes write their stores",
+      "the application routes work with no gameplay session behind them drives every route while a real GameSessionHost stays EMPTY (issue #427)",
+      "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session"
     ]
   },
   {
@@ -3626,6 +3699,22 @@
     ]
   },
   {
+    "id": "route-host-paints-the-settings-once-and-never-again",
+    "file": "src/game/route-host.ts",
+    "find": "  const stopPaintingSettings = deps.effectiveSettings.subscribe(paintSettingsControls);",
+    "replace": "  const stopPaintingSettings = (): void => {};",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "The construction-time paint survives and every control still opens showing the stored value, so Settings looks right until the player touches it -- and then the control they just pressed never redraws, because this subscription is the only thing that answers the store. Issue #364's fifth criterion is specifically about the change landing WITH THE PANE OPEN, which is this line and not the call above it, and issue #289's motion toggle is the control where the consequence is visible rather than merely stale: the resolved policy stops reaching `hud.setReducedMotion`, so the transitions the player is trying to change carry on until a reload.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page paints the stored audio and input settings, which no session-less page did before",
+      "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session",
+      "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot"
+    ]
+  },
+  {
     "id": "route-host-haptics-toggle-reads-the-effective-value",
     "file": "src/game/route-host.ts",
     "find": "    hud.setHaptics(deps.settings.snapshot().input.deviceHaptics);",
@@ -3634,7 +3723,7 @@
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "Reads the effective value for a control that EDITS the stored preference -- the one asymmetry in this function, and the tempting edit, since every other line beside it reads `effective`. On a device without vibration the switch then shows forced-off, which reads as the preference having been erased: what issue #320 forbids. This was the code until #324, harmless only because the block ran on session-less pages where `loop.ts` corrected it; making the page the sole writer would have shipped it everywhere.",
+    "why": "Reads the effective value for a control that EDITS the stored preference -- one of only two lines in this function that read the store rather than `effective`, which is what makes it the tempting edit. On a device without vibration the switch then shows forced-off, which reads as the preference having been erased: what issue #320 forbids. This was the code until #324, harmless only because the block ran on session-less pages where `loop.ts` corrected it; making the page the sole writer would have shipped it everywhere.",
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED haptics preference, not the effective one"
     ]
@@ -3769,6 +3858,21 @@
     "why": "Moves the flag's assignment back below `setState`'s early return, where it sat until this change. `playing` and `launch` both return before it, so the outcome -> playing transition -- the ordinary restart -- left the flag stuck `true` and every later push re-rendered the outcome lines and rewrote the action button behind an already-hidden panel. The natural placement, since every other line of that function's body is below the return; only a test that pushes an outcome DURING play can see it, because `.hud-panel` hides the result either way.",
     "killedBy": [
       "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) a push during PLAY repaints nothing -- the surface gate survives a restart"
+    ]
+  },
+  {
+    "id": "motion-control-painted-from-the-resolved-policy",
+    "file": "src/game/route-host.ts",
+    "find": "    hud.setMotion(deps.settings.snapshot().presentation.motion);",
+    "replace": "    hud.setMotion(effective.reducedMotion ? 'reduced' : 'full');",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts",
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Paints the motion control from the RESOLVED policy instead of the stored preference -- the tempting edit, since every other line in `paintSettingsControls` but the haptics one reads `effective`. The control has three states and the policy has two, so this erases 'system' with no way back to it: a player on the default sees 'Full' or 'Reduced', and choosing either leaves them unable to return to following their device. Sharper than the haptics case, because 'system' is what everyone starts on.",
+    "killedBy": [
+      "startGameWith: reduced motion reaches the preview through the effective seam the motion control is painted with the STORED preference, not the resolved policy"
     ]
   }
 ]
