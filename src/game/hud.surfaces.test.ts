@@ -1335,7 +1335,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     expect(quitBtn(root).textContent).toBe('Main Menu');
   });
 
-  it('THE GAP (issue #323): a lost campaign has no route to the Main Menu', () => {
+  it('THE GAP (issue #323): a lost campaign has a route to the Main Menu', () => {
     // Measured before the fix, not argued: at `outcome-lose` the quit button is hidden
     // and the panel's one remaining action restarts the level (`landOnCampaignBoard` in
     // loop.ts), so the only way to the Main Menu is to play again, pause, and quit from
