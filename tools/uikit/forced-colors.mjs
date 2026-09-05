@@ -89,7 +89,10 @@ const CONTROLS = [
   { id: 'quiet-slab', sel: '.hud-records-open', surface: 'main menu' },
   { id: 'small-quiet', sel: '.hud-about-open', surface: 'main menu' },
   { id: 'hint', sel: '.ui-hint', surface: 'any' },
-  { id: 'locked-level', sel: '.hud-level-btn--locked', surface: 'level select' },
+  // `locked-level` lived here until issue #555 stopped the Levels grid drawing levels the
+  // player has not cleared. It was this set's only REFUSED control, and nothing replaces
+  // it: the other shipped refusals sit on panes this one-shot does not visit. The forced-
+  // colors contract for the disabled treatment is still gated by hud.css.test.ts.
   { id: 'selectable-on', sel: '[data-fc="selected"]', surface: 'customize' },
   { id: 'selectable-off', sel: '[data-fc="unselected"]', surface: 'customize' },
   { id: 'destructive', sel: '.hud-reset-progress', surface: 'settings' },
@@ -145,13 +148,15 @@ async function main() {
       out[c.id] = await readStyle(page, c.sel);
     }
 
-    // Level select: the locked button is the shipped example of a refused control.
+    // Level select. Opened for the surface flag and the pane's own screenshot only -- the
+    // refused control it used to contribute is gone (see the CONTROLS note above). The
+    // pane needs cleared levels to be offered at all since issue #555, so the flag below
+    // reports false on a fresh profile, which is a fact about the save and not a fault.
     const levelsShown = await (async () => {
       await page.click('.hud-levelselect-open', { timeout: 15000 }).catch(() => {});
       return page.waitForSelector('.hud-levelselect:not(.hud-levelselect--hidden)', { state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
     })();
     out.__levelSelectOpened = levelsShown;
-    out['locked-level'] = await readStyle(page, '.hud-level-btn--locked');
     // Closed by its OWN named Back control, not Escape. `tools/uikit/README.md` records
     // this as a sharp edge and it bit here too: Escape left the level panel open over the
     // menu, so every later `click` landed on an obscured element and timed out. The

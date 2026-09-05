@@ -462,10 +462,10 @@ describe('hud.css is syntactically whole', () => {
       // Records is one Main Menu entry with two tabs (issue #226): the tab row's layout,
       // and the hidden rule that keeps the entry off the pause panel.
       '.hud-records-tabs', '.hud-records-open--hidden',
-      '.hud-levels', '.hud-level-btn', '.hud-level-btn--locked', // level select buttons
-      // ...and the reason a locked one is locked: without the hidden rule it explains a
-      // state the player has already left
-      '.hud-levels-note--hidden',
+      // Level select buttons. No `--locked` rule and no `--hidden` note rule since issue
+      // #555: the grid draws only unlocked levels, so there is no dimmed control to style
+      // and no state the note can explain that the player is not in.
+      '.hud-levels', '.hud-level-btn',
       // the level select PANEL: without the hidden rules it covers everything from load,
       // and without the open button's hidden rule it shows outside the title screen
       '.hud-levelselect', '.hud-levelselect--hidden', '.hud-levelselect-open--hidden',
@@ -694,7 +694,11 @@ describe('hud.css is syntactically whole', () => {
     // (`defaultSlots(2)` is `[human, bot]`). They carry `.ui-btn`/`.ui-btn--sm`, so they
     // are inside this sweep rather than falling through to browser default styling --
     // which is exactly what the sweep is for.
-    // 120 since issue #323 added the practice end screen's Choose Level
+    // 118 since issue #555 stopped the level grid drawing locked levels: this fixture's
+    // `setLevelSelect(2, 4)` used to build four buttons and now builds two (-2). The
+    // fixture's ARGUMENTS are the population, so this figure moves with them -- a fixture
+    // that unlocked all four would pin 120 again while measuring less.
+    // It was 120 at issue #323, which added the practice end screen's Choose Level
     // (.hud-choose-level): one more static panel button, rendered unconditionally at
     // construction and hidden by CSS class like .hud-campaign-open and the
     // Continue/New Game pair above it, so this fixture counts it without ever showing it.
@@ -708,7 +712,7 @@ describe('hud.css is syntactically whole', () => {
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
     //                         + 1 friendly-fire toggle (Teams-only)
     //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
-    //   everything else  67  = the panels above (54 before issue #226, +10, +1, +1, +1)
+    //   everything else  65  = the panels above (54 before issue #226, +10, +1, +1, +1, -2)
     //
     // The +10, itemised: OUT go the topbar Mute chip, the Main Menu's Stats button and
     // its Achievements button (-3). IN come Records, Settings and About & Legal on the
@@ -724,7 +728,7 @@ describe('hud.css is syntactically whole', () => {
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(120);
+    expect(buttons.length).toBe(118);
     expect(unstyled).toEqual([]);
 
     dispose();

@@ -991,8 +991,9 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     });
     expect(f.host.hasSession()).toBe(false);
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([true]);
-    // One cleared: the grid offers it plus the next.
-    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([2, CAMPAIGN_LEVELS.length]);
+    // One cleared: the grid offers exactly that one. Not two -- the pane replays levels
+    // the player has BEATEN and never offers the frontier (issue #555's second ruling).
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
     expect(f.hud.argsOf('setHullColor').at(-1)).toEqual(['red']);
     expect(f.hud.argsOf('setSkin')).toHaveLength(1);
     expect(f.hud.argsOf('setAccentColor')).toHaveLength(1);
@@ -1000,27 +1001,70 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     expect(f.hud.argsOf('setAchievements')).toHaveLength(1);
   });
 
+  it('sizes the grid on ALL-TIME progress, so a new campaign does not re-lock what was earned', () => {
+    // The question issue #555 makes load-bearing. Before it, this contract only decided
+    // which buttons were DIMMED; now it decides which exist at all, and whether the Main
+    // Menu offers a Levels button in the first place -- so a page that sized the grid
+    // from the active run instead of the permanent store would take a returning player's
+    // whole campaign away, silently, with nothing on screen to say it had happened.
+    //
+    // Progress and the run are separate stores on purpose (`run.ts` vs `progress.ts`):
+    // `startNewRun` writes only the run, and `progress.reset()` is reachable from exactly
+    // one place -- Settings -> Reset progress, two-click confirmed. This pins the
+    // composition of those two facts, which neither store's own suite can see.
+    //
+    // A REGRESSION GUARD, not a closed coverage gap, and the difference was measured
+    // rather than assumed: a page that sized the grid from the run's own position was
+    // applied to `route-host.ts` and killed by three cases, two of which already existed.
+    // No manifest entry accompanies this test because no mutation kills it ALONE -- the
+    // defect it names is currently unreachable by construction, since `RouteUiDeps` does
+    // not carry `run` at all. It earns its place by stating the contract at the seam a
+    // future widening of those deps would break first, not by adding a net.
+    const f = fixture({
+      seed: (stores) => {
+        // Four cleared across earlier campaigns...
+        for (const level of CAMPAIGN_LEVELS.slice(0, 4)) stores.progress.recordCleared(level);
+        // ...and then a brand-new campaign, which starts back at level 1.
+        stores.run.startNewRun(CAMPAIGN_LEVELS[0].id);
+      },
+    });
+    // 4, not 0 and not 1: every level the player has ever BEATEN is still on offer. Not
+    // 5 either -- level 5 was never cleared, and the frontier is the campaign's to hand
+    // out, not the practice pane's.
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([4, CAMPAIGN_LEVELS.length]);
+    // ...and the run summary still reports where the NEW run stands, which is the half
+    // that does come from the run store. Both readings from one paint, so a page that
+    // crossed the two wires fails here rather than passing each check separately.
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([{ mission: 1, lives: 3 }]);
+  });
+
   it('paints no Continue when there is no run -- the negative control', () => {
     const f = fixture();
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([false]);
     expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([null]);
-    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
+    // 0, not 1: a player who has cleared nothing has nothing to replay, so the grid is
+    // empty and `hud.ts` withholds the Levels button entirely. An empty grid is a
+    // reachable VALUE and never a reachable screen.
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([0, CAMPAIGN_LEVELS.length]);
   });
 
   it('resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)', () => {
     // The mission number is resolved HERE and not in the HUD, because the run store holds
     // a level ID and only the level system can order it -- `run.ts` deliberately never
     // imports campaign data, and the HUD names no simulation module at all. So the page
-    // is the only layer that can turn a stored id into "Mission 2 of N".
+    // is the only layer that can turn a stored id into "Mission 2".
+    //
+    // `toEqual` on the whole object, not a property check: the campaign LENGTH used to
+    // travel here as `total` and issue #555 removed it, so this assertion is also what
+    // fails if a later change starts sending the HUD a number it has no business
+    // rendering. An extra key breaks toEqual; a `toMatchObject` would let it back in.
     const f = fixture({
       seed: (stores) => {
         stores.run.startNewRun(CAMPAIGN_LEVELS[1].id);
         stores.run.setLivesRemaining(2);
       },
     });
-    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([
-      { mission: 2, total: CAMPAIGN_LEVELS.length, lives: 2 },
-    ]);
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([{ mission: 2, lives: 2 }]);
   });
 
   it('reports a mission it cannot place as null rather than inventing a position', () => {
@@ -1033,9 +1077,7 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
         stores.run.startNewRun('a-level-this-campaign-does-not-contain');
       },
     });
-    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([
-      { mission: null, total: CAMPAIGN_LEVELS.length, lives: 3 },
-    ]);
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([{ mission: null, lives: 3 }]);
     // ...and Continue is still offered: the run exists, only its POSITION is unresolvable.
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([true]);
   });
@@ -1343,7 +1385,7 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
       before,
     );
     f.host.sm.toMainMenu();
-    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([2, CAMPAIGN_LEVELS.length]);
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
   });
 
   it('re-reads Continue on every arrival at the Main Menu, and only there', () => {

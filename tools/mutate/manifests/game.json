@@ -1369,7 +1369,7 @@
     ],
     "killedBy": [
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
-      "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert",
       "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
       "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
       "hud: spatial focus follows the drawn layout (issue #495) negative control: with jsdom's empty rects the same Right leaves the segment in document order",
@@ -1640,7 +1640,7 @@
     "find": "  .ui-btn:hover:not(:disabled) {",
     "replace": "  .ui-btn:hover {",
     "expect": "killed",
-    "why": "One hover selector loses `:not(:disabled)` (issue #392's second acceptance criterion). A locked level button -- `hud.ts` sets the real `disabled` attribute, and `.hud-level-btn--locked` dims it to 0.35 opacity -- would brighten under the pointer, telling the player a control they cannot activate is available. Worse than no hover at all, and the sort of thing that survives review because the rule LOOKS right; the selector is checked per-rule rather than by eye. Only the base `.ui-btn` selector is mutated: one is enough to prove the assertion sweeps every rule in the block rather than a named list. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "why": "One hover selector loses `:not(:disabled)` (issue #392's second acceptance criterion). An unofferable versus mode or an unavailable controller source -- `hud.ts` sets the real `disabled` attribute on both -- would brighten under the pointer, telling the player a control they cannot activate is available. Worse than no hover at all, and the sort of thing that survives review because the rule LOOKS right; the selector is checked per-rule rather than by eye. Only the base `.ui-btn` selector is mutated: one is enough to prove the assertion sweeps every rule in the block rather than a named list. Scoped to hud.css.test.ts; expectFailures counts that scoped run only. (the example was a locked level button until issue #555 stopped the grid drawing them; the selector this mutates is unchanged).",
     "tests": [
       "src/game/hud.css.test.ts"
     ],
@@ -2372,8 +2372,8 @@
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
-    "expectFailures": 9,
-    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness. Re-measured at 6 of 482 for issue #226: the page now also paints the active run's SUMMARY and the stored audio/input settings at construction, so the two cases that pin those fail here too. Re-measured at 9 of 495 (route-host.test.ts 62 + loop.test.ts 433) for issue #324's step S5, and the GROWTH is the step's whole point rather than test churn: the gameplay session used to paint Records, the earned set and the three paint-shop swatches at its own construction, so four loop.test.ts cases about those boot echoes passed with this block deleted. With the session's duplicates gone the page is the only writer, and removing its paints is now visible to them too."
+    "expectFailures": 10,
+    "why": "The page stops painting the store-derived Main Menu -- Continue, the Levels grid, Records, the paint shop's selected swatches -- at construction. A session still paints the same values at ITS construction, which is exactly what hid this: every session-only test kept passing while a returning player's first Main Menu, on a page that boots into an empty host since issue #428, offered no Continue for the run they had left and no Levels grid. 4 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the two construction-paint cases in route-host.test.ts and the two fresh-load cases in loop.test.ts's page harness. Re-measured at 6 of 482 for issue #226: the page now also paints the active run's SUMMARY and the stored audio/input settings at construction, so the two cases that pin those fail here too. Re-measured at 9 of 495 (route-host.test.ts 62 + loop.test.ts 433) for issue #324's step S5, and the GROWTH is the step's whole point rather than test churn: the gameplay session used to paint Records, the earned set and the three paint-shop swatches at its own construction, so four loop.test.ts cases about those boot echoes passed with this block deleted. With the session's duplicates gone the page is the only writer, and removing its paints is now visible to them too. Re-measured at 10 of 521 for issue #555: one case, not a population shift -- `sizes the grid on ALL-TIME progress, so a new campaign does not re-lock what was earned` is a new route-host.test.ts case that reads a construction paint, so deleting the block takes it with the rest."
   },
   {
     "id": "route-host-never-re-reads-continue-on-arrival",
@@ -3376,7 +3376,7 @@
       "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
       "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Settings, then Controllers, then Quit from the pause panel",
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
-      "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert",
       "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
       "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
       "hud: the semantic action dispatcher (issue #494) a direction walks the active panel like the arrows do, and reports unconsumed with nothing shown",
@@ -3816,16 +3816,15 @@
   {
     "id": "route-host-paints-no-run-summary",
     "file": "src/game/route-host.ts",
-    "find": "    const index = deps.levels.levels.findIndex((level) => level.id === run.currentLevelId);\n    hud.setCampaignRun({\n      mission: index < 0 ? null : index + 1,\n      total: deps.levels.levels.length,\n      lives: run.livesRemaining,\n    });",
-    "replace": "    hud.setCampaignRun({ mission: null, total: 0, lives: run.livesRemaining });",
+    "find": "    const index = deps.levels.levels.findIndex((level) => level.id === run.currentLevelId);\n    hud.setCampaignRun({\n      mission: index < 0 ? null : index + 1,\n      lives: run.livesRemaining,\n    });",
+    "replace": "    hud.setCampaignRun({ mission: null, lives: run.livesRemaining });",
     "expect": "killed",
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "The mission NUMBER is resolvable only here: `run.ts` holds a level id and deliberately never imports campaign data, and the HUD names no simulation module at all, so a page that does not resolve it leaves the Main Menu's confidence line permanently degraded to the lives half for every player. It also feeds the replace-run confirmation's copy, which is what stops that question being about runs in general.",
+    "why": "The mission NUMBER is resolvable only here: `run.ts` holds a level id and deliberately never imports campaign data, and the HUD names no simulation module at all, so a page that does not resolve it leaves the Main Menu's confidence line permanently degraded to the lives half for every player. It also feeds the replace-run confirmation's copy, which is what stops that question being about runs in general. Re-anchored for issue #555, which removed the `total` line this find string carried: the summary no longer names the campaign's length, so the only number the page still resolves is the position. That removal is also why there is no sibling entry putting the denominator BACK -- `CampaignRunSummary` has nowhere to carry it, which is the point of taking the field out rather than leaving it unread. The unplaceable-level case is no longer a killer HERE and has its own entry (`route-host-invents-a-position-for-an-unplaceable-level`) instead: with `total` gone this mutation's payload is `{ mission: null, lives }`, which is byte-for-byte what the real code produces for a level the campaign does not list, so that test cannot see it. Splitting the two keeps both nets rather than dropping one -- each entry now names the single defect its killer actually proves.",
     "killedBy": [
-      "createRouteHost: the Main Menu is painted from the stores by the page resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)",
-      "createRouteHost: the Main Menu is painted from the stores by the page reports a mission it cannot place as null rather than inventing a position"
+      "createRouteHost: the Main Menu is painted from the stores by the page resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)"
     ]
   },
   {
@@ -4163,7 +4162,7 @@
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Drops the half of the gate that is about the SESSION rather than the ending. The sandbox ends as a `practice-result` (it is a practice-kind session) and runs one synthetic level, which is exactly the case for which `setLevelSelect`'s `total > 1` already hides the Main Menu's own entry into the same pane -- so this offers a button whose click leaves the session and lands on a menu with nothing behind it. It also silently drops the live half: `setLevelSelect` is pushed while the panel is up, and with the term gone there is nothing for that push to change.",
+    "why": "Drops the half of the gate that is about the SESSION rather than the ending. The sandbox ends as a `practice-result` (it is a practice-kind session) and runs one synthetic level, which is exactly the case for which `setLevelSelect`'s `unlocked > 1` already hides the Main Menu's own entry into the same pane (it was `total > 1` until issue #555) -- so this offers a button whose click leaves the session and lands on a menu with nothing behind it. It also silently drops the live half: `setLevelSelect` is pushed while the panel is up, and with the term gone there is nothing for that push to change.",
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) withholds Choose Level from a session with no level to choose"
     ]
@@ -4882,6 +4881,98 @@
     "killedBy": [
       "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped",
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once"
+    ]
+  },
+  {
+    "id": "level-grid-draws-the-whole-campaign",
+    "file": "src/game/hud.ts",
+    "find": "      for (let i = 0; i < unlocked; i++) {",
+    "replace": "      for (let i = 0; i < total; i++) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "The exact behaviour issue #555 removed, restored as a one-word edit -- which is how easily it comes back. A grid sized by `total` tells a player who has cleared nothing how long the campaign is, and the ruling was that it should not. Worse than the version that shipped before #555: that one disabled the entries past the unlock line, and this loop no longer has that branch, so every level in the campaign is drawn ENABLED and clickable. Two suites catch it and they catch different halves -- surfaces reads the button labels (`['1']` becomes `['1', '2', '3']`), navigation walks the panel and finds nodes the roving tabindex did not expect.",
+    "killedBy": [
+      "hud: level select panel renders one button per UNLOCKED level, and none at all for the rest (issue #555)",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert"
+    ]
+  },
+  {
+    "id": "level-grid-draws-one-level-past-the-unlock-line",
+    "file": "src/game/hud.ts",
+    "find": "      for (let i = 0; i < unlocked; i++) {",
+    "replace": "      for (let i = 0; i <= unlocked; i++) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "The off-by-one on a freshly written loop bound, and the reason the grid test asserts an exact label list rather than `length <= total`. It leaks less than the entry above -- one level, not the campaign -- but it leaks something worse: the extra button is enabled, so it starts a level the player has not unlocked, and on the last one it indexes past the level system entirely. Distinct from `level-grid-draws-the-whole-campaign` because the fix is different (a bound, not a variable) and because a test that merely counted 'fewer than total' would kill that one and survive this.",
+    "killedBy": [
+      "hud: level select panel renders one button per UNLOCKED level, and none at all for the rest (issue #555)",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert"
+    ]
+  },
+  {
+    "id": "levels-offered-on-campaign-length-not-progress",
+    "file": "src/game/hud.ts",
+    "find": "      levelChoice = unlocked > 1;",
+    "replace": "      levelChoice = total > 1;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The other half of issue #555, and the half that survives the grid being fixed: with the population correct but the OFFER still keyed on campaign length, a fresh five-level campaign shows a Levels button leading to a pane holding no buttons at all (`unlocked` counts CLEARED levels, so it is 0 before the first win). That is both a choice of one -- which the sandbox case has always refused on identical reasoning -- and a standing hint that there is more, on the first screen a new player sees. Pinned separately from the grid entries because the two are independent: either can be reverted without the other.",
+    "killedBy": [
+      "hud: level select panel offers the Levels button on what is UNLOCKED, not on what the campaign holds"
+    ]
+  },
+  {
+    "id": "levels-note-never-says-the-grid-has-stopped-growing",
+    "file": "src/game/hud.ts",
+    "find": "        unlocked >= total ? 'Every level cleared.' : 'Clear a level to add it here.';",
+    "replace": "        'Clear a level to add it here.';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Removes the completion signal, which is the thing issue #555 had to REPLACE rather than merely delete. A grid of locked buttons told a player implicitly that the campaign had an end and where it was; a grid that only grows says nothing, so a player who has cleared everything cannot tell that from a player whose next level has not arrived -- and this line promising another one is then a lie for the rest of the campaign, which under the cleared-only rule means for a player who has actually finished the game. Survives every population assertion in the file, because it changes no button.",
+    "killedBy": [
+      "hud: level select panel says whether the grid will keep growing, without saying how far it has to go"
+    ]
+  },
+  {
+    "id": "route-host-invents-a-position-for-an-unplaceable-level",
+    "file": "src/game/route-host.ts",
+    "find": "      mission: index < 0 ? null : index + 1,",
+    "replace": "      mission: index + 1,",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Drops the guard and reports `Mission 0` for a run whose stored level this build's campaign does not list -- reachable today through a developer session's `?dev=1&level=` jump. Split out of `route-host-paints-no-run-summary` at issue #555: with `total` removed from `CampaignRunSummary`, that entry's payload became identical to the real one for exactly this case, so the net had to move rather than be dropped. It is also the sharper statement of the contract -- the summary degrades to the lives half rather than inventing a position, and an invented one is worse than an omitted one because the Main Menu presents it with the same confidence as a true reading.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page reports a mission it cannot place as null rather than inventing a position"
+    ]
+  },
+  {
+    "id": "level-select-hands-out-the-frontier-level",
+    "file": "src/game/route-ui.ts",
+    "find": "    Math.min(deps.progress.highestCleared(), deps.levels.levels.length);",
+    "replace": "    Math.min(deps.progress.highestCleared() + 1, deps.levels.levels.length);",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-ui.test.ts",
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "Restores the cleared-PLUS-ONE rule, which is not a cosmetic off-by-one: it makes the Levels pane a second campaign ladder. A practice win records permanent progress -- `loop.ts` gates `recordCleared` on `tracksProgress` alone and its own comment says practice is deliberately NOT excluded -- so with the frontier level on offer a player can rehearse it with independent lives, bank the unlock, and repeat, climbing the whole campaign without ever spending a campaign life or touching the run. Counting clears alone seals that structurally rather than with a second guard, because `recordCleared` keeps the maximum: a pane that can only offer already-counted levels cannot advance progress at all. Three suites catch it at three different distances from the change -- the resolver itself, the page's paint, and the session boot -- which is what a rule this cheap to revert needs.",
+    "killedBy": [
+      "the application routes work with no gameplay session behind them unlockedLevels answers from progress alone, and counts CLEARED levels only",
+      "createRouteHost: the Main Menu is painted from the stores by the page paints no Continue when there is no run -- the negative control",
+      "startGameWith: the main menu tells the HUD the unlock state at boot: CLEARED levels pickable, capped at the count"
     ]
   }
 ]

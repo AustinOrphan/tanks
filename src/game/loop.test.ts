@@ -5259,12 +5259,16 @@ describe('startGameWith: quit is pause-only', () => {
 });
 
 describe('startGameWith: the main menu', () => {
-  it('tells the HUD the unlock state at boot: cleared+1 pickable, capped at the count', () => {
+  it('tells the HUD the unlock state at boot: CLEARED levels pickable, capped at the count', () => {
+    // Cleared, not cleared-plus-one, since issue #555's second ruling -- the Levels pane
+    // replays levels the player has beaten and never hands out the frontier, because a
+    // practice win records permanent progress and the `+ 1` therefore made this pane a
+    // second campaign ladder. See `unlockedLevels` in route-ui.ts.
     const h = boot(makeDeps({ levelCount: 2, progressHighest: 0 }));
-    expect(h.rec.levelSelects[0]).toEqual([1, 2]);
+    expect(h.rec.levelSelects[0], 'nothing cleared is nothing to replay').toEqual([0, 2]);
     h.handle.dispose();
     const h2 = boot(makeDeps({ levelCount: 2, progressHighest: 5 }));
-    expect(h2.rec.levelSelects[0]).toEqual([2, 2]); // capped: 6 of 2 is nonsense
+    expect(h2.rec.levelSelects[0]).toEqual([2, 2]); // capped: 5 of 2 is nonsense
     h2.handle.dispose();
   });
 
@@ -5278,9 +5282,10 @@ describe('startGameWith: the main menu', () => {
     h.setState('playing');
     h.setState('outcome-win');
     expect(h.rec.cleared).toEqual([1]);
-    expect(h.rec.levelSelects.at(-1), 'nothing re-sizes the grid mid-match').toEqual([1, 2]);
+    expect(h.rec.levelSelects.at(-1), 'nothing re-sizes the grid mid-match').toEqual([0, 2]);
     h.setState('main-menu');
-    expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]);
+    // 1, not 2: the level just cleared joins the grid; the one after it does not.
+    expect(h.rec.levelSelects.at(-1)).toEqual([1, 2]);
     h.handle.dispose();
   });
 
@@ -5539,10 +5544,10 @@ describe('startGameWith: stats wiring', () => {
 
   it('Reset progress re-locks levels and refreshes the level select', () => {
     const h = boot(makeDeps({ levelCount: 2, progressHighest: 1 }));
-    expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]); // level 2 open at boot
+    expect(h.rec.levelSelects.at(-1)).toEqual([1, 2]); // one cleared, so one replayable
     h.hud.resetProgress();
     expect(h.rec.progressResets).toBe(1);
-    expect(h.rec.levelSelects.at(-1)).toEqual([1, 2]); // re-locked
+    expect(h.rec.levelSelects.at(-1)).toEqual([0, 2]); // re-locked: nothing left to replay
     h.handle.dispose();
   });
 });
@@ -8900,8 +8905,9 @@ describe('the page paints the Main Menu a returning player needs before any sess
     page.pointerdown();
     expect(page.sessions(), 'the Launch gesture must not start a session').toBe(0);
     expect(h.rec.continueAvailable.at(-1), 'no Continue for an active run').toBe(true);
-    // Two cleared of three: the grid offers those two plus the next one.
-    expect(h.rec.levelSelects.at(-1), 'the Levels grid was never sized').toEqual([3, 3]);
+    // Two cleared of three: the grid offers exactly those two. Not three -- the frontier
+    // is the campaign run's to hand out, and Continue above is what leads there.
+    expect(h.rec.levelSelects.at(-1), 'the Levels grid was never sized').toEqual([2, 3]);
   });
 
   it('...and shows no Continue when there is no run to continue', () => {
@@ -8950,7 +8956,12 @@ describe('quitting a versus match leaves a campaign-shaped Main Menu behind', ()
     // "Start Match" button that, with no session to dispatch to, requested a NEW campaign
     // run -- replacing the player's own with no confirmation.
     const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
-    const h = makeDeps({ levelCount: 3, savedRun: { level: 1, lives: 2 } });
+    // `progressHighest: 2` since issue #555: this test's title claims the empty host
+    // offers LEVELS, and the pane is now offered on cleared levels alone -- two of them,
+    // since one is a choice of one and `hud.ts` withholds the button for it. A save that
+    // had cleared nothing would still exercise the grid SIZING below, but the title would
+    // be describing a button that is not there.
+    const h = makeDeps({ levelCount: 3, savedRun: { level: 1, lives: 2 }, progressHighest: 2 });
     const page = bootPageOn(h, { startEmpty: true });
     page.pointerdown();
     page.start({ kind: 'versus', config: VS });
@@ -8981,7 +8992,7 @@ describe('quitting a versus match leaves a campaign-shaped Main Menu behind', ()
       h.rec.levelSelects.filter(([, total]) => total !== 3),
       'a versus session sized the campaign Levels grid to its own arena list',
     ).toEqual([]);
-    expect(h.rec.levelSelects.at(-1)).toEqual([1, 3]);
+    expect(h.rec.levelSelects.at(-1)).toEqual([2, 3]);
   });
 });
 

@@ -225,21 +225,38 @@ async function main() {
     await capture('small-quiet', '.hud-about-open', ['hover', 'focus-visible', 'pressed'], 'main menu footer');
     await page.screenshot({ path: join(outDir, 'surface--main-menu.png') });
 
-    // ---- Level select: the disabled control AND the visible reason it is disabled ----
+    // ---- Level select ----
+    //
+    // This step used to capture `locked-level` -- the shipped example of a refused control
+    // -- and the aria association between it and the line saying why it was refused. Issue
+    // #555 removed both: the grid draws only levels the player has CLEARED, so there is no
+    // dimmed tile to photograph and nothing for the note to explain. The strongest form of
+    // "say why this is refused" turned out to be not offering it.
+    //
+    // COVERAGE THIS SET NO LONGER HAS, said plainly rather than quietly dropped: no
+    // refused control is photographed here any more. `hud.css.test.ts`'s `draws a refused
+    // button as refused, on more channels than colour alone (issue #260)` still gates the
+    // treatment itself, and the other shipped refusals -- unofferable versus modes,
+    // unavailable controller sources -- are on panes this one-shot does not visit. Adding
+    // one is issue #326's durable-recipe work, not a patch here.
+    //
+    // The pane needs cleared levels to open at all now, so the harness seeds them the same
+    // way `tools/visual/roundtrip.mjs` does.
+    await page.evaluate(() =>
+      localStorage.setItem('tanks.progress.v1', JSON.stringify({ levelId: 'level-02' })),
+    );
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => !!document.querySelector('.hud-panel'), undefined, { timeout: 20000 });
+    if (await page.evaluate(() => !document.querySelector('.hud-splash')?.classList.contains('hud-splash--hidden'))) {
+      await page.keyboard.press('Space');
+      await page.waitForFunction(() => document.querySelector('.hud-splash')?.classList.contains('hud-splash--hidden'));
+    }
     await open('.hud-levelselect-open', '.hud-levelselect:not(.hud-levelselect--hidden)');
-    await capture('locked-level', '.hud-level-btn--locked', ['hover', 'focus-visible'], 'level select');
     const reason = await page.evaluate(() => {
       const note = document.querySelector('.hud-levels-note');
-      const locked = document.querySelector('.hud-level-btn--locked');
-      return {
-        noteVisible: !!note && !note.classList.contains('hud-levels-note--hidden'),
-        noteText: note?.textContent ?? null,
-        noteId: note?.id ?? null,
-        describedBy: locked?.getAttribute('aria-describedby') ?? null,
-        disabled: locked?.hasAttribute('disabled') ?? null,
-      };
+      return { noteVisible: !!note, noteText: note?.textContent ?? null };
     });
-    report.push({ id: 'disabled-reason-association', context: 'level select', ...reason });
+    report.push({ id: 'level-select-note', context: 'level select', ...reason });
     await page.locator('.hud-levelselect').screenshot({ path: join(outDir, 'surface--level-select.png') });
 
     // ---- Customize: the selectable pair, on and off, and what carries the state ----

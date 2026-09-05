@@ -549,7 +549,6 @@ export function createRouteHost(
     const index = deps.levels.levels.findIndex((level) => level.id === run.currentLevelId);
     hud.setCampaignRun({
       mission: index < 0 ? null : index + 1,
-      total: deps.levels.levels.length,
       lives: run.livesRemaining,
     });
   };

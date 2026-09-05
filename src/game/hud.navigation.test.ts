@@ -937,9 +937,12 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     );
   });
 
-  it('skips locked level buttons when stepping through the Levels panel', () => {
+  it('steps through every button the Levels panel draws, because none of them is inert', () => {
+    // Was "skips locked level buttons". Issue #555 stopped drawing them, so the walk has
+    // nothing to skip -- and that is the assertion now: every `.hud-level-btn` in the DOM
+    // is reachable and enabled, where before two of the four were neither.
     const { hud: h, root } = mount();
-    h.setLevelSelect(2, 4); // levels 3 and 4 locked
+    h.setLevelSelect(2, 4); // 4-level campaign, 2 unlocked -- so 2 buttons, not 4
     h.setState('main-menu');
 
     let active = document.activeElement as HTMLElement;
@@ -962,15 +965,17 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     const levelBtns = Array.from(
       root.querySelectorAll('.hud-level-btn'),
     ) as HTMLButtonElement[];
-    expect(levelBtns).toHaveLength(4);
-    // 2 unlocked level buttons + Back -- the 2 locked ones must never appear here.
+    // 2, not 4: the campaign's length is not in this DOM at all (issue #555).
+    expect(levelBtns).toHaveLength(2);
+    // 2 level buttons + Back, and the walk lands on ALL of them -- a grid that still
+    // drew locked entries would either add unreachable nodes here or focus a disabled one.
     const reached: HTMLButtonElement[] = [];
     for (let i = 0; i < 3; i++) {
       pressActive('ArrowDown');
       reached.push(document.activeElement as HTMLButtonElement);
     }
     expect(reached).toEqual([levelBtns[0], levelBtns[1], root.querySelector('.hud-levelselect-back')]);
-    expect(reached.some((b) => b.disabled), 'a disabled, locked level button was focused').toBe(false);
+    expect(reached.some((b) => b.disabled), 'a disabled level button was focused').toBe(false);
   });
 
   it('moves focus backward with ArrowUp, undoing an ArrowDown step', () => {
@@ -1790,24 +1795,31 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     expect(pressed().filter((v) => v === 'true')).toHaveLength(1);
   });
 
-  it('associates a locked level with the line that says why it is locked', () => {
+  it('leaves the level grid with nothing to describe, because nothing in it is refused', () => {
+    // SUPERSEDES 'associates a locked level with the line that says why it is locked'.
+    // That contract was real and this sweep still enforces it everywhere it applies --
+    // the versus Start and the Controllers rows below. It stopped applying to the level
+    // grid at issue #555, which removed the refused control rather than re-describing it:
+    // the strongest form of "say why this is refused" is to not offer it.
+    //
+    // Kept as an assertion rather than deleted with the branch, because the failure this
+    // guards is a re-added locked button that points at an element whose id went with it.
     const { hud: h, root } = mountEveryChoice();
-    const note = root.querySelector('#hud-levels-note') as HTMLElement;
-    expect(note, 'the level picker has no reason line').not.toBeNull();
-    expect(note.textContent).toContain('unlock');
-    expect(note.classList.contains('hud-levels-note--hidden')).toBe(false);
+    expect(root.querySelector('#hud-levels-note'), 'the reason line outlived its reason').toBeNull();
 
     const btns = Array.from(root.querySelectorAll('.hud-level-btn')) as HTMLButtonElement[];
-    // setLevelSelect(2, 4): levels 1-2 open, 3-4 locked.
-    expect(btns.map((b) => b.disabled)).toEqual([false, false, true, true]);
-    expect(btns.map((b) => b.getAttribute('aria-describedby')))
-      .toEqual([null, null, 'hud-levels-note', 'hud-levels-note']);
+    // mountEveryChoice's setLevelSelect(2, 4): 2 unlocked, so 2 buttons and no more.
+    expect(btns).toHaveLength(2);
+    expect(btns.map((b) => b.disabled)).toEqual([false, false]);
+    expect(btns.map((b) => b.getAttribute('aria-describedby'))).toEqual([null, null]);
 
-    // Nothing locked: the reason goes away rather than explaining a state the player is
-    // no longer in, and no button is left pointing at a line that is not on screen.
+    // The negative control: fully unlocked draws MORE buttons, still with nothing refused
+    // and still with nothing described. Without it a grid that rendered no levels at all
+    // would satisfy every assertion above.
     h.setLevelSelect(4, 4);
-    expect(note.classList.contains('hud-levels-note--hidden')).toBe(true);
     const after = Array.from(root.querySelectorAll('.hud-level-btn')) as HTMLButtonElement[];
+    expect(after).toHaveLength(4);
+    expect(after.map((b) => b.disabled)).toEqual([false, false, false, false]);
     expect(after.map((b) => b.getAttribute('aria-describedby'))).toEqual([null, null, null, null]);
   });
 
@@ -1920,11 +1932,11 @@ describe('hud: the replace-run confirmation (issue #226)', () => {
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.setContinueAvailable(true);
-    h.setCampaignRun({ mission: 4, total: 8, lives: 1 });
+    h.setCampaignRun({ mission: 4, lives: 1 });
     click(root, '.hud-new-game');
     const body = root.querySelector('.hud-confirm-body') as HTMLElement;
     expect(body.textContent).toBe(
-      'Mission 4 of 8 -- 1 life left. Starting a new campaign replaces it. This cannot be undone.',
+      'Mission 4 -- 1 life left. Starting a new campaign replaces it. This cannot be undone.',
     );
   });
 

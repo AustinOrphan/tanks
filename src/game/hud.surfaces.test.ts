@@ -976,28 +976,72 @@ describe('hud: level select panel', () => {
   const buttons = (root: HTMLElement): HTMLButtonElement[] =>
     Array.from(root.querySelectorAll('.hud-level-btn'));
 
-  it('renders one button per level, locking those past the unlock line', () => {
+  it('renders one button per UNLOCKED level, and none at all for the rest (issue #555)', () => {
+    // The concealment, stated where it can fail. A grid built from `total` -- which is
+    // what shipped until #555 -- renders ['1', '2', '3'] here and tells a player who has
+    // cleared nothing that the campaign is three levels long. Population: 3 levels, 1
+    // unlocked, so the two assertions below disagree with each other under the old code.
     const { hud: h, root } = mount();
     h.setLevelSelect(1, 3); // cleared nothing beyond level 1's unlock
-    const btns = buttons(root);
-    expect(btns.map((b) => b.textContent)).toEqual(['1', '2', '3']);
-    // Population: all 3 buttons. Level 1 open; 2 and 3 locked and DISABLED --
-    // a locked level must be unclickable, not merely grey.
-    expect(btns.map((b) => b.disabled)).toEqual([false, true, true]);
-    expect(btns.map((b) => b.classList.contains('hud-level-btn--locked')))
-      .toEqual([false, true, true]);
+    expect(buttons(root).map((b) => b.textContent)).toEqual(['1']);
+
+    // The NEGATIVE CONTROL for "only unlocked": the same grid, fully unlocked, must draw
+    // every level. Without this line a `setLevelSelect` that rendered nothing, or one
+    // button, or a hard-coded `1`, would pass the assertion above.
+    h.setLevelSelect(3, 3);
+    expect(buttons(root).map((b) => b.textContent)).toEqual(['1', '2', '3']);
+
+    // ...and no button is ever disabled now, because no unpickable level is drawn. This
+    // is the machinery the change removed, asserted as ABSENT rather than deleted along
+    // with the code: a re-added locked branch would restore the leak silently.
+    expect(
+      buttons(root).some((b) => b.disabled || b.classList.contains('hud-level-btn--locked')),
+      'a locked level button was drawn, which is the leak this issue closed',
+    ).toBe(false);
   });
 
-  it('reports a click on an unlocked level, 0-based, and nothing for a locked one', () => {
+  it('says whether the grid will keep growing, without saying how far it has to go', () => {
+    // The completion signal, which the locked buttons used to carry implicitly: a grid
+    // that has simply stopped growing cannot be told from one whose next entry has not
+    // arrived. The line says which, and says it without a number -- the whole point.
+    const { hud: h, root } = mount();
+    const note = (): string => (root.querySelector('.hud-levels-note') as HTMLElement).textContent ?? '';
+
+    h.setLevelSelect(2, 5);
+    // "add it here", not "unlock the next": `unlocked` counts levels BEATEN, so clearing
+    // one puts THAT level in this grid. The old wording described the cleared-plus-one
+    // rule and would now be pointing at a button that never arrives.
+    expect(note()).toBe('Clear a level to add it here.');
+    // Everything cleared -- and it means that exactly, which it did not under the old
+    // rule: `unlocked` reaching `total` now requires the LAST level to have fallen.
+    h.setLevelSelect(5, 5);
+    expect(note()).toBe('Every level cleared.');
+    // ...and back, because a clear is not the only thing that repaints this grid: a
+    // level system swap (dev flags, a versus system) pushes a smaller `unlocked`.
+    h.setLevelSelect(2, 5);
+    expect(note()).toBe('Clear a level to add it here.');
+    // Never hidden. It used to be, on exactly the `unlocked >= total` state above, and
+    // that is the state it now has something to say about.
+    expect(
+      (root.querySelector('.hud-levels-note') as HTMLElement).classList.contains(
+        'hud-levels-note--hidden',
+      ),
+    ).toBe(false);
+  });
+
+  it('reports a click on a level, 0-based, from the last button as well as the first', () => {
     const { hud: h, root } = mount();
     const picks: number[] = [];
     h.onLevelSelect((i) => picks.push(i));
     h.setLevelSelect(2, 3);
     h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
+    // Two buttons, both live. The second is the newest unlock and the one an off-by-one
+    // in the render loop would either omit or leave inert.
+    expect(buttons(root)).toHaveLength(2);
     buttons(root)[1].dispatchEvent(new MouseEvent('click'));
-    buttons(root)[2].dispatchEvent(new MouseEvent('click')); // locked: disabled anyway
-    expect(picks).toEqual([1]);
+    buttons(root)[0].dispatchEvent(new MouseEvent('click'));
+    expect(picks).toEqual([1, 0]);
   });
 
   it('the Levels button opens the panel, and Back returns to the menu', () => {
@@ -1010,7 +1054,9 @@ describe('hud: level select panel', () => {
     vi.useFakeTimers();
     try {
       const { hud: h, root } = mount();
-      h.setLevelSelect(1, 2);
+      // (2, 2), not (1, 2): since issue #555 the Levels button appears once there is more
+      // than one UNLOCKED level, and this test needs the button to press.
+      h.setLevelSelect(2, 2);
       h.setState('main-menu');
       vi.advanceTimersByTime(1000);
       expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
@@ -1028,7 +1074,7 @@ describe('hud: level select panel', () => {
 
   it('the Levels button lives on the title panel only', () => {
     const { hud: h, root } = mount();
-    h.setLevelSelect(1, 2);
+    h.setLevelSelect(2, 2); // 2 unlocked -- see the offer test below for why not (1, 2)
     h.setState('main-menu');
     expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(false);
     for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
@@ -1044,12 +1090,34 @@ describe('hud: level select panel', () => {
     expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(true);
   });
 
+  it('offers the Levels button on what is UNLOCKED, not on what the campaign holds', () => {
+    // Issue #555's second half, and the one that changes a screen a new player sees. The
+    // offer used to be `total > 1`, so a five-level campaign showed a Levels button from
+    // the first boot -- and opening it showed the whole shape of the campaign. It is now
+    // `unlocked > 1`: nothing to choose between, nothing offered.
+    //
+    // This is not only concealment. A pane holding exactly one button is a choice of one,
+    // which the sandbox test above already refuses on the identical reasoning.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    const offered = (): boolean =>
+      !openBtn(root).classList.contains('hud-levelselect-open--hidden');
+
+    h.setLevelSelect(1, 5); // fresh five-level campaign: `total > 1` would offer it
+    expect(offered(), 'a fresh campaign offered a Levels pane holding one button').toBe(false);
+
+    // The negative control, one unlock later. Without it a permanently hidden button
+    // passes the assertion above.
+    h.setLevelSelect(2, 5);
+    expect(offered(), 'the Levels button never came back after an unlock').toBe(true);
+  });
+
   it('is a title-screen affair, closed by any state change', () => {
     // Mirrors 'hud: achievements'' "is a title-screen affair" test: setState is the ONE
     // chokepoint that closes every panel unconditionally, so a caller cannot leave this
     // one sitting over a live game.
     const { hud: h, root } = mount();
-    h.setLevelSelect(1, 2);
+    h.setLevelSelect(2, 2);
     h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     h.setState('playing');
@@ -1069,10 +1137,17 @@ describe('hud: level select panel', () => {
 
   it('re-rendering after an unlock replaces the buttons rather than appending', () => {
     const { hud: h, root } = mount();
-    h.setLevelSelect(1, 2);
-    h.setLevelSelect(2, 2); // level 1 cleared -> level 2 unlocks
+    h.setLevelSelect(1, 2); // one button
+    h.setLevelSelect(2, 2); // level 1 cleared -> level 2 unlocks, so two
+    // 2, not 3. Append is the failure this catches, and since issue #555 the grid GROWS
+    // between these two calls, which is exactly the shape append hides in.
     expect(buttons(root)).toHaveLength(2);
-    expect(buttons(root)[1].disabled).toBe(false);
+    expect(buttons(root).map((b) => b.textContent)).toEqual(['1', '2']);
+
+    // ...and it shrinks too, which append cannot do at all: a level-system swap pushes a
+    // smaller `unlocked` at a grid that already drew more.
+    h.setLevelSelect(1, 2);
+    expect(buttons(root).map((b) => b.textContent)).toEqual(['1']);
   });
 });
 
@@ -1135,9 +1210,9 @@ describe('hud: the Main Menu hierarchy (issue #226)', () => {
       true,
     );
 
-    h.setCampaignRun({ mission: 3, total: 8, lives: 2 });
+    h.setCampaignRun({ mission: 3, lives: 2 });
     expect(summary(root).classList.contains('hud-run-summary--hidden')).toBe(false);
-    expect(summary(root).textContent).toBe('Mission 3 of 8 -- 2 lives left');
+    expect(summary(root).textContent).toBe('Mission 3 -- 2 lives left');
 
     for (const state of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(state);
@@ -1163,9 +1238,9 @@ describe('hud: the Main Menu hierarchy (issue #226)', () => {
     // `setCampaignRun`) -- inventing a position would be worse than omitting one.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    h.setCampaignRun({ mission: 1, total: 8, lives: 1 });
-    expect(summary(root).textContent).toBe('Mission 1 of 8 -- 1 life left');
-    h.setCampaignRun({ mission: null, total: 8, lives: 3 });
+    h.setCampaignRun({ mission: 1, lives: 1 });
+    expect(summary(root).textContent).toBe('Mission 1 -- 1 life left');
+    h.setCampaignRun({ mission: null, lives: 3 });
     expect(summary(root).textContent).toBe('3 lives left');
   });
 
@@ -1175,7 +1250,7 @@ describe('hud: the Main Menu hierarchy (issue #226)', () => {
     // versus menu would carry a campaign mission line over buttons that start a match.
     const { hud: h, root } = mount();
     h.setRelaunchTarget('versus-setup');
-    h.setCampaignRun({ mission: 3, total: 8, lives: 2 });
+    h.setCampaignRun({ mission: 3, lives: 2 });
     h.setState('main-menu');
     expect(summary(root).classList.contains('hud-run-summary--hidden')).toBe(true);
   });
