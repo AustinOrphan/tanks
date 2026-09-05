@@ -1480,9 +1480,18 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     const screens = [MISSION_CLEAR, CAMPAIGN_OVER, CAMPAIGN_COMPLETE, PRACTICE_WON, PRACTICE_LOST]
       .map((outcome) => {
         drive(h, outcome);
-        return `${title(root)} | ${subtitle(root)} | ${action(root)}`;
+        return { title: title(root), whole: `${title(root)} | ${subtitle(root)} | ${action(root)}` };
       });
-    expect(new Set(screens).size, screens.join('\n')).toBe(screens.length);
+    const whole = screens.map((s) => s.whole);
+    expect(new Set(whole).size, whole.join('\n')).toBe(whole.length);
+    // ...and the HEADLINES on their own, which is the stronger half and the one the
+    // issue's complaint is actually about. Two endings that differ only in the word on a
+    // button are still two screens a player reads as the same verdict -- and it was
+    // measured that the whole-screen comparison above does NOT catch that on its own:
+    // giving the practice failure the campaign game-over's headline and line left the
+    // triples distinct, because their actions still differed.
+    const titles = screens.map((s) => s.title);
+    expect(new Set(titles).size, titles.join('\n')).toBe(titles.length);
   });
 
   it('leaves the VERSUS result screen exactly as it shipped -- issue #279 owns it', () => {
