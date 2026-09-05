@@ -3816,13 +3816,13 @@
   {
     "id": "route-host-paints-no-run-summary",
     "file": "src/game/route-host.ts",
-    "find": "    const index = deps.levels.levels.findIndex((level) => level.id === run.currentLevelId);\n    hud.setCampaignRun({\n      mission: index < 0 ? null : index + 1,\n      total: deps.levels.levels.length,\n      lives: run.livesRemaining,\n    });",
-    "replace": "    hud.setCampaignRun({ mission: null, total: 0, lives: run.livesRemaining });",
+    "find": "    const index = deps.levels.levels.findIndex((level) => level.id === run.currentLevelId);\n    hud.setCampaignRun({\n      mission: index < 0 ? null : index + 1,\n      lives: run.livesRemaining,\n    });",
+    "replace": "    hud.setCampaignRun({ mission: null, lives: run.livesRemaining });",
     "expect": "killed",
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "The mission NUMBER is resolvable only here: `run.ts` holds a level id and deliberately never imports campaign data, and the HUD names no simulation module at all, so a page that does not resolve it leaves the Main Menu's confidence line permanently degraded to the lives half for every player. It also feeds the replace-run confirmation's copy, which is what stops that question being about runs in general.",
+    "why": "The mission NUMBER is resolvable only here: `run.ts` holds a level id and deliberately never imports campaign data, and the HUD names no simulation module at all, so a page that does not resolve it leaves the Main Menu's confidence line permanently degraded to the lives half for every player. It also feeds the replace-run confirmation's copy, which is what stops that question being about runs in general. Re-anchored for issue #555, which removed the `total` line this find string carried: the summary no longer names the campaign's length, so the only number the page still resolves is the position. That removal is also why there is no sibling entry putting the denominator BACK -- `CampaignRunSummary` has nowhere to carry it, which is the point of taking the field out rather than leaving it unread.",
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)",
       "createRouteHost: the Main Menu is painted from the stores by the page reports a mission it cannot place as null rather than inventing a position"
@@ -4163,7 +4163,7 @@
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Drops the half of the gate that is about the SESSION rather than the ending. The sandbox ends as a `practice-result` (it is a practice-kind session) and runs one synthetic level, which is exactly the case for which `setLevelSelect`'s `total > 1` already hides the Main Menu's own entry into the same pane -- so this offers a button whose click leaves the session and lands on a menu with nothing behind it. It also silently drops the live half: `setLevelSelect` is pushed while the panel is up, and with the term gone there is nothing for that push to change.",
+    "why": "Drops the half of the gate that is about the SESSION rather than the ending. The sandbox ends as a `practice-result` (it is a practice-kind session) and runs one synthetic level, which is exactly the case for which `setLevelSelect`'s `unlocked > 1` already hides the Main Menu's own entry into the same pane (it was `total > 1` until issue #555) -- so this offers a button whose click leaves the session and lands on a menu with nothing behind it. It also silently drops the live half: `setLevelSelect` is pushed while the panel is up, and with the term gone there is nothing for that push to change.",
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) withholds Choose Level from a session with no level to choose"
     ]
@@ -4882,6 +4882,66 @@
     "killedBy": [
       "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped",
       "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once"
+    ]
+  },
+  {
+    "id": "level-grid-draws-the-whole-campaign",
+    "file": "src/game/hud.ts",
+    "find": "      for (let i = 0; i < unlocked; i++) {",
+    "replace": "      for (let i = 0; i < total; i++) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "The exact behaviour issue #555 removed, restored as a one-word edit -- which is how easily it comes back. A grid sized by `total` tells a player who has cleared nothing how long the campaign is, and the ruling was that it should not. Worse than the version that shipped before #555: that one disabled the entries past the unlock line, and this loop no longer has that branch, so every level in the campaign is drawn ENABLED and clickable. Two suites catch it and they catch different halves -- surfaces reads the button labels (`['1']` becomes `['1', '2', '3']`), navigation walks the panel and finds nodes the roving tabindex did not expect.",
+    "killedBy": [
+      "hud: level select panel renders one button per UNLOCKED level, and none at all for the rest (issue #555)",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert"
+    ]
+  },
+  {
+    "id": "level-grid-draws-one-level-past-the-unlock-line",
+    "file": "src/game/hud.ts",
+    "find": "      for (let i = 0; i < unlocked; i++) {",
+    "replace": "      for (let i = 0; i <= unlocked; i++) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "The off-by-one on a freshly written loop bound, and the reason the grid test asserts an exact label list rather than `length <= total`. It leaks less than the entry above -- one level, not the campaign -- but it leaks something worse: the extra button is enabled, so it starts a level the player has not unlocked, and on the last one it indexes past the level system entirely. Distinct from `level-grid-draws-the-whole-campaign` because the fix is different (a bound, not a variable) and because a test that merely counted 'fewer than total' would kill that one and survive this.",
+    "killedBy": [
+      "hud: level select panel renders one button per UNLOCKED level, and none at all for the rest (issue #555)",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert"
+    ]
+  },
+  {
+    "id": "levels-offered-on-campaign-length-not-progress",
+    "file": "src/game/hud.ts",
+    "find": "      levelChoice = unlocked > 1;",
+    "replace": "      levelChoice = total > 1;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The other half of issue #555, and the half that survives the grid being fixed: with the population correct but the OFFER still keyed on campaign length, a fresh five-level campaign shows a Levels button leading to a pane holding one button. That is both a choice of one -- which the sandbox case has always refused on identical reasoning -- and a standing hint that there is more, on the first screen a new player sees. Pinned separately from the grid entries because the two are independent: either can be reverted without the other.",
+    "killedBy": [
+      "hud: level select panel offers the Levels button on what is UNLOCKED, not on what the campaign holds"
+    ]
+  },
+  {
+    "id": "levels-note-never-says-the-grid-has-stopped-growing",
+    "file": "src/game/hud.ts",
+    "find": "        unlocked >= total ? 'Every level is unlocked.' : 'Clear a level to unlock the next.';",
+    "replace": "        'Clear a level to unlock the next.';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Removes the completion signal, which is the thing issue #555 had to REPLACE rather than merely delete. A grid of locked buttons told a player implicitly that the campaign had an end and where it was; a grid that only grows says nothing, so a player who has unlocked everything cannot tell that from a player whose next level has not arrived -- and this line promising a next one is then a lie for the rest of the campaign. Survives every population assertion in the file, because it changes no button.",
+    "killedBy": [
+      "hud: level select panel says whether the grid will keep growing, without saying how far it has to go"
     ]
   }
 ]

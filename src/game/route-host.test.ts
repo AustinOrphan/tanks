@@ -1011,16 +1011,19 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     // The mission number is resolved HERE and not in the HUD, because the run store holds
     // a level ID and only the level system can order it -- `run.ts` deliberately never
     // imports campaign data, and the HUD names no simulation module at all. So the page
-    // is the only layer that can turn a stored id into "Mission 2 of N".
+    // is the only layer that can turn a stored id into "Mission 2".
+    //
+    // `toEqual` on the whole object, not a property check: the campaign LENGTH used to
+    // travel here as `total` and issue #555 removed it, so this assertion is also what
+    // fails if a later change starts sending the HUD a number it has no business
+    // rendering. An extra key breaks toEqual; a `toMatchObject` would let it back in.
     const f = fixture({
       seed: (stores) => {
         stores.run.startNewRun(CAMPAIGN_LEVELS[1].id);
         stores.run.setLivesRemaining(2);
       },
     });
-    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([
-      { mission: 2, total: CAMPAIGN_LEVELS.length, lives: 2 },
-    ]);
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([{ mission: 2, lives: 2 }]);
   });
 
   it('reports a mission it cannot place as null rather than inventing a position', () => {
@@ -1033,9 +1036,7 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
         stores.run.startNewRun('a-level-this-campaign-does-not-contain');
       },
     });
-    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([
-      { mission: null, total: CAMPAIGN_LEVELS.length, lives: 3 },
-    ]);
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([{ mission: null, lives: 3 }]);
     // ...and Continue is still offered: the run exists, only its POSITION is unresolvable.
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([true]);
   });

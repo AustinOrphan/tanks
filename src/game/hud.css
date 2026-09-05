@@ -300,9 +300,10 @@
  * query is the browser's own answer to "is there a hovering primary pointer".
  *
  * `:not(:disabled)` on every selector. Disabled here is the real HTML attribute, not a
- * class -- `hud.ts` sets `btn.disabled = true` for locked levels and for the unavailable
- * controller sources -- so this excludes exactly the controls that cannot be activated,
- * and `.hud-level-btn--locked` keeps its 0.35 opacity with nothing layered over it.
+ * class -- `hud.ts` sets `btn.disabled = true` for the unavailable controller sources and
+ * the unofferable versus modes -- so this excludes exactly the controls that cannot be
+ * activated, leaving them with nothing layered over their disabled treatment. Level
+ * buttons were a third case until issue #555; the grid now draws only unlocked ones.
  *
  * THREE STATES, THREE CHANNELS, so none of them is confusable with another:
  *   - hover           -> the control's own FILL brightens (or, for a swatch, its border
@@ -1804,24 +1805,16 @@
   margin-bottom: 4px;
 }
 
-/* Without this the reason line shows under a fully unlocked picker, explaining a state
- * the player is no longer in. */
-.hud-levels-note--hidden {
-  display: none;
-}
+/* The note has no hidden rule and no locked-button rule sits beside it: issue #555 stopped
+ * the grid drawing levels the player has not unlocked, so there is no dimmed control to
+ * style and no state the line can explain that the player is not in. It now says whether
+ * the grid will keep growing, which is true in both states, so it is always shown. */
 
 .hud-level-btn {
   width: var(--hud-control-min);
   height: var(--hud-control-min);
   font-size: 18px;
   font-weight: var(--hud-weight-strong);
-}
-
-/* Locked levels read as locked, and the disabled attribute makes them unclickable --
- * the style is the SIGNAL, the attribute is the mechanism. */
-.hud-level-btn--locked {
-  cursor: default;
-  opacity: 0.35;
 }
 
 .hud-settings-volume {

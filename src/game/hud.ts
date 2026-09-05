@@ -435,9 +435,13 @@ export interface RoundPhaseInfo {
 export interface CampaignRunSummary {
   /** 1-based position in this build's campaign, or `null` when it cannot be resolved. */
   readonly mission: number | null;
-  /** How many missions the campaign has. Only rendered beside a resolved `mission`. */
-  readonly total: number;
-  /** Lives left in the run, verbatim from the run store. */
+  /**
+   * Lives left in the run, verbatim from the run store.
+   *
+   * There was a `total` here, and issue #555 removed it rather than leaving it unread:
+   * the summary no longer says "of 8", and a campaign length still arriving at the HUD
+   * is a standing invitation to put it back on screen.
+   */
   readonly lives: number;
 }
 
@@ -496,7 +500,7 @@ export interface Hud {
   setContinueAvailable(available: boolean): void;
   /**
    * WHERE THE ACTIVE RUN STANDS, for the Main Menu's one-line confidence summary and the
-   * replace-run confirmation's copy (issue #226): "Mission 3 of 8 -- 2 lives left".
+   * replace-run confirmation's copy (issue #226): "Mission 3 -- 2 lives left".
    *
    * A SECOND signal beside `setContinueAvailable`, not a replacement for it, and the
    * split is the same one #153 drew between "is there a run" and what the run contains.
@@ -508,10 +512,10 @@ export interface Hud {
    * they have no reason to know, or make the page's paint the only one -- losing the
    * mid-session availability updates that already work.
    *
-   * `mission` is 1-BASED and `total` is the campaign length, both resolved by the caller
-   * against the level system; a run whose stored level id is not in this build's campaign
-   * reports `mission: null` and the line degrades to the lives half rather than inventing
-   * a position. The HUD owns the wording; the caller owns the numbers.
+   * `mission` is 1-BASED, resolved by the caller against the level system; a run whose
+   * stored level id is not in this build's campaign reports `mission: null` and the line
+   * degrades to the lives half rather than inventing a position. The HUD owns the
+   * wording; the caller owns the numbers.
    */
   setCampaignRun(run: CampaignRunSummary | null): void;
   /**
@@ -1368,11 +1372,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     <div class="hud-levelselect hud-levelselect--hidden" tabindex="-1" aria-labelledby="hud-levelselect-title">
       <h1 id="hud-levelselect-title">Levels</h1>
       <div class="hud-levels"></div>
-      <!-- A locked level is dimmed and unclickable, which says THAT it is unavailable
-           and not why (#321). This line is the why, and every locked button points at
-           it with aria-describedby; it is hidden outright once nothing is locked, so it
-           never explains a state the player is not in. -->
-      <p class="ui-hint hud-levels-note hud-levels-note--hidden" id="hud-levels-note">Clear a level to unlock the next.</p>
+      <!-- The grid stops at the highest unlocked level (#555), so nothing here is dimmed
+           and there is no locked button to explain -- what this line says instead is
+           whether the grid is going to keep growing. Always shown; setLevelSelect owns
+           the text, and the wording below is the pre-unlock one. -->
+      <p class="ui-hint hud-levels-note">Clear a level to unlock the next.</p>
       <button class="ui-btn ui-btn--slab hud-levelselect-back" type="button">Back</button>
     </div>
     <!-- The controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
@@ -4022,15 +4026,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * "Mission 3 of 8 -- 2 lives left", or just the lives half when the run's stored level
-   * is not a mission this build knows (see `setCampaignRun`). Singular "1 life left" is
-   * not a flourish: the number is at its most alarming exactly when it is one, and
-   * "1 lives" is the reading a player is least likely to trust.
+   * "Mission 3 -- 2 lives left", or just the lives half when the run's stored level is
+   * not a mission this build knows (see `setCampaignRun`). Singular "1 life left" is not
+   * a flourish: the number is at its most alarming exactly when it is one, and "1 lives"
+   * is the reading a player is least likely to trust.
+   *
+   * "of 8" is gone (issue #555). This line and the confirmation that reuses it were the
+   * last two places the campaign's length was written out, and they wrote it on the Main
+   * Menu -- before the player had cleared anything, which is the exact moment the ruling
+   * is about. The ordinal survives because a player's position in their own run is not
+   * the thing being concealed.
    */
   function runSummaryText(run: CampaignRunSummary): string {
     const lives = `${run.lives} ${run.lives === 1 ? 'life' : 'lives'} left`;
     if (run.mission === null) return lives;
-    return `Mission ${run.mission} of ${run.total} -- ${lives}`;
+    return `Mission ${run.mission} -- ${lives}`;
   }
 
   /**
@@ -5296,30 +5306,35 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       applyStatus();
     },
     setLevelSelect(unlocked: number, total: number): void {
-      levelChoice = total > 1;
-      // The reason line follows the locked buttons exactly: shown while any level is
-      // still locked, gone the moment none is. Toggled here rather than in setState,
-      // because `unlocked` is only known at this call.
-      levelsNoteEl.classList.toggle('hud-levels-note--hidden', unlocked >= total);
+      // `unlocked`, not `total` (issue #555). The grid is the only surface left that says
+      // anything about campaign length, and all it says is "this much so far" -- so the
+      // button that opens it appears when there is genuinely a choice to make, which on a
+      // fresh campaign there is not. `total > 1` would have offered a pane holding one
+      // button, which is a choice of one and also the exact hint this change removes.
+      levelChoice = unlocked > 1;
+      // The note carries the SHAPE of the campaign now that no locked button does, and it
+      // carries it without a number: whether the grid is still going to grow. Always
+      // shown, never toggled -- "every level is unlocked" is the completion signal the
+      // locked buttons used to give implicitly, and a grid that has merely stopped
+      // growing gives none. Written here rather than in setState because `unlocked` and
+      // `total` are only known at this call.
+      //
+      // "unlocked", not "cleared": `unlocked` is `highestCleared + 1`, so it reaches
+      // `total` one level BEFORE the campaign is finished. "Campaign complete" here would
+      // be a claim the player disproves by pressing the last button.
+      levelsNoteEl.textContent =
+        unlocked >= total ? 'Every level is unlocked.' : 'Clear a level to unlock the next.';
       // REPLACE, never append: this re-renders after every unlock.
       levelsRow.textContent = '';
-      for (let i = 0; i < total; i++) {
+      for (let i = 0; i < unlocked; i++) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ui-btn hud-level-btn';
         btn.textContent = String(i + 1);
-        if (i + 1 > unlocked) {
-          // Disabled, not merely grey: a locked level must be unclickable, and a
-          // disabled button never fires click handlers.
-          btn.disabled = true;
-          btn.classList.add('hud-level-btn--locked');
-          describeDisabledReason(btn, 'hud-levels-note');
-        } else {
-          btn.addEventListener('click', (e) => {
-            for (const cb of levelSelectCbs) cb(i);
-            if ((e as MouseEvent).detail > 0) btn.blur();
-          });
-        }
+        btn.addEventListener('click', (e) => {
+          for (const cb of levelSelectCbs) cb(i);
+          if ((e as MouseEvent).detail > 0) btn.blur();
+        });
         levelsRow.appendChild(btn);
       }
       // setLevelSelect may re-render while ANOTHER panel is up (unlocks are recorded at
