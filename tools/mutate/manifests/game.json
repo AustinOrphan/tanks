@@ -2755,15 +2755,16 @@
   {
     "id": "pane-covers-the-open-pane",
     "file": "src/game/hud.ts",
-    "find": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;\n      layers.pop();\n      LAYERS[top.id].close();\n      origin = top.origin;",
-    "replace": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;\n      layers.pop();\n      origin = top.origin;",
+    "find": "      LAYERS[top.id].release?.();",
+    "replace": "      void LAYERS;",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
     "expect": "killed",
-    "why": "A pane opened while a different pane is up covers it without closing it: the covered Customize pane keeps its live WebGL preview and the covered Controllers pane its window gamepad listeners, with no close callback ever firing for either, and the transition contract's second-destination rule is met only by accident of paint order. hud.navigation.test.ts (244): \"a pane opened while a different pane is up replaces it through that pane's own close\", which counts `onCustomizeClose`. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+    "why": "A pane opened while a different pane is up keeps everything the outgoing pane owned: the Customize pane's live WebGL preview and the Controllers pane's window gamepad listeners, with no close callback ever firing for either. RE-ANCHORED by issue #558, which replaced this line's `close()` with a `release?.()` -- and NARROWED its meaning in the process, which is worth stating rather than letting the id drift. The old line also did the VISUAL half, so deleting it once left both panes on screen at once; since #558 the incoming `open()` sources its transition from `openSurface()` and always fades the outgoing pane out, so covering is no longer reachable from here at all. What survives is exactly the leak, which is what this entry is now about.",
     "killedBy": [
-      "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once"
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once",
+      "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped"
     ]
   },
   {
@@ -4867,20 +4868,6 @@
     ]
   },
   {
-    "id": "replacing-a-pane-releases-nothing",
-    "file": "src/game/hud.ts",
-    "find": "      LAYERS[top.id].release?.();",
-    "replace": "      void LAYERS;",
-    "expect": "killed",
-    "tests": [
-      "src/game/hud.surfaces.test.ts"
-    ],
-    "why": "The OBVIOUS WRONG FIX, which issue #558's scope names explicitly: dropping the outgoing layer's teardown removes the flash and leaks everything the surface does not cover. `customize` hands a live `TankPreview` -- a WebGL context and its listeners -- to its close subscribers, and a replace that never tells them keeps it alive for the rest of the page's life with nothing thrown and no visual difference. Pinned separately from the entry above because the two fail in opposite directions and a fix for either one alone still ships the other.",
-    "killedBy": [
-      "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped"
-    ]
-  },
-  {
     "id": "a-replaced-customize-pane-keeps-its-webgl-context",
     "file": "src/game/hud.ts",
     "find": "        if (isSurfaceOpen(CUSTOMIZE_SURFACE)) for (const cb of customizeCloseCbs) cb();",
@@ -4889,9 +4876,10 @@
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "The same leak as the entry above, reached one layer down: the replace path still calls `release()` and the row still exists, but the row does nothing. Worth its own entry because the two are fixed in different places -- a correct replace branch over an empty release row is exactly as leaky as no release at all, and reads more correct.",
+    "why": "The same leak as the entry above, reached one layer down: the replace path still calls `release()` and the row still exists, but the row does nothing. Worth its own entry because the two are fixed in different places -- a correct replace branch over an empty release row is exactly as leaky as no release at all, and reads more correct. Killed by the pre-existing navigation case as well as the transition one: both drive Customize then `showVersusSetup`, and both read the close count, so an empty row shows up as zero in either.",
     "killedBy": [
-      "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped"
+      "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped",
+      "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once"
     ]
   }
 ]

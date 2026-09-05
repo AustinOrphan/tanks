@@ -1958,11 +1958,17 @@ describe('createHud application transition contract', () => {
   });
 
   it('still RELEASES the replaced pane, which is why the close was not simply dropped', () => {
-    // The trap in the obvious fix, pinned. Deleting `close()` from the replace branch
-    // removes the flash and also skips every pane's non-visual teardown: `customize`
+    // The trap in the obvious fix. Deleting the outgoing layer's teardown from the replace
+    // branch removes the flash and also skips every pane's non-visual release: `customize`
     // hands out a live `TankPreview` -- a WebGL context and its listeners -- to
-    // `onCustomizeClose` subscribers, and a replace that never told them would leak it
-    // for the rest of the page's life, silently.
+    // `onCustomizeClose` subscribers, and a replace that never told them would leak it for
+    // the rest of the page's life, silently.
+    //
+    // NOT the only cover for that: hud.navigation.test.ts's "a pane opened while a
+    // different pane is up..." already counts the same callback over the same gesture, and
+    // is the older of the two. What this one adds is the SURFACE half beside it -- that
+    // the same replace also never paints the menu -- so the two halves of issue #558's fix
+    // are asserted against one gesture rather than inferred from two.
     //
     // Reached through the public API rather than a synthetic call: `showVersusSetup` is
     // what `route-ui.ts` uses for the post-match reopen, and firing it over an open
