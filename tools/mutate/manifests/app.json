@@ -50,14 +50,14 @@
   {
     "id": "boot-start-failure-escapes-the-page",
     "file": "src/boot.ts",
-    "find": "      requestStart: (intent) => {\n        try {\n          sessions?.start(intent);\n        } catch (err) {\n          showFailure(err);\n        }\n      },",
+    "find": "      requestStart: (intent) => {\n        try {\n          sessions?.start(intent);\n        } catch (err) {\n          // 'match' rather than the default: the game is UP. Reporting \"Tanks! could not\n          // start\" over a Main Menu the player can see working would read as the message\n          // being broken rather than the match. Issue #325's own scope names this case\n          // separately, and `boot.ts` recorded it as a hole when #428 created it.\n          showFailure(err, 'match');\n        }\n      },\n",
     "replace": "      requestStart: (intent) => sessions?.start(intent),",
     "tests": [
       "src/boot.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 8,
-    "why": "Drops the try/catch around the start request, so a `WebGLRenderer` that gets its context and then fails to initialise throws out of a HUD click handler with nobody listening. The player sits on a menu whose buttons silently do nothing -- no error page, no report, no clue. This guard is NEW WORK rather than a copy of `boot()`'s own: while the eager start existed, that same failure threw inside `boot()`'s try. Issue #428 turns a documented edge case ('a REPLACEMENT that throws does not arrive here') into the ordinary path. 8 of 55 in the scoped run: the five no-WebGL cases that now drive the failure through a start request, plus the capability suite's 'still catches a session that fails for a reason the probe cannot see' and the #428 suite's own 'a failed start reaches the same message page'."
+    "why": "Drops the try/catch around the start request, so a `WebGLRenderer` that gets its context and then fails to initialise throws out of a HUD click handler with nobody listening. The player sits on a menu whose buttons silently do nothing -- no error page, no report, no clue. This guard is NEW WORK rather than a copy of `boot()`'s own: while the eager start existed, that same failure threw inside `boot()`'s try. Issue #428 turns a documented edge case ('a REPLACEMENT that throws does not arrive here') into the ordinary path. 8 of 55 in the scoped run: the five no-WebGL cases that now drive the failure through a start request, plus the capability suite's 'still catches a session that fails for a reason the probe cannot see' and the #428 suite's own 'a failed start reaches the same message page'. The find string grew in issue #325, which gave the catch a `'match'` failure point so the screen it raises says the MATCH could not start rather than that the game could not: the guard being mutated is the same one, and the argument is part of it."
   },
   {
     "id": "dependency-direction-render-may-import-game",
