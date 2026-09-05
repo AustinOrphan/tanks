@@ -8,6 +8,8 @@ import { versusMapChoices, type VersusConfig } from './versus-config';
 import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
+import type { TypedOutcome } from './app-state';
+import { ZERO_STATS } from './stats';
 
 
 let hud: Hud | null = null;
@@ -1090,6 +1092,67 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     );
     pressActive('ArrowDown');
     expect(document.activeElement).toBe(action);
+  });
+
+  it('reaches Retry, then Choose Level, then Main Menu on a PRACTICE end screen', () => {
+    /*
+     * The keyboard and D-pad half of issue #323's third action. `Choose Level` is a
+     * button on a panel that had two, so the roving order is the thing that can silently
+     * be wrong about it in either direction: skipping it strands a pad-only player on an
+     * action they cannot reach, and reaching it while it is hidden is the ancestor-walk
+     * bug the test below this one exists for, in its simplest form -- this button carries
+     * its own `--hidden` modifier rather than sitting inside a hidden wrapper, so it is
+     * `focusableControls`' OWN display check that has to exclude it.
+     */
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5); // there is a level choice to make, so the button is offered
+    h.setState('main-menu');
+    h.setState('playing');
+    h.setState('outcome-lose');
+    const practiceLost: TypedOutcome = { kind: 'practice-result', cleared: false };
+    h.setOutcome({
+      tally: 'solo', attempt: ZERO_STATS, action: 'campaign-levels', typedOutcome: practiceLost,
+    });
+    expect((root.querySelector('.hud-action') as HTMLElement).textContent).toBe('Retry');
+
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the first ArrowDown did not reach Retry').toBe(
+      root.querySelector('.hud-action'),
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the second ArrowDown did not reach Choose Level').toBe(
+      root.querySelector('.hud-choose-level'),
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the third ArrowDown did not reach Main Menu').toBe(
+      root.querySelector('.hud-quit'),
+    );
+  });
+
+  it('never walks focus onto Choose Level on a screen that does not offer it', () => {
+    // The negative control for the traversal above, and the bug class the pause panel
+    // has been bitten by before: the button is in the DOM on every screen and is hidden
+    // by a class, so a roving order that walked the markup rather than the rendering
+    // would hand a campaign game-over an invisible stop between Start New Campaign and
+    // Main Menu. Walked further than there are visible controls so the order has to WRAP,
+    // which is where an unexcluded control shows up first.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5);
+    h.setState('main-menu');
+    h.setState('playing');
+    h.setState('outcome-lose');
+    const campaignOver: TypedOutcome = { kind: 'campaign-over' };
+    h.setOutcome({
+      tally: 'solo', attempt: ZERO_STATS, action: 'campaign-levels', typedOutcome: campaignOver,
+    });
+    const choose = root.querySelector('.hud-choose-level') as HTMLElement;
+    expect(choose.isConnected, 'test invalid: the button is not in the DOM to be skipped').toBe(true);
+    const reachable = [root.querySelector('.hud-action'), root.querySelector('.hud-quit')];
+    for (let i = 0; i < 6; i++) {
+      pressActive('ArrowDown');
+      expect(document.activeElement, `press ${i + 1} landed on a hidden Choose Level`).not.toBe(choose);
+      expect(reachable, `press ${i + 1} left the two-control order`).toContain(document.activeElement);
+    }
   });
 
   it('never walks focus into a Main Menu region while its wrapper is display:none', () => {

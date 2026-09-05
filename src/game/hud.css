@@ -1107,12 +1107,22 @@
 .hud-records-open,
 .hud-customize-open,
 .hud-levelselect-open,
+.hud-choose-level,
 .hud-controllers-open,
 .hud-settings-open,
 .hud-versus-open,
 .hud-campaign-open {
   margin-top: 2px;
   font-size: 15px;
+}
+
+/* The practice end screen's Choose Level (issue #323) is hidden on every other screen,
+ * and on a session with no level choice to offer -- see hud.ts's applyChooseLevel for
+ * both halves of that gate. Without this rule it stands on the pause panel, on the
+ * campaign end screens and on the Main Menu, where its click would leave a session that
+ * is not finished or none at all. */
+.hud-choose-level--hidden {
+  display: none;
 }
 
 /* Quitting is the pause panel's secondary path -- pushed further off the action button. */

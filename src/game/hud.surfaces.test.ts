@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type GameplayStatus, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { createHud, type GameplayOutcome, type GameplayStatus, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
+import { TYPED_OUTCOME_KINDS, type TypedOutcome } from './app-state';
+import { ZERO_STATS } from './stats';
 
 
 let hud: Hud | null = null;
@@ -1359,6 +1361,270 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     h.setState('paused');
     expect(hidden(root)).toBe(false);
     expect(quitBtn(root).textContent).toBe('Quit to Title');
+  });
+});
+
+/*
+ * ---- EVERY ENDING GETS ITS OWN SCREEN (issue #323) --------------------------------
+ *
+ * The issue's finding, restated as a fixture: before this, four endings shared two
+ * screens. A campaign that ran out of lives and a practice level that ran out of lives
+ * both read `Game Over` / `Out of lives.` over a button saying `Retry`; a campaign
+ * completed to its last level and a practice level beaten both read `You Win!` /
+ * `Arena cleared.` over `Play Again`. The panel had no way to tell them apart because
+ * nothing ever told it -- it was handed a two-valued win/lose surface and nothing else.
+ *
+ * These drive the panel exactly the way production does: `setState` opens the surface,
+ * then `setOutcome` lands the session's own `TypedOutcome` on it. The ordering is not
+ * incidental and one case below asserts it directly.
+ */
+describe('hud: every ending gets its own screen (issue #323)', () => {
+  const title = (root: HTMLElement): string =>
+    (root.querySelector('.hud-title') as HTMLElement).textContent ?? '';
+  const subtitle = (root: HTMLElement): string =>
+    (root.querySelector('.hud-subtitle') as HTMLElement).textContent ?? '';
+  const action = (root: HTMLElement): string =>
+    (root.querySelector('.hud-action') as HTMLElement).textContent ?? '';
+  const chooseLevel = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-choose-level') as HTMLButtonElement;
+  const chooseLevelShown = (root: HTMLElement): boolean =>
+    !chooseLevel(root).classList.contains('hud-choose-level--hidden');
+
+  /** A solo campaign-shaped outcome push carrying the session's own ending. */
+  const push = (typedOutcome: TypedOutcome): GameplayOutcome => ({
+    tally: 'solo',
+    attempt: ZERO_STATS,
+    action: 'campaign-levels',
+    typedOutcome,
+  });
+
+  /**
+   * The surface the page would be on for an ending, from the SAME projection production
+   * uses (`legacyOutcomePresentation`, restated here as the fixture's own two lines so a
+   * change to that function shows up as a failure rather than being followed silently).
+   */
+  const surfaceFor = (outcome: TypedOutcome): 'outcome-win' | 'outcome-lose' => {
+    if (outcome.kind === 'campaign-over') return 'outcome-lose';
+    if (outcome.kind === 'practice-result' && !outcome.cleared) return 'outcome-lose';
+    return 'outcome-win';
+  };
+
+  /** Drive the panel to an ending the way production does: surface first, outcome after. */
+  const drive = (h: Hud, outcome: TypedOutcome): void => {
+    h.setState(surfaceFor(outcome));
+    h.setOutcome(push(outcome));
+  };
+
+  const MISSION_CLEAR: TypedOutcome = { kind: 'mission-clear' };
+  const CAMPAIGN_OVER: TypedOutcome = { kind: 'campaign-over' };
+  const CAMPAIGN_COMPLETE: TypedOutcome = { kind: 'campaign-complete' };
+  const PRACTICE_WON: TypedOutcome = { kind: 'practice-result', cleared: true };
+  const PRACTICE_LOST: TypedOutcome = { kind: 'practice-result', cleared: false };
+
+  it('gives each campaign and practice ending its own copy and its own action', () => {
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5); // a real level choice exists, so Choose Level is not withheld
+    h.setStatus(atLevel(3, 5));
+
+    const screen = (outcome: TypedOutcome): string[] => {
+      drive(h, outcome);
+      return [title(root), subtitle(root), action(root), String(chooseLevelShown(root))];
+    };
+
+    expect(screen(MISSION_CLEAR)).toEqual([
+      'Level 3 cleared!',
+      'Your run carries on, with the lives you have left.',
+      'Next Level',
+      'false',
+    ]);
+    expect(screen(CAMPAIGN_OVER)).toEqual([
+      'Game Over',
+      'Out of lives. This run is over.',
+      'Start New Campaign',
+      'false',
+    ]);
+    expect(screen(CAMPAIGN_COMPLETE)).toEqual([
+      'Campaign Complete!',
+      'Every level cleared. This run is finished.',
+      'Start New Campaign',
+      'false',
+    ]);
+    expect(screen(PRACTICE_WON)).toEqual([
+      'Practice Cleared',
+      'Practice only. Your campaign run is untouched.',
+      'Retry',
+      'true',
+    ]);
+    expect(screen(PRACTICE_LOST)).toEqual([
+      'Practice Failed',
+      'Practice only. Your campaign run is untouched.',
+      'Retry',
+      'true',
+    ]);
+  });
+
+  it('THE GAP (issue #323): no two endings render as the same screen any more', () => {
+    // The shipped state, measured rather than argued: a campaign game-over and a failed
+    // practice level were byte-identical panels (`Game Over` / `Out of lives.` / `Retry`),
+    // and a campaign completion and a cleared practice level were the other one
+    // (`You Win!` / `Arena cleared.` / `Play Again`). That is the whole of the issue's
+    // complaint about these screens.
+    //
+    // This is the sweep the per-ending case above cannot be: it fails on ANY collapse,
+    // including one introduced by a later edit that makes two entries agree, without
+    // naming which strings are involved.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5);
+    h.setStatus(atLevel(3, 5));
+
+    const screens = [MISSION_CLEAR, CAMPAIGN_OVER, CAMPAIGN_COMPLETE, PRACTICE_WON, PRACTICE_LOST]
+      .map((outcome) => {
+        drive(h, outcome);
+        return `${title(root)} | ${subtitle(root)} | ${action(root)}`;
+      });
+    expect(new Set(screens).size, screens.join('\n')).toBe(screens.length);
+  });
+
+  it('leaves the VERSUS result screen exactly as it shipped -- issue #279 owns it', () => {
+    // The negative control for the table: a versus ending has no entry in it and must
+    // still render the legacy win/lose copy, including the `Versus Setup` label that
+    // names where its click lands. A transcription of that screen into OUTCOME_PANEL
+    // would pass the per-ending case above and fail here the moment it drifted.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5);
+    const versus = (result: TypedOutcome): GameplayOutcome => ({
+      tally: 'ffa', attempt: ZERO_STATS, action: 'versus-setup',
+      kills: [1, 0], deaths: [0, 1], typedOutcome: result,
+    });
+
+    h.setState('outcome-win');
+    h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'winner-slot', slot: 0 } }));
+    expect(title(root)).toBe('You Win!');
+    expect(subtitle(root)).toBe('Arena cleared.');
+    expect(action(root)).toBe('Versus Setup');
+    expect(chooseLevelShown(root), 'a versus match never chose a level to be on').toBe(false);
+
+    // A draw presents as a defeat, which is the shipped behaviour for the simultaneous
+    // -elimination `lose` event -- see legacyOutcomePresentation's own doc comment.
+    h.setState('outcome-lose');
+    h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'draw' } }));
+    expect(title(root)).toBe('Game Over');
+    expect(subtitle(root)).toBe('Out of lives.');
+    expect(action(root)).toBe('Versus Setup');
+    expect(chooseLevelShown(root)).toBe(false);
+  });
+
+  it('keeps the pre-#323 wording when no ending has been pushed at all', () => {
+    // Every css and gallery fixture is this HUD, and so is the instant between the state
+    // machine flipping and the session's own push landing. Both must read as the panel
+    // always did rather than as an empty table lookup.
+    const { hud: h, root } = mount();
+    h.setStatus(atLevel(5, 5));
+    h.setState('outcome-win');
+    expect(title(root)).toBe('You Win!');
+    expect(action(root)).toBe('Play Again');
+    h.setState('outcome-lose');
+    expect(title(root)).toBe('Game Over');
+    expect(action(root)).toBe('Retry');
+    expect(chooseLevelShown(root)).toBe(false);
+  });
+
+  it('replaces the opening copy when the ending lands AFTER the panel is already up', () => {
+    // PRODUCTION'S OWN ORDER, asserted as an order. `state.ts` flips to the outcome phase
+    // inside `stateMachine.onEvents`, and `loop.ts` pushes the outcome from
+    // `onFrameEvents`, which `driver.ts` runs immediately afterwards -- so `setState`
+    // always opens the panel before the kind that explains it arrives. A `setOutcome`
+    // that repainted only the tally lines would leave a campaign game-over reading
+    // `Retry` under `Out of lives.` for the rest of the screen's life.
+    const { hud: h, root } = mount();
+    h.setStatus(atLevel(4, 5));
+    h.setState('outcome-lose');
+    expect(title(root), 'the opening frame is the legacy copy').toBe('Game Over');
+    expect(action(root)).toBe('Retry');
+
+    h.setOutcome(push(CAMPAIGN_OVER));
+    expect(subtitle(root)).toBe('Out of lives. This run is over.');
+    expect(action(root)).toBe('Start New Campaign');
+  });
+
+  it('offers Choose Level on the practice endings and nowhere else', () => {
+    // The population is every outcome kind, from the model's own list, so a sixth kind
+    // added later arrives here unanswered rather than defaulting quietly into one arm.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5);
+    const shownFor = new Map<string, boolean>();
+    for (const kind of TYPED_OUTCOME_KINDS) {
+      const outcomes: TypedOutcome[] =
+        kind === 'practice-result'
+          ? [PRACTICE_WON, PRACTICE_LOST]
+          : kind === 'vs-match-end'
+            ? [{ kind: 'vs-match-end', result: { kind: 'winner-slot', slot: 0 } }]
+            : [{ kind } as TypedOutcome];
+      for (const outcome of outcomes) {
+        drive(h, outcome);
+        shownFor.set(`${kind}`, (shownFor.get(`${kind}`) ?? false) || chooseLevelShown(root));
+      }
+    }
+    expect([...shownFor.entries()].filter(([, shown]) => shown).map(([k]) => k))
+      .toEqual(['practice-result']);
+
+    // ...and every surface that is not an end screen keeps it off, including the pause
+    // panel a player reaches from the level they went on to play.
+    drive(h, PRACTICE_LOST);
+    expect(chooseLevelShown(root)).toBe(true);
+    for (const s of ['paused', 'main-menu', 'playing', 'launch'] as const) {
+      h.setState(s);
+      expect(chooseLevelShown(root), s).toBe(false);
+    }
+  });
+
+  it('withholds Choose Level from a session with no level to choose', () => {
+    // The second half of the gate, and not redundant with the first: the SANDBOX ends as
+    // a `practice-result` (it is a practice-kind session), and its one synthetic level is
+    // exactly the case for which the Main Menu already hides the Practice entry into the
+    // same pane. Offering the button here would land the player on a menu with nothing
+    // behind it.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(1, 1); // one level: no choice to make
+    drive(h, PRACTICE_LOST);
+    expect(chooseLevelShown(root)).toBe(false);
+
+    // NEGATIVE CONTROL, and it also pins the live half: an unlock recorded at the win
+    // event repaints the grid while this panel is already up, and the button must follow
+    // that push rather than wait for the next surface change.
+    h.setLevelSelect(2, 4);
+    expect(chooseLevelShown(root)).toBe(true);
+  });
+
+  it('leaves the finished session and opens the Levels pane, in that order', () => {
+    // Choose Level is Main Menu followed by Practice, through the two paths those
+    // controls already use -- `loop.ts` acts on a level pick only from the Main Menu, so
+    // a pane opened over the end screen would look right and do nothing on the click that
+    // matters. The order is the assertion: the quit must have been dispatched before the
+    // pane is on screen.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5);
+    const paneHidden = (): boolean =>
+      (root.querySelector('.hud-levelselect') as HTMLElement).classList.contains(
+        'hud-levelselect--hidden',
+      );
+    // RECORDED, never asserted from inside the callback: jsdom swallows a throw from an
+    // event listener and reports it on the window instead of propagating it out of
+    // `click()`, so an `expect` in here passes the test whatever it finds. Measured --
+    // an earlier draft of this case asserted in the callback and stayed green with the
+    // two calls in `handleChooseLevel` swapped, which is the exact mutation it exists to
+    // kill.
+    let quits = 0;
+    let paneWasHiddenAtQuit: boolean | null = null;
+    h.onQuitToTitle(() => {
+      quits += 1;
+      paneWasHiddenAtQuit = paneHidden();
+    });
+    drive(h, PRACTICE_LOST);
+    chooseLevel(root).click();
+    expect(quits, 'Choose Level did not leave the session at all').toBe(1);
+    expect(paneWasHiddenAtQuit, 'the pane opened before the session was left').toBe(true);
+    expect(paneHidden(), 'the pane never opened').toBe(false);
   });
 });
 

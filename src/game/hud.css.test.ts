@@ -469,6 +469,9 @@ describe('hud.css is syntactically whole', () => {
       // the level select PANEL: without the hidden rules it covers everything from load,
       // and without the open button's hidden rule it shows outside the title screen
       '.hud-levelselect', '.hud-levelselect--hidden', '.hud-levelselect-open--hidden',
+      // ...and the outcome panel's own way into it (issue #323): without the hidden rule
+      // Choose Level stands on the pause panel, the campaign end screens and the menu.
+      '.hud-choose-level--hidden',
       // Continue/New Game split: without these hidden rules both show at once, or the
       // retired single action button shows alongside them at title
       '.hud-continue--hidden', '.hud-new-game--hidden', '.hud-action--hidden',
@@ -691,7 +694,11 @@ describe('hud.css is syntactically whole', () => {
     // (`defaultSlots(2)` is `[human, bot]`). They carry `.ui-btn`/`.ui-btn--sm`, so they
     // are inside this sweep rather than falling through to browser default styling --
     // which is exactly what the sweep is for.
-    // 119 today; it was 117 at issue #226, up 10 from 107, and that delta was the Main Menu and Settings
+    // 120 since issue #323 added the practice end screen's Choose Level
+    // (.hud-choose-level): one more static panel button, rendered unconditionally at
+    // construction and hidden by CSS class like .hud-campaign-open and the
+    // Continue/New Game pair above it, so this fixture counts it without ever showing it.
+    // It was 119 before that; it was 117 at issue #226, up 10 from 107, and that delta was the Main Menu and Settings
     // restructure rather than the kit growing. MEASURED at this fixture's state; the
     // arithmetic is recorded so the next change re-derives instead of adjusting a literal:
     //
@@ -701,7 +708,7 @@ describe('hud.css is syntactically whole', () => {
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
     //                         + 1 friendly-fire toggle (Teams-only)
     //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
-    //   everything else  66  = the panels above (54 before issue #226, +10, +1, +1)
+    //   everything else  67  = the panels above (54 before issue #226, +10, +1, +1, +1)
     //
     // The +10, itemised: OUT go the topbar Mute chip, the Main Menu's Stats button and
     // its Achievements button (-3). IN come Records, Settings and About & Legal on the
@@ -711,12 +718,13 @@ describe('hud.css is syntactically whole', () => {
     //
     // The first +1 is issue #289's motion toggle, the first control the Settings pane's
     // Accessibility section ever held; the second is issue #540's quality toggle, which
-    // put a second one beside it.
+    // put a second one beside it; the third is issue #323's Choose Level, the outcome
+    // panel's own second action.
     //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(119);
+    expect(buttons.length).toBe(120);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -736,7 +744,11 @@ describe('hud.css is syntactically whole', () => {
       document.body.appendChild(b);
       return getComputedStyle(b);
     };
-    const panel = ['hud-records-open', 'hud-settings-open', 'hud-customize-open', 'hud-levelselect-open'];
+    const panel = ['hud-records-open', 'hud-settings-open', 'hud-customize-open', 'hud-levelselect-open',
+      // Issue #323's Choose Level joined the same group rule; measured with its siblings
+      // so a tidy-up that drops it from the selector list shows up as a size change here
+      // rather than as an untested button that merely still looks themed.
+      'hud-choose-level'];
     const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back',
       'hud-levelselect-back', 'hud-settings-back', 'hud-about-back'];
 

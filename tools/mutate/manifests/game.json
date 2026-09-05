@@ -4065,22 +4065,25 @@
   {
     "id": "outcome-label-frozen-at-panel-open",
     "file": "src/game/hud.ts",
-    "find": "      actionBtn.textContent = outcomeActionLabel(shownState === 'outcome-win');",
-    "replace": "      // the button keeps whatever setState wrote when the panel opened",
+    "find": "      renderOutcomeCopy();\n    },\n    onResetStats",
+    "replace": "      // the panel keeps whatever setState wrote when it opened\n    },\n    onResetStats",
     "expect": "killed",
-    "why": "Half-applies the projection. The outcome panel opens on the winning frame's SimEvent and the session's push for that same frame arrives afterwards, so this leaves the tally painted from the newest push and the action button from whatever was known before it -- the ordering hazard `versusStocksVisible` documents at length one screen away, now in a setter feeding four elements instead of one. It survives every test that pushes its outcome before `setState`, which is the order a test writes by default and the opposite of the one production takes.",
+    "why": "Half-applies the projection. The outcome panel opens on the winning frame's SimEvent and the session's push for that same frame arrives afterwards, so this leaves the tally painted from the newest push and the panel's own words from whatever was known before it -- the ordering hazard `versusStocksVisible` documents at length one screen away, now in a setter feeding four elements instead of one. Since issue #323 it costs strictly more: the push is the ONLY thing that carries why the session ended, so a frozen panel does not merely keep a stale label, it keeps the pre-#323 shared verdict on every ending. It survives every test that pushes its outcome before `setState`, which is the order a test writes by default and the opposite of the one production takes.",
     "tests": [
-      "src/game/hud.navigation.test.ts"
+      "src/game/hud.navigation.test.ts",
+      "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
-      "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened"
+      "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened",
+      "hud: every ending gets its own screen (issue #323) replaces the opening copy when the ending lands AFTER the panel is already up",
+      "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
     ]
   },
   {
     "id": "outcome-projection-missing-at-boot",
     "file": "src/game/loop.ts",
-    "find": "  // The outcome panel's opening state, stated rather than inherited: a session that is\n  // disposed before it ever produces an event still leaves the HUD holding a projection\n  // that describes THIS session's board, not the previous one's.\n  pushOutcome(world);",
-    "replace": "  // The outcome panel's opening state, stated rather than inherited: a session that is\n  // disposed before it ever produces an event still leaves the HUD holding a projection\n  // that describes THIS session's board, not the previous one's.",
+    "find": "  // outcome, because a session that has just been constructed has not ended.\n  pushOutcome(world, null);",
+    "replace": "  // outcome, because a session that has just been constructed has not ended.",
     "expect": "killed",
     "tests": [
       "src/game/loop.test.ts"
@@ -4093,8 +4096,8 @@
   {
     "id": "outcome-projection-stale-across-a-board-switch",
     "file": "src/game/loop.ts",
-    "find": "    // saying whatever the finished attempt said.\n    pushOutcome(world);",
-    "replace": "    // saying whatever the finished attempt said.",
+    "find": "    // of the board being left, and the board being built has not ended.\n    pushOutcome(world, null);",
+    "replace": "    // of the board being left, and the board being built has not ended.",
     "expect": "killed",
     "tests": [
       "src/game/loop.test.ts"
@@ -4102,6 +4105,136 @@
     "why": "Leaves the finished attempt's projection in place across a board switch. A Levels pick can land a coop session on a one-player board, so which tally the panel would show changes with the board -- the stale projection then describes a board that is no longer on screen. Same blind spot as the boot entry: only a test that counts pushes across the switch, rather than reading the last one after a frame, can see it.",
     "killedBy": [
       "startGameWith: the active campaign run (issues #153/#152) coop kill attribution, end to end (coop semantics plan) re-derives the outcome projection on a BOARD SWITCH, before the new board runs"
+    ]
+  },
+  {
+    "id": "campaign-over-and-practice-share-one-verdict",
+    "file": "src/game/hud.ts",
+    "find": "    subtitle: 'Out of lives. This run is over.',\n    action: 'Start New Campaign',",
+    "replace": "    subtitle: 'Out of lives.',\n    action: 'Retry',",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Puts the pre-#323 wording back on one table entry. This is the exact screen issue #323 opened about: `Game Over` / `Out of lives.` over a button reading `Retry` was what a campaign that ran out of lives AND a practice level that ran out of lives both showed, and the word `Retry` was doubly untrue on the campaign one -- the click ends that run and begins a new campaign at level 1 (pinned in loop.test.ts). The panel still renders, still routes and still offers the Main Menu beside it, so only copy assertions can see this.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action",
+      "hud: every ending gets its own screen (issue #323) replaces the opening copy when the ending lands AFTER the panel is already up"
+    ]
+  },
+  {
+    "id": "practice-failure-reads-as-a-campaign-game-over",
+    "file": "src/game/hud.ts",
+    "find": "  'practice-failed': {\n    title: () => 'Practice Failed',\n    subtitle: 'Practice only. Your campaign run is untouched.',",
+    "replace": "  'practice-failed': {\n    title: () => 'Game Over',\n    subtitle: 'Out of lives. This run is over.',",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Collapses two of the five endings onto one screen -- the specific collapse issue #323 names, since a practice level and a campaign run are the two positions a player can hold and this makes the loss of one read as the loss of the other. A table keyed over the outcome kinds cannot prevent two entries agreeing, so the population sweep is what has to catch it; the per-ending case catches it too and names the strings, and both are listed because they fail for different reasons.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action",
+      "hud: every ending gets its own screen (issue #323) THE GAP (issue #323): no two endings render as the same screen any more"
+    ]
+  },
+  {
+    "id": "choose-level-survives-onto-every-other-screen",
+    "file": "src/game/hud.ts",
+    "find": "    applyChooseLevel();\n    // THE OUTCOME PANEL'S THREE LINES",
+    "replace": "    // THE OUTCOME PANEL'S THREE LINES",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "Leaves the outcome panel's third action to be hidden only by the end screens themselves, so it is never taken back down: `renderOutcomeCopy` puts it up on a practice result and nothing lowers it again on the pause panel, the campaign end screens or the Main Menu, all of which are the same `.hud-panel` element. Its click leaves the session, so on a PAUSED game that is a button that abandons a match in progress under a name that says nothing about doing so. Invisible to any test that only reads the screen it belongs on, which is why the sweep walks the other surfaces after it.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) offers Choose Level on the practice endings and nowhere else"
+    ]
+  },
+  {
+    "id": "choose-level-offered-with-no-level-to-choose",
+    "file": "src/game/hud.ts",
+    "find": "      !(copy?.chooseLevel ?? false) || !levelChoice,",
+    "replace": "      !(copy?.chooseLevel ?? false),",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Drops the half of the gate that is about the SESSION rather than the ending. The sandbox ends as a `practice-result` (it is a practice-kind session) and runs one synthetic level, which is exactly the case for which `setLevelSelect`'s `total > 1` already hides the Main Menu's own entry into the same pane -- so this offers a button whose click leaves the session and lands on a menu with nothing behind it. It also silently drops the live half: `setLevelSelect` is pushed while the panel is up, and with the term gone there is nothing for that push to change.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) withholds Choose Level from a session with no level to choose"
+    ]
+  },
+  {
+    "id": "choose-level-ignores-an-unlock-that-lands-on-the-open-panel",
+    "file": "src/game/hud.ts",
+    "find": "      // already looking at.\n      applyChooseLevel();",
+    "replace": "      // already looking at.",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Makes the button's visibility a claim recomputed only at a surface change, while the signal it depends on is pushed between them. A win records an unlock and the page repaints the Levels grid from it, so a session that reaches its first multi-level offer at the moment it ends leaves the button hidden on the very screen the player is looking at, until some later `setState` -- by which time they have left. The same reasoning is already written on `setLevelSelect`'s `applyTitleAffordances` call for the Main Menu's own copy of this button.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) withholds Choose Level from a session with no level to choose"
+    ]
+  },
+  {
+    "id": "choose-level-opens-the-pane-over-the-finished-session",
+    "file": "src/game/hud.ts",
+    "find": "    handleQuit();\n    openLayer('levelselect', levelSelectOpenBtn);",
+    "replace": "    openLayer('levelselect', levelSelectOpenBtn);\n    handleQuit();",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Swaps the two halves of Choose Level, which LOOKS identical and is not. `loop.ts` acts on a level pick only from the Main Menu -- its own guard, not a CSS class -- so a pane opened before the session is left is opened over an end screen, and `setState('main-menu')` arriving from the quit a moment later empties the layer stack and closes it again. The player sees the grid flash and lands on the menu. Only an assertion that records the pane's state AT the quit can see this; an assertion made inside the quit callback cannot, because jsdom swallows a throw from an event listener -- measured, and stated in the test that kills this.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) leaves the finished session and opens the Levels pane, in that order"
+    ]
+  },
+  {
+    "id": "quit-is-inert-on-a-losing-end-screen",
+    "file": "src/game/loop.ts",
+    "find": "    if (!sm.isPaused && !sm.hasOutcome) return;",
+    "replace": "    if (!sm.isPaused && !sm.presentsAsWin) return;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "The guard exactly as it shipped, and as it stayed through PR #563 -- which put the Main Menu button on every end screen in `hud.ts` and changed no handler. The result was a button that was visible, focusable and did nothing on all three losing endings: a campaign game-over, a failed practice level and a versus draw. That is the stranding issue #323 opened about, moved one layer down, and no test in this file reached it because every quit case drove the handler from `paused` or from `outcome-win`. It is also what Choose Level rides on, so this breaks the practice end screen's other action with it.",
+    "killedBy": [
+      "startGameWith: leaving a CLEARED level for the main menu keeps the run also reaches the Main Menu from a LOST match, which is where it was inert",
+      "startGameWith: canonical session identity at the production boundary Practice LEAVING Practice cannot retain a Practice descriptor on a campaign board"
+    ]
+  },
+  {
+    "id": "practice-retry-lands-on-the-campaign-board",
+    "file": "src/game/loop.ts",
+    "find": "      if (sm.outcome?.kind === 'practice-result') {\n        switchTo(level);\n        sm.enterGameplay(currentSession);\n        return;\n      }",
+    "replace": "      // a practice result falls through to the shared restart branch",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Puts a practice result back through the shared restart branch, which is where issue #323 found it lying in two directions at once: on a loss it fell to `landOnCampaignBoard` and built `deps.levels.start` -- the RUN's current level, as a campaign session -- so a button labelled Retry moved the player to a different level in a different kind of session; on a win with a level after it, the `next !== null` arm advanced practice through the campaign sequence instead. Both survive every assertion about the run, because neither writes it.",
+    "killedBy": [
+      "startGameWith: canonical session identity at the production boundary Practice a practice RETRY rebuilds the level it was on, still as practice"
+    ]
+  },
+  {
+    "id": "practice-retry-carries-the-exhausted-lives",
+    "file": "src/game/loop.ts",
+    "find": "      if (sm.outcome?.kind === 'practice-result') {\n        switchTo(level);",
+    "replace": "      if (sm.outcome?.kind === 'practice-result') {\n        switchTo(level, driver.world.lives);",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Rebuilds the right board with the wrong lives. `switchTo`'s `lives` argument is what a level ADVANCE carries -- the count that survived the level before it -- and on a retry after a loss that count is zero, so the rebuilt board is unplayable and the next death re-ends it. Practice builds with an independent full pool (`onLevelSelect`'s own \"independent fresh lives\"), and this is the only other site that builds a practice board. The descriptor, the identity and the run are all correct under this mutation, so only an assertion on the built lives can see it.",
+    "killedBy": [
+      "startGameWith: canonical session identity at the production boundary Practice a practice RETRY rebuilds the level it was on, still as practice"
     ]
   },
   {

@@ -4008,13 +4008,24 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
   });
 
   describe('game over and campaign completion -- explicit run-ending transitions', () => {
-    it('game over ends the active run; Retry starts a brand-new one at level 1', () => {
+    it('game over ends the active run; Start New Campaign starts a brand-new one at level 1', () => {
+      // RETITLED, not rewritten (issue #323). Every assertion below is the one this test
+      // shipped with; what changed is the word on the button that fires
+      // `startRestart()`. It read `Retry` -- the shared win/lose panel's one label for
+      // every ending -- while what it did here was end one campaign and begin another
+      // from level 1, which is what the assertions have always said. The end screen says
+      // `Start New Campaign` now, and this test is where that promise is checked.
+      //
+      // It is also why the panel offers NO confirmation before it, unlike the Main Menu's
+      // button of the same name: that one guards an ACTIVE run, and `runEnds` below is
+      // the proof there is none left to guard -- `endRun` ran the instant the state
+      // flipped, before this screen was ever on it.
       const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 1, lives: 1 } })); // mid-campaign, level 2
       h.setState('playing');
       h.setState('outcome-lose');
       expect(h.rec.runEnds).toBe(1);
       expect(h.deps.run.active()).toBeNull();
-      h.hud.startRestart(); // Retry
+      h.hud.startRestart(); // Start New Campaign
       expect(h.rec.runNewRuns).toEqual([0]); // deps.levels.start with no run/jump: level 1
       expect(h.deps.run.active()?.livesRemaining).toBe(LIVES);
       h.handle.dispose();
@@ -7817,6 +7828,31 @@ describe('startGameWith: leaving a CLEARED level for the main menu keeps the run
     h.handle.dispose();
   });
 
+  it('also reaches the Main Menu from a LOST match, which is where it was inert', () => {
+    /*
+     * THE OTHER HALF OF PR #563, which this test is the first to reach.
+     *
+     * #563 put the Main Menu button on every end screen in `hud.ts` and changed nothing
+     * else. `loop.ts`'s quit handler still opened with `!sm.isPaused && !sm.presentsAsWin`
+     * -- written when the directive above covered a cleared level and nothing else -- so
+     * on all three LOSING endings the button was on screen, focusable, and returned
+     * without doing anything. Nothing caught it: every quit test in this file drove the
+     * handler from `paused` or from `outcome-win`.
+     *
+     * The guard is `!sm.isPaused && !sm.hasOutcome` now: the session is over however it
+     * ended, and there is nothing still running to abandon.
+     */
+    const h = boot(
+      makeDeps({ tracksProgress: true, levelCount: 5, levelStart: 2, savedRun: { level: 2, lives: 3 } }),
+    );
+    h.setState('outcome-lose');
+    expect(h.rec.typedOutcomes.at(-1)?.kind, 'the fixture must really be a campaign loss')
+      .toBe('campaign-over');
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('main-menu');
+    h.handle.dispose();
+  });
+
   it('still refuses to quit straight out of PLAYING', () => {
     // The negative control for the widened guard. Without it, replacing the guard with
     // an unconditional pass would satisfy the test above. Quit rebuilds the world, so
@@ -7900,12 +7936,59 @@ describe('startGameWith: canonical session identity at the production boundary',
       h.handle.dispose();
     });
 
-    it('advancing within Practice updates the ordinal to the level actually built', () => {
-      // A STORED descriptor would keep reporting the originally picked level.
+    it('moving between Practice levels updates the ordinal to the level actually built', () => {
+      /*
+       * REVERSED DRIVER, SAME PROPERTY (issue #323). This was
+       * "advancing within Practice updates the ordinal to the level actually built",
+       * and it drove `h.hud.startRestart()` from a practice win, because the shared
+       * win/lose panel's one button advanced practice through the campaign sequence.
+       * Issue #323 gave the practice endings their own action set -- Retry, Choose
+       * Level, Main Menu -- so that button now rebuilds the SAME level and there is no
+       * advance left inside practice to assert on. Driving it anyway would have left a
+       * test that reads level 1 twice and could no longer fail.
+       *
+       * The property under test is unchanged and so is its negative control: a STORED
+       * descriptor keeps reporting the originally picked level, so ordinal 1 here is the
+       * failure this asserts against. What changed is the gesture that moves practice
+       * between levels, which is now the end screen's Choose Level: leave the finished
+       * session for the Main Menu, then pick (hud.ts's handleChooseLevel).
+       */
       const h = boot(makeDeps({ levelCount: 3, progressHighest: 3 }));
       h.hud.pickLevel(0); // level 1
       h.setState('outcome-win');
-      h.hud.startRestart(); // Next Level -> level 2, still practice
+      h.hud.quitToTitle(); // the half of Choose Level that leaves the session
+      h.hud.pickLevel(1); // ...and the half that picks: level 2
+      expect(lastDescriptor(h)).toEqual({
+        kind: 'practice',
+        target: { kind: 'campaign-level', levelOrdinal: 2 },
+      });
+      h.handle.dispose();
+    });
+
+    it('a practice RETRY rebuilds the level it was on, still as practice', () => {
+      // The action that replaced the advance above (issue #323). "Retry" used to be a
+      // lie twice over: on a loss it fell through to landOnCampaignBoard and put the
+      // player on the RUN's current level as a campaign session, and on a win it
+      // advanced. Both are gone; the ordinal and the kind here are what the button now
+      // promises. levelCount 3 with the pick on level 2 is what makes the assertion
+      // bite -- an advance would read 3, and a landing on the campaign board would read
+      // 1 (no run saved, so `deps.levels.start` is level 1) and `kind: 'campaign'`.
+      const h = boot(makeDeps({ levelCount: 3, progressHighest: 3 }));
+      h.hud.pickLevel(1); // level 2
+      h.setState('outcome-lose');
+      h.hud.startRestart(); // Retry
+      expect(lastDescriptor(h)).toEqual({
+        kind: 'practice',
+        target: { kind: 'campaign-level', levelOrdinal: 2 },
+      });
+      // FRESH LIVES, the same independent pool a Levels pick builds with -- practice
+      // never reads or writes the run, so there is no other number this could carry.
+      // Without this the retry could hand the rebuilt board `driver.world.lives`, which
+      // on a loss is the exhausted count the player just ran out of.
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: undefined }); // index 1 = level 2, the board the pick built
+      // ...and the same on the winning ending, which is the arm that used to advance.
+      h.setState('outcome-win');
+      h.hud.startRestart();
       expect(lastDescriptor(h)).toEqual({
         kind: 'practice',
         target: { kind: 'campaign-level', levelOrdinal: 2 },
@@ -7914,14 +7997,30 @@ describe('startGameWith: canonical session identity at the production boundary',
     });
 
     it('LEAVING Practice cannot retain a Practice descriptor on a campaign board', () => {
-      // Issue #316's finding 4, at the production boundary: a Practice result
-      // landing back on the campaign board used to clear a separate
-      // `inPractice` flag while the retained Practice descriptor rode along.
+      /*
+       * Issue #316's finding 4, at the production boundary: a Practice result landing
+       * back on the campaign board used to clear a separate `inPractice` flag while the
+       * retained Practice descriptor rode along.
+       *
+       * REVERSED DRIVER (issue #323), same finding. The leave used to be
+       * `startRestart()` straight off the practice end screen, because that button was
+       * the only control there and it landed on the campaign board. It is `Retry` now
+       * and stays in practice, so the leave this test is about is the end screen's Main
+       * Menu, followed by Continue -- which is where `landOnCampaignBoard` actually runs
+       * (the quit handler owes the landing; Continue redeems it).
+       *
+       * That also makes this the test that fails if loop.ts's quit guard is narrowed
+       * back to `!sm.isPaused && !sm.presentsAsWin`: a quit from a LOSING end screen
+       * returns early, the state never becomes 'main-menu', and the Continue that
+       * follows re-enters the practice session it never left.
+       */
       const h = boot(makeDeps({ levelCount: 1, progressHighest: 1 }));
       h.hud.pickLevel(0);
       expect(lastDescriptor(h).kind).toBe('practice');
       h.setState('outcome-lose'); // practice ends
-      h.hud.startRestart(); // lands on the campaign board and re-enters
+      h.hud.quitToTitle(); // the end screen's Main Menu
+      expect(h.getState()).toBe('main-menu');
+      h.hud.startRestart(); // Continue: builds the owed campaign landing and re-enters
       expect(lastDescriptor(h)).toEqual({ kind: 'campaign' });
       h.handle.dispose();
     });

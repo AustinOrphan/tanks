@@ -125,6 +125,26 @@ export type GameplayOutcome = {
    * this session's click lands.
    */
   action: HudRelaunchTarget;
+  /**
+   * WHY the session ended, in the model's own words: the `TypedOutcome` the state
+   * machine's outcome phase holds (`app-state.ts`), carried WHOLE rather than copied
+   * member by member, so the panel's kind and that kind's payload cannot drift apart
+   * from each other or from the phase they were read out of.
+   *
+   * This one is imported rather than restated in HUD vocabulary the way `HudSurface`
+   * and `SessionKind` are, and the difference is that those two are vocabularies -- bare
+   * unions of literals whose whole content is their names -- while this is a payload:
+   * `practice-result` carries `cleared`, `vs-match-end` carries a `VersusResult`. A
+   * structural copy here would be a second declaration of that payload with nothing
+   * checking the two still agree, which is the failure this field exists to avoid.
+   *
+   * ABSENT and `null` say one thing and the same thing: no typed outcome is available
+   * for this push, so the panel must read exactly as it did before this field existed.
+   * Both spellings occur. `loop.ts` passes `null` from the two OPENING pushes -- a board
+   * switch and session construction -- which describe a board that has not ended; every
+   * fixture written before the field simply omits it.
+   */
+  typedOutcome?: TypedOutcome | null;
 } & (
   | { tally: 'solo' }
   | { tally: 'coop'; kills: number[] }
@@ -214,6 +234,7 @@ export type GameplayStatus = {
 );
 
 import type { StatCounts } from './stats';
+import type { TypedOutcome, TypedOutcomeKind } from './app-state';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
 import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
@@ -260,6 +281,125 @@ import {
 import './hud.css';
 import { describeDisabledReason, setSelected } from './ui';
 import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
+
+/*
+ * ---- WHAT EACH ENDING SAYS, AND WHAT IT OFFERS (issue #323) ----------------------
+ *
+ * One keyed table, so the end screens can be read against each other instead of
+ * reconstructed from branches spread through `setState`.
+ *
+ * THE COMPLAINT THE ISSUE RECORDS is not that any one screen was wrong; it is that four
+ * of them were the SAME screen. A campaign that ran out of lives, a practice level that
+ * ran out of lives, a campaign completed to its last level and a practice level beaten
+ * all collapsed onto `You Win!`/`Game Over` under one button reading `Play Again`/
+ * `Retry`, because the only thing this panel was ever told was a two-valued win/lose
+ * surface (`legacyOutcomePresentation`, app-state.ts). The session's own `TypedOutcome`
+ * rides the outcome push now (`GameplayOutcome.typedOutcome`), and this table is the
+ * whole of what the panel does with it.
+ *
+ * THE SUBTITLES NAME WHAT IS PRESERVED OR REPLACED, which is the issue's own criterion
+ * for honest copy. `Out of lives.` was true of a campaign game-over and of a practice
+ * failure alike, and told a player nothing about which of their two positions -- the
+ * active run, or nothing at all -- the screen had just changed.
+ */
+
+/** One end screen's words, and the one optional extra action it offers. */
+interface OutcomePanelCopy {
+  /**
+   * The headline, as a function of the 1-based level ordinal the topbar is showing
+   * (`null` when no status has been pushed at all -- every css and gallery fixture).
+   * Only `mission-clear` reads the argument; the other entries take it and ignore it so
+   * that every entry has one shape a reader and a sweep can walk.
+   */
+  readonly title: (mission: number | null) => string;
+  /** The line under the headline. */
+  readonly subtitle: string;
+  /** The primary (`.hud-action`) button's word. */
+  readonly action: string;
+  /**
+   * Whether this ending offers `Choose Level` beside the primary action. True for the
+   * two practice endings and nothing else: practice is the only session whose player
+   * chose a level to be on, so it is the only one for which "a different one" is a
+   * destination rather than a way of abandoning a run. The button is ALSO gated on
+   * `levelChoice` at the point of use -- see `applyChooseLevel` -- because a sandbox or
+   * one-level system has no choice to offer and its Main Menu already hides the Practice
+   * entry that opens the same pane.
+   */
+  readonly chooseLevel: boolean;
+}
+
+/**
+ * The table's key: an outcome KIND, with two departures. Both are here, in the key,
+ * rather than inside an entry, so that every entry stays flat data.
+ *
+ *  - `practice-result` is TWO screens. Its payload carries `cleared`, and a player who
+ *    just failed a level must not read the headline of one who just beat it.
+ *  - `vs-match-end` has NO entry, and `outcomePanelKey` returns `null` for it. Issue
+ *    #279 owns the versus result screen; the way to leave it exactly as it shipped is to
+ *    leave it on the legacy win/lose projection it was written against, not to
+ *    transcribe that projection into this table where the copy could drift from it. That
+ *    `null` is the same answer as "no typed outcome was pushed at all", and both fall
+ *    through to `renderLegacyOutcomeCopy`.
+ */
+type OutcomePanelKey =
+  | Exclude<TypedOutcomeKind, 'practice-result' | 'vs-match-end'>
+  | 'practice-cleared'
+  | 'practice-failed';
+
+/** Which entry a finished session reads, or `null` for the versus screen #279 owns. */
+function outcomePanelKey(outcome: TypedOutcome): OutcomePanelKey | null {
+  switch (outcome.kind) {
+    case 'practice-result':
+      return outcome.cleared ? 'practice-cleared' : 'practice-failed';
+    case 'vs-match-end':
+      return null;
+    default:
+      return outcome.kind;
+  }
+}
+
+/**
+ * THE TABLE. Exhaustive over `OutcomePanelKey` by construction -- a sixth ending is a
+ * compile error here rather than a screen that silently reads like its neighbour, which
+ * is the failure this whole table exists to make impossible to reintroduce.
+ *
+ * The two practice entries deliberately SHARE a subtitle: it is the same true statement
+ * in both endings, and it is the statement a practice player actually needs (the run
+ * they may have going is not what they were just playing). Only the headline and the
+ * verdict differ, because only those differ.
+ */
+const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
+  'mission-clear': {
+    title: (mission) => (mission === null ? 'Level cleared!' : `Level ${mission} cleared!`),
+    subtitle: 'Your run carries on, with the lives you have left.',
+    action: 'Next Level',
+    chooseLevel: false,
+  },
+  'campaign-over': {
+    title: () => 'Game Over',
+    subtitle: 'Out of lives. This run is over.',
+    action: 'Start New Campaign',
+    chooseLevel: false,
+  },
+  'campaign-complete': {
+    title: () => 'Campaign Complete!',
+    subtitle: 'Every level cleared. This run is finished.',
+    action: 'Start New Campaign',
+    chooseLevel: false,
+  },
+  'practice-cleared': {
+    title: () => 'Practice Cleared',
+    subtitle: 'Practice only. Your campaign run is untouched.',
+    action: 'Retry',
+    chooseLevel: true,
+  },
+  'practice-failed': {
+    title: () => 'Practice Failed',
+    subtitle: 'Practice only. Your campaign run is untouched.',
+    action: 'Retry',
+    chooseLevel: true,
+  },
+};
 
 export interface RoundPhaseInfo {
   phase: RoundPhase;
@@ -1431,6 +1571,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--primary hud-continue hud-continue--hidden" type="button">Continue Campaign</button>
       <button class="ui-btn ui-btn--primary hud-new-game hud-new-game--hidden" type="button">Start Campaign</button>
       <button class="ui-btn ui-btn--primary hud-action" type="button"></button>
+      <!-- CHOOSE LEVEL (issue #323), the practice end screen's second action and the
+           only button on this panel that belongs to ONE ending. A practice player picked
+           the level they are on, so "a different one" is a real destination for them;
+           for a campaign run it would be a way of abandoning the run wearing the name of
+           a navigation, which is why no campaign ending offers it. Hidden by default,
+           same convention as every other gated button here -- OUTCOME_PANEL decides when
+           it appears (see applyChooseLevel), and isHiddenWithin keeps the roving focus
+           and the D-pad off it for every state that does not.
+
+           Its click is Main Menu followed by the Practice pane, in that order and
+           through the same two paths those controls already use -- see
+           handleChooseLevel, which is deliberately not a third route into the grid. -->
+      <button class="ui-btn ui-btn--slab hud-choose-level hud-choose-level--hidden" type="button">Choose Level</button>
       <!-- The two DIRECT play actions (issue #226 hierarchy step 2). Versus setup entry
            (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md, ruling 1) is
            MAIN-MENU ONLY -- a live round's mode/players/stock are closed over for its
@@ -1640,6 +1793,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     subtitleEl.classList.toggle('hud-subtitle--hidden', text === '');
   }
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
+  const chooseLevelBtn = el.querySelector('.hud-choose-level') as HTMLButtonElement;
   const continueBtn = el.querySelector('.hud-continue') as HTMLButtonElement;
   const newGameBtn = el.querySelector('.hud-new-game') as HTMLButtonElement;
   const quitBtn = el.querySelector('.hud-quit') as HTMLButtonElement;
@@ -3666,6 +3820,100 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * WHICH ENTRY OF `OUTCOME_PANEL` THIS PANEL IS ON, or `null` for the two cases the
+   * table deliberately does not answer: a versus result (issue #279 owns that screen) and
+   * an outcome surface reached with no typed outcome pushed at all.
+   *
+   * The second case is not hypothetical and is not only a fixture. In production the
+   * state machine flips FIRST and the session's own outcome push lands a beat later
+   * (`loop.ts`'s `onFrameEvents`, and see `driver.ts` for the ordering), so this returns
+   * `null` for the `setState` that OPENS the panel and the table's answer for the
+   * `setOutcome` that arrives inside the same synchronous frame handler. Both render, in
+   * that order, with no paint between them -- which is why `setOutcome` repaints the copy
+   * rather than only the tally lines.
+   */
+  function outcomePanelCopyNow(): OutcomePanelCopy | null {
+    const outcome = outcomeData?.typedOutcome ?? null;
+    if (outcome === null) return null;
+    const key = outcomePanelKey(outcome);
+    return key === null ? null : OUTCOME_PANEL[key];
+  }
+
+  /**
+   * WHAT THE PANEL SAID BEFORE ANY OUTCOME KIND REACHED IT -- unchanged, and still the
+   * answer on the two paths `outcomePanelCopyNow` returns `null` for.
+   *
+   * Kept as the shipped code rather than transcribed into `OUTCOME_PANEL`'s vocabulary:
+   * the versus result screen belongs to issue #279, and "leave it exactly as it is" is a
+   * claim that can only be checked if the code that renders it is the same code. It
+   * reads the SURFACE (`shownState`), which is the two-valued projection
+   * `legacyOutcomePresentation` produces, and `hasNextMission`, which is how a
+   * developer-flag versus session on the campaign level system still gets its
+   * `Level N cleared!` / `Next Level` pair.
+   */
+  function renderLegacyOutcomeCopy(): void {
+    const win = shownState === 'outcome-win';
+    if (win) {
+      // An intermediate win advances; only the LAST level's win is the game's.
+      if (statusData !== null && hasNextMission()) {
+        titleEl.textContent = `Level ${statusData.mission} cleared!`;
+        setSubtitle('On to the next.');
+      } else {
+        titleEl.textContent = 'You Win!';
+        setSubtitle('Arena cleared.');
+      }
+    } else {
+      titleEl.textContent = 'Game Over';
+      setSubtitle('Out of lives.');
+    }
+    actionBtn.textContent = outcomeActionLabel(win);
+  }
+
+  /**
+   * WHETHER `Choose Level` IS ON SCREEN -- one function, called from `setState` for every
+   * surface and again from `renderOutcomeCopy`, so there is exactly one sentence
+   * anywhere that can put this button up.
+   *
+   * TWO conditions, and the second is not redundant. `OUTCOME_PANEL` says which ENDINGS
+   * offer a level change (the two practice ones); `levelChoice` says whether there is a
+   * level choice to make at all, and it is the same signal that decides whether the Main
+   * Menu shows the Practice entry into the very same pane (`applyTitleAffordances`).
+   * Without it a sandbox result -- which classifies as `practice-result`, since the
+   * sandbox is a practice-kind session -- would offer a button that lands on a menu with
+   * nothing behind it.
+   */
+  function applyChooseLevel(): void {
+    const atOutcome = shownState === 'outcome-win' || shownState === 'outcome-lose';
+    const copy = atOutcome ? outcomePanelCopyNow() : null;
+    chooseLevelBtn.classList.toggle(
+      'hud-choose-level--hidden',
+      !(copy?.chooseLevel ?? false) || !levelChoice,
+    );
+  }
+
+  /**
+   * THE END SCREEN, WHOLE: its headline, its line, its primary button's word, and
+   * whether `Choose Level` stands beside it. `applyTitleAffordances`' twin at the other
+   * end of a session, and the only place any of those four is decided.
+   *
+   * Called from `setState`'s outcome branch and from `setOutcome`, for the ordering
+   * reason spelled out on `outcomePanelCopyNow`: the surface arrives before the outcome
+   * that explains it, so the panel is painted twice inside one frame handler and the
+   * second painting is the one a player sees.
+   */
+  function renderOutcomeCopy(): void {
+    const copy = outcomePanelCopyNow();
+    if (copy === null) {
+      renderLegacyOutcomeCopy();
+    } else {
+      titleEl.textContent = copy.title(statusData?.mission ?? null);
+      setSubtitle(copy.subtitle);
+      actionBtn.textContent = copy.action;
+    }
+    applyChooseLevel();
+  }
+
+  /**
    * The Main Menu's one-line run summary (issue #226): "only the current mission and
    * remaining run lives needed to build confidence", and nothing else.
    *
@@ -3844,11 +4092,38 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleLevelSelectOpen = (): void => {
     openLayer('levelselect', levelSelectOpenBtn);
   };
+  /**
+   * CHOOSE LEVEL, from a finished practice level (issue #323): leave the session, then
+   * open the Levels pane over the Main Menu. Two existing paths in that order, and
+   * deliberately not a third route into the grid.
+   *
+   * WHY THE QUIT COMES FIRST, rather than opening the pane over the outcome screen: the
+   * pick that follows is `onLevelSelect`, and `loop.ts` acts on it only from the Main
+   * Menu -- "a handler that rebuilds the world deserves its own guard, not a CSS class as
+   * its only defence", which is its own comment there. A pane opened over the end screen
+   * would look right and do nothing on the click that matters. Leaving first is also what
+   * a practice session's Choose Level MEANS: practice is not resumable, so the session
+   * the player is on ends either way, and this button and the Main Menu button beside it
+   * differ only in where they put the player afterwards.
+   *
+   * The opener recorded is the MAIN MENU's Practice button, not this one: `openLayer`
+   * stamps the surface the layer opened over (the Main Menu, by the time the quit above
+   * has been dispatched), and Back must restore a control that surface actually shows.
+   * `restoreFocus` already refuses a hidden opener and falls back to the container, so a
+   * HUD with no quit subscriber -- every unit fixture -- degrades to the container rather
+   * than to a wrong control.
+   */
+  const handleChooseLevel = (): void => {
+    handleQuit();
+    openLayer('levelselect', levelSelectOpenBtn);
+  };
   const handleLevelSelectBack = (): void => {
     back();
   };
   levelSelectOpenBtn.addEventListener('click', handleLevelSelectOpen);
   levelSelectOpenBtn.addEventListener('click', blurIfPointer);
+  chooseLevelBtn.addEventListener('click', handleChooseLevel);
+  chooseLevelBtn.addEventListener('click', blurIfPointer);
   levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
   levelSelectBackBtn.addEventListener('click', blurIfPointer);
 
@@ -4740,6 +5015,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // one function rather than four inline toggles here.
     applyTitleAffordances();
     actionBtn.classList.toggle('hud-action--hidden', atMainMenu);
+    // ...and the outcome panel's own extra action, hidden for every surface that is not
+    // an end screen offering it. Called HERE, before the `paused` early return below, so
+    // that a pause -- which never offers it -- cannot inherit it from the end screen the
+    // player was on. The end screens themselves reach it again through
+    // `renderOutcomeCopy`, once the outcome that decides it has landed.
+    applyChooseLevel();
     // THE OUTCOME PANEL'S THREE LINES belong to the END screens alone. The surface's
     // half of the answer is recorded above, before the `playing` early return, in the
     // variable `setOutcome` reads -- so a later push into an already-open panel repaints
@@ -4774,20 +5055,23 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (atMainMenu) {
       titleEl.textContent = 'TANKS!';
       setSubtitle('');
-    } else if (s === 'outcome-win') {
-      // An intermediate win advances; only the LAST level's win is the game's.
-      if (statusData !== null && hasNextMission()) {
-        titleEl.textContent = `Level ${statusData.mission} cleared!`;
-        setSubtitle('On to the next.');
-      } else {
-        titleEl.textContent = 'You Win!';
-        setSubtitle('Arena cleared.');
-      }
-      actionBtn.textContent = outcomeActionLabel(true);
     } else {
-      titleEl.textContent = 'Game Over';
-      setSubtitle('Out of lives.');
-      actionBtn.textContent = outcomeActionLabel(false);
+      /*
+       * BOTH END SCREENS, ONE RENDERER (issue #323).
+       *
+       * This used to be an `outcome-win` arm and an `outcome-lose` arm, each writing its
+       * own three strings, because the surface WAS the whole answer: two surfaces, two
+       * screens. It is not the answer any more. `outcome-win` now covers a mission clear,
+       * a campaign completion and a cleared practice level -- three different screens with
+       * three different action sets -- and `outcome-lose` covers two more. Which one this
+       * is comes off the session's own outcome, in `renderOutcomeCopy`, which is also
+       * where the surface is still consulted for the versus screen issue #279 owns.
+       *
+       * `playing` and `launch` have already returned above, and `paused` returns just
+       * above this chain, so the only surfaces that reach this `else` are the two end
+       * screens -- the same set the two arms it replaced covered between them.
+       */
+      renderOutcomeCopy();
     }
   }
 
@@ -4920,6 +5204,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // applyTitleAffordances so this also respects `relaunchTarget` (see its own doc
       // comment for why gating only inside `setState` is not enough).
       applyTitleAffordances();
+      // ...and the outcome panel's Choose Level, for the SAME reason and on the same
+      // signal: `levelChoice` gates both (see applyChooseLevel), and this setter is
+      // pushed while an outcome panel is up -- a win records an unlock, and the page
+      // repaints the grid from that. Without this line a session that reached its first
+      // multi-level offer at the moment it ended would leave the button hidden until the
+      // next `setState`, which on the practice end screen is the screen the player is
+      // already looking at.
+      applyChooseLevel();
     },
     onLevelSelect(cb: (level: number) => void): void {
       levelSelectCbs.push(cb);
@@ -5040,12 +5332,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // all four of these live, and `setState` renders them itself on the way in.
       if (!outcomeVisible) return;
       renderOutcomeLines();
-      // The action button too, because the destination rides the same push. In today's
-      // production this never changes a word -- `loop.ts` derives `action` from a
-      // boot-time relaunch target and re-sends the same value every frame -- but a panel
-      // that painted the tally from the newest push and the label from the oldest would
-      // be exactly the kind of half-applied projection this merge exists to rule out.
-      actionBtn.textContent = outcomeActionLabel(shownState === 'outcome-win');
+      /*
+       * ...and the COPY, because the words ride the same push.
+       *
+       * This was `actionBtn.textContent = outcomeActionLabel(...)` -- the label alone --
+       * under a comment saying that in production it never changed a word, since `action`
+       * came from a boot-time relaunch target that was re-sent unchanged every frame.
+       * That is no longer true and the panel now depends on its not being true: since
+       * issue #323 the push also carries WHY the session ended, and in production the
+       * state machine flips before this push lands, so `setState` opens the panel with no
+       * typed outcome and THIS call is what replaces the fallback copy with the ending's
+       * own. Both run inside one synchronous frame handler, so nothing is painted in
+       * between; a player sees only the second.
+       */
+      renderOutcomeCopy();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);
@@ -5280,6 +5580,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       achBackBtn.removeEventListener('click', blurIfPointer);
       levelSelectOpenBtn.removeEventListener('click', handleLevelSelectOpen);
       levelSelectOpenBtn.removeEventListener('click', blurIfPointer);
+      chooseLevelBtn.removeEventListener('click', handleChooseLevel);
+      chooseLevelBtn.removeEventListener('click', blurIfPointer);
       levelSelectBackBtn.removeEventListener('click', handleLevelSelectBack);
       levelSelectBackBtn.removeEventListener('click', blurIfPointer);
       controllersOpenBtn.removeEventListener('click', handleControllersOpen);
