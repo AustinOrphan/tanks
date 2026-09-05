@@ -1000,6 +1000,41 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     expect(f.hud.argsOf('setAchievements')).toHaveLength(1);
   });
 
+  it('sizes the grid on ALL-TIME progress, so a new campaign does not re-lock what was earned', () => {
+    // The question issue #555 makes load-bearing. Before it, this contract only decided
+    // which buttons were DIMMED; now it decides which exist at all, and whether the Main
+    // Menu offers a Levels button in the first place -- so a page that sized the grid
+    // from the active run instead of the permanent store would take a returning player's
+    // whole campaign away, silently, with nothing on screen to say it had happened.
+    //
+    // Progress and the run are separate stores on purpose (`run.ts` vs `progress.ts`):
+    // `startNewRun` writes only the run, and `progress.reset()` is reachable from exactly
+    // one place -- Settings -> Reset progress, two-click confirmed. This pins the
+    // composition of those two facts, which neither store's own suite can see.
+    //
+    // A REGRESSION GUARD, not a closed coverage gap, and the difference was measured
+    // rather than assumed: a page that sized the grid from the run's own position was
+    // applied to `route-host.ts` and killed by three cases, two of which already existed.
+    // No manifest entry accompanies this test because no mutation kills it ALONE -- the
+    // defect it names is currently unreachable by construction, since `RouteUiDeps` does
+    // not carry `run` at all. It earns its place by stating the contract at the seam a
+    // future widening of those deps would break first, not by adding a net.
+    const f = fixture({
+      seed: (stores) => {
+        // Four cleared across earlier campaigns...
+        for (const level of CAMPAIGN_LEVELS.slice(0, 4)) stores.progress.recordCleared(level);
+        // ...and then a brand-new campaign, which starts back at level 1.
+        stores.run.startNewRun(CAMPAIGN_LEVELS[0].id);
+      },
+    });
+    // 5, not 1 and not 2: every level the player has ever earned is still on offer.
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([5, CAMPAIGN_LEVELS.length]);
+    // ...and the run summary still reports where the NEW run stands, which is the half
+    // that does come from the run store. Both readings from one paint, so a page that
+    // crossed the two wires fails here rather than passing each check separately.
+    expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([{ mission: 1, lives: 3 }]);
+  });
+
   it('paints no Continue when there is no run -- the negative control', () => {
     const f = fixture();
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([false]);
