@@ -961,7 +961,17 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     values: [...BLOCKED_FIRE_CUES],
     description:
       'Plays an experimental cue when the active-shell cap refuses a shot; the shipped ' +
-      'default is silent. Issue #356 compares several treatments before adopting one.',
+      'default adds none of them.',
+    notes: [
+      'Issue #356 is CLOSED and adopted NONE of these arms. What ships instead is drawn ' +
+        'unconditionally and is not reachable through this flag: a refused shot recoils ' +
+        'the barrel and puffs burnt muzzle smoke, the same treatment a fired shot gets ' +
+        'in a darker colour (render/barrel-recoil.ts, render/muzzle-smoke.ts).',
+      'The arms are retained deliberately, so the comparison can be re-run if the ' +
+        'refusal reads as unclear at a real rate of fire. `smoke` is NOT among them: ' +
+        'issue #536 retired it from the vocabulary when the effect stopped reading a cue ' +
+        'at all (presentation/blocked-fire.ts).',
+    ],
   },
   backdrop: {
     kind: 'valued',
