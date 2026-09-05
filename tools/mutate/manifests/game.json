@@ -1640,7 +1640,7 @@
     "find": "  .ui-btn:hover:not(:disabled) {",
     "replace": "  .ui-btn:hover {",
     "expect": "killed",
-    "why": "One hover selector loses `:not(:disabled)` (issue #392's second acceptance criterion). A locked level button -- `hud.ts` sets the real `disabled` attribute, and `.hud-level-btn--locked` dims it to 0.35 opacity -- would brighten under the pointer, telling the player a control they cannot activate is available. Worse than no hover at all, and the sort of thing that survives review because the rule LOOKS right; the selector is checked per-rule rather than by eye. Only the base `.ui-btn` selector is mutated: one is enough to prove the assertion sweeps every rule in the block rather than a named list. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "why": "One hover selector loses `:not(:disabled)` (issue #392's second acceptance criterion). An unofferable versus mode or an unavailable controller source -- `hud.ts` sets the real `disabled` attribute on both -- would brighten under the pointer, telling the player a control they cannot activate is available. Worse than no hover at all, and the sort of thing that survives review because the rule LOOKS right; the selector is checked per-rule rather than by eye. Only the base `.ui-btn` selector is mutated: one is enough to prove the assertion sweeps every rule in the block rather than a named list. Scoped to hud.css.test.ts; expectFailures counts that scoped run only. (the example was a locked level button until issue #555 stopped the grid drawing them; the selector this mutates is unchanged).",
     "tests": [
       "src/game/hud.css.test.ts"
     ],
@@ -3376,7 +3376,7 @@
       "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
       "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Settings, then Controllers, then Quit from the pause panel",
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
-      "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert",
       "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
       "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
       "hud: the semantic action dispatcher (issue #494) a direction walks the active panel like the arrows do, and reports unconsumed with nothing shown",

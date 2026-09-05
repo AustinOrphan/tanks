@@ -106,10 +106,19 @@ const CENSUS = () => {
  * nothing, and stopping there would have exercised no start at all.
  *
  * `:not([disabled])` on the two second-step selectors is the honest wait rather than a
- * convenience. A locked level tile is `disabled` (hud.ts renders it that way so it cannot
- * fire), and `.hud-versus-start` is `disabled` whenever the retained config has a problem --
- * so without it this would click a dead control and then time out waiting for a canvas,
- * reporting a disposal failure for what is really an invalid setup.
+ * convenience. `.hud-versus-start` is `disabled` whenever the retained config has a
+ * problem -- so without it this would click a dead control and then time out waiting for a
+ * canvas, reporting a disposal failure for what is really an invalid setup. It stays on
+ * the level tile too, though no tile is disabled since issue #555 stopped the grid drawing
+ * locked levels: it costs nothing, and it is the assertion that fails loudly here rather
+ * than quietly if a disabled tile ever comes back.
+ *
+ * THE PRACTICE GESTURE NEEDS CLEARED LEVELS (issue #555). The pane offers levels the
+ * player has BEATEN, so a fresh profile has none and the opener is not even rendered --
+ * and nothing earlier in this sweep clears one, because every gesture ends by quitting
+ * from the pause panel rather than by winning. `seedProgress` below is what makes the
+ * gesture reachable, and it runs once before the first census so the cross-gesture canvas
+ * accumulation this file exists to measure is not reset by a mid-sweep reload.
  */
 const GESTURES = [
   { id: 'new-game', clicks: ['.hud-new-game'] },
@@ -274,6 +283,18 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+
+  // Two cleared levels, written before the run that matters (issue #555). Two, not one:
+  // one is a choice of one and `hud.ts` withholds the Levels button for it, so a single
+  // clear would leave the practice gesture just as unreachable as no clears at all.
+  //
+  // Seeded through a load-and-reload rather than mid-sweep, for the accumulation reason in
+  // the GESTURES comment. `localStorage` needs an origin, so the first `goto` exists only
+  // to get one; the reload is what makes the boot this sweep measures read the seeded save.
+  await page.goto(base, { waitUntil: 'load' });
+  await page.evaluate(() =>
+    localStorage.setItem('tanks.progress.v1', JSON.stringify({ levelId: 'level-02' })),
+  );
 
   await page.goto(base, { waitUntil: 'load' });
   await page.keyboard.press('Space'); // leave the Launch splash
