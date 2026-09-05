@@ -69,6 +69,7 @@ import {
   type ResolvedSession,
   type SessionDescriptor,
   type SessionDescriptorKind,
+  type TypedOutcome,
   type VersusResult,
   legacyOutcomePresentation,
   resolveSession,
@@ -2158,16 +2159,27 @@ export function startGameWith(
    *
    * `action` is the boot-time relaunch target, unchanged for the session's whole life --
    * the outcome button names where its click LANDS, and no world build moves that.
+   *
+   * `typedOutcome` is a PARAMETER rather than a `sm.outcome` read in here, for the same
+   * reason the world is one. The call site that has an outcome -- the frame whose events
+   * ended the session -- is safe either way: `driver.ts` runs `stateMachine.onEvents`
+   * immediately before `onFrameEvents`, so the phase has already flipped and `sm.outcome`
+   * is this session's ending by the time the push below runs. The two OPENING call sites
+   * are why reading it here would be wrong: `switchTo` runs BEFORE its caller's
+   * `sm.enterGameplay` (see the Next Level branch of the action handler), so a click that
+   * advances a level reaches this function with the FINISHED board's outcome still live
+   * on the state machine. Those two pass `null`, which is what is true of a board that
+   * has not ended, and they say it where a reader can check it against the caller.
    */
-  function pushOutcome(forWorld: World): void {
+  function pushOutcome(forWorld: World, typedOutcome: TypedOutcome | null): void {
     const attempt = deps.stats.attempt();
     const mode = forWorld.rules.mode;
     if (mode === 'ffa' || mode === 'teams') {
-      hud.setOutcome({ tally: mode, attempt, action: relaunchTarget, kills: coopKills, deaths: versusDeaths });
+      hud.setOutcome({ tally: mode, attempt, action: relaunchTarget, kills: coopKills, deaths: versusDeaths, typedOutcome });
     } else if (countPlayerTanks(forWorld) >= 2) {
-      hud.setOutcome({ tally: 'coop', attempt, action: relaunchTarget, kills: coopKills });
+      hud.setOutcome({ tally: 'coop', attempt, action: relaunchTarget, kills: coopKills, typedOutcome });
     } else {
-      hud.setOutcome({ tally: 'solo', attempt, action: relaunchTarget });
+      hud.setOutcome({ tally: 'solo', attempt, action: relaunchTarget, typedOutcome });
     }
   }
   function checkAchievements(clearedLevel: number | null): void {
@@ -2389,7 +2401,7 @@ export function startGameWith(
       // updates from here. It updates a beat AFTER the state flips -- the winning kill is
       // in THIS batch, not the one before the panel opened -- so this push lands into an
       // already-open panel and the HUD repaints it.
-      pushOutcome(driver.world);
+      pushOutcome(driver.world, sm.outcome);
       // The topbar status -- Lives, Enemies, the level chip and the versus stock strip --
       // is NOT pushed from here. It rides `refreshTopbar` in `onSimulated` above, and the
       // reason is this callback's own gate: `onFrameEvents` fires only
@@ -2523,6 +2535,35 @@ export function startGameWith(
       // REBUILDS the world. Resuming must keep the game exactly as frozen.
       sm.resume();
     } else {
+      /*
+       * PRACTICE RETRIES THE LEVEL IT WAS ON (issue #323), and it is checked FIRST
+       * because both branches below would otherwise answer for it, wrongly and in
+       * opposite directions.
+       *
+       * What a practice result used to do here: fall through to `landOnCampaignBoard`
+       * on a loss, which resets `sessionIdentity` to the boot context and builds
+       * `deps.levels.start` -- the RUN's own current level. A player who lost a practice
+       * level and pressed the button labelled `Retry` was put onto a different level, in
+       * a different kind of session. On a practice WIN with a level after it, the
+       * `next !== null` branch below advanced practice through the campaign sequence
+       * instead. Both were the shared win/lose panel answering a question it could not
+       * see: the panel had no idea it was a practice session.
+       *
+       * `sm.outcome`, not `sessionIdentity`, is the discriminant -- the model's own word
+       * for why this session ended (`app-state.ts`), which is the same value the HUD's
+       * end screen is reading to put `Retry` on that button in the first place. The two
+       * cannot disagree about which screen this click came from.
+       *
+       * `switchTo(level)` with no lives argument: a retry is a fresh attempt at the same
+       * board, which is exactly what a Levels pick already builds (see `onLevelSelect`'s
+       * "independent fresh lives"). The identity is left alone, so the session stays
+       * Practice and the run stays untouched all the way through.
+       */
+      if (sm.outcome?.kind === 'practice-result') {
+        switchTo(level);
+        sm.enterGameplay(currentSession);
+        return;
+      }
       // Intermediate win -> the NEXT level, with the lives that survived this one.
       // Neither branch touches the active RUN here: a mid-campaign level clear or a
       // game-over/completion is already persisted reactively in sm.onChange, the
@@ -2649,8 +2690,10 @@ export function startGameWith(
     // The win/lose panel starts the new attempt empty too. A board switch can change
     // which tally the panel would show -- a Levels pick lands a coop session on a
     // one-player board -- so the whole projection is re-derived here rather than left
-    // saying whatever the finished attempt said.
-    pushOutcome(world);
+    // saying whatever the finished attempt said. `null` and not `sm.outcome`: the
+    // Next Level click reaches here while the state machine still holds the outcome
+    // of the board being left, and the board being built has not ended.
+    pushOutcome(world, null);
   }
 
   /**
@@ -2837,7 +2880,16 @@ export function startGameWith(
     // Next Level is pressed, so the run is already sitting on the NEXT level by the time
     // this panel is on screen. Leaving from here resumes there, not on the level just
     // beaten.
-    if (!sm.isPaused && !sm.presentsAsWin) return;
+    // EVERY END SCREEN, not the winning ones (issue #323). This read
+    // `!sm.isPaused && !sm.presentsAsWin`, from when the directive above covered a
+    // CLEARED level and nothing else. PR #563 then put the Main Menu button on every end
+    // screen in the HUD without widening this guard, so the button was on screen and
+    // inert on all three losing endings -- a campaign game-over, a failed practice level
+    // and a versus draw -- which is the exact stranding issue #323 opened about, moved
+    // one layer down. `hasOutcome` is the honest condition: the session is over, however
+    // it ended, and leaving it abandons nothing that is still running. `playing` is
+    // still refused, which is what this guard was always for.
+    if (!sm.isPaused && !sm.hasOutcome) return;
     // NAVIGATION ONLY (issue #317): this builds no world, consumes no gameplay seed and
     // touches no run. It used to call `landOnCampaignBoard(false)` -- `switchTo` ->
     // `nextSeed()` -> a world build -- for one reason, stated in the comment this
@@ -3014,8 +3066,9 @@ export function startGameWith(
   versusDeaths = [];
   // The outcome panel's opening state, stated rather than inherited: a session that is
   // disposed before it ever produces an event still leaves the HUD holding a projection
-  // that describes THIS session's board, not the previous one's.
-  pushOutcome(world);
+  // that describes THIS session's board, not the previous one's -- and with no typed
+  // outcome, because a session that has just been constructed has not ended.
+  pushOutcome(world, null);
   // NO APPLICATION-SURFACE PUSHES HERE any more (issue #324, step S5). Continue, the
   // Levels grid, Records and the paint shop's selected swatches were all pushed from this
   // block at every session construction, over values `route-host.ts` had already painted
