@@ -1909,6 +1909,93 @@ describe('createHud application transition contract', () => {
     }
   });
 
+  it('THE GAP (issue #558): a Records tab switch never paints the Main Menu', () => {
+    // The defect, measured MID-transition rather than once settled -- settled is where it
+    // hides. `openLayer`'s replace branch pops the outgoing tab and calls its `close()`,
+    // and every pane's close is defined as "return to the Main Menu" (`closeSurface`
+    // swaps to `PANEL_SURFACE`). The following `open()` drains that outstanding chain
+    // before starting its own, so the panel lands genuinely open and is then crossfaded
+    // straight back out: the player sees the menu they already left flash between two
+    // panes that `openLayer`'s own doc comment calls "siblings over the same origin".
+    //
+    // Reduced motion masks it completely -- the class work settles inside one synchronous
+    // step and never lands visible -- so this runs on the ordinary animated path, which
+    // is what every player without a motion preference gets.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      const panelEl = surface(root, '.hud-panel');
+
+      click(root, '.hud-records-open');
+      vi.advanceTimersByTime(1000);
+      expect(panelEl.classList.contains('hud-panel--hidden'), 'Records did not open').toBe(true);
+
+      // The switch, read at its MIDPOINT: no timer advance, so whatever the swap put on
+      // screen is still on screen.
+      click(root, '.hud-stats .hud-records-tab-achievements');
+      expect(
+        panelEl.classList.contains('hud-panel--hidden'),
+        'the Main Menu was painted between two Records tabs',
+      ).toBe(true);
+
+      // ...and back again, because the defect was symmetric in both directions.
+      vi.advanceTimersByTime(1000);
+      click(root, '.hud-achievements .hud-records-tab-stats');
+      expect(
+        panelEl.classList.contains('hud-panel--hidden'),
+        'the Main Menu was painted switching back',
+      ).toBe(true);
+
+      // The denominator: the tabs really did move. Without this the assertions above
+      // would pass on a build where the click did nothing at all.
+      vi.advanceTimersByTime(1000);
+      expect(surface(root, '.hud-stats').classList.contains('hud-stats--hidden')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still RELEASES the replaced pane, which is why the close was not simply dropped', () => {
+    // The trap in the obvious fix, pinned. Deleting `close()` from the replace branch
+    // removes the flash and also skips every pane's non-visual teardown: `customize`
+    // hands out a live `TankPreview` -- a WebGL context and its listeners -- to
+    // `onCustomizeClose` subscribers, and a replace that never told them would leak it
+    // for the rest of the page's life, silently.
+    //
+    // Reached through the public API rather than a synthetic call: `showVersusSetup` is
+    // what `route-ui.ts` uses for the post-match reopen, and firing it over an open
+    // Customize pane is exactly the replace path.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      let closes = 0;
+      h.onCustomizeClose(() => {
+        closes += 1;
+      });
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+
+      click(root, '.hud-customize-open');
+      vi.advanceTimersByTime(1000);
+      expect(closes, 'opening the pane already reported a close').toBe(0);
+
+      h.showVersusSetup(true);
+      expect(closes, 'the replaced pane was never told it had been replaced').toBe(1);
+
+      // ...and the flash is still absent on this path too, which is the whole point of
+      // releasing rather than closing.
+      expect(
+        surface(root, '.hud-panel').classList.contains('hud-panel--hidden'),
+        'the Main Menu was painted between two panes',
+      ).toBe(true);
+      vi.advanceTimersByTime(1000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('settles rather than orphans an outstanding transition when the HUD is disposed', () => {
     // The other half of criterion 6: a HUD torn down mid-transition must leave no timer
     // behind. `dispose` settles rather than drops, so the surface it was hiding is hidden

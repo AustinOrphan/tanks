@@ -3286,15 +3286,55 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     open(initial?: VersusConfig | null): void;
     /** Today's ANIMATED `showX(false)`, so close callbacks fire through their guards. */
     close(): void;
+    /**
+     * Give up everything this layer owns that is NOT its surface (issue #558).
+     *
+     * `close()` cannot be used when one pane REPLACES another, because every pane's close
+     * is defined as "return to the Main Menu" -- `closeSurface` swaps to `PANEL_SURFACE`.
+     * On a Records tab switch that put the menu genuinely on screen between two panes the
+     * layer stack calls siblings, and the incoming open then crossfaded it straight back
+     * out; the player saw the screen they had already left flash past.
+     *
+     * So the replace path releases instead. The visual half is not skipped, it is DONE BY
+     * THE INCOMING OPEN: every opener sources its transition from `openSurface()`, "the
+     * surface the player is actually on", so leaving the outgoing pane open is exactly
+     * what turns two transitions through the menu into one directly between the panes.
+     *
+     * ABSENT for a layer whose close is only its surface, which is most of them --
+     * `stats`, `achievements`, `levelselect`, `settings`, `about`, the confirmation, and
+     * `versus-setup` (whose `closeVersusPane` is a bare `closeSurface`). Only the two
+     * panes with real close callbacks need a row here, and a row that did nothing would
+     * suggest there was something to do.
+     */
+    release?(): void;
     /** `'already-top'`: re-render in place, no transition. */
     refresh?(initial?: VersusConfig | null): void;
   }
   const LAYERS: Record<HudLayerId, LayerRow> = {
     stats: { container: statsView, open: () => showStats(true), close: () => showStats(false) },
-    customize: { container: customizeView, open: () => showCustomize(true), close: () => showCustomize(false) },
+    customize: {
+      container: customizeView,
+      open: () => showCustomize(true),
+      close: () => showCustomize(false),
+      // The pane owns a live `TankPreview` -- a WebGL context and its listeners -- handed
+      // out to `customizeCloseCbs` subscribers. Guarded on the surface being open for the
+      // same reason `showCustomize` guards on `wasOpen`: a release that fired for a pane
+      // that was never on screen would tear down a preview nobody built.
+      release: () => {
+        if (isSurfaceOpen(CUSTOMIZE_SURFACE)) for (const cb of customizeCloseCbs) cb();
+      },
+    },
     achievements: { container: achView, open: () => showAchievements(true), close: () => showAchievements(false) },
     levelselect: { container: levelSelectView, open: () => showLevelSelect(true), close: () => showLevelSelect(false) },
-    controllers: { container: controllersView, open: () => showControllers(true), close: () => showControllers(false) },
+    controllers: {
+      container: controllersView,
+      open: () => showControllers(true),
+      close: () => showControllers(false),
+      /** Same shape as `customize` above: the pane's subscribers own the pad listeners. */
+      release: () => {
+        if (isSurfaceOpen(CONTROLLERS_SURFACE)) for (const cb of controllersCloseCbs) cb();
+      },
+    },
     'versus-setup': {
       container: versusSetupView,
       open: (initial) => openVersusPane(initial),
@@ -3373,7 +3413,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
        */
       if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;
       layers.pop();
-      LAYERS[top.id].close();
+      /*
+       * RELEASED, not closed (issue #558). `close()` here asked for the Main Menu -- it
+       * is `closeSurface`, which swaps to `PANEL_SURFACE` -- so a Records tab switch
+       * moved Stats -> Main Menu -> Achievements and the player watched the menu flash
+       * between two panes this stack calls siblings. Measured mid-transition; settled, it
+       * is invisible, and under reduced motion it never lands visible at all.
+       *
+       * Leaving the outgoing surface open is what makes the swap direct: the incoming
+       * `open()` below sources from `openSurface()`, so it fades this pane out and the new
+       * one in as ONE transition. `release()` gives up only what the surface does not
+       * cover, and most layers have nothing there.
+       */
+      LAYERS[top.id].release?.();
       origin = top.origin;
     }
     const result = layers.push({

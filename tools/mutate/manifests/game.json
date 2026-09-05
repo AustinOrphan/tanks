@@ -4850,5 +4850,48 @@
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) keeps the word \"run\" off a practice ending, where there is no run"
     ]
+  },
+  {
+    "id": "replacing-a-pane-goes-through-the-main-menu",
+    "file": "src/game/hud.ts",
+    "find": "      LAYERS[top.id].release?.();",
+    "replace": "      LAYERS[top.id].close();",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Restores the shipped defect issue #558 was filed for. Every pane's close is defined as \"return to the Main Menu\" -- it is `closeSurface`, which swaps to `PANEL_SURFACE` -- so replacing one pane with another moved Stats -> Main Menu -> Achievements and the player watched the menu they had already left flash between two panes the layer stack's own doc comment calls siblings. The incoming `open()` drains the outstanding chain before starting its own, so the menu genuinely lands open and is then crossfaded back out. Invisible once settled and invisible under reduced motion, which is why the killer reads the panel MID-transition with no timer advance.",
+    "killedBy": [
+      "createHud application transition contract THE GAP (issue #558): a Records tab switch never paints the Main Menu",
+      "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped"
+    ]
+  },
+  {
+    "id": "replacing-a-pane-releases-nothing",
+    "file": "src/game/hud.ts",
+    "find": "      LAYERS[top.id].release?.();",
+    "replace": "      void LAYERS;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The OBVIOUS WRONG FIX, which issue #558's scope names explicitly: dropping the outgoing layer's teardown removes the flash and leaks everything the surface does not cover. `customize` hands a live `TankPreview` -- a WebGL context and its listeners -- to its close subscribers, and a replace that never tells them keeps it alive for the rest of the page's life with nothing thrown and no visual difference. Pinned separately from the entry above because the two fail in opposite directions and a fix for either one alone still ships the other.",
+    "killedBy": [
+      "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped"
+    ]
+  },
+  {
+    "id": "a-replaced-customize-pane-keeps-its-webgl-context",
+    "file": "src/game/hud.ts",
+    "find": "        if (isSurfaceOpen(CUSTOMIZE_SURFACE)) for (const cb of customizeCloseCbs) cb();",
+    "replace": "        void customizeCloseCbs;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The same leak as the entry above, reached one layer down: the replace path still calls `release()` and the row still exists, but the row does nothing. Worth its own entry because the two are fixed in different places -- a correct replace branch over an empty release row is exactly as leaky as no release at all, and reads more correct.",
+    "killedBy": [
+      "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped"
+    ]
   }
 ]
