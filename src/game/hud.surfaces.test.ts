@@ -1513,30 +1513,21 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
       'Next Level',
       'false',
     ]);
-    expect(screen(CAMPAIGN_OVER)).toEqual([
-      'Game Over',
-      'Out of lives. This run is over.',
-      'Start New Campaign',
-      'false',
-    ]);
+    // NO SUBTITLE on this one, by owner ruling: the headline and the two buttons already
+    // say it, and the sentence that stood here only restated them.
+    expect(screen(CAMPAIGN_OVER)).toEqual(['Game Over', '', 'Start New Campaign', 'false']);
     expect(screen(CAMPAIGN_COMPLETE)).toEqual([
       'Campaign Complete!',
       'Every level cleared. This run is finished.',
       'Start New Campaign',
       'false',
     ]);
-    expect(screen(PRACTICE_WON)).toEqual([
-      'Practice Cleared',
-      'Practice only. Your campaign run is untouched.',
-      'Retry',
-      'true',
-    ]);
-    expect(screen(PRACTICE_LOST)).toEqual([
-      'Practice Failed',
-      'Practice only. Your campaign run is untouched.',
-      'Retry',
-      'true',
-    ]);
+    // The practice endings name the LEVEL and carry no subtitle (owner ruling). They said
+    // "Practice Cleared"/"Practice Failed" over a topbar chip already reading PRACTICE,
+    // and a subtitle promising the campaign run was safe -- reassurance that mostly
+    // raised the doubt it answered.
+    expect(screen(PRACTICE_WON)).toEqual(['Level Cleared', '', 'Retry', 'true']);
+    expect(screen(PRACTICE_LOST)).toEqual(['Level Failed', '', 'Retry', 'true']);
   });
 
   it('THE GAP (issue #323): no two endings render as the same screen any more', () => {
@@ -1628,7 +1619,11 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     expect(action(root)).toBe('Retry');
 
     h.setOutcome(push(CAMPAIGN_OVER));
-    expect(subtitle(root)).toBe('Out of lives. This run is over.');
+    // The repaint is visible in BOTH directions here: the legacy line is cleared (the
+    // ruled copy for this ending has no subtitle) and the action is rewritten. Asserting
+    // only the action would let a repaint that touched buttons and left stale prose
+    // behind pass.
+    expect(subtitle(root), 'the legacy subtitle survived the repaint').toBe('');
     expect(action(root)).toBe('Start New Campaign');
   });
 

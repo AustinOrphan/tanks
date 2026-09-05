@@ -4110,13 +4110,13 @@
   {
     "id": "campaign-over-and-practice-share-one-verdict",
     "file": "src/game/hud.ts",
-    "find": "    subtitle: 'Out of lives. This run is over.',\n    action: 'Start New Campaign',",
-    "replace": "    subtitle: 'Out of lives.',\n    action: 'Retry',",
+    "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n  },\n  'campaign-complete'",
+    "replace": "    subtitle: 'Out of lives.',\n    action: 'Retry',\n    chooseLevel: false,\n  },\n  'campaign-complete'",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Puts the pre-#323 wording back on one table entry. This is the exact screen issue #323 opened about: `Game Over` / `Out of lives.` over a button reading `Retry` was what a campaign that ran out of lives AND a practice level that ran out of lives both showed, and the word `Retry` was doubly untrue on the campaign one -- the click ends that run and begins a new campaign at level 1 (pinned in loop.test.ts). The panel still renders, still routes and still offers the Main Menu beside it, so only copy assertions can see this.",
+    "why": "Puts the pre-#323 wording back on one table entry. This is the exact screen issue #323 opened about: `Game Over` / `Out of lives.` over a button reading `Retry` was what a campaign that ran out of lives AND a practice level that ran out of lives both showed, and the word `Retry` was doubly untrue on the campaign one -- the click ends that run and begins a new campaign at level 1 (pinned in loop.test.ts). The panel still renders, still routes and still offers the Main Menu beside it, so only copy assertions can see this. RE-ANCHORED after the owner ruled the subtitle off this screen: the find string embedded the sentence that no longer exists, so it now anchors on the empty subtitle plus the action and the next table key, which is the smallest span that is still unique. The mutation is unchanged in substance -- it restores the pre-#323 verdict wording and the shared `Retry` button.",
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action",
       "hud: every ending gets its own screen (issue #323) replaces the opening copy when the ending lands AFTER the panel is already up"
@@ -4125,13 +4125,13 @@
   {
     "id": "practice-failure-reads-as-a-campaign-game-over",
     "file": "src/game/hud.ts",
-    "find": "  'practice-failed': {\n    title: () => 'Practice Failed',\n    subtitle: 'Practice only. Your campaign run is untouched.',",
-    "replace": "  'practice-failed': {\n    title: () => 'Game Over',\n    subtitle: 'Out of lives. This run is over.',",
+    "find": "  'practice-failed': {\n    title: () => 'Level Failed',\n    subtitle: '',",
+    "replace": "  'practice-failed': {\n    title: () => 'Game Over',\n    subtitle: 'Out of lives.',",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Collapses two of the five endings onto one screen -- the specific collapse issue #323 names, since a practice level and a campaign run are the two positions a player can hold and this makes the loss of one read as the loss of the other. A table keyed over the outcome kinds cannot prevent two entries agreeing, so the population sweep is what has to catch it; the per-ending case catches it too and names the strings, and both are listed because they fail for different reasons.",
+    "why": "Collapses two of the five endings onto one screen -- the specific collapse issue #323 names, since a practice level and a campaign run are the two positions a player can hold and this makes the loss of one read as the loss of the other. A table keyed over the outcome kinds cannot prevent two entries agreeing, so the population sweep is what has to catch it; the per-ending case catches it too and names the strings, and both are listed because they fail for different reasons. RE-ANCHORED after the owner ruling renamed this ending to `Level Failed` and dropped its subtitle. The collapse being mutated is the same one: a failed practice level reading as a lost campaign.",
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action",
       "hud: every ending gets its own screen (issue #323) THE GAP (issue #323): no two endings render as the same screen any more"

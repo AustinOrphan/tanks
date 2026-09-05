@@ -377,7 +377,12 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
   },
   'campaign-over': {
     title: () => 'Game Over',
-    subtitle: 'Out of lives. This run is over.',
+    // NO SUBTITLE, by owner ruling. "Out of lives. This run is over." stood here and said
+    // nothing "Game Over" had not already said, over a screen whose two buttons -- Start
+    // New Campaign, Main Menu -- state the consequence better than a sentence about it
+    // can. An empty string is the documented way to drop the line: `setSubtitle` hides
+    // the element rather than leaving an empty one taking up its space.
+    subtitle: '',
     action: 'Start New Campaign',
     chooseLevel: false,
   },
@@ -387,15 +392,30 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
     action: 'Start New Campaign',
     chooseLevel: false,
   },
+  /*
+   * The two practice endings name the LEVEL, not the mode, and carry no subtitle at all
+   * (owner ruling).
+   *
+   * "Practice Cleared" / "Practice Failed" repeated a word the topbar is already showing
+   * in its own chip two lines above, and spent the headline saying WHERE the player is
+   * rather than WHAT happened. The level is what happened.
+   *
+   * The dropped subtitle was "Practice only. Your campaign run is untouched." -- true,
+   * and reassurance nobody asked for: a player who chose Practice from the menu knows
+   * they are in Practice, and a sentence promising their run is safe mostly plants the
+   * idea that it might not have been. It also put the word "run" on the one screen that
+   * is not about a run, which is why `renderAttemptSummary` keeps that word off these
+   * screens too.
+   */
   'practice-cleared': {
-    title: () => 'Practice Cleared',
-    subtitle: 'Practice only. Your campaign run is untouched.',
+    title: () => 'Level Cleared',
+    subtitle: '',
     action: 'Retry',
     chooseLevel: true,
   },
   'practice-failed': {
-    title: () => 'Practice Failed',
-    subtitle: 'Practice only. Your campaign run is untouched.',
+    title: () => 'Level Failed',
+    subtitle: '',
     action: 'Retry',
     chooseLevel: true,
   },
@@ -2187,8 +2207,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     }
     const r = outcomeData.attempt;
     const kills = r.shellKills + r.mineKills;
+    /*
+     * "This level" on a practice ending, "This run" everywhere else (owner ruling).
+     *
+     * A practice session has no run -- that is the whole point of it, and `loop.ts`
+     * enforces it: `campaignActive()` is false for practice, so nothing it does reaches
+     * the run store. Heading its numbers "This run" named a thing the player does not
+     * have on screen and, worse, named the campaign run they DO have going elsewhere,
+     * which is exactly the one these numbers are not about.
+     *
+     * The counter itself is per-ATTEMPT either way -- `stats.attempt()` is zeroed on
+     * every world build (see its own doc) -- so on a campaign screen "This run" is
+     * already a loose reading of a per-level tally. Left alone here because that wording
+     * predates this change and correcting it is a separate decision about campaign copy;
+     * this only stops the word appearing where it is plainly wrong.
+     */
+    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';
     attemptSummaryEl.textContent =
-      `This run: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
+      `${scope}: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
     attemptSummaryEl.classList.remove('hud-attempt-summary--hidden');
   }
 
