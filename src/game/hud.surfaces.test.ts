@@ -1497,6 +1497,36 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
   const PRACTICE_WON: TypedOutcome = { kind: 'practice-result', cleared: true };
   const PRACTICE_LOST: TypedOutcome = { kind: 'practice-result', cleared: false };
 
+  it('keeps the word "run" off a practice ending, where there is no run', () => {
+    // The owner ruling: a practice screen must not say "this run" anywhere. The subtitle
+    // that said it is gone, and this is the OTHER place the word appeared -- the tally
+    // line, which is not part of the copy catalogue and would have kept saying it.
+    //
+    // A practice session has no run at all: `campaignActive()` is false for it, so
+    // nothing it does reaches the run store. The word named the campaign run the player
+    // may well have going elsewhere, which is precisely the one these numbers are not
+    // about.
+    const { hud: h, root } = mount();
+    h.setStatus(atLevel(3, 5));
+    const summary = (): string =>
+      (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent ?? '';
+
+    drive(h, PRACTICE_LOST);
+    expect(summary()).toMatch(/^This level:/);
+    expect(summary(), 'a practice ending still said "run"').not.toContain('run');
+
+    drive(h, PRACTICE_WON);
+    expect(summary(), 'only the failed practice ending was fixed').toMatch(/^This level:/);
+
+    // THE NEGATIVE CONTROL. Without it, a line hardcoded to "This level" reads correctly
+    // on the two screens this test drives and silently relabels every campaign ending
+    // too -- the same shape of over-broad fix the pause-label control catches.
+    drive(h, CAMPAIGN_OVER);
+    expect(summary(), 'the campaign ending was relabelled too').toMatch(/^This run:/);
+    drive(h, MISSION_CLEAR);
+    expect(summary()).toMatch(/^This run:/);
+  });
+
   it('gives each campaign and practice ending its own copy and its own action', () => {
     const { hud: h, root } = mount();
     h.setLevelSelect(3, 5); // a real level choice exists, so Choose Level is not withheld

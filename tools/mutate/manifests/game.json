@@ -4822,5 +4822,33 @@
     "killedBy": [
       "hud: the pause exit is contextual (issue #323) leaves every practice END screen reading Main Menu, not End Practice"
     ]
+  },
+  {
+    "id": "practice-tally-claims-a-run-the-player-has-not-got",
+    "file": "src/game/hud.ts",
+    "find": "    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';",
+    "replace": "    const scope = 'This run';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Puts the word 'run' back on the one screen with no run behind it. A practice session never touches the campaign run -- campaignActive() is false for it, so nothing it does reaches the run store -- so 'This run: 6 kills' over a practice tally names the campaign run the player may have going elsewhere, which is exactly the one those numbers are not about. The owner ruled the word off this screen along with the subtitle that also carried it. Nothing else changes: the numbers are right, the line is in the right place, and only the noun is a lie.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) keeps the word \"run\" off a practice ending, where there is no run"
+    ]
+  },
+  {
+    "id": "every-ending-tally-reads-as-one-level",
+    "file": "src/game/hud.ts",
+    "find": "    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';",
+    "replace": "    const scope = 'This level';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The over-broad half of the same fix, and the more likely regression: relabelling EVERY ending 'This level' reads correctly on the two practice screens a careless test would drive and quietly rewrites the campaign ones too. It is killed only by the negative control in the same case, which drives a campaign-over and a mission-clear through the identical helper. Same shape as the pause-label control, and the reason both exist.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) keeps the word \"run\" off a practice ending, where there is no run"
+    ]
   }
 ]
