@@ -4924,7 +4924,7 @@
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "The other half of issue #555, and the half that survives the grid being fixed: with the population correct but the OFFER still keyed on campaign length, a fresh five-level campaign shows a Levels button leading to a pane holding one button. That is both a choice of one -- which the sandbox case has always refused on identical reasoning -- and a standing hint that there is more, on the first screen a new player sees. Pinned separately from the grid entries because the two are independent: either can be reverted without the other.",
+    "why": "The other half of issue #555, and the half that survives the grid being fixed: with the population correct but the OFFER still keyed on campaign length, a fresh five-level campaign shows a Levels button leading to a pane holding no buttons at all (`unlocked` counts CLEARED levels, so it is 0 before the first win). That is both a choice of one -- which the sandbox case has always refused on identical reasoning -- and a standing hint that there is more, on the first screen a new player sees. Pinned separately from the grid entries because the two are independent: either can be reverted without the other.",
     "killedBy": [
       "hud: level select panel offers the Levels button on what is UNLOCKED, not on what the campaign holds"
     ]
@@ -4932,13 +4932,13 @@
   {
     "id": "levels-note-never-says-the-grid-has-stopped-growing",
     "file": "src/game/hud.ts",
-    "find": "        unlocked >= total ? 'Every level is unlocked.' : 'Clear a level to unlock the next.';",
-    "replace": "        'Clear a level to unlock the next.';",
+    "find": "        unlocked >= total ? 'Every level cleared.' : 'Clear a level to add it here.';",
+    "replace": "        'Clear a level to add it here.';",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Removes the completion signal, which is the thing issue #555 had to REPLACE rather than merely delete. A grid of locked buttons told a player implicitly that the campaign had an end and where it was; a grid that only grows says nothing, so a player who has unlocked everything cannot tell that from a player whose next level has not arrived -- and this line promising a next one is then a lie for the rest of the campaign. Survives every population assertion in the file, because it changes no button.",
+    "why": "Removes the completion signal, which is the thing issue #555 had to REPLACE rather than merely delete. A grid of locked buttons told a player implicitly that the campaign had an end and where it was; a grid that only grows says nothing, so a player who has cleared everything cannot tell that from a player whose next level has not arrived -- and this line promising another one is then a lie for the rest of the campaign, which under the cleared-only rule means for a player who has actually finished the game. Survives every population assertion in the file, because it changes no button.",
     "killedBy": [
       "hud: level select panel says whether the grid will keep growing, without saying how far it has to go"
     ]
@@ -4955,6 +4955,24 @@
     "why": "Drops the guard and reports `Mission 0` for a run whose stored level this build's campaign does not list -- reachable today through a developer session's `?dev=1&level=` jump. Split out of `route-host-paints-no-run-summary` at issue #555: with `total` removed from `CampaignRunSummary`, that entry's payload became identical to the real one for exactly this case, so the net had to move rather than be dropped. It is also the sharper statement of the contract -- the summary degrades to the lives half rather than inventing a position, and an invented one is worse than an omitted one because the Main Menu presents it with the same confidence as a true reading.",
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page reports a mission it cannot place as null rather than inventing a position"
+    ]
+  },
+  {
+    "id": "level-select-hands-out-the-frontier-level",
+    "file": "src/game/route-ui.ts",
+    "find": "    Math.min(deps.progress.highestCleared(), deps.levels.levels.length);",
+    "replace": "    Math.min(deps.progress.highestCleared() + 1, deps.levels.levels.length);",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-ui.test.ts",
+      "src/game/route-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "why": "Restores the cleared-PLUS-ONE rule, which is not a cosmetic off-by-one: it makes the Levels pane a second campaign ladder. A practice win records permanent progress -- `loop.ts` gates `recordCleared` on `tracksProgress` alone and its own comment says practice is deliberately NOT excluded -- so with the frontier level on offer a player can rehearse it with independent lives, bank the unlock, and repeat, climbing the whole campaign without ever spending a campaign life or touching the run. Counting clears alone seals that structurally rather than with a second guard, because `recordCleared` keeps the maximum: a pane that can only offer already-counted levels cannot advance progress at all. Three suites catch it at three different distances from the change -- the resolver itself, the page's paint, and the session boot -- which is what a rule this cheap to revert needs.",
+    "killedBy": [
+      "the application routes work with no gameplay session behind them unlockedLevels answers from progress alone, and counts CLEARED levels only",
+      "createRouteHost: the Main Menu is painted from the stores by the page paints no Continue when there is no run -- the negative control",
+      "startGameWith: the main menu tells the HUD the unlock state at boot: CLEARED levels pickable, capped at the count"
     ]
   }
 ]

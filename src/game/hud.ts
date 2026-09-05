@@ -5311,19 +5311,26 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // button that opens it appears when there is genuinely a choice to make, which on a
       // fresh campaign there is not. `total > 1` would have offered a pane holding one
       // button, which is a choice of one and also the exact hint this change removes.
+      //
+      // `unlocked` can now be 0 (nothing cleared), which is why this is `> 1` rather than
+      // a truthiness check and why the loop below is bounded rather than guarded: an empty
+      // grid is a reachable value, just never a reachable SCREEN.
       levelChoice = unlocked > 1;
       // The note carries the SHAPE of the campaign now that no locked button does, and it
       // carries it without a number: whether the grid is still going to grow. Always
-      // shown, never toggled -- "every level is unlocked" is the completion signal the
-      // locked buttons used to give implicitly, and a grid that has merely stopped
-      // growing gives none. Written here rather than in setState because `unlocked` and
-      // `total` are only known at this call.
+      // shown, never toggled -- "every level cleared" is the completion signal the locked
+      // buttons used to give implicitly, and a grid that has merely stopped growing gives
+      // none. Written here rather than in setState because `unlocked` and `total` are only
+      // known at this call.
       //
-      // "unlocked", not "cleared": `unlocked` is `highestCleared + 1`, so it reaches
-      // `total` one level BEFORE the campaign is finished. "Campaign complete" here would
-      // be a claim the player disproves by pressing the last button.
+      // "cleared" in both halves, and the wording is exact rather than tidy. `unlocked` is
+      // the count of levels the player has BEATEN (see `unlockedLevels`), so clearing a
+      // level adds THAT level to this grid -- not the next one -- and `unlocked >= total`
+      // is reached only when the last level falls, which makes the completion line a
+      // statement of fact instead of the near-miss claim it would have been under the
+      // cleared-plus-one rule this pane used to follow.
       levelsNoteEl.textContent =
-        unlocked >= total ? 'Every level is unlocked.' : 'Clear a level to unlock the next.';
+        unlocked >= total ? 'Every level cleared.' : 'Clear a level to add it here.';
       // REPLACE, never append: this re-renders after every unlock.
       levelsRow.textContent = '';
       for (let i = 0; i < unlocked; i++) {

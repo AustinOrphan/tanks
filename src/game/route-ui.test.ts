@@ -26,6 +26,7 @@ import {
   createStaticReducedMotionSource,
   NO_CAPABILITIES,
 } from './capabilities';
+import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 import { createLevelSystem } from './levels';
 import { DEV_FLAGS_OFF } from './devflags';
 import type { VersusConfig } from './versus-config';
@@ -502,9 +503,23 @@ describe('the application routes work with no gameplay session behind them', () 
     expect(f.deps.settings.snapshot().presentation.quality).toBe('low');
   });
 
-  it('unlockedLevels answers from progress alone', () => {
+  it('unlockedLevels answers from progress alone, and counts CLEARED levels only', () => {
+    // Issue #555's second ruling, at the one place that decides it. `highestCleared + 1`
+    // made this pane a second campaign ladder: a practice win records permanent progress
+    // (`loop.ts` gates `recordCleared` on `tracksProgress`, which practice satisfies), so
+    // a player could rehearse the frontier with independent lives, bank the unlock, and
+    // climb the whole campaign without spending a campaign life. Counting clears alone
+    // seals it structurally -- `recordCleared` keeps the maximum, so a pane that only
+    // ever offers already-counted levels cannot advance progress at all.
     const f = fixture();
-    // A fresh save has cleared nothing, so exactly one level is pickable.
-    expect(f.routeUi.unlockedLevels()).toBe(1);
+    // A fresh save has cleared nothing, so NOTHING is pickable. Under the old rule this
+    // was 1, and that one button was the frontier.
+    expect(f.routeUi.unlockedLevels()).toBe(0);
+
+    // The negative control: it does follow progress, rather than being pinned at zero.
+    // Two clears, and the count is 2 -- not 3, which is what the `+ 1` returned here.
+    f.deps.progress.recordCleared(CAMPAIGN_LEVELS[0]);
+    f.deps.progress.recordCleared(CAMPAIGN_LEVELS[1]);
+    expect(f.routeUi.unlockedLevels()).toBe(2);
   });
 });

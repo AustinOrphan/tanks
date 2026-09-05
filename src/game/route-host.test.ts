@@ -991,8 +991,9 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     });
     expect(f.host.hasSession()).toBe(false);
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([true]);
-    // One cleared: the grid offers it plus the next.
-    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([2, CAMPAIGN_LEVELS.length]);
+    // One cleared: the grid offers exactly that one. Not two -- the pane replays levels
+    // the player has BEATEN and never offers the frontier (issue #555's second ruling).
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
     expect(f.hud.argsOf('setHullColor').at(-1)).toEqual(['red']);
     expect(f.hud.argsOf('setSkin')).toHaveLength(1);
     expect(f.hud.argsOf('setAccentColor')).toHaveLength(1);
@@ -1027,8 +1028,10 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
         stores.run.startNewRun(CAMPAIGN_LEVELS[0].id);
       },
     });
-    // 5, not 1 and not 2: every level the player has ever earned is still on offer.
-    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([5, CAMPAIGN_LEVELS.length]);
+    // 4, not 0 and not 1: every level the player has ever BEATEN is still on offer. Not
+    // 5 either -- level 5 was never cleared, and the frontier is the campaign's to hand
+    // out, not the practice pane's.
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([4, CAMPAIGN_LEVELS.length]);
     // ...and the run summary still reports where the NEW run stands, which is the half
     // that does come from the run store. Both readings from one paint, so a page that
     // crossed the two wires fails here rather than passing each check separately.
@@ -1039,7 +1042,10 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     const f = fixture();
     expect(f.hud.argsOf('setContinueAvailable').at(-1)).toEqual([false]);
     expect(f.hud.argsOf('setCampaignRun').at(-1)).toEqual([null]);
-    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
+    // 0, not 1: a player who has cleared nothing has nothing to replay, so the grid is
+    // empty and `hud.ts` withholds the Levels button entirely. An empty grid is a
+    // reachable VALUE and never a reachable screen.
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([0, CAMPAIGN_LEVELS.length]);
   });
 
   it('resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)', () => {
@@ -1379,7 +1385,7 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
       before,
     );
     f.host.sm.toMainMenu();
-    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([2, CAMPAIGN_LEVELS.length]);
+    expect(f.hud.argsOf('setLevelSelect').at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
   });
 
   it('re-reads Continue on every arrival at the Main Menu, and only there', () => {

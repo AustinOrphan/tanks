@@ -1008,16 +1008,18 @@ describe('hud: level select panel', () => {
     const note = (): string => (root.querySelector('.hud-levels-note') as HTMLElement).textContent ?? '';
 
     h.setLevelSelect(2, 5);
-    expect(note()).toBe('Clear a level to unlock the next.');
-    // Everything unlocked. `unlocked` is `highestCleared + 1`, so this is reached one
-    // level BEFORE the campaign is beaten -- "unlocked" is the honest word and
-    // "complete" would be a claim the player disproves by pressing button 5.
+    // "add it here", not "unlock the next": `unlocked` counts levels BEATEN, so clearing
+    // one puts THAT level in this grid. The old wording described the cleared-plus-one
+    // rule and would now be pointing at a button that never arrives.
+    expect(note()).toBe('Clear a level to add it here.');
+    // Everything cleared -- and it means that exactly, which it did not under the old
+    // rule: `unlocked` reaching `total` now requires the LAST level to have fallen.
     h.setLevelSelect(5, 5);
-    expect(note()).toBe('Every level is unlocked.');
-    // ...and back, because an unlock is not the only thing that repaints this grid: a
+    expect(note()).toBe('Every level cleared.');
+    // ...and back, because a clear is not the only thing that repaints this grid: a
     // level system swap (dev flags, a versus system) pushes a smaller `unlocked`.
     h.setLevelSelect(2, 5);
-    expect(note()).toBe('Clear a level to unlock the next.');
+    expect(note()).toBe('Clear a level to add it here.');
     // Never hidden. It used to be, on exactly the `unlocked >= total` state above, and
     // that is the state it now has something to say about.
     expect(

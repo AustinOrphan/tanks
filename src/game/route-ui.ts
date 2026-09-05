@@ -151,9 +151,29 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   /** The gameplay renderer's style input, when a session has offered one. */
   let styleSink: StyleSink | null = null;
 
-  /** How many levels are pickable: everything cleared plus the next one, capped. */
+  /**
+   * How many levels are pickable: everything the player has CLEARED, capped.
+   *
+   * Cleared, not cleared-plus-the-next (owner ruling on issue #555). The `+ 1` made the
+   * Levels pane an alternative campaign ladder rather than a replay of solved content: a
+   * practice win records permanent progress -- `loop.ts` gates `recordCleared` on
+   * `tracksProgress` alone and does NOT exclude practice, which its own comment says
+   * outright -- so a player could practice the frontier level with independent lives,
+   * bank the unlock, and repeat, climbing the whole campaign without ever spending a
+   * campaign life. Offering only cleared levels seals that, and seals it structurally
+   * rather than by a second guard: `recordCleared` keeps the maximum, so a pane that can
+   * only ever offer levels already counted can never advance progress at all.
+   *
+   * The cost, stated because it is real: there is no longer a risk-free way to rehearse
+   * the level you are stuck on. That was the same affordance viewed from the other side.
+   *
+   * The `Math.min` is NOT redundant, and this is the one place it matters: `progress`
+   * resolves ordinals against the shipped campaign, while `deps.levels` is THIS session's
+   * level system, which for a versus match or the sandbox is a single synthetic arena. A
+   * save three levels deep would otherwise size that grid at 3.
+   */
   const unlockedLevels = (): number =>
-    Math.min(deps.progress.highestCleared() + 1, deps.levels.levels.length);
+    Math.min(deps.progress.highestCleared(), deps.levels.levels.length);
 
   /**
    * Store -> audio -> button, for all three mute paths.
