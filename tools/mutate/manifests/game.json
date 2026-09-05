@@ -4596,5 +4596,52 @@
       "boot: the shell capability probe (issue #470) tells a BLOCKED probe apart from a browser that answered no",
       "boot: the message itself classifies each cause into its own state, and guesses at nothing"
     ]
+  },
+  {
+    "id": "end-screens-lose-the-route-to-the-menu",
+    "file": "src/game/hud.ts",
+    "find": "    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !atOutcome);",
+    "replace": "    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Restores the shipped rule issue #323 replaced, in its most complete form: the Main Menu button reachable only from Pause. The measured consequence is a player who runs out of campaign lives having exactly ONE control on screen, and that control restarts the level (`landOnCampaignBoard`, loop.ts) rather than leaving it -- so the menu is reachable only by playing again, pausing, and quitting from there. `back` is no help: route-host.ts's menu-action handler acts on `back` only while `sm.isPaused`. The panel still renders correctly under this mutation, which is why it needs a case that enumerates the REACHABLE controls rather than one that checks the panel appeared.",
+    "killedBy": [
+      "hud: the level-cleared panel offers the main menu THE GAP (issue #323): a lost campaign has a route to the Main Menu",
+      "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people",
+      "hud: the level-cleared panel offers the main menu shows it on the FINAL win too, where the run has already ended"
+    ]
+  },
+  {
+    "id": "end-screens-offer-the-menu-only-when-you-won",
+    "file": "src/game/hud.ts",
+    "find": "const atOutcome = s === 'outcome-win' || s === 'outcome-lose';",
+    "replace": "const atOutcome = s === 'outcome-win';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The half-fix, and the one worth pinning separately: giving the winner a way out and leaving the loser without one. It is the more likely regression than removing the route entirely, because the win screens keep working and only the state a developer is least likely to sit on stays broken. Every assertion about the intermediate-clear panel -- the case that HAD this button before issue #323 -- survives it.",
+    "killedBy": [
+      "hud: the level-cleared panel offers the main menu THE GAP (issue #323): a lost campaign has a route to the Main Menu",
+      "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people"
+    ]
+  },
+  {
+    "id": "quit-button-says-quit-on-a-finished-match",
+    "file": "src/game/hud.ts",
+    "find": "    quitBtn.textContent = atOutcome ? 'Main Menu' : 'Quit to Title';",
+    "replace": "    quitBtn.textContent = 'Quit to Title';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Collapses the per-state wording, so a match that is already over invites the player to \"Quit\" it. Issue #323 asks every outcome label to describe exactly what it preserves or replaces, and there is nothing left to abandon on an end screen -- on an intermediate clear the run is preserved besides, which is why this wording was already special-cased there before #323 widened it. The button still appears and still works, so only the copy assertions can see this.",
+    "killedBy": [
+      "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people",
+      "hud: the level-cleared panel offers the main menu shows it on the FINAL win too, where the run has already ended",
+      "hud: the level-cleared panel offers the main menu shows it after clearing an INTERMEDIATE level, labelled Main Menu"
+    ]
   }
 ]

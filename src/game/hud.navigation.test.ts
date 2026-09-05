@@ -1102,7 +1102,12 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.setState('playing');
-    h.setState('outcome-win'); // controls: the action button ALONE
+    // Controls here: the action button and, since issue #323, the Main Menu button --
+    // which is the point of the change and NOT what this test is about. The roving order
+    // legitimately has two members now, so the assertion below names the SET rather than
+    // a single element; what must still hold is that nothing inside a hidden region is
+    // ever reachable, however many visible controls there happen to be.
+    h.setState('outcome-win');
     for (const cls of ['hud-menu-play', 'hud-menu-utilities', 'hud-menu-footer']) {
       const region = root.querySelector(`.${cls}`) as HTMLElement;
       expect(getComputedStyle(region).display, `test invalid: .${cls} is not actually hidden`).toBe(
@@ -1122,11 +1127,18 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
         `test invalid: ${sel} now also resolves display:none, which would make this pass for the wrong reason`,
       ).not.toBe('none');
     }
-    pressActive('ArrowDown'); // reaches the action button
-    pressActive('ArrowDown'); // must WRAP back to it, not fall into a hidden region
-    expect(document.activeElement, 'focus walked onto a control inside a hidden region').toBe(
-      root.querySelector('.hud-action'),
-    );
+    // Walk further than there are visible controls, so the order has to WRAP rather than
+    // run off the end into a hidden region. Six presses over a two-control order visits
+    // each of them three times and would land on a hidden button on the very first
+    // overflow if `isHiddenWithin` stopped walking ancestors.
+    const reachable = [root.querySelector('.hud-action'), root.querySelector('.hud-quit')];
+    for (let i = 0; i < 6; i++) {
+      pressActive('ArrowDown');
+      expect(
+        reachable,
+        `press ${i + 1}: focus walked onto a control inside a hidden region`,
+      ).toContain(document.activeElement);
+    }
   });
 
   it('does not intercept arrow keys while playing, so input.ts still drives the tank', () => {
