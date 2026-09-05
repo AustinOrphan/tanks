@@ -133,6 +133,22 @@
            (issue #325): with scripting off, nothing below ever runs and the page would
            otherwise sit blank and dark with no explanation at all. -->
       <noscript>
+        <!--
+          The holding card is retired by `boot.ts`, which never runs here, so without this
+          rule the two states stack: both are `position:absolute; inset:0`, and the
+          "Tanks!" wordmark lands on top of the sentence explaining why nothing works.
+          Measured, not predicted -- the capture for issue #325 showed both, overlapping
+          and unreadable, and no assertion about the markup could see it because both
+          elements were present exactly as intended.
+
+          A <style> inside <noscript> is the one way to say "only when scripting is off"
+          in CSS; there is no media query for it.
+        -->
+        <style>
+          #boot-loading {
+            display: none;
+          }
+        </style>
         <div id="boot-noscript">
           Tanks! needs JavaScript, which is turned off in this browser. Enable it for this
           page, or open the game in another browser.

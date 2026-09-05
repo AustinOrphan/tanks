@@ -1052,6 +1052,14 @@ describe('boot: the message itself', () => {
     expect(html, 'the no-script state says nothing about JavaScript').toMatch(
       /noscript[\s\S]*JavaScript/,
     );
+    // ...and it HIDES the holding card, which nothing else can do here: `boot.ts` retires
+    // that card and `boot.ts` never runs with scripting off. Without the rule both states
+    // paint at `inset: 0` and the wordmark lands on top of the sentence explaining why the
+    // page is dead. Found by capturing the built page, not by reasoning about it -- every
+    // assertion above still passed while the screen was unreadable.
+    expect(html, 'the holding card is left over the no-script message').toMatch(
+      /<noscript>[\s\S]*#boot-loading[\s\S]*display:\s*none[\s\S]*<\/noscript>/,
+    );
   });
 
   it('is styled to fill the viewport rather than sitting in the top-left corner', () => {
