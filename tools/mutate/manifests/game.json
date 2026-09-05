@@ -4551,5 +4551,120 @@
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
     ]
+  },
+  {
+    "id": "startup-failure-guesses-webgl",
+    "file": "src/game/startup-failure.ts",
+    "find": "  return STARTUP_FAILURES['startup-failed'];",
+    "replace": "  return STARTUP_FAILURES['unsupported-render'];",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Restores the exact behaviour issue #325 was filed to remove: one message for every way startup can fail. Before this change `showFailure` printed NO_WEBGL_MESSAGE -- \"this game needs WebGL, try another browser\" -- for the capability gate, for `createAppShell` failing to resolve storage, for a renderer that got its context and then failed initialising, and for a match that failed from a HUD click. It was true for the first and a GUESS for the rest, and the guess was actionable: a player whose storage was blocked was told to go and change browsers over a graphics feature that was working. Nothing throws under this mutation and the screen still looks correct, which is why it needs a test that reads which state was chosen rather than that a state was.",
+    "killedBy": [
+      "boot: the page-scoped settings owner shows the error page when building it throws, rather than failing silently",
+      "boot: the message itself classifies each cause into its own state, and guesses at nothing"
+    ]
+  },
+  {
+    "id": "startup-failure-ignores-where-it-failed",
+    "file": "src/game/startup-failure.ts",
+    "find": "  if (at === 'match') return STARTUP_FAILURES['match-failed'];",
+    "replace": "  void at;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Collapses the two boundaries back into one. The same thrown object means different things depending on where it was caught: during boot the game never came up, while from a match start the player has already watched a Main Menu work and clicked a button on it. Under this mutation a failed match tells them \"Tanks! could not start\" over a menu they can see running, which reads as the message being broken rather than the match. `boot.ts` recorded this case as a hole when issue #428 created it.",
+    "killedBy": [
+      "boot: the message itself classifies each cause into its own state, and guesses at nothing",
+      "boot: the shell capability probe (issue #470) still catches a session that fails for a reason the probe cannot see"
+    ]
+  },
+  {
+    "id": "startup-failure-collapses-the-blocked-probe",
+    "file": "src/game/startup-failure.ts",
+    "find": "err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'",
+    "replace": "'unsupported-render'",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Throws away the distinction issue #470 built `RenderCapabilityFailure` to carry, one consumer after it was created. A browser that ANSWERED no needs different hardware or different settings; a browser whose probe THREW is usually being blocked by something the player can switch off, and sending them to install another browser is the expensive advice for the likelier cause. Both are `webgl2: false`, so every count and every 'a failure screen appeared' assertion survives this.",
+    "killedBy": [
+      "boot: the shell capability probe (issue #470) tells a BLOCKED probe apart from a browser that answered no",
+      "boot: the message itself classifies each cause into its own state, and guesses at nothing"
+    ]
+  },
+  {
+    "id": "failure-screen-offers-no-way-out",
+    "file": "src/boot.ts",
+    "find": "    page.append(title, detail, action);",
+    "replace": "    page.append(title, detail);",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Drops the recovery action, leaving a page that explains the problem and offers nothing to do about it -- issue #325's second criterion is that every blocking state provides at least one valid action. The copy is untouched, so every assertion about WHAT the page says still passes; only the case that presses the button can see it.",
+    "killedBy": [
+      "boot: the message itself OFFERS A WAY OUT, and the way out works"
+    ]
+  },
+  {
+    "id": "failure-screen-action-does-nothing",
+    "file": "src/boot.ts",
+    "find": "    action.addEventListener('click', () => deps.reload());",
+    "replace": "    void deps.reload;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The worse half of the entry above, and the reason `reload` is an injected seam rather than a direct `location.reload()`: a button that renders and does nothing is worse than no button, because the player spends their one idea on it and concludes the page is dead. The control is present, labelled and focusable under this mutation, so only pressing it can tell.",
+    "killedBy": [
+      "boot: the message itself OFFERS A WAY OUT, and the way out works"
+    ]
+  },
+  {
+    "id": "failure-screen-is-not-announced",
+    "file": "src/boot.ts",
+    "find": "    page.setAttribute('role', 'alert');",
+    "replace": "    page.setAttribute('role', 'presentation');",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The page is replaced with no navigation, so nothing tells a screen reader to read it again. Without the alert role a non-sighted player is left on a page that silently became something else, which is issue #325's 'announce state changes accessibly'. Entirely invisible to any assertion about text or structure.",
+    "killedBy": [
+      "boot: the message itself is ANNOUNCED and focused, not merely drawn"
+    ]
+  },
+  {
+    "id": "failure-screen-strands-the-keyboard",
+    "file": "src/boot.ts",
+    "find": "    action.focus();",
+    "replace": "    void action;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The element that had focus was just removed from the document, which leaves focus on <body> and a keyboard or controller player with nowhere to go but Tab from the top of a page whose only control is the one they need. The button is still reachable, so this is a degradation rather than a dead end -- which is exactly why nothing but an explicit activeElement assertion catches it.",
+    "killedBy": [
+      "boot: the message itself is ANNOUNCED and focused, not merely drawn"
+    ]
+  },
+  {
+    "id": "boot-leaves-the-holding-screen-up",
+    "file": "src/boot.ts",
+    "find": "    deps.root.querySelector(`#${BOOT_LOADING_ID}`)?.remove();",
+    "replace": "    void BOOT_LOADING_ID;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "`index.html` paints a 'Tanks!' holding card before any script runs (issue #325), and this line is the only thing in the bundle that can remove it. Left up, it covers a working Main Menu on every successful boot -- the loudest possible regression, and one no unit test would see by accident, because every harness here builds its own empty root rather than serving the real markup. That is why the killer plants the element and why a second case asserts `index.html` still carries the id.",
+    "killedBy": [
+      "boot: the message itself RETIRES the markup holding screen once the route UI exists"
+    ]
   }
 ]

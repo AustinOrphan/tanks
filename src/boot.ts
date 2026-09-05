@@ -1,7 +1,11 @@
 import { createGameSessionHost } from './game/session-host';
 import type { GameSessionHost, GameSessionHostDeps } from './game/session-host';
 import type { AppShell } from './game/app-shell';
-import type { RenderCapabilityFailure } from './game/render-capability';
+import {
+  classifyStartupFailure,
+  UnsupportedRenderError,
+  type FailurePoint,
+} from './game/startup-failure';
 import type { RouteHost, SessionRequests } from './game/route-host';
 
 /**
@@ -63,6 +67,15 @@ export interface BootDeps {
   readonly host: BootHost;
   readonly reportError: (err: unknown) => void;
   /**
+   * Reload the page, for the failure screen's one recovery action (issue #325).
+   *
+   * INJECTED rather than calling `location.reload()` where it is used, and required
+   * rather than defaulted, for the reason every other seam on this interface is: a test
+   * asserts that the button DOES something, and a default would let a caller ship a
+   * screen whose only affordance silently did nothing. `main.ts` binds the real one.
+   */
+  readonly reload: () => void;
+  /**
    * Builds the page's shell -- settings/persistence, audio engine, Launch gate -- ONCE.
    *
    * Injected rather than imported so a test can drive the storage-denied, malformed and
@@ -94,30 +107,38 @@ export interface BootDeps {
   ) => RouteHost;
 }
 
-export const NO_WEBGL_MESSAGE =
-  'This game needs WebGL, which this browser is not providing. ' +
-  'Try another browser, or enable hardware acceleration in its settings.';
+/**
+ * The branded failure page's styles, inline for the reason they always were: this page is
+ * shown when startup did not finish, so it cannot assume anything the app would have set
+ * up. It does share the document background (`index.html`) rather than painting its own,
+ * so a failure looks like the game failing rather than like a different site.
+ */
+const PAGE_CSS =
+  'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+  'gap:1rem;height:100%;padding:2rem;box-sizing:border-box;color:#d8dde6;' +
+  'font:16px/1.6 system-ui,sans-serif;text-align:center';
+const TITLE_CSS = 'margin:0;font-size:1.25rem;font-weight:600;color:#f0f3f8';
+const DETAIL_CSS = 'margin:0;max-width:34rem';
+const ACTION_CSS =
+  'margin-top:0.5rem;padding:0.6rem 1.4rem;font:inherit;color:#f0f3f8;' +
+  'background:#2a2f38;border:1px solid #4a515e;border-radius:6px;cursor:pointer';
 
 /**
- * The capability probe said no, so boot stopped before building anything (issue #470).
- *
- * A distinct type, not a bare `Error`, because it is the one failure here whose CAUSE is
- * known rather than inferred. Everything else that lands on the error page below arrives
- * as "something threw during startup" and gets the WebGL message on the strength of that
- * being the overwhelmingly likely reason; this one carries which probe branch answered.
- * `reportError` receives it unchanged, and issue #325's branded screen can read `failure`
- * without re-probing.
+ * Re-exported from `startup-failure.ts`, where issue #325 moved it so the error and the
+ * copy that explains it could live together without a cycle. Kept on `boot.ts`'s surface
+ * because that is where every existing importer looks for it.
  */
-export class UnsupportedRenderError extends Error {
-  constructor(readonly failure: RenderCapabilityFailure) {
-    super(`Gameplay needs WebGL 2 and this browser did not provide it (${failure}).`);
-    this.name = 'UnsupportedRenderError';
-  }
-}
+/**
+ * The id of the holding screen `index.html` paints before any script runs (issue #325).
+ *
+ * Named here rather than spelled into the query below so the markup and the code that
+ * retires it cannot drift apart silently -- a renamed div would otherwise leave the card
+ * on screen under a working Main Menu, which no unit test that builds its own root would
+ * ever see.
+ */
+export const BOOT_LOADING_ID = 'boot-loading';
 
-const MESSAGE_CSS =
-  'display:flex;align-items:center;justify-content:center;height:100%;' +
-  'padding:2rem;color:#d8dde6;font:16px/1.6 system-ui,sans-serif;text-align:center';
+export { UnsupportedRenderError } from './game/startup-failure';
 
 export function boot(deps: BootDeps): void {
   /**
@@ -129,12 +150,46 @@ export function boot(deps: BootDeps): void {
    * inside a HUD click handler, long after `boot()` returned, which is a boundary that
    * did not have to exist while the only session was the eager one.
    */
-  const showFailure = (err: unknown): void => {
+  const showFailure = (err: unknown, at: FailurePoint = 'boot'): void => {
+    const state = classifyStartupFailure(err, at);
     deps.root.innerHTML = '';
-    const msg = document.createElement('div');
-    msg.style.cssText = MESSAGE_CSS;
-    msg.textContent = NO_WEBGL_MESSAGE;
-    deps.root.appendChild(msg);
+
+    const page = document.createElement('div');
+    page.style.cssText = PAGE_CSS;
+    // ANNOUNCED, not merely drawn (issue #325). The page is replaced without any
+    // navigation, so a screen reader is given no reason to re-read it; `role="alert"`
+    // with `aria-live="assertive"` is what makes the swap an event. Set BEFORE the text
+    // is attached, because a live region that gains its content in the same task it
+    // gains its role is not reliably announced.
+    page.setAttribute('role', 'alert');
+    page.setAttribute('aria-live', 'assertive');
+
+    const title = document.createElement('h1');
+    title.style.cssText = TITLE_CSS;
+    title.textContent = state.title;
+
+    const detail = document.createElement('p');
+    detail.style.cssText = DETAIL_CSS;
+    detail.textContent = state.detail;
+
+    // Every blocking state gets a recovery action, which is issue #325's second
+    // criterion. A real <button>, so it is reachable by keyboard, by controller through
+    // the browser's own focus order, and by touch -- and focused, because the page it
+    // replaced may have held focus on an element that no longer exists.
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.style.cssText = ACTION_CSS;
+    action.textContent = state.action;
+    action.addEventListener('click', () => deps.reload());
+
+    page.append(title, detail, action);
+    deps.root.appendChild(page);
+    action.focus();
+
+    // UNCHANGED, and deliberately the last thing: the player-facing copy above says
+    // nothing technical, so this is the only place the actual cause survives. Issue
+    // #325 asks diagnostics to live behind Developer Tools (issue #238); until that
+    // exists, the console is where a developer reads them and the page is not.
     deps.reportError(err);
   };
 
@@ -223,7 +278,11 @@ export function boot(deps: BootDeps): void {
         try {
           sessions?.start(intent);
         } catch (err) {
-          showFailure(err);
+          // 'match' rather than the default: the game is UP. Reporting "Tanks! could not
+          // start" over a Main Menu the player can see working would read as the message
+          // being broken rather than the match. Issue #325's own scope names this case
+          // separately, and `boot.ts` recorded it as a hole when #428 created it.
+          showFailure(err, 'match');
         }
       },
       requestVersusSession: (config) => sessions?.requestVersusSession(config),
@@ -235,6 +294,16 @@ export function boot(deps: BootDeps): void {
       // rather than paint over with the no-WebGL page.
       requestStop: () => sessions?.stopSession(),
     });
+
+    // The application UI now exists, so the markup's holding screen has done its job
+    // (issue #325). Removed HERE rather than at the end of `boot()` because this is the
+    // moment it stops being true: the Main Menu is on screen from this line, and a
+    // "Tanks!" card left over it would be a second thing claiming the viewport.
+    //
+    // Not needed on the failure paths -- `showFailure` clears the whole root -- and
+    // harmless if the element is absent, which it is in every test that builds its own
+    // root rather than serving `index.html`.
+    deps.root.querySelector(`#${BOOT_LOADING_ID}`)?.remove();
 
 
 
