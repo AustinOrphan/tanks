@@ -1369,7 +1369,7 @@
     ],
     "killedBy": [
       "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
-      "createHud roving-tabindex focus navigation (issue #115) skips locked level buttons when stepping through the Levels panel",
+      "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert",
       "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
       "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
       "hud: spatial focus follows the drawn layout (issue #495) negative control: with jsdom's empty rects the same Right leaves the segment in document order",
@@ -3822,10 +3822,9 @@
     "tests": [
       "src/game/route-host.test.ts"
     ],
-    "why": "The mission NUMBER is resolvable only here: `run.ts` holds a level id and deliberately never imports campaign data, and the HUD names no simulation module at all, so a page that does not resolve it leaves the Main Menu's confidence line permanently degraded to the lives half for every player. It also feeds the replace-run confirmation's copy, which is what stops that question being about runs in general. Re-anchored for issue #555, which removed the `total` line this find string carried: the summary no longer names the campaign's length, so the only number the page still resolves is the position. That removal is also why there is no sibling entry putting the denominator BACK -- `CampaignRunSummary` has nowhere to carry it, which is the point of taking the field out rather than leaving it unread.",
+    "why": "The mission NUMBER is resolvable only here: `run.ts` holds a level id and deliberately never imports campaign data, and the HUD names no simulation module at all, so a page that does not resolve it leaves the Main Menu's confidence line permanently degraded to the lives half for every player. It also feeds the replace-run confirmation's copy, which is what stops that question being about runs in general. Re-anchored for issue #555, which removed the `total` line this find string carried: the summary no longer names the campaign's length, so the only number the page still resolves is the position. That removal is also why there is no sibling entry putting the denominator BACK -- `CampaignRunSummary` has nowhere to carry it, which is the point of taking the field out rather than leaving it unread. The unplaceable-level case is no longer a killer HERE and has its own entry (`route-host-invents-a-position-for-an-unplaceable-level`) instead: with `total` gone this mutation's payload is `{ mission: null, lives }`, which is byte-for-byte what the real code produces for a level the campaign does not list, so that test cannot see it. Splitting the two keeps both nets rather than dropping one -- each entry now names the single defect its killer actually proves.",
     "killedBy": [
-      "createRouteHost: the Main Menu is painted from the stores by the page resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)",
-      "createRouteHost: the Main Menu is painted from the stores by the page reports a mission it cannot place as null rather than inventing a position"
+      "createRouteHost: the Main Menu is painted from the stores by the page resolves the run summary the Main Menu shows, mission NUMBER included (issue #226)"
     ]
   },
   {
@@ -4942,6 +4941,20 @@
     "why": "Removes the completion signal, which is the thing issue #555 had to REPLACE rather than merely delete. A grid of locked buttons told a player implicitly that the campaign had an end and where it was; a grid that only grows says nothing, so a player who has unlocked everything cannot tell that from a player whose next level has not arrived -- and this line promising a next one is then a lie for the rest of the campaign. Survives every population assertion in the file, because it changes no button.",
     "killedBy": [
       "hud: level select panel says whether the grid will keep growing, without saying how far it has to go"
+    ]
+  },
+  {
+    "id": "route-host-invents-a-position-for-an-unplaceable-level",
+    "file": "src/game/route-host.ts",
+    "find": "      mission: index < 0 ? null : index + 1,",
+    "replace": "      mission: index + 1,",
+    "expect": "killed",
+    "tests": [
+      "src/game/route-host.test.ts"
+    ],
+    "why": "Drops the guard and reports `Mission 0` for a run whose stored level this build's campaign does not list -- reachable today through a developer session's `?dev=1&level=` jump. Split out of `route-host-paints-no-run-summary` at issue #555: with `total` removed from `CampaignRunSummary`, that entry's payload became identical to the real one for exactly this case, so the net had to move rather than be dropped. It is also the sharper statement of the contract -- the summary degrades to the lives half rather than inventing a position, and an invented one is worse than an omitted one because the Main Menu presents it with the same confidence as a true reading.",
+    "killedBy": [
+      "createRouteHost: the Main Menu is painted from the stores by the page reports a mission it cannot place as null rather than inventing a position"
     ]
   }
 ]
