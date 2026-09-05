@@ -38,6 +38,11 @@ boot({
     ),
   host: window,
   reportError: (err) => console.error('Tanks! failed to start:', err),
+  // The failure screen's recovery action (issue #325). `location.reload()` rather than
+  // re-running `boot()`: whatever failed did so with the module graph already evaluated,
+  // and a fresh document is the only retry that does not inherit whatever state the
+  // failure left behind.
+  reload: () => location.reload(),
   // The page's one shell (issues #320, #317): settings/persistence, the audio engine, the
   // Launch gate and the WebGL capability reading (#470). boot.ts calls this exactly once
   // and hands the result to every session, which is what keeps mute, volume, the resumed

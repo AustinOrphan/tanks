@@ -5,11 +5,11 @@
     "find": "    if (!shell.render.webgl2) throw new UnsupportedRenderError(shell.render.failure ?? 'no-webgl2');",
     "replace": "    void shell.render.webgl2;",
     "expect": "killed",
-    "expectFailures": 6,
+    "expectFailures": 7,
     "tests": [
       "src/boot.test.ts"
     ],
-    "why": "The whole of issue #470's boot change, deleted. Without this line boot() never reads the shell's answer, so an unsupported browser gets a canvas, a session and a world before `THREE.WebGLRenderer` throws into the try/catch below -- the OLD route, which still exists and still lands on the same NO_WEBGL_MESSAGE. That is what makes this the negative control for the issue rather than a screen-level check: the message is identical on both routes, and only what got CONSTRUCTED on the way distinguishes them, which is the property issue #428 needs in order to remove the eager `sessions.start()`. `void shell.render.webgl2;` rather than a deletion so the mutation still reads the field and a tsc failure cannot be mistaken for test coverage. 5 of 43 in the scoped run: boot.test.ts's 'boot: the shell capability probe (issue #470)' block has 7 cases and the 5 unsupported-path ones all fail, because this file's fake `startGame` does NOT throw -- so with the gate gone boot completes normally, builds a canvas and a session, registers a teardown and reports no error. The 2 that still pass are the pair that pin the gate is not a SECOND gate: 'changes nothing when the probe says yes' and 'still catches a session that fails for a reason the probe cannot see'. expectFailures counts that scoped run only. COUNT RE-MEASURED on this branch: 5 -> 6. `boot.test.ts` grew from 43 cases to 50 when issue #468 added its page-scoped route-UI suite, and one of those -- 'builds no route UI at all when the capability probe says no' -- also fails under this mutation, because a boot that skips the gate goes on to build the route UI for a browser that cannot render. CI's `verify (current)` is what caught the drift: growing a test file moves expectFailures on entries anchored in files you never touched, and the local re-run list for this branch covered the 35 older entries but not the 8 issue #470 had just added. RE-MEASURED AGAIN for issue #428: still 6, now of 55 rather than 50, because boot.test.ts gained the empty-boot suite. The COUNT did not move and the denominator did, which is the case a bare number cannot express -- the failing set was compared on both sides rather than the total renumbered."
+    "why": "The whole of issue #470's boot change, deleted. Without this line boot() never reads the shell's answer, so an unsupported browser gets a canvas, a session and a world before `THREE.WebGLRenderer` throws into the try/catch below -- the OLD route, which still exists and still lands on the same NO_WEBGL_MESSAGE. That is what makes this the negative control for the issue rather than a screen-level check: the message is identical on both routes, and only what got CONSTRUCTED on the way distinguishes them, which is the property issue #428 needs in order to remove the eager `sessions.start()`. `void shell.render.webgl2;` rather than a deletion so the mutation still reads the field and a tsc failure cannot be mistaken for test coverage. 5 of 43 in the scoped run: boot.test.ts's 'boot: the shell capability probe (issue #470)' block has 7 cases and the 5 unsupported-path ones all fail, because this file's fake `startGame` does NOT throw -- so with the gate gone boot completes normally, builds a canvas and a session, registers a teardown and reports no error. The 2 that still pass are the pair that pin the gate is not a SECOND gate: 'changes nothing when the probe says yes' and 'still catches a session that fails for a reason the probe cannot see'. expectFailures counts that scoped run only. COUNT RE-MEASURED on this branch: 5 -> 6. `boot.test.ts` grew from 43 cases to 50 when issue #468 added its page-scoped route-UI suite, and one of those -- 'builds no route UI at all when the capability probe says no' -- also fails under this mutation, because a boot that skips the gate goes on to build the route UI for a browser that cannot render. CI's `verify (current)` is what caught the drift: growing a test file moves expectFailures on entries anchored in files you never touched, and the local re-run list for this branch covered the 35 older entries but not the 8 issue #470 had just added. RE-MEASURED AGAIN for issue #428: still 6, now of 55 rather than 50, because boot.test.ts gained the empty-boot suite. The COUNT did not move and the denominator did, which is the case a bare number cannot express -- the failing set was compared on both sides rather than the total renumbered. COUNT REMEASURED at 7 of 73 by issue #325, up from 6 of 55: that issue added the branded-state cases to boot.test.ts, and one of them -- 'tells a BLOCKED probe apart from a browser that answered no' -- drives the same gate this mutation removes, so it joins the killers rather than the population drifting underneath a stale number. The denominator moved for the ordinary reason too."
   },
   {
     "id": "boot-collapses-the-probe-failure-cause",
@@ -17,11 +17,11 @@
     "find": "throw new UnsupportedRenderError(shell.render.failure ?? 'no-webgl2');",
     "replace": "throw new UnsupportedRenderError('no-webgl2');",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "tests": [
       "src/boot.test.ts"
     ],
-    "why": "Throws the right TYPE with the wrong CAUSE: every unsupported boot reports `no-webgl2`, including the `probe-failed` case where the probe could not even ask -- a locked-down or non-DOM host. This is the distinction issue #470 asks for, and issue #325's branded screen is the consumer that would read it, so collapsing it here tells that screen to blame the GPU for a document that never let the question be asked. Invisible to every count- and screen-level assertion around it: the same error class still reaches `reportError`, the same message still paints, and only a case that drives a NON-default failure and reads `.failure` back off the thrown error can see it. 1 of 43 in the scoped run -- 'reports a typed error carrying which probe branch answered', which is the only case in boot.test.ts that drives `{ webgl2: false, failure: 'probe-failed' }`. Its sibling 'distinguishes the two failures rather than collapsing them' keeps passing by construction, because it drives the `no-webgl2` side that this mutation hardcodes; the pair is what makes the assertion a real 2-way discrimination rather than a single-value echo. expectFailures counts that scoped run only."
+    "why": "Throws the right TYPE with the wrong CAUSE: every unsupported boot reports `no-webgl2`, including the `probe-failed` case where the probe could not even ask -- a locked-down or non-DOM host. This is the distinction issue #470 asks for, and issue #325's branded screen is the consumer that would read it, so collapsing it here tells that screen to blame the GPU for a document that never let the question be asked. Invisible to every count- and screen-level assertion around it: the same error class still reaches `reportError`, the same message still paints, and only a case that drives a NON-default failure and reads `.failure` back off the thrown error can see it. 1 of 43 in the scoped run -- 'reports a typed error carrying which probe branch answered', which is the only case in boot.test.ts that drives `{ webgl2: false, failure: 'probe-failed' }`. Its sibling 'distinguishes the two failures rather than collapsing them' keeps passing by construction, because it drives the `no-webgl2` side that this mutation hardcodes; the pair is what makes the assertion a real 2-way discrimination rather than a single-value echo. expectFailures counts that scoped run only. COUNT REMEASURED at 2 of 73 by issue #325. It was 1 while the probe's two failure branches differed only in the typed error reaching `reportError`; #325 gave them DIFFERENT PLAYER COPY, so the new 'tells a BLOCKED probe apart' case fails alongside the original one. See startup-failure-collapses-the-blocked-probe, which mutates the same distinction one layer up."
   },
   {
     "id": "boot-builds-the-route-ui-per-session",
@@ -50,14 +50,14 @@
   {
     "id": "boot-start-failure-escapes-the-page",
     "file": "src/boot.ts",
-    "find": "      requestStart: (intent) => {\n        try {\n          sessions?.start(intent);\n        } catch (err) {\n          showFailure(err);\n        }\n      },",
+    "find": "      requestStart: (intent) => {\n        try {\n          sessions?.start(intent);\n        } catch (err) {\n          // 'match' rather than the default: the game is UP. Reporting \"Tanks! could not\n          // start\" over a Main Menu the player can see working would read as the message\n          // being broken rather than the match. Issue #325's own scope names this case\n          // separately, and `boot.ts` recorded it as a hole when #428 created it.\n          showFailure(err, 'match');\n        }\n      },\n",
     "replace": "      requestStart: (intent) => sessions?.start(intent),",
     "tests": [
       "src/boot.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 8,
-    "why": "Drops the try/catch around the start request, so a `WebGLRenderer` that gets its context and then fails to initialise throws out of a HUD click handler with nobody listening. The player sits on a menu whose buttons silently do nothing -- no error page, no report, no clue. This guard is NEW WORK rather than a copy of `boot()`'s own: while the eager start existed, that same failure threw inside `boot()`'s try. Issue #428 turns a documented edge case ('a REPLACEMENT that throws does not arrive here') into the ordinary path. 8 of 55 in the scoped run: the five no-WebGL cases that now drive the failure through a start request, plus the capability suite's 'still catches a session that fails for a reason the probe cannot see' and the #428 suite's own 'a failed start reaches the same message page'."
+    "why": "Drops the try/catch around the start request, so a `WebGLRenderer` that gets its context and then fails to initialise throws out of a HUD click handler with nobody listening. The player sits on a menu whose buttons silently do nothing -- no error page, no report, no clue. This guard is NEW WORK rather than a copy of `boot()`'s own: while the eager start existed, that same failure threw inside `boot()`'s try. Issue #428 turns a documented edge case ('a REPLACEMENT that throws does not arrive here') into the ordinary path. 8 of 55 in the scoped run: the five no-WebGL cases that now drive the failure through a start request, plus the capability suite's 'still catches a session that fails for a reason the probe cannot see' and the #428 suite's own 'a failed start reaches the same message page'. The find string grew in issue #325, which gave the catch a `'match'` failure point so the screen it raises says the MATCH could not start rather than that the game could not: the guard being mutated is the same one, and the argument is part of it."
   },
   {
     "id": "dependency-direction-render-may-import-game",
@@ -94,5 +94,75 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "GAME_WIRING gains a permission nothing uses: settings.ts is allowed audio/engine, which it does not import -- it reads only the manifest's DEFAULT_VOLUME. The sweep over the real tree stays green under it: an unused entry forbids nothing today, and that is the problem, because it is a standing licence for the next edit to pull the audio ENGINE into a settings module without the review moment the list exists to force. This entry was anchored on hud.ts's identical `['audio/manifest']` line until issue #324 removed that file's volume default and with it its wiring entry; settings.ts carries the same shape and keeps its import, so the assertion moved there rather than being deleted. 1 of 84 in dependency-direction.test.ts: `every GAME_WIRING entry names a real file and an import that file actually makes`; every fixture and the layer-pair coverage test pass either way, because the mutation changes no rule, only the list."
+  },
+  {
+    "id": "failure-screen-offers-no-way-out",
+    "file": "src/boot.ts",
+    "find": "    page.append(title, detail, action);",
+    "replace": "    page.append(title, detail);",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Drops the recovery action, leaving a page that explains the problem and offers nothing to do about it -- issue #325's second criterion is that every blocking state provides at least one valid action. The copy is untouched, so every assertion about WHAT the page says still passes; only the case that presses the button can see it.",
+    "killedBy": [
+      "boot: the message itself OFFERS A WAY OUT, and the way out works"
+    ]
+  },
+  {
+    "id": "failure-screen-action-does-nothing",
+    "file": "src/boot.ts",
+    "find": "    action.addEventListener('click', () => deps.reload());",
+    "replace": "    void deps.reload;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The worse half of the entry above, and the reason `reload` is an injected seam rather than a direct `location.reload()`: a button that renders and does nothing is worse than no button, because the player spends their one idea on it and concludes the page is dead. The control is present, labelled and focusable under this mutation, so only pressing it can tell.",
+    "killedBy": [
+      "boot: the message itself OFFERS A WAY OUT, and the way out works"
+    ]
+  },
+  {
+    "id": "failure-screen-is-not-announced",
+    "file": "src/boot.ts",
+    "find": "    page.setAttribute('role', 'alert');",
+    "replace": "    page.setAttribute('role', 'presentation');",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The page is replaced with no navigation, so nothing tells a screen reader to read it again. Without the alert role a non-sighted player is left on a page that silently became something else, which is issue #325's 'announce state changes accessibly'. Entirely invisible to any assertion about text or structure.",
+    "killedBy": [
+      "boot: the message itself is ANNOUNCED and focused, not merely drawn"
+    ]
+  },
+  {
+    "id": "failure-screen-strands-the-keyboard",
+    "file": "src/boot.ts",
+    "find": "    action.focus();",
+    "replace": "    void action;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "The element that had focus was just removed from the document, which leaves focus on <body> and a keyboard or controller player with nowhere to go but Tab from the top of a page whose only control is the one they need. The button is still reachable, so this is a degradation rather than a dead end -- which is exactly why nothing but an explicit activeElement assertion catches it.",
+    "killedBy": [
+      "boot: the message itself is ANNOUNCED and focused, not merely drawn"
+    ]
+  },
+  {
+    "id": "boot-leaves-the-holding-screen-up",
+    "file": "src/boot.ts",
+    "find": "    deps.root.querySelector(`#${BOOT_LOADING_ID}`)?.remove();",
+    "replace": "    void BOOT_LOADING_ID;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "`index.html` paints a 'Tanks!' holding card before any script runs (issue #325), and this line is the only thing in the bundle that can remove it. Left up, it covers a working Main Menu on every successful boot -- the loudest possible regression, and one no unit test would see by accident, because every harness here builds its own empty root rather than serving the real markup. That is why the killer plants the element and why a second case asserts `index.html` still carries the id.",
+    "killedBy": [
+      "boot: the message itself RETIRES the markup holding screen once the route UI exists"
+    ]
   }
 ]

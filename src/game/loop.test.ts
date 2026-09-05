@@ -8673,6 +8673,11 @@ function bootPageOn(
     reportError: (err) => {
       throw err;
     },
+    // Never reached: this harness rethrows from `reportError` above, so a failure ends
+    // the test before the screen's action could be pressed. Wired because `BootDeps`
+    // requires it (issue #325) and a throwing stub would turn a real regression here
+    // into a confusing failure somewhere else.
+    reload: () => {},
   });
 
   // The Continue gesture, which is what `boot()` itself used to do. Driven through the

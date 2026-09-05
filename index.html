@@ -90,10 +90,71 @@
         display: block;
         touch-action: none;
       }
+      /*
+       * The first thing on screen, and the last thing issue #325 calls "initial loading".
+       * Before it, `#app` was empty and the document background was the whole experience
+       * until the module graph evaluated -- indistinguishable, on a slow connection or a
+       * failed deploy, from a broken page.
+       *
+       * Inline HERE rather than in hud.css, because hud.css arrives with the bundle and
+       * this has to be painted by the markup alone. `boot.ts` removes the element once
+       * the route UI exists, and the failure screen clears the root, so it is never
+       * competing with either.
+       *
+       * No spinner and no animation: a static wordmark says the same thing, needs no
+       * reduced-motion exception, and cannot keep animating over a page that has died.
+       */
+      #boot-loading,
+      #boot-noscript {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        box-sizing: border-box;
+        color: #d8dde6;
+        font: 600 1.5rem/1.6 system-ui, sans-serif;
+        text-align: center;
+      }
+      #boot-noscript {
+        font-weight: 400;
+        font-size: 1rem;
+      }
     </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Removed by boot.ts once the route UI exists (issue #325). Present in the
+           markup rather than written by script, because the gap it covers is the one
+           before any script has run. -->
+      <div id="boot-loading">Tanks!</div>
+      <!-- The one failure the bundle can never report on its own, so the markup must
+           (issue #325): with scripting off, nothing below ever runs and the page would
+           otherwise sit blank and dark with no explanation at all. -->
+      <noscript>
+        <!--
+          The holding card is retired by `boot.ts`, which never runs here, so without this
+          rule the two states stack: both are `position:absolute; inset:0`, and the
+          "Tanks!" wordmark lands on top of the sentence explaining why nothing works.
+          Measured, not predicted -- the capture for issue #325 showed both, overlapping
+          and unreadable, and no assertion about the markup could see it because both
+          elements were present exactly as intended.
+
+          A <style> inside <noscript> is the one way to say "only when scripting is off"
+          in CSS; there is no media query for it.
+        -->
+        <style>
+          #boot-loading {
+            display: none;
+          }
+        </style>
+        <div id="boot-noscript">
+          Tanks! needs JavaScript, which is turned off in this browser. Enable it for this
+          page, or open the game in another browser.
+        </div>
+      </noscript>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

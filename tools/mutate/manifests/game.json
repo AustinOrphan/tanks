@@ -4551,5 +4551,50 @@
     "killedBy": [
       "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
     ]
+  },
+  {
+    "id": "startup-failure-guesses-webgl",
+    "file": "src/game/startup-failure.ts",
+    "find": "  return STARTUP_FAILURES['startup-failed'];",
+    "replace": "  return STARTUP_FAILURES['unsupported-render'];",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Restores the exact behaviour issue #325 was filed to remove: one message for every way startup can fail. Before this change `showFailure` printed NO_WEBGL_MESSAGE -- \"this game needs WebGL, try another browser\" -- for the capability gate, for `createAppShell` failing to resolve storage, for a renderer that got its context and then failed initialising, and for a match that failed from a HUD click. It was true for the first and a GUESS for the rest, and the guess was actionable: a player whose storage was blocked was told to go and change browsers over a graphics feature that was working. Nothing throws under this mutation and the screen still looks correct, which is why it needs a test that reads which state was chosen rather than that a state was.",
+    "killedBy": [
+      "boot: the page-scoped settings owner shows the error page when building it throws, rather than failing silently",
+      "boot: the message itself classifies each cause into its own state, and guesses at nothing"
+    ]
+  },
+  {
+    "id": "startup-failure-ignores-where-it-failed",
+    "file": "src/game/startup-failure.ts",
+    "find": "  if (at === 'match') return STARTUP_FAILURES['match-failed'];",
+    "replace": "  void at;",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Collapses the two boundaries back into one. The same thrown object means different things depending on where it was caught: during boot the game never came up, while from a match start the player has already watched a Main Menu work and clicked a button on it. Under this mutation a failed match tells them \"Tanks! could not start\" over a menu they can see running, which reads as the message being broken rather than the match. `boot.ts` recorded this case as a hole when issue #428 created it.",
+    "killedBy": [
+      "boot: the message itself classifies each cause into its own state, and guesses at nothing",
+      "boot: the shell capability probe (issue #470) still catches a session that fails for a reason the probe cannot see"
+    ]
+  },
+  {
+    "id": "startup-failure-collapses-the-blocked-probe",
+    "file": "src/game/startup-failure.ts",
+    "find": "err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'",
+    "replace": "'unsupported-render'",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "why": "Throws away the distinction issue #470 built `RenderCapabilityFailure` to carry, one consumer after it was created. A browser that ANSWERED no needs different hardware or different settings; a browser whose probe THREW is usually being blocked by something the player can switch off, and sending them to install another browser is the expensive advice for the likelier cause. Both are `webgl2: false`, so every count and every 'a failure screen appeared' assertion survives this.",
+    "killedBy": [
+      "boot: the shell capability probe (issue #470) tells a BLOCKED probe apart from a browser that answered no",
+      "boot: the message itself classifies each cause into its own state, and guesses at nothing"
+    ]
   }
 ]

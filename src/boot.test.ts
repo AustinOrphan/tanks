@@ -3,7 +3,13 @@ import { defaultSlots } from './game/versus-setup';
 import { describe, it, expect, vi } from 'vitest';
 import type { GameHandle } from './game/loop';
 import type { VersusConfig } from './game/versus-config';
-import { boot, NO_WEBGL_MESSAGE, UnsupportedRenderError, type BootDeps } from './boot';
+import { readFileSync } from 'node:fs';
+import { boot, BOOT_LOADING_ID, UnsupportedRenderError, type BootDeps } from './boot';
+import {
+  STARTUP_FAILURES,
+  classifyStartupFailure,
+  type StartupFailureKind,
+} from './game/startup-failure';
 import type { AppShell } from './game/app-shell';
 import { RENDER_CAPABILITY_SUPPORTED, type RenderCapability } from './game/render-capability';
 import type { RouteHost, SessionRequests, StartIntent } from './game/route-host';
@@ -60,6 +66,8 @@ function harness(
   routeHostBuilds: number;
   /** ...and disposed. Only the page teardown may. */
   routeHostDisposals: number;
+  /** How many times the failure screen's action reloaded the page (issue #325). */
+  reloads: number;
   /** The root each route host was built in. */
   routeHostRoots: HTMLElement[];
   /** The application-level start requests boot handed the route UI (issue #468). */
@@ -90,6 +98,8 @@ function harness(
     appSettingsDisposals: 0,
     routeHostBuilds: 0,
     routeHostDisposals: 0,
+    /** How many times the failure screen's recovery action reloaded the page (issue #325). */
+    reloads: 0,
   };
   /**
    * A stand-in for the page's ONE shell. Identity is the whole assertion: every session
@@ -136,6 +146,12 @@ function harness(
       r.appendChild(canvas);
       canvases.push(canvas);
       return canvas;
+    },
+    // The failure screen's one recovery action (issue #325). Counted rather than
+    // stubbed, because "the button exists" and "the button does something" are different
+    // claims and only this separates them.
+    reload: () => {
+      box.reloads += 1;
     },
     createAppShell: (): AppShell => {
       box.appSettingsBuilds += 1;
@@ -194,6 +210,9 @@ function harness(
     get routeHostDisposals(): number {
       return box.routeHostDisposals;
     },
+    get reloads(): number {
+      return box.reloads;
+    },
     routeHostRoots,
     sessionRequests,
     disposedIds,
@@ -227,6 +246,24 @@ function harness(
 function bootAndStart(h: ReturnType<typeof harness>): void {
   boot(h.deps);
   h.sessionRequests[0]?.requestStart({ kind: 'campaign-continue' });
+}
+
+/**
+ * Which branded failure state is on screen (issue #325), by matching the rendered title
+ * against the catalogue rather than against a string spelled out here.
+ *
+ * Derived so that changing a title is a copy change and not a test failure, and so that a
+ * page showing NOTHING is `null` rather than accidentally matching. Two kinds share a
+ * title on purpose -- `unsupported-render` and `probe-blocked` both open "This browser
+ * cannot run Tanks!" -- so the DETAIL is what separates them, and this returns the kind
+ * whose title and detail BOTH match.
+ */
+function shownFailure(h: ReturnType<typeof harness>): StartupFailureKind | null {
+  const text = h.root.textContent ?? '';
+  const hit = Object.values(STARTUP_FAILURES).find(
+    (f) => text.includes(f.title) && text.includes(f.detail),
+  );
+  return hit?.kind ?? null;
 }
 
 describe('boot: the happy path', () => {
@@ -368,7 +405,12 @@ describe('boot: the page-scoped settings owner', () => {
     const h = harness({ throwOnAppSettings: boom });
     boot(h.deps);
     expect(h.errors).toEqual([boom]);
-    expect(h.root.textContent).toBe(NO_WEBGL_MESSAGE);
+    // THE DEFECT ISSUE #325 NAMES, as a direct assertion. Blocked storage used to print
+    // "This game needs WebGL, try another browser" -- a instruction that was not merely
+    // vague but wrong, sending a player to reinstall over a graphics feature that was
+    // working fine. It now says only what is known.
+    expect(shownFailure(h)).toBe('startup-failed');
+    expect(h.root.textContent, 'the page still blamed WebGL').not.toContain('WebGL');
     expect(h.startArgs).toEqual([]);
   });
 });
@@ -378,7 +420,10 @@ describe('boot: no WebGL', () => {
     const err = new Error('Error creating WebGL context.');
     const h = harness({ throwOnStart: err });
     bootAndStart(h);
-    expect(h.root.textContent).toBe(NO_WEBGL_MESSAGE);
+    // `bootAndStart` reaches this through `requestStart`, which is the MATCH boundary --
+    // the shell came up and the menu is what the player clicked. The state named here is
+    // the one that boundary produces, not the boot one.
+    expect(shownFailure(h)).toBe('match-failed');
   });
 
   it('clears whatever was in the root first, so the message is not appended below it', () => {
@@ -424,7 +469,7 @@ describe('boot: no WebGL', () => {
     const h = harness({ throwOnStart: 'a string, not an Error' });
     expect(() => bootAndStart(h)).not.toThrow();
     expect(h.errors).toEqual(['a string, not an Error']);
-    expect(h.root.textContent).toBe(NO_WEBGL_MESSAGE);
+    expect(shownFailure(h)).toBe('match-failed');
   });
 });
 
@@ -440,10 +485,24 @@ describe('boot: no WebGL', () => {
 describe('boot: the shell capability probe (issue #470)', () => {
   const unsupported: RenderCapability = { webgl2: false, failure: 'no-webgl2' };
 
-  it('shows the same explanation when the probe says this browser has no WebGL 2', () => {
+  it('shows the UNSUPPORTED state when the probe says this browser has no WebGL 2', () => {
     const h = harness({ render: unsupported });
     bootAndStart(h);
-    expect(h.root.textContent).toContain(NO_WEBGL_MESSAGE);
+    expect(shownFailure(h)).toBe('unsupported-render');
+    // ...and this is the one state that may still name WebGL, because here it is the
+    // measured answer rather than a guess about an unrelated throw.
+    expect(h.root.textContent).toContain('WebGL 2');
+  });
+
+  it('tells a BLOCKED probe apart from a browser that answered no', () => {
+    // Different cause, different fix, so different copy: a browser that answered no needs
+    // other hardware or other settings, while one that could not be asked is usually
+    // being blocked by something the player can switch off. Sending the second player to
+    // install a new browser is the expensive advice for the likely cause.
+    const h = harness({ render: { webgl2: false, failure: 'probe-failed' } });
+    bootAndStart(h);
+    expect(shownFailure(h)).toBe('probe-blocked');
+    expect(h.root.textContent).toContain('extension');
   });
 
   /**
@@ -499,7 +558,7 @@ describe('boot: the shell capability probe (issue #470)', () => {
     expect(h.startArgs).toHaveLength(1);
     expect(h.canvases).toHaveLength(1);
     expect(h.errors).toEqual([]);
-    expect(h.root.textContent).not.toContain(NO_WEBGL_MESSAGE);
+    expect(shownFailure(h), 'the happy path showed a failure screen').toBeNull();
   });
 
   /**
@@ -511,9 +570,14 @@ describe('boot: the shell capability probe (issue #470)', () => {
   it('still catches a session that fails for a reason the probe cannot see', () => {
     const h = harness({ throwOnStart: new Error('context lost during init') });
     bootAndStart(h);
-    expect(h.root.textContent).toContain(NO_WEBGL_MESSAGE);
+    expect(shownFailure(h)).toBe('match-failed');
     expect(h.errors).toHaveLength(1);
     expect(h.errors[0]).not.toBeInstanceOf(UnsupportedRenderError);
+    // The probe said YES and this failure is not the probe's, so nothing here may claim
+    // the browser lacks WebGL -- which is exactly what it used to claim.
+    expect(h.root.textContent, 'a non-capability failure blamed the capability').not.toContain(
+      'WebGL',
+    );
   });
 });
 
@@ -746,7 +810,7 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
     expect(h.root.textContent, 'the page still showed a working menu').toBe('');
 
     h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
-    expect(h.root.textContent).toContain(NO_WEBGL_MESSAGE);
+    expect(shownFailure(h)).toBe('match-failed');
     expect(h.errors).toEqual([boom]);
   });
 });
@@ -869,10 +933,133 @@ describe('boot: returning to an application route (issue #429)', () => {
 });
 
 describe('boot: the message itself', () => {
-  it('names WebGL and offers a way forward', () => {
-    // It is the only thing a visitor on an unsupported browser ever sees.
-    expect(NO_WEBGL_MESSAGE).toMatch(/WebGL/);
-    expect(NO_WEBGL_MESSAGE).toMatch(/another browser|hardware acceleration/);
+  /**
+   * Asserted over the WHOLE catalogue rather than over the states someone remembered to
+   * list, so a fifth state added later inherits the contract instead of quietly opting
+   * out of it. `STARTUP_FAILURES` is a `Record` over the union, so `tsc` already refuses
+   * a state that is declared and not written; this is the half `tsc` cannot check.
+   */
+  it('gives EVERY branded state a problem, a consequence and a way forward', () => {
+    const states = Object.values(STARTUP_FAILURES);
+    expect(states.length, 'the catalogue is empty, so this asserts nothing').toBe(4);
+    for (const s of states) {
+      // Issue #325: "every blocking state names the problem and provides at least one
+      // valid recovery action".
+      expect(s.title.length, `${s.kind} has no title`).toBeGreaterThan(0);
+      expect(s.detail.length, `${s.kind} has no detail`).toBeGreaterThan(0);
+      expect(s.action.length, `${s.kind} offers no recovery action`).toBeGreaterThan(0);
+      // Player copy, not diagnostics (issue #325 keeps those behind Developer Tools,
+      // which is issue #238 and unbuilt). No capability enum, no error-shaped text.
+      expect(`${s.title} ${s.detail}`, `${s.kind} leaked a diagnostic`).not.toMatch(
+        /probe-failed|no-webgl2|Error|undefined|null/,
+      );
+    }
+  });
+
+  it('says something DIFFERENT for each cause, which is the whole point', () => {
+    // The negative control for the catalogue above: four states that all read the same
+    // would satisfy every assertion in it while restoring exactly the behaviour issue
+    // #325 exists to remove -- one message for four unrelated failures.
+    const details = Object.values(STARTUP_FAILURES).map((s) => s.detail);
+    expect(new Set(details).size, 'two states tell the player the same thing').toBe(
+      details.length,
+    );
+  });
+
+  it('classifies each cause into its own state, and guesses at nothing', () => {
+    expect(classifyStartupFailure(new UnsupportedRenderError('no-webgl2'), 'boot').kind).toBe(
+      'unsupported-render',
+    );
+    expect(classifyStartupFailure(new UnsupportedRenderError('probe-failed'), 'boot').kind).toBe(
+      'probe-blocked',
+    );
+    // Anything it does not recognise is "we do not know", NOT the likeliest guess. That
+    // guess is what made a storage failure into WebGL advice.
+    expect(classifyStartupFailure(new Error('storage denied'), 'boot').kind).toBe(
+      'startup-failed',
+    );
+    expect(classifyStartupFailure('a string, not an Error', 'boot').kind).toBe('startup-failed');
+    expect(classifyStartupFailure(undefined, 'boot').kind).toBe('startup-failed');
+    // WHERE beats WHAT: the same error means a different thing once the menu is up.
+    expect(classifyStartupFailure(new UnsupportedRenderError('no-webgl2'), 'match').kind).toBe(
+      'match-failed',
+    );
+  });
+
+  it('OFFERS A WAY OUT, and the way out works', () => {
+    // Issue #325's second criterion, as behaviour rather than as the presence of a
+    // button: a control that renders and does nothing is worse than no control, because
+    // the player spends their one idea on it.
+    const h = harness({ throwOnAppSettings: new Error('storage denied') });
+    boot(h.deps);
+    const button = h.root.querySelector('button');
+    expect(button, 'the failure screen offered no recovery action').not.toBeNull();
+    expect(button?.textContent).toBe(STARTUP_FAILURES['startup-failed'].action);
+    expect(h.reloads, 'the page reloaded before anyone pressed anything').toBe(0);
+    button?.click();
+    expect(h.reloads, 'the recovery action did nothing').toBe(1);
+  });
+
+  it('is ANNOUNCED and focused, not merely drawn', () => {
+    // The page is replaced with no navigation, so nothing tells a screen reader to read
+    // it again; and the element that had focus has just been removed from the document,
+    // which leaves focus on <body> and the keyboard with nowhere to go.
+    const h = harness({ throwOnAppSettings: new Error('storage denied') });
+    // IN the document, unlike every other case here. The rest of this file asserts over a
+    // detached root because nothing it measures needs a layout or a focus ring -- but
+    // `focus()` is a no-op on an element the document does not contain, so a detached
+    // root would make this assertion measure jsdom rather than the page.
+    document.body.appendChild(h.root);
+    try {
+      boot(h.deps);
+      const page = h.root.firstElementChild as HTMLElement;
+      expect(page.getAttribute('role')).toBe('alert');
+      expect(page.getAttribute('aria-live')).toBe('assertive');
+      expect(document.activeElement, 'the recovery action was not focused').toBe(
+        h.root.querySelector('button'),
+      );
+    } finally {
+      h.root.remove();
+    }
+  });
+
+  it('RETIRES the markup holding screen once the route UI exists', () => {
+    // `index.html` paints "Tanks!" before any script runs, and nothing in the bundle can
+    // remove it but this. Left behind, it sits over a working Main Menu -- and no test
+    // that builds its own empty root would ever notice, which is why the id is a shared
+    // constant and why this case plants the real element.
+    const h = harness();
+    const holding = document.createElement('div');
+    holding.id = BOOT_LOADING_ID;
+    h.root.appendChild(holding);
+
+    boot(h.deps);
+
+    expect(h.root.querySelector(`#${BOOT_LOADING_ID}`), 'the holding screen stayed').toBeNull();
+  });
+
+  it('and the markup it retires actually carries that id, plus a no-script state', () => {
+    // The drift this closes: renaming the div in `index.html` breaks nothing `tsc` or the
+    // case above can see -- that one plants its own element and would keep passing over a
+    // page whose real holding screen never goes away.
+    // `process.cwd()` rather than a URL relative to this module: vitest runs from the
+    // repository root, and `import.meta.url` is not a file URL under this config.
+    const html = readFileSync(`${process.cwd()}/index.html`, 'utf8');
+    expect(html).toContain(`id="${BOOT_LOADING_ID}"`);
+    // Scripting off is the one failure the bundle can never report on its own, because
+    // none of it runs. Without this the page is blank and dark with no explanation.
+    expect(html).toContain('<noscript>');
+    expect(html, 'the no-script state says nothing about JavaScript').toMatch(
+      /noscript[\s\S]*JavaScript/,
+    );
+    // ...and it HIDES the holding card, which nothing else can do here: `boot.ts` retires
+    // that card and `boot.ts` never runs with scripting off. Without the rule both states
+    // paint at `inset: 0` and the wordmark lands on top of the sentence explaining why the
+    // page is dead. Found by capturing the built page, not by reasoning about it -- every
+    // assertion above still passed while the screen was unreadable.
+    expect(html, 'the holding card is left over the no-script message').toMatch(
+      /<noscript>[\s\S]*#boot-loading[\s\S]*display:\s*none[\s\S]*<\/noscript>/,
+    );
   });
 
   it('is styled to fill the viewport rather than sitting in the top-left corner', () => {
