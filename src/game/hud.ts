@@ -4653,19 +4653,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // worse than no gate the moment someone relies on it.
     outcomeVisible = isOutcome;
     if (s === 'playing' || atLaunch) return;
-    // Quit belongs to the pause panel AND the level-cleared panel. It used to be pause
-    // alone, on the reasoning that "a quit button on the win panel would be a second,
-    // untested path out of a finished game" -- a directive overrides that: clearing a
-    // level must offer the main menu, not only Next Level. The objection was about
-    // TESTING, not about the path being wrong, so it is answered rather than ignored --
-    // hud.test.ts pins the visibility and label per state and loop.test.ts pins that the
-    // run survives the trip, which is the half a CSS class could never have guaranteed.
-    //
-    // Only the INTERMEDIATE win: a final win or a loss has already called endRun, so
-    // there is no run to return to and the panel is genuinely verdict-only there. Lose
-    // stays verdict-only for the same reason. Level select is a menu affair -- and only
-    // when there is a choice to make (see setLevelSelect).
-    const clearedIntermediate = s === 'outcome-win' && hasNextMission();
+    // Quit belongs to the pause panel AND every end screen. It was pause alone once, on
+    // the reasoning that "a quit button on the win panel would be a second, untested path
+    // out of a finished game"; a directive overrode that for the level-cleared panel, and
+    // issue #323 finished the job for the rest. The original objection was about TESTING
+    // rather than about the path being wrong, and it is answered rather than ignored --
+    // hud.surfaces.test.ts pins the visibility and label per state, and loop.test.ts pins
+    // that the run survives the trip, which is the half a CSS class could never guarantee.
     shownState = s;
     /*
      * THE THREE MAIN-MENU REGIONS (issue #226), hidden as GROUPS rather than one button
@@ -4696,10 +4690,31 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       s !== 'paused' && !atMainMenu,
     );
     recordsOpenBtn.classList.toggle('hud-records-open--hidden', !atMainMenu);
-    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !clearedIntermediate);
-    // "Quit" is the wrong word for leaving a level you just WON -- the run is preserved
-    // either way, but the copy should not imply abandoning it.
-    quitBtn.textContent = clearedIntermediate ? 'Main Menu' : 'Quit to Title';
+    /*
+     * EVERY END SCREEN, not only the intermediate clear (issue #323).
+     *
+     * This read `s !== 'paused' && !clearedIntermediate`, on the reasoning that a final
+     * win and a loss have already called `endRun`, so "there is no run to return to and
+     * the panel is genuinely verdict-only there".
+     *
+     * That reasoning explains why the Main Menu would have no Continue on it. It does not
+     * explain withholding the route: the Main Menu is a destination whether or not a run
+     * survives, and the shipped result was that a player who ran out of lives had exactly
+     * ONE control -- an action that restarts the level (`landOnCampaignBoard`, loop.ts).
+     * Reaching the menu meant playing again, pausing, and quitting from there. `back` was
+     * no help either: `route-host.ts`'s menu-action handler acts on `back` only while
+     * `sm.isPaused`. Measured, and pinned by "a lost campaign has a route to the Main
+     * Menu" in hud.surfaces.test.ts.
+     *
+     * Issue #323 names the destination for each of these screens, and Main Menu is in
+     * every one of them.
+     */
+    const atOutcome = s === 'outcome-win' || s === 'outcome-lose';
+    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !atOutcome);
+    // "Quit" is the wrong word for leaving a match that is already over -- there is
+    // nothing left to abandon, and on an intermediate clear the run is preserved besides.
+    // Pause keeps its own wording, because there a match genuinely IS being left.
+    quitBtn.textContent = atOutcome ? 'Main Menu' : 'Quit to Title';
     /*
      * PAUSE ONLY since issue #226 -- the inverse of the old rule, which showed it at the
      * Main Menu AND at Pause. The issue removes it as a permanent top-level destination

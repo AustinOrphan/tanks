@@ -1111,14 +1111,14 @@
     "find": "      ],\n      undefined,\n      s === 'playing',\n    );",
     "replace": "      ],\n      undefined,\n      false,\n    );",
     "expect": "killed",
-    "why": "setState's gameplay-entry exemption, deleted. Issue #364 is explicit that no transition may run during gameplay entry or exit in a way that delays the countdown or the first input; this is the single argument that enforces it, and `false` is what the line would say if that rule had never been read. The failure is silent in every other check: the menu still ends up hidden, the ground still ends up covering the board, and every settled-state assertion in this suite still passes -- only the frames BETWEEN the click and the countdown differ, with the panel painted over the live game for the whole duration and `--leaving` still on it. `never runs a transition on gameplay entry` is the case that measures it, and it measures the timer DELTA rather than an absolute count, so the HUD's unrelated toast and armed-reset timers cannot satisfy it. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "why": "setState's gameplay-entry exemption, deleted. Issue #364 is explicit that no transition may run during gameplay entry or exit in a way that delays the countdown or the first input; this is the single argument that enforces it, and `false` is what the line would say if that rule had never been read. The failure is silent in every other check: the menu still ends up hidden, the ground still ends up covering the board, and every settled-state assertion in this suite still passes -- only the frames BETWEEN the click and the countdown differ, with the panel painted over the live game for the whole duration and `--leaving` still on it. `never runs a transition on gameplay entry` is the case that measures it, and it measures the timer DELTA rather than an absolute count, so the HUD's unrelated toast and armed-reset timers cannot satisfy it. Scoped to hud.test.ts; expectFailures counts that scoped run only. The killer's NAME changed in issue #323, not its subject: the case still sweeps the non-paused states for this button, but the Main Menu is now the only one that withholds it, so the title says that instead.",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract never runs a transition on gameplay entry",
       "createHud panel setBackdrop switches the treatment class both ways, and changes nothing about WHEN the ground shows",
-      "hud: pause panel keeps Quit out of every other panel state, and settings off the END screens"
+      "hud: pause panel keeps Quit off the MAIN MENU, offers it on every end screen, and settings off both"
     ]
   },
   {
@@ -1127,14 +1127,14 @@
     "find": "      const ms = instant ? 0 : deps.durationMs();",
     "replace": "      const ms = deps.durationMs();",
     "expect": "killed",
-    "why": "The other half of the gameplay-entry exemption, one level down: the runner honours the caller's `instant` rather than consulting the configured duration. Mutated here the flag still threads through every call site and still typechecks, so `transition-runs-on-gameplay-entry` above -- which pins the ARGUMENT -- cannot see it, and neither can transitions.test.ts, which never passes `instant` (0 call sites, checked). `instant` is a property of WHICH change this is, not of how long transitions happen to be configured to take, so a build that merely set the duration low would not restore the guarantee. `never runs a transition on gameplay entry` is again the case that measures it, through hud.ts's two `showCustomize(false, true)` / `showControllers(false, true)` cleanup closes and setState's own call. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "why": "The other half of the gameplay-entry exemption, one level down: the runner honours the caller's `instant` rather than consulting the configured duration. Mutated here the flag still threads through every call site and still typechecks, so `transition-runs-on-gameplay-entry` above -- which pins the ARGUMENT -- cannot see it, and neither can transitions.test.ts, which never passes `instant` (0 call sites, checked). `instant` is a property of WHICH change this is, not of how long transitions happen to be configured to take, so a build that merely set the duration low would not restore the guarantee. `never runs a transition on gameplay entry` is again the case that measures it, through hud.ts's two `showCustomize(false, true)` / `showControllers(false, true)` cleanup closes and setState's own call. Scoped to hud.test.ts; expectFailures counts that scoped run only. The killer's NAME changed in issue #323, not its subject: the case still sweeps the non-paused states for this button, but the Main Menu is now the only one that withholds it, so the title says that instead.",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
       "createHud application transition contract never runs a transition on gameplay entry",
       "createHud panel setBackdrop switches the treatment class both ways, and changes nothing about WHEN the ground shows",
-      "hud: pause panel keeps Quit out of every other panel state, and settings off the END screens"
+      "hud: pause panel keeps Quit off the MAIN MENU, offers it on every end screen, and settings off both"
     ]
   },
   {
@@ -4595,6 +4595,53 @@
     "killedBy": [
       "boot: the shell capability probe (issue #470) tells a BLOCKED probe apart from a browser that answered no",
       "boot: the message itself classifies each cause into its own state, and guesses at nothing"
+    ]
+  },
+  {
+    "id": "end-screens-lose-the-route-to-the-menu",
+    "file": "src/game/hud.ts",
+    "find": "    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !atOutcome);",
+    "replace": "    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Restores the shipped rule issue #323 replaced, in its most complete form: the Main Menu button reachable only from Pause. The measured consequence is a player who runs out of campaign lives having exactly ONE control on screen, and that control restarts the level (`landOnCampaignBoard`, loop.ts) rather than leaving it -- so the menu is reachable only by playing again, pausing, and quitting from there. `back` is no help: route-host.ts's menu-action handler acts on `back` only while `sm.isPaused`. The panel still renders correctly under this mutation, which is why it needs a case that enumerates the REACHABLE controls rather than one that checks the panel appeared.",
+    "killedBy": [
+      "hud: the level-cleared panel offers the main menu THE GAP (issue #323): a lost campaign has a route to the Main Menu",
+      "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people",
+      "hud: the level-cleared panel offers the main menu shows it on the FINAL win too, where the run has already ended"
+    ]
+  },
+  {
+    "id": "end-screens-offer-the-menu-only-when-you-won",
+    "file": "src/game/hud.ts",
+    "find": "const atOutcome = s === 'outcome-win' || s === 'outcome-lose';",
+    "replace": "const atOutcome = s === 'outcome-win';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The half-fix, and the one worth pinning separately: giving the winner a way out and leaving the loser without one. It is the more likely regression than removing the route entirely, because the win screens keep working and only the state a developer is least likely to sit on stays broken. Every assertion about the intermediate-clear panel -- the case that HAD this button before issue #323 -- survives it.",
+    "killedBy": [
+      "hud: the level-cleared panel offers the main menu THE GAP (issue #323): a lost campaign has a route to the Main Menu",
+      "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people"
+    ]
+  },
+  {
+    "id": "quit-button-says-quit-on-a-finished-match",
+    "file": "src/game/hud.ts",
+    "find": "    quitBtn.textContent = atOutcome ? 'Main Menu' : 'Quit to Title';",
+    "replace": "    quitBtn.textContent = 'Quit to Title';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Collapses the per-state wording, so a match that is already over invites the player to \"Quit\" it. Issue #323 asks every outcome label to describe exactly what it preserves or replaces, and there is nothing left to abandon on an end screen -- on an intermediate clear the run is preserved besides, which is why this wording was already special-cased there before #323 widened it. The button still appears and still works, so only the copy assertions can see this.",
+    "killedBy": [
+      "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people",
+      "hud: the level-cleared panel offers the main menu shows it on the FINAL win too, where the run has already ended",
+      "hud: the level-cleared panel offers the main menu shows it after clearing an INTERMEDIATE level, labelled Main Menu"
     ]
   }
 ]

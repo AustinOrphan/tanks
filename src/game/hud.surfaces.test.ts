@@ -833,16 +833,21 @@ describe('hud: pause panel', () => {
     expect(visible('.hud-records-open'), 'Records does not belong to Pause').toBe(false);
   });
 
-  it('keeps Quit out of every other panel state, and settings off the END screens', () => {
-    // Population: all four non-paused states. Quit reaches the level-cleared panel too
-    // (a directive), but that needs an INTERMEDIATE level position -- this fixture sets
-    // none, so `win` here is the final-win shape and stays verdict-only. The cleared
-    // case has its own describe block below; without it this loop would keep passing
-    // for the wrong reason, since a null level position hides the button regardless.
+  it('keeps Quit off the MAIN MENU, offers it on every end screen, and settings off both', () => {
+    // NARROWED by issue #323. This loop used to include both outcome states and assert
+    // the button was hidden on all three, with the reasoning that a final win and a loss
+    // have already ended the run so the panel is "verdict-only". The route out is not the
+    // run's to withhold: the Main Menu is a destination either way, and hiding it left a
+    // player who ran out of lives with one control that restarts the level.
+    //
+    // The Main Menu keeps its own exclusion for the unchanged reason -- you are already
+    // there.
     const { hud: h, root } = mount();
-    for (const s of ['main-menu', 'outcome-win', 'outcome-lose'] as const) {
+    h.setState('main-menu');
+    expect(quit(root).classList.contains('hud-quit--hidden'), 'main-menu').toBe(true);
+    for (const s of ['outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
-      expect(quit(root).classList.contains('hud-quit--hidden'), s).toBe(true);
+      expect(quit(root).classList.contains('hud-quit--hidden'), s).toBe(false);
     }
     for (const s of ['outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
@@ -1307,22 +1312,44 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     expect(quitBtn(root).textContent).toBe('Main Menu');
   });
 
-  it('hides it on the FINAL win, where the run has already ended', () => {
-    // The discriminator, and the reason `s === 'win'` alone is not the condition:
-    // endRun has run by then, so there is no run to return to.
+  it('shows it on the FINAL win too, where the run has already ended', () => {
+    // REVERSED by issue #323, and worth stating as a reversal. This asserted the button
+    // was HIDDEN here, because "endRun has run by then, so there is no run to return to".
+    // That is a true statement about the run and a wrong one about the route: it explains
+    // why the Main Menu will have no Continue on it, not why the player may not go there.
     const { hud: h, root } = mount();
     h.setStatus(atLevel(5, 5));
     h.setState('outcome-win');
-    expect(hidden(root)).toBe(true);
+    expect(hidden(root)).toBe(false);
+    expect(quitBtn(root).textContent).toBe('Main Menu');
   });
 
-  it('hides it on lose even mid-campaign', () => {
-    // A loss ends the run too, so a cleared-level route out does not apply. Fails if the
-    // condition widens from `s === 'win'` to "any end screen with levels left".
+  it('shows it on lose, which is where its absence actually stranded people', () => {
+    // Also REVERSED. The old rule left a lost campaign with exactly one control, and that
+    // control restarts the level rather than leaving it -- so the menu was reachable only
+    // by playing again, pausing, and quitting from there.
     const { hud: h, root } = mount();
     h.setStatus(atLevel(2, 5));
     h.setState('outcome-lose');
-    expect(hidden(root)).toBe(true);
+    expect(hidden(root)).toBe(false);
+    expect(quitBtn(root).textContent).toBe('Main Menu');
+  });
+
+  it('THE GAP (issue #323): a lost campaign has a route to the Main Menu', () => {
+    // Measured before the fix, not argued: at `outcome-lose` the quit button is hidden
+    // and the panel's one remaining action restarts the level (`landOnCampaignBoard` in
+    // loop.ts), so the only way to the Main Menu is to play again, pause, and quit from
+    // there. `back` does not help either -- route-host.ts's menu-action handler acts on
+    // `back` only while `sm.isPaused`.
+    const { hud: h, root } = mount();
+    h.setStatus(atLevel(2, 5));
+    h.setState('outcome-lose');
+
+    const reachable = [...root.querySelectorAll('button')].filter(
+      (b) => b.offsetParent !== null || !b.className.includes('--hidden'),
+    );
+    const labels = reachable.map((b) => b.textContent?.trim());
+    expect(labels, 'the outcome screen offered no way to the Main Menu').toContain('Main Menu');
   });
 
   it('still says Quit to Title when paused', () => {
