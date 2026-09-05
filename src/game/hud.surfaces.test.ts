@@ -1365,6 +1365,82 @@ describe('hud: the level-cleared panel offers the main menu', () => {
 });
 
 /*
+ * ---- THE PAUSE EXIT NAMES WHAT LEAVING COSTS (issue #323) --------------------------
+ *
+ * The shipped button said `Quit to Title` at Pause for every session there is. That is
+ * the right sentence about a campaign run -- leaving suspends one -- and the wrong one
+ * about practice, where `loop.ts`'s session identity already keeps the board from
+ * reading or writing the run at all. So the one surface that asks "will this cost me
+ * anything?" answered the same way whether or not it would, and the reassuring case was
+ * the one the wording scared the player off.
+ *
+ * The ACTION is untouched in all three cases -- `onQuitToTitle`, the same handler, the
+ * same landing. Only the word changes, which is exactly why the negative control below
+ * has to exist: a rename applied to the button rather than to the practice case would
+ * satisfy the practice assertion alone.
+ */
+describe('hud: the pause exit is contextual (issue #323)', () => {
+  const quitBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-quit') as HTMLButtonElement;
+
+  /**
+   * One status per session kind, differing in the KIND and in nothing else that this
+   * button could read -- same level position, same sequence length. That is what makes
+   * the campaign/versus cases below a control rather than a second scenario: if the
+   * label follows anything other than the kind, the three cases are indistinguishable
+   * inputs and cannot disagree.
+   */
+  const paused = (kind: GameplayStatus['kind']): GameplayStatus =>
+    kind === 'versus'
+      ? { kind, mission: 2, missions: 5, stocks: null }
+      : { kind, mission: 2, missions: 5, lives: 3, enemies: 3 };
+
+  it('reads End Practice at Pause, where "quit to title" would overstate the cost', () => {
+    const { hud: h, root } = mount();
+    h.setStatus(paused('practice'));
+    h.setState('paused');
+    // Visible as well as relabelled: the route out of a paused session is PR #563's and
+    // issue #226's, and this change is only allowed to rename it.
+    expect(quitBtn(root).classList.contains('hud-quit--hidden')).toBe(false);
+    expect(quitBtn(root).textContent).toBe('End Practice');
+  });
+
+  it('keeps Quit to Title at Pause for every session that is NOT practice', () => {
+    // THE NEGATIVE CONTROL. Without it, writing `End Practice` unconditionally -- or
+    // keying it on anything a practice session merely happens to have -- passes the test
+    // above. Campaign is the case the wording is TRUE for; versus is issue #279's screen
+    // and is deliberately left alone; the null status is a session that has not stated
+    // its kind, where the generic word is the only honest one.
+    const { hud: h, root } = mount();
+    const labelWith = (status: GameplayStatus | null): string => {
+      h.setStatus(status);
+      h.setState('paused');
+      return quitBtn(root).textContent ?? '';
+    };
+    expect(labelWith(paused('campaign'))).toBe('Quit to Title');
+    expect(labelWith(paused('versus'))).toBe('Quit to Title');
+    expect(labelWith(null)).toBe('Quit to Title');
+    // And the practice reading survives the same driver, so the three readings above are
+    // a disagreement this panel can actually express and not a constant.
+    expect(labelWith(paused('practice'))).toBe('End Practice');
+  });
+
+  it('leaves every practice END screen reading Main Menu, not End Practice', () => {
+    // The arms are ordered, and this is the assertion that pins the order. A practice
+    // level that is OVER is an end screen, and issue #323's action set for it names Main
+    // Menu -- there is no session left to end. A practice arm placed ahead of the outcome
+    // arm would relabel both endings and quietly undo PR #563's wording.
+    const { hud: h, root } = mount();
+    h.setStatus(paused('practice'));
+    for (const s of ['outcome-win', 'outcome-lose'] as const) {
+      h.setState(s);
+      expect(quitBtn(root).textContent, s).toBe('Main Menu');
+      expect(quitBtn(root).classList.contains('hud-quit--hidden'), s).toBe(false);
+    }
+  });
+});
+
+/*
  * ---- EVERY ENDING GETS ITS OWN SCREEN (issue #323) --------------------------------
  *
  * The issue's finding, restated as a fixture: before this, four endings shared two

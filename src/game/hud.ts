@@ -4986,10 +4986,46 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      */
     const atOutcome = s === 'outcome-win' || s === 'outcome-lose';
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !atOutcome);
-    // "Quit" is the wrong word for leaving a match that is already over -- there is
-    // nothing left to abandon, and on an intermediate clear the run is preserved besides.
-    // Pause keeps its own wording, because there a match genuinely IS being left.
-    quitBtn.textContent = atOutcome ? 'Main Menu' : 'Quit to Title';
+    /*
+     * ONE BUTTON, ONE ACTION, THREE WORDS FOR IT -- the label names what leaving costs
+     * from where you are standing, and nothing else about the click changes.
+     *
+     * `Main Menu` on every end screen: "Quit" is the wrong word for leaving a match that
+     * is already over -- there is nothing left to abandon, and on an intermediate clear
+     * the run is preserved besides. This arm is FIRST, so a practice ENDING keeps the
+     * Main Menu wording its action set names (issue #323's per-outcome sets); only Pause
+     * is contextual.
+     *
+     * `End Practice` at Pause in a practice session (issue #323's contextual pause
+     * exits): "Quit to Title" describes leaving a run, and a practice board is not one --
+     * `loop.ts`'s session identity keeps practice from reading or writing the campaign
+     * run at all, so there is nothing here to quit and nothing to lose by leaving. The
+     * generic word invited the player to believe otherwise, on the one surface where the
+     * question "will this cost me my run?" is actually being asked.
+     *
+     * `Quit to Title` at Pause otherwise -- campaign, versus, and any session that has
+     * not stated its kind yet. There a match genuinely IS being left, and versus is
+     * issue #279's screen besides.
+     *
+     * KEYED ON `statusData.kind`, the same projection `applyStatus` branches on for the
+     * mode chip and the campaign stat row, and NOT on a second session signal of its
+     * own. `loop.ts` pushes it before any `setState` for a session (its own comment at
+     * the push site says so), so the kind is already known the first time Pause renders.
+     *
+     * NOT re-rendered from `setStatus` the way the topbar and the outcome copy are, and
+     * that asymmetry is deliberate rather than an omission. The driver runs `onSimulated`
+     * -- the only per-frame status push -- only while playing, so the ONE status push
+     * that can land while `paused` is on screen is the one `onQuitToTitle` makes on its
+     * way out, and that push deliberately carries the LANDING's kind, not the paused
+     * session's. Following it would rewrite this button from `End Practice` to `Quit to
+     * Title` under the finger that just pressed it, one statement before the menu
+     * replaces the panel anyway.
+     */
+    quitBtn.textContent = atOutcome
+      ? 'Main Menu'
+      : s === 'paused' && statusData?.kind === 'practice'
+        ? 'End Practice'
+        : 'Quit to Title';
     /*
      * PAUSE ONLY since issue #226 -- the inverse of the old rule, which showed it at the
      * Main Menu AND at Pause. The issue removes it as a permanent top-level destination

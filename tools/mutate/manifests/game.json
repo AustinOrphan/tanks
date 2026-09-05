@@ -4764,17 +4764,63 @@
   {
     "id": "quit-button-says-quit-on-a-finished-match",
     "file": "src/game/hud.ts",
-    "find": "    quitBtn.textContent = atOutcome ? 'Main Menu' : 'Quit to Title';",
+    "find": "    quitBtn.textContent = atOutcome\n      ? 'Main Menu'\n      : s === 'paused' && statusData?.kind === 'practice'\n        ? 'End Practice'\n        : 'Quit to Title';",
     "replace": "    quitBtn.textContent = 'Quit to Title';",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Collapses the per-state wording, so a match that is already over invites the player to \"Quit\" it. Issue #323 asks every outcome label to describe exactly what it preserves or replaces, and there is nothing left to abandon on an end screen -- on an intermediate clear the run is preserved besides, which is why this wording was already special-cased there before #323 widened it. The button still appears and still works, so only the copy assertions can see this.",
+    "why": "Collapses the per-state wording, so a match that is already over invites the player to \"Quit\" it. Issue #323 asks every outcome label to describe exactly what it preserves or replaces, and there is nothing left to abandon on an end screen -- on an intermediate clear the run is preserved besides, which is why this wording was already special-cased there before #323 widened it. The button still appears and still works, so only the copy assertions can see this. RE-ANCHORED by issue #323's contextual pause exit: the single-line ternary this replaced is now a three-arm chain, and collapsing the whole chain is still the same mutation -- every screen, ended or paused, invited to \"Quit\". It now flattens the practice pause wording as well, which is why the two pause-exit killers joined the list.",
     "killedBy": [
       "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people",
       "hud: the level-cleared panel offers the main menu shows it on the FINAL win too, where the run has already ended",
-      "hud: the level-cleared panel offers the main menu shows it after clearing an INTERMEDIATE level, labelled Main Menu"
+      "hud: the level-cleared panel offers the main menu shows it after clearing an INTERMEDIATE level, labelled Main Menu",
+      "hud: the pause exit is contextual (issue #323) reads End Practice at Pause, where \"quit to title\" would overstate the cost",
+      "hud: the pause exit is contextual (issue #323) keeps Quit to Title at Pause for every session that is NOT practice"
+    ]
+  },
+  {
+    "id": "pause-exit-is-generic-in-a-practice-session",
+    "file": "src/game/hud.ts",
+    "find": "        ? 'End Practice'\n        : 'Quit to Title';",
+    "replace": "        ? 'Quit to Title'\n        : 'Quit to Title';",
+    "expect": "killed",
+    "why": "Restores the shipped wording for a paused PRACTICE session, keeping the arm and its condition so nothing about the structure reads as wrong. That is the whole defect issue #323's contextual pause exit removes: \"Quit to Title\" describes suspending a run, and a practice board is not one -- loop.ts's session identity keeps it from reading or writing the campaign run at all. The button is visible and does exactly the same thing either way, so only a copy assertion driven by a practice STATUS can see this; every campaign and versus assertion in the file stays green.",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) reads End Practice at Pause, where \"quit to title\" would overstate the cost",
+      "hud: the pause exit is contextual (issue #323) keeps Quit to Title at Pause for every session that is NOT practice"
+    ]
+  },
+  {
+    "id": "pause-offers-to-end-a-practice-nobody-is-playing",
+    "file": "src/game/hud.ts",
+    "find": "      : s === 'paused' && statusData?.kind === 'practice'",
+    "replace": "      : s === 'paused'",
+    "expect": "killed",
+    "why": "Drops the SESSION half of the contextual pause exit, so every paused session -- a campaign run mid-level, a versus match, a session that has not stated its kind yet -- offers to \"End Practice\". This is the mutation the practice assertion alone cannot see: it satisfies the new label test and is wrong everywhere else, which is exactly why that test ships with a control that pauses a campaign, a versus match and a null status through the same driver. Campaign is the case the generic word is TRUE for, and versus is issue #279's screen, so both are copy the player would act on.",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) keeps Quit to Title at Pause for every session that is NOT practice",
+      "hud: the level-cleared panel offers the main menu still says Quit to Title when paused"
+    ]
+  },
+  {
+    "id": "pause-wording-reaches-a-finished-practice-level",
+    "file": "src/game/hud.ts",
+    "find": "    quitBtn.textContent = atOutcome\n      ? 'Main Menu'\n      : s === 'paused' && statusData?.kind === 'practice'\n        ? 'End Practice'\n        : 'Quit to Title';",
+    "replace": "    quitBtn.textContent = statusData?.kind === 'practice'\n      ? 'End Practice'\n      : atOutcome\n        ? 'Main Menu'\n        : 'Quit to Title';",
+    "expect": "killed",
+    "why": "Reorders the arms so the session kind outranks the surface, which relabels the two practice END screens \"End Practice\". Both arms survive and every campaign and versus reading is unchanged, so this is the plausible version of the change rather than a typo. It is wrong because there is nothing left to end on an ending: issue #323's action set for a finished practice level names Main Menu, and PR #563 put that route on every end screen. Only an assertion that drives a practice STATUS all the way to an outcome surface can tell the two orderings apart.",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) leaves every practice END screen reading Main Menu, not End Practice"
     ]
   }
 ]
