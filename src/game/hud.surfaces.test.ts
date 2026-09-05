@@ -1561,21 +1561,24 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     // added later arrives here unanswered rather than defaulting quietly into one arm.
     const { hud: h, root } = mount();
     h.setLevelSelect(3, 5);
-    const shownFor = new Map<string, boolean>();
+    // Every ENDING of every kind, since the two that carry a payload have more than one
+    // -- a practice level ends two ways and the button must follow the kind, not the
+    // verdict. The cast is only for the three kinds whose whole content is their name;
+    // the two with payloads are spelled out above it and never reach it.
+    const offeredBy: string[] = [];
     for (const kind of TYPED_OUTCOME_KINDS) {
-      const outcomes: TypedOutcome[] =
+      const endings: TypedOutcome[] =
         kind === 'practice-result'
           ? [PRACTICE_WON, PRACTICE_LOST]
           : kind === 'vs-match-end'
             ? [{ kind: 'vs-match-end', result: { kind: 'winner-slot', slot: 0 } }]
             : [{ kind } as TypedOutcome];
-      for (const outcome of outcomes) {
-        drive(h, outcome);
-        shownFor.set(`${kind}`, (shownFor.get(`${kind}`) ?? false) || chooseLevelShown(root));
+      for (const ending of endings) {
+        drive(h, ending);
+        if (chooseLevelShown(root) && !offeredBy.includes(kind)) offeredBy.push(kind);
       }
     }
-    expect([...shownFor.entries()].filter(([, shown]) => shown).map(([k]) => k))
-      .toEqual(['practice-result']);
+    expect(offeredBy).toEqual(['practice-result']);
 
     // ...and every surface that is not an end screen keeps it off, including the pause
     // panel a player reaches from the level they went on to play.
