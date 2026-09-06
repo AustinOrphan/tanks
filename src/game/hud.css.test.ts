@@ -467,7 +467,7 @@ describe('hud.css is syntactically whole', () => {
       '.hud-stats-empty--hidden',
       // ...and the campaign-run tally's: without it the run total shows on the practice
       // and versus endings, reporting a campaign they have nothing to do with.
-      '.hud-run-tally--hidden',
+      '.hud-run-tally', '.hud-run-tally--hidden',
       // Level select buttons. No `--locked` rule and no `--hidden` note rule since issue
       // #555: the grid draws only unlocked levels, so there is no dimmed control to style
       // and no state the note can explain that the player is not in.

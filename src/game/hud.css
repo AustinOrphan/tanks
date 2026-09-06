@@ -1794,6 +1794,18 @@
   }
 }
 
+/* The campaign-run tally, directly under the level attempt's. `margin-top` matches
+ * `.hud-coop-kills`, the existing "one line below the attempt summary" precedent, and it
+ * is what makes the two read as a PAIR: measured at the default paragraph spacing they
+ * sat far enough apart to read as two unrelated facts, which defeats the whole reason
+ * both scopes are on screen. Found in a capture, not by a test -- no assertion about
+ * text content can see it. */
+.hud-run-tally {
+  margin-top: -6px;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Without this the campaign-run tally shows on every ending, reporting a campaign on the
  * practice and versus screens that have nothing to do with one. */
 .hud-run-tally--hidden {
