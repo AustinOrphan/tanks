@@ -221,7 +221,12 @@ export function createStatsStore(storage: Storage): StatsStore {
       const bump = (key: keyof StatCounts): void => {
         delta[key] = (delta[key] ?? 0) + 1;
         attempt[key] += 1; // purely in-memory per attempt; never persisted, never resynced
-        if (countsTowardRun) runDelta[key] = (runDelta[key] ?? 0) + 1;
+        // Accumulated unconditionally and APPLIED conditionally, below. Gating here as
+        // well would be defence in depth of the useless kind: with two guards for one
+        // rule, neither is load-bearing, so removing either leaves the behaviour correct
+        // and the tests green -- which is exactly what a mutation run reported when this
+        // was written that way. One gate, and it is the one that decides the write.
+        runDelta[key] = (runDelta[key] ?? 0) + 1;
         changed = true;
       };
       for (const e of events) {

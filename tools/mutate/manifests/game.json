@@ -5062,8 +5062,8 @@
   {
     "id": "run-tally-counts-practice-and-versus",
     "file": "src/game/stats.ts",
-    "find": "        if (countsTowardRun) runDelta[key] = (runDelta[key] ?? 0) + 1;",
-    "replace": "        runDelta[key] = (runDelta[key] ?? 0) + 1;",
+    "find": "      if (!countsTowardRun) return;",
+    "replace": "      if (false) return;",
     "expect": "killed",
     "tests": [
       "src/game/stats.test.ts"
@@ -5071,7 +5071,7 @@
     "killedBy": [
       "createStatsStore: the CAMPAIGN RUN scope accumulates only when the caller says this session counts toward the run"
     ],
-    "why": "Drops the gate inside `bump`, so a practice level, the sandbox, a dev-flag jump and a versus match all pour into the CAMPAIGN run's total. The number then cannot be reconciled with the campaign the player just played, which is the one thing an end-screen total has to be. Survives every lifetime and attempt assertion in the file, because those scopes are unchanged."
+    "why": "Drops the ONE gate that keeps practice, the sandbox, a dev-flag jump and versus out of the CAMPAIGN run's total, so the number stops being reconcilable with the campaign the player just played. An earlier version of this entry removed a second, redundant guard inside `bump` and SURVIVED -- with two guards for one rule neither is load-bearing, and the production code was simplified to a single gate rather than the entry weakened. Recorded because the redundancy read as defence in depth and was the opposite."
   },
   {
     "id": "run-tally-never-persisted",
@@ -5160,8 +5160,8 @@
   {
     "id": "new-run-keeps-the-previous-runs-tally",
     "file": "src/game/loop.ts",
-    "find": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;\n      // The run's TALLY starts over with the run itself.",
-    "replace": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;\n      // The run's TALLY starts over with the run itself. (mutated: it does not)\n      if (false)",
+    "find": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;\n      // The run's TALLY starts over with the run itself. Paired at every `startNewRun`\n      // call rather than folded into the run store, because run.ts is a pure key-value\n      // store that deliberately knows nothing about statistics.\n      deps.stats.startRun();",
+    "replace": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
     "expect": "killed",
     "tests": [
       "src/game/loop.test.ts"
@@ -5169,7 +5169,7 @@
     "killedBy": [
       "startGameWith: stats wiring starts a fresh RUN tally exactly where it starts a new run, and not on a level pick"
     ],
-    "why": "Replaces the run record without replacing its tally, so the new campaign's end screen reports the previous campaign's numbers on top of its own. The pairing is a convention rather than something the type system enforces -- run.ts is a pure key-value store that deliberately knows nothing about statistics -- so nothing but this test holds the two `startNewRun`/`startRun` call sites together."
+    "why": "Replaces the run record without replacing its tally, so the new campaign's end screen reports the previous campaign's numbers on top of its own. The pairing is a convention rather than something the type system enforces -- run.ts is a pure key-value store that deliberately knows nothing about statistics -- so nothing but this test holds the two `startNewRun`/`startRun` call sites together. An earlier version wrapped the call in `if (false)` and left a dangling statement the suite could not even collect; deleting the line is the mutation a real revert would make."
   },
   {
     "id": "run-total-shown-on-every-ending",

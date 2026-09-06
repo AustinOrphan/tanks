@@ -5579,6 +5579,66 @@ describe('startGameWith: stats wiring', () => {
     h.handle.dispose();
   });
 
+  it('sends the run total ONLY on the two endings that finish a run', () => {
+    // The other half of the gate, and the half no HUD test can see: `hud.surfaces.test.ts`
+    // pushes an outcome payload it built itself, so it proves the HUD renders a run total
+    // when given one and hides the line when not. What it cannot prove is which endings
+    // the SESSION resolves one for -- which is this.
+    //
+    // `mission-clear` is the case that makes the gate worth pinning. It IS campaign play
+    // and it IS mid-run, so a condition written as "is this a campaign session" instead of
+    // "did this end a run" looks right and puts a running campaign total on every level.
+    // Driven through the PRODUCTION classifier, the same way the typed-outcome cases
+    // below are: the kind is what gates this, so a fixture that asserted the kind it had
+    // itself supplied would be checking its own arithmetic.
+    const runOn = (h: ReturnType<typeof boot>, kind: string): boolean | undefined => {
+      const push = h.rec.outcomePushes.filter((o) => o.typedOutcome?.kind === kind).at(-1);
+      return push === undefined ? undefined : push.run !== undefined;
+    };
+
+    // Driven through a REAL winning frame, which is the only way the typed outcome
+    // reaches a push: `pushOutcome(driver.world, sm.outcome)` fires from `onFrameEvents`,
+    // so a bare `setState('outcome-win')` classifies the ending but pushes nothing. The
+    // player's bullet is placed on the last enemy, the frame runs, the classifier flips
+    // the surface, and the push for THAT batch carries the outcome -- production's own
+    // "a beat after the state flips" ordering.
+    const winFrame = (h: ReturnType<typeof boot>): void => {
+      const world = h.rec.builtWorlds.at(-1)!;
+      const player = world.tanks.find((t: Tank) => t.kind === 'player')!;
+      const enemy = world.tanks.find((t: Tank) => t.kind !== 'player')!;
+      // Down to ONE enemy, in place, so destroying it is the last kill and the frame
+      // really produces a win rather than a kill the classifier shrugs at.
+      world.tanks = [player, enemy];
+      world.bullets.push({
+        id: 902, ownerId: player.id, type: 'normal', pos: { x: enemy.pos.x, y: enemy.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+    };
+
+    // ONE level, so the only win available is the one that finishes the campaign.
+    const done = boot(makeDeps({ levelCount: 1, savedRun: { level: 0, lives: LIVES } }));
+    done.hud.startRestart();
+    winFrame(done);
+    expect(done.rec.typedOutcomes.at(-1)?.kind, 'the fixture did not finish the campaign').toBe(
+      'campaign-complete',
+    );
+    expect(runOn(done, 'campaign-complete'), 'the finished run carried no total').toBe(true);
+    done.handle.dispose();
+
+    // THE NEGATIVE CONTROL: three levels, so the same winning frame is mission-clear and
+    // the run carries on. Without it a payload that always resolved a total passes above.
+    const mid = boot(makeDeps({ levelCount: 3, savedRun: { level: 0, lives: LIVES } }));
+    mid.hud.startRestart();
+    winFrame(mid);
+    expect(mid.rec.typedOutcomes.at(-1)?.kind, 'the fixture did not reach mission-clear').toBe(
+      'mission-clear',
+    );
+    expect(runOn(mid, 'mission-clear'), 'a mid-run level reported a campaign total').toBe(false);
+    mid.handle.dispose();
+  });
+
   it('starts a fresh attempt tally at boot and on every level switch -- and NOT on a quit', () => {
     // The tally follows `switchTo`, so it follows world builds. Issue #317 took the quit
     // out of that set: quitting is navigation and starts no attempt, and the attempt

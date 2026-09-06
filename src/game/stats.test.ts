@@ -307,6 +307,25 @@ describe('createStatsStore: the CAMPAIGN RUN scope', () => {
     expect(reloaded.run()).toEqual(ZERO_STATS);
   });
 
+  it('adopts another tab\'s New Game rather than outranking it with a stale shadow', () => {
+    // PR #62's defect class, on the second persisted scope. Without the run tally in
+    // `resync()`, this instance's in-memory total stays higher than disk forever, so a
+    // New Game (or a Reset stats) performed in another tab is undone by the very next
+    // frame this one records.
+    const tabA = createStatsStore(localStorage);
+    const tabB = createStatsStore(localStorage);
+    tabA.record([fire(P), fire(P)], P, true);
+    expect(tabA.run().shotsFired).toBe(2);
+
+    // The other tab starts a new campaign. Disk is now zero; tabA's shadow still says 2.
+    tabB.startRun();
+
+    // tabA records one more shot. It must land on DISK's zero, not on its own stale 2.
+    tabA.record([fire(P)], P, true);
+    expect(tabA.run().shotsFired, 'a stale shadow outranked another tab\'s New Game').toBe(1);
+    expect(createStatsStore(localStorage).run().shotsFired).toBe(1);
+  });
+
   it('reads a corrupt run key as zeros without disturbing the lifetime key', () => {
     // Same paranoia as every other store here, and the isolation matters: the two scopes
     // are separate keys precisely so one cannot poison the other.
