@@ -5230,8 +5230,8 @@
   {
     "id": "records-tab-memory-outlives-the-document",
     "file": "src/game/hud.ts",
-    "find": "  let lastRecordsTab: Extract<HudLayerId, 'stats' | 'achievements'> = 'stats';",
-    "replace": "  let lastRecordsTab: Extract<HudLayerId, 'stats' | 'achievements'> =\n    (globalThis as { __lastRecordsTab?: 'stats' | 'achievements' }).__lastRecordsTab ?? 'stats';",
+    "find": "  let lastRecordsTab: Extract<HudLayerId, 'stats' | 'achievements'> = 'stats';\n  const handleRecordsOpen = (): void => {\n    openLayer(lastRecordsTab, recordsOpenBtn);\n  };\n  const handleRecordsTabStats = (): void => {\n    lastRecordsTab = 'stats';\n    openLayer('stats', recordsOpenBtn);\n  };\n  const handleRecordsTabAchievements = (): void => {\n    lastRecordsTab = 'achievements';\n    openLayer('achievements', recordsOpenBtn);\n  };",
+    "replace": "  const tabStore = globalThis as { __lastRecordsTab?: 'stats' | 'achievements' };\n  const handleRecordsOpen = (): void => {\n    openLayer(tabStore.__lastRecordsTab ?? 'stats', recordsOpenBtn);\n  };\n  const handleRecordsTabStats = (): void => {\n    tabStore.__lastRecordsTab = 'stats';\n    openLayer('stats', recordsOpenBtn);\n  };\n  const handleRecordsTabAchievements = (): void => {\n    tabStore.__lastRecordsTab = 'achievements';\n    openLayer('achievements', recordsOpenBtn);\n  };",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
@@ -5239,6 +5239,6 @@
     "killedBy": [
       "hud: the stats page does NOT retain the tab across documents, which is what keeps it out of storage"
     ],
-    "why": "Seeds the tab from state that outlives one HUD, which is the shape persisting it would take -- a global here, `storage.ts` in the version someone would actually write. The owner ruled this memory lasts the sitting and is gone on reload: it is a convenience within one visit, not a preference the player set, and a persisted version would make the first screen of a visit depend on something they did days earlier. Nothing about a single mount can see this, which is why the second case builds a whole new HUD."
+    "why": "Moves the tab memory OUT of the HUD instance and into state that outlives it -- a global here, `storage.ts` in the version someone would actually write. The owner ruled this memory lasts the sitting and is gone on reload: it is a convenience within one visit, not a preference the player set, and a persisted version would make the first screen of a visit depend on something they did days earlier. The whole block is the find string because a faithful mutation has to both READ and WRITE the outliving store -- an earlier version patched only the read, so nothing ever wrote the global, the fallback always applied and it SURVIVED. Nothing about a single mount can see this either way, which is why its test builds a whole second HUD."
   }
 ]
