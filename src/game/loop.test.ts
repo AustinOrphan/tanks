@@ -7169,11 +7169,17 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       h.handle.dispose();
     });
 
-    it('falls through to the campaign board when there is no configuration to replay', () => {
-      // THE NEGATIVE CONTROL, and a reachable case rather than defensive padding: a versus
-      // world reached by `?dev=1&mode=ffa` never went through the pane, so it has no
-      // retained config and no `requestVersusSession` on its deps. Inventing a
-      // configuration to replay would be fabricating the player's choices.
+    it('leaves a dev-flag versus world on the campaign branch, which never had a pane to return to', () => {
+      // THE NEGATIVE CONTROL for the branch as a whole. A versus world reached by
+      // `?dev=1&mode=ffa` gets `relaunchTarget === 'campaign-levels'` (`relaunchTargetFor`
+      // excludes the `'versus-flags'` origin), so it must not take the rematch path at all
+      // -- there is no pane behind it to have configured anything.
+      //
+      // It does NOT exercise the branch's two null guards, and the comment says so rather
+      // than implying otherwise: those are TYPE guards over optional `GameDeps` fields,
+      // unreachable at runtime because a `'versus-setup'` relaunch target already implies
+      // a pane-originated session that carries a config. Their mutation entry is marked
+      // equivalent, not left looking like a gap this case covers.
       const base = makeDeps({ devFlags: { mode: 'ffa' } });
       const h = boot(base);
       h.setState('outcome-win');

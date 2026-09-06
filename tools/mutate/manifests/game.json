@@ -5355,17 +5355,15 @@
     "why": "Helpfully resolves the arena before handing the config over, which pins THIS match's arena onto every rematch after it -- the defect issue #278 fixed one layer down, reintroduced from above. It looks like an improvement (the config is now concrete) and is the reason the killer asserts on the `arenaId` FIELD rather than merely that a config was passed: every other assertion about the rematch survives this unchanged. `ResolvedSession` exists precisely so a retained `'random'` descriptor can produce distinct instances without being mutated into a mixture of player choice and launch result."
   },
   {
-    "id": "rematch-invents-a-configuration-it-was-never-given",
+    "id": "rematch-drops-a-type-guard-over-an-unreachable-null",
     "file": "src/game/loop.ts",
     "find": "      } else if (relaunchTarget === 'versus-setup' && deps.requestVersusSession && deps.initialVersusConfig) {",
     "replace": "      } else if (relaunchTarget === 'versus-setup' && deps.requestVersusSession) {",
-    "expect": "killed",
+    "expect": "survives",
     "tests": [
       "src/game/loop.test.ts"
     ],
-    "killedBy": [
-      "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's Rematch: the same configuration, a fresh match (issue #279) falls through to the campaign board when there is no configuration to replay"
-    ],
-    "why": "Drops the guard that there is a configuration to replay. A versus world reached by `?dev=1&mode=ffa` never went through the setup pane, so `initialVersusConfig` is null and the branch would hand `undefined` to the start seam -- fabricating, or crashing on, choices the player never made. The reachable case is a dev-flag versus session, and the honest answer there is the campaign board, which is what the branch falls through to."
+    "why": "EQUIVALENT, not a coverage gap, and measured rather than assumed: it was declared `killed` first and SURVIVED. `relaunchTarget === 'versus-setup'` already means a pane-originated versus session (`relaunchTargetFor`: versus identity plus a `sessionOrigin` other than `'versus-flags'`), and the start boundary never creates one without a config -- so `deps.initialVersusConfig` cannot be null when this branch is reached. The field is optional only because `GameDeps` makes it optional for the campaign path, which is why the guard exists at all: TypeScript needs it to call through. A `?dev=1&mode=ffa` world takes the campaign branch because its relaunch target differs, not because of this guard. Kept so that a future change making a config-less `'versus-setup'` session reachable is what flips this to killed, rather than a silent fabrication of a configuration the player never chose.",
+    "equivalent": true
   }
 ]

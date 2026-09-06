@@ -2622,11 +2622,16 @@ export function startGameWith(
          * distinct rematch instances without being mutated into a mixture of player choice
          * and launch result" (app-state.ts).
          *
-         * BOTH GUARDS IN THE CONDITION ARE REACHABLE, not defensive padding. A versus
-         * session reached by `?dev=1&mode=ffa` has no pane config behind it and no
-         * `requestVersusSession` on its deps, so there is nothing to rematch WITH -- it
-         * falls through to the campaign board below rather than inventing a configuration
-         * to replay, the same "never fabricate" rule the Main Menu's run summary follows.
+         * THE TWO EXTRA GUARDS ARE TYPE GUARDS, and saying so is more useful than implying
+         * they are live branches. `relaunchTarget === 'versus-setup'` already means a
+         * PANE-originated versus session (`relaunchTargetFor`: versus identity and a
+         * `sessionOrigin` other than `'versus-flags'`), and the start boundary never
+         * creates one without a config -- so a null `initialVersusConfig` here is
+         * unreachable at runtime, and both fields are optional only because `GameDeps`
+         * makes them optional for the campaign path. A `?dev=1&mode=ffa` world takes the
+         * campaign branch below because its relaunch target is `'campaign-levels'`, not
+         * because of these guards. Their mutation entry is marked equivalent for that
+         * reason rather than left looking like a coverage hole.
          *
          * Through `requestVersusSession`, the seam `route-host.ts` says it keeps "because a
          * session's own Rematch still reboots through it". Nothing here builds a world: the
