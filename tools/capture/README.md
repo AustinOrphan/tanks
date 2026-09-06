@@ -51,6 +51,31 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `gallery.ai-tracking.normal` | `ai-tracking` | `capture.mp4`, `preview.gif` | ticks 0–46, one frame per 60 Hz tick |
 | `gallery.drive.normal` | `drive` | `capture.mp4`, `preview.gif` | ticks 0–29, one frame per 60 Hz tick |
 | `gallery.ai-last-seen.normal` | `ai-last-seen` | `capture.mp4`, `preview.gif` | ticks 0–164, one frame per 60 Hz tick |
+| `screen.main-menu` | `screen.main-menu` | `capture.png` | still |
+| `screen.main-menu.fresh` | `screen.main-menu.fresh` | `capture.png` | still |
+| `screen.levels` | `screen.levels` | `capture.png` | still |
+| `screen.records.stats` | `screen.records.stats` | `capture.png` | still |
+| `screen.records.stats.empty` | `screen.records.stats.empty` | `capture.png` | still |
+| `screen.records.achievements` | `screen.records.achievements` | `capture.png` | still |
+| `screen.settings` | `screen.settings` | `capture.png` | still |
+| `screen.customize` | `screen.customize` | `capture.png` | still |
+| `screen.versus-setup` | `screen.versus-setup` | `capture.png` | still |
+| `screen.about` | `screen.about` | `capture.png` | still |
+| `screen.confirm.new-campaign` | `screen.confirm.new-campaign` | `capture.png` | still |
+| `screen.startup.unsupported-render` | `screen.startup.unsupported-render` | `capture.png` | still |
+| `screen.startup.probe-blocked` | `screen.startup.probe-blocked` | `capture.png` | still |
+| `screen.startup.match-failed` | `screen.startup.match-failed` | `capture.png` | still |
+| `screen.no-script` | `screen.no-script` | `capture.png` | still |
+
+The `screen.*` recipes are the `screen` producer (issue #561): they boot the BUILT page
+into a named application state from [`tools/screens/states.mjs`](../screens/states.mjs) and
+photograph it. A screen recipe carries an empty `variant` — which screen it is lives in
+`producer.scenarioId`, and the state definition owns its seeded storage, its renderer-probe
+override and the clicks that reach it, because those are properties of the screen rather
+than of one capture of it.
+
+They are captured on demand and are NOT part of the required `visual` check. See
+[`tools/screens/README.md`](../screens/README.md) for that argument.
 
 `gallery.ai-tracking.normal` is a generic tracking/capture fixture. It is not evidence of
 turret shimmer and does not encode or evaluate an AI deadband choice.

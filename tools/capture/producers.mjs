@@ -1,4 +1,5 @@
 import { runGalleryMoment } from './gallery-adapter.mjs';
+import { runScreenState } from './screen-adapter.mjs';
 
 export function createProducerRegistry(entries) {
   const registry = new Map();
@@ -12,6 +13,7 @@ export function createProducerRegistry(entries) {
 
 export const CAPTURE_PRODUCERS = createProducerRegistry([
   ['moment', runGalleryMoment],
+  ['screen', runScreenState],
 ]);
 
 export function producerForKind(kind, registry = CAPTURE_PRODUCERS) {

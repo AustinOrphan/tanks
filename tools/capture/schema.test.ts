@@ -27,6 +27,23 @@ describe('capture recipe schema', () => {
       'gallery.ricochet.still',
       'gallery.drive.normal',
       'gallery.ai-last-seen.normal',
+      // The `screen` producer's states (issue #561). Pinned like the gallery ones: this
+      // list is what makes ADDING a recipe a deliberate act rather than a side effect.
+      'screen.main-menu',
+      'screen.main-menu.fresh',
+      'screen.levels',
+      'screen.records.stats',
+      'screen.records.stats.empty',
+      'screen.records.achievements',
+      'screen.settings',
+      'screen.customize',
+      'screen.versus-setup',
+      'screen.about',
+      'screen.confirm.new-campaign',
+      'screen.startup.unsupported-render',
+      'screen.startup.probe-blocked',
+      'screen.startup.match-failed',
+      'screen.no-script',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });
@@ -87,13 +104,31 @@ describe('capture recipe schema', () => {
     unknown.producer.kind = 'shell';
     expect(() => validateRecipe(unknown)).toThrow(/must be one of moment, screen, flow, replay/);
 
-    for (const kind of ['screen', 'flow', 'replay']) {
+    // `flow` and `replay` only. `screen` was in this list until issue #561 implemented it,
+    // and it is the case this loop exists to describe: a kind starts as a name the schema
+    // accepts and the registry refuses, and graduates to one both accept. Leaving it here
+    // would have asserted that a producer with a real adapter is unimplemented.
+    for (const kind of ['flow', 'replay']) {
       const future = recipe();
       future.producer.kind = kind;
       future.variant = {};
       expect(() => validateRecipe(future)).not.toThrow(); // contract shape is extensible
       expect(() => producerForKind(kind)).toThrow(new RegExp(`'${kind}'.*not implemented`));
     }
+
+    // ...and the graduated kind, which now validates its scenario the way `moment` does.
+    const screen = recipe();
+    screen.producer.kind = 'screen';
+    screen.producer.scenarioId = 'screen.main-menu';
+    screen.variant = {};
+    expect(() => validateRecipe(screen)).not.toThrow();
+    expect(() => producerForKind('screen')).not.toThrow();
+
+    const madeUp = recipe();
+    madeUp.producer.kind = 'screen';
+    madeUp.producer.scenarioId = 'screen.not-a-state';
+    madeUp.variant = {};
+    expect(() => validateRecipe(madeUp)).toThrow(/is not a known screen state/);
   });
 
   it('rejects invalid producer options instead of forwarding arbitrary gallery arguments', () => {
@@ -101,8 +136,12 @@ describe('capture recipe schema', () => {
     command.variant.command = 'node';
     expect(() => validateRecipe(command)).toThrow(/variant\.command.*not an allowed field/);
 
+    // A screen recipe still carries an EMPTY variant: which screen it is lives in
+    // `producer.scenarioId`, and the state's own definition owns the seeding and the
+    // steps. A route smuggled in here is refused like any other unknown field.
     const future = recipe();
     future.producer.kind = 'screen';
+    future.producer.scenarioId = 'screen.main-menu';
     future.variant = { route: '/title' };
     expect(() => validateRecipe(future)).toThrow(/variant\.route.*not an allowed field/);
 
@@ -148,7 +187,7 @@ describe('capture recipe schema', () => {
 
     const frameScheduled = recipe(1);
     frameScheduled.producer.kind = 'screen';
-    frameScheduled.producer.scenarioId = 'fake-screen';
+    frameScheduled.producer.scenarioId = 'screen.main-menu';
     frameScheduled.variant = {};
     frameScheduled.schedule = { kind: 'frames', frameCount: 12 };
     frameScheduled.playback.intendedFps = 24;
