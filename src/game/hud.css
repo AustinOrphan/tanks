@@ -1450,11 +1450,30 @@
 
 /* Versus's per-player kill/death tally (n-player arc PR 4, FFA + teams) -- the
    .hud-coop-kills precedent, one line below it. */
+/* A TABLE since the owner's ruling on issue #279, so the per-player figures line up in
+ * columns instead of running together on one line. Borrows `.hud-stats-table`'s cell
+ * treatment deliberately -- left-aligned label, right-aligned figures, tabular numerals --
+ * because this IS the same kind of readout and two different table looks on one product
+ * would be the drift, not the consistency. Centred as a block because the panel it sits in
+ * is centred (issue #151) and a left-flush table under a centred heading reads as a
+ * mistake. */
 .hud-versus-results {
-  margin-top: -6px;
-  margin-bottom: 0;
+  margin: -6px auto 0;
+  border-collapse: collapse;
   opacity: 0.9;
   font-variant-numeric: tabular-nums;
+}
+
+.hud-versus-results th {
+  text-align: left;
+  padding: 2px 18px 2px 0;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.hud-versus-results td {
+  text-align: right;
+  padding: 2px 0 2px 22px;
 }
 
 .hud-versus-results--hidden {

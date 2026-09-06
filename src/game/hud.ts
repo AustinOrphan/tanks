@@ -1607,7 +1607,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            a single line would have to be rebuilt to drop half of itself. -->
       <p class="hud-run-tally hud-run-tally--hidden"></p>
       <p class="hud-coop-kills hud-coop-kills--hidden"></p>
-      <p class="hud-versus-results hud-versus-results--hidden"></p>
+      <!-- A TABLE since the owner's ruling on issue #279, not a single run-on line: a
+           four-player FFA result read "P1: 6/2 · P2: 2/6 · P3: 1/5 · P4: 0/6", which is a
+           row of numbers a player has to parse before they can compare themselves to
+           anyone. Columns line the figures up so the comparison is the shape of the thing. -->
+      <table class="hud-versus-results hud-versus-results--hidden"></table>
       <!-- THE MAIN MENU HIERARCHY (issue #226), top to bottom and in exactly the order
            the issue names it: one dominant Campaign action with a run summary above it,
            the two direct play actions, the three compact utilities, and a footer.
@@ -2361,7 +2365,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     }
     const { tally, kills, deaths } = outcomeData;
     const slots = Math.max(kills.length, deaths.length);
-    let text: string;
+    /*
+     * ONE ROW PER COMPETITOR, in a table (owner ruling, issue #279).
+     *
+     * This was a single line -- `P1: 6/2 · P2: 2/6 · ...` -- and at four players it was a
+     * run of numbers a reader had to parse before they could compare anyone to anyone.
+     * Columns do that work: kills under kills, deaths under deaths.
+     *
+     * The row LABEL is what differs between the two tallies and it is the whole reason
+     * teams is not just ffa with different arithmetic: teams mode cares which SIDE won, so
+     * its rows are the two teams with each side's slots summed, and a per-player breakdown
+     * there would answer a question the mode is not asking.
+     */
+    const rows: Array<[string, number, number]> = [];
     if (tally === 'teams') {
       const teamKills = [0, 0];
       const teamDeaths = [0, 0];
@@ -2370,15 +2386,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         teamKills[team] += kills[slot] ?? 0;
         teamDeaths[team] += deaths[slot] ?? 0;
       }
-      text = `Team 1: ${teamKills[0]}/${teamDeaths[0]} · Team 2: ${teamKills[1]}/${teamDeaths[1]}`;
+      rows.push(['Team 1', teamKills[0], teamDeaths[0]], ['Team 2', teamKills[1], teamDeaths[1]]);
     } else {
-      const parts: string[] = [];
       for (let slot = 0; slot < slots; slot++) {
-        parts.push(`P${slot + 1}: ${kills[slot] ?? 0}/${deaths[slot] ?? 0}`);
+        rows.push([`Player ${slot + 1}`, kills[slot] ?? 0, deaths[slot] ?? 0]);
       }
-      text = parts.join(' · ');
     }
-    versusResultsEl.textContent = text;
+    const body = rows
+      .map(([label, k, d]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td></tr>`)
+      .join('');
+    versusResultsEl.innerHTML = `<tr><th></th><td>Kills</td><td>Deaths</td></tr>${body}`;
     versusResultsEl.classList.remove('hud-versus-results--hidden');
   }
 
@@ -4020,7 +4037,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function outcomeActionLabel(win: boolean): string {
     if (win && hasNextMission()) return 'Next Level';
-    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Versus Setup';
+    // `Rematch`, not `Versus Setup` (issue #279): the finished screen's primary action is
+    // to play the same match again, and the issue names the four words this button must
+    // NOT use -- "Versus Setup", "Play Again", "Continue" and a generic "Quit" -- because
+    // each of them describes a destination other than the one the button reaches.
+    //
+    // The pane is still one click away, on `Change Setup` beside this. That split is the
+    // point: the old single button was labelled for the pane and behaved like a trip to
+    // it, so a player who simply wanted another round paid a detour through a
+    // configuration screen to ask for the configuration they already had.
+    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Rematch';
     return win ? 'Play Again' : 'Retry';
   }
 
@@ -4056,8 +4082,39 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * developer-flag versus session on the campaign level system still gets its
    * `Level N cleared!` / `Next Level` pair.
    */
+  /**
+   * A VERSUS match's own result copy (owner ruling, issue #279).
+   *
+   * The legacy path below reads "You Win!" / "Arena cleared." for any final win, which is
+   * campaign language: a local versus match has no arena to clear and no single "you" to
+   * have won it -- the player looking at the screen may well be P2. The typed outcome
+   * already carries WHO won (`VersusResult`), so the screen says it.
+   *
+   * NO SUBTITLE, the same ruling the campaign endings got: the headline names the result
+   * and the table below breaks it down per player, so a sentence between them restates one
+   * or the other. Returns `null` for anything that is not a versus ending, so the legacy
+   * copy stays exactly as it was for every campaign and practice screen it still serves.
+   */
+  function versusOutcomeTitle(): string | null {
+    const typed = outcomeData?.typedOutcome;
+    if (typed?.kind !== 'vs-match-end') return null;
+    const { result } = typed;
+    if (result.kind === 'draw') return 'Draw';
+    if (result.kind === 'winner-team') return `Team ${result.team + 1} wins`;
+    // `slot` is `Tank.controlledBy`, 0-based; players are named from 1 on every other
+    // surface (the stock strip, the who's-playing cards), so it is named from 1 here too.
+    return `Player ${result.slot + 1} wins`;
+  }
+
   function renderLegacyOutcomeCopy(): void {
     const win = shownState === 'outcome-win';
+    const versusTitle = versusOutcomeTitle();
+    if (versusTitle !== null) {
+      titleEl.textContent = versusTitle;
+      setSubtitle('');
+      actionBtn.textContent = outcomeActionLabel(win);
+      return;
+    }
     if (win) {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (statusData !== null && hasNextMission()) {
@@ -4109,10 +4166,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * offering a second one here would put two routes to the same pane on one panel.
    */
   function applyChangeSetup(): void {
-    changeSetupBtn.classList.toggle(
-      'hud-change-setup--hidden',
-      !(shownState === 'paused' && statusData?.kind === 'versus'),
-    );
+    // TWO surfaces since issue #279, and they read different signals on purpose.
+    //
+    // At PAUSE the session is live, so `statusData.kind` is the honest question: what is
+    // being played right now.
+    //
+    // At an ENDING the panel is a projection of the outcome that was pushed, so the
+    // question is what the outcome SAYS its destination is -- `action === 'versus-setup'`,
+    // the same signal `outcomeActionLabel` reads one function above. Keying the end screen
+    // on `statusData` instead would make the button follow a status push that arrives on
+    // the way OUT of the session (see the pause-label comment on why that push carries the
+    // landing's kind, not the finished match's).
+    const atOutcome = shownState === 'outcome-win' || shownState === 'outcome-lose';
+    const versusEnding = atOutcome && (outcomeData?.action ?? 'campaign-levels') === 'versus-setup';
+    const versusPause = shownState === 'paused' && statusData?.kind === 'versus';
+    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || versusPause));
   }
 
   /**
@@ -4135,6 +4203,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       actionBtn.textContent = copy.action;
     }
     applyChooseLevel();
+    // ...and Change Setup, for the identical ordering reason (issue #279): a versus
+    // ending reaches this function through `renderLegacyOutcomeCopy` above, and the
+    // OUTCOME that says it is a versus ending arrives after the surface does. Deciding
+    // the button in `setState` alone would leave it hidden on the screen the player is
+    // already looking at until something else repainted the panel.
+    applyChangeSetup();
   }
 
   /**

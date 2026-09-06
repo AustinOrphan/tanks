@@ -2601,27 +2601,45 @@ export function startGameWith(
       if (next !== null) {
         switchTo(next, driver.world.lives);
         sm.enterGameplay(currentSession);
-      } else if (relaunchTarget === 'versus-setup') {
-        // A setup-pane versus match's own win/lose has nothing to advance to -- the
-        // versus level system is always a single synthetic level (levels.ts), so
-        // `next` above is null here exactly as it is for a campaign game-over. But
-        // unlike campaign, "Play Again" on a FINISHED versus match must not silently
-        // rebuild the same match: the versus-setup-menu plan's rematch flow returns
-        // to the setup pane, prefilled with the match just played, so players/map/
-        // stock can change before the next round. The actual reboot -- a new world,
-        // new bots, the lot -- happens only through `requestVersusSession`, wired
-        // below off the pane's OWN Start button; this click must not touch `world`.
-        //
-        // sm.toMainMenu() BEFORE showVersusSetup, not after: setState's close-all
-        // discipline (hud.ts) unconditionally re-hides the versus pane on every
-        // state change, so opening the pane first would just have that work undone
-        // a moment later by this very call. loop.test.ts pins the order with a case
-        // that fails if the two calls are swapped.
-        sm.toMainMenu();
-        // Through the SLOT (issue #324, step S5): this session decides that its own
-        // rematch goes back to the pane, and the page decides what the pane is prefilled
-        // with, from the config it retains across the disposal this click causes.
-        slot.openVersusSetup();
+      } else if (relaunchTarget === 'versus-setup' && deps.requestVersusSession && deps.initialVersusConfig) {
+        /*
+         * REMATCH (issue #279): the same configuration, a fresh match, in one activation.
+         *
+         * A setup-pane versus match's own win/lose has nothing to advance to -- the versus
+         * level system is always a single synthetic level (levels.ts), so `next` above is
+         * null here exactly as it is for a campaign game-over. This click used to return to
+         * the SETUP PANE instead, under a button labelled `Versus Setup`; issue #279's
+         * ruling is that the primary action on a finished match is to play it again, and
+         * the pane is now one click away on `Change Setup` beside it.
+         *
+         * THE FRESH SEED AND FRESH RANDOM ARENA ARE NOT ARRANGED HERE, and that is the
+         * architecture working rather than an omission. `deps.initialVersusConfig` is the
+         * UNRESOLVED config the pane handed over -- a `'random'` selection is still
+         * `'random'`, see that field's own doc comment -- and `applyVersusToDeps` resolves
+         * it exactly once per session construction. Each rematch therefore rolls its own
+         * arena and draws its own seed by construction, which is precisely what
+         * `ResolvedSession` was split out to allow: "a retained descriptor can create
+         * distinct rematch instances without being mutated into a mixture of player choice
+         * and launch result" (app-state.ts).
+         *
+         * THE TWO EXTRA GUARDS ARE TYPE GUARDS, and saying so is more useful than implying
+         * they are live branches. `relaunchTarget === 'versus-setup'` already means a
+         * PANE-originated versus session (`relaunchTargetFor`: versus identity and a
+         * `sessionOrigin` other than `'versus-flags'`), and the start boundary never
+         * creates one without a config -- so a null `initialVersusConfig` here is
+         * unreachable at runtime, and both fields are optional only because `GameDeps`
+         * makes them optional for the campaign path. A `?dev=1&mode=ffa` world takes the
+         * campaign branch below because its relaunch target is `'campaign-levels'`, not
+         * because of these guards. Their mutation entry is marked equivalent for that
+         * reason rather than left looking like a coverage hole.
+         *
+         * Through `requestVersusSession`, the seam `route-host.ts` says it keeps "because a
+         * session's own Rematch still reboots through it". Nothing here builds a world: the
+         * request tears this session down and boots a new one exactly as the pane's own
+         * Start does, so there is ONE path into a versus match rather than two that can
+         * disagree.
+         */
+        deps.requestVersusSession(deps.initialVersusConfig);
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).

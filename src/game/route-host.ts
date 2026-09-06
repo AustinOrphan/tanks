@@ -216,17 +216,6 @@ export interface GameplaySlot {
    */
   setControllers(assignment: Assignment, botsMayDrivePlayers: boolean): void;
   /**
-   * Return to the retained Versus Setup pane, the way a finished versus match's action
-   * button does.
-   *
-   * The session decides WHETHER (only a setup-pane versus session has anything to go back
-   * to -- see `loop.ts`'s `relaunchTarget`); the shell decides WHAT the pane is prefilled
-   * with, because the retained configuration is page state that outlives the match that
-   * produced it. Callers pair this with the `sm.toMainMenu()` that precedes it: `setState`
-   * closes every pane on a surface change, so opening first would have the open undone.
-   */
-  openVersusSetup(): void;
-  /**
    * Release the slot. Idempotent, and INERT once another session has taken it -- a late
    * detach from an outgoing session must not silently unhook the incoming one. That is
    * the same stale-capture failure `session-host.ts`'s two "stale-capture control" tests
@@ -442,10 +431,14 @@ export function createRouteHost(
 
   hud.onStartRestart(() => {
     if (live) {
-      // Wrapped because this button is ALSO an exit: a finished versus match's action
-      // button reads "Versus Setup" and returns to the retained pane (`loop.ts`'s
-      // `relaunchTarget` branch). Its other branches -- Resume, Retry, Play Again, Next
-      // Level -- all stay in gameplay and so dispose nothing.
+      // Wrapped because this button's branch set belongs to the SESSION, not to this
+      // file, and one of those branches may leave gameplay. Every branch that ships today
+      // stays in it -- Resume, Retry, Play Again, Next Level, and, since issue #279,
+      // Rematch, which reboots through `requestVersusSession` and is back in gameplay
+      // before this wrapper looks. The versus action used to read "Versus Setup" and
+      // return to the retained pane, which is what made the wrapper load-bearing then;
+      // the pane now has its own button and this stays as the guard it always was, not as
+      // a description of a branch that still exits.
       leavingGameplay(() => live?.startRestart?.());
       return;
     }
@@ -1036,9 +1029,6 @@ export function createRouteHost(
           hud.setBotAssignmentAllowed(botsMayDrivePlayers);
           hud.setControllers(assignment);
         },
-        openVersusSetup(): void {
-          if (current()) routeUi.openVersusSetup();
-        },
         detach(): void {
           if (!current()) return;
           live = null;
@@ -1049,8 +1039,7 @@ export function createRouteHost(
           // Without this, only the seven click trampolines went quiet (they read `live`),
           // while every method that guards on `current()` stayed live on a session that no
           // longer exists: a late `setControllers` would repaint the panel for a finished
-          // match, a late `openVersusSetup` would open the pane over the Main Menu, and
-          // `detach()` itself would run its resets a second time. Since step S8 it also
+          // match, and `detach()` itself would run its resets a second time. Since step S8 it also
           // covers the whole gameplay HUD facade, where the failure is visible: a frame
           // that lands after a quit repaints the empty host's topbar with the match that
           // just ended.
