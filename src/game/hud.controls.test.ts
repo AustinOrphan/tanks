@@ -971,6 +971,70 @@ describe('hud: the stats page', () => {
     expect(cell(root, 'Shell kills', 0)).toBe('4');
   });
 
+  it('reopens on the tab you last used, and starts a fresh document on Stats', () => {
+    // Issue #322's "restore the originating tab". Records is one destination with two
+    // tabs, and the menu button opened `stats` unconditionally -- so a player comparing
+    // achievements across runs re-clicked the tab on every visit.
+    const openRecords = (root: HTMLElement): void =>
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+    const showing = (root: HTMLElement): string =>
+      root.querySelector('.hud-achievements')!.classList.contains('hud-achievements--hidden')
+        ? 'stats'
+        : 'achievements';
+
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+
+    // First visit lands on Stats, which is also the negative control for the assertion
+    // after it: a button hardcoded to `achievements` would pass that one and fail this.
+    openRecords(root);
+    expect(showing(root), 'the first visit did not open on Stats').toBe('stats');
+
+    // Switch tab, leave, come back.
+    (root.querySelector('.hud-stats .hud-records-tab-achievements') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    expect(showing(root)).toBe('achievements');
+    (root.querySelector('.hud-achievements-back') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    openRecords(root);
+    expect(showing(root), 'Records forgot the tab within one visit to the menu').toBe(
+      'achievements',
+    );
+
+    // ...and switching back is remembered too, so this is a memory rather than a one-way
+    // latch onto whichever tab was touched first.
+    (root.querySelector('.hud-achievements .hud-records-tab-stats') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    (root.querySelector('.hud-stats-back') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    openRecords(root);
+    expect(showing(root)).toBe('stats');
+  });
+
+  it('does NOT retain the tab across documents, which is what keeps it out of storage', () => {
+    // The owner ruling: the memory lasts the sitting and is gone on reload. A second
+    // `createHud` on the same document IS that reload -- fresh module state, same
+    // `localStorage`. So this is the assertion that fails the moment someone "improves"
+    // the convenience by routing it through `storage.ts`: a preference the player never
+    // set would decide the first screen of a visit days later.
+    const first = mount();
+    first.hud.setState('main-menu');
+    openBtn(first.root).dispatchEvent(new MouseEvent('click'));
+    (first.root.querySelector('.hud-stats .hud-records-tab-achievements') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    expect(
+      first.root.querySelector('.hud-achievements')!.classList.contains('hud-achievements--hidden'),
+    ).toBe(false);
+
+    const second = mount();
+    second.hud.setState('main-menu');
+    openBtn(second.root).dispatchEvent(new MouseEvent('click'));
+    expect(
+      second.root.querySelector('.hud-achievements')!.classList.contains('hud-achievements--hidden'),
+      'the tab survived into a new document, so it is being persisted',
+    ).toBe(true);
+  });
+
   it('opens from the title, shows both columns, and Back returns to the menu', () => {
     // Fake timers from the START, not after the click: Back now CROSSFADES rather than
     // cutting, and a timer installed after the click cannot advance one scheduled

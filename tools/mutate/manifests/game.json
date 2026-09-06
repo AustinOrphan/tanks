@@ -5198,5 +5198,47 @@
       "hud: every ending gets its own screen (issue #323) reports the whole campaign run beside the level attempt, on the two endings that finish one"
     ],
     "why": "Falls back to the ATTEMPT tally when no run was resolved, so every ending carries a second line that duplicates the first under a label claiming it is the campaign. Worse than showing nothing, and the shape a well-meaning \"avoid the empty element\" edit takes: the line is present, populated and plausible on screens that have no run at all."
+  },
+  {
+    "id": "records-button-always-reopens-stats",
+    "file": "src/game/hud.ts",
+    "find": "    openLayer(lastRecordsTab, recordsOpenBtn);",
+    "replace": "    openLayer('stats', recordsOpenBtn);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "killedBy": [
+      "hud: the stats page reopens on the tab you last used, and starts a fresh document on Stats"
+    ],
+    "why": "The behaviour issue #322 asked to change, restored: the Main Menu's Records button opens the Stats tab whatever the player last used, so someone comparing achievements across runs re-clicks the tab on every visit. Survives the fresh-document case entirely -- a first visit opens on Stats either way -- which is why the reopen test drives a full switch/leave/return round trip rather than asserting the opening tab once."
+  },
+  {
+    "id": "records-tab-memory-latches-on-the-first-switch",
+    "file": "src/game/hud.ts",
+    "find": "  const handleRecordsTabStats = (): void => {\n    lastRecordsTab = 'stats';",
+    "replace": "  const handleRecordsTabStats = (): void => {",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "killedBy": [
+      "hud: the stats page reopens on the tab you last used, and starts a fresh document on Stats"
+    ],
+    "why": "Records the move TO Achievements but not the move back, so the memory becomes a one-way latch: once a player has looked at achievements, Records reopens there forever even after they switch back to Stats and leave from it. The half of the round trip that catches this is the reason that test switches in both directions instead of stopping at the first remembered tab."
+  },
+  {
+    "id": "records-tab-memory-outlives-the-document",
+    "file": "src/game/hud.ts",
+    "find": "  let lastRecordsTab: Extract<HudLayerId, 'stats' | 'achievements'> = 'stats';",
+    "replace": "  let lastRecordsTab: Extract<HudLayerId, 'stats' | 'achievements'> =\n    (globalThis as { __lastRecordsTab?: 'stats' | 'achievements' }).__lastRecordsTab ?? 'stats';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "killedBy": [
+      "hud: the stats page does NOT retain the tab across documents, which is what keeps it out of storage"
+    ],
+    "why": "Seeds the tab from state that outlives one HUD, which is the shape persisting it would take -- a global here, `storage.ts` in the version someone would actually write. The owner ruled this memory lasts the sitting and is gone on reload: it is a convenience within one visit, not a preference the player set, and a persisted version would make the first screen of a visit depend on something they did days earlier. Nothing about a single mount can see this, which is why the second case builds a whole new HUD."
   }
 ]
