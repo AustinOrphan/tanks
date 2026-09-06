@@ -540,25 +540,24 @@ describe('createRouteHost: what a session REPORTS through the slot (issue #324, 
     expect(f.hud.argsOf('setControllers').at(-1)).toEqual([[{ kind: 'keyboard' }]]);
   });
 
-  it('reopens the Versus Setup pane prefilled with the config the PAGE retains', () => {
-    // A finished versus match's action button reads "Versus Setup" and goes back to the
-    // pane. The session decides that; the page decides what the pane is prefilled with,
-    // because the retained config outlives the match -- which is exactly why the session
-    // must not open the pane itself with a config of its own.
-    const f = fixture();
-    const slot = f.host.attach(CAMPAIGN);
-    slot.setVersusConfig(CONFIG);
-    slot.openVersusSetup();
-    expect(f.hud.argsOf('showVersusSetup')).toEqual([[true, CONFIG]]);
-  });
-
-  it('a stale slot cannot reopen the pane', () => {
-    const f = fixture();
-    const old = f.host.attach(CAMPAIGN);
-    f.host.attach(CAMPAIGN);
-    old.openVersusSetup();
-    expect(f.hud.argsOf('showVersusSetup')).toEqual([]);
-  });
+  /*
+   * TWO CASES USED TO LIVE HERE, and issue #279 removed the capability they guarded.
+   *
+   * `reopens the Versus Setup pane prefilled with the config the PAGE retains` and `a
+   * stale slot cannot reopen the pane` both exercised `slot.openVersusSetup()` -- the
+   * session's own route into an application surface. That member is gone: the versus
+   * result screen's `Change Setup` opens the pane the way every other pane in `hud.ts` is
+   * opened, through the HUD's own layer stack, so no session can reach it.
+   *
+   * NOT A LOSS OF COVERAGE. The stale-slot case guarded against a retired session
+   * reopening the pane; a session that cannot open the pane at all cannot do it while
+   * stale either. That is issue #324's own pattern -- step S8 replaced the convention
+   * "the session does not reach route members" with a facade that makes reaching one a
+   * compile error, and this is the last member that sat outside that fence, on
+   * `GameplaySlot` rather than on `GameplayHud`.
+   *
+   * `hud-ownership.test.ts` is where the remaining guarantee lives.
+   */
 });
 
 describe('createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7)', () => {
@@ -707,10 +706,15 @@ describe('createRouteHost: releasing the slot gives the menu back its page shape
 
   it('goes inert on release: a second detach, and every late report, does nothing', () => {
     // Releasing retires the slot's generation, not just the click trampolines. Before
-    // that, a detached session could still repaint the Controllers panel and reopen the
-    // Versus Setup pane over the empty host's Main Menu -- a match that has ended pushing
-    // its own roster onto a page that is not playing anything -- and a second `detach()`
-    // re-ran the resets the first one had already done.
+    // that, a detached session could still repaint the Controllers panel -- a match that
+    // has ended pushing its own roster onto a page that is not playing anything -- and a
+    // second `detach()` re-ran the resets the first one had already done.
+    //
+    // TWO probes, not the three this had before issue #279: it also drove
+    // `slot.openVersusSetup()`, and that member no longer exists (the session's route into
+    // an application surface, removed with the Rematch work -- see the note at the end of
+    // the slot describe block above). The remaining pair still covers both shapes the
+    // generation guard has to stop: a route-adjacent push and a repeated `detach()`.
     const f = fixture({ launchDismissed: true });
     const slot = f.host.attach(CAMPAIGN);
     slot.setVersusConfig(CONFIG);
@@ -719,17 +723,14 @@ describe('createRouteHost: releasing the slot gives the menu back its page shape
 
     slot.detach();
     slot.setControllers([{ kind: 'bot' }], true);
-    slot.openVersusSetup();
     expect(f.hud.calls.slice(before), 'a released slot still reached the page HUD').toEqual([]);
 
-    // NEGATIVE CONTROL: the same three calls on a LIVE slot all reach the HUD, so this is
-    // a claim about release rather than about methods that never do anything.
+    // NEGATIVE CONTROL: the same calls on a LIVE slot do reach the HUD, so this is a claim
+    // about release rather than about methods that never do anything.
     const live = f.host.attach(CAMPAIGN);
     live.setControllers([{ kind: 'bot' }], true);
-    live.openVersusSetup();
     const names = f.hud.calls.slice(before).map(([name]) => name);
     expect(names).toContain('setControllers');
-    expect(names).toContain('showVersusSetup');
     live.detach();
     expect(f.hud.argsOf('setStatus').at(-1), 'the live slot could not release').toEqual([null]);
   });

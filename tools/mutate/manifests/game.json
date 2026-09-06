@@ -2594,36 +2594,6 @@
     ]
   },
   {
-    "id": "route-host-slot-drops-the-versus-setup-reopen",
-    "file": "src/game/route-host.ts",
-    "find": "          if (current()) routeUi.openVersusSetup();\n",
-    "replace": "          void routeUi;\n",
-    "expect": "killed",
-    "tests": [
-      "src/game/route-host.test.ts",
-      "src/game/loop.test.ts"
-    ],
-    "why": "A finished versus match's action button reads \"Versus Setup\" and then does nothing: the machine goes to the Main Menu and the pane never opens, so the rematch flow the versus-setup plan specifies -- back to the pane, prefilled with the match just played, players/map/stock changeable -- dead-ends at the title screen. Since issue #324's step S5 the session asks through the slot instead of calling `showVersusSetup` itself, which is what lets the PAGE decide what the pane is prefilled with from the config it retains past the disposal that same click causes.",
-    "killedBy": [
-      "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) reopens the Versus Setup pane prefilled with the config the PAGE retains",
-      "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's \"Play Again\": returns to the setup pane, not a rebuilt match win: lands on title, reopens the pane with the retained config, and rebuilds nothing"
-    ]
-  },
-  {
-    "id": "route-host-slot-lets-a-stale-session-reopen-the-pane",
-    "file": "src/game/route-host.ts",
-    "find": "          if (current()) routeUi.openVersusSetup();\n",
-    "replace": "          routeUi.openVersusSetup();\n",
-    "expect": "killed",
-    "tests": [
-      "src/game/route-host.test.ts"
-    ],
-    "why": "The stale-capture half of the reopen, distinct from the entry above: the call still works for the live session, so only a case that reopens from a RELEASED slot can see it. Without the guard a session that has been replaced can throw the Versus Setup pane over whatever the incoming one is showing, which is the same class of defect the slot's registration guard exists to stop.",
-    "killedBy": [
-      "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) a stale slot cannot reopen the pane"
-    ]
-  },
-  {
     "id": "route-host-painter-outlives-the-page",
     "file": "src/game/route-host.ts",
     "find": "      stopPainting();\n      stopPaintingSettings();\n      hud.dispose();",
