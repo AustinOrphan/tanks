@@ -3122,6 +3122,12 @@ describe('startGameWith: the start boundary (issue #428)', () => {
     // one's synthetic id is '0'. Exactly one entry: a boundary that wrote twice would
     // land on level one either way, and only the count tells the two apart.
     expect(h.rec.runNewRuns, 'New Game did not start exactly one fresh run').toEqual([0]);
+    // ...and the run's TALLY is replaced with it, exactly once. Counted for the same
+    // reason: a boundary that started two runs and one tally, or one run and two
+    // tallies, leaves the player on level one either way. The pairing is a convention
+    // -- run.ts knows nothing about statistics -- so this call site is the only thing
+    // holding it, and it is a DIFFERENT site from the in-session New Game button's.
+    expect(h.rec.statRunStarts, 'the run tally was not replaced with the run').toBe(1);
     handle.dispose();
   });
 
@@ -3131,6 +3137,8 @@ describe('startGameWith: the start boundary (issue #428)', () => {
    * be broken -- the in-session Levels handler was the only one before.
    */
   it('practice lands on the picked level and leaves the run untouched', () => {
+    // "Untouched" includes its TALLY: a practice pick that zeroed the run's statistics
+    // would leave the run itself intact and silently erase what it had counted.
     const h = makeDeps({ levelCount: 5, levelStart: 3, savedRun: { level: 3, lives: 2 }, tracksProgress: true });
     const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, {
       kind: 'practice',
@@ -3138,6 +3146,7 @@ describe('startGameWith: the start boundary (issue #428)', () => {
     });
     expect(h.rec.hudLevels.at(-1), 'the pick did not reach the board').toEqual([2, 5]);
     expect(h.rec.runNewRuns, 'a Practice pick started a run').toHaveLength(0);
+    expect(h.rec.statRunStarts, 'a Practice pick zeroed the campaign run tally').toBe(0);
     // Fresh lives, not the run's: practice is isolated play.
     expect(h.rec.lives.at(-1), 'practice adopted the run\'s lives').not.toBe(2);
     handle.dispose();

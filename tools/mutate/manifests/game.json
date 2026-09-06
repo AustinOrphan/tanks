@@ -5097,9 +5097,9 @@
       "src/game/stats.test.ts"
     ],
     "killedBy": [
-      "createStatsStore: the CAMPAIGN RUN scope SURVIVES the tab closing, which is the entire reason it is persisted"
+      "createStatsStore: the CAMPAIGN RUN scope adopts another tab's New Game rather than outranking it with a stale shadow"
     ],
-    "why": "Leaves the run tally out of the resync, so this instance's shadow outranks disk forever -- PR #62's defect class, on the second persisted scope. A New Game or a Reset stats performed in another tab is undone by the next frame this tab records. Caught by the reload case because a second store instance reads disk at construction and then accumulates on top of a shadow the first instance's writes are still overwriting."
+    "why": "Leaves the run tally out of the resync, so this instance's shadow outranks disk forever -- PR #62's defect class, on the second persisted scope. A New Game or a Reset stats performed in another tab is undone by the next frame this tab records. Caught by the reload case because a second store instance reads disk at construction and then accumulates on top of a shadow the first instance's writes are still overwriting. Pinned by the cross-tab case rather than the reload one: a second store instance reads disk at construction either way, so only a tab that keeps RECORDING after another has reset can see a shadow outrank disk."
   },
   {
     "id": "new-campaign-inherits-the-old-runs-tally",
@@ -5167,9 +5167,9 @@
       "src/game/loop.test.ts"
     ],
     "killedBy": [
-      "startGameWith: stats wiring starts a fresh RUN tally exactly where it starts a new run, and not on a level pick"
+      "startGameWith: the start boundary (issue #428) campaign-new lands on level one and writes the run exactly once"
     ],
-    "why": "Replaces the run record without replacing its tally, so the new campaign's end screen reports the previous campaign's numbers on top of its own. The pairing is a convention rather than something the type system enforces -- run.ts is a pure key-value store that deliberately knows nothing about statistics -- so nothing but this test holds the two `startNewRun`/`startRun` call sites together. An earlier version wrapped the call in `if (false)` and left a dangling statement the suite could not even collect; deleting the line is the mutation a real revert would make."
+    "why": "Replaces the run record without replacing its tally, so the new campaign's end screen reports the previous campaign's numbers on top of its own. The pairing is a convention rather than something the type system enforces -- run.ts is a pure key-value store that deliberately knows nothing about statistics -- so nothing but this test holds the two `startNewRun`/`startRun` call sites together. An earlier version wrapped the call in `if (false)` and left a dangling statement the suite could not even collect; deleting the line is the mutation a real revert would make. Pinned at the START BOUNDARY, which is a different call site from the in-session New Game button's: an earlier version of this entry was declared against a test driving `hud.newGame()` and SURVIVED, because that path reaches a different `startNewRun` altogether. Three call sites, and each needs its own net."
   },
   {
     "id": "run-total-shown-on-every-ending",
@@ -5178,13 +5178,12 @@
     "replace": "      deps.stats.run();",
     "expect": "killed",
     "tests": [
-      "src/game/hud.surfaces.test.ts",
       "src/game/loop.test.ts"
     ],
     "killedBy": [
-      "hud: every ending gets its own screen (issue #323) reports the whole campaign run beside the level attempt, on the two endings that finish one"
+      "startGameWith: stats wiring sends the run total ONLY on the two endings that finish a run"
     ],
-    "why": "Resolves a run total for every ending, so `mission-clear` shows a running campaign figure on every level and the practice and versus screens show a campaign the player was not playing. `mission-clear` is the sharp case: it IS campaign play and it IS mid-run, so a gate written as \"is this a campaign session\" instead of \"did this end a run\" looks correct and is not. The HUD hides the line by ABSENCE, so it has no second opinion to catch this with."
+    "why": "Resolves a run total for every ending, so `mission-clear` shows a running campaign figure on every level and the practice and versus screens show a campaign the player was not playing. `mission-clear` is the sharp case: it IS campaign play and it IS mid-run, so a gate written as \"is this a campaign session\" instead of \"did this end a run\" looks correct and is not. The HUD hides the line by ABSENCE, so it has no second opinion to catch this with. Killed at the SESSION, not in the HUD: `hud.surfaces.test.ts` builds its own payload, so it proves the HUD renders a total when given one and hides the line when not -- it cannot see which endings the session resolves one for. That is this entry's claim, and it needed a loop case driving a real winning frame."
   },
   {
     "id": "run-total-line-never-hidden",
