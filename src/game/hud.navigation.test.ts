@@ -1482,7 +1482,7 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(true);
   });
 
-  it("the win/lose action button reads 'Versus Setup' for a versus session's FINAL win and its lose -- truthful about what the click now does", () => {
+  it("the win/lose action button reads 'Rematch' for a versus session's FINAL win and its lose -- what the click now does", () => {
     // Fails if the label branch is missing, or reads deps/state other than the
     // outcome's own `action` (e.g. always 'Versus Setup' regardless of it, which the
     // campaign-target tests elsewhere in this file would also have caught).
@@ -1498,9 +1498,12 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     h.setOutcome(outcomeWithAction('versus-setup'));
     h.setStatus(campaignStatus(1, 1));
     h.setState('outcome-win');
-    expect(actionBtn(root).textContent).toBe('Versus Setup');
+    // `Rematch` since issue #279: the primary action on a finished match plays it again,
+    // and the setup pane moved to `Change Setup` beside it. The label previously read
+    // `Versus Setup`, naming the pane the click went to.
+    expect(actionBtn(root).textContent).toBe('Rematch');
     h.setState('outcome-lose');
-    expect(actionBtn(root).textContent).toBe('Versus Setup');
+    expect(actionBtn(root).textContent).toBe('Rematch');
   });
 
   it('the outcome label follows a projection that lands AFTER the panel opened', () => {
@@ -1515,11 +1518,20 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Play Again'); // the default, nothing pushed
     h.setOutcome(outcomeWithAction('versus-setup'));
-    expect(actionBtn(root).textContent).toBe('Versus Setup');
+    expect(actionBtn(root).textContent).toBe('Rematch');
     // ...and back again, so the assertion cannot pass on a setter that only ever
     // writes the versus wording once.
     h.setOutcome(outcomeWithAction('campaign-levels'));
     expect(actionBtn(root).textContent).toBe('Play Again');
+    // Change Setup rides the SAME late projection (issue #279): it is decided from the
+    // outcome's `action`, not from the session status, so a panel that re-derived the
+    // label on a late push but not the button beside it would be half-applied in exactly
+    // the way this case exists to catch.
+    const changeSetupHidden = (): boolean =>
+      root.querySelector('.hud-change-setup')!.classList.contains('hud-change-setup--hidden');
+    expect(changeSetupHidden(), 'Change Setup stood on a campaign ending').toBe(true);
+    h.setOutcome(outcomeWithAction('versus-setup'));
+    expect(changeSetupHidden(), 'Change Setup ignored a late versus projection').toBe(false);
   });
 
   it("leaves 'Resume' and 'Next Level' alone for a versus session -- neither click opens the pane, so relabeling either would be the same lie in reverse", () => {

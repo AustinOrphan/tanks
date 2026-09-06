@@ -413,6 +413,38 @@ describe('createRouteHost: the gameplay slot', () => {
     expect(second.fired.map(([name]) => name)).toEqual(GAMEPLAY_HANDLERS.map((h) => h.slotName));
   });
 
+  it('only stops a session whose action actually LEFT gameplay (issue #279)', () => {
+    // The interaction a Rematch could plausibly get caught by. `leavingGameplay` wraps the
+    // action button and calls `requestStop()` whenever the handler left gameplay -- which
+    // the versus action DID, back when it returned to the setup pane. Rematch reboots
+    // through `requestVersusSession` and is in gameplay again by the time the wrapper
+    // looks, so nothing should be stopped; a wrapper that stopped unconditionally would
+    // tear down the match the player just asked for.
+    //
+    // Pinned as the WRAPPER'S rule rather than by simulating a reboot: re-entering
+    // gameplay from `playing` is refused by the state machine (a real rematch goes through
+    // session-host's dispose-then-create), so a fixture that faked it would be asserting
+    // against a transition production never makes.
+    const f = fixture({ launchDismissed: true });
+    const slot = f.host.attach(CAMPAIGN);
+    f.host.sm.enterGameplay({ descriptor: { kind: 'versus' }, level: 0, seed: 1 } as never);
+    const stopsBefore = f.stopRequests();
+
+    // An action that stays in gameplay -- Resume, Retry, Play Again, Next Level, and the
+    // far side of a Rematch.
+    slot.onStartRestart(() => {});
+    f.hud.fire('onStartRestart');
+    expect(f.stopRequests(), 'a session still in gameplay was stopped').toBe(stopsBefore);
+
+    // THE NEGATIVE CONTROL: an action that really does leave must still be stopped, or
+    // this passes just as well against a wrapper someone deleted.
+    slot.onStartRestart(() => {
+      f.host.sm.toMainMenu();
+    });
+    f.hud.fire('onStartRestart');
+    expect(f.stopRequests(), 'an action that left gameplay was never stopped').toBe(stopsBefore + 1);
+  });
+
   it('stops dispatching to a session the moment it detaches', () => {
     const f = fixture();
     const { fired, slot } = fillSlot(f.host);

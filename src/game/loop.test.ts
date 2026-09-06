@@ -7106,55 +7106,80 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
     });
   });
 
-  describe('a finished versus session\'s "Play Again": returns to the setup pane, not a rebuilt match', () => {
-    it('win: lands on title, reopens the pane with the retained config, and rebuilds nothing', () => {
+  describe('a finished versus session\'s Rematch: the same configuration, a fresh match (issue #279)', () => {
+    it('win: reboots through the start seam with the retained config, and builds no world itself', () => {
+      // SUPERSEDES 'returns to the setup pane, not a rebuilt match'. That behaviour was
+      // correct for a button labelled `Versus Setup`; issue #279's ruling renames the
+      // primary action to Rematch and moves the pane to `Change Setup` beside it, so a
+      // player who wants another round no longer detours through a configuration screen
+      // to ask for the configuration they already had.
       const calls: VersusConfig[] = [];
       const base = makeDeps();
       const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
       const levelBuildsBeforeClick = h.rec.levelBuilds.length;
       h.setState('outcome-win');
-      h.hud.startRestart(); // the win screen's ONLY affordance for a single-level session
-      // Fails if the versus branch is missing entirely (falls through to the campaign
-      // else-branch): state would land on 'playing', not 'title'.
-      expect(h.getState()).toBe('main-menu');
-      // Fails if showVersusSetup is never called, or called with the wrong `show`/
-      // `initial` -- e.g. `null` instead of the match just played.
-      expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: CONFIG });
-      // Fails if the branch still rebuilds a world (switchTo/landOnCampaignBoard) before
-      // showing the pane -- "no reboot until Start again" is the whole point of this
-      // branch existing instead of reusing the campaign else-branch's `sm.restart()`.
-      expect(h.rec.levelBuilds.length).toBe(levelBuildsBeforeClick);
-      // The reboot seam itself must NOT have fired: only the pane's own Start does that.
-      expect(calls).toEqual([]);
+      h.hud.startRestart();
+
+      // THE reboot seam, with the retained config unchanged. `requestVersusSession` is
+      // the same seam the pane's own Start uses -- one path into a versus match, not two.
+      expect(calls, 'Rematch did not reboot through the start seam').toEqual([CONFIG]);
+      // ...and this click builds NOTHING itself. The request tears the session down and
+      // boots a new one; a `switchTo`/`landOnCampaignBoard` here would be a second, rival
+      // way to start a match.
+      expect(h.rec.levelBuilds.length, 'the click built a world of its own').toBe(
+        levelBuildsBeforeClick,
+      );
+      // The setup pane stays shut: Rematch is not a trip to it.
+      expect(h.rec.versusSetupPushes.at(-1)?.show ?? false).toBe(false);
       h.handle.dispose();
     });
 
-    it('lose: the same return-to-setup path, not the campaign Retry rebuild', () => {
+    it('lose: the same rematch path, not the campaign Retry rebuild', () => {
+      const calls: VersusConfig[] = [];
       const base = makeDeps();
-      const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
       const levelBuildsBeforeClick = h.rec.levelBuilds.length;
       h.setState('outcome-lose');
       h.hud.startRestart();
-      expect(h.getState()).toBe('main-menu');
-      expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: CONFIG });
+      expect(calls).toEqual([CONFIG]);
       expect(h.rec.levelBuilds.length).toBe(levelBuildsBeforeClick);
       h.handle.dispose();
     });
 
-    it('order pin: setState(\'title\') runs BEFORE showVersusSetup -- a test that fails if the two calls are swapped', () => {
-      // hud.ts's real setState unconditionally re-hides the versus pane on every state
-      // change (its own close-all discipline) -- so showVersusSetup must run AFTER
-      // sm.toTitle(), or the pane would open and then be immediately hidden again by
-      // the state transition. This fake does not model that hide/show interaction
-      // (it only records), so this test pins the ORDER directly via the one shared
-      // log both calls write to -- a swap in loop.ts flips the last two entries here
-      // even though every OTHER assertion in this describe block would keep passing.
+    it('hands over the UNRESOLVED config, so each rematch rolls its own arena and seed', () => {
+      // The crux of the criterion "resolve a fresh Random arena only when Rematch actually
+      // creates the next match". Nothing in the rematch path resolves anything: it passes
+      // the config the PANE handed over, in which `'random'` is still `'random'`, and
+      // `applyVersusToDeps` resolves it once per session construction. So a rematch rolls a
+      // new arena because it builds a new session, not because this click arranges it.
+      //
+      // Asserted on the ARENA FIELD rather than on a resolved id, because a click that
+      // helpfully resolved `'random'` here would pin the same arena for every subsequent
+      // rematch -- the exact defect issue #278 fixed one layer down, reintroduced from
+      // above and invisible to any assertion that only checked "a config was passed".
+      const calls: VersusConfig[] = [];
       const base = makeDeps();
-      const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+      const random: VersusConfig = { ...CONFIG, arenaId: 'random' };
+      const h = boot({ ...base, deps: versusDeps(base, random, (c) => calls.push(c)) });
       h.setState('outcome-win');
-      h.rec.hudCallLog.length = 0; // isolate this one click's own call order
       h.hud.startRestart();
-      expect(h.rec.hudCallLog).toEqual(['state:main-menu', 'versusSetup:true']);
+      expect(calls.at(-1)?.arenaId, 'the rematch resolved Random instead of passing it on').toBe(
+        'random',
+      );
+      h.handle.dispose();
+    });
+
+    it('falls through to the campaign board when there is no configuration to replay', () => {
+      // THE NEGATIVE CONTROL, and a reachable case rather than defensive padding: a versus
+      // world reached by `?dev=1&mode=ffa` never went through the pane, so it has no
+      // retained config and no `requestVersusSession` on its deps. Inventing a
+      // configuration to replay would be fabricating the player's choices.
+      const base = makeDeps({ devFlags: { mode: 'ffa' } });
+      const h = boot(base);
+      h.setState('outcome-win');
+      h.hud.startRestart();
+      // The campaign else-branch: it enters gameplay rather than doing nothing at all.
+      expect(h.getState(), 'a config-less versus ending stranded the player').toBe('playing');
       h.handle.dispose();
     });
   });

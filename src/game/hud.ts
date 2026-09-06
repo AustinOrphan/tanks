@@ -4020,7 +4020,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function outcomeActionLabel(win: boolean): string {
     if (win && hasNextMission()) return 'Next Level';
-    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Versus Setup';
+    // `Rematch`, not `Versus Setup` (issue #279): the finished screen's primary action is
+    // to play the same match again, and the issue names the four words this button must
+    // NOT use -- "Versus Setup", "Play Again", "Continue" and a generic "Quit" -- because
+    // each of them describes a destination other than the one the button reaches.
+    //
+    // The pane is still one click away, on `Change Setup` beside this. That split is the
+    // point: the old single button was labelled for the pane and behaved like a trip to
+    // it, so a player who simply wanted another round paid a detour through a
+    // configuration screen to ask for the configuration they already had.
+    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Rematch';
     return win ? 'Play Again' : 'Retry';
   }
 
@@ -4109,10 +4118,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * offering a second one here would put two routes to the same pane on one panel.
    */
   function applyChangeSetup(): void {
-    changeSetupBtn.classList.toggle(
-      'hud-change-setup--hidden',
-      !(shownState === 'paused' && statusData?.kind === 'versus'),
-    );
+    // TWO surfaces since issue #279, and they read different signals on purpose.
+    //
+    // At PAUSE the session is live, so `statusData.kind` is the honest question: what is
+    // being played right now.
+    //
+    // At an ENDING the panel is a projection of the outcome that was pushed, so the
+    // question is what the outcome SAYS its destination is -- `action === 'versus-setup'`,
+    // the same signal `outcomeActionLabel` reads one function above. Keying the end screen
+    // on `statusData` instead would make the button follow a status push that arrives on
+    // the way OUT of the session (see the pause-label comment on why that push carries the
+    // landing's kind, not the finished match's).
+    const atOutcome = shownState === 'outcome-win' || shownState === 'outcome-lose';
+    const versusEnding = atOutcome && (outcomeData?.action ?? 'campaign-levels') === 'versus-setup';
+    const versusPause = shownState === 'paused' && statusData?.kind === 'versus';
+    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || versusPause));
   }
 
   /**
@@ -4135,6 +4155,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       actionBtn.textContent = copy.action;
     }
     applyChooseLevel();
+    // ...and Change Setup, for the identical ordering reason (issue #279): a versus
+    // ending reaches this function through `renderLegacyOutcomeCopy` above, and the
+    // OUTCOME that says it is a versus ending arrives after the surface does. Deciding
+    // the button in `setState` alone would leave it hidden on the screen the player is
+    // already looking at until something else repainted the panel.
+    applyChangeSetup();
   }
 
   /**

@@ -258,16 +258,16 @@
   {
     "id": "session-outcome-label-keyed-on-identity",
     "file": "src/game/hud.ts",
-    "find": "    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Versus Setup';",
-    "replace": "    if (statusData?.kind === 'versus') return 'Versus Setup';",
+    "find": "    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Rematch';",
+    "replace": "    if (statusData?.kind === 'versus') return 'Rematch';",
     "expect": "killed",
-    "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Re-anchored for issue #324's step S4: the label used to be written inline in setState from the boot-time `relaunchTarget`, and it now comes off `GameplayOutcome.action` in `outcomeActionLabel`, so the anchor moved with the code. The mutation is unchanged in substance -- both forms swap the click's destination for the session's identity. Scoped to hud.navigation.test.ts. Re-expressed for issue #324's step S6: the identity it wrongly reaches for is the status projection's own `kind` now that `sessionKind` is not a variable of its own. The mutation is the same mistake -- reading WHAT IS BEING PLAYED to decide what a BUTTON says -- and it still has to compile to be worth running.",
+    "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Re-anchored for issue #324's step S4: the label used to be written inline in setState from the boot-time `relaunchTarget`, and it now comes off `GameplayOutcome.action` in `outcomeActionLabel`, so the anchor moved with the code. The mutation is unchanged in substance -- both forms swap the click's destination for the session's identity. Scoped to hud.navigation.test.ts. Re-expressed for issue #324's step S6: the identity it wrongly reaches for is the status projection's own `kind` now that `sessionKind` is not a variable of its own. The mutation is the same mistake -- reading WHAT IS BEING PLAYED to decide what a BUTTON says -- and it still has to compile to be worth running. Re-anchored for issue #279, which renamed the label from `Versus Setup` to `Rematch`; the defect -- keying the label on WHAT IS BEING PLAYED rather than on the outcome's own stated destination -- is unchanged.",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
     "killedBy": [
       "hud: relaunch target -- the title/outcome affordance policy a versus STATUS alone leaves the outcome action button reading 'Play Again'/'Retry'",
-      "hud: relaunch target -- the title/outcome affordance policy the win/lose action button reads 'Versus Setup' for a versus session's FINAL win and its lose -- truthful about what the click now does",
+      "hud: relaunch target -- the title/outcome affordance policy the win/lose action button reads 'Rematch' for a versus session's FINAL win and its lose -- what the click now does",
       "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened"
     ]
   },
@@ -5258,8 +5258,8 @@
   {
     "id": "change-setup-offered-on-every-panel",
     "file": "src/game/hud.ts",
-    "find": "      !(shownState === 'paused' && statusData?.kind === 'versus'),",
-    "replace": "      false,",
+    "find": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || versusPause));",
+    "replace": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', false);",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
@@ -5267,13 +5267,13 @@
     "killedBy": [
       "hud: the pause exit is contextual (issue #323) offers Change Setup at Pause in a versus match, and on no other panel (issue #261)"
     ],
-    "why": "Shows Change Setup on every panel: the Main Menu, both campaign end screens, a paused campaign round. Two different wrongs at once -- a campaign session has no versus setup to change, and the versus END screen already carries its own route to the pane (issue #279's set), so a second one puts two on one panel. The test drives both axes for that reason: wrong kind and wrong surface are separate mistakes and a gate keyed on only one of them survives the other."
+    "why": "Shows Change Setup on every panel: the Main Menu, both campaign end screens, a paused campaign round. Two different wrongs at once -- a campaign session has no versus setup to change, and the versus END screen already carries its own route to the pane (issue #279's set), so a second one puts two on one panel. The test drives both axes for that reason: wrong kind and wrong surface are separate mistakes and a gate keyed on only one of them survives the other. Re-anchored for issue #279, which gave the button a SECOND surface (the versus ending) -- the gate is now a disjunction, and showing it everywhere still means offering a versus configuration pane to campaign and practice sessions."
   },
   {
     "id": "change-setup-offered-to-a-campaign-round",
     "file": "src/game/hud.ts",
-    "find": "      !(shownState === 'paused' && statusData?.kind === 'versus'),",
-    "replace": "      shownState !== 'paused',",
+    "find": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || versusPause));",
+    "replace": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || shownState === 'paused'));",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
@@ -5281,7 +5281,7 @@
     "killedBy": [
       "hud: the pause exit is contextual (issue #323) offers Change Setup at Pause in a versus match, and on no other panel (issue #261)"
     ],
-    "why": "Keeps the SURFACE half of the gate and drops the KIND half, which is the half-fix a reader is most likely to write: Pause is obviously the right surface, and the session kind is the easier condition to forget. A paused campaign or practice round then offers a versus configuration pane. Distinct from the entry above because a test that only checked the end screens kills that one and survives this."
+    "why": "Keeps the SURFACE half of the gate and drops the KIND half, which is the half-fix a reader is most likely to write: Pause is obviously the right surface, and the session kind is the easier condition to forget. A paused campaign or practice round then offers a versus configuration pane. Distinct from the entry above because a test that only checked the end screens kills that one and survives this. Re-anchored for issue #279: the half-fix is now keeping the ENDING arm intact while dropping the kind check from the pause arm, which is the same mistake in the shape the code has today."
   },
   {
     "id": "change-setup-opens-the-pane-over-a-live-match",
@@ -5325,5 +5325,47 @@
       "createGameSessionHost: start SHOWS the session it built, and shows the replacement rather than the one it retired"
     ],
     "why": "The host builds a session and never shows it -- construction and routing are deliberately separate acts here, so dropping the second leaves a world built behind a menu. Already caught by composition (four `loop.test.ts` cases red), which is why this entry is scoped to BOTH files: what was missing was the claim at the layer that owns it. `session-host.test.ts` recorded `enteredIds` -- documented as \"which session was SHOWN, in order\" -- and asserted it zero times, so the failure surfaced as a stale campaign run or a silent Main Menu rather than as \"the host never showed what it built\". The killer also pins the ORDER, which distinguishes showing the replacement from re-showing the session just retired."
+  },
+  {
+    "id": "rematch-returns-to-the-pane-instead-of-playing",
+    "file": "src/game/loop.ts",
+    "find": "        deps.requestVersusSession(deps.initialVersusConfig);",
+    "replace": "        sm.toMainMenu();\n        slot.openVersusSetup();",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's Rematch: the same configuration, a fresh match (issue #279) win: reboots through the start seam with the retained config, and builds no world itself"
+    ],
+    "why": "The pre-#279 behaviour restored: the finished match's primary action returns to the SETUP PANE instead of playing again. That was correct while the button read `Versus Setup`; issue #279's ruling is that the primary action plays the match again and the pane moves to `Change Setup` beside it, so this makes a player who wants another round detour through a configuration screen to ask for the configuration they already had. Killed on the reboot seam rather than on the label, so a revert that kept the word `Rematch` over the old behaviour fails too."
+  },
+  {
+    "id": "rematch-resolves-random-before-handing-it-over",
+    "file": "src/game/loop.ts",
+    "find": "        deps.requestVersusSession(deps.initialVersusConfig);",
+    "replace": "        deps.requestVersusSession({ ...deps.initialVersusConfig, arenaId: deps.levels.start.arenaId });",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's Rematch: the same configuration, a fresh match (issue #279) hands over the UNRESOLVED config, so each rematch rolls its own arena and seed"
+    ],
+    "why": "Helpfully resolves the arena before handing the config over, which pins THIS match's arena onto every rematch after it -- the defect issue #278 fixed one layer down, reintroduced from above. It looks like an improvement (the config is now concrete) and is the reason the killer asserts on the `arenaId` FIELD rather than merely that a config was passed: every other assertion about the rematch survives this unchanged. `ResolvedSession` exists precisely so a retained `'random'` descriptor can produce distinct instances without being mutated into a mixture of player choice and launch result."
+  },
+  {
+    "id": "rematch-invents-a-configuration-it-was-never-given",
+    "file": "src/game/loop.ts",
+    "find": "      } else if (relaunchTarget === 'versus-setup' && deps.requestVersusSession && deps.initialVersusConfig) {",
+    "replace": "      } else if (relaunchTarget === 'versus-setup' && deps.requestVersusSession) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's Rematch: the same configuration, a fresh match (issue #279) falls through to the campaign board when there is no configuration to replay"
+    ],
+    "why": "Drops the guard that there is a configuration to replay. A versus world reached by `?dev=1&mode=ffa` never went through the setup pane, so `initialVersusConfig` is null and the branch would hand `undefined` to the start seam -- fabricating, or crashing on, choices the player never made. The reachable case is a dev-flag versus session, and the honest answer there is the campaign board, which is what the branch falls through to."
   }
 ]

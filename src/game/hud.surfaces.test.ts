@@ -1852,11 +1852,15 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     expect(new Set(titles).size, titles.join('\n')).toBe(titles.length);
   });
 
-  it('leaves the VERSUS result screen exactly as it shipped -- issue #279 owns it', () => {
+  it('keeps the VERSUS result screen OUT of the copy table, and gives it the #279 action set', () => {
     // The negative control for the table: a versus ending has no entry in it and must
-    // still render the legacy win/lose copy, including the `Versus Setup` label that
-    // names where its click lands. A transcription of that screen into OUTCOME_PANEL
-    // would pass the per-ending case above and fail here the moment it drifted.
+    // still render the legacy win/lose copy. A transcription of that screen into
+    // OUTCOME_PANEL would pass the per-ending case above and fail here the moment it
+    // drifted.
+    //
+    // The ACTION is `Rematch` since issue #279, not the `Versus Setup` this test pinned
+    // before -- and Change Setup now stands beside it, which is what makes renaming the
+    // primary action honest rather than a relabel of a trip to the pane.
     const { hud: h, root } = mount();
     h.setLevelSelect(3, 5);
     const versus = (result: TypedOutcome): GameplayOutcome => ({
@@ -1868,8 +1872,12 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'winner-slot', slot: 0 } }));
     expect(title(root)).toBe('You Win!');
     expect(subtitle(root)).toBe('Arena cleared.');
-    expect(action(root)).toBe('Versus Setup');
+    expect(action(root)).toBe('Rematch');
     expect(chooseLevelShown(root), 'a versus match never chose a level to be on').toBe(false);
+    expect(
+      root.querySelector('.hud-change-setup')!.classList.contains('hud-change-setup--hidden'),
+      'the versus result screen offered no way back to the setup',
+    ).toBe(false);
 
     // A draw presents as a defeat, which is the shipped behaviour for the simultaneous
     // -elimination `lose` event -- see legacyOutcomePresentation's own doc comment.
@@ -1877,8 +1885,11 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'draw' } }));
     expect(title(root)).toBe('Game Over');
     expect(subtitle(root)).toBe('Out of lives.');
-    expect(action(root)).toBe('Versus Setup');
+    expect(action(root)).toBe('Rematch');
     expect(chooseLevelShown(root)).toBe(false);
+    expect(
+      root.querySelector('.hud-change-setup')!.classList.contains('hud-change-setup--hidden'),
+    ).toBe(false);
   });
 
   it('keeps the pre-#323 wording when no ending has been pushed at all', () => {

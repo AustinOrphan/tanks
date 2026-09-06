@@ -442,10 +442,14 @@ export function createRouteHost(
 
   hud.onStartRestart(() => {
     if (live) {
-      // Wrapped because this button is ALSO an exit: a finished versus match's action
-      // button reads "Versus Setup" and returns to the retained pane (`loop.ts`'s
-      // `relaunchTarget` branch). Its other branches -- Resume, Retry, Play Again, Next
-      // Level -- all stay in gameplay and so dispose nothing.
+      // Wrapped because this button's branch set belongs to the SESSION, not to this
+      // file, and one of those branches may leave gameplay. Every branch that ships today
+      // stays in it -- Resume, Retry, Play Again, Next Level, and, since issue #279,
+      // Rematch, which reboots through `requestVersusSession` and is back in gameplay
+      // before this wrapper looks. The versus action used to read "Versus Setup" and
+      // return to the retained pane, which is what made the wrapper load-bearing then;
+      // the pane now has its own button and this stays as the guard it always was, not as
+      // a description of a branch that still exits.
       leavingGameplay(() => live?.startRestart?.());
       return;
     }
