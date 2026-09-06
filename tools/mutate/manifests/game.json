@@ -4978,27 +4978,27 @@
   {
     "id": "records-columns-still-called-a-run",
     "file": "src/game/hud.ts",
-    "find": "      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;",
+    "find": "      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;",
     "replace": "      `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement.",
+    "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement. Re-anchored when the column was renamed from \"Current attempt\" to \"Level attempt\" -- one scope, one name, matching the ending screens.",
     "killedBy": [
       "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
     ]
   },
   {
-    "id": "records-borrows-the-ending-screens-wording",
+    "id": "records-column-renamed-without-its-test",
     "file": "src/game/hud.ts",
-    "find": "      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;",
-    "replace": "      `<tr><th></th><td>Lifetime</td><td>This level</td></tr>${rows}`;",
+    "find": "      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;",
+    "replace": "      `<tr><th></th><td>Lifetime</td><td>Attempt</td></tr>${rows}`;",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Collapses the two surfaces onto one word, which is the tidying this rule invites and the reason the ruling gave them different ones. An ending screen has the level ON SCREEN and just played, so \"This level\" is both natural and true there. Records is reachable from the Main Menu alone, where naming a level the player is not looking at is worse than naming the scope. Kills the paired assertion in the Records test rather than the header equality, which is what that pair exists for.",
+    "why": "Renames the column to something plausible-but-unpinned. This entry used to assert the OPPOSITE -- that Records must NOT borrow the ending screens' \"This level\" -- and the owner then ruled the two should share one label after all, which made that claim false rather than merely stale. What survives is the part that was always the point: the heading is exact copy and a test names it, so a drive-by shortening cannot slip through. Kept rather than deleted because deleting it would leave the column's wording pinned by one entry instead of two.",
     "killedBy": [
       "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
     ]

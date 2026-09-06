@@ -920,9 +920,11 @@ describe('hud: the stats page', () => {
     // exact wording as the ambiguous use of `run` that issue #153 asks to remove. The
     // store has two scopes and no third -- there is no run-sized tally to label.
     //
-    // "Current attempt" rather than the ending screens' "This level", deliberately: this
-    // pane is reachable from the Main Menu only, with no level on screen, so "This level"
-    // would name one the player is not looking at.
+    // "Level attempt", the SAME words the ending screens use (owner ruling). An earlier
+    // version of this said "Current attempt" and reasoned that Records is reachable from
+    // the Main Menu only, so naming a level the player is not looking at would be wrong.
+    // That reasoning was about the moment, not the scope -- and it produced two names for
+    // one thing, which is the ambiguity this issue exists to remove.
     const { hud: h, root } = mount();
     h.setStats({ lifetime: SOME, attempt: NONE });
     h.setState('main-menu');
@@ -931,15 +933,11 @@ describe('hud: the stats page', () => {
     const header = Array.from(
       (root.querySelector('.hud-stats-table tr') as HTMLElement).querySelectorAll('td'),
     ).map((c) => c.textContent);
-    expect(header).toEqual(['Lifetime', 'Current attempt']);
+    expect(header).toEqual(['Lifetime', 'Level attempt']);
 
-    // The two halves of the rule, asserted as a PAIR so collapsing them into one shared
-    // string fails here: the pane must not borrow the ending screens' wording...
-    expect(header.join(' '), 'Records borrowed the ending screens\' wording').not.toContain(
-      'This level',
-    );
-    // ...and must not go back to calling a per-attempt tally a run.
-    expect(header.join(' '), 'a per-attempt tally is still called a run').not.toContain('run');
+    // The rule that survived the rename: whatever the scope is called, it is not a RUN.
+    // `run()` is a real third scope now, and it is not what this column holds.
+    expect(header.join(' '), 'a per-attempt tally is still called a run').not.toMatch(/\brun\b/i);
 
     // The columns are not merely LABELLED right, they are the right way round -- a header
     // fix that left the cells swapped would pass every assertion above.

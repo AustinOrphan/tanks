@@ -1611,39 +1611,27 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
       expect(summary(), `${name} still called a per-attempt tally a run`).not.toMatch(/\brun\b/);
     }
 
-    // THE NEGATIVE CONTROL, and it took two attempts to find one that bites -- recorded
-    // because the failures are the interesting part.
+    // THE NEGATIVE CONTROL, third attempt, and the failures are the interesting part.
     //
-    // It first read `mission-clear`'s subtitle ("Your run carries on, with the lives you
-    // have left."), on the theory that the word must survive where it is true. A later
-    // owner ruling cut that subtitle and `campaign-complete`'s. It then moved to the
-    // replace-run confirmation, which turned out to say "run" only in its FALLBACK branch
-    // -- the shipped body reads "Mission 4 -- 1 life left. Starting a new campaign
-    // replaces it." So there is no longer any user-facing copy where "run" is both
-    // correct and reachable, and a control asserting the word survives somewhere would be
-    // pinning a string no player sees.
+    // It first read `mission-clear`'s subtitle ("Your run carries on..."), on the theory
+    // that the word "run" must survive where it is true. An owner ruling cut that
+    // subtitle. It then moved to the replace-run confirmation, which says "run" only in a
+    // FALLBACK branch no shipped page reaches. It then asserted that Records still said
+    // "Current attempt" while these screens said "Level attempt" -- and a later ruling
+    // unified those two deliberately, so "the labels differ" stopped being true.
     //
-    // The real risk is different anyway: not that "run" gets purged, but that the two
-    // scope labels get COLLAPSED onto one word by a later tidy-up. Records must still say
-    // "Current attempt" while these screens say "This level" -- see renderStatsTable for
-    // why they differ. A global replace of either string fails here.
-    h.setState('main-menu');
-    h.setStats({
-      lifetime: { shotsFired: 1, shellKills: 1, mineKills: 0, deaths: 0, selfKills: 0,
-        friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0 },
-      attempt: { shotsFired: 0, shellKills: 0, mineKills: 0, deaths: 0, selfKills: 0,
-        friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0 },
+    // What is left is the distinction that actually matters: on a campaign ending the two
+    // LINES name different scopes, and a refactor that hoisted one shared label for both
+    // -- the obvious tidy-up now that both are built by `tallyLineEl` -- would make the
+    // screen report the same words twice over different numbers.
+    drive(h, CAMPAIGN_COMPLETE, {
+      shotsFired: 100, shellKills: 31, mineKills: 4, deaths: 7, selfKills: 1,
+      friendlyFireKills: 0, minesLaid: 12, wallsDestroyed: 40, ricochets: 9,
     });
-    (root.querySelector('.hud-records-open') as HTMLButtonElement).dispatchEvent(
-      new MouseEvent('click'),
-    );
-    const header = (root.querySelector('.hud-stats-table tr') as HTMLElement).textContent ?? '';
-    expect(header, 'Records was collapsed onto the ending screens\' wording').toContain(
-      'Current attempt',
-    );
-    expect(header, 'Records was collapsed onto the ending screens\' wording').not.toContain(
-      'This level',
-    );
+    const attemptLine = (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent ?? '';
+    const runLine = (root.querySelector('.hud-run-tally') as HTMLElement).textContent ?? '';
+    expect(attemptLine).toMatch(/^Level attempt:/);
+    expect(runLine, 'both lines were built from one shared label').toMatch(/^Campaign run:/);
   });
 
   it('reports the whole campaign run beside the level attempt, on the two endings that finish one', () => {

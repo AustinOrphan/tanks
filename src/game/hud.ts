@@ -658,12 +658,14 @@ export interface Hud {
    * value that keeps moving.
    *
    * `attempt` (not `run`, see stats.ts): a level-sized tally, zeroed on every
-   * switchTo. The VISIBLE copy now matches -- "Current attempt" in Records, "This
-   * level" on an ending (issue #322). It read "This run" for both until then; that
-   * was the user-facing half of the ambiguity issue #153 asks to remove, deferred as
+   * switchTo. The VISIBLE copy now matches, and matches ITSELF: "Level attempt" in
+   * Records and on every ending (issue #322). It read "This run" in both places until
+   * then -- the user-facing half of the ambiguity issue #153 asks to remove, deferred as
    * a separate decision by the adjudicated review of #156 (nit 4) and ruled on by the
-   * owner here. The identifier half -- `hud-run-summary`/`runSummaryEl`/
-   * `renderRunSummary` renamed to their attempt-scoped names -- was done at #156.
+   * owner here. It passed through "This level" and "Current attempt" on the way, which is
+   * how it ended up briefly carrying two names for one scope; one scope, one name is the
+   * point. The identifier half -- `hud-run-summary`/`runSummaryEl`/`renderRunSummary`
+   * renamed to their attempt-scoped names -- was done at #156.
    *
    * The win/lose panel's attempt summary used to ride here too, which is what made a
    * gameplay session push a Records-shaped payload just to keep one line of its own
@@ -2245,8 +2247,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const rows = STAT_ROWS.map(
       ([label, get]) => `<tr><th>${label}</th><td>${get(lifetime)}</td><td>${get(attempt)}</td></tr>`,
     ).join('');
+    // "Level attempt", the same words the ending screens use, by owner ruling. It read
+    // "Current attempt" for one PR, which was accurate but made two names for one scope --
+    // exactly the ambiguity issue #322 exists to remove, reintroduced in a different
+    // place. The scope IS the level attempt whether or not a level is on screen; the
+    // column heading names the scope, and "Current" was doing no work the table's own
+    // Lifetime/attempt pairing did not already do.
     statsTable.innerHTML =
-      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;
+      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;
   }
 
   function renderAttemptSummary(): void {
