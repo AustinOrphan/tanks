@@ -363,15 +363,25 @@ function outcomePanelKey(outcome: TypedOutcome): OutcomePanelKey | null {
  * compile error here rather than a screen that silently reads like its neighbour, which
  * is the failure this whole table exists to make impossible to reintroduce.
  *
- * The two practice entries deliberately SHARE a subtitle: it is the same true statement
- * in both endings, and it is the statement a practice player actually needs (the run
- * they may have going is not what they were just playing). Only the headline and the
- * verdict differ, because only those differ.
+ * EVERY entry now carries an empty subtitle, arrived at over three separate owner
+ * rulings rather than as a policy: the practice pair first, then `campaign-over`, then
+ * `mission-clear` and `campaign-complete`. Each line was cut for the same reason -- it
+ * restated the headline, the action button, or the topbar -- so the field survives as a
+ * per-ending decision that has landed the same way five times, not as a constant. A
+ * sixth ending is free to use it, and `renderLegacyOutcomeCopy` still does.
+ *
+ * The subtitle is therefore no longer a distinguishing axis between these screens: the
+ * TITLES carry that alone now, which is what `no two endings render as the same screen`
+ * checks. They are strongly different, and that test fails if a later edit makes two of
+ * them agree.
  */
 const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
   'mission-clear': {
     title: (mission) => (mission === null ? 'Level cleared!' : `Level ${mission} cleared!`),
-    subtitle: 'Your run carries on, with the lives you have left.',
+    // NO SUBTITLE, by owner ruling, on the same reasoning as `campaign-over` below.
+    // "Your run carries on, with the lives you have left." restated two things already on
+    // screen: the topbar shows the lives, and the action button says "Next Level".
+    subtitle: '',
     action: 'Next Level',
     chooseLevel: false,
   },
@@ -388,7 +398,11 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
   },
   'campaign-complete': {
     title: () => 'Campaign Complete!',
-    subtitle: 'Every level cleared. This run is finished.',
+    // NO SUBTITLE, by owner ruling. "Every level cleared. This run is finished." said the
+    // headline twice. The owner floated "Campaign run complete" as a replacement and it
+    // is the same restatement in fewer words -- `Campaign Complete!` is already directly
+    // above it -- so the line goes rather than shrinks.
+    subtitle: '',
     action: 'Start New Campaign',
     chooseLevel: false,
   },

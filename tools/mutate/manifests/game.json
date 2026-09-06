@@ -5030,5 +5030,33 @@
     "killedBy": [
       "hud: the stats page says so when nothing has been played, and gets out of the way once something has"
     ]
+  },
+  {
+    "id": "mission-clear-restates-the-lives-and-the-button",
+    "file": "src/game/hud.ts",
+    "find": "    subtitle: '',\n    action: 'Next Level',",
+    "replace": "    subtitle: 'Your run carries on, with the lives you have left.',\n    action: 'Next Level',",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Puts back the subtitle the owner cut. It restated two things already on the same screen -- the topbar shows the lives, the action button says \"Next Level\" -- and it put the word \"run\" on a panel whose numbers are per-attempt. Anchored on the following `action` line because `subtitle: ''` is now the value of all five entries and is not unique on its own; the action is what identifies WHICH ending this is.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
+    ]
+  },
+  {
+    "id": "campaign-complete-says-its-own-headline-twice",
+    "file": "src/game/hud.ts",
+    "find": "    title: () => 'Campaign Complete!',",
+    "replace": "    title: () => 'Campaign Complete!',\n    subtitle: 'Every level cleared. This run is finished.',",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Restores a subtitle sitting directly under the headline that already says it. Applied as an INSERT rather than an edit, because the entry's own `subtitle: ''` is not unique across the table -- the duplicate key it creates is legal JavaScript and the later one wins, which is exactly how this line would come back in a real edit. The owner floated \"Campaign run complete\" instead of deleting; the same restatement in fewer words, so the line went rather than shrank.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
+    ]
   }
 ]
