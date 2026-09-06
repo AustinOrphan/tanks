@@ -3802,13 +3802,13 @@
   {
     "id": "records-tab-restores-the-tab-instead-of-the-menu-control",
     "file": "src/game/hud.ts",
-    "find": "  const handleRecordsTabAchievements = (): void => {\n    openLayer('achievements', recordsOpenBtn);\n  };",
-    "replace": "  const handleRecordsTabAchievements = (): void => {\n    openLayer('achievements', recordsTabAchievementsBtns[0]);\n  };",
+    "find": "  const handleRecordsTabAchievements = (): void => {\n    lastRecordsTab = 'achievements';\n    openLayer('achievements', recordsOpenBtn);\n  };",
+    "replace": "  const handleRecordsTabAchievements = (): void => {\n    lastRecordsTab = 'achievements';\n    openLayer('achievements', recordsTabAchievementsBtns[0]);\n  };",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Records is one destination with two tabs, and switching tabs REPLACES the top layer -- so the tab that was clicked belongs to the pane being left and is not on the destination Back returns to. Recording it as the opener makes `restoreFocus` fall through to the container on every Back out of the Achievements tab, silently losing a keyboard player's place at the Main Menu control they actually used. Issue #318's whole point, in the one place issue #226 could break it.",
+    "why": "Records is one destination with two tabs, and switching tabs REPLACES the top layer -- so the tab that was clicked belongs to the pane being left and is not on the destination Back returns to. Recording it as the opener makes `restoreFocus` fall through to the container on every Back out of the Achievements tab, silently losing a keyboard player's place at the Main Menu control they actually used. Issue #318's whole point, in the one place issue #226 could break it. Re-anchored when the handler gained the in-document tab memory (issue #322): the opener argument is unchanged, but the line above it is new.",
     "killedBy": [
       "hud: achievements is one destination with two tabs: switching keeps the Main Menu as the origin"
     ]
