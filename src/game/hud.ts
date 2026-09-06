@@ -363,15 +363,25 @@ function outcomePanelKey(outcome: TypedOutcome): OutcomePanelKey | null {
  * compile error here rather than a screen that silently reads like its neighbour, which
  * is the failure this whole table exists to make impossible to reintroduce.
  *
- * The two practice entries deliberately SHARE a subtitle: it is the same true statement
- * in both endings, and it is the statement a practice player actually needs (the run
- * they may have going is not what they were just playing). Only the headline and the
- * verdict differ, because only those differ.
+ * EVERY entry now carries an empty subtitle, arrived at over three separate owner
+ * rulings rather than as a policy: the practice pair first, then `campaign-over`, then
+ * `mission-clear` and `campaign-complete`. Each line was cut for the same reason -- it
+ * restated the headline, the action button, or the topbar -- so the field survives as a
+ * per-ending decision that has landed the same way five times, not as a constant. A
+ * sixth ending is free to use it, and `renderLegacyOutcomeCopy` still does.
+ *
+ * The subtitle is therefore no longer a distinguishing axis between these screens: the
+ * TITLES carry that alone now, which is what `no two endings render as the same screen`
+ * checks. They are strongly different, and that test fails if a later edit makes two of
+ * them agree.
  */
 const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
   'mission-clear': {
     title: (mission) => (mission === null ? 'Level cleared!' : `Level ${mission} cleared!`),
-    subtitle: 'Your run carries on, with the lives you have left.',
+    // NO SUBTITLE, by owner ruling, on the same reasoning as `campaign-over` below.
+    // "Your run carries on, with the lives you have left." restated two things already on
+    // screen: the topbar shows the lives, and the action button says "Next Level".
+    subtitle: '',
     action: 'Next Level',
     chooseLevel: false,
   },
@@ -388,7 +398,11 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
   },
   'campaign-complete': {
     title: () => 'Campaign Complete!',
-    subtitle: 'Every level cleared. This run is finished.',
+    // NO SUBTITLE, by owner ruling. "Every level cleared. This run is finished." said the
+    // headline twice. The owner floated "Campaign run complete" as a replacement and it
+    // is the same restatement in fewer words -- `Campaign Complete!` is already directly
+    // above it -- so the line goes rather than shrinks.
+    subtitle: '',
     action: 'Start New Campaign',
     chooseLevel: false,
   },
@@ -634,12 +648,12 @@ export interface Hud {
    * value that keeps moving.
    *
    * `attempt` (not `run`, see stats.ts): a level-sized tally, zeroed on every
-   * switchTo. The visible copy still reads "This run" -- that is user-facing
-   * wording, not the codebase's ambiguous use of the word issue #153 asks to
-   * remove, and changing it is out of this change's scope (nit 4, adjudicated
-   * review of #156: renaming `hud-run-summary`/`runSummaryEl`/`renderRunSummary`
-   * to their attempt-scoped names was trivial and safe, and is done; the visible
-   * "This run: ..." copy is a separate, user-facing decision and stays as-is).
+   * switchTo. The VISIBLE copy now matches -- "Current attempt" in Records, "This
+   * level" on an ending (issue #322). It read "This run" for both until then; that
+   * was the user-facing half of the ambiguity issue #153 asks to remove, deferred as
+   * a separate decision by the adjudicated review of #156 (nit 4) and ruled on by the
+   * owner here. The identifier half -- `hud-run-summary`/`runSummaryEl`/
+   * `renderRunSummary` renamed to their attempt-scoped names -- was done at #156.
    *
    * The win/lose panel's attempt summary used to ride here too, which is what made a
    * gameplay session push a Records-shaped payload just to keep one line of its own
@@ -1539,6 +1553,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--sm ui-selectable ui-selectable--on hud-records-tab hud-records-tab-stats" type="button" aria-pressed="true">Stats</button>
         <button class="ui-btn ui-btn--sm ui-selectable hud-records-tab hud-records-tab-achievements" type="button" aria-pressed="false">Achievements</button>
       </div>
+      <!-- Issue #322's empty state. A fresh save renders eleven rows of zeros, which
+           does not say whether the player has not played or the game is not counting.
+           One line answers that. The TABLE STAYS: it is the honest reading, and it also
+           shows what will be tracked, which hiding it would not. -->
+      <p class="ui-hint hud-stats-empty hud-stats-empty--hidden">No matches played yet.</p>
       <table class="hud-stats-table"></table>
       <div class="hud-stats-actions">
         <button class="ui-btn ui-btn--slab hud-stats-back" type="button">Back</button>
@@ -1828,6 +1847,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const recordsOpenBtn = el.querySelector('.hud-records-open') as HTMLButtonElement;
   const statsView = el.querySelector('.hud-stats') as HTMLElement;
   const statsTable = el.querySelector('.hud-stats-table') as HTMLElement;
+  const statsEmptyEl = el.querySelector('.hud-stats-empty') as HTMLElement;
   const statsBackBtn = el.querySelector('.hud-stats-back') as HTMLButtonElement;
   const customizeOpenBtn = el.querySelector('.hud-customize-open') as HTMLButtonElement;
   const customizeView = el.querySelector('.hud-customize') as HTMLElement;
@@ -2198,10 +2218,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function renderStatsTable(): void {
     if (!statsData) return;
     const { lifetime, attempt } = statsData;
+    // Keyed on LIFETIME, not the attempt column: "have you ever played", which is the
+    // question a table of zeros leaves open. The attempt column is legitimately zero
+    // every time this pane is opened -- Records is reachable from the Main Menu alone,
+    // with no attempt in progress -- so keying on it would show the line permanently.
+    statsEmptyEl.classList.toggle(
+      'hud-stats-empty--hidden',
+      Object.values(lifetime).some((v) => v !== 0),
+    );
     const rows = STAT_ROWS.map(
       ([label, get]) => `<tr><th>${label}</th><td>${get(lifetime)}</td><td>${get(attempt)}</td></tr>`,
     ).join('');
-    statsTable.innerHTML = `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;
+    statsTable.innerHTML =
+      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;
   }
 
   function renderAttemptSummary(): void {
@@ -2212,21 +2241,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const r = outcomeData.attempt;
     const kills = r.shellKills + r.mineKills;
     /*
-     * "This level" on a practice ending, "This run" everywhere else (owner ruling).
+     * "This level" on EVERY ending, campaign included (issue #322, owner ruling).
      *
-     * A practice session has no run -- that is the whole point of it, and `loop.ts`
-     * enforces it: `campaignActive()` is false for practice, so nothing it does reaches
-     * the run store. Heading its numbers "This run" named a thing the player does not
-     * have on screen and, worse, named the campaign run they DO have going elsewhere,
-     * which is exactly the one these numbers are not about.
+     * It read "This run" on campaign endings until now, and that was wrong about the
+     * data rather than merely loose: `stats.attempt()` is zeroed on every world build
+     * (see stats.ts, which names this exact wording as the ambiguity issue #153 asks to
+     * remove), so the numbers under it are one try at one level -- not the campaign run,
+     * which is the thing the player has going elsewhere and is emphatically not what
+     * these count. A practice ending already said "This level" for the same reason.
      *
-     * The counter itself is per-ATTEMPT either way -- `stats.attempt()` is zeroed on
-     * every world build (see its own doc) -- so on a campaign screen "This run" is
-     * already a loose reading of a per-level tally. Left alone here because that wording
-     * predates this change and correcting it is a separate decision about campaign copy;
-     * this only stops the word appearing where it is plainly wrong.
+     * "This level" rather than the Records table's "Current attempt", and the split is
+     * deliberate: here the level IS on screen and was just played, so the natural words
+     * are also the true ones. Records is browsed from the Main Menu with no level in
+     * sight, which is why it uses the scope's own name instead -- see renderStatsTable.
+     *
+     * The one place a retry makes this loose: clear a level on your third try and these
+     * are the third try's numbers, not the level's. "Current attempt" would be exact
+     * everywhere, and was rejected here as stiffer than the screen deserves.
      */
-    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';
+    const scope = 'This level';
     attemptSummaryEl.textContent =
       `${scope}: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
     attemptSummaryEl.classList.remove('hud-attempt-summary--hidden');

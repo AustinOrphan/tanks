@@ -1572,34 +1572,68 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
   const PRACTICE_WON: TypedOutcome = { kind: 'practice-result', cleared: true };
   const PRACTICE_LOST: TypedOutcome = { kind: 'practice-result', cleared: false };
 
-  it('keeps the word "run" off a practice ending, where there is no run', () => {
-    // The owner ruling: a practice screen must not say "this run" anywhere. The subtitle
-    // that said it is gone, and this is the OTHER place the word appeared -- the tally
-    // line, which is not part of the copy catalogue and would have kept saying it.
+  it('heads the tally "This level" on EVERY ending, because that is what it counts', () => {
+    // SUPERSEDES 'keeps the word "run" off a practice ending'. That test pinned the
+    // practice half of this rule and used the campaign half as its negative control --
+    // "a line hardcoded to This level would relabel every campaign ending too". Issue
+    // #322's owner ruling is that relabelling them is CORRECT, so the control had to be
+    // replaced rather than relaxed; the new one is below.
     //
-    // A practice session has no run at all: `campaignActive()` is false for it, so
-    // nothing it does reaches the run store. The word named the campaign run the player
-    // may well have going elsewhere, which is precisely the one these numbers are not
-    // about.
+    // The line is wrong about its DATA, not merely loose: `stats.attempt()` is zeroed on
+    // every world build (stats.ts names this exact wording as the ambiguity issue #153
+    // asks to remove), so these numbers are one try at one level. A campaign ending
+    // saying "This run" pointed at the campaign attempt the player has going elsewhere,
+    // which is the one thing they are not.
     const { hud: h, root } = mount();
     h.setStatus(atLevel(3, 5));
     const summary = (): string =>
       (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent ?? '';
 
-    drive(h, PRACTICE_LOST);
-    expect(summary()).toMatch(/^This level:/);
-    expect(summary(), 'a practice ending still said "run"').not.toContain('run');
+    for (const [name, outcome] of [
+      ['practice-lost', PRACTICE_LOST],
+      ['practice-won', PRACTICE_WON],
+      ['campaign-over', CAMPAIGN_OVER],
+      ['mission-clear', MISSION_CLEAR],
+      ['campaign-complete', CAMPAIGN_COMPLETE],
+    ] as const) {
+      drive(h, outcome);
+      expect(summary(), `${name} did not head its tally with the level`).toMatch(/^This level:/);
+      expect(summary(), `${name} still called a per-attempt tally a run`).not.toContain('run');
+    }
 
-    drive(h, PRACTICE_WON);
-    expect(summary(), 'only the failed practice ending was fixed').toMatch(/^This level:/);
-
-    // THE NEGATIVE CONTROL. Without it, a line hardcoded to "This level" reads correctly
-    // on the two screens this test drives and silently relabels every campaign ending
-    // too -- the same shape of over-broad fix the pause-label control catches.
-    drive(h, CAMPAIGN_OVER);
-    expect(summary(), 'the campaign ending was relabelled too').toMatch(/^This run:/);
-    drive(h, MISSION_CLEAR);
-    expect(summary()).toMatch(/^This run:/);
+    // THE NEGATIVE CONTROL, and it took two attempts to find one that bites -- recorded
+    // because the failures are the interesting part.
+    //
+    // It first read `mission-clear`'s subtitle ("Your run carries on, with the lives you
+    // have left."), on the theory that the word must survive where it is true. A later
+    // owner ruling cut that subtitle and `campaign-complete`'s. It then moved to the
+    // replace-run confirmation, which turned out to say "run" only in its FALLBACK branch
+    // -- the shipped body reads "Mission 4 -- 1 life left. Starting a new campaign
+    // replaces it." So there is no longer any user-facing copy where "run" is both
+    // correct and reachable, and a control asserting the word survives somewhere would be
+    // pinning a string no player sees.
+    //
+    // The real risk is different anyway: not that "run" gets purged, but that the two
+    // scope labels get COLLAPSED onto one word by a later tidy-up. Records must still say
+    // "Current attempt" while these screens say "This level" -- see renderStatsTable for
+    // why they differ. A global replace of either string fails here.
+    h.setState('main-menu');
+    h.setStats({
+      lifetime: { shotsFired: 1, shellKills: 1, mineKills: 0, deaths: 0, selfKills: 0,
+        friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0 },
+      attempt: { shotsFired: 0, shellKills: 0, mineKills: 0, deaths: 0, selfKills: 0,
+        friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0 },
+    });
+    (root.querySelector('.hud-records-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
+    const header = (root.querySelector('.hud-stats-table tr') as HTMLElement).textContent ?? '';
+    expect(header, 'Records was collapsed onto the ending screens\' wording').toContain(
+      'Current attempt',
+    );
+    expect(header, 'Records was collapsed onto the ending screens\' wording').not.toContain(
+      'This level',
+    );
   });
 
   it('gives each campaign and practice ending its own copy and its own action', () => {
@@ -1612,18 +1646,17 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
       return [title(root), subtitle(root), action(root), String(chooseLevelShown(root))];
     };
 
-    expect(screen(MISSION_CLEAR)).toEqual([
-      'Level 3 cleared!',
-      'Your run carries on, with the lives you have left.',
-      'Next Level',
-      'false',
-    ]);
-    // NO SUBTITLE on this one, by owner ruling: the headline and the two buttons already
-    // say it, and the sentence that stood here only restated them.
+    // NO SUBTITLE on any of them, by owner ruling, arrived at over three separate rulings
+    // rather than as a policy. Each line restated the headline, the action button or the
+    // topbar: "Your run carries on, with the lives you have left." over a topbar showing
+    // the lives and a button reading Next Level; "Out of lives. This run is over." over
+    // "Game Over"; "Every level cleared. This run is finished." directly under "Campaign
+    // Complete!".
+    expect(screen(MISSION_CLEAR)).toEqual(['Level 3 cleared!', '', 'Next Level', 'false']);
     expect(screen(CAMPAIGN_OVER)).toEqual(['Game Over', '', 'Start New Campaign', 'false']);
     expect(screen(CAMPAIGN_COMPLETE)).toEqual([
       'Campaign Complete!',
-      'Every level cleared. This run is finished.',
+      '',
       'Start New Campaign',
       'false',
     ]);

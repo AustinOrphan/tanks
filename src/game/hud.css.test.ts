@@ -462,6 +462,9 @@ describe('hud.css is syntactically whole', () => {
       // Records is one Main Menu entry with two tabs (issue #226): the tab row's layout,
       // and the hidden rule that keeps the entry off the pause panel.
       '.hud-records-tabs', '.hud-records-open--hidden',
+      // ...and Records' empty state: without the hidden rule the "no matches played yet"
+      // line stands over a populated table, contradicting the numbers beside it (#322).
+      '.hud-stats-empty--hidden',
       // Level select buttons. No `--locked` rule and no `--hidden` note rule since issue
       // #555: the grid draws only unlocked levels, so there is no dimmed control to style
       // and no state the note can explain that the player is not in.

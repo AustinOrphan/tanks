@@ -4825,31 +4825,17 @@
     ]
   },
   {
-    "id": "practice-tally-claims-a-run-the-player-has-not-got",
+    "id": "ending-tally-calls-a-per-attempt-count-a-run",
     "file": "src/game/hud.ts",
-    "find": "    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';",
+    "find": "    const scope = 'This level';",
     "replace": "    const scope = 'This run';",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Puts the word 'run' back on the one screen with no run behind it. A practice session never touches the campaign run -- campaignActive() is false for it, so nothing it does reaches the run store -- so 'This run: 6 kills' over a practice tally names the campaign run the player may have going elsewhere, which is exactly the one those numbers are not about. The owner ruled the word off this screen along with the subtitle that also carried it. Nothing else changes: the numbers are right, the line is in the right place, and only the noun is a lie.",
+    "why": "Puts the whole tally line back to \"This run\", which is wrong about the DATA and not merely loose: `stats.attempt()` is zeroed on every world build, so these numbers are one try at one level, and the words point at the campaign attempt the player has going elsewhere -- the one thing they are not. Renamed and re-anchored at issue #322: it was `practice-tally-claims-a-run-the-player-has-not-got`, pinning the PRACTICE half while campaign endings still said \"run\" by ruling. The owner's #322 ruling extended the wording to every ending, so the conditional it was anchored to is gone and the defect is now the broader one. Its sibling `every-ending-tally-reads-as-one-level` was deleted rather than re-anchored, because what that one mutated TO is now the shipped code -- it had become a no-op.",
     "killedBy": [
-      "hud: every ending gets its own screen (issue #323) keeps the word \"run\" off a practice ending, where there is no run"
-    ]
-  },
-  {
-    "id": "every-ending-tally-reads-as-one-level",
-    "file": "src/game/hud.ts",
-    "find": "    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';",
-    "replace": "    const scope = 'This level';",
-    "expect": "killed",
-    "tests": [
-      "src/game/hud.surfaces.test.ts"
-    ],
-    "why": "The over-broad half of the same fix, and the more likely regression: relabelling EVERY ending 'This level' reads correctly on the two practice screens a careless test would drive and quietly rewrites the campaign ones too. It is killed only by the negative control in the same case, which drives a campaign-over and a mission-clear through the identical helper. Same shape as the pause-label control, and the reason both exist.",
-    "killedBy": [
-      "hud: every ending gets its own screen (issue #323) keeps the word \"run\" off a practice ending, where there is no run"
+      "hud: every ending gets its own screen (issue #323) heads the tally \"This level\" on EVERY ending, because that is what it counts"
     ]
   },
   {
@@ -4973,6 +4959,104 @@
       "the application routes work with no gameplay session behind them unlockedLevels answers from progress alone, and counts CLEARED levels only",
       "createRouteHost: the Main Menu is painted from the stores by the page paints no Continue when there is no run -- the negative control",
       "startGameWith: the main menu tells the HUD the unlock state at boot: CLEARED levels pickable, capped at the count"
+    ]
+  },
+  {
+    "id": "campaign-ending-keeps-the-run-wording",
+    "file": "src/game/hud.ts",
+    "find": "    const scope = 'This level';",
+    "replace": "    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "The HALF-fix: practice endings corrected, campaign endings left saying \"run\". This is the code that actually shipped between issues #323 and #322, so it is the state a revert lands on rather than an invented defect -- and it is the one a reader is most likely to restore, because the conditional looks like it is being careful. The tally is per-ATTEMPT for a campaign ending too; the kind of session it came from changes nothing about what was counted. Pinned separately from `ending-tally-calls-a-per-attempt-count-a-run` because a test that only checked the practice screens kills that one and survives this.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) heads the tally \"This level\" on EVERY ending, because that is what it counts"
+    ]
+  },
+  {
+    "id": "records-columns-still-called-a-run",
+    "file": "src/game/hud.ts",
+    "find": "      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;",
+    "replace": "      `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement.",
+    "killedBy": [
+      "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
+    ]
+  },
+  {
+    "id": "records-borrows-the-ending-screens-wording",
+    "file": "src/game/hud.ts",
+    "find": "      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;",
+    "replace": "      `<tr><th></th><td>Lifetime</td><td>This level</td></tr>${rows}`;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Collapses the two surfaces onto one word, which is the tidying this rule invites and the reason the ruling gave them different ones. An ending screen has the level ON SCREEN and just played, so \"This level\" is both natural and true there. Records is reachable from the Main Menu alone, where naming a level the player is not looking at is worse than naming the scope. Kills the paired assertion in the Records test rather than the header equality, which is what that pair exists for.",
+    "killedBy": [
+      "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
+    ]
+  },
+  {
+    "id": "records-empty-line-never-goes-away",
+    "file": "src/game/hud.ts",
+    "find": "      Object.values(lifetime).some((v) => v !== 0),",
+    "replace": "      Object.values(attempt).some((v) => v !== 0),",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Keys the empty-state line on the ATTEMPT column instead of lifetime, which is the natural-looking mistake and is permanently wrong: Records is reachable from the Main Menu alone, where no attempt is in progress, so that column is zero on every open and the line would tell a player with hundreds of lifetime kills that they have played nothing. Survives the fresh-save half of the test, which is why that case carries a populated negative control rather than standing alone.",
+    "killedBy": [
+      "hud: the stats page says so when nothing has been played, and gets out of the way once something has"
+    ]
+  },
+  {
+    "id": "records-empty-line-shown-over-real-numbers",
+    "file": "src/game/hud.ts",
+    "find": "    statsEmptyEl.classList.toggle(\n      'hud-stats-empty--hidden',\n      Object.values(lifetime).some((v) => v !== 0),\n    );",
+    "replace": "    statsEmptyEl.classList.remove('hud-stats-empty--hidden');",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Never hides the line, so \"No matches played yet.\" stands above a table of real totals and contradicts the numbers under it. Distinct from the entry above: that one picks the wrong SOURCE and this one drops the decision entirely, and a test asserting only the empty case would survive both.",
+    "killedBy": [
+      "hud: the stats page says so when nothing has been played, and gets out of the way once something has"
+    ]
+  },
+  {
+    "id": "mission-clear-restates-the-lives-and-the-button",
+    "file": "src/game/hud.ts",
+    "find": "    subtitle: '',\n    action: 'Next Level',",
+    "replace": "    subtitle: 'Your run carries on, with the lives you have left.',\n    action: 'Next Level',",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Puts back the subtitle the owner cut. It restated two things already on the same screen -- the topbar shows the lives, the action button says \"Next Level\" -- and it put the word \"run\" on a panel whose numbers are per-attempt. Anchored on the following `action` line because `subtitle: ''` is now the value of all five entries and is not unique on its own; the action is what identifies WHICH ending this is.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
+    ]
+  },
+  {
+    "id": "campaign-complete-says-its-own-headline-twice",
+    "file": "src/game/hud.ts",
+    "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n  },\n  /*",
+    "replace": "    subtitle: 'Every level cleared. This run is finished.',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n  },\n  /*",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "why": "Restores a subtitle sitting directly under the headline that already says it. The owner floated \"Campaign run complete\" instead of deleting; that is the same restatement in fewer words, so the line went rather than shrank. Anchored on the `action`/`chooseLevel` tail plus the comment delimiter that follows this entry, because `subtitle: ''` is the value of all five entries and `action: 'Start New Campaign'` is shared with `campaign-over` -- only the trailing `/*` separates them. An earlier version of this entry INSERTED a second `subtitle` key above the existing one and survived: a duplicate key is legal here and the LATER one wins, so the empty string was still what shipped. Recorded because the mutation looked obviously fatal and was not.",
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
     ]
   }
 ]
