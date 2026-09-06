@@ -4,6 +4,9 @@
 // fail here -- it fails ten minutes later as a Playwright timeout with no useful name on
 // it. These are the guards that turn that into a named failure at unit speed.
 import { describe, it, expect } from 'vitest';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   SCREEN_STATES,
   SCREEN_STATE_IDS,
@@ -11,7 +14,7 @@ import {
   WEBGL_MODES,
   findScreenState,
 } from './states.mjs';
-import { buildScreenArguments } from '../capture/screen-adapter.mjs';
+import { buildScreenArguments, runScreenState } from '../capture/screen-adapter.mjs';
 import { CAPTURE_RECIPES } from '../capture/registry.mjs';
 
 const STABLE_ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -128,6 +131,89 @@ describe('the screen capture adapter', () => {
     for (const bad of ['../frame.png', 'tmp/../../frame.png', '/etc/frame.png', 'out/frame.png']) {
       expect(() => buildScreenArguments(recipe, bad), bad).toThrow(/isolated relative tmp\//);
     }
+  });
+
+  /**
+   * Drive the real adapter with the child process stubbed -- the same `deps.runProcess`
+   * seam `runGalleryMoment` offers -- so the report-reading and assertion half runs for
+   * real without launching a browser.
+   */
+  const runWithReport = async (producer: Record<string, unknown>): Promise<any> => {
+    const dir = await mkdtemp(join(tmpdir(), 'screen-adapter-'));
+    try {
+      await writeFile(
+        join(dir, 'producer.json'),
+        JSON.stringify({
+          capture: { viewport: { width: 1280, height: 800, devicePixelRatio: 2 } },
+          producer: { stateId: 'screen.main-menu', title: 'x', webgl: 'ok', javascript: 'on', ...producer },
+        }),
+      );
+      await writeFile(join(dir, 'frame.png'), 'not really a png');
+      return await runScreenState(
+        {
+          recipe: recipeFor('screen.main-menu'),
+          root: process.cwd(),
+          outputRelative: 'tmp/producer-dir',
+          outputDirectory: dir,
+          env: {},
+          prerequisites: { playwright: { moduleSpecifier: 'playwright' } },
+          signal: undefined,
+        },
+        { runProcess: async () => undefined },
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('reports an uncaught page error as a FAILED capture, not a saved picture of a broken screen', async () => {
+    // Every state here is a screen a player can sit on. The branded failure screens REPORT
+    // a failure; they do not suffer one. So an exception on the page means the capture
+    // photographed something still falling over, and publishing that as a passing artifact
+    // is the quiet-success failure mode the assertion channel exists to prevent.
+    const clean = await runWithReport({ measurements: [{ selector: '.hud-panel', present: true }], pageErrors: [] });
+    expect(clean.assertions.find((a: any) => a.kind === 'page-errors').passed).toBe(true);
+
+    const broken = await runWithReport({
+      measurements: [{ selector: '.hud-panel', present: true }],
+      pageErrors: ['TypeError: undefined is not a function'],
+    });
+    const failed = broken.assertions.find((a: any) => a.kind === 'page-errors');
+    expect(failed.passed, 'a page error was reported as a healthy capture').toBe(false);
+    expect(failed.diagnostic).toContain('TypeError');
+  });
+
+  it('fails a capture whose measured selector matched nothing, but not one that is merely hidden', async () => {
+    // The distinction is the whole point. Several states exist to show a control is
+    // ABSENT -- a fresh save hides Continue, the no-script style hides the holding card --
+    // so `visible: false` is a result, not a fault. `present: false` means the selector
+    // matches nothing at all, which makes the state's report an empty caption on a
+    // picture that still looks plausible.
+    const hidden = await runWithReport({
+      measurements: [{ selector: '.hud-continue', present: true, visible: false }],
+      pageErrors: [],
+    });
+    expect(
+      hidden.assertions.find((a: any) => a.kind === 'measured-elements-present').passed,
+      'a deliberately hidden control was treated as a broken capture',
+    ).toBe(true);
+
+    const renamed = await runWithReport({
+      measurements: [
+        { selector: '.hud-panel', present: true },
+        { selector: '.hud-renamed-away', present: false },
+      ],
+      pageErrors: [],
+    });
+    const missing = renamed.assertions.find((a: any) => a.kind === 'measured-elements-present');
+    expect(missing.passed, 'a selector matching nothing passed').toBe(false);
+    expect(missing.diagnostic).toContain('.hud-renamed-away');
+  });
+
+  it('refuses a report describing a different state than the recipe asked for', async () => {
+    // The runner and the recipe agreeing is not something the framework checks: a mixed-up
+    // report would publish one screen's picture under another screen's name and hash.
+    await expect(runWithReport({ stateId: 'screen.about' })).rejects.toThrow(/reported state/);
   });
 
   it('refuses a recipe this producer cannot honour, rather than capturing something else', () => {
