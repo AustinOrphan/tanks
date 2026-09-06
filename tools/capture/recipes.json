@@ -1046,5 +1046,103 @@
     "altText": "Screenshot of the Tanks! scripting disabled screen.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.pause.versus",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.pause.versus"
+    },
+    "fixture": {
+      "id": "screen.pause.versus",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Pause, versus match",
+    "description": "The pause panel in a versus match: a named exit and Change Setup beside it.",
+    "altText": "Screenshot of the Tanks! pause, versus match screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.pause.campaign",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.pause.campaign"
+    },
+    "fixture": {
+      "id": "screen.pause.campaign",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Pause, campaign round",
+    "description": "The pause panel in a campaign round, the control for the versus one.",
+    "altText": "Screenshot of the Tanks! pause, campaign round screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
   }
 ]
