@@ -1794,6 +1794,12 @@
   }
 }
 
+/* Without this the "no matches played yet" line shows over a populated table, saying the
+ * opposite of the numbers beside it. */
+.hud-stats-empty--hidden {
+  display: none;
+}
+
 /* ---- Level select panel: the numbered row inside .hud-levelselect --------------- */
 
 /* No hidden class of its own: the panel wrapper above is the one chokepoint, same as

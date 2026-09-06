@@ -1572,34 +1572,46 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
   const PRACTICE_WON: TypedOutcome = { kind: 'practice-result', cleared: true };
   const PRACTICE_LOST: TypedOutcome = { kind: 'practice-result', cleared: false };
 
-  it('keeps the word "run" off a practice ending, where there is no run', () => {
-    // The owner ruling: a practice screen must not say "this run" anywhere. The subtitle
-    // that said it is gone, and this is the OTHER place the word appeared -- the tally
-    // line, which is not part of the copy catalogue and would have kept saying it.
+  it('heads the tally "This level" on EVERY ending, because that is what it counts', () => {
+    // SUPERSEDES 'keeps the word "run" off a practice ending'. That test pinned the
+    // practice half of this rule and used the campaign half as its negative control --
+    // "a line hardcoded to This level would relabel every campaign ending too". Issue
+    // #322's owner ruling is that relabelling them is CORRECT, so the control had to be
+    // replaced rather than relaxed; the new one is below.
     //
-    // A practice session has no run at all: `campaignActive()` is false for it, so
-    // nothing it does reaches the run store. The word named the campaign run the player
-    // may well have going elsewhere, which is precisely the one these numbers are not
-    // about.
+    // The line is wrong about its DATA, not merely loose: `stats.attempt()` is zeroed on
+    // every world build (stats.ts names this exact wording as the ambiguity issue #153
+    // asks to remove), so these numbers are one try at one level. A campaign ending
+    // saying "This run" pointed at the campaign attempt the player has going elsewhere,
+    // which is the one thing they are not.
     const { hud: h, root } = mount();
     h.setStatus(atLevel(3, 5));
     const summary = (): string =>
       (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent ?? '';
 
-    drive(h, PRACTICE_LOST);
-    expect(summary()).toMatch(/^This level:/);
-    expect(summary(), 'a practice ending still said "run"').not.toContain('run');
+    for (const [name, outcome] of [
+      ['practice-lost', PRACTICE_LOST],
+      ['practice-won', PRACTICE_WON],
+      ['campaign-over', CAMPAIGN_OVER],
+      ['mission-clear', MISSION_CLEAR],
+      ['campaign-complete', CAMPAIGN_COMPLETE],
+    ] as const) {
+      drive(h, outcome);
+      expect(summary(), `${name} did not head its tally with the level`).toMatch(/^This level:/);
+      expect(summary(), `${name} still called a per-attempt tally a run`).not.toContain('run');
+    }
 
-    drive(h, PRACTICE_WON);
-    expect(summary(), 'only the failed practice ending was fixed').toMatch(/^This level:/);
-
-    // THE NEGATIVE CONTROL. Without it, a line hardcoded to "This level" reads correctly
-    // on the two screens this test drives and silently relabels every campaign ending
-    // too -- the same shape of over-broad fix the pause-label control catches.
-    drive(h, CAMPAIGN_OVER);
-    expect(summary(), 'the campaign ending was relabelled too').toMatch(/^This run:/);
+    // THE NEGATIVE CONTROL, and it has to live on a different axis now that every ending
+    // shares one word: "run" is not banned from the screen, it is banned from THIS LINE.
+    // `mission-clear` says "Your run carries on, with the lives you have left." one
+    // element above, and that is a true statement about the campaign attempt -- so a
+    // blanket purge of the word, which is the over-broad fix this rule invites, fails
+    // here rather than shipping.
     drive(h, MISSION_CLEAR);
-    expect(summary()).toMatch(/^This run:/);
+    expect(
+      (root.querySelector('.hud-subtitle') as HTMLElement).textContent,
+      'the word was purged from copy that is genuinely about the run',
+    ).toContain('run');
   });
 
   it('gives each campaign and practice ending its own copy and its own action', () => {

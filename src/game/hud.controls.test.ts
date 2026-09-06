@@ -914,6 +914,65 @@ describe('hud: the stats page', () => {
     friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0,
   };
 
+  it('names the two scopes for what they ARE: Lifetime and the current attempt', () => {
+    // Issue #322's terminology half. The second column read "This run" and had never been
+    // run-sized: `stats.attempt()` is zeroed on every world build, and stats.ts names this
+    // exact wording as the ambiguous use of `run` that issue #153 asks to remove. The
+    // store has two scopes and no third -- there is no run-sized tally to label.
+    //
+    // "Current attempt" rather than the ending screens' "This level", deliberately: this
+    // pane is reachable from the Main Menu only, with no level on screen, so "This level"
+    // would name one the player is not looking at.
+    const { hud: h, root } = mount();
+    h.setStats({ lifetime: SOME, attempt: NONE });
+    h.setState('main-menu');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+
+    const header = Array.from(
+      (root.querySelector('.hud-stats-table tr') as HTMLElement).querySelectorAll('td'),
+    ).map((c) => c.textContent);
+    expect(header).toEqual(['Lifetime', 'Current attempt']);
+
+    // The two halves of the rule, asserted as a PAIR so collapsing them into one shared
+    // string fails here: the pane must not borrow the ending screens' wording...
+    expect(header.join(' '), 'Records borrowed the ending screens\' wording').not.toContain(
+      'This level',
+    );
+    // ...and must not go back to calling a per-attempt tally a run.
+    expect(header.join(' '), 'a per-attempt tally is still called a run').not.toContain('run');
+
+    // The columns are not merely LABELLED right, they are the right way round -- a header
+    // fix that left the cells swapped would pass every assertion above.
+    expect(cell(root, 'Shell kills', 0), 'lifetime column').toBe('4');
+    expect(cell(root, 'Shell kills', 1), 'current-attempt column').toBe('0');
+  });
+
+  it('says so when nothing has been played, and gets out of the way once something has', () => {
+    // Issue #322's empty state. Eleven rows of zeros do not distinguish "you have not
+    // played" from "this is not being counted", and Records is the one screen a new
+    // player opens to find out which.
+    const { hud: h, root } = mount();
+    const line = (): HTMLElement => root.querySelector('.hud-stats-empty') as HTMLElement;
+    const shown = (): boolean => !line().classList.contains('hud-stats-empty--hidden');
+    h.setState('main-menu');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+
+    h.setStats({ lifetime: NONE, attempt: NONE });
+    expect(shown(), 'a fresh save got no explanation for its zeros').toBe(true);
+
+    // THE NEGATIVE CONTROL, and the reason the line is keyed on LIFETIME: Records opens
+    // from the Main Menu, where no attempt is in progress, so the attempt column is zero
+    // on every single open. A line keyed on that column would never go away.
+    h.setStats({ lifetime: SOME, attempt: NONE });
+    expect(shown(), 'the line outlived the first match, or is keyed on the wrong column').toBe(
+      false,
+    );
+
+    // ...and the table is still there underneath in both states -- hiding it would take
+    // away the one thing that says WHAT gets tracked.
+    expect(cell(root, 'Shell kills', 0)).toBe('4');
+  });
+
   it('opens from the title, shows both columns, and Back returns to the menu', () => {
     // Fake timers from the START, not after the click: Back now CROSSFADES rather than
     // cutting, and a timer installed after the click cannot advance one scheduled
