@@ -3591,13 +3591,29 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * the same origin rather than a two-deep stack. That is the shallow-tab shape the UI
    * direction asks for, and it is why no covering-layer support (issue #327) is needed.
    */
+  /**
+   * WHICH RECORDS TAB THE MENU BUTTON REOPENS (issue #322).
+   *
+   * Records is one destination with two tabs, and the button on the Main Menu used to open
+   * `'stats'` unconditionally -- so a player comparing achievements across runs re-clicked
+   * the tab on every visit. The issue's "restore the originating tab" is this.
+   *
+   * IN MEMORY ONLY, by owner ruling: it lasts the document and is gone on reload, so a
+   * fresh page always opens on Stats. Deliberately NOT routed through `storage.ts`, which
+   * is what "not retained from session to session" means concretely -- this is a
+   * convenience within one sitting, not a preference the player set, and persisting it
+   * would make the first screen of a new visit depend on something they did days ago.
+   */
+  let lastRecordsTab: Extract<HudLayerId, 'stats' | 'achievements'> = 'stats';
   const handleRecordsOpen = (): void => {
-    openLayer('stats', recordsOpenBtn);
+    openLayer(lastRecordsTab, recordsOpenBtn);
   };
   const handleRecordsTabStats = (): void => {
+    lastRecordsTab = 'stats';
     openLayer('stats', recordsOpenBtn);
   };
   const handleRecordsTabAchievements = (): void => {
+    lastRecordsTab = 'achievements';
     openLayer('achievements', recordsOpenBtn);
   };
   const handleStatsBack = (): void => {
