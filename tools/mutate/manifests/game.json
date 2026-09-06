@@ -5240,5 +5240,61 @@
       "hud: the stats page does NOT retain the tab across documents, which is what keeps it out of storage"
     ],
     "why": "Moves the tab memory OUT of the HUD instance and into state that outlives it -- a global here, `storage.ts` in the version someone would actually write. The owner ruled this memory lasts the sitting and is gone on reload: it is a convenience within one visit, not a preference the player set, and a persisted version would make the first screen of a visit depend on something they did days earlier. The whole block is the find string because a faithful mutation has to both READ and WRITE the outliving store -- an earlier version patched only the read, so nothing ever wrote the global, the fallback always applied and it SURVIVED. Nothing about a single mount can see this either way, which is why its test builds a whole second HUD."
+  },
+  {
+    "id": "versus-pause-exit-stays-generic",
+    "file": "src/game/hud.ts",
+    "find": "        : s === 'paused' && statusData?.kind === 'versus'\n          ? 'Main Menu'\n          : 'Quit to Title';",
+    "replace": "        : 'Quit to Title';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) names the destination at Pause wherever one can be named, and keeps the generic word where it cannot"
+    ],
+    "why": "Puts the generic word back on a paused versus match. Issue #261's contract is \"do not expose a generic Quit action when a specific destination can be named\", and here one can: a versus match shares the campaign run store but writes nothing to it, so `Quit to Title` described a cost that is not being paid -- on the one surface where the player is asking what leaving costs. The campaign and null-status arms are untouched, which is what makes the label a disagreement this panel can express rather than a constant."
+  },
+  {
+    "id": "change-setup-offered-on-every-panel",
+    "file": "src/game/hud.ts",
+    "find": "      !(shownState === 'paused' && statusData?.kind === 'versus'),",
+    "replace": "      false,",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) offers Change Setup at Pause in a versus match, and on no other panel (issue #261)"
+    ],
+    "why": "Shows Change Setup on every panel: the Main Menu, both campaign end screens, a paused campaign round. Two different wrongs at once -- a campaign session has no versus setup to change, and the versus END screen already carries its own route to the pane (issue #279's set), so a second one puts two on one panel. The test drives both axes for that reason: wrong kind and wrong surface are separate mistakes and a gate keyed on only one of them survives the other."
+  },
+  {
+    "id": "change-setup-offered-to-a-campaign-round",
+    "file": "src/game/hud.ts",
+    "find": "      !(shownState === 'paused' && statusData?.kind === 'versus'),",
+    "replace": "      shownState !== 'paused',",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) offers Change Setup at Pause in a versus match, and on no other panel (issue #261)"
+    ],
+    "why": "Keeps the SURFACE half of the gate and drops the KIND half, which is the half-fix a reader is most likely to write: Pause is obviously the right surface, and the session kind is the easier condition to forget. A paused campaign or practice round then offers a versus configuration pane. Distinct from the entry above because a test that only checked the end screens kills that one and survives this."
+  },
+  {
+    "id": "change-setup-opens-the-pane-over-a-live-match",
+    "file": "src/game/hud.ts",
+    "find": "  const handleChangeSetup = (): void => {\n    handleQuit();\n    openLayer('versus-setup', versusOpenBtn);\n  };",
+    "replace": "  const handleChangeSetup = (): void => {\n    openLayer('versus-setup', versusOpenBtn);\n    handleQuit();\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) leaves the match before opening the setup pane, through the paths that already exist"
+    ],
+    "why": "Reverses the two calls, so a configuration surface is opened over a match that is still running before the quit lands. Both orders settle to the same final state, which is why the test reads the pane's visibility from INSIDE the quit callback -- the one moment the difference is observable. `handleChooseLevel` has the identical ordering and the identical reason."
   }
 ]

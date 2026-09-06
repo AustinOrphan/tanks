@@ -1470,6 +1470,67 @@ describe('hud: the pause exit is contextual (issue #323)', () => {
       ? { kind, mission: 2, missions: 5, stocks: null }
       : { kind, mission: 2, missions: 5, lives: 3, enemies: 3 };
 
+  it('offers Change Setup at Pause in a versus match, and on no other panel (issue #261)', () => {
+    // The Pause twin of Choose Level. A versus match's configuration surface, reachable
+    // from the match itself rather than by leaving and finding it on the menu.
+    const { hud: h, root } = mount();
+    const changeSetup = (): HTMLButtonElement =>
+      root.querySelector('.hud-change-setup') as HTMLButtonElement;
+    const offered = (): boolean => !changeSetup().classList.contains('hud-change-setup--hidden');
+
+    h.setStatus(paused('versus'));
+    h.setState('paused');
+    expect(offered(), 'a paused versus match had no way back to its setup').toBe(true);
+
+    // THE NEGATIVE CONTROLS, and they are two different mistakes. Wrong KIND: a paused
+    // campaign or practice round has no versus setup to change, and the button would land
+    // on a pane prefilled for a match the player is not in.
+    for (const kind of ['campaign', 'practice'] as const) {
+      h.setStatus(paused(kind));
+      h.setState('paused');
+      expect(offered(), `a paused ${kind} round offered Change Setup`).toBe(false);
+    }
+
+    // Wrong SURFACE: the versus status stays exactly as it was, and only the panel moves.
+    // The end screen is issue #279's action set and already carries its own route to the
+    // pane, so a second one here would put two on one panel.
+    h.setStatus(paused('versus'));
+    for (const surface of ['playing', 'main-menu', 'outcome-win', 'outcome-lose'] as const) {
+      h.setState(surface);
+      expect(offered(), `Change Setup leaked onto ${surface}`).toBe(false);
+    }
+  });
+
+  it('leaves the match before opening the setup pane, through the paths that already exist', () => {
+    // The click is `handleQuit()` then `openLayer('versus-setup')`, in that order -- the
+    // same shape Choose Level uses. The ORDER is what this pins, by reading the pane's own
+    // visibility from inside the quit callback: reversing the two would sit a
+    // configuration surface over a live match, and that reading is the only moment the
+    // difference is observable, since both orders settle to the same final state.
+    //
+    // A recorder over two CALLBACKS would not do it. `handleChangeSetup` opens the layer
+    // directly rather than through the menu button's handler, so `onVersusOpen` never
+    // fires on this path -- measured, after an earlier version of this test claimed an
+    // ordered pair of events and was really asserting one event and a final state.
+    const { hud: h, root } = mount();
+    const pane = (): HTMLElement => root.querySelector('.hud-versus-setup') as HTMLElement;
+    const paneOpen = (): boolean => !pane().classList.contains('hud-versus-setup--hidden');
+    let quits = 0;
+    let paneOpenWhenQuitFired: boolean | null = null;
+    h.onQuitToTitle(() => {
+      quits += 1;
+      paneOpenWhenQuitFired = paneOpen();
+    });
+    h.setStatus(paused('versus'));
+    h.setState('paused');
+    (root.querySelector('.hud-change-setup') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+
+    expect(quits, 'Change Setup never left the match').toBe(1);
+    expect(paneOpenWhenQuitFired, 'the setup pane was opened over a live match').toBe(false);
+    expect(paneOpen(), 'the match was left but the setup pane never opened').toBe(true);
+  });
+
   it('reads End Practice at Pause, where "quit to title" would overstate the cost', () => {
     const { hud: h, root } = mount();
     h.setStatus(paused('practice'));
@@ -1480,12 +1541,20 @@ describe('hud: the pause exit is contextual (issue #323)', () => {
     expect(quitBtn(root).textContent).toBe('End Practice');
   });
 
-  it('keeps Quit to Title at Pause for every session that is NOT practice', () => {
-    // THE NEGATIVE CONTROL. Without it, writing `End Practice` unconditionally -- or
-    // keying it on anything a practice session merely happens to have -- passes the test
-    // above. Campaign is the case the wording is TRUE for; versus is issue #279's screen
-    // and is deliberately left alone; the null status is a session that has not stated
-    // its kind, where the generic word is the only honest one.
+  it('names the destination at Pause wherever one can be named, and keeps the generic word where it cannot', () => {
+    // THE NEGATIVE CONTROL for both contextual arms. Without it, writing `End Practice`
+    // or `Main Menu` unconditionally -- or keying either on something the other session
+    // merely happens to have -- passes the tests above.
+    //
+    // Campaign keeps `Quit to Title`: a run genuinely IS being left, which is the one
+    // case the generic wording is true for. A null status is a session that has not
+    // stated its kind, where the generic word is the only honest one.
+    //
+    // Versus reads `Main Menu` since issue #261, whose contract is "do not expose a
+    // generic Quit action when a specific destination can be named". It shares the
+    // campaign run store but writes nothing to it, so `Quit to Title` described a cost
+    // that is not being paid. This case previously asserted `Quit to Title` and deferred
+    // to issue #279 -- a mis-read, since #279 is the RESULTS screen and Pause is #261's.
     const { hud: h, root } = mount();
     const labelWith = (status: GameplayStatus | null): string => {
       h.setStatus(status);
@@ -1493,10 +1562,10 @@ describe('hud: the pause exit is contextual (issue #323)', () => {
       return quitBtn(root).textContent ?? '';
     };
     expect(labelWith(paused('campaign'))).toBe('Quit to Title');
-    expect(labelWith(paused('versus'))).toBe('Quit to Title');
     expect(labelWith(null)).toBe('Quit to Title');
-    // And the practice reading survives the same driver, so the three readings above are
-    // a disagreement this panel can actually express and not a constant.
+    // The two contextual readings, through the same driver, so all four are a
+    // disagreement this panel can actually express and not a constant.
+    expect(labelWith(paused('versus'))).toBe('Main Menu');
     expect(labelWith(paused('practice'))).toBe('End Practice');
   });
 

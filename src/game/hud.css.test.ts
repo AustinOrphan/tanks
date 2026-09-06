@@ -478,6 +478,9 @@ describe('hud.css is syntactically whole', () => {
       // ...and the outcome panel's own way into it (issue #323): without the hidden rule
       // Choose Level stands on the pause panel, the campaign end screens and the menu.
       '.hud-choose-level--hidden',
+      // ...and Pause's own contextual action (issue #261): without the hidden rule Change
+      // Setup stands on every panel, including sessions with no versus setup to change.
+      '.hud-change-setup--hidden',
       // Continue/New Game split: without these hidden rules both show at once, or the
       // retired single action button shows alongside them at title
       '.hud-continue--hidden', '.hud-new-game--hidden', '.hud-action--hidden',
@@ -700,8 +703,12 @@ describe('hud.css is syntactically whole', () => {
     // (`defaultSlots(2)` is `[human, bot]`). They carry `.ui-btn`/`.ui-btn--sm`, so they
     // are inside this sweep rather than falling through to browser default styling --
     // which is exactly what the sweep is for.
-    // 118 since issue #555 stopped the level grid drawing locked levels: this fixture's
-    // `setLevelSelect(2, 4)` used to build four buttons and now builds two (-2). The
+    // 119 since issue #261 added Change Setup, the pause panel's contextual versus action:
+    // one more static panel button, rendered unconditionally at construction and hidden by
+    // CSS class exactly like `.hud-choose-level` beside it, so this fixture counts it
+    // without ever showing it.
+    // It was 118 at issue #555, which stopped the level grid drawing locked levels: that
+    // fixture's `setLevelSelect(2, 4)` used to build four buttons and now builds two (-2). The
     // fixture's ARGUMENTS are the population, so this figure moves with them -- a fixture
     // that unlocked all four would pin 120 again while measuring less.
     // It was 120 at issue #323, which added the practice end screen's Choose Level
@@ -718,7 +725,7 @@ describe('hud.css is syntactically whole', () => {
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
     //                         + 1 friendly-fire toggle (Teams-only)
     //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
-    //   everything else  65  = the panels above (54 before issue #226, +10, +1, +1, +1, -2)
+    //   everything else  66  = the panels above (54 before issue #226, +10, +1, +1, +1, -2, +1)
     //
     // The +10, itemised: OUT go the topbar Mute chip, the Main Menu's Stats button and
     // its Achievements button (-3). IN come Records, Settings and About & Legal on the
@@ -734,7 +741,7 @@ describe('hud.css is syntactically whole', () => {
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(118);
+    expect(buttons.length).toBe(119);
     expect(unstyled).toEqual([]);
 
     dispose();
