@@ -24,6 +24,10 @@ function seeded(): Storage {
   const s = createMemoryStorage();
   s.setItem('tanks.progress.v1', '3');
   s.setItem('tanks.stats.v1', JSON.stringify({ shotsFired: 12, shellKills: 4 }));
+  // The campaign-run tally, seeded DIFFERENTLY from the lifetime key above: a fixture
+  // where the two agree cannot tell a round-trip that carries both apart from one that
+  // writes the lifetime blob into both slots.
+  s.setItem('tanks.stats.run.v1', JSON.stringify({ shotsFired: 5, shellKills: 2 }));
   s.setItem('tanks.custom.v1', JSON.stringify({ hull: 'green', skin: 'camo', accent: 'gold' }));
   s.setItem(SETTINGS_KEY, SEEDED_SETTINGS);
   s.setItem('tanks.achievements.v1', JSON.stringify({ earned: ['first-blood'] }));
@@ -43,10 +47,13 @@ describe('SAVE_KEYS', () => {
     // Pinned as LITERALS, not derived from the store modules: this is the wire
     // format. Renaming a store's key is a save-compatibility break and should
     // fail here rather than silently produce blobs an older build cannot read.
-    // Population: all six keys an export carries.
+    // Population: all seven keys an export carries. Six until the campaign-run tally
+    // (`tanks.stats.run.v1`) joined them -- exported with the run it describes, because a
+    // save carrying `tanks.run.v2` without it restores a run whose end screen reports zeros.
     expect(SAVE_KEYS).toEqual([
       'tanks.progress.v1',
       'tanks.stats.v1',
+      'tanks.stats.run.v1',
       'tanks.custom.v1',
       'tanks.settings.v1',
       'tanks.achievements.v1',
@@ -81,7 +88,7 @@ describe('SAVE_IMPORT_KEYS', () => {
     const storage = createMemoryStorage();
     const stores = createStores(storage);
     stores.progress.recordCleared(CAMPAIGN_LEVELS[0]);
-    stores.stats.resetLifetime();
+    stores.stats.resetStats();
     stores.customization.setHull('red');
     stores.settings.setTouchScheme('point');
     stores.achievements.reset();
@@ -109,7 +116,8 @@ describe('exportSave', () => {
     s.removeItem('tanks.achievements.v1');
     const blob = parse(exportSave(s, 'production'));
     expect('tanks.achievements.v1' in blob.keys).toBe(false);
-    expect(Object.keys(blob.keys)).toHaveLength(5);
+    // 6 of the 7 export keys: the seeded fixture writes all of them and this removes one.
+    expect(Object.keys(blob.keys)).toHaveLength(6);
   });
 
   it('never exports a key belonging to another app on the shared origin', () => {

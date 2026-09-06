@@ -2025,12 +2025,12 @@
     "find": "      const state: SlotState = {};\n      live = state;",
     "replace": "      const state: SlotState = {};\n      void state;",
     "expect": "killed",
-    "expectFailures": 105,
+    "expectFailures": 107,
     "tests": [
       "src/game/route-host.test.ts",
       "src/game/loop.test.ts"
     ],
-    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered. expectFailures tracks the size of loop.test.ts's suite rather than any property of this mutation, so it moves whenever tests are added to that file: 104 before issue #324 removed the session's duplicate settings pushes, 101 after, 102 with #324's outcome-projection coverage, and 103 once #531's world-swap announcement added its own case. Re-measured each time, never guessed. Re-measured at 105 of 520 for issue #323: the two added cases are loop.test.ts's \"also reaches the Main Menu from a LOST match, which is where it was inert\" and \"a practice RETRY rebuilds the level it was on, still as practice\", both of which dispatch through a slot that is never filled. The failing SET was compared, not the number renumbered -- the third #323 name in it, \"moving between Practice levels updates the ordinal to the level actually built\", is the same case under a new title and is not a fourth failure."
+    "why": "`attach()` hands back a slot that is never made live, so every gameplay handler a session registers is dropped on the floor: Start, Restart, level select, New Game, the two touch buttons, Quit and slot reassignment all become dead controls while the application routes keep working. 91 of 423 in the scoped run -- by far the widest blast radius of this issue's entries, because loop.test.ts drives gameplay through those handlers throughout. The breadth is the reason it is worth pinning as its own entry rather than assumed from the narrower ones: it is the difference between 'the slot mechanism is subtly wrong' and 'the game does not respond to its own buttons', and only this one states the second. COUNT RE-MEASURED for issue #428: 91 -> 96, because the start-boundary suite adds five cases that drive a session's handlers. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 96 -> 100, because route-host.test.ts gained the leaving-gameplay suite, whose cases drive a session's handlers and so also fail when the slot is never filled. The failing SET was compared, not the number renumbered. Re-measured at 101 of 458 (route-host.test.ts 37 + loop.test.ts 421) after the page took over the Main Menu paints: the added case is loop.test.ts's \"quitting a versus match leaves a campaign-shaped Main Menu behind\", whose Quit dispatches to nobody when the slot is never filled, so the versus session is never disposed and never detaches. Re-measured at 104 of 482 (route-host.test.ts 54 + loop.test.ts 428) for issue #226: the added cases are route-host.test.ts's two new page-owned paints -- the run summary and the M shortcut -- both of which read a slot that is never filled. The failing SET was compared, not the number renumbered. expectFailures tracks the size of loop.test.ts's suite rather than any property of this mutation, so it moves whenever tests are added to that file: 104 before issue #324 removed the session's duplicate settings pushes, 101 after, 102 with #324's outcome-projection coverage, and 103 once #531's world-swap announcement added its own case. Re-measured each time, never guessed. Re-measured at 105 of 520 for issue #323: the two added cases are loop.test.ts's \"also reaches the Main Menu from a LOST match, which is where it was inert\" and \"a practice RETRY rebuilds the level it was on, still as practice\", both of which dispatch through a slot that is never filled. The failing SET was compared, not the number renumbered -- the third #323 name in it, \"moving between Practice levels updates the ordinal to the level actually built\", is the same case under a new title and is not a fourth failure. Re-measured at 107 for the campaign-run tally: two new loop.test.ts cases read an outcome push through a driven session, so an attach that never fills the slot takes them with the rest."
   },
   {
     "id": "route-host-attach-does-not-invalidate-the-old-slot",
@@ -2180,26 +2180,26 @@
   {
     "id": "start-boundary-new-game-stays-on-the-run-board",
     "file": "src/game/loop.ts",
-    "find": "    level = deps.levels.levels[0];\n    if (startsCampaignRun) newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
-    "replace": "    if (startsCampaignRun) newRunLives = deps.run.startNewRun(deps.levels.levels[0].id).livesRemaining;",
+    "find": "    level = deps.levels.levels[0];\n    if (startsCampaignRun) {\n      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+    "replace": "    if (startsCampaignRun) {\n      newRunLives = deps.run.startNewRun(deps.levels.levels[0].id).livesRemaining;",
     "tests": [
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 2,
-    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes. Re-measured at 2 of 417 in loop.test.ts once the renderer-fit case \"New Game with a run parked on a wider level opens on level one's own board\" joined the file: a New Game that stays on the run's board also leaves the renderer fitted to the run's board, so that case dies to this mutation too."
+    "why": "New Game writes a fresh run at level one and then builds the board the OLD run was on. The run and the screen disagree from the first frame: the player is told they are starting again and is put back on level 8, with level one's lives. Half-right is what makes it dangerous -- the persistence write is correct, so a reload lands on the right board and the defect looks like a transient glitch. 1 of 412 -- 'campaign-new lands on level one and writes the run exactly once', whose `hudLevels` assertion is the half that fails while the `runNewRuns` half passes. Re-measured at 2 of 417 in loop.test.ts once the renderer-fit case \"New Game with a run parked on a wider level opens on level one's own board\" joined the file: a New Game that stays on the run's board also leaves the renderer fitted to the run's board, so that case dies to this mutation too. Re-anchored when the run's TALLY was paired with the run write and the one-line `if` became a block."
   },
   {
     "id": "start-boundary-new-game-never-writes-the-run",
     "file": "src/game/loop.ts",
-    "find": "    if (startsCampaignRun) newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
-    "replace": "    void startsCampaignRun;",
+    "find": "    if (startsCampaignRun) {\n      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+    "replace": "    if (false) {\n      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
     "tests": [
       "src/game/loop.test.ts"
     ],
     "expect": "killed",
     "expectFailures": 2,
-    "why": "The opposite half: New Game lands on level one and never touches the run, so the board is right and the campaign the player thinks they restarted is still sitting at level 8 with its old lives. Invisible until they quit and press Continue. Paired with the entry above so both halves of the one write this issue makes are pinned separately -- neither can stand in for the other. `void startsCampaignRun;` rather than a deletion so the guard is still read and a tsc failure cannot be mistaken for coverage. 1 of 412. Re-measured at 2 of 421 in loop.test.ts: the second case is \"a retired campaign session does not advance the run a second time from stale state\", whose New Game must create the fresh run the live session's mission-clear then advances."
+    "why": "The opposite half: New Game lands on level one and never touches the run, so the board is right and the campaign the player thinks they restarted is still sitting at level 8 with its old lives. Invisible until they quit and press Continue. Paired with the entry above so both halves of the one write this issue makes are pinned separately -- neither can stand in for the other. `void startsCampaignRun;` rather than a deletion so the guard is still read and a tsc failure cannot be mistaken for coverage. 1 of 412. Re-measured at 2 of 421 in loop.test.ts: the second case is \"a retired campaign session does not advance the run a second time from stale state\", whose New Game must create the fresh run the live session's mission-clear then advances. Re-anchored for the same block change, and expressed as a dead condition rather than a deleted statement so the paired `deps.stats.startRun()` inside the block goes with it -- which is what a New Game that writes nothing really means now."
   },
   {
     "id": "start-boundary-practice-keeps-the-campaign-identity",
@@ -4038,10 +4038,10 @@
   {
     "id": "outcome-summary-falls-back-to-the-records-payload",
     "file": "src/game/hud.ts",
-    "find": "  function renderAttemptSummary(): void {\n    if (!outcomeData) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }\n    const r = outcomeData.attempt;",
-    "replace": "  function renderAttemptSummary(): void {\n    const source = outcomeData ?? statsData;\n    if (!source) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }\n    const r = source.attempt;",
+    "find": "  function renderAttemptSummary(): void {\n    if (!outcomeData) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+    "replace": "  function renderAttemptSummary(): void {\n    if (!outcomeData) {\n      if (statsData) {\n        tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'Level attempt', statsData.attempt);\n        return;\n      }\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
     "expect": "killed",
-    "why": "The migration issue #324's step S4 performs, written as the shortcut that would have made it invisible: keep the old source working beside the new one. Both payloads carry `attempt` counts, so a fallback still renders a plausible summary line -- built from the Records table's numbers, pushed by an application route, onto a panel a gameplay session owns. Every test that pushes an outcome passes under it, which is why the split needs an assertion of its own: the discriminating case is a HUD told ONLY the Records numbers, and that HUD must show no summary at all.",
+    "why": "The migration issue #324's step S4 performs, written as the shortcut that would have made it invisible: keep the old source working beside the new one. Both payloads carry `attempt` counts, so a fallback still renders a plausible summary line -- built from the Records table's numbers, pushed by an application route, onto a panel a gameplay session owns. Every test that pushes an outcome passes under it, which is why the split needs an assertion of its own: the discriminating case is a HUD told ONLY the Records numbers, and that HUD must show no summary at all. Re-anchored when the line's body moved into the shared `tallyLineEl` helper: the mutation now adds the Records-payload fallback as a branch rather than swapping the source expression, which is the same defect through the shape the code has today.",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
@@ -4827,15 +4827,15 @@
   {
     "id": "ending-tally-calls-a-per-attempt-count-a-run",
     "file": "src/game/hud.ts",
-    "find": "    const scope = 'This level';",
-    "replace": "    const scope = 'This run';",
+    "find": "    tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'Level attempt', outcomeData.attempt);",
+    "replace": "    tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'This run', outcomeData.attempt);",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Puts the whole tally line back to \"This run\", which is wrong about the DATA and not merely loose: `stats.attempt()` is zeroed on every world build, so these numbers are one try at one level, and the words point at the campaign attempt the player has going elsewhere -- the one thing they are not. Renamed and re-anchored at issue #322: it was `practice-tally-claims-a-run-the-player-has-not-got`, pinning the PRACTICE half while campaign endings still said \"run\" by ruling. The owner's #322 ruling extended the wording to every ending, so the conditional it was anchored to is gone and the defect is now the broader one. Its sibling `every-ending-tally-reads-as-one-level` was deleted rather than re-anchored, because what that one mutated TO is now the shipped code -- it had become a no-op.",
+    "why": "Puts the whole tally line back to \"This run\", which is wrong about the DATA and not merely loose: `stats.attempt()` is zeroed on every world build, so these numbers are one try at one level, and the words point at the campaign attempt the player has going elsewhere -- the one thing they are not. Renamed and re-anchored at issue #322: it was `practice-tally-claims-a-run-the-player-has-not-got`, pinning the PRACTICE half while campaign endings still said \"run\" by ruling. The owner's #322 ruling extended the wording to every ending, so the conditional it was anchored to is gone and the defect is now the broader one. Its sibling `every-ending-tally-reads-as-one-level` was deleted rather than re-anchored, because what that one mutated TO is now the shipped code -- it had become a no-op. Re-anchored again when the two campaign endings gained a second line: the wording moved into a `tallyLineEl` argument, and the label is now `Level attempt` so it is built the same way as `Campaign run` beside it.",
     "killedBy": [
-      "hud: every ending gets its own screen (issue #323) heads the tally \"This level\" on EVERY ending, because that is what it counts"
+      "hud: every ending gets its own screen (issue #323) heads the tally \"Level attempt\" on EVERY ending, because that is what it counts"
     ]
   },
   {
@@ -4964,41 +4964,41 @@
   {
     "id": "campaign-ending-keeps-the-run-wording",
     "file": "src/game/hud.ts",
-    "find": "    const scope = 'This level';",
-    "replace": "    const scope = outcomeData.typedOutcome?.kind === 'practice-result' ? 'This level' : 'This run';",
+    "find": "    tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'Level attempt', outcomeData.attempt);",
+    "replace": "    tallyLineEl(\n      attemptSummaryEl,\n      'hud-attempt-summary--hidden',\n      outcomeData.typedOutcome?.kind === 'practice-result' ? 'Level attempt' : 'This run',\n      outcomeData.attempt,\n    );",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "The HALF-fix: practice endings corrected, campaign endings left saying \"run\". This is the code that actually shipped between issues #323 and #322, so it is the state a revert lands on rather than an invented defect -- and it is the one a reader is most likely to restore, because the conditional looks like it is being careful. The tally is per-ATTEMPT for a campaign ending too; the kind of session it came from changes nothing about what was counted. Pinned separately from `ending-tally-calls-a-per-attempt-count-a-run` because a test that only checked the practice screens kills that one and survives this.",
+    "why": "The HALF-fix: practice endings corrected, campaign endings left saying \"run\". This is the code that actually shipped between issues #323 and #322, so it is the state a revert lands on rather than an invented defect -- and it is the one a reader is most likely to restore, because the conditional looks like it is being careful. The tally is per-ATTEMPT for a campaign ending too; the kind of session it came from changes nothing about what was counted. Pinned separately from `ending-tally-calls-a-per-attempt-count-a-run` because a test that only checked the practice screens kills that one and survives this. Re-anchored for the same move into `tallyLineEl`.",
     "killedBy": [
-      "hud: every ending gets its own screen (issue #323) heads the tally \"This level\" on EVERY ending, because that is what it counts"
+      "hud: every ending gets its own screen (issue #323) heads the tally \"Level attempt\" on EVERY ending, because that is what it counts"
     ]
   },
   {
     "id": "records-columns-still-called-a-run",
     "file": "src/game/hud.ts",
-    "find": "      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;",
+    "find": "      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;",
     "replace": "      `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement.",
+    "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement. Re-anchored when the column was renamed from \"Current attempt\" to \"Level attempt\" -- one scope, one name, matching the ending screens.",
     "killedBy": [
       "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
     ]
   },
   {
-    "id": "records-borrows-the-ending-screens-wording",
+    "id": "records-column-renamed-without-its-test",
     "file": "src/game/hud.ts",
-    "find": "      `<tr><th></th><td>Lifetime</td><td>Current attempt</td></tr>${rows}`;",
-    "replace": "      `<tr><th></th><td>Lifetime</td><td>This level</td></tr>${rows}`;",
+    "find": "      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;",
+    "replace": "      `<tr><th></th><td>Lifetime</td><td>Attempt</td></tr>${rows}`;",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Collapses the two surfaces onto one word, which is the tidying this rule invites and the reason the ruling gave them different ones. An ending screen has the level ON SCREEN and just played, so \"This level\" is both natural and true there. Records is reachable from the Main Menu alone, where naming a level the player is not looking at is worse than naming the scope. Kills the paired assertion in the Records test rather than the header equality, which is what that pair exists for.",
+    "why": "Renames the column to something plausible-but-unpinned. This entry used to assert the OPPOSITE -- that Records must NOT borrow the ending screens' \"This level\" -- and the owner then ruled the two should share one label after all, which made that claim false rather than merely stale. What survives is the part that was always the point: the heading is exact copy and a test names it, so a drive-by shortening cannot slip through. Kept rather than deleted because deleting it would leave the column's wording pinned by one entry instead of two.",
     "killedBy": [
       "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
     ]
@@ -5058,5 +5058,145 @@
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
     ]
+  },
+  {
+    "id": "run-tally-counts-practice-and-versus",
+    "file": "src/game/stats.ts",
+    "find": "      if (!countsTowardRun) return;",
+    "replace": "      if (false) return;",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope accumulates only when the caller says this session counts toward the run"
+    ],
+    "why": "Drops the ONE gate that keeps practice, the sandbox, a dev-flag jump and versus out of the CAMPAIGN run's total, so the number stops being reconcilable with the campaign the player just played. An earlier version of this entry removed a second, redundant guard inside `bump` and SURVIVED -- with two guards for one rule neither is load-bearing, and the production code was simplified to a single gate rather than the entry weakened. Recorded because the redundancy read as defence in depth and was the opposite."
+  },
+  {
+    "id": "run-tally-never-persisted",
+    "file": "src/game/stats.ts",
+    "find": "      writeRaw(RUN_STATS_KEY, runTally);\n    },\n  };",
+    "replace": "    },\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope SURVIVES the tab closing, which is the entire reason it is persisted"
+    ],
+    "why": "Accumulates the run tally in memory and never writes it, which is the whole design decision reversed in one line. Everything passes within a single browser session -- which is how a campaign is usually played while testing -- and a campaign spread over two sittings silently reports only the second one, on the screen built to report it. Anchored on the tail of `record` plus the closing brace, because `writeRaw(RUN_STATS_KEY, runTally)` also appears in `startRun` and `resetStats` and those writes are a different claim."
+  },
+  {
+    "id": "run-tally-shadow-never-resynced",
+    "file": "src/game/stats.ts",
+    "find": "    runTally = read(storage, RUN_STATS_KEY);\n  }",
+    "replace": "  }",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope adopts another tab's New Game rather than outranking it with a stale shadow"
+    ],
+    "why": "Leaves the run tally out of the resync, so this instance's shadow outranks disk forever -- PR #62's defect class, on the second persisted scope. A New Game or a Reset stats performed in another tab is undone by the next frame this tab records. Caught by the reload case because a second store instance reads disk at construction and then accumulates on top of a shadow the first instance's writes are still overwriting. Pinned by the cross-tab case rather than the reload one: a second store instance reads disk at construction either way, so only a tab that keeps RECORDING after another has reset can see a shadow outrank disk."
+  },
+  {
+    "id": "new-campaign-inherits-the-old-runs-tally",
+    "file": "src/game/stats.ts",
+    "find": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) runTally[key] = 0;\n      writeRaw(RUN_STATS_KEY, runTally);",
+    "replace": "      writeRaw(RUN_STATS_KEY, runTally);",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope startRun zeroes the run tally and ONLY the run tally"
+    ],
+    "why": "`startRun` stops zeroing, so every campaign after the first reports the sum of all of them. The write stays, which is what makes this worth its own entry rather than folding into a deleted-body mutation: the store still looks busy and still persists, it just persists the wrong number."
+  },
+  {
+    "id": "new-campaign-wipes-the-lifetime-tally",
+    "file": "src/game/stats.ts",
+    "find": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) runTally[key] = 0;\n      writeRaw(RUN_STATS_KEY, runTally);",
+    "replace": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) {\n        runTally[key] = 0;\n        life[key] = 0;\n      }\n      writeRaw(RUN_STATS_KEY, runTally);\n      writeRaw(STATS_KEY, life);",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope startRun zeroes the run tally and ONLY the run tally"
+    ],
+    "why": "The opposite error, and the more destructive one: pressing New Game erases the player's whole history. Plausible precisely because the two scopes now sit next to each other in this file and `resetStats` legitimately clears both -- copying its body into `startRun` is a one-paste mistake. The `ONLY the run tally` half of the test is what stands between that and a shipped data-loss bug."
+  },
+  {
+    "id": "reset-stats-leaves-the-run-tally-behind",
+    "file": "src/game/stats.ts",
+    "find": "      writeRaw(STATS_KEY, life);\n      writeRaw(RUN_STATS_KEY, runTally);\n    },\n    record(",
+    "replace": "      writeRaw(STATS_KEY, life);\n    },\n    record(",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope resetStats clears BOTH persisted scopes, so erased history cannot come back"
+    ],
+    "why": "Reset stats zeroes the run tally in memory but never persists that, so the erased numbers come back on the next reload and appear on the next end screen. The in-memory clear is what hides it: everything looks right until the page is reloaded, which is exactly when a player checks that a reset worked."
+  },
+  {
+    "id": "session-feeds-every-frame-to-the-run-tally",
+    "file": "src/game/loop.ts",
+    "find": "      deps.stats.record(events, playerId ?? -1, campaignActive());",
+    "replace": "      deps.stats.record(events, playerId ?? -1, true);",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: stats wiring tells the store whether the frame counts toward the campaign run"
+    ],
+    "why": "The session stops asking whether this world is campaign play. The store's own gate is intact and correct; the caller just always says yes, so practice and the sandbox reach the campaign total anyway. This is the half a store-level test cannot see, which is why the gate is pinned on both sides of the seam."
+  },
+  {
+    "id": "new-run-keeps-the-previous-runs-tally",
+    "file": "src/game/loop.ts",
+    "find": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;\n      // The run's TALLY starts over with the run itself. Paired at every `startNewRun`\n      // call rather than folded into the run store, because run.ts is a pure key-value\n      // store that deliberately knows nothing about statistics.\n      deps.stats.startRun();",
+    "replace": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: the start boundary (issue #428) campaign-new lands on level one and writes the run exactly once"
+    ],
+    "why": "Replaces the run record without replacing its tally, so the new campaign's end screen reports the previous campaign's numbers on top of its own. The pairing is a convention rather than something the type system enforces -- run.ts is a pure key-value store that deliberately knows nothing about statistics -- so nothing but this test holds the two `startNewRun`/`startRun` call sites together. An earlier version wrapped the call in `if (false)` and left a dangling statement the suite could not even collect; deleting the line is the mutation a real revert would make. Pinned at the START BOUNDARY, which is a different call site from the in-session New Game button's: an earlier version of this entry was declared against a test driving `hud.newGame()` and SURVIVED, because that path reaches a different `startNewRun` altogether. Three call sites, and each needs its own net."
+  },
+  {
+    "id": "run-total-shown-on-every-ending",
+    "file": "src/game/loop.ts",
+    "find": "      typedOutcome?.kind === 'campaign-complete' || typedOutcome?.kind === 'campaign-over'\n        ? deps.stats.run()\n        : undefined;",
+    "replace": "      deps.stats.run();",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: stats wiring sends the run total ONLY on the two endings that finish a run"
+    ],
+    "why": "Resolves a run total for every ending, so `mission-clear` shows a running campaign figure on every level and the practice and versus screens show a campaign the player was not playing. `mission-clear` is the sharp case: it IS campaign play and it IS mid-run, so a gate written as \"is this a campaign session\" instead of \"did this end a run\" looks correct and is not. The HUD hides the line by ABSENCE, so it has no second opinion to catch this with. Killed at the SESSION, not in the HUD: `hud.surfaces.test.ts` builds its own payload, so it proves the HUD renders a total when given one and hides the line when not -- it cannot see which endings the session resolves one for. That is this entry's claim, and it needed a loop case driving a real winning frame."
+  },
+  {
+    "id": "run-total-line-never-hidden",
+    "file": "src/game/hud.ts",
+    "find": "    const run = outcomeData?.run;\n    if (!run) {\n      runTallyEl.classList.add('hud-run-tally--hidden');\n      return;\n    }",
+    "replace": "    const run = outcomeData?.run ?? outcomeData?.attempt;\n    if (!run) {\n      runTallyEl.classList.add('hud-run-tally--hidden');\n      return;\n    }",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) reports the whole campaign run beside the level attempt, on the two endings that finish one"
+    ],
+    "why": "Falls back to the ATTEMPT tally when no run was resolved, so every ending carries a second line that duplicates the first under a label claiming it is the campaign. Worse than showing nothing, and the shape a well-meaning \"avoid the empty element\" edit takes: the line is present, populated and plausible on screens that have no run at all."
   }
 ]

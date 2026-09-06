@@ -1413,8 +1413,21 @@
   color: #fff;
 }
 
+/* THE STACKED TALLY LINES: the level attempt, the campaign run, and the coop/versus
+ * per-player readouts. They share `margin-bottom: 0` for a reason that is not tidiness.
+ *
+ * The panel is a flex column with `gap: 14px`, and flex `gap` does NOT collapse margins.
+ * These are `<p>` elements, so each carried the browser's default 1em bottom margin --
+ * 16px that simply added to the gap. Measured on the campaign-complete screen: title to
+ * attempt was 8px (14 gap, less the -6 pull), attempt to run 24px. Two lines meant to be
+ * read as a pair sat three times further apart than either sat from the heading.
+ *
+ * It was invisible until this screen because only ONE of these lines had ever been shown
+ * at a time; the 16px went between the tally and the action button, where nothing was
+ * being compared. The coop screen had the same latent gap and gets the same fix. */
 .hud-attempt-summary {
   margin-top: -6px;
+  margin-bottom: 0;
   opacity: 0.9;
   font-variant-numeric: tabular-nums;
 }
@@ -1426,6 +1439,7 @@
 /* Coop's per-player kill tally -- one line below the attempt summary. */
 .hud-coop-kills {
   margin-top: -6px;
+  margin-bottom: 0;
   opacity: 0.9;
   font-variant-numeric: tabular-nums;
 }
@@ -1438,6 +1452,7 @@
    .hud-coop-kills precedent, one line below it. */
 .hud-versus-results {
   margin-top: -6px;
+  margin-bottom: 0;
   opacity: 0.9;
   font-variant-numeric: tabular-nums;
 }
@@ -1792,6 +1807,25 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* The campaign-run tally, directly under the level attempt's. `margin-top` matches
+ * `.hud-coop-kills`, the existing "one line below the attempt summary" precedent, and it
+ * is what makes the two read as a PAIR: measured at the default paragraph spacing they
+ * sat far enough apart to read as two unrelated facts, which defeats the whole reason
+ * both scopes are on screen. Found in a capture, not by a test -- no assertion about
+ * text content can see it. */
+.hud-run-tally {
+  margin-top: -6px;
+  margin-bottom: 0;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Without this the campaign-run tally shows on every ending, reporting a campaign on the
+ * practice and versus screens that have nothing to do with one. */
+.hud-run-tally--hidden {
+  display: none;
 }
 
 /* Without this the "no matches played yet" line shows over a populated table, saying the

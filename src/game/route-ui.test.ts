@@ -363,7 +363,7 @@ describe('the application routes work with no gameplay session behind them', () 
 
   it('resetting stats and progress works from the routes alone', () => {
     const f = fixture();
-    f.deps.stats.record([{ type: 'fire', ownerId: 0 }] as never, 0);
+    f.deps.stats.record([{ type: 'fire', ownerId: 0 }] as never, 0, false);
     // Recorded first, and asserted, so the reset below has something real to clear --
     // otherwise "it is 0 afterwards" would hold on a store that never counted at all.
     expect(f.deps.stats.lifetime().shotsFired).toBe(1);
@@ -388,6 +388,7 @@ describe('the application routes work with no gameplay session behind them', () 
     f.deps.stats.record(
       [{ type: 'tank-destroyed', tankId: 2, kind: 'enemy', by: { ownerId: 7, source: 'shell' } }] as never,
       7,
+      false,
     );
     f.deps.achievements.check({
       lifetime: f.deps.stats.lifetime(),

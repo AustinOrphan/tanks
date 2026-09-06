@@ -1,5 +1,5 @@
 import { PROGRESS_KEY } from './progress';
-import { STATS_KEY } from './stats';
+import { RUN_STATS_KEY, STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { SETTINGS_KEY } from './settings';
@@ -57,6 +57,9 @@ export const SAVE_VERSION = 1;
 export const SAVE_KEYS: readonly string[] = Object.freeze([
   PROGRESS_KEY,
   STATS_KEY,
+  // The campaign run's own tally. Exported with the run it describes: a save carrying
+  // `tanks.run.v2` but not this would restore a run whose end screen reported zeros.
+  RUN_STATS_KEY,
   CUSTOM_KEY,
   SETTINGS_KEY,
   ACHIEVEMENTS_KEY,

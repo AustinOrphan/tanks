@@ -247,8 +247,9 @@ interface Recorder {
   fireSignals: number;
   cleared: number[];
   progressResets: number;
-  statBatches: Array<{ count: number; playerId: number }>;
+  statBatches: Array<{ count: number; playerId: number; countsTowardRun: boolean }>;
   statAttemptStarts: number;
+  statRunStarts: number;
   statResets: number;
   statPushes: number;
   /**
@@ -539,6 +540,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     progressResets: 0,
     statBatches: [],
     statAttemptStarts: 0,
+    statRunStarts: 0,
     statResets: 0,
     statPushes: 0,
     outcomePushes: [],
@@ -1463,24 +1465,35 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // which is exactly how the win-ordering defect stayed invisible.
       let attempt = { ...ZERO_STATS };
       let lifetime = { ...ZERO_STATS };
-      const fold = (events: SimEvent[]): void => {
+      let runTally = { ...ZERO_STATS };
+      // `countsTowardRun` is MODELLED, not ignored: the run tally is the one scope the
+      // session can be wrong about, and a fake that folded every frame into it would make
+      // the practice/versus exclusion untestable from here.
+      const fold = (events: SimEvent[], countsTowardRun: boolean): void => {
         const kills = events.filter((e) => e.type === 'tank-destroyed').length;
         attempt = { ...attempt, shellKills: attempt.shellKills + kills };
         lifetime = { ...lifetime, shellKills: lifetime.shellKills + kills };
+        if (countsTowardRun) runTally = { ...runTally, shellKills: runTally.shellKills + kills };
       };
       return {
         lifetime: () => ({ ...lifetime }),
         attempt: () => ({ ...attempt }),
-        record: (events: SimEvent[], playerId: number) => {
-          rec.statBatches.push({ count: events.length, playerId });
-          fold(events);
+        run: () => ({ ...runTally }),
+        record: (events: SimEvent[], playerId: number, countsTowardRun: boolean) => {
+          rec.statBatches.push({ count: events.length, playerId, countsTowardRun });
+          fold(events, countsTowardRun);
         },
         startAttempt: () => {
           attempt = { ...ZERO_STATS };
           rec.statAttemptStarts += 1;
         },
-        resetLifetime: () => {
+        startRun: () => {
+          runTally = { ...ZERO_STATS };
+          rec.statRunStarts += 1;
+        },
+        resetStats: () => {
           lifetime = { ...ZERO_STATS };
+          runTally = { ...ZERO_STATS };
           rec.statResets += 1;
         },
       };
@@ -3109,6 +3122,12 @@ describe('startGameWith: the start boundary (issue #428)', () => {
     // one's synthetic id is '0'. Exactly one entry: a boundary that wrote twice would
     // land on level one either way, and only the count tells the two apart.
     expect(h.rec.runNewRuns, 'New Game did not start exactly one fresh run').toEqual([0]);
+    // ...and the run's TALLY is replaced with it, exactly once. Counted for the same
+    // reason: a boundary that started two runs and one tally, or one run and two
+    // tallies, leaves the player on level one either way. The pairing is a convention
+    // -- run.ts knows nothing about statistics -- so this call site is the only thing
+    // holding it, and it is a DIFFERENT site from the in-session New Game button's.
+    expect(h.rec.statRunStarts, 'the run tally was not replaced with the run').toBe(1);
     handle.dispose();
   });
 
@@ -3118,6 +3137,8 @@ describe('startGameWith: the start boundary (issue #428)', () => {
    * be broken -- the in-session Levels handler was the only one before.
    */
   it('practice lands on the picked level and leaves the run untouched', () => {
+    // "Untouched" includes its TALLY: a practice pick that zeroed the run's statistics
+    // would leave the run itself intact and silently erase what it had counted.
     const h = makeDeps({ levelCount: 5, levelStart: 3, savedRun: { level: 3, lives: 2 }, tracksProgress: true });
     const handle = startGameWith(document.createElement('canvas'), h.deps, h.routeHost, {
       kind: 'practice',
@@ -3125,6 +3146,7 @@ describe('startGameWith: the start boundary (issue #428)', () => {
     });
     expect(h.rec.hudLevels.at(-1), 'the pick did not reach the board').toEqual([2, 5]);
     expect(h.rec.runNewRuns, 'a Practice pick started a run').toHaveLength(0);
+    expect(h.rec.statRunStarts, 'a Practice pick zeroed the campaign run tally').toBe(0);
     // Fresh lives, not the run's: practice is isolated play.
     expect(h.rec.lives.at(-1), 'practice adopted the run\'s lives').not.toBe(2);
     handle.dispose();
@@ -5512,6 +5534,118 @@ describe('startGameWith: stats wiring', () => {
     const player = world.tanks.find((t) => t.kind === 'player')!;
     for (const b of h.rec.statBatches) expect(b.playerId).toBe(player.id);
     h.handle.dispose();
+  });
+
+  it('tells the store whether the frame counts toward the campaign run', () => {
+    // The run tally's gate, at the one place that decides it. `campaignActive()` is the
+    // SAME signal the run store is written behind, so a practice level, the sandbox, a
+    // dev-flag jump and a versus match all record lifetime and attempt statistics while
+    // leaving the campaign's own total alone -- exactly as they leave its position and
+    // its lives alone.
+    const world = { ...createArenaWorld(1), roundStartTick: -100000 };
+    world.mines.push({ id: 500, ownerId: 99, pos: { x: 1, y: 1 }, timer: 0.001, armed: true, detonated: false });
+
+    const campaign = boot(makeDeps({ world }));
+    campaign.setState('playing');
+    campaign.fireFrame(100);
+    expect(campaign.rec.statBatches.length, 'the frame was not eventful').toBeGreaterThan(0);
+    expect(
+      campaign.rec.statBatches.every((b) => b.countsTowardRun),
+      'a campaign frame was excluded from the run tally',
+    ).toBe(true);
+    campaign.handle.dispose();
+
+    // THE NEGATIVE CONTROL: the sandbox does not track progress, so it must not feed the
+    // run either. Without it a hardcoded `true` passes everything above.
+    const sandbox = boot(makeDeps({ world: { ...world }, tracksProgress: false }));
+    sandbox.setState('playing');
+    sandbox.fireFrame(100);
+    expect(sandbox.rec.statBatches.length, 'the sandbox frame was not eventful').toBeGreaterThan(0);
+    expect(
+      sandbox.rec.statBatches.some((b) => b.countsTowardRun),
+      'a session that tracks no progress fed the campaign run tally',
+    ).toBe(false);
+    sandbox.handle.dispose();
+  });
+
+  it('starts a fresh RUN tally exactly where it starts a new run, and not on a level pick', () => {
+    // Paired with `deps.run.startNewRun` at every one of its call sites: a run whose
+    // record was replaced but whose tally was not would report the PREVIOUS campaign's
+    // numbers on this one's end screen.
+    const h = boot(makeDeps({ levelCount: 3 }));
+    const before = h.rec.statRunStarts;
+    h.hud.newGame();
+    expect(h.rec.runNewRuns.length, 'New Game did not start a run').toBeGreaterThan(0);
+    expect(h.rec.statRunStarts, 'the run tally was not reset with the run').toBe(before + 1);
+
+    // THE NEGATIVE CONTROL. A Levels pick is PRACTICE -- it starts no run (see
+    // `onLevelSelect`), so it must not zero the tally of the run the player still has
+    // going. A `startRun()` folded into every world build would fail here.
+    const atPick = h.rec.statRunStarts;
+    h.hud.pickLevel(1);
+    expect(h.rec.runNewRuns.length, 'a level pick started a run').toBe(1);
+    expect(h.rec.statRunStarts, 'practice reset the campaign run tally').toBe(atPick);
+    h.handle.dispose();
+  });
+
+  it('sends the run total ONLY on the two endings that finish a run', () => {
+    // The other half of the gate, and the half no HUD test can see: `hud.surfaces.test.ts`
+    // pushes an outcome payload it built itself, so it proves the HUD renders a run total
+    // when given one and hides the line when not. What it cannot prove is which endings
+    // the SESSION resolves one for -- which is this.
+    //
+    // `mission-clear` is the case that makes the gate worth pinning. It IS campaign play
+    // and it IS mid-run, so a condition written as "is this a campaign session" instead of
+    // "did this end a run" looks right and puts a running campaign total on every level.
+    // Driven through the PRODUCTION classifier, the same way the typed-outcome cases
+    // below are: the kind is what gates this, so a fixture that asserted the kind it had
+    // itself supplied would be checking its own arithmetic.
+    const runOn = (h: ReturnType<typeof boot>, kind: string): boolean | undefined => {
+      const push = h.rec.outcomePushes.filter((o) => o.typedOutcome?.kind === kind).at(-1);
+      return push === undefined ? undefined : push.run !== undefined;
+    };
+
+    // Driven through a REAL winning frame, which is the only way the typed outcome
+    // reaches a push: `pushOutcome(driver.world, sm.outcome)` fires from `onFrameEvents`,
+    // so a bare `setState('outcome-win')` classifies the ending but pushes nothing. The
+    // player's bullet is placed on the last enemy, the frame runs, the classifier flips
+    // the surface, and the push for THAT batch carries the outcome -- production's own
+    // "a beat after the state flips" ordering.
+    const winFrame = (h: ReturnType<typeof boot>): void => {
+      const world = h.rec.builtWorlds.at(-1)!;
+      const player = world.tanks.find((t: Tank) => t.kind === 'player')!;
+      const enemy = world.tanks.find((t: Tank) => t.kind !== 'player')!;
+      // Down to ONE enemy, in place, so destroying it is the last kill and the frame
+      // really produces a win rather than a kill the classifier shrugs at.
+      world.tanks = [player, enemy];
+      world.bullets.push({
+        id: 902, ownerId: player.id, type: 'normal', pos: { x: enemy.pos.x, y: enemy.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+    };
+
+    // ONE level, so the only win available is the one that finishes the campaign.
+    const done = boot(makeDeps({ levelCount: 1, savedRun: { level: 0, lives: LIVES } }));
+    done.hud.startRestart();
+    winFrame(done);
+    expect(done.rec.typedOutcomes.at(-1)?.kind, 'the fixture did not finish the campaign').toBe(
+      'campaign-complete',
+    );
+    expect(runOn(done, 'campaign-complete'), 'the finished run carried no total').toBe(true);
+    done.handle.dispose();
+
+    // THE NEGATIVE CONTROL: three levels, so the same winning frame is mission-clear and
+    // the run carries on. Without it a payload that always resolved a total passes above.
+    const mid = boot(makeDeps({ levelCount: 3, savedRun: { level: 0, lives: LIVES } }));
+    mid.hud.startRestart();
+    winFrame(mid);
+    expect(mid.rec.typedOutcomes.at(-1)?.kind, 'the fixture did not reach mission-clear').toBe(
+      'mission-clear',
+    );
+    expect(runOn(mid, 'mission-clear'), 'a mid-run level reported a campaign total').toBe(false);
+    mid.handle.dispose();
   });
 
   it('starts a fresh attempt tally at boot and on every level switch -- and NOT on a quit', () => {

@@ -339,7 +339,7 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   hud.onRecordsOpen(paintRecords);
 
   hud.onResetStats(() => {
-    deps.stats.resetLifetime();
+    deps.stats.resetStats();
     // Through the shared painter, which also re-reads the achievements half this button
     // does not touch. That is a repaint of an unchanged set, not a claim that Reset stats
     // clears anything else: one painter for one surface is what stops the two tabs
