@@ -1542,9 +1542,10 @@ describe('hud: the pause exit is contextual (issue #323)', () => {
     // Driven through the pane's own controls rather than a seeded store, so this reads
     // what a player would see: they pick, they start, they pause, they change setup.
     const { hud: h, root } = mount();
-    const pick = (row: string, attr: string, value: string): void =>
+    const pick = (row: string, attr: string, value: string): void => {
       (root.querySelector(`.hud-versus-${row}-row [data-${attr}="${value}"]`) as HTMLButtonElement)
         .dispatchEvent(new MouseEvent('click'));
+    };
     const chosen = (row: string, attr: string): string | null => {
       const on = root.querySelector(
         `.hud-versus-${row}-row [aria-pressed="true"]`,
