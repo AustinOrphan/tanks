@@ -16,6 +16,22 @@ import type { SimEvent } from '../sim/events';
  */
 export const STATS_KEY = 'tanks.stats.v1';
 
+/**
+ * The CAMPAIGN RUN tally's own key (issue #322 follow-up).
+ *
+ * A separate key rather than a field beside the lifetime counts, because the two have
+ * different lifetimes and one of them is destroyed on a schedule the other must survive:
+ * a run is zeroed at New Game, lifetime only at Reset stats. Merging them would make
+ * every run reset a read-modify-write of the lifetime totals as well, which is the exact
+ * shape of the defect PR #62 fixed here once already.
+ *
+ * PERSISTED, and that is the whole point rather than an implementation detail: a run
+ * survives closing the tab -- that is what `tanks.run.v2` is for -- so a tally that did
+ * not would silently undercount any campaign played over more than one sitting, and
+ * undercount it on the one screen that exists to report it.
+ */
+export const RUN_STATS_KEY = 'tanks.stats.run.v1';
+
 export interface StatCounts {
   shotsFired: number;
   shellKills: number;
@@ -43,18 +59,52 @@ export const ZERO_STATS: StatCounts = Object.freeze({
 export interface StatsStore {
   lifetime(): StatCounts;
   attempt(): StatCounts;
-  /** Fold one frame's events in, attributed against the CURRENT world's player id. */
-  record(events: SimEvent[], playerId: number): void;
+  /**
+   * The CAMPAIGN RUN tally: everything since New Game, across every level and every
+   * retry, and nothing else. The missing middle between `attempt` (one try at one level)
+   * and `lifetime` (this browser, forever).
+   *
+   * Practice and versus are EXCLUDED -- see `record`'s `countsTowardRun`. They do not
+   * touch the run store either, and a tally that counted them would report a number the
+   * player cannot reconcile with the campaign they just played.
+   */
+  run(): StatCounts;
+  /**
+   * Fold one frame's events in, attributed against the CURRENT world's player id.
+   *
+   * `countsTowardRun` is the caller's answer to "is this session part of the active
+   * campaign run": `loop.ts` passes its own `campaignActive()`, the same gate that
+   * decides whether the run STORE may be written. Required rather than defaulted,
+   * because the safe value differs by call site and a default would pick one silently.
+   */
+  record(events: SimEvent[], playerId: number, countsTowardRun: boolean): void;
   /** A new attempt begins (level switch, quit, retry): zero the attempt tally only. */
   startAttempt(): void;
-  /** The two-click-confirmed reset. Lifetime only; the attempt tally is already ephemeral. */
-  resetLifetime(): void;
+  /**
+   * A new campaign run begins: zero the run tally only.
+   *
+   * Called at New Game, NOT at the end of a run -- `endRun()` destroys the run record at
+   * exactly the moment the completion screen wants to report on it. Clearing forward
+   * instead means the finished run's numbers are still there to render, and are replaced
+   * only when the player starts another one.
+   */
+  startRun(): void;
+  /**
+   * The two-click-confirmed reset. Clears the lifetime AND run tallies; the attempt
+   * tally is already ephemeral.
+   *
+   * Named `resetStats`, not `resetLifetime`, since it stopped being lifetime-only: a
+   * player who has just erased their history must not meet numbers from it on the next
+   * end screen, and a method whose name covered one of the two scopes it clears is the
+   * kind of quiet inaccuracy this file's own doc comments exist to prevent.
+   */
+  resetStats(): void;
 }
 
-function read(storage: Storage): StatCounts {
+function read(storage: Storage, key: string): StatCounts {
   let raw: string | null = null;
   try {
-    raw = storage.getItem(STATS_KEY);
+    raw = storage.getItem(key);
   } catch {
     return { ...ZERO_STATS };
   }
@@ -80,8 +130,9 @@ function read(storage: Storage): StatCounts {
 }
 
 export function createStatsStore(storage: Storage): StatsStore {
-  let life = read(storage);
+  let life = read(storage, STATS_KEY);
   let attempt: StatCounts = { ...ZERO_STATS };
+  let runTally = read(storage, RUN_STATS_KEY);
 
   // Flips to false the first time a write catches an exception, and never flips
   // back. Guards resync() below -- same convention as run.ts's storageIsWritable
@@ -92,9 +143,9 @@ export function createStatsStore(storage: Storage): StatsStore {
   // always read -- never this instance's own writes).
   let storageIsWritable = true;
 
-  function writeRaw(counts: StatCounts): void {
+  function writeRaw(key: string, counts: StatCounts): void {
     try {
-      storage.setItem(STATS_KEY, JSON.stringify(counts));
+      storage.setItem(key, JSON.stringify(counts));
     } catch {
       // Private mode or quota: the in-memory tally carries the session.
       storageIsWritable = false;
@@ -120,32 +171,57 @@ export function createStatsStore(storage: Storage): StatsStore {
    */
   function resync(): void {
     if (!storageIsWritable) return;
-    life = read(storage);
+    life = read(storage, STATS_KEY);
+    // The RUN tally gets the same treatment and for the same reason, not as symmetry: it
+    // is the second accumulating, persisted scope, so it has the same stale-shadow hazard
+    // -- a New Game or a Reset stats in another tab must stay applied here rather than
+    // being outranked forever by this instance's higher running total.
+    runTally = read(storage, RUN_STATS_KEY);
   }
 
   return {
     lifetime: () => ({ ...life }),
     attempt: () => ({ ...attempt }),
+    run: () => ({ ...runTally }),
     startAttempt(): void {
       attempt = { ...ZERO_STATS };
     },
-    resetLifetime(): void {
+    startRun(): void {
+      // Same "no resync" reasoning as resetStats below: starting a run is an explicit
+      // action allowed to replace whatever disk holds, not a delta on top of it.
+      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) runTally[key] = 0;
+      writeRaw(RUN_STATS_KEY, runTally);
+    },
+    resetStats(): void {
       // Deliberately does NOT call resync(): reset is the one explicit action
       // allowed to replace whatever disk currently holds, the same way run.ts's
       // startNewRun skips refreshShadowIfEnded -- see resync's doc comment.
-      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) life[key] = 0;
-      writeRaw(life); // a direct write, NOT resync+persist: that would instantly resurrect the numbers just erased
+      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) {
+        life[key] = 0;
+        runTally[key] = 0;
+      }
+      // Direct writes, NOT resync+persist: that would instantly resurrect the numbers
+      // just erased. Both keys, because both scopes were just cleared -- a run tally left
+      // on disk would put erased history back on the next end screen.
+      writeRaw(STATS_KEY, life);
+      writeRaw(RUN_STATS_KEY, runTally);
     },
-    record(events: SimEvent[], playerId: number): void {
+    record(events: SimEvent[], playerId: number, countsTowardRun: boolean): void {
       // Deltas accumulate here, NOT directly into `life`: resync() below must
       // replace `life` with a fresh disk read before this call's increments are
       // added on top, and it can only do that if `life` was never mutated
       // mid-loop.
       const delta: Partial<Record<keyof StatCounts, number>> = {};
+      // The run tally accumulates as a DELTA for the same reason lifetime does: `resync()`
+      // below replaces both shadows with a fresh disk read before this call's increments
+      // are applied, and it can only do that if neither was mutated mid-loop. `attempt` is
+      // exempt because it is never persisted and never resynced.
+      const runDelta: Partial<Record<keyof StatCounts, number>> = {};
       let changed = false;
       const bump = (key: keyof StatCounts): void => {
         delta[key] = (delta[key] ?? 0) + 1;
         attempt[key] += 1; // purely in-memory per attempt; never persisted, never resynced
+        if (countsTowardRun) runDelta[key] = (runDelta[key] ?? 0) + 1;
         changed = true;
       };
       for (const e of events) {
@@ -192,7 +268,15 @@ export function createStatsStore(storage: Storage): StatsStore {
       for (const key of Object.keys(delta) as Array<keyof StatCounts>) {
         life[key] += delta[key] ?? 0;
       }
-      writeRaw(life);
+      writeRaw(STATS_KEY, life);
+      // Only when this session counts toward the run, and only when it actually moved
+      // something: a practice or versus frame writes the lifetime key and leaves the run
+      // key untouched, which is what keeps a campaign total reconcilable with the campaign.
+      if (!countsTowardRun) return;
+      for (const key of Object.keys(runDelta) as Array<keyof StatCounts>) {
+        runTally[key] += runDelta[key] ?? 0;
+      }
+      writeRaw(RUN_STATS_KEY, runTally);
     },
   };
 }

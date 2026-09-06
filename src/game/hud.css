@@ -1794,6 +1794,12 @@
   }
 }
 
+/* Without this the campaign-run tally shows on every ending, reporting a campaign on the
+ * practice and versus screens that have nothing to do with one. */
+.hud-run-tally--hidden {
+  display: none;
+}
+
 /* Without this the "no matches played yet" line shows over a populated table, saying the
  * opposite of the numbers beside it. */
 .hud-stats-empty--hidden {

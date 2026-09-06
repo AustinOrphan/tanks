@@ -3,7 +3,7 @@
 // Storage paranoia mirrors progress.ts: corrupt reads as zeros, throwing storage
 // degrades to in-memory.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createStatsStore, ZERO_STATS, STATS_KEY, type StatCounts } from './stats';
+import { createStatsStore, ZERO_STATS, STATS_KEY, RUN_STATS_KEY, type StatCounts } from './stats';
 import type { SimEvent } from '../sim/events';
 
 const P = 16; // the player's tank id in these fixtures
@@ -29,7 +29,7 @@ beforeEach(() => localStorage.clear());
 describe('createStatsStore: attribution rules', () => {
   function afterEvents(events: SimEvent[]): { life: StatCounts; attempt: StatCounts } {
     const s = createStatsStore(localStorage);
-    s.record(events, P);
+    s.record(events, P, false);
     return { life: s.lifetime(), attempt: s.attempt() };
   }
 
@@ -82,7 +82,7 @@ describe('createStatsStore: attribution rules', () => {
 describe('createStatsStore: attempt vs lifetime', () => {
   it('startAttempt zeroes the attempt tally and leaves the lifetime alone', () => {
     const s = createStatsStore(localStorage);
-    s.record([fire(P)], P);
+    s.record([fire(P)], P, false);
     s.startAttempt();
     expect(s.attempt()).toEqual(ZERO_STATS);
     expect(s.lifetime().shotsFired).toBe(1);
@@ -90,7 +90,7 @@ describe('createStatsStore: attempt vs lifetime', () => {
 
   it('lifetime persists across store instances; the attempt does not', () => {
     const a = createStatsStore(localStorage);
-    a.record([fire(P), killed('brown', 'shell', P)], P);
+    a.record([fire(P), killed('brown', 'shell', P)], P, false);
     const b = createStatsStore(localStorage);
     expect(b.lifetime().shotsFired).toBe(1);
     expect(b.lifetime().shellKills).toBe(1);
@@ -99,8 +99,8 @@ describe('createStatsStore: attempt vs lifetime', () => {
 
   it('resetLifetime zeroes and persists the zeros', () => {
     const a = createStatsStore(localStorage);
-    a.record([fire(P)], P);
-    a.resetLifetime();
+    a.record([fire(P)], P, false);
+    a.resetStats();
     expect(createStatsStore(localStorage).lifetime()).toEqual(ZERO_STATS);
   });
 });
@@ -123,7 +123,7 @@ describe('createStatsStore: storage paranoia', () => {
       },
     } as unknown as Storage;
     const s = createStatsStore(throwing);
-    s.record([fire(P)], P); // must not throw
+    s.record([fire(P)], P, false); // must not throw
     expect(s.lifetime().shotsFired).toBe(1);
   });
 });
@@ -134,7 +134,7 @@ describe('the shot-an-enemy-mine scenario (found in review)', () => {
     // stops calling a player kill "AI friendly fire" and stops scoring the
     // killing shot as a miss.
     const s = createStatsStore(localStorage);
-    s.record([fire(P), killed('brown', 'shell', P)], P);
+    s.record([fire(P), killed('brown', 'shell', P)], P, false);
     expect(s.lifetime().shellKills).toBe(1);
     expect(s.lifetime().friendlyFireKills).toBe(0);
   });
@@ -146,8 +146,8 @@ describe('two stores over one storage (the second-tab case)', () => {
     // larger window (stats persist on every eventful frame).
     const tabA = createStatsStore(localStorage);
     const tabB = createStatsStore(localStorage);
-    tabA.record([fire(P), fire(P)], P);
-    tabB.record([mineDropped(P)], P);
+    tabA.record([fire(P), fire(P)], P, false);
+    tabB.record([mineDropped(P)], P, false);
     const reloaded = createStatsStore(localStorage).lifetime();
     expect(reloaded.shotsFired).toBe(2); // tabB's write did not erase tabA's shots
     expect(reloaded.minesLaid).toBe(1);
@@ -155,8 +155,8 @@ describe('two stores over one storage (the second-tab case)', () => {
 
   it('reset does NOT max-merge, or it would resurrect what it just erased', () => {
     const s = createStatsStore(localStorage);
-    s.record([fire(P)], P);
-    s.resetLifetime();
+    s.record([fire(P)], P, false);
+    s.resetStats();
     expect(createStatsStore(localStorage).lifetime()).toEqual(ZERO_STATS);
   });
 });
@@ -171,14 +171,14 @@ describe('a tab left open across reset (PR #62\'s sibling defect)', () => {
     // field) must not spread that stale shotsFired count back onto disk merely
     // because the old per-key max-merge compared against it.
     const tabA = createStatsStore(localStorage);
-    tabA.record([fire(P), fire(P)], P); // tabA racks up shotsFired: 2
+    tabA.record([fire(P), fire(P)], P, false); // tabA racks up shotsFired: 2
     const tabB = createStatsStore(localStorage); // boots with shotsFired: 2 in its shadow
     expect(tabB.lifetime().shotsFired).toBe(2);
 
-    tabA.resetLifetime();
+    tabA.resetStats();
     expect(createStatsStore(localStorage).lifetime()).toEqual(ZERO_STATS); // disk really is reset
 
-    tabB.record([mineDropped(P)], P); // tabB lays a mine, unrelated to the reset field
+    tabB.record([mineDropped(P)], P, false); // tabB lays a mine, unrelated to the reset field
 
     expect(tabB.lifetime().shotsFired, 'the reset must stick even from a stale tab').toBe(0);
     expect(tabB.lifetime().minesLaid, 'the newly recorded field must still land').toBe(1);
@@ -202,9 +202,9 @@ describe('a storage whose writes never land (PR #62\'s sibling: the latch)', () 
       },
     } as unknown as Storage;
     const store = createStatsStore(s);
-    store.record([fire(P)], P); // write() catches the throw -- storage is now known broken
+    store.record([fire(P)], P, false); // write() catches the throw -- storage is now known broken
     expect(store.lifetime().shotsFired).toBe(1);
-    store.record([mineDropped(P)], P); // a second mutating call, an unrelated field
+    store.record([mineDropped(P)], P, false); // a second mutating call, an unrelated field
     expect(store.lifetime().shotsFired, 'the shadow remains the truth, not wiped by the always-empty read').toBe(1);
     expect(store.lifetime().minesLaid).toBe(1);
   });
@@ -218,5 +218,110 @@ describe('per-field validation (found in review: was only tested with whole-obje
     expect(life.shellKills).toBe(0); // float dropped
     expect(life.deaths).toBe(3); // valid sibling survives
     expect(life.ricochets).toBe(4);
+  });
+});
+
+
+describe('createStatsStore: the CAMPAIGN RUN scope', () => {
+  // The missing middle between `attempt` (one try at one level, in memory, gone at the
+  // next world build) and `lifetime` (this browser, forever). A run spans every level and
+  // every retry of one campaign, and nothing else.
+
+  it('accumulates only when the caller says this session counts toward the run', () => {
+    // The gate is the caller's, not the store's: `loop.ts` passes its own
+    // `campaignActive()`, the same signal that decides whether the run STORE may be
+    // written. Practice, the sandbox, a dev-flag jump and versus all pass false.
+    const s = createStatsStore(localStorage);
+    s.record([fire(P), killed('brown', 'shell', P)], P, true);
+    expect(s.run().shellKills, 'a campaign frame did not reach the run tally').toBe(1);
+
+    // THE NEGATIVE CONTROL, and the whole reason the argument exists: an excluded session
+    // still records lifetime and attempt, and must leave the run tally exactly where it
+    // was. A store that ignored the flag passes the assertion above and fails here.
+    s.record([fire(P), killed('brown', 'shell', P)], P, false);
+    expect(s.run().shellKills, 'practice leaked into the campaign run tally').toBe(1);
+    expect(s.lifetime().shellKills, 'the excluded frame was dropped entirely').toBe(2);
+    expect(s.run().shotsFired).toBe(1);
+    expect(s.lifetime().shotsFired).toBe(2);
+  });
+
+  it('SURVIVES the tab closing, which is the entire reason it is persisted', () => {
+    // A run outlives the browser session -- `tanks.run.v2` exists so Continue works
+    // tomorrow. An in-memory tally would silently undercount any campaign played over
+    // more than one sitting, and undercount it on the one screen built to report it.
+    // A second store instance IS the reload: same storage, fresh memory.
+    const tonight = createStatsStore(localStorage);
+    tonight.startRun();
+    tonight.record([fire(P), fire(P), killed('brown', 'shell', P)], P, true);
+
+    const tomorrow = createStatsStore(localStorage);
+    expect(tomorrow.run().shotsFired, 'the run tally did not survive the reload').toBe(2);
+    expect(tomorrow.run().shellKills).toBe(1);
+
+    // ...and it keeps accumulating from there rather than starting over.
+    tomorrow.record([fire(P)], P, true);
+    expect(tomorrow.run().shotsFired).toBe(3);
+  });
+
+  it('startRun zeroes the run tally and ONLY the run tally', () => {
+    const s = createStatsStore(localStorage);
+    s.record([fire(P), fire(P)], P, true);
+    expect(s.lifetime().shotsFired).toBe(2);
+
+    s.startRun();
+    expect(s.run().shotsFired, 'a new campaign kept the old one\'s numbers').toBe(0);
+    // The negative control: lifetime is not a run and must not be cleared with one.
+    // Starting a new campaign is not erasing your history.
+    expect(s.lifetime().shotsFired, 'New Game wiped the lifetime tally').toBe(2);
+    // ...and the zeros are PERSISTED, not just in memory: a reload must not resurrect
+    // the previous run.
+    expect(createStatsStore(localStorage).run().shotsFired).toBe(0);
+  });
+
+  it('is NOT cleared by the end of a run, which is when the end screen reads it', () => {
+    // The sequencing this whole design exists for. `endRun()` deletes the run record at
+    // exactly the moment `campaign-complete` wants to report on it, so the tally is
+    // cleared FORWARD -- at the next New Game -- instead. Nothing here calls endRun,
+    // because the point is that the tally does not care: no code path zeroes it except
+    // startRun and resetStats.
+    const s = createStatsStore(localStorage);
+    s.startRun();
+    s.record([killed('brown', 'shell', P), killed('brown', 'shell', P)], P, true);
+    // Whatever the run store does now, these numbers are still here to render.
+    expect(s.run().shellKills).toBe(2);
+    expect(createStatsStore(localStorage).run().shellKills).toBe(2);
+  });
+
+  it('resetStats clears BOTH persisted scopes, so erased history cannot come back', () => {
+    // A player who has just erased their statistics must not meet numbers from them on
+    // the next end screen. Reset stats is the one action that clears the run tally
+    // without starting a new run.
+    const s = createStatsStore(localStorage);
+    s.record([fire(P), fire(P)], P, true);
+    s.resetStats();
+    expect(s.lifetime()).toEqual(ZERO_STATS);
+    expect(s.run(), 'the run tally outlived a Reset stats').toEqual(ZERO_STATS);
+    // Persisted, both of them: the reset must survive the reload it usually precedes.
+    const reloaded = createStatsStore(localStorage);
+    expect(reloaded.lifetime()).toEqual(ZERO_STATS);
+    expect(reloaded.run()).toEqual(ZERO_STATS);
+  });
+
+  it('reads a corrupt run key as zeros without disturbing the lifetime key', () => {
+    // Same paranoia as every other store here, and the isolation matters: the two scopes
+    // are separate keys precisely so one cannot poison the other.
+    localStorage.setItem(RUN_STATS_KEY, '{not json');
+    localStorage.setItem(STATS_KEY, JSON.stringify({ ...ZERO_STATS, shellKills: 9 }));
+    const s = createStatsStore(localStorage);
+    expect(s.run()).toEqual(ZERO_STATS);
+    expect(s.lifetime().shellKills, 'a corrupt run key took the lifetime tally with it').toBe(9);
+  });
+
+  it('does not hand out its own state: run() is a copy, like the other two scopes', () => {
+    const s = createStatsStore(localStorage);
+    s.record([fire(P)], P, true);
+    const taken = s.run();
+    taken.shotsFired = 999;
+    expect(s.run().shotsFired, 'a caller mutated the store through its own reading').toBe(1);
   });
 });

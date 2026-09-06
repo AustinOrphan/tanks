@@ -5058,5 +5058,146 @@
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
     ]
+  },
+  {
+    "id": "run-tally-counts-practice-and-versus",
+    "file": "src/game/stats.ts",
+    "find": "        if (countsTowardRun) runDelta[key] = (runDelta[key] ?? 0) + 1;",
+    "replace": "        runDelta[key] = (runDelta[key] ?? 0) + 1;",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope accumulates only when the caller says this session counts toward the run"
+    ],
+    "why": "Drops the gate inside `bump`, so a practice level, the sandbox, a dev-flag jump and a versus match all pour into the CAMPAIGN run's total. The number then cannot be reconciled with the campaign the player just played, which is the one thing an end-screen total has to be. Survives every lifetime and attempt assertion in the file, because those scopes are unchanged."
+  },
+  {
+    "id": "run-tally-never-persisted",
+    "file": "src/game/stats.ts",
+    "find": "      writeRaw(RUN_STATS_KEY, runTally);\n    },\n  };",
+    "replace": "    },\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope SURVIVES the tab closing, which is the entire reason it is persisted"
+    ],
+    "why": "Accumulates the run tally in memory and never writes it, which is the whole design decision reversed in one line. Everything passes within a single browser session -- which is how a campaign is usually played while testing -- and a campaign spread over two sittings silently reports only the second one, on the screen built to report it. Anchored on the tail of `record` plus the closing brace, because `writeRaw(RUN_STATS_KEY, runTally)` also appears in `startRun` and `resetStats` and those writes are a different claim."
+  },
+  {
+    "id": "run-tally-shadow-never-resynced",
+    "file": "src/game/stats.ts",
+    "find": "    runTally = read(storage, RUN_STATS_KEY);\n  }",
+    "replace": "  }",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope SURVIVES the tab closing, which is the entire reason it is persisted"
+    ],
+    "why": "Leaves the run tally out of the resync, so this instance's shadow outranks disk forever -- PR #62's defect class, on the second persisted scope. A New Game or a Reset stats performed in another tab is undone by the next frame this tab records. Caught by the reload case because a second store instance reads disk at construction and then accumulates on top of a shadow the first instance's writes are still overwriting."
+  },
+  {
+    "id": "new-campaign-inherits-the-old-runs-tally",
+    "file": "src/game/stats.ts",
+    "find": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) runTally[key] = 0;\n      writeRaw(RUN_STATS_KEY, runTally);",
+    "replace": "      writeRaw(RUN_STATS_KEY, runTally);",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope startRun zeroes the run tally and ONLY the run tally"
+    ],
+    "why": "`startRun` stops zeroing, so every campaign after the first reports the sum of all of them. The write stays, which is what makes this worth its own entry rather than folding into a deleted-body mutation: the store still looks busy and still persists, it just persists the wrong number."
+  },
+  {
+    "id": "new-campaign-wipes-the-lifetime-tally",
+    "file": "src/game/stats.ts",
+    "find": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) runTally[key] = 0;\n      writeRaw(RUN_STATS_KEY, runTally);",
+    "replace": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) {\n        runTally[key] = 0;\n        life[key] = 0;\n      }\n      writeRaw(RUN_STATS_KEY, runTally);\n      writeRaw(STATS_KEY, life);",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope startRun zeroes the run tally and ONLY the run tally"
+    ],
+    "why": "The opposite error, and the more destructive one: pressing New Game erases the player's whole history. Plausible precisely because the two scopes now sit next to each other in this file and `resetStats` legitimately clears both -- copying its body into `startRun` is a one-paste mistake. The `ONLY the run tally` half of the test is what stands between that and a shipped data-loss bug."
+  },
+  {
+    "id": "reset-stats-leaves-the-run-tally-behind",
+    "file": "src/game/stats.ts",
+    "find": "      writeRaw(STATS_KEY, life);\n      writeRaw(RUN_STATS_KEY, runTally);\n    },\n    record(",
+    "replace": "      writeRaw(STATS_KEY, life);\n    },\n    record(",
+    "expect": "killed",
+    "tests": [
+      "src/game/stats.test.ts"
+    ],
+    "killedBy": [
+      "createStatsStore: the CAMPAIGN RUN scope resetStats clears BOTH persisted scopes, so erased history cannot come back"
+    ],
+    "why": "Reset stats zeroes the run tally in memory but never persists that, so the erased numbers come back on the next reload and appear on the next end screen. The in-memory clear is what hides it: everything looks right until the page is reloaded, which is exactly when a player checks that a reset worked."
+  },
+  {
+    "id": "session-feeds-every-frame-to-the-run-tally",
+    "file": "src/game/loop.ts",
+    "find": "      deps.stats.record(events, playerId ?? -1, campaignActive());",
+    "replace": "      deps.stats.record(events, playerId ?? -1, true);",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: stats wiring tells the store whether the frame counts toward the campaign run"
+    ],
+    "why": "The session stops asking whether this world is campaign play. The store's own gate is intact and correct; the caller just always says yes, so practice and the sandbox reach the campaign total anyway. This is the half a store-level test cannot see, which is why the gate is pinned on both sides of the seam."
+  },
+  {
+    "id": "new-run-keeps-the-previous-runs-tally",
+    "file": "src/game/loop.ts",
+    "find": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;\n      // The run's TALLY starts over with the run itself.",
+    "replace": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;\n      // The run's TALLY starts over with the run itself. (mutated: it does not)\n      if (false)",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "startGameWith: stats wiring starts a fresh RUN tally exactly where it starts a new run, and not on a level pick"
+    ],
+    "why": "Replaces the run record without replacing its tally, so the new campaign's end screen reports the previous campaign's numbers on top of its own. The pairing is a convention rather than something the type system enforces -- run.ts is a pure key-value store that deliberately knows nothing about statistics -- so nothing but this test holds the two `startNewRun`/`startRun` call sites together."
+  },
+  {
+    "id": "run-total-shown-on-every-ending",
+    "file": "src/game/loop.ts",
+    "find": "      typedOutcome?.kind === 'campaign-complete' || typedOutcome?.kind === 'campaign-over'\n        ? deps.stats.run()\n        : undefined;",
+    "replace": "      deps.stats.run();",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) reports the whole campaign run beside the level attempt, on the two endings that finish one"
+    ],
+    "why": "Resolves a run total for every ending, so `mission-clear` shows a running campaign figure on every level and the practice and versus screens show a campaign the player was not playing. `mission-clear` is the sharp case: it IS campaign play and it IS mid-run, so a gate written as \"is this a campaign session\" instead of \"did this end a run\" looks correct and is not. The HUD hides the line by ABSENCE, so it has no second opinion to catch this with."
+  },
+  {
+    "id": "run-total-line-never-hidden",
+    "file": "src/game/hud.ts",
+    "find": "    const run = outcomeData?.run;\n    if (!run) {\n      runTallyEl.classList.add('hud-run-tally--hidden');\n      return;\n    }",
+    "replace": "    const run = outcomeData?.run ?? outcomeData?.attempt;\n    if (!run) {\n      runTallyEl.classList.add('hud-run-tally--hidden');\n      return;\n    }",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) reports the whole campaign run beside the level attempt, on the two endings that finish one"
+    ],
+    "why": "Falls back to the ATTEMPT tally when no run was resolved, so every ending carries a second line that duplicates the first under a label claiming it is the campaign. Worse than showing nothing, and the shape a well-meaning \"avoid the empty element\" edit takes: the line is present, populated and plausible on screens that have no run at all."
   }
 ]

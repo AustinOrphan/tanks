@@ -247,8 +247,9 @@ interface Recorder {
   fireSignals: number;
   cleared: number[];
   progressResets: number;
-  statBatches: Array<{ count: number; playerId: number }>;
+  statBatches: Array<{ count: number; playerId: number; countsTowardRun: boolean }>;
   statAttemptStarts: number;
+  statRunStarts: number;
   statResets: number;
   statPushes: number;
   /**
@@ -539,6 +540,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     progressResets: 0,
     statBatches: [],
     statAttemptStarts: 0,
+    statRunStarts: 0,
     statResets: 0,
     statPushes: 0,
     outcomePushes: [],
@@ -1463,24 +1465,35 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // which is exactly how the win-ordering defect stayed invisible.
       let attempt = { ...ZERO_STATS };
       let lifetime = { ...ZERO_STATS };
-      const fold = (events: SimEvent[]): void => {
+      let runTally = { ...ZERO_STATS };
+      // `countsTowardRun` is MODELLED, not ignored: the run tally is the one scope the
+      // session can be wrong about, and a fake that folded every frame into it would make
+      // the practice/versus exclusion untestable from here.
+      const fold = (events: SimEvent[], countsTowardRun: boolean): void => {
         const kills = events.filter((e) => e.type === 'tank-destroyed').length;
         attempt = { ...attempt, shellKills: attempt.shellKills + kills };
         lifetime = { ...lifetime, shellKills: lifetime.shellKills + kills };
+        if (countsTowardRun) runTally = { ...runTally, shellKills: runTally.shellKills + kills };
       };
       return {
         lifetime: () => ({ ...lifetime }),
         attempt: () => ({ ...attempt }),
-        record: (events: SimEvent[], playerId: number) => {
-          rec.statBatches.push({ count: events.length, playerId });
-          fold(events);
+        run: () => ({ ...runTally }),
+        record: (events: SimEvent[], playerId: number, countsTowardRun: boolean) => {
+          rec.statBatches.push({ count: events.length, playerId, countsTowardRun });
+          fold(events, countsTowardRun);
         },
         startAttempt: () => {
           attempt = { ...ZERO_STATS };
           rec.statAttemptStarts += 1;
         },
-        resetLifetime: () => {
+        startRun: () => {
+          runTally = { ...ZERO_STATS };
+          rec.statRunStarts += 1;
+        },
+        resetStats: () => {
           lifetime = { ...ZERO_STATS };
+          runTally = { ...ZERO_STATS };
           rec.statResets += 1;
         },
       };
@@ -5511,6 +5524,58 @@ describe('startGameWith: stats wiring', () => {
     expect(h.rec.statBatches.length).toBeGreaterThan(0); // the frame really was eventful
     const player = world.tanks.find((t) => t.kind === 'player')!;
     for (const b of h.rec.statBatches) expect(b.playerId).toBe(player.id);
+    h.handle.dispose();
+  });
+
+  it('tells the store whether the frame counts toward the campaign run', () => {
+    // The run tally's gate, at the one place that decides it. `campaignActive()` is the
+    // SAME signal the run store is written behind, so a practice level, the sandbox, a
+    // dev-flag jump and a versus match all record lifetime and attempt statistics while
+    // leaving the campaign's own total alone -- exactly as they leave its position and
+    // its lives alone.
+    const world = { ...createArenaWorld(1), roundStartTick: -100000 };
+    world.mines.push({ id: 500, ownerId: 99, pos: { x: 1, y: 1 }, timer: 0.001, armed: true, detonated: false });
+
+    const campaign = boot(makeDeps({ world }));
+    campaign.setState('playing');
+    campaign.fireFrame(100);
+    expect(campaign.rec.statBatches.length, 'the frame was not eventful').toBeGreaterThan(0);
+    expect(
+      campaign.rec.statBatches.every((b) => b.countsTowardRun),
+      'a campaign frame was excluded from the run tally',
+    ).toBe(true);
+    campaign.handle.dispose();
+
+    // THE NEGATIVE CONTROL: the sandbox does not track progress, so it must not feed the
+    // run either. Without it a hardcoded `true` passes everything above.
+    const sandbox = boot(makeDeps({ world: { ...world }, tracksProgress: false }));
+    sandbox.setState('playing');
+    sandbox.fireFrame(100);
+    expect(sandbox.rec.statBatches.length, 'the sandbox frame was not eventful').toBeGreaterThan(0);
+    expect(
+      sandbox.rec.statBatches.some((b) => b.countsTowardRun),
+      'a session that tracks no progress fed the campaign run tally',
+    ).toBe(false);
+    sandbox.handle.dispose();
+  });
+
+  it('starts a fresh RUN tally exactly where it starts a new run, and not on a level pick', () => {
+    // Paired with `deps.run.startNewRun` at every one of its call sites: a run whose
+    // record was replaced but whose tally was not would report the PREVIOUS campaign's
+    // numbers on this one's end screen.
+    const h = boot(makeDeps({ levelCount: 3 }));
+    const before = h.rec.statRunStarts;
+    h.hud.newGame();
+    expect(h.rec.runNewRuns.length, 'New Game did not start a run').toBeGreaterThan(0);
+    expect(h.rec.statRunStarts, 'the run tally was not reset with the run').toBe(before + 1);
+
+    // THE NEGATIVE CONTROL. A Levels pick is PRACTICE -- it starts no run (see
+    // `onLevelSelect`), so it must not zero the tally of the run the player still has
+    // going. A `startRun()` folded into every world build would fail here.
+    const atPick = h.rec.statRunStarts;
+    h.hud.pickLevel(1);
+    expect(h.rec.runNewRuns.length, 'a level pick started a run').toBe(1);
+    expect(h.rec.statRunStarts, 'practice reset the campaign run tally').toBe(atPick);
     h.handle.dispose();
   });
 

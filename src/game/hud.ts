@@ -112,6 +112,16 @@ export type HudRelaunchTarget = 'campaign-levels' | 'versus-setup';
  */
 export type GameplayOutcome = {
   /**
+   * The CAMPAIGN RUN's tally (`stats.run()`), present only on the two campaign endings.
+   *
+   * `undefined` everywhere else, and resolved by the SESSION rather than read here,
+   * because only the session knows whether this ending belongs to a run at all: a
+   * practice level, the sandbox and a versus match all end without one, and handing the
+   * HUD a campaign total on those screens would be handing it a number about a campaign
+   * the player was not playing.
+   */
+  run?: StatCounts;
+  /**
    * The per-ATTEMPT tally the summary line reads (`stats.attempt()`, zeroed on every
    * world build) -- never the lifetime column, which belongs to Records and reaches the
    * HUD through `setStats`.
@@ -1589,6 +1599,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
       <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
+      <!-- The campaign RUN's totals, directly under the level attempt's, so the two scopes
+           read as a pair. Its own element rather than a second clause on the line above:
+           they appear on different screens (only the two campaign endings carry a run) and
+           a single line would have to be rebuilt to drop half of itself. -->
+      <p class="hud-run-tally hud-run-tally--hidden"></p>
       <p class="hud-coop-kills hud-coop-kills--hidden"></p>
       <p class="hud-versus-results hud-versus-results--hidden"></p>
       <!-- THE MAIN MENU HIERARCHY (issue #226), top to bottom and in exactly the order
@@ -1864,6 +1879,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const achBackBtn = el.querySelector('.hud-achievements-back') as HTMLButtonElement;
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
   const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
+  const runTallyEl = el.querySelector('.hud-run-tally') as HTMLElement;
   const coopKillsEl = el.querySelector('.hud-coop-kills') as HTMLElement;
   const versusResultsEl = el.querySelector('.hud-versus-results') as HTMLElement;
   const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
@@ -2238,31 +2254,59 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       attemptSummaryEl.classList.add('hud-attempt-summary--hidden');
       return;
     }
-    const r = outcomeData.attempt;
-    const kills = r.shellKills + r.mineKills;
     /*
-     * "This level" on EVERY ending, campaign included (issue #322, owner ruling).
+     * "Level attempt" on EVERY ending, campaign included (owner ruling).
      *
-     * It read "This run" on campaign endings until now, and that was wrong about the
-     * data rather than merely loose: `stats.attempt()` is zeroed on every world build
-     * (see stats.ts, which names this exact wording as the ambiguity issue #153 asks to
-     * remove), so the numbers under it are one try at one level -- not the campaign run,
-     * which is the thing the player has going elsewhere and is emphatically not what
-     * these count. A practice ending already said "This level" for the same reason.
+     * It read "This run" on campaign endings until issue #322, and that was wrong about
+     * the DATA rather than merely loose: `stats.attempt()` is zeroed on every world build
+     * (see stats.ts, which names that wording as the ambiguity issue #153 asks to remove),
+     * so the numbers under it are one try at one level -- not the campaign run, which is
+     * the thing the player has going elsewhere.
      *
-     * "This level" rather than the Records table's "Current attempt", and the split is
-     * deliberate: here the level IS on screen and was just played, so the natural words
-     * are also the true ones. Records is browsed from the Main Menu with no level in
-     * sight, which is why it uses the scope's own name instead -- see renderStatsTable.
-     *
-     * The one place a retry makes this loose: clear a level on your third try and these
-     * are the third try's numbers, not the level's. "Current attempt" would be exact
-     * everywhere, and was rejected here as stiffer than the screen deserves.
+     * "Level attempt", not the "This level" that briefly replaced it, because the two
+     * campaign endings now carry a second line naming the campaign run. Once both scopes
+     * are on screen together the labels have to be built the same way for the pair to
+     * read as a pair, and "attempt" is the more exact half anyway: a retry resets this
+     * tally, so it was never the level's total.
      */
-    const scope = 'This level';
-    attemptSummaryEl.textContent =
-      `${scope}: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
-    attemptSummaryEl.classList.remove('hud-attempt-summary--hidden');
+    tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'Level attempt', outcomeData.attempt);
+  }
+
+  /**
+   * Twin of renderAttemptSummary, one line below it: the whole campaign run, on the two
+   * endings that finish one.
+   *
+   * Hidden by ABSENCE rather than by a screen check -- `outcomeData.run` is `undefined`
+   * on every other ending because the session did not resolve one (see `pushOutcome`).
+   * The HUD does not re-derive which screens have a run: the payload already answers it,
+   * and a second opinion here is how the two get to disagree.
+   */
+  function renderRunTally(): void {
+    const run = outcomeData?.run;
+    if (!run) {
+      runTallyEl.classList.add('hud-run-tally--hidden');
+      return;
+    }
+    tallyLineEl(runTallyEl, 'hud-run-tally--hidden', 'Campaign run', run);
+  }
+
+  /**
+   * The one place a tally line is worded and formatted, so the two cannot drift.
+   *
+   * They are the same sentence about different scopes, and the whole reason both are on
+   * screen is that a reader can compare them -- which stops working the moment one of
+   * them counts kills differently or rounds accuracy its own way.
+   */
+  function tallyLineEl(
+    into: HTMLElement,
+    hiddenClass: string,
+    scope: string,
+    counts: StatCounts,
+  ): void {
+    const kills = counts.shellKills + counts.mineKills;
+    into.textContent =
+      `${scope}: ${kills} kills · ${counts.deaths} deaths · ${pct(counts.shellKills, counts.shotsFired)} accuracy`;
+    into.classList.remove(hiddenClass);
   }
 
   /**
@@ -2325,6 +2369,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function renderOutcomeLines(): void {
     renderAttemptSummary();
+    renderRunTally();
     renderCoopKillLine();
     renderVersusResultsLine();
   }

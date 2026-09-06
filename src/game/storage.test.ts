@@ -14,7 +14,7 @@ import {
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { exportSave, importSave, SAVE_FORMAT, SAVE_VERSION } from './save';
 import { PROGRESS_KEY } from './progress';
-import { STATS_KEY } from './stats';
+import { STATS_KEY, RUN_STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
 import { SETTINGS_KEY } from './settings';
 import { ACHIEVEMENTS_KEY } from './achievements';
@@ -23,7 +23,11 @@ import { VERSUS_SETUP_KEY } from './versus-setup-store';
 import { CAMPAIGN_LEVELS } from '../sim/arena';
 
 /** Every key the six stores own, as the wire strings the browser sees. */
-const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY, VERSUS_SETUP_KEY];
+// Eight keys across SEVEN stores: the stats store owns two persisted scopes since the
+// campaign-run tally, so this list is no longer one key per store and the difference is
+// the point -- a second key on an existing store bypasses the developer namespace exactly
+// as easily as a new store does.
+const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, RUN_STATS_KEY, CUSTOM_KEY, SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY, VERSUS_SETUP_KEY];
 
 /**
  * One write per store in `GameStores`, keyed by that store's own field name.
@@ -36,7 +40,11 @@ const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, SETTINGS_KEY, ACHIEVEMENT
  */
 const STORE_WRITES: Record<keyof GameStores, (stores: GameStores) => void> = {
   progress: (s) => s.progress.recordCleared(CAMPAIGN_LEVELS[1]),
-  stats: (s) => s.stats.resetLifetime(),
+  // BOTH stats keys: the store owns two persisted scopes since the campaign-run tally
+  // (`tanks.stats.run.v1`), and a write that touched only the lifetime key would leave
+  // the second one invisible to this inventory -- which is the exact hole this test is
+  // for. `resetStats` writes both.
+  stats: (s) => s.stats.resetStats(),
   customization: (s) => s.customization.setHull('red'),
   settings: (s) => s.settings.setTouchScheme('point'),
   achievements: (s) => s.achievements.reset(),

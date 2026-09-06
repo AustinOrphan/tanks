@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type GameplayOutcome, type GameplayStatus, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { TYPED_OUTCOME_KINDS, type TypedOutcome } from './app-state';
-import { ZERO_STATS } from './stats';
+import { ZERO_STATS, type StatCounts } from './stats';
 
 
 let hud: Hud | null = null;
@@ -1542,9 +1542,13 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     !chooseLevel(root).classList.contains('hud-choose-level--hidden');
 
   /** A solo campaign-shaped outcome push carrying the session's own ending. */
-  const push = (typedOutcome: TypedOutcome): GameplayOutcome => ({
+  const push = (typedOutcome: TypedOutcome, run?: StatCounts): GameplayOutcome => ({
     tally: 'solo',
     attempt: ZERO_STATS,
+    // Absent unless a case asks for it, mirroring production: `pushOutcome` resolves a run
+    // total only for the two endings that finish a run, so `undefined` is the shape every
+    // other screen really receives rather than a fixture convenience.
+    ...(run ? { run } : {}),
     action: 'campaign-levels',
     typedOutcome,
   });
@@ -1561,9 +1565,9 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
   };
 
   /** Drive the panel to an ending the way production does: surface first, outcome after. */
-  const drive = (h: Hud, outcome: TypedOutcome): void => {
+  const drive = (h: Hud, outcome: TypedOutcome, run?: StatCounts): void => {
     h.setState(surfaceFor(outcome));
-    h.setOutcome(push(outcome));
+    h.setOutcome(push(outcome, run));
   };
 
   const MISSION_CLEAR: TypedOutcome = { kind: 'mission-clear' };
@@ -1572,7 +1576,7 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
   const PRACTICE_WON: TypedOutcome = { kind: 'practice-result', cleared: true };
   const PRACTICE_LOST: TypedOutcome = { kind: 'practice-result', cleared: false };
 
-  it('heads the tally "This level" on EVERY ending, because that is what it counts', () => {
+  it('heads the tally "Level attempt" on EVERY ending, because that is what it counts', () => {
     // SUPERSEDES 'keeps the word "run" off a practice ending'. That test pinned the
     // practice half of this rule and used the campaign half as its negative control --
     // "a line hardcoded to This level would relabel every campaign ending too". Issue
@@ -1584,6 +1588,10 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     // asks to remove), so these numbers are one try at one level. A campaign ending
     // saying "This run" pointed at the campaign attempt the player has going elsewhere,
     // which is the one thing they are not.
+    //
+    // "Level attempt", not the "This level" that briefly replaced "This run": the two
+    // campaign endings now carry a SECOND line naming the campaign run, and once both
+    // scopes share a screen the labels have to be built the same way to read as a pair.
     const { hud: h, root } = mount();
     h.setStatus(atLevel(3, 5));
     const summary = (): string =>
@@ -1597,8 +1605,10 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
       ['campaign-complete', CAMPAIGN_COMPLETE],
     ] as const) {
       drive(h, outcome);
-      expect(summary(), `${name} did not head its tally with the level`).toMatch(/^This level:/);
-      expect(summary(), `${name} still called a per-attempt tally a run`).not.toContain('run');
+      expect(summary(), `${name} did not head its tally with the level attempt`).toMatch(
+        /^Level attempt:/,
+      );
+      expect(summary(), `${name} still called a per-attempt tally a run`).not.toMatch(/\brun\b/);
     }
 
     // THE NEGATIVE CONTROL, and it took two attempts to find one that bites -- recorded
@@ -1634,6 +1644,43 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     expect(header, 'Records was collapsed onto the ending screens\' wording').not.toContain(
       'This level',
     );
+  });
+
+  it('reports the whole campaign run beside the level attempt, on the two endings that finish one', () => {
+    // The pair, in the order they are read. Two scopes on one screen is the point: a bare
+    // number leaves the player guessing which one it is, so both are named.
+    const { hud: h, root } = mount();
+    h.setStatus(atLevel(5, 5));
+    const lines = (): Array<string | null> => [
+      (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent,
+      (root.querySelector('.hud-run-tally') as HTMLElement).classList.contains('hud-run-tally--hidden')
+        ? null
+        : (root.querySelector('.hud-run-tally') as HTMLElement).textContent,
+    ];
+    const RUN = { shotsFired: 100, shellKills: 31, mineKills: 4, deaths: 7, selfKills: 1,
+      friendlyFireKills: 0, minesLaid: 12, wallsDestroyed: 40, ricochets: 9 };
+
+    for (const outcome of [CAMPAIGN_COMPLETE, CAMPAIGN_OVER] as const) {
+      drive(h, outcome, RUN);
+      const [attempt, run] = lines();
+      expect(attempt, 'the level attempt line went missing').toMatch(/^Level attempt:/);
+      expect(run, `${outcome.kind} carried no campaign total`).toMatch(/^Campaign run:/);
+      // The two lines are DIFFERENT readings, not the same numbers twice -- which is what
+      // a payload wired to `attempt` for both would produce.
+      expect(run).toContain('35 kills'); // 31 shell + 4 mine, from RUN
+      expect(attempt).not.toContain('35 kills');
+    }
+
+    // THE NEGATIVE CONTROL, and the reason the HUD hides this line by ABSENCE rather than
+    // by naming screens: an ending with no run behind it must not show a campaign total.
+    // `mission-clear` is the sharp case -- it IS campaign play, and it is mid-run, so a
+    // gate written as "is this a campaign session" instead of "did this end a run" shows
+    // a running total on every level.
+    for (const outcome of [MISSION_CLEAR, PRACTICE_WON, PRACTICE_LOST] as const) {
+      drive(h, outcome);
+      expect(lines()[1], `${outcome.kind} reported a campaign run that has not ended`).toBeNull();
+      expect(lines()[0], 'the level attempt line went with it').toMatch(/^Level attempt:/);
+    }
   });
 
   it('gives each campaign and practice ending its own copy and its own action', () => {

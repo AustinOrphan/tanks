@@ -1511,7 +1511,13 @@ export function startGameWith(
   let newRunLives: number | undefined;
   if (intent.kind === 'campaign-new') {
     level = deps.levels.levels[0];
-    if (startsCampaignRun) newRunLives = deps.run.startNewRun(level.id).livesRemaining;
+    if (startsCampaignRun) {
+      newRunLives = deps.run.startNewRun(level.id).livesRemaining;
+      // The run's TALLY starts over with the run itself. Paired at every `startNewRun`
+      // call rather than folded into the run store, because run.ts is a pure key-value
+      // store that deliberately knows nothing about statistics.
+      deps.stats.startRun();
+    }
   } else if (intent.kind === 'practice') {
     const picked = intent.level;
     if (Number.isInteger(picked) && picked >= 0 && picked < deps.levels.levels.length) {
@@ -2173,13 +2179,31 @@ export function startGameWith(
    */
   function pushOutcome(forWorld: World, typedOutcome: TypedOutcome | null): void {
     const attempt = deps.stats.attempt();
+    /*
+     * The run tally, on the two endings that ARE the end of a run and nowhere else.
+     *
+     * Read here rather than in the HUD, and gated on the typed outcome rather than on
+     * `campaignActive()`: this is a question about the SCREEN being drawn, not about the
+     * session's permissions. `mission-clear` ends a level inside a run that carries on,
+     * so it gets no total; the two endings that finish a run get one whether it was
+     * finished by winning or by running out of lives (owner ruling).
+     *
+     * Safe to read AFTER the run record is gone: `sm.onChange`'s outcome branch calls
+     * `endRun()` on exactly these two kinds, and the tally deliberately lives in its own
+     * key cleared by `startRun` instead -- see stats.ts. Without that, this line would be
+     * a race against the state subscriber rather than a read.
+     */
+    const run =
+      typedOutcome?.kind === 'campaign-complete' || typedOutcome?.kind === 'campaign-over'
+        ? deps.stats.run()
+        : undefined;
     const mode = forWorld.rules.mode;
     if (mode === 'ffa' || mode === 'teams') {
-      hud.setOutcome({ tally: mode, attempt, action: relaunchTarget, kills: coopKills, deaths: versusDeaths, typedOutcome });
+      hud.setOutcome({ tally: mode, attempt, run, action: relaunchTarget, kills: coopKills, deaths: versusDeaths, typedOutcome });
     } else if (countPlayerTanks(forWorld) >= 2) {
-      hud.setOutcome({ tally: 'coop', attempt, action: relaunchTarget, kills: coopKills, typedOutcome });
+      hud.setOutcome({ tally: 'coop', attempt, run, action: relaunchTarget, kills: coopKills, typedOutcome });
     } else {
-      hud.setOutcome({ tally: 'solo', attempt, action: relaunchTarget, typedOutcome });
+      hud.setOutcome({ tally: 'solo', attempt, run, action: relaunchTarget, typedOutcome });
     }
   }
   function checkAchievements(clearedLevel: number | null): void {
@@ -2384,7 +2408,11 @@ export function startGameWith(
       blockedFireHud.handle(events, driver.world);
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
-      deps.stats.record(events, playerId ?? -1);
+      // `campaignActive()` is the SAME gate the run store is written behind (see its own
+      // doc comment): practice, the sandbox, a dev-flag level jump and versus all record
+      // lifetime and attempt statistics but must not touch the campaign run's tally, for
+      // the same reason they must not touch its position or its lives.
+      deps.stats.record(events, playerId ?? -1, campaignActive());
       // The results-screen per-slot tally, alongside stats.record -- see coopKills' own
       // comment above for why this stays out of stats.ts.
       tallyCoopKills(events, driver.world, coopKills, versusDeaths);
@@ -2747,6 +2775,7 @@ export function startGameWith(
     const startLevel = deps.levels.start;
     if (deps.levels.tracksProgress && deps.run.active() === null && mayCreateRun) {
       deps.run.startNewRun(startLevel.id);
+      deps.stats.startRun();
     }
     const lives = campaignActive() ? deps.run.active()?.livesRemaining : undefined;
     switchTo(startLevel, lives);
@@ -2824,6 +2853,7 @@ export function startGameWith(
     sessionIdentity = bootContext.identity;
     if (campaignActive()) {
       const fresh = deps.run.startNewRun(deps.levels.levels[0].id);
+      deps.stats.startRun();
       switchTo(deps.levels.levels[0], fresh.livesRemaining);
     } else {
       // Sandbox or dev jump: no run write at all -- just a fresh board at levels[0],
