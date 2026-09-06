@@ -137,12 +137,28 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
   };
   const versusLine = (root: HTMLElement): HTMLElement =>
     root.querySelector('.hud-versus-results') as HTMLElement;
+  /**
+   * The results readout as ROWS OF CELLS since the owner's ruling on issue #279 -- it was
+   * one run-on line (`P1: 2/1 · P2: 0/3 · ...`) and is now a table, one row per
+   * competitor. Read structurally rather than as a concatenated string: the point of the
+   * change is that kills and deaths sit in their own columns, and a `textContent`
+   * comparison cannot tell a table from the same digits in one cell.
+   */
+  const versusRows = (root: HTMLElement): string[][] =>
+    Array.from(versusLine(root).querySelectorAll('tr')).map((tr) =>
+      Array.from(tr.children).map((c) => c.textContent ?? ''),
+    );
 
   it('win panel carries the ffa results line, per-slot kills/deaths', () => {
     const { hud: h, root } = mount();
     h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0, 1], deaths: [1, 3, 0] });
     h.setState('outcome-win');
-    expect(versusLine(root).textContent ?? '').toBe('P1: 2/1 · P2: 0/3 · P3: 1/0');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths'],
+      ['Player 1', '2', '1'],
+      ['Player 2', '0', '3'],
+      ['Player 3', '1', '0'],
+    ]);
     expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(false);
   });
 
@@ -151,7 +167,13 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     // slots 0,2 -> team 0; slot 1 -> team 1 (teamOf(slot) = slot % 2).
     h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 1, 3], deaths: [1, 4, 0] });
     h.setState('outcome-win');
-    expect(versusLine(root).textContent ?? '').toBe('Team 1: 5/1 · Team 2: 1/4');
+    // PER-TEAM rows, not per-slot: teams mode cares which side won, and a per-player
+    // breakdown here would answer a question the mode is not asking.
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths'],
+      ['Team 1', '5', '1'],
+      ['Team 2', '1', '4'],
+    ]);
   });
 
   it('a push during PLAY repaints nothing -- the surface gate survives a restart', () => {
@@ -168,7 +190,11 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0], deaths: [0, 2] });
     h.setState('outcome-win');
     const atOutcome = versusLine(root).textContent ?? '';
-    expect(atOutcome).toBe('P1: 2/0 · P2: 0/2');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths'],
+      ['Player 1', '2', '0'],
+      ['Player 2', '0', '2'],
+    ]);
 
     h.setState('playing');
     h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [9, 9], deaths: [9, 9] });
@@ -178,7 +204,11 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     // so this is not a flag stuck the other way.
     h.setState('outcome-win');
     h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 3], deaths: [3, 1] });
-    expect(versusLine(root).textContent ?? '').toBe('P1: 1/3 · P2: 3/1');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths'],
+      ['Player 1', '1', '3'],
+      ['Player 2', '3', '1'],
+    ]);
   });
 
   it('a non-versus outcome keeps the line hidden even at win/lose', () => {
@@ -217,9 +247,17 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     const { hud: h, root } = mount();
     h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 0], deaths: [0, 1] });
     h.setState('outcome-win');
-    expect(versusLine(root).textContent).toBe('P1: 1/0 · P2: 0/1');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths'],
+      ['Player 1', '1', '0'],
+      ['Player 2', '0', '1'],
+    ]);
     h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 1], deaths: [1, 1] });
-    expect(versusLine(root).textContent).toBe('P1: 1/1 · P2: 1/1');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths'],
+      ['Player 1', '1', '1'],
+      ['Player 2', '1', '1'],
+    ]);
   });
 });
 

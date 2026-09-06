@@ -1870,8 +1870,12 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
 
     h.setState('outcome-win');
     h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'winner-slot', slot: 0 } }));
-    expect(title(root)).toBe('You Win!');
-    expect(subtitle(root)).toBe('Arena cleared.');
+    // NAMES THE WINNER (owner ruling): "You Win!" / "Arena cleared." is campaign language
+    // on a local versus screen -- there is no arena to clear, and the "you" may well be
+    // the player who lost. The typed outcome already carries who won, so the screen says
+    // it, and the subtitle goes the way the campaign endings' did.
+    expect(title(root)).toBe('Player 1 wins');
+    expect(subtitle(root)).toBe('');
     expect(action(root)).toBe('Rematch');
     expect(chooseLevelShown(root), 'a versus match never chose a level to be on').toBe(false);
     expect(
@@ -1881,10 +1885,19 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
 
     // A draw presents as a defeat, which is the shipped behaviour for the simultaneous
     // -elimination `lose` event -- see legacyOutcomePresentation's own doc comment.
+    // A draw presents on the LOSE surface (the simultaneous-elimination `lose` event, see
+    // `legacyOutcomePresentation`) but is not a defeat and no longer says so.
     h.setState('outcome-lose');
     h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'draw' } }));
-    expect(title(root)).toBe('Game Over');
-    expect(subtitle(root)).toBe('Out of lives.');
+    expect(title(root)).toBe('Draw');
+    expect(subtitle(root)).toBe('');
+
+    // ...and a TEAMS win names the side, not a player: the same result type carries both,
+    // and a screen that read `slot` for a team outcome would name a player who may not
+    // even have been the last one standing.
+    h.setState('outcome-win');
+    h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'winner-team', team: 1 } }));
+    expect(title(root)).toBe('Team 2 wins');
     expect(action(root)).toBe('Rematch');
     expect(chooseLevelShown(root)).toBe(false);
     expect(

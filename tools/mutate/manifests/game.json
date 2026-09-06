@@ -5365,5 +5365,48 @@
     ],
     "why": "EQUIVALENT, not a coverage gap, and measured rather than assumed: it was declared `killed` first and SURVIVED. `relaunchTarget === 'versus-setup'` already means a pane-originated versus session (`relaunchTargetFor`: versus identity plus a `sessionOrigin` other than `'versus-flags'`), and the start boundary never creates one without a config -- so `deps.initialVersusConfig` cannot be null when this branch is reached. The field is optional only because `GameDeps` makes it optional for the campaign path, which is why the guard exists at all: TypeScript needs it to call through. A `?dev=1&mode=ffa` world takes the campaign branch because its relaunch target differs, not because of this guard. Kept so that a future change making a config-less `'versus-setup'` session reachable is what flips this to killed, rather than a silent fabrication of a configuration the player never chose.",
     "equivalent": true
+  },
+  {
+    "id": "versus-result-reads-as-a-campaign-win",
+    "file": "src/game/hud.ts",
+    "find": "    const versusTitle = versusOutcomeTitle();\n    if (versusTitle !== null) {",
+    "replace": "    const versusTitle: string | null = null;\n    if (versusTitle !== null) {",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) keeps the VERSUS result screen OUT of the copy table, and gives it the #279 action set"
+    ],
+    "why": "Falls a local versus result back to the campaign wording -- \"You Win!\" over \"Arena cleared.\" -- which is what shipped before the owner's ruling. Both halves are wrong on that screen and wrong in different ways: there is no arena to clear, and the \"you\" addresses one player on a couch where the other may have just lost. The typed outcome already carries WHO won, so saying so costs nothing and is the only version that is true for every seat at the screen."
+  },
+  {
+    "id": "versus-result-names-the-slot-for-a-team-win",
+    "file": "src/game/hud.ts",
+    "find": "    if (result.kind === 'winner-team') return `Team ${result.team + 1} wins`;",
+    "replace": "    if (result.kind === 'winner-team') return `Player ${result.team + 1} wins`;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) keeps the VERSUS result screen OUT of the copy table, and gives it the #279 action set"
+    ],
+    "why": "Names a PLAYER for a team victory. `VersusResult` carries `winner-slot` and `winner-team` as separate shapes precisely because the two mean different things, and the numbers collide plausibly -- team 1 and player 1 are both `1` -- so a screen that read the wrong field looks right in a two-player fixture and names a player who may not even have been the last one standing in a four-player teams match."
+  },
+  {
+    "id": "versus-results-collapse-back-into-one-line",
+    "file": "src/game/hud.ts",
+    "find": "    versusResultsEl.innerHTML = `<tr><th></th><td>Kills</td><td>Deaths</td></tr>${body}`;",
+    "replace": "    versusResultsEl.textContent = rows.map(([l, k, d]) => `${l}: ${k}/${d}`).join(' \\u00b7 ');",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the ffa results line, per-slot kills/deaths",
+      "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the teams results line as PER-TEAM sums, not per-slot"
+    ],
+    "why": "Puts the per-competitor figures back on one run-on line, which is what the owner's ruling replaced: at four players `P1: 6/2 \\u00b7 P2: 2/6 \\u00b7 P3: 1/5 \\u00b7 P4: 0/6` is a row of numbers a reader has to parse before they can compare anyone to anyone. The killers read ROWS OF CELLS rather than `textContent` for exactly this reason -- a string comparison cannot tell a table from the same digits run together, so a test written that way would have passed this mutation."
   }
 ]
