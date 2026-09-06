@@ -5296,5 +5296,34 @@
       "hud: the pause exit is contextual (issue #323) leaves the match before opening the setup pane, through the paths that already exist"
     ],
     "why": "Reverses the two calls, so a configuration surface is opened over a match that is still running before the quit lands. Both orders settle to the same final state, which is why the test reads the pane's visibility from INSIDE the quit callback -- the one moment the difference is observable. `handleChooseLevel` has the identical ordering and the identical reason."
+  },
+  {
+    "id": "change-setup-reopens-a-forgotten-pane",
+    "file": "src/game/hud.ts",
+    "find": "  const handleChangeSetup = (): void => {\n    handleQuit();\n    openLayer('versus-setup', versusOpenBtn);\n  };",
+    "replace": "  const handleChangeSetup = (): void => {\n    handleQuit();\n    openLayer('versus-setup', versusOpenBtn);\n    seedAndRenderVersus({ mode: 'ffa', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: false, slots: defaultSlots(2) });\n  };",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) reopens the setup a player CHOSE, not a fresh one (issue #261)"
+    ],
+    "why": "Change Setup reopens the pane with a hardcoded default instead of what the player chose, so the button that exists to ADJUST a configuration discards it. THE GAP WAS REAL AND MEASURED: this exact mutation passed all 1833 tests in `src/game/` before the killer above was written. The sibling cases proved the pane opens and proved the call order; nothing asserted what it opened ONTO, which is the half issue #261's criterion is about (\"return to the retained VS Setup\"). Found by an adversarial audit of that criterion rather than by the change that introduced the button."
+  },
+  {
+    "id": "session-host-builds-a-session-it-never-shows",
+    "file": "src/game/session-host.ts",
+    "find": "    handle.enterGameplay();",
+    "replace": "    void handle;",
+    "expect": "killed",
+    "tests": [
+      "src/game/session-host.test.ts",
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "createGameSessionHost: start SHOWS the session it built, and shows the replacement rather than the one it retired"
+    ],
+    "why": "The host builds a session and never shows it -- construction and routing are deliberately separate acts here, so dropping the second leaves a world built behind a menu. Already caught by composition (four `loop.test.ts` cases red), which is why this entry is scoped to BOTH files: what was missing was the claim at the layer that owns it. `session-host.test.ts` recorded `enteredIds` -- documented as \"which session was SHOWN, in order\" -- and asserted it zero times, so the failure surfaced as a stale campaign run or a silent Main Menu rather than as \"the host never showed what it built\". The killer also pins the ORDER, which distinguishes showing the replacement from re-showing the session just retired."
   }
 ]

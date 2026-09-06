@@ -123,6 +123,25 @@ describe('createGameSessionHost: start', () => {
     expect(intent).toEqual(CONTINUE);
   });
 
+  it('SHOWS the session it built, and shows the replacement rather than the one it retired', () => {
+    // `enteredIds` records which session was shown, in order -- and until now this file
+    // recorded it and never read it. The composition is covered: dropping
+    // `handle.enterGameplay()` from `create()` reds four cases in `loop.test.ts`. What was
+    // missing was the claim at the layer that OWNS it, so the failure named a stale
+    // campaign run or a silent Main Menu rather than "the host built a session and never
+    // showed it".
+    //
+    // The ORDER matters as much as the membership: a host that entered the retired session
+    // instead of its replacement would put the player back into the match they just left,
+    // and `[0, 1]` is what tells that apart from `[0, 0]`.
+    const h = harness();
+    h.host.start(CONTINUE);
+    expect(h.enteredIds, 'the host built a session and never showed it').toEqual([0]);
+    h.host.start(CONTINUE);
+    expect(h.enteredIds, 'the replacement was built but the retired session was shown').toEqual([0, 1]);
+    expect(h.disposedIds, 'the shown session is the one that survived').toEqual([0]);
+  });
+
   it('a SECOND start() replaces the first session rather than orphaning it', () => {
     // Not a call boot.ts makes, and that is the point: `start()` bypassing the replace
     // path is the shape this had first, and it left the first session's frame loop,

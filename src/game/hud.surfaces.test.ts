@@ -1531,6 +1531,54 @@ describe('hud: the pause exit is contextual (issue #323)', () => {
     expect(paneOpen(), 'the match was left but the setup pane never opened').toBe(true);
   });
 
+  it('reopens the setup a player CHOSE, not a fresh one (issue #261)', () => {
+    // THE GAP, proven before this test existed: replacing `handleChangeSetup`'s reopen
+    // with `seedAndRenderVersus(<a hardcoded default config>)` -- the pane forgetting
+    // every selection the player made -- passed all 1833 tests in `src/game/`. The
+    // sibling case above proves the pane OPENS and proves the ORDER; nothing asserted
+    // what the pane opened onto, which is the half the criterion is actually about
+    // ("Change Setup: return to retained VS Setup").
+    //
+    // Driven through the pane's own controls rather than a seeded store, so this reads
+    // what a player would see: they pick, they start, they pause, they change setup.
+    const { hud: h, root } = mount();
+    const pick = (row: string, attr: string, value: string): void =>
+      (root.querySelector(`.hud-versus-${row}-row [data-${attr}="${value}"]`) as HTMLButtonElement)
+        .dispatchEvent(new MouseEvent('click'));
+    const chosen = (row: string, attr: string): string | null => {
+      const on = root.querySelector(
+        `.hud-versus-${row}-row [aria-pressed="true"]`,
+      ) as HTMLElement | null;
+      return on?.getAttribute(`data-${attr}`) ?? null;
+    };
+
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    pick('mode', 'mode', 'teams');
+    pick('players', 'players', '4');
+    pick('stock', 'stock', '5');
+    expect([chosen('mode', 'mode'), chosen('players', 'players'), chosen('stock', 'stock')])
+      .toEqual(['teams', '4', '5']);
+
+    // Into the match, then Pause, then Change Setup.
+    h.setStatus(paused('versus'));
+    h.setState('paused');
+    (root.querySelector('.hud-change-setup') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+
+    expect(
+      [chosen('mode', 'mode'), chosen('players', 'players'), chosen('stock', 'stock')],
+      'Change Setup reopened a pane that had forgotten the match it came from',
+    ).toEqual(['teams', '4', '5']);
+
+    // THE NEGATIVE CONTROL: the three readings are not simply whatever the pane defaults
+    // to. A pane hardcoded to teams/4/5 would satisfy every assertion above, so the same
+    // helpers have to be able to read a DIFFERENT selection through the same path.
+    pick('mode', 'mode', 'ffa');
+    pick('players', 'players', '2');
+    expect([chosen('mode', 'mode'), chosen('players', 'players')]).toEqual(['ffa', '2']);
+  });
+
   it('reads End Practice at Pause, where "quit to title" would overstate the cost', () => {
     const { hud: h, root } = mount();
     h.setStatus(paused('practice'));
