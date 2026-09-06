@@ -975,8 +975,9 @@ describe('hud: the stats page', () => {
     // Issue #322's "restore the originating tab". Records is one destination with two
     // tabs, and the menu button opened `stats` unconditionally -- so a player comparing
     // achievements across runs re-clicked the tab on every visit.
-    const openRecords = (root: HTMLElement): void =>
+    const openRecords = (root: HTMLElement): void => {
       openBtn(root).dispatchEvent(new MouseEvent('click'));
+    };
     const showing = (root: HTMLElement): string =>
       root.querySelector('.hud-achievements')!.classList.contains('hud-achievements--hidden')
         ? 'stats'
