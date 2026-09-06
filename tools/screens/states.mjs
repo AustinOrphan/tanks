@@ -177,6 +177,41 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-confirm', '.hud-confirm-body', '.hud-confirm-actions'],
   }),
 
+  // ---- Pause, which is a contextual surface rather than one screen -------------------
+  //
+  // Its exit is named for the session it belongs to and it carries a per-kind action, so
+  // one capture of "the pause panel" would be evidence for whichever session happened to
+  // be running. These two are a PAIR: same surface, different session, and the difference
+  // between them is the whole contract (issue #261, and issue #323 before it).
+  state({
+    id: 'screen.pause.versus',
+    title: 'Pause, versus match',
+    description: 'The exit names Main Menu and Change Setup stands beside it.',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { click: '.hud-versus-start' },
+      { waitHidden: '.hud-versus-setup' },
+      { press: 'Escape' },
+      { waitVisible: '.hud-quit' },
+    ],
+    measure: ['.hud-panel', '.hud-quit', '.hud-change-setup', '.hud-settings-open'],
+  }),
+  state({
+    id: 'screen.pause.campaign',
+    title: 'Pause, campaign round',
+    description: 'The control for the versus pause: a generic exit, and no Change Setup.',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-new-game' },
+      { waitHidden: '.hud-panel' },
+      { press: 'Escape' },
+      { waitVisible: '.hud-quit' },
+    ],
+    measure: ['.hud-panel', '.hud-quit', '.hud-change-setup', '.hud-settings-open'],
+  }),
+
   // ---- The branded failure states (issue #325) --------------------------------------
   //
   // Produced by BREAKING the thing they report on, never by injecting markup: the probe

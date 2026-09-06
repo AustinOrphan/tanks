@@ -56,6 +56,8 @@ on:
           - screen.main-menu
           - screen.main-menu.fresh
           - screen.no-script
+          - screen.pause.campaign
+          - screen.pause.versus
           - screen.records.achievements
           - screen.records.stats
           - screen.records.stats.empty

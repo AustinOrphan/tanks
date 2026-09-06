@@ -1822,6 +1822,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Without this Change Setup stands on every panel: the Main Menu, the campaign and
+ * practice end screens, and a paused campaign round -- offering a versus configuration
+ * surface to sessions that have none. Pause in a versus match is its one home. */
+.hud-change-setup--hidden {
+  display: none;
+}
+
 /* Without this the campaign-run tally shows on every ending, reporting a campaign on the
  * practice and versus screens that have nothing to do with one. */
 .hud-run-tally--hidden {

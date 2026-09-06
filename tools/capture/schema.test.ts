@@ -44,6 +44,8 @@ describe('capture recipe schema', () => {
       'screen.startup.probe-blocked',
       'screen.startup.match-failed',
       'screen.no-script',
+      'screen.pause.versus',
+      'screen.pause.campaign',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });

@@ -1644,6 +1644,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            through the same two paths those controls already use -- see
            handleChooseLevel, which is deliberately not a third route into the grid. -->
       <button class="ui-btn ui-btn--slab hud-choose-level hud-choose-level--hidden" type="button">Choose Level</button>
+      <!-- CHANGE SETUP (issue #261), the Pause twin of Choose Level: a versus match's own
+           configuration surface, reachable from the match without going through the menu
+           by hand. Shown at Pause in a versus session and nowhere else -- see
+           applyChangeSetup -- and its click is the same two existing paths in the same
+           order Choose Level uses, deliberately not a third route into the pane.
+
+           NOT on the results screen. The three actions there (Rematch, Change Setup,
+           Main Menu) are issue #279's set, and that screen's action button still reads
+           "Versus Setup", which #279 renames. One button per surface; this is Pause's. -->
+      <button class="ui-btn ui-btn--slab hud-change-setup hud-change-setup--hidden" type="button">Change Setup</button>
       <!-- The two DIRECT play actions (issue #226 hierarchy step 2). Versus setup entry
            (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md, ruling 1) is
            MAIN-MENU ONLY -- a live round's mode/players/stock are closed over for its
@@ -1854,6 +1864,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
   const chooseLevelBtn = el.querySelector('.hud-choose-level') as HTMLButtonElement;
+  const changeSetupBtn = el.querySelector('.hud-change-setup') as HTMLButtonElement;
   const continueBtn = el.querySelector('.hud-continue') as HTMLButtonElement;
   const newGameBtn = el.querySelector('.hud-new-game') as HTMLButtonElement;
   const quitBtn = el.querySelector('.hud-quit') as HTMLButtonElement;
@@ -4086,6 +4097,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * CHANGE SETUP, at Pause, in a versus session only (issue #261).
+   *
+   * Keyed on `statusData.kind` -- the same projection the pause EXIT label branches on,
+   * and for the same reason: `loop.ts` pushes the status before any `setState` for a
+   * session, so the kind is known the first time Pause renders. A second session signal
+   * of its own is how the two would come to disagree about what kind of match this is.
+   *
+   * Pause ONLY, not the outcome screens. A finished versus match gets its action set from
+   * issue #279, and that screen already carries a `Versus Setup` button #279 renames --
+   * offering a second one here would put two routes to the same pane on one panel.
+   */
+  function applyChangeSetup(): void {
+    changeSetupBtn.classList.toggle(
+      'hud-change-setup--hidden',
+      !(shownState === 'paused' && statusData?.kind === 'versus'),
+    );
+  }
+
+  /**
    * THE END SCREEN, WHOLE: its headline, its line, its primary button's word, and
    * whether `Choose Level` stands beside it. `applyTitleAffordances`' twin at the other
    * end of a session, and the only place any of those four is decided.
@@ -4317,6 +4347,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     handleQuit();
     openLayer('levelselect', levelSelectOpenBtn);
   };
+  /**
+   * Leave the match, then open the retained Versus Setup -- the same shape as
+   * `handleChooseLevel` above, through the same two existing paths in the same order,
+   * because a third route into the pane is how the pane's own contract gets a second
+   * opinion about what it is prefilled with.
+   *
+   * `handleQuit` first: it leaves gameplay and disposes the session, and `route-host.ts`
+   * treats every exit the same way ("handler ran, and afterwards the machine is no longer
+   * in gameplay"). No world is built and no seed drawn on the way -- issue #261 asks for
+   * that explicitly, and it holds because this reaches the pane rather than a match.
+   *
+   * KNOWN COSMETIC ISSUE, shared with `handleChooseLevel` and not introduced here: the
+   * Main Menu is painted for one crossfade between the two calls. That is issue #566,
+   * and this is now the third caller of the pattern it describes.
+   */
+  const handleChangeSetup = (): void => {
+    handleQuit();
+    openLayer('versus-setup', versusOpenBtn);
+  };
   const handleLevelSelectBack = (): void => {
     back();
   };
@@ -4324,6 +4373,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   levelSelectOpenBtn.addEventListener('click', blurIfPointer);
   chooseLevelBtn.addEventListener('click', handleChooseLevel);
   chooseLevelBtn.addEventListener('click', blurIfPointer);
+  changeSetupBtn.addEventListener('click', handleChangeSetup);
+  changeSetupBtn.addEventListener('click', blurIfPointer);
   levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
   levelSelectBackBtn.addEventListener('click', blurIfPointer);
 
@@ -5203,9 +5254,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      * generic word invited the player to believe otherwise, on the one surface where the
      * question "will this cost me my run?" is actually being asked.
      *
-     * `Quit to Title` at Pause otherwise -- campaign, versus, and any session that has
-     * not stated its kind yet. There a match genuinely IS being left, and versus is
-     * issue #279's screen besides.
+     * `Main Menu` at Pause in a VERSUS session (issue #261): the contract is "do not
+     * expose a generic Quit action when a specific destination can be named", and here one
+     * can be. A versus match has no run to quit -- it shares the campaign run store
+     * (`loop.ts`'s `versusAwareDeps`) but writes nothing to it -- so "Quit to Title"
+     * described a cost that is not being paid, on the surface where the player is asking
+     * what leaving costs. The word `Main Menu` also matches the destination the button
+     * actually reaches, which `Title` stopped naming when the title screen became the
+     * Launch splash.
+     *
+     * This comment used to defer the versus wording to issue #279. That was a mis-read:
+     * #279 is the RESULTS screen's action set, and Pause is #261's.
+     *
+     * `Quit to Title` at Pause otherwise -- campaign, and any session that has not stated
+     * its kind yet. There a run genuinely IS being left.
      *
      * KEYED ON `statusData.kind`, the same projection `applyStatus` branches on for the
      * mode chip and the campaign stat row, and NOT on a second session signal of its
@@ -5225,7 +5287,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       ? 'Main Menu'
       : s === 'paused' && statusData?.kind === 'practice'
         ? 'End Practice'
-        : 'Quit to Title';
+        : s === 'paused' && statusData?.kind === 'versus'
+          ? 'Main Menu'
+          : 'Quit to Title';
+    // Beside the label it shares a signal with: both read `statusData.kind` at Pause, and
+    // deciding them one statement apart is what keeps a panel from naming Main Menu as
+    // its exit while withholding the Change Setup that belongs next to it.
+    applyChangeSetup();
     /*
      * PAUSE ONLY since issue #226 -- the inverse of the old rule, which showed it at the
      * Main Menu AND at Pause. The issue removes it as a permanent top-level destination
