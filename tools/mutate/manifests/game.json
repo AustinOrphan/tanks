@@ -2181,7 +2181,7 @@
     "id": "start-boundary-new-game-stays-on-the-run-board",
     "file": "src/game/loop.ts",
     "find": "    level = deps.levels.levels[0];\n    if (startsCampaignRun) {\n      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
-    "replace": "    level = deps.levels.levels[0];\n    if (startsCampaignRun) {\n      newRunLives = deps.run.startNewRun(deps.levels.levels[1].id).livesRemaining;",
+    "replace": "    if (startsCampaignRun) {\n      newRunLives = deps.run.startNewRun(deps.levels.levels[0].id).livesRemaining;",
     "tests": [
       "src/game/loop.test.ts"
     ],
@@ -4835,7 +4835,7 @@
     ],
     "why": "Puts the whole tally line back to \"This run\", which is wrong about the DATA and not merely loose: `stats.attempt()` is zeroed on every world build, so these numbers are one try at one level, and the words point at the campaign attempt the player has going elsewhere -- the one thing they are not. Renamed and re-anchored at issue #322: it was `practice-tally-claims-a-run-the-player-has-not-got`, pinning the PRACTICE half while campaign endings still said \"run\" by ruling. The owner's #322 ruling extended the wording to every ending, so the conditional it was anchored to is gone and the defect is now the broader one. Its sibling `every-ending-tally-reads-as-one-level` was deleted rather than re-anchored, because what that one mutated TO is now the shipped code -- it had become a no-op. Re-anchored again when the two campaign endings gained a second line: the wording moved into a `tallyLineEl` argument, and the label is now `Level attempt` so it is built the same way as `Campaign run` beside it.",
     "killedBy": [
-      "hud: every ending gets its own screen (issue #323) heads the tally \"This level\" on EVERY ending, because that is what it counts"
+      "hud: every ending gets its own screen (issue #323) heads the tally \"Level attempt\" on EVERY ending, because that is what it counts"
     ]
   },
   {
@@ -4972,7 +4972,7 @@
     ],
     "why": "The HALF-fix: practice endings corrected, campaign endings left saying \"run\". This is the code that actually shipped between issues #323 and #322, so it is the state a revert lands on rather than an invented defect -- and it is the one a reader is most likely to restore, because the conditional looks like it is being careful. The tally is per-ATTEMPT for a campaign ending too; the kind of session it came from changes nothing about what was counted. Pinned separately from `ending-tally-calls-a-per-attempt-count-a-run` because a test that only checked the practice screens kills that one and survives this. Re-anchored for the same move into `tallyLineEl`.",
     "killedBy": [
-      "hud: every ending gets its own screen (issue #323) heads the tally \"This level\" on EVERY ending, because that is what it counts"
+      "hud: every ending gets its own screen (issue #323) heads the tally \"Level attempt\" on EVERY ending, because that is what it counts"
     ]
   },
   {
