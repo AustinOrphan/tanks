@@ -5,6 +5,7 @@ import {
   SKIN_IDS,
   SPAWN_ANIM_IDS,
 } from '../gallery/args.mjs';
+import { SCREEN_STATE_IDS } from '../screens/states.mjs';
 
 export const RECIPE_SCHEMA_VERSION = 1;
 export const MANIFEST_SCHEMA_VERSION = 1;
@@ -79,6 +80,14 @@ function validateProducer(recipe) {
   stableIdAt(producer.scenarioId, 'producer.scenarioId');
   if (producer.kind === 'moment' && !MOMENT_IDS.includes(producer.scenarioId)) {
     fail('producer.scenarioId', `is not an existing gallery moment (${MOMENT_IDS.join(', ')})`);
+  }
+  // The same rule for screens (issue #561), and it is the ONLY schema change the screen
+  // producer needed: a screen recipe names a state in `tools/screens/states.mjs` and the
+  // state owns its own seeding, capability override and reach steps. Nothing about which
+  // screen this is belongs in `variant`, which is why that stays empty for this kind --
+  // `validateVariant` already required exactly that of every non-moment producer.
+  if (producer.kind === 'screen' && !SCREEN_STATE_IDS.includes(producer.scenarioId)) {
+    fail('producer.scenarioId', `is not a known screen state (${SCREEN_STATE_IDS.join(', ')})`);
   }
 }
 

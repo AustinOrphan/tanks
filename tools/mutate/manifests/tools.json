@@ -683,5 +683,75 @@
       "the pre-run --only echo (issue #529) names how many entries will run against how many exist, and lists them",
       "the pre-run --only echo (issue #529) still reports the total when a single entry was selected"
     ]
+  },
+  {
+    "id": "screen-capture-output-escapes-the-workspace",
+    "file": "tools/capture/screen-adapter.mjs",
+    "find": "  if (!/^tmp\\/[A-Za-z0-9._/-]+$/.test(outputRelative) || outputRelative.includes('..')) {\n    throw new Error('screen adapter output must be an isolated relative tmp/ path');\n  }",
+    "replace": "  void outputRelative;",
+    "expect": "killed",
+    "tests": [
+      "tools/screens/states.test.ts"
+    ],
+    "killedBy": [
+      "the screen capture adapter refuses an output path that could escape the capture workspace"
+    ],
+    "why": "Drops the containment guard on a string that reaches a child process's argv. The gallery adapter carries the identical check and `paths.mjs` has two manifest entries of its own for the workspace version -- a SECOND producer is a second way to lose the same property, which is exactly why it is asserted per adapter rather than once."
+  },
+  {
+    "id": "screen-capture-accepts-a-moving-schedule",
+    "file": "tools/capture/screen-adapter.mjs",
+    "find": "  if (recipe.schedule.kind !== 'still') {\n    throw new Error('screen captures are stills; a moving application surface is issue #326');\n  }",
+    "replace": "  void recipe;",
+    "expect": "killed",
+    "tests": [
+      "tools/screens/states.test.ts"
+    ],
+    "killedBy": [
+      "the screen capture adapter refuses a recipe this producer cannot honour, rather than capturing something else"
+    ],
+    "why": "Lets a clip recipe through a producer that writes exactly one frame. The shared pipeline would then look for the frames a `frames` schedule promises and find one, failing far from the recipe that asked for it -- or, worse, publish a single-frame 'clip'. Refusing at the adapter is what keeps the error next to its cause."
+  },
+  {
+    "id": "screen-capture-allows-full-motion",
+    "file": "tools/capture/screen-adapter.mjs",
+    "find": "  if (!profile.reducedMotion) {\n    throw new Error('screen captures are taken under reduced motion; set profile.reducedMotion');\n  }",
+    "replace": "  void profile;",
+    "expect": "killed",
+    "tests": [
+      "tools/screens/states.test.ts"
+    ],
+    "killedBy": [
+      "the screen capture adapter refuses a recipe this producer cannot honour, rather than capturing something else"
+    ],
+    "why": "Accepts a recipe asking for full motion while the runner emulates reduced motion regardless -- so the recipe would DOCUMENT one thing and the capture do another, which is worse than either alone. It is also the flake this whole producer is built to avoid: a crossfade caught mid-flight on a slow machine and settled on a fast one is a screenshot that does not reproduce."
+  },
+  {
+    "id": "screen-capture-ignores-page-errors",
+    "file": "tools/capture/screen-adapter.mjs",
+    "find": "    passed: pageErrors.length === 0,",
+    "replace": "    passed: true,",
+    "expect": "killed",
+    "tests": [
+      "tools/screens/states.test.ts"
+    ],
+    "killedBy": [
+      "the screen-state catalogue ships a capture recipe for every state, and no recipe for a state that is gone"
+    ],
+    "why": "Reports an uncaught page error as a passing capture. Every state here is a screen a player can sit on -- the branded failure screens REPORT a failure, they do not suffer one -- so an exception means the picture is of a page still falling over. Turning that into a saved artifact instead of a failed capture is the quiet-success failure mode the assertion channel exists for."
+  },
+  {
+    "id": "screen-capture-measures-nothing-and-says-nothing",
+    "file": "tools/capture/screen-adapter.mjs",
+    "find": "  const missing = measurements.filter((m) => !m.present).map((m) => m.selector);",
+    "replace": "  const missing = [];",
+    "expect": "killed",
+    "tests": [
+      "tools/screens/states.test.ts"
+    ],
+    "killedBy": [
+      "the screen-state catalogue ships a capture recipe for every state, and no recipe for a state that is gone"
+    ],
+    "why": "Stops noticing that a measured selector matched nothing, which is how a renamed class turns a state's report into an empty caption while the screenshot still looks plausible. Deliberately NOT an is-visible check: several states exist to show a control is ABSENT, so presence is the property that distinguishes 'the control is hidden, as intended' from 'this state is measuring nothing at all'."
   }
 ]

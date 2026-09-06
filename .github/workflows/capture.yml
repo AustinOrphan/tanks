@@ -49,6 +49,21 @@ on:
           - gallery.drive.normal
           - gallery.fire.still
           - gallery.ricochet.still
+          - screen.about
+          - screen.confirm.new-campaign
+          - screen.customize
+          - screen.levels
+          - screen.main-menu
+          - screen.main-menu.fresh
+          - screen.no-script
+          - screen.records.achievements
+          - screen.records.stats
+          - screen.records.stats.empty
+          - screen.settings
+          - screen.startup.match-failed
+          - screen.startup.probe-blocked
+          - screen.startup.unsupported-render
+          - screen.versus-setup
       ref:
         description: capture mode only. A branch, tag or SHA. Blank uses the default branch.
         required: false

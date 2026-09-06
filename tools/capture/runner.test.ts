@@ -323,29 +323,33 @@ describe('capture runner publication and cleanup', () => {
   it('runs a fake non-moment producer through the complete shared artifact pipeline', async () => {
     const checkout = await root();
     const recipe = structuredClone(CAPTURE_RECIPES[1].recipe);
-    recipe.id = 'test.screen.clip';
-    recipe.producer = { kind: 'screen', scenarioId: 'fake-screen' };
-    recipe.fixture = { id: 'fake-screen', seed: 99 };
+    // `flow`, not `screen`, since issue #561 gave `screen` a real adapter and a validated
+    // scenario list. This case is about the SHARED pipeline carrying any non-gallery
+    // producer, so it wants a kind the schema still treats as an open name -- coupling it
+    // to `tools/screens/states.mjs` would make an unrelated catalogue edit fail it.
+    recipe.id = 'test.flow.clip';
+    recipe.producer = { kind: 'flow', scenarioId: 'fake-flow' };
+    recipe.fixture = { id: 'fake-flow', seed: 99 };
     recipe.variant = {};
     recipe.schedule = { kind: 'frames', frameCount: 2 };
     const [entry] = createRegistry([recipe]);
-    const fakeScreen = vi.fn(async (context: any) => {
+    const fakeFlow = vi.fn(async (context: any) => {
       const frames = [];
       for (let index = 0; index < 2; index++) {
         const frame = join(context.outputDirectory, `arbitrary-${index}.png`);
-        await writeFile(frame, `screen ${index}`);
+        await writeFile(frame, `flow ${index}`);
         frames.push(frame);
       }
       return normalizedResult(context, {
         frames,
-        kind: 'screen',
-        scenarioId: 'fake-screen',
+        kind: 'flow',
+        scenarioId: 'fake-flow',
         metadata: null,
-        assertions: [{ kind: 'screen-ready', passed: true, diagnostic: null, details: {} }],
+        assertions: [{ kind: 'flow-ready', passed: true, diagnostic: null, details: {} }],
         toolVersions: { fake: '1.0.0' },
       });
     });
-    const producerRegistry = createProducerRegistry([['screen', fakeScreen]]);
+    const producerRegistry = createProducerRegistry([['flow', fakeFlow]]);
     const deps = common(undefined, {
       producerRegistry,
       describeArtifact: vi.fn(async (_path: string, format: string) => artifactDescription(format, 2)),
@@ -353,23 +357,23 @@ describe('capture runner publication and cleanup', () => {
 
     const result = await captureRecipe(entry, {
       root: checkout,
-      out: 'artifacts/capture/fake-screen',
+      out: 'artifacts/capture/fake-flow',
       retainFrames: false,
       sourceRef: null,
     }, deps);
 
-    expect(fakeScreen).toHaveBeenCalledOnce();
+    expect(fakeFlow).toHaveBeenCalledOnce();
     expect(deps.encodeMp4).toHaveBeenCalledOnce();
     expect(deps.encodeGif).toHaveBeenCalledOnce();
     expect(result.manifest.producer).toMatchObject({
-      kind: 'screen', scenarioId: 'fake-screen', metadata: null,
+      kind: 'flow', scenarioId: 'fake-flow', metadata: null,
     });
     expect(result.manifest.capture).toMatchObject({
       requestedSchedule: { kind: 'frames', frameCount: 2 },
       frameSchedule: { kind: 'frames', frameCount: 2 },
     });
     expect(result.manifest.assertions).toEqual([
-      { kind: 'screen-ready', passed: true, diagnostic: null, details: {} },
+      { kind: 'flow-ready', passed: true, diagnostic: null, details: {} },
     ]);
     expect((await stat(join(result.output.absolute, 'capture.mp4'))).isFile()).toBe(true);
     expect((await stat(join(result.output.absolute, 'preview.gif'))).isFile()).toBe(true);
