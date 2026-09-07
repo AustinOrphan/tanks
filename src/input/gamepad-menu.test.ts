@@ -68,13 +68,28 @@ function single(): FakePad & { poller: ReturnType<typeof createGamepadMenuPoller
 }
 
 describe('createGamepadMenuPoller: button indices', () => {
-  it('confirm and back are the SAME face buttons gamepad.ts reads as fire and mine -- the reason loop.ts resyncs -- and pause is Start (9)', () => {
+  it('confirm and back are DISJOINT from fire and mine, so a menu press cannot leak a shot, and pause is Start (9)', () => {
     // The behavioural tests below press through these constants, so a changed index would
-    // pass them; this is what holds the numbers. The tie to gamepad.ts is the point: the
-    // one-poll resync in `createGamepadReader` exists only because the two readers share
-    // buttons 0 and 1.
-    expect(MENU_CONFIRM_BUTTON).toBe(GAMEPAD_FIRE_BUTTON);
-    expect(MENU_BACK_BUTTON).toBe(GAMEPAD_MINE_BUTTON);
+    // pass them; this is what holds the numbers.
+    //
+    // THE ASSERTION INVERTED, deliberately. It used to require these to be the SAME two
+    // buttons, and the one-poll resync in `createGamepadReader` existed because they were:
+    // confirming Resume with A, still held on the first simulated tick, read as a fresh
+    // fire press and shot a shell (issue #494). Fire and mine have since moved to the
+    // triggers, because on a twin-stick pad the face buttons sit under the thumb that has
+    // to stay on the aim stick.
+    //
+    // So the tie is now a separation, and it is worth pinning in that direction: rebinding
+    // either pair back onto the other's buttons would restore a defect that took its own
+    // issue to find. Stated as set disjointness rather than four literals, so it keeps
+    // holding if any of the four moves for an unrelated reason.
+    const menu = [MENU_CONFIRM_BUTTON, MENU_BACK_BUTTON, MENU_PAUSE_BUTTON];
+    const play = [GAMEPAD_FIRE_BUTTON, GAMEPAD_MINE_BUTTON];
+    for (const m of menu) {
+      expect(play, `menu button ${m} is also a gameplay action`).not.toContain(m);
+    }
+    expect(MENU_CONFIRM_BUTTON).toBe(0);
+    expect(MENU_BACK_BUTTON).toBe(1);
     expect(MENU_PAUSE_BUTTON).toBe(9);
   });
 });

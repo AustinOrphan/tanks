@@ -61,12 +61,28 @@ export const GAMEPAD_DEADZONE = 0.2;
 
 /**
  * Standard Gamepad API mapping (`mapping: 'standard'`) button indices this reader reads.
- * 0 is the bottom face button (A on Xbox, Cross on PlayStation) and 1 is the button to
- * its right (B / Circle) -- the two are adjacent under a right thumb resting on the face
- * buttons, mirroring the mouse's left-click-fires/right-click-mines split.
+ * 7 is the right trigger (RT / R2) and 6 the left (LT / L2).
+ *
+ * WHY THE TRIGGERS, and why the face buttons were wrong. This is a TWIN-STICK game: the
+ * left stick drives and the right stick aims (`AIM_AXIS_X/Y` below). Fire used to sit on
+ * button 0 -- A / Cross -- which is under the same right thumb that has to stay on the aim
+ * stick. Firing therefore meant letting go of aim, so a player could aim or shoot but not
+ * both, in a game whose whole subject is aiming. The mouse split it was mirroring does not
+ * have that problem: a mouse aims with the hand and fires with a finger of the same hand.
+ * The triggers restore that, with the index fingers free of both sticks.
+ *
+ * Mine goes to the OPPOSITE trigger rather than beside fire, so the two cannot be confused
+ * under pressure and neither hand does both jobs.
+ *
+ * A consequence worth stating, because it removes a whole bug class: the menu poller
+ * (`gamepad-menu.ts`) reads 0 and 1 as Confirm and Back, and those are now disjoint from
+ * these. Confirming a menu with A can no longer leak a shot into the first simulated tick.
+ * `resync()` below still exists, because a HELD trigger crossing the same boundary would
+ * read as a fresh press -- but the specific face-button overlap that motivated it (issue
+ * #494) is gone.
  */
-export const GAMEPAD_FIRE_BUTTON = 0;
-export const GAMEPAD_MINE_BUTTON = 1;
+export const GAMEPAD_FIRE_BUTTON = 7;
+export const GAMEPAD_MINE_BUTTON = 6;
 
 /** Standard mapping axis indices: left stick is 0/1, right stick is 2/3. */
 const MOVE_AXIS_X = 0;
@@ -144,11 +160,19 @@ export interface GamepadReader {
   connected(): boolean;
   /**
    * Arm a one-poll edge resync (issue #494): the NEXT `poll()` adopts whatever the fire and
-   * mine buttons are doing as the "previous" state without reporting an edge. The menu
-   * poller (`gamepad-menu.ts`) reads the same face buttons as Confirm and Back while
-   * nothing simulates, and this reader is not polled at all then -- so a Resume confirmed
-   * with A, still held on the first simulated tick, would otherwise read here as a fresh
-   * press and fire a shell. `loop.ts` calls this on every entry into play, beside
+   * mine buttons are doing as the "previous" state without reporting an edge.
+   *
+   * THE INVARIANT, restated now that fire and mine have moved to the triggers. This reader
+   * is not polled at all while nothing simulates, so on the first simulated tick it has no
+   * previous state and ANY held fire or mine button reads as a fresh press -- and fires.
+   * That is true of a trigger held through a menu exactly as it was of a face button.
+   *
+   * What HAS gone is the specific overlap that made it easy to hit: the menu poller reads
+   * 0 and 1 as Confirm and Back, and fire/mine were those same buttons, so confirming
+   * Resume with A leaked a shell every time. Those sets are now disjoint, so reaching this
+   * needs a player deliberately holding a trigger across the transition. Kept because that
+   * is still reachable, and because it would silently return if anything were ever rebound
+   * onto a menu button. `loop.ts` calls this on every entry into play, beside
    * `clearQueuedPresses()`.
    */
   resync(): void;

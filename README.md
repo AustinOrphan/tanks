@@ -34,6 +34,16 @@ The canonical roster currently defines 6 enemy types. Its gameplay data lives in
 | Drop mine | `Space` / right click |
 | Mute | `M` |
 
+On a gamepad, both thumbs stay on the sticks and the index fingers do the shooting:
+
+| | |
+| --- | --- |
+| Move | Left stick |
+| Aim | Right stick |
+| Fire | Right trigger (`RT` / `R2`) |
+| Drop mine | Left trigger (`LT` / `L2`) |
+| Menus | `A`/`Cross` confirms, `B`/`Circle` backs out, `Start` pauses |
+
 Experimental gamepad input and 2–4-player couch co-op are available behind
 development flags; see the [generated dev-flag reference](docs/dev-flags.md).
 
