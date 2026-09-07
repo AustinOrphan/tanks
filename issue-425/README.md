@@ -20,3 +20,17 @@ A tank is 1.5 cells wide, so any corridor a tank must traverse needs at least 2 
 | `ringroad-33x23.png` | perimeter alternative | 2 cells |
 
 All three candidates pass the real `evaluateVersusBoard` at N=2, 3 and 4.
+
+## The 27x17 comparison arms
+
+Each candidate also ships a redesigned board at the current size, and all three pass the gate too.
+
+| File | Narrowest corridor | Solid cover |
+| --- | --- | --- |
+| `rotunda-arm-27x17.png` | 4 cells | 19.0% |
+| `pinwheel-arm-27x17.png` | 2 cells | 22.9% |
+| `ringroad-arm-27x17.png` | 2 cells | 23.3% |
+
+For reference: the withdrawn board is 30.7% solid, and `vs-tri-01` — which works at this size, for three
+players — is 32.5%.
+
