@@ -81,5 +81,19 @@
       "the schema constants pins every documented default, so a silent retune fails here",
       "startGameWith: dev flags stay off by default builds the renderer with the STORED quality preset when no flag is set (issue #540)"
     ]
+  },
+  {
+    "id": "team-b-collides-with-the-player-hull",
+    "file": "src/presentation/identity.ts",
+    "find": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0xfcc0fc, 0x4eff3b];",
+    "replace": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "killedBy": [
+      "player identity: ring and shell tint TEAM_COLORS: exactly 3 hues, measurably clear of each other, the player hull and the placeholder"
+    ],
+    "why": "Restores the blue team B that issue #579 replaced. It is unequal to every other colour in the game, so the byte-inequality sweep this entry's test replaced passed on it -- and it sits 2.09 from the player's default hull #3d7bd6 once composited, which is a blue ring drawn around a blue tank. That is the whole case for measuring instead of comparing: the defect and the assertion that was supposed to catch it coexisted happily. Filed in presentation.json because its file is src/presentation/identity.ts -- `validateManifest`'s one-file-per-area rule (issue #505) requires it, and caught this entry filed under render.json."
   }
 ]
