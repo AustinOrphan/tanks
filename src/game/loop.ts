@@ -787,8 +787,19 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  * through `controlledBy` exactly as `tallyCoopKills` does, so a slot means the same thing
  * in every column.
  *
- * Player tanks only, on both counts. An AI's shots are not a player's marksmanship, and a
- * bot filling a versus slot is not a seat anyone is sitting in.
+ * PLAYER-KIND TANKS ONLY, and that guard is a structural safeguard rather than something
+ * that fires today -- stated plainly because the obvious reading of it is wrong. In ffa
+ * and teams `loadArena` STRIPS every non-player spawn letter (`kind !== 'player' && mode
+ * !== 'campaign-coop'` -> `continue`, arena.ts), so a versus arena holds nothing but
+ * player-kind tanks. A slot a BOT drives is one of them: it carries `controlledBy` like
+ * any other competitor and belongs in the table, because the table is per slot and that
+ * slot took part in the match.
+ *
+ * The guard is kept because it mirrors `tallyCoopKills`'s own player-only rule -- whose
+ * campaign branch genuinely needs it -- and because this function's contract should not
+ * depend on which spawn letters a future arena happens to admit. Its test exercises it
+ * with an input a versus arena cannot currently produce, which is the known-bad control a
+ * guard needs rather than a claim about live behaviour.
  */
 export function tallyVersusAccuracy(
   events: SimEvent[],

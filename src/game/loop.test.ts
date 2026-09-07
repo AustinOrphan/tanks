@@ -3702,8 +3702,11 @@ describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue
   const world = (mode: 'ffa' | 'teams' | 'campaign') =>
     ({
       rules: resolveWorldRules({ mode } as never),
-      // Slot 2 is a BOT sharing the arena, which is what makes the player-only rule
-      // testable: its shots must not land in anyone's column.
+      // Tank 3 is a NON-PLAYER tank, which a versus arena cannot actually contain: ffa and
+      // teams strip every non-player spawn letter (arena.ts). It is here as the known-bad
+      // control the player-only guard needs -- NOT as a claim that this occurs, and not a
+      // stand-in for a bot. A slot a bot DRIVES is player-kind, carries `controlledBy`,
+      // and is counted like any other competitor.
       tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown')],
     }) as World;
   const fired = (ownerId: number): SimEvent =>
@@ -3744,9 +3747,14 @@ describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue
     expect(shellKills).toEqual([]);
   });
 
-  it('ignores a bot entirely, and does nothing at all outside a versus mode', () => {
-    // A bot's shots are not a player's marksmanship, and there is no per-slot table to
-    // fill outside ffa/teams -- the campaign screen has its own single-player line.
+  it('ignores a NON-PLAYER tank, and does nothing at all outside a versus mode', () => {
+    // Two guards, different in kind. The mode guard is LIVE: outside ffa/teams there is no
+    // per-slot table to fill, and the campaign screen has its own single-player line.
+    //
+    // The player-kind guard is STRUCTURAL -- a versus arena holds only player-kind tanks,
+    // so this input cannot occur there today. It is the known-bad control the guard needs,
+    // and it keeps this function's contract from depending on which spawn letters a future
+    // arena admits.
     const shots: number[] = [];
     const shellKills: number[] = [];
     tallyVersusAccuracy([fired(3), destroyed(1, 3, 'shell')], world('ffa'), shots, shellKills);
