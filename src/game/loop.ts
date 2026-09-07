@@ -772,6 +772,51 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
  * default 4 keeps lifetime stats P1-scoped. This stays a small loop.ts-local array
  * pair instead.
  */
+/**
+ * PER-SLOT SHOTS AND SHELL KILLS, for the versus result's accuracy column (owner ruling
+ * on issue #279).
+ *
+ * A SIBLING of `tallyCoopKills` rather than four more positional parameters on it: that
+ * function answers "who eliminated whom", this one answers "how well did each player
+ * shoot", and the two are read by different columns of the same table. Splitting them
+ * also keeps each independently testable, which four out-parameters would not.
+ *
+ * `shellKills`, not `kills`: accuracy has always meant shells that found a tank over
+ * shells fired (`renderAttemptSummary` computes the single-player line the same way), so
+ * a mine kill raises a player's kill count and leaves their accuracy alone. Attributed
+ * through `controlledBy` exactly as `tallyCoopKills` does, so a slot means the same thing
+ * in every column.
+ *
+ * Player tanks only, on both counts. An AI's shots are not a player's marksmanship, and a
+ * bot filling a versus slot is not a seat anyone is sitting in.
+ */
+export function tallyVersusAccuracy(
+  events: SimEvent[],
+  world: World,
+  shots: number[],
+  shellKills: number[],
+): void {
+  if (world.rules.mode !== 'ffa' && world.rules.mode !== 'teams') return;
+  const slotOf = (tankId: number): number | null => {
+    const tank = world.tanks.find((t) => t.id === tankId);
+    return tank?.kind === 'player' ? tank.controlledBy ?? 0 : null;
+  };
+  for (const e of events) {
+    if (e.type === 'fire') {
+      const slot = slotOf(e.ownerId);
+      if (slot !== null) shots[slot] = (shots[slot] ?? 0) + 1;
+      continue;
+    }
+    if (e.type !== 'tank-destroyed' || e.by.source !== 'shell') continue;
+    // A tank destroyed by its OWN shell is not a hit on an opponent; `tallyCoopKills`
+    // refuses it as a kill for the same reason and this must agree, or a player could
+    // improve their accuracy by ricocheting into themselves.
+    if (e.by.ownerId === e.tankId) continue;
+    const slot = slotOf(e.by.ownerId);
+    if (slot !== null) shellKills[slot] = (shellKills[slot] ?? 0) + 1;
+  }
+}
+
 export function tallyCoopKills(events: SimEvent[], world: World, kills: number[], deaths: number[]): void {
   if (world.rules.mode === 'ffa' || world.rules.mode === 'teams') {
     for (const e of events) {
@@ -2142,6 +2187,10 @@ export function startGameWith(
    */
   let coopKills: number[] = [];
   let versusDeaths: number[] = [];
+  // The accuracy column's two inputs (issue #279's owner ruling), same lifecycle as the
+  // pair above: per attempt, never persisted, reset wherever those are.
+  let versusShots: number[] = [];
+  let versusShellKills: number[] = [];
 
   /**
    * THE WHOLE WIN/LOSE PANEL, in one push (issue #324, step S4) -- what used to be
@@ -2199,7 +2248,7 @@ export function startGameWith(
         : undefined;
     const mode = forWorld.rules.mode;
     if (mode === 'ffa' || mode === 'teams') {
-      hud.setOutcome({ tally: mode, attempt, run, action: relaunchTarget, kills: coopKills, deaths: versusDeaths, typedOutcome });
+      hud.setOutcome({ tally: mode, attempt, run, action: relaunchTarget, kills: coopKills, deaths: versusDeaths, shots: versusShots, shellKills: versusShellKills, typedOutcome });
     } else if (countPlayerTanks(forWorld) >= 2) {
       hud.setOutcome({ tally: 'coop', attempt, run, action: relaunchTarget, kills: coopKills, typedOutcome });
     } else {
@@ -2416,6 +2465,7 @@ export function startGameWith(
       // The results-screen per-slot tally, alongside stats.record -- see coopKills' own
       // comment above for why this stays out of stats.ts.
       tallyCoopKills(events, driver.world, coopKills, versusDeaths);
+      tallyVersusAccuracy(events, driver.world, versusShots, versusShellKills);
       // AFTER record, so an attempt feat sees the attempt that just finished.
       checkAchievements(pendingClear);
       pendingClear = null;
@@ -2730,6 +2780,8 @@ export function startGameWith(
     // attempt, not just at boot -- see coopKills' own comment for why.
     coopKills = [];
     versusDeaths = [];
+    versusShots = [];
+    versusShellKills = [];
     // No Records push for the new attempt: the page reads `deps.stats` when the Records
     // page opens (issue #324, step S5), and `startAttempt` above has already reset the
     // store this reads.
@@ -3112,6 +3164,8 @@ export function startGameWith(
   deps.stats.startAttempt();
   coopKills = [];
   versusDeaths = [];
+  versusShots = [];
+  versusShellKills = [];
   // The outcome panel's opening state, stated rather than inherited: a session that is
   // disposed before it ever produces an event still leaves the HUD holding a projection
   // that describes THIS session's board, not the previous one's -- and with no typed

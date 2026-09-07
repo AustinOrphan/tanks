@@ -5367,8 +5367,8 @@
   {
     "id": "versus-results-collapse-back-into-one-line",
     "file": "src/game/hud.ts",
-    "find": "    versusResultsEl.innerHTML = `<tr><th></th><td>Kills</td><td>Deaths</td></tr>${body}`;",
-    "replace": "    versusResultsEl.textContent = rows.map(([l, k, d]) => `${l}: ${k}/${d}`).join(' \\u00b7 ');",
+    "find": "    versusResultsEl.innerHTML =\n      `<tr><th></th><td>Kills</td><td>Deaths</td><td>Accuracy</td></tr>${body}`;",
+    "replace": "    versusResultsEl.textContent = rows.map(([l, k, d, a]) => `${l}: ${k}/${d} ${a}`).join(' \u00b7 ');",
     "expect": "killed",
     "tests": [
       "src/game/hud.match.test.ts"
@@ -5377,6 +5377,90 @@
       "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the ffa results line, per-slot kills/deaths",
       "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the teams results line as PER-TEAM sums, not per-slot"
     ],
-    "why": "Puts the per-competitor figures back on one run-on line, which is what the owner's ruling replaced: at four players `P1: 6/2 \\u00b7 P2: 2/6 \\u00b7 P3: 1/5 \\u00b7 P4: 0/6` is a row of numbers a reader has to parse before they can compare anyone to anyone. The killers read ROWS OF CELLS rather than `textContent` for exactly this reason -- a string comparison cannot tell a table from the same digits run together, so a test written that way would have passed this mutation."
+    "why": "Puts the per-competitor figures back on one run-on line, which is what the owner's ruling replaced: at four players `P1: 6/2 \\u00b7 P2: 2/6 \\u00b7 P3: 1/5 \\u00b7 P4: 0/6` is a row of numbers a reader has to parse before they can compare anyone to anyone. The killers read ROWS OF CELLS rather than `textContent` for exactly this reason -- a string comparison cannot tell a table from the same digits run together, so a test written that way would have passed this mutation. Re-anchored when the accuracy column landed: the collapsed line now carries three figures per competitor, which is worse still on one line -- `Player 1: 6/2 36% \u00b7 Player 2: 2/6 11% \u00b7 ...`."
+  },
+  {
+    "id": "versus-accuracy-counts-mine-kills-as-hits",
+    "file": "src/game/loop.ts",
+    "find": "    if (e.type !== 'tank-destroyed' || e.by.source !== 'shell') continue;",
+    "replace": "    if (e.type !== 'tank-destroyed') continue;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) leaves a MINE kill out of the numerator, which is the whole reason it is not `kills`"
+    ],
+    "why": "Counts a mine kill as a hit, so accuracy stops meaning shells that found a tank over shells fired -- the meaning it has on the campaign line and the only one that makes the column comparable between a mine-heavy player and a marksman. Their Kills column already credits the mine; crediting it twice rates the same play higher in both columns."
+  },
+  {
+    "id": "versus-accuracy-credits-a-self-elimination",
+    "file": "src/game/loop.ts",
+    "find": "    if (e.by.ownerId === e.tankId) continue;\n    const slot = slotOf(e.by.ownerId);\n    if (slot !== null) shellKills[slot] = (shellKills[slot] ?? 0) + 1;",
+    "replace": "    const slot = slotOf(e.by.ownerId);\n    if (slot !== null) shellKills[slot] = (shellKills[slot] ?? 0) + 1;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) refuses a self-elimination, so a player cannot improve their accuracy by ricocheting into themselves"
+    ],
+    "why": "Credits a player's own shell killing themselves as a hit, so a ricochet into your own tank RAISES your accuracy. `tallyCoopKills` refuses the same event as a kill; the two must agree or a slot's accuracy numerator counts something its Kills column does not."
+  },
+  {
+    "id": "versus-accuracy-counts-a-bots-shooting",
+    "file": "src/game/loop.ts",
+    "find": "    const tank = world.tanks.find((t) => t.id === tankId);\n    return tank?.kind === 'player' ? tank.controlledBy ?? 0 : null;",
+    "replace": "    const tank = world.tanks.find((t) => t.id === tankId);\n    return tank ? tank.controlledBy ?? 0 : null;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) ignores a bot entirely, and does nothing at all outside a versus mode"
+    ],
+    "why": "Attributes a BOT's shots and hits to a slot, so an AI filling a versus seat reports marksmanship for a seat nobody is sitting in -- and, because `controlledBy` is undefined on a bot, it all lands on slot 0, silently inflating Player 1. `tallyCoopKills` applies the same player-only rule for the same reason."
+  },
+  {
+    "id": "versus-results-drop-the-accuracy-column",
+    "file": "src/game/hud.ts",
+    "find": "      .map(([label, k, d, acc]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td><td>${acc}</td></tr>`)",
+    "replace": "      .map(([label, k, d]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td></tr>`)",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the ffa results line, per-slot kills/deaths"
+    ],
+    "why": "Drops the per-player accuracy the owner asked for, leaving the header row promising a column the body does not fill -- a table whose heading and rows disagree, which reads as a rendering bug rather than a missing feature. The killers assert rows of CELLS, so a body row short of a cell fails; a `textContent` comparison would not have noticed."
+  },
+  {
+    "id": "versus-result-keeps-the-campaign-attempt-line",
+    "file": "src/game/hud.ts",
+    "find": "    if (outcomeData.tally === 'ffa' || outcomeData.tally === 'teams') {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+    "replace": "    void 0;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) drops the campaign attempt line, because the table below already says it per player"
+    ],
+    "why": "Puts the campaign attempt line back on a versus result, above a table that already reports the same ground per player. Two wrongs at once: \"Level attempt\" names a level a versus match does not have, and the numbers openly DISAGREE with the row beneath -- `attempt` counts the tracked seat's shell and mine kills against its own shots, the table is per-slot, so the line reads 7 kills / 29% over a Player 1 row reading 6 and 36%. Neither figure is incorrect, which is what makes showing both worse than showing either."
+  },
+  {
+    "id": "every-ending-loses-the-attempt-line",
+    "file": "src/game/hud.ts",
+    "find": "    if (outcomeData.tally === 'ffa' || outcomeData.tally === 'teams') {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+    "replace": "    if (true) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.match.test.ts"
+    ],
+    "killedBy": [
+      "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) drops the campaign attempt line, because the table below already says it per player"
+    ],
+    "why": "The over-broad half of the same edit: the line is dropped everywhere rather than on the screen that replaced it. A campaign or practice ending has no per-player table to fall back on, so its only tally of the round just played disappears. Distinct from the entry above because a test that merely checked the versus screen is clean would kill that one and survive this."
   }
 ]

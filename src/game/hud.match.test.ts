@@ -149,15 +149,43 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
       Array.from(tr.children).map((c) => c.textContent ?? ''),
     );
 
+  it('drops the campaign attempt line, because the table below already says it per player', () => {
+    // Owner ruling. "Level attempt: ..." was the last campaign-scoped wording on a versus
+    // screen -- a versus match is not a level -- and it sat directly above a table
+    // reporting the same ground for EVERY player rather than the tracked seat alone.
+    //
+    // The two also disagreed, which is the sharper reason: `attempt` counts the tracked
+    // player's shell and mine kills against their own shots, while the table is per-slot.
+    // The line read one number and Player 1's row read another, and neither was wrong.
+    const { hud: h, root } = mount();
+    const attemptLine = (): HTMLElement =>
+      root.querySelector('.hud-attempt-summary') as HTMLElement;
+    const shown = (): boolean =>
+      !attemptLine().classList.contains('hud-attempt-summary--hidden');
+
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0], deaths: [0, 2], shots: [8, 4], shellKills: [2, 0] });
+    h.setState('outcome-win');
+    expect(shown(), 'a versus result still carried the campaign attempt line').toBe(false);
+
+    // THE NEGATIVE CONTROL: the line is dropped for a VERSUS result, not switched off for
+    // every ending. A campaign screen is where it belongs and where it stays -- without
+    // this, deleting the element entirely would satisfy the assertion above.
+    h.setOutcome({ tally: 'solo', action: 'campaign-levels', attempt: NO_ATTEMPT });
+    expect(shown(), 'the campaign ending lost its attempt line too').toBe(true);
+  });
+
   it('win panel carries the ffa results line, per-slot kills/deaths', () => {
     const { hud: h, root } = mount();
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0, 1], deaths: [1, 3, 0] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0, 1], deaths: [1, 3, 0], shots: [8, 4, 4], shellKills: [2, 0, 1] });
     h.setState('outcome-win');
+    // ACCURACY per player (owner ruling): shell kills over shots fired, the same meaning
+    // the campaign line has always had -- so a mine kill raises Kills and leaves this
+    // column alone. 2 of 8, 0 of 4, 1 of 4.
     expect(versusRows(root)).toEqual([
-      ['', 'Kills', 'Deaths'],
-      ['Player 1', '2', '1'],
-      ['Player 2', '0', '3'],
-      ['Player 3', '1', '0'],
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Player 1', '2', '1', '25%'],
+      ['Player 2', '0', '3', '0%'],
+      ['Player 3', '1', '0', '25%'],
     ]);
     expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(false);
   });
@@ -165,14 +193,17 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
   it('win panel carries the teams results line as PER-TEAM sums, not per-slot', () => {
     const { hud: h, root } = mount();
     // slots 0,2 -> team 0; slot 1 -> team 1 (teamOf(slot) = slot % 2).
-    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 1, 3], deaths: [1, 4, 0] });
+    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 1, 3], deaths: [1, 4, 0], shots: [8, 4, 12], shellKills: [2, 1, 3] });
     h.setState('outcome-win');
     // PER-TEAM rows, not per-slot: teams mode cares which side won, and a per-player
     // breakdown here would answer a question the mode is not asking.
     expect(versusRows(root)).toEqual([
-      ['', 'Kills', 'Deaths'],
-      ['Team 1', '5', '1'],
-      ['Team 2', '1', '4'],
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      // Accuracy sums per SIDE too -- slots 0 and 2 are team 1, so 5 shell kills of 20
+      // shots, not the average of two per-player percentages, which would weight a slot
+      // that barely fired the same as one that carried the match.
+      ['Team 1', '5', '1', '25%'],
+      ['Team 2', '1', '4', '25%'],
     ]);
   });
 
@@ -187,27 +218,27 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     // -- so the assertion is about the gate rather than about pixels: the line keeps the
     // text the OUTCOME left on it, and the push made during play does not reach it.
     const { hud: h, root } = mount();
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0], deaths: [0, 2] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 0], deaths: [0, 2], shots: [8, 4], shellKills: [2, 0] });
     h.setState('outcome-win');
     const atOutcome = versusLine(root).textContent ?? '';
     expect(versusRows(root)).toEqual([
-      ['', 'Kills', 'Deaths'],
-      ['Player 1', '2', '0'],
-      ['Player 2', '0', '2'],
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Player 1', '2', '0', '25%'],
+      ['Player 2', '0', '2', '0%'],
     ]);
 
     h.setState('playing');
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [9, 9], deaths: [9, 9] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [9, 9], deaths: [9, 9], shots: [36, 36], shellKills: [9, 9] });
     expect(versusLine(root).textContent ?? '', 'a push during play reached the DOM').toBe(atOutcome);
 
     // ...and the gate reopens: the next outcome surface renders the push it was given,
     // so this is not a flag stuck the other way.
     h.setState('outcome-win');
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 3], deaths: [3, 1] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 3], deaths: [3, 1], shots: [4, 12], shellKills: [1, 3] });
     expect(versusRows(root)).toEqual([
-      ['', 'Kills', 'Deaths'],
-      ['Player 1', '1', '3'],
-      ['Player 2', '3', '1'],
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Player 1', '1', '3', '25%'],
+      ['Player 2', '3', '1', '25%'],
     ]);
   });
 
@@ -231,32 +262,32 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     h.setOutcome({ tally: 'coop', action: 'campaign-levels', attempt: NO_ATTEMPT, kills: [1, 2] });
     h.setState('outcome-win');
     expect(coopLine().classList.contains('hud-coop-kills--hidden')).toBe(false);
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 2], deaths: [2, 1] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 2], deaths: [2, 1], shots: [4, 8], shellKills: [1, 2] });
     expect(coopLine().classList.contains('hud-coop-kills--hidden')).toBe(true);
     expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(false);
   });
 
   it('the versus results line is hidden outside win/lose, even with live data set', () => {
     const { hud: h, root } = mount();
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1], deaths: [0] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1], deaths: [0], shots: [4], shellKills: [1] });
     h.setState('playing');
     expect(versusLine(root).classList.contains('hud-versus-results--hidden')).toBe(true);
   });
 
   it('updates live while the win panel is already open, same as the coop kill line', () => {
     const { hud: h, root } = mount();
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 0], deaths: [0, 1] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 0], deaths: [0, 1], shots: [4, 4], shellKills: [1, 0] });
     h.setState('outcome-win');
     expect(versusRows(root)).toEqual([
-      ['', 'Kills', 'Deaths'],
-      ['Player 1', '1', '0'],
-      ['Player 2', '0', '1'],
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Player 1', '1', '0', '25%'],
+      ['Player 2', '0', '1', '0%'],
     ]);
-    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 1], deaths: [1, 1] });
+    h.setOutcome({ tally: 'ffa', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 1], deaths: [1, 1], shots: [4, 4], shellKills: [1, 1] });
     expect(versusRows(root)).toEqual([
-      ['', 'Kills', 'Deaths'],
-      ['Player 1', '1', '1'],
-      ['Player 2', '1', '1'],
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Player 1', '1', '1', '25%'],
+      ['Player 2', '1', '1', '25%'],
     ]);
   });
 });

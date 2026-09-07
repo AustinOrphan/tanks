@@ -94,6 +94,7 @@ import {
   isPlayerDeath,
   deathVignetteColor,
   tallyCoopKills,
+  tallyVersusAccuracy,
   playerShellsInFlight,
   startGameWith,
   versusResultFromWorld,
@@ -3692,6 +3693,71 @@ describe('tallyCoopKills', () => {
     const world = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player'), mkTank(3, 'brown')] } as World;
     tallyCoopKills([destroyedEnemy(3, 1)], world, into, []);
     expect(into[0]).toBe(1);
+  });
+});
+
+describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue #279)', () => {
+  const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
+    ({ id, kind, controlledBy }) as Tank;
+  const world = (mode: 'ffa' | 'teams' | 'campaign') =>
+    ({
+      rules: resolveWorldRules({ mode } as never),
+      // Slot 2 is a BOT sharing the arena, which is what makes the player-only rule
+      // testable: its shots must not land in anyone's column.
+      tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown')],
+    }) as World;
+  const fired = (ownerId: number): SimEvent =>
+    ({ type: 'fire', ownerId, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 }) as SimEvent;
+  const destroyed = (tankId: number, ownerId: number, source: 'shell' | 'blast'): SimEvent =>
+    ({ type: 'tank-destroyed', tankId, kind: 'player', by: { source, ownerId }, pos: { x: 0, y: 0 } }) as SimEvent;
+
+  it('counts shots and SHELL kills per slot, attributed through controlledBy', () => {
+    const shots: number[] = [];
+    const shellKills: number[] = [];
+    tallyVersusAccuracy(
+      [fired(1), fired(1), fired(2), destroyed(2, 1, 'shell')],
+      world('ffa'), shots, shellKills,
+    );
+    expect(shots[0]).toBe(2);
+    expect(shots[1]).toBe(1);
+    expect(shellKills[0]).toBe(1);
+    expect(shellKills[1]).toBeUndefined();
+  });
+
+  it('leaves a MINE kill out of the numerator, which is the whole reason it is not `kills`', () => {
+    // Accuracy has always meant shells that found a tank over shells fired -- the
+    // single-player line computes it the same way. Counting a blast kill here would rate a
+    // mine-heavy player above a marksman while their Kills column already credits it.
+    const shots: number[] = [];
+    const shellKills: number[] = [];
+    tallyVersusAccuracy([fired(1), destroyed(2, 1, 'blast')], world('ffa'), shots, shellKills);
+    expect(shots[0]).toBe(1);
+    expect(shellKills, 'a mine kill was counted as a hit').toEqual([]);
+  });
+
+  it('refuses a self-elimination, so a player cannot improve their accuracy by ricocheting into themselves', () => {
+    // `tallyCoopKills` refuses the same event as a KILL; the two have to agree or a slot's
+    // accuracy would credit a hit its kill column does not.
+    const shots: number[] = [];
+    const shellKills: number[] = [];
+    tallyVersusAccuracy([fired(1), destroyed(1, 1, 'shell')], world('ffa'), shots, shellKills);
+    expect(shellKills).toEqual([]);
+  });
+
+  it('ignores a bot entirely, and does nothing at all outside a versus mode', () => {
+    // A bot's shots are not a player's marksmanship, and there is no per-slot table to
+    // fill outside ffa/teams -- the campaign screen has its own single-player line.
+    const shots: number[] = [];
+    const shellKills: number[] = [];
+    tallyVersusAccuracy([fired(3), destroyed(1, 3, 'shell')], world('ffa'), shots, shellKills);
+    expect(shots).toEqual([]);
+    expect(shellKills).toEqual([]);
+
+    const campaignShots: number[] = [];
+    const campaignShells: number[] = [];
+    tallyVersusAccuracy([fired(1), destroyed(2, 1, 'shell')], world('campaign'), campaignShots, campaignShells);
+    expect(campaignShots, 'a campaign world filled the versus table').toEqual([]);
+    expect(campaignShells).toEqual([]);
   });
 });
 
