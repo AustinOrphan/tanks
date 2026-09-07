@@ -43,6 +43,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { parseArgs, safeLabel, gridShape, DEFAULTS } from './args.mjs';
+import { enterGameplay, GAME_CANVAS } from './enter-gameplay.mjs';
 
 const PORT = 5599;
 const ROOT = new URL('../../', import.meta.url).pathname;
@@ -204,50 +205,18 @@ async function run(browser) {
    * until Customize is opened, so it was never a candidate; it just made the selector
    * ambiguous.
    */
-  const GAME_CANVAS = 'canvas:not(.hud-preview)';
-
   /**
-   * Shoot the REAL game at its REAL camera: load it, leave the title screen, wait out
-   * the opening countdown, then capture. No pose stepping -- the game owns its clock.
+   * Reaching gameplay lives in `enter-gameplay.mjs` so its ORDER is testable without a
+   * browser (issue #581). It used to be inline here, and it waited for the game canvas
+   * before pressing Start -- a canvas that does not exist until a session is created.
    */
+
   async function captureGame(prefix) {
     const qs = args.query ? `?${args.query}` : '';
-    // 'domcontentloaded', not 'load'. A --sweep patches source between shots, so vite is
-    // rebuilding when we navigate and may issue a full HMR reload mid-load -- the 'load'
-    // event then never fires for the navigation we are awaiting, and it times out after
-    // 30s looking like a broken page. Wait for the canvas the game actually creates.
-    //
-    // Retried once, because this degrades with SEQUENCE LENGTH: a two-variant sweep is
-    // reliable and a six-variant one is not. Each variant is a fresh full load of a
-    // WebGL game under software rendering, and the later ones are slower. A single
-    // retry is the difference between a usable tool and one that fails a long sweep
-    // after several minutes of work.
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await page.goto(`http://localhost:${PORT}/${qs}`, { waitUntil: 'domcontentloaded' });
-        await page.locator(GAME_CANVAS).waitFor({ state: 'attached', timeout: 30000 });
-        break;
-      } catch (e) {
-        if (attempt >= 1) throw e;
-        console.log(`  (retrying ${prefix}: ${String(e).split('\n')[0]})`);
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-    await page.waitForTimeout(1500);
-    // Leave the title screen first. Until it is gone the menu has no Start button to
-    // find -- setState('splash') returns before the branch that writes the label, so
-    // the locator below matches nothing -- and the panel-hidden check further down
-    // reads TRUE while the splash is up, because the menu behind it is hidden too.
-    // Both safeguards silently degrade into the Enter fallback without this.
-    if (await page.locator('.hud-splash:not(.hud-splash--hidden)').count()) {
-      await page.keyboard.press('Space');
-      await page
-        .waitForSelector('.hud-splash.hud-splash--hidden', { timeout: 5000 })
-        .catch(() => {});
-    }
-    const start = page.locator('button', { hasText: /start|play/i }).first();
-    if (await start.count()) await start.click();
-    else await page.keyboard.press('Enter');
+    const start = await enterGameplay(page, {
+      url: `http://localhost:${PORT}/${qs}`,
+      onRetry: (message) => console.log(`  (retrying ${prefix}: ${message})`),
+    });
     // VERIFY the game actually left the title screen. One burst run silently shot 80
     // frames of the title panel; a still would have lied the same way.
     for (let tries = 0; ; tries++) {
