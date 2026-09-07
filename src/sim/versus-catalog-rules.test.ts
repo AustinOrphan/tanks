@@ -23,24 +23,25 @@ import { TANK_RADIUS } from './constants';
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 7 shipped entries validate clean: 0 failures over 33 declared (entry, N, mode) combinations', () => {
-    // 33, not 42: five entries declare 3 player counts x 2 modes (30), issue #271's
-    // vs-duel-01 declares 1 x 2, and issue #272's vs-tri-01 declares 1 x 1 -- three
-    // players have no fair team split, so it offers `ffa` alone. The sweep covers what
-    // each entry PROMISES, so a narrowed declaration shrinks this denominator rather than
-    // leaving combinations silently unchecked.
+  it('all 8 shipped entries validate clean: 0 failures over 35 declared (entry, N, mode) combinations', () => {
+    // 35, not 48: five entries declare 3 player counts x 2 modes (30), issue #271's
+    // vs-duel-01 declares 1 x 2, issue #272's vs-tri-01 declares 1 x 1 -- three players
+    // have no fair team split, so it offers `ffa` alone -- and issue #273's vs-quad-01
+    // declares 1 x 2, four players splitting evenly into two mirrored pairs. The sweep
+    // covers what each entry PROMISES, so a narrowed declaration shrinks this denominator
+    // rather than leaving combinations silently unchecked.
     //
     // History of this number, each step re-derived rather than renumbered: 35 with all
     // eight entries, then 32 when vs-tri-01 (1 x 1) and vs-quad-01 (1 x 2) were WITHDRAWN
     // pending #424/#425 because human playtesting found players could not leave their
-    // spawns on either board, and now 33 -- issue #424 rebuilt vs-tri-01's geometry and it
-    // clears the tank-egress gate, so its single combination returns. 32 + 1 = 33.
-    // vs-quad-01's two are still out, pending #425.
-    expect(VERSUS_CATALOG.length).toBe(7);
+    // spawns on either board; 33 when #424's rebuild returned vs-tri-01's one combination;
+    // and 35 now that #425's rebuild returns vs-quad-01's two. 33 + 2 = 35, back to the
+    // original denominator with both boards now holding the egress guarantee they lacked.
+    expect(VERSUS_CATALOG.length).toBe(8);
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(33);
+    ).toBe(35);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }
@@ -644,8 +645,8 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
 
 describe('vs-quad-01: four corners, one orbit', () => {
   const arena = arenaById('vs-quad-01');
-  const COL_AXIS = 13; // c mirrors to 26 - c; 13 is its own partner
-  const ROW_AXIS = 8; //  r mirrors to 16 - r;  8 is its own partner
+  const COL_AXIS = 16; // c mirrors to 32 - c; 16 is its own partner
+  const ROW_AXIS = 13; //  r mirrors to 26 - r; 13 is its own partner
   const kindAt = (c: number, r: number): WallKind | undefined => arena.legend[arena.grid[r][c]];
 
   /** Shortest walkable path in cells. `breached` false is the AUTHORED variant, with
@@ -708,7 +709,7 @@ describe('vs-quad-01: four corners, one orbit', () => {
     // single mirror would leave the board free to be rotationally symmetric and not
     // mirrored -- a different board, and one whose four corners are two orbits rather
     // than one, which is exactly what the distance claim below would then lose.
-    expect(compared, 'the whole board twice over, not a sample').toBe(2 * 27 * 17);
+    expect(compared, 'the whole board twice over, not a sample').toBe(2 * 33 * 27);
     expect(asymmetric, 'vs-quad-01 is not invariant under both of its mirrors').toEqual([]);
   });
 
@@ -717,7 +718,7 @@ describe('vs-quad-01: four corners, one orbit', () => {
     expect(cells).toHaveLength(4);
     // Sorted, because the policy's output ORDER is not part of this claim -- only the set.
     const sorted = [...cells].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    expect(sorted).toEqual([[1, 1], [1, 15], [25, 1], [25, 15]]);
+    expect(sorted).toEqual([[1, 1], [1, 25], [31, 1], [31, 25]]);
     // Orbit, stated as the closure it is: applying either mirror to any spawn lands on
     // another spawn. A set that merely LOOKED corner-shaped -- say three corners and a
     // near-corner -- would satisfy the count above and fail here.
@@ -742,21 +743,35 @@ describe('vs-quad-01: four corners, one orbit', () => {
     // be, a rectangle's diagonal is longer than its sides -- but that no player holds a
     // different SET of separations from any other.
     //
-    // Both boards, because they are genuinely different numbers and the earlier of the
-    // two was nearly written into the notes as if it were the only one. AUTHORED, with
-    // the destructibles standing, the cross-lane clusters on rows 2 and 14 lengthen the
-    // horizontal hop from 26 to 32, so the set is {30, 32, 38}: vertical neighbour,
-    // horizontal neighbour, diagonal. BREACHED, with every destructible removed, it
-    // relaxes to {26, 30, 38}. The board is equal-for-all in both, which is the claim
-    // worth making -- a board that is fair only while its cover stands is not fair.
-    for (const m of multisetsWith(false)) expect(m, 'authored per-spawn multiset').toEqual([30, 32, 38]);
-    for (const m of multisetsWith(true)) expect(m, 'breached per-spawn multiset').toEqual([26, 30, 38]);
+    // Both wall phases, and on the rebuilt board (issue #425) they are the SAME set:
+    // {34, 40, 54} authored and {34, 40, 54} breached -- vertical neighbour, horizontal
+    // neighbour, diagonal. The old geometry moved between {30, 32, 38} and {26, 30, 38},
+    // because its destructible clusters sat across the connecting lanes and breaching one
+    // shortened a route. The rotunda's destructibles are free-standing avenue flanks and
+    // island shoulders with open modules on every side, so none of them lies on a shortest
+    // path and removing them changes no distance at all.
+    //
+    // That is a stronger fairness property than the board had before, not merely a
+    // different number: this board cannot become unfair by being played into, because
+    // there is no breach that alters the distance structure. Both are pinned anyway --
+    // asserting only the authored phase would let a future edit put cover back on a lane
+    // and go unnoticed until a match had been played.
+    for (const m of multisetsWith(false)) expect(m, 'authored per-spawn multiset').toEqual([34, 40, 54]);
+    for (const m of multisetsWith(true)) expect(m, 'breached per-spawn multiset').toEqual([34, 40, 54]);
     // Pinned literals rather than "all four are equal to each other", because an equality
     // check alone stays green if every distance collapses to the same wrong number (a
-    // pathLen that returned -1 everywhere, for instance, is perfectly equal). The two sets
-    // differing from each other is itself the control that `breached` is wired.
+    // pathLen that returned -1 everywhere, for instance, is perfectly equal).
     expect(multisetsWith(false)).toHaveLength(4);
-    expect(multisetsWith(false)).not.toEqual(multisetsWith(true));
+
+    // THE `breached` CONTROL, rebuilt. It used to be that the two multisets differed from
+    // each other, which proved the flag was wired. On this geometry they are identical --
+    // that is the point of the design, and it would silently turn the flag into a no-op
+    // nobody would notice. So the control moves to a pair the destructibles DO gate: the
+    // approach from the top edge down to the west avenue passes the row 12-14 flank, and
+    // removing it shortens the drive. If `breached` stopped being honoured, this fails
+    // while the spawn assertions above stay green.
+    expect(pathLenWith(false)([10, 0], [10, 13]), 'authored: the avenue flank stands').toBe(17);
+    expect(pathLenWith(true)([10, 0], [10, 13]), 'breached: the same drive, shorter').toBe(13);
   });
 
   it('teams splits the orbit into two mirror-image halves, not an unfair pairing', () => {
@@ -771,8 +786,8 @@ describe('vs-quad-01: four corners, one orbit', () => {
     expect([...byTeam.keys()].sort()).toEqual([0, 1]);
     const zero = (byTeam.get(0) as [number, number][]).sort((a, b) => a[0] - b[0]);
     const one = (byTeam.get(1) as [number, number][]).sort((a, b) => a[0] - b[0]);
-    expect(zero).toEqual([[1, 1], [25, 1]]);
-    expect(one).toEqual([[1, 15], [25, 15]]);
+    expect(zero).toEqual([[1, 1], [31, 1]]);
+    expect(one).toEqual([[1, 25], [31, 25]]);
     // The two teams are each other's reflection about the row axis, so neither holds a
     // shape the other does not. `teamOf(slot) = slot % 2` reads the picker's ORDER, so
     // this could easily have come out as a diagonal pairing -- which would still be 2v2,
@@ -782,11 +797,12 @@ describe('vs-quad-01: four corners, one orbit', () => {
       expect(one.some(([oc, or]) => oc === c && or === arena.rows - 1 - r), `row-mirror of ${c},${r}`).toBe(true);
     }
     // Teammates the same distance apart on both sides, which is that fairness in numbers.
-    // 32 is the AUTHORED figure (the row-2 and row-14 destructible clusters stand between
-    // the two corners of each team); it relaxes to 26 once they are breached.
+    // 40 is the horizontal corner-to-corner drive: 30 cells of separation, plus the detour
+    // around the top and bottom edge masses. It does NOT relax when breached, for the same
+    // reason the multisets above do not -- no destructible sits on this route.
     expect(pathLen(zero[0], zero[1])).toBe(pathLen(one[0], one[1]));
-    expect(pathLen(zero[0], zero[1])).toBe(32);
-    expect(pathLenWith(true)(zero[0], zero[1])).toBe(26);
+    expect(pathLen(zero[0], zero[1])).toBe(40);
+    expect(pathLenWith(true)(zero[0], zero[1]), 'unchanged by breaching, as above').toBe(40);
   });
 
   it('ffa and teams place the four players identically -- the geometry claims cover both modes', () => {

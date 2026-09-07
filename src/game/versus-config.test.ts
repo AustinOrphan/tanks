@@ -24,6 +24,7 @@ describe('versusMapChoices', () => {
   const DUEL = 'vs-duel-01';
   /** N=3 ffa additionally offers the dedicated tri board (issue #272, rebuilt by #424). */
   const TRI = 'vs-tri-01';
+  const QUAD = 'vs-quad-01';
 
   it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its own count', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
@@ -44,11 +45,12 @@ describe('versusMapChoices', () => {
         // two `extra` arms is the whole reason this pin is written per (N, mode) rather
         // than per N.
         //
-        // vs-quad-01 stays WITHDRAWN pending #425 -- players cannot leave their spawns on
-        // it (#423) -- so it has no constant here. Only the OFFER is withdrawn; its arena
-        // definition remains in arenas.json for the redesign to edit, and restoring it
-        // means a catalog entry plus a row here AND passing the egress gate.
-        const extra = n === 2 ? [DUEL] : n === 3 && mode === 'ffa' ? [TRI] : [];
+        // vs-quad-01 is BACK (issue #425 rebuilt its geometry; it clears the tank-egress
+        // gate at N=2, 3 and 4). It returns at N=4 and at BOTH modes -- four corner spawns
+        // split into a top pair and a bottom pair holding mirrored territory, so the
+        // catalog declares `teams` alongside `ffa`, which is why this arm is unconditional
+        // on mode where vs-tri-01's is not.
+        const extra = n === 2 ? [DUEL] : n === 3 && mode === 'ffa' ? [TRI] : n === 4 ? [QUAD] : [];
         expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }
@@ -83,7 +85,13 @@ describe('versusMapChoices', () => {
     //
     // Measured, not assumed, and pinned by name so a board leaving the menu for a reason
     // nobody wrote down still fails here.
-    const WITHHELD: Record<number, string[]> = { 2: ['vs-tri-01'], 3: [], 4: ['vs-tri-01'] };
+    // Both dedicated multi-player boards are now measured suitable everywhere and curated
+    // to one count each, so each is withheld at the two counts it was not authored for.
+    const WITHHELD: Record<number, string[]> = {
+      2: ['vs-tri-01', 'vs-quad-01'],
+      3: ['vs-quad-01'],
+      4: ['vs-tri-01'],
+    };
     const rows = versusBoardCatalog();
     for (const n of [2, 3, 4] as const) {
       const measured = rows.filter((r) => r.playerCount === n && r.suitable).map((r) => r.arenaId);

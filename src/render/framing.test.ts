@@ -310,12 +310,18 @@ describe('the board actually fills the screen', () => {
     // above asks for, recorded rather than absorbed: the orientation decision is
     // unchanged, but the "21:9 costs single digits" summary now holds only for boards
     // near the campaign shape.
-    // Issue #273's vs-quad-01 is 27x17 as well -- the same bounds as vs-tri-01, so the
-    // same 1.588 world-unit ratio and the same place in this partition. It is named
-    // rather than derived from a width threshold on purpose: the width check below is
-    // what proves the membership, so a board added here without actually being wider
+    // vs-quad-01 was here too, at the same 27x17 and the same 1.588 ratio. Issue #425
+    // rebuilt it at 33x27 -- deliberately arena-01/02/03's exact shape -- so it now sits at
+    // 1.222 and belongs in the tight band with the campaign boards it copies. It is not
+    // exempted, it is reclassified: the else branch below holds it to the mild-case bounds,
+    // and the width check at the end of this test would fail if it were still wide enough
+    // to need the other partition. That reclassification is the framing half of the
+    // redesign's argument -- the board stopped needing its own bound.
+    //
+    // Membership is named rather than derived from a width threshold on purpose: the width
+    // check below is what proves it, so a board added here without actually being wider
     // fails instead of quietly widening the band.
-    const WIDE = new Set(['vs-tri-01', 'vs-quad-01']);
+    const WIDE = new Set(['vs-tri-01']);
     for (const [i, arena] of ARENAS.entries()) {
       const f = ultrawide[i];
       const id = (arena as unknown as { id: string }).id;

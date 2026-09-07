@@ -443,11 +443,20 @@ import { step } from '../../src/sim/world';
  * 3:1 1500->1510, 3:4 1756->1769, 3:6 1472->1463, 4:1 1707->1705, 4:3 1741->1418,
  * 4:6 1512->1252). Trace text length 134583 -> 133166.
  *
+ * NINTH CHANGE (issue #425): vs-quad-01's grid was rebuilt from 27x17 to 33x27 to give
+ * every spawn tank-sized egress, so its six traced runs necessarily re-trace. No other
+ * arena's simulation moved, and that is MEASURED rather than argued: vs-quad-01 is last in
+ * ARENA_DEFS, so a change confined to it must be a pure suffix, and the old and new trace
+ * texts share a 127,625-byte common prefix -- 95.84% of the old 133,166 -- which is every
+ * byte of arenas 0 through 6. Only the final 5,541 bytes (old) / 5,214 bytes (new) differ.
+ * Total length 133,166 -> 132,839.
+ *
  * No existing arena's simulation moved on any of the first three occasions, on the fourth
  * exactly one did and it is named above, on the fifth every arena's turret track did, on
- * the sixth five runs' timing did, on the seventh five runs' timing moved back, and on the
- * eighth nine runs' timing did.
+ * the sixth five runs' timing did, on the seventh five runs' timing moved back, on the
+ * eighth nine runs' timing did, and on the ninth only the rebuilt board's own six runs did.
  * Previous values, newest first:
+ * 4db707174e770eb813f062138f418a476e17c4809fdc75282b7eca4dab484e29
  * 8584bf34ddca8347c7fe9f3c8bdbdd5b43c292c06c7af214398884d44edc50be
  * 64013a606e3dce459ff04d01e4364be477e340ae9b287c14cf865c9e16e7d85a
  * b7e8b2aa567be37d7bf6a84cc920b4dfe6a438503f8a3acb7df09d7739f0c583
@@ -459,7 +468,7 @@ import { step } from '../../src/sim/world';
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = '4db707174e770eb813f062138f418a476e17c4809fdc75282b7eca4dab484e29';
+export const BASELINE_HASH = 'e2b9b204c6eadbae8a5c0ba65460e383d54475e23719cc12798cb2c33d9d6f76';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

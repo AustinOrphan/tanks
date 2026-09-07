@@ -3,7 +3,7 @@ import { VERSUS_CATALOG, versusCatalogEntryById } from './versus-catalog';
 import { ARENA_DEFS } from './arenas';
 
 describe('VERSUS_CATALOG', () => {
-  it('ships 7 entries whose ids equal their arena ids, in arena order', () => {
+  it('ships 8 entries whose ids equal their arena ids, in arena order', () => {
     // Population pin: the catalog began as a straight migration of the 5 campaign arenas
     // (setup-menu spec ruling 2), and said a 6th entry would move this count
     // deliberately. That was issue #271's vs-duel-01, the first entry that is not a
@@ -14,13 +14,15 @@ describe('VERSUS_CATALOG', () => {
     // their spawns on either board (#423 measured each Keystone spawn reaching 2.4% or
     // less of the tank-legal floor, each Quarters spawn about 11%).
     //
-    // 7, because issue #424 rebuilt vs-tri-01's geometry to a stated minimum passage width
-    // and it now CLEARS the tank-egress gate at N=2, 3 and 4 -- `evaluateVersusBoard`
-    // reports egressOk true, sealedSpawns 0 and fatalEscapes 0, where it reported 3 of 3
-    // spawns fatal at N=3 before. vs-quad-01 stays withdrawn pending #425; that is the
+    // It reached 7 when issue #424 rebuilt vs-tri-01's geometry to a stated minimum passage
+    // width, and **8** now that issue #425 has done the same for vs-quad-01. Both clear the
+    // tank-egress gate at N=2, 3 and 4 -- `evaluateVersusBoard` reports egressOk true,
+    // sealedSpawns 0 and fatalEscapes 0 for each, where Keystone reported 3 of 3 spawns
+    // fatal at N=3 and Quarters reported every spawn in a disjoint region. That is the
     // whole of the difference between the two rows below.
     expect(VERSUS_CATALOG.map((e) => e.id)).toEqual([
       'arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05', 'vs-duel-01', 'vs-tri-01',
+      'vs-quad-01',
     ]);
     for (const e of VERSUS_CATALOG) expect(e.arenaId, e.id).toBe(e.id);
   });
@@ -43,13 +45,16 @@ describe('VERSUS_CATALOG', () => {
       'vs-duel-01': [2],
       // vs-tri-01 is BACK (issue #424), and at [3] alone -- the same narrowing it declared
       // before it was withdrawn. It measures suitable at N=2 and N=4 too (versusBoardCatalog
-      // reports 19 of 24 suitable and vs-tri-01 is in none of the 5 failures), so the [3]
+      // reports 22 of 24 suitable and vs-tri-01 is in neither of the 2 failures), so the [3]
       // here is curation, exactly like vs-duel-01's [2]: a board authored for three players
       // is withheld where it is playable but not designed.
       'vs-tri-01': [3],
-      // vs-quad-01 (#273) still has no row: it remains withdrawn pending #425. When it
-      // returns it needs a row here AND must pass the tank-egress gate in
-      // versus-board.test.ts, which is what would have caught it (#423).
+      // vs-quad-01 is BACK (issue #425), at [4] alone, and by the same curation rule as its
+      // two siblings: `versusBoardCatalog` now reports it suitable at N=2, 3 and 4 (22 of 24
+      // suitable, and vs-quad-01 is in neither of the 2 remaining failures), so restricting
+      // it to 4 is a design choice about the board it was authored for, not a limit the
+      // measurements impose.
+      'vs-quad-01': [4],
     };
     // Set equality first, so a new entry cannot ship without a row here to review.
     expect(new Set(VERSUS_CATALOG.map((e) => e.id))).toEqual(new Set(Object.keys(CURATED_COUNTS)));
