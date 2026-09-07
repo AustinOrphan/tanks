@@ -5408,7 +5408,7 @@
     "why": "Credits a player's own shell killing themselves as a hit, so a ricochet into your own tank RAISES your accuracy. `tallyCoopKills` refuses the same event as a kill; the two must agree or a slot's accuracy numerator counts something its Kills column does not."
   },
   {
-    "id": "versus-accuracy-counts-a-bots-shooting",
+    "id": "versus-accuracy-counts-a-non-player-tanks-shooting",
     "file": "src/game/loop.ts",
     "find": "    const tank = world.tanks.find((t) => t.id === tankId);\n    return tank?.kind === 'player' ? tank.controlledBy ?? 0 : null;",
     "replace": "    const tank = world.tanks.find((t) => t.id === tankId);\n    return tank ? tank.controlledBy ?? 0 : null;",
@@ -5417,9 +5417,23 @@
       "src/game/loop.test.ts"
     ],
     "killedBy": [
-      "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) ignores a bot entirely, and does nothing at all outside a versus mode"
+      "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) ignores a NON-PLAYER tank, and does nothing at all outside a versus mode"
     ],
-    "why": "Attributes a BOT's shots and hits to a slot, so an AI filling a versus seat reports marksmanship for a seat nobody is sitting in -- and, because `controlledBy` is undefined on a bot, it all lands on slot 0, silently inflating Player 1. `tallyCoopKills` applies the same player-only rule for the same reason."
+    "why": "Drops the player-kind guard, so any non-player tank's shots land in a slot -- and with `controlledBy` absent on every non-player tank, all of it falls to `?? 0` and silently inflates Player 1. NOT about bots: a bot DRIVING a versus slot is a player-kind tank with a real `controlledBy` and is counted deliberately. The guard is structural rather than live, because ffa/teams strip every non-player spawn (arena.ts), so this is the known-bad control the guard needs -- it keeps the contract independent of which spawn letters a future arena admits, which is the same reason `tallyCoopKills` carries the rule."
+  },
+  {
+    "id": "versus-accuracy-mode-guard-names-a-mode-that-does-not-exist",
+    "file": "src/game/loop.ts",
+    "find": "  if (world.rules.mode !== 'ffa' && world.rules.mode !== 'teams') return;",
+    "replace": "  if ((world.rules.mode as string) === 'campaign') return;",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) ignores a NON-PLAYER tank, and does nothing at all outside a versus mode"
+    ],
+    "why": "Guards on a mode string that is not in `GameMode` (exactly 'campaign-coop' | 'ffa' | 'teams'), so every REAL campaign world falls straight through and fills the versus table. This mutation survived until the test stopped feeding the guard a made-up 'campaign' cast through `as never` and used the shipped 'campaign-coop' instead: a placeholder mode made the fixture agree with the mutant."
   },
   {
     "id": "versus-results-drop-the-accuracy-column",

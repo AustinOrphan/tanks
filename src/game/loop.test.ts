@@ -3699,11 +3699,18 @@ describe('tallyCoopKills', () => {
 describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue #279)', () => {
   const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
     ({ id, kind, controlledBy }) as Tank;
-  const world = (mode: 'ffa' | 'teams' | 'campaign') =>
+  // 'campaign-coop' rather than a made-up 'campaign': it is the REAL shipped campaign mode
+  // at every player count (GameMode has exactly three values), so the mode guard is tested
+  // against a value the game actually runs on. A cast-through-`as never` placeholder would
+  // pass while a guard rewritten to name the real mode broke campaign play.
+  const world = (mode: 'ffa' | 'teams' | 'campaign-coop') =>
     ({
-      rules: resolveWorldRules({ mode } as never),
-      // Slot 2 is a BOT sharing the arena, which is what makes the player-only rule
-      // testable: its shots must not land in anyone's column.
+      rules: resolveWorldRules({ mode }),
+      // Tank 3 is a NON-PLAYER tank, which a versus arena cannot actually contain: ffa and
+      // teams strip every non-player spawn letter (arena.ts). It is here as the known-bad
+      // control the player-only guard needs -- NOT as a claim that this occurs, and not a
+      // stand-in for a bot. A slot a bot DRIVES is player-kind, carries `controlledBy`,
+      // and is counted like any other competitor.
       tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown')],
     }) as World;
   const fired = (ownerId: number): SimEvent =>
@@ -3744,9 +3751,14 @@ describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue
     expect(shellKills).toEqual([]);
   });
 
-  it('ignores a bot entirely, and does nothing at all outside a versus mode', () => {
-    // A bot's shots are not a player's marksmanship, and there is no per-slot table to
-    // fill outside ffa/teams -- the campaign screen has its own single-player line.
+  it('ignores a NON-PLAYER tank, and does nothing at all outside a versus mode', () => {
+    // Two guards, different in kind. The mode guard is LIVE: outside ffa/teams there is no
+    // per-slot table to fill, and the campaign screen has its own single-player line.
+    //
+    // The player-kind guard is STRUCTURAL -- a versus arena holds only player-kind tanks,
+    // so this input cannot occur there today. It is the known-bad control the guard needs,
+    // and it keeps this function's contract from depending on which spawn letters a future
+    // arena admits.
     const shots: number[] = [];
     const shellKills: number[] = [];
     tallyVersusAccuracy([fired(3), destroyed(1, 3, 'shell')], world('ffa'), shots, shellKills);
@@ -3755,7 +3767,7 @@ describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue
 
     const campaignShots: number[] = [];
     const campaignShells: number[] = [];
-    tallyVersusAccuracy([fired(1), destroyed(2, 1, 'shell')], world('campaign'), campaignShots, campaignShells);
+    tallyVersusAccuracy([fired(1), destroyed(2, 1, 'shell')], world('campaign-coop'), campaignShots, campaignShells);
     expect(campaignShots, 'a campaign world filled the versus table').toEqual([]);
     expect(campaignShells).toEqual([]);
   });
