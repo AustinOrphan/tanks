@@ -87,12 +87,35 @@ function identityColor(slot: number): number {
  * overlooked: the constraint set leaves no hue that is both well separated here and
  * colour-blind-safe against red. It is why `TEAM_LABELS` exists and why the stock readout
  * carries the letter -- the issue requires the reinforcement precisely so the hue is not
- * load-bearing on its own. A vivid red/blue/green trio, verified distinct
- * from every roster colour, both identity-ring hues and the unstyled-slot placeholder
- * by entities.test.ts's sweep -- same reuse-the-mechanism, new-colour-source shape PR1
- * itself used for IDENTITY_RING_COLORS' own placeholder swatch.
+ * load-bearing on its own.
+ *
+ * TEAM B IS NO LONGER BLUE (issue #579). It was `#3b82ff`, and once the ring stopped being
+ * additively blended (#580) that blue survived compositing intact and landed on top of the
+ * thing it is drawn beside: **2.09** from the player's default hull `#3d7bd6`, which is also
+ * offered as the `Classic blue` paint. A blue ring around a blue tank carries no
+ * information. Under the additive blending it replaced, the same pair measured 31.13 -- the
+ * old value was masked by a bug, not earned.
+ *
+ * `#fcc0fc` was chosen by measuring, not by eye, against every colour a team ring can sit
+ * beside. Note that set is smaller than it looks: team colours render only in `teams` mode,
+ * which is versus-only, and versus arenas strip every non-player spawn (arena.ts) -- so
+ * brown, teal and the rest never share a screen with these, and constraining against them
+ * would have been over-constraint.
+ *
+ * Measured as drawn, composited over the felt:
+ *
+ * | | old `#3b82ff` | new `#fcc0fc` |
+ * | --- | ---: | ---: |
+ * | vs the player hull and placeholder | 2.09 | **29.3** |
+ * | vs every customization paint | 2.09 | **21.2** |
+ * | vs teams A and C, worst across normal/protan/deutan/tritan | 25.4 | **29.5** |
+ * | luminance contrast against the felt | 1.56 | **3.42** |
+ *
+ * Better on every axis, which is why it is here rather than a compromise. Cyan scored
+ * higher against the hull and looked more vivid, and was rejected: it collapses to 8.6
+ * against team C under tritanopia, because cyan and green converge there.
  */
-export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];
+export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0xfcc0fc, 0x4eff3b];
 
 /**
  * Single letters for the same three sides, and the reason they exist (issue #281).

@@ -9,6 +9,27 @@ import {
   STRIPE_TURRET_MODE, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_OPACITY,
 } from './entities';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
+import { distance, overFelt } from '../presentation/colour-distance';
+
+/**
+ * Floors, in CIEDE2000, measured as drawn rather than asserted from a standard.
+ *
+ * OWNER_FLOOR 15: what an owner colour must clear against a tank it is drawn beside. The
+ * shipped identity palette clears 17.09 against the roster, and team colours clear 29.3
+ * against the player hull since issue #579 re-picked team B -- so this sits below both with
+ * room, and would have caught the 2.09 collision that motivated it.
+ *
+ * TEAM_FLOOR 25: teammates share a colour, so telling two SIDES apart matters more than
+ * telling two slots apart, and the trio has more room to spend. The shipped worst pair is
+ * 38.8.
+ *
+ * Neither is a published threshold. A just-noticeable difference is about 1-2 and these are
+ * moving objects at play distance, so the numbers are chosen from what the shipped palettes
+ * actually achieve, with enough headroom that a real regression trips them and normal
+ * palette work does not.
+ */
+const OWNER_FLOOR = 15;
+const TEAM_FLOOR = 25;
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
@@ -1979,18 +2000,27 @@ describe('player identity: ring and shell tint', () => {
     return createWorld({ walls: [], tanks: [p0, p1, p2, p3], spawns, lives: 3, mode: 'teams' });
   }
 
-  it('TEAM_COLORS: exactly 3 hues, pairwise distinct from each other, every roster colour and the placeholder', () => {
+  it('TEAM_COLORS: exactly 3 hues, measurably clear of each other, the player hull and the placeholder', () => {
     // THREE since issue #281: four-player Teams may use two or three teams (2v2 or
     // 2v1v1). Two entries left `teamColor(2)` falling through to the white fallback,
     // which is also the unstyled-slot placeholder -- so a 2v1v1 rendered one whole side
     // as "no identity", in the ring, the shell tint, the tread trail and the stock chip
     // at once.
     expect(TEAM_COLORS).toHaveLength(3);
+    // MEASURED, not compared (issue #579). `.not.toBe` passed for two colours a player
+    // cannot tell apart and would equally have failed two that are obviously different, so
+    // it never said anything either way. `distance` is CIEDE2000 and `overFelt` composites
+    // the ring the way the renderer does, because the authored constant is not what anyone
+    // sees -- measuring those is how #580 stayed invisible.
+    //
     // Pairwise over all three, generated rather than written out, so a fourth entry is
     // covered without anyone remembering to add another line.
     for (let i = 0; i < TEAM_COLORS.length; i++) {
       for (let j = i + 1; j < TEAM_COLORS.length; j++) {
-        expect(TEAM_COLORS[i], `team ${i} vs team ${j}`).not.toBe(TEAM_COLORS[j]);
+        expect(
+          distance(overFelt(TEAM_COLORS[i]), overFelt(TEAM_COLORS[j])),
+          `team ${i} vs team ${j}`,
+        ).toBeGreaterThan(TEAM_FLOOR);
       }
     }
     // ...and a label per hue, since the letter is the non-colour channel and a missing one
@@ -2011,15 +2041,22 @@ describe('player identity: ring and shell tint', () => {
       }
     });
     expect(placeholder).not.toBe(-1);
+    // The tanks a team ring can actually sit beside. NOT every roster kind: team colours
+    // render only in `teams` mode, which is versus-only, and `loadArena` strips every
+    // non-player spawn there -- so brown, teal and the rest never share a screen with these.
+    // Asserting against them would be over-constraint dressed up as rigour.
+    const player = parseInt(configFor('player').color.slice(1), 16);
     for (const team of TEAM_COLORS) {
-      for (const kind of TANK_KINDS) {
-        expect(team, `team vs ${kind}`).not.toBe(parseInt(configFor(kind).color.slice(1), 16));
-      }
-      for (const ring of IDENTITY_RING_COLORS) {
-        expect(team, 'team vs an identity-ring hue').not.toBe(ring);
-      }
-      expect(team, 'team vs unstyled placeholder').not.toBe(placeholder);
+      expect(distance(overFelt(team), player), 'team vs the player hull').toBeGreaterThan(OWNER_FLOOR);
+      expect(distance(overFelt(team), placeholder), 'team vs unstyled placeholder').toBeGreaterThan(OWNER_FLOOR);
     }
+
+    // THE TEAM-VS-IDENTITY ASSERTION IS GONE, deliberately rather than by oversight.
+    // `resolveOwnerColor` (identity.ts) is a strict either/or on `world.rules.mode`, so a
+    // match draws team colours or identity colours and never both. The old check compared
+    // two palettes that cannot appear together, by byte inequality, which made it doubly
+    // uninformative. Removing it is the point of issue #579, not a gap in it.
+    expect(IDENTITY_RING_COLORS.length, 'the identity palette still exists, it is just not compared here').toBe(4);
     views.dispose();
   });
 

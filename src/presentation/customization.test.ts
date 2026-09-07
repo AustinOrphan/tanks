@@ -14,36 +14,32 @@ import {
   type SpawnAnimId,
 } from './customization';
 import { GAME_TANK_DEFS } from '../sim/config/roster';
-
-/** Rough CIE Lab from sRGB hex, enough for a coarse deltaE76 floor. */
-function lab(hex: string): [number, number, number] {
-  const lin = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const r = lin(parseInt(hex.slice(1, 3), 16) / 255);
-  const g = lin(parseInt(hex.slice(3, 5), 16) / 255);
-  const b = lin(parseInt(hex.slice(5, 7), 16) / 255);
-  const x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
-  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  const z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
-  const f = (t: number): number => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
-}
-function deltaE(a: string, b: string): number {
-  const [l1, a1, b1] = lab(a);
-  const [l2, a2, b2] = lab(b);
-  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
-}
+import { distance } from './colour-distance';
 
 describe('the palette', () => {
   it('keeps every swatch PERCEPTUALLY clear of every enemy identity', () => {
     // Population: every non-player kind in the shipped roster, against every swatch.
     // A distance floor, not exact-hex inequality: review pointed out the equality pin
-    // would accept a swatch one hex off an enemy. Floor 20 deltaE76 -- the shipped
-    // minimum is ~27.7 (green vs olive), measured, so this passes with headroom while
-    // failing anything that would genuinely read as an enemy at play distance.
+    // would accept a swatch one hex off an enemy.
+    //
+    // NOW CIEDE2000, via the shared helper (issue #579). This file used to carry its own
+    // hand-rolled deltaE76 and a floor of 20 against a measured minimum of ~27.7. The two
+    // metrics disagree by more than the margin: the same worst pair, green vs olive, scores
+    // **13.60** under CIEDE2000. CIE76 overstates distance in the saturated region these
+    // colours occupy, so the old floor was looser than its number suggested.
+    //
+    // Floor 12, against that measured 13.60. Deliberately not raised to "look safer": the
+    // shipped palette is what it is, and a floor above the real minimum would fail on the
+    // first run. Whether green and olive are too close for a player is a design question
+    // for the roster, not something this assertion can decide -- it is recorded here so the
+    // next person sees the margin rather than inheriting a comfortable-looking 20.
     const enemies = Object.entries(GAME_TANK_DEFS).filter(([kind]) => kind !== 'player');
     for (const swatch of PALETTE) {
       for (const [kind, def] of enemies) {
-        expect(deltaE(swatch.hex, def.color), `${swatch.id} vs ${kind}`).toBeGreaterThan(20);
+        expect(
+          distance(parseInt(swatch.hex.slice(1), 16), parseInt(def.color.slice(1), 16)),
+          `${swatch.id} vs ${kind}`,
+        ).toBeGreaterThan(12);
       }
     }
   });
@@ -52,16 +48,26 @@ describe('the palette', () => {
     // Kind-vs-kind, which the swatch test above cannot see: review proved that giving
     // yellow grey's exact hex passed all 2150 tests, because nothing compared enemies
     // to EACH OTHER and hull colour is a kind's primary identity channel (issue #137).
-    // Population: all 21 pairs of the 7 shipped kinds, player included. Same floor 20
-    // deltaE76 as the swatch test; the shipped minimum is 33.0 (olive vs green),
-    // measured over those 21 pairs, so this passes with headroom while failing any
-    // future kind that lands on (or one hex off) an existing identity.
+    // Population: all 21 pairs of the 7 shipped kinds, player included.
+    //
+    // NOW CIEDE2000, and the metric change moved WHICH PAIR IS WORST -- which is the
+    // clearest argument for having made it. Under the hand-rolled deltaE76 this replaced,
+    // the minimum was 33.0 at olive vs green. Under CIEDE2000 it is **17.82 at player vs
+    // grey**, a pair the old measure ranked comfortably mid-table. The floor was guarding
+    // a pair that was never the closest one.
+    //
+    // Floor 15, against that measured 17.82. Not rounded up to look reassuring: the margin
+    // is genuinely thinner than the old number implied, and player-vs-grey is worth a look
+    // from someone deciding roster colours rather than someone writing an assertion.
     const kinds = Object.entries(GAME_TANK_DEFS);
     for (let i = 0; i < kinds.length; i++) {
       for (let j = i + 1; j < kinds.length; j++) {
         const [ka, a] = kinds[i];
         const [kb, b] = kinds[j];
-        expect(deltaE(a.color, b.color), `${ka} vs ${kb}`).toBeGreaterThan(20);
+        expect(
+          distance(parseInt(a.color.slice(1), 16), parseInt(b.color.slice(1), 16)),
+          `${ka} vs ${kb}`,
+        ).toBeGreaterThan(15);
       }
     }
   });

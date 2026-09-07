@@ -903,5 +903,19 @@
       "player identity: ring and shell tint alpha-blends the identity ring, so a slot's hue survives compositing (issue #580)"
     ],
     "why": "Restores the additive blending this carried until #580, which destroys the hue that identifies a slot: adding a bright colour to the felt #2f6d4f clips channels, and the shipped palette's slot 1 and slot 2 both composite to warm gold. The two existing 'distinct colours' tests pass under BOTH blend modes -- verified by applying this mutation and watching them stay green -- because authored colours stay distinct either way. Only the blend-mode assertion catches it."
+  },
+  {
+    "id": "team-b-collides-with-the-player-hull",
+    "file": "src/presentation/identity.ts",
+    "find": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0xfcc0fc, 0x4eff3b];",
+    "replace": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "killedBy": [
+      "player identity: ring and shell tint TEAM_COLORS: exactly 3 hues, measurably clear of each other, the player hull and the placeholder"
+    ],
+    "why": "Restores the blue team B that issue #579 replaced. It is unequal to every other colour in the game, so the byte-inequality sweep this entry's test replaced passed on it -- and it sits 2.09 from the player's default hull #3d7bd6 once composited, which is a blue ring drawn around a blue tank. That is the whole case for measuring instead of comparing: the defect and the assertion that was supposed to catch it coexisted happily."
   }
 ]
