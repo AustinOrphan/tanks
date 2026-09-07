@@ -134,15 +134,34 @@ export const IDENTITY_RING_OUTER_R = TANK_RADIUS * 1.6;
 /** Just off the felt, at track level, matching the RING_Y precedent in minedebug.ts. */
 const IDENTITY_RING_Y = 0.03;
 const IDENTITY_RING_SEGMENTS = 48;
-const IDENTITY_RING_OPACITY = 0.85;
+export const IDENTITY_RING_OPACITY = 0.85;
 
 /**
- * One player's identity ring: an unlit, additively-blended flat annulus, matching the
- * treatment particles.ts already uses for glow (sparks, muzzle flash) rather than
- * inventing a new one -- see the comment on ParticleSystem's material. Unlit because a
- * lit ring would dim on the far side of the tank from the key light, which is exactly
- * the side a teammate most needs it legible from; additive blending is what turns a
- * flat colour into a "glow" over the dark ground plane cheaply, with no extra lights.
+ * One player's identity ring: an unlit, ALPHA-blended flat annulus. Unlit because a lit
+ * ring would dim on the far side of the tank from the key light, which is exactly the
+ * side a teammate most needs it legible from.
+ *
+ * WHY NOT ADDITIVE, which this was until issue #580. Additive blending does turn a flat
+ * colour into a cheap "glow" over the ground plane, and that is why particles.ts uses it
+ * for sparks and muzzle flash. But a ring is not a spark: it is an IDENTITY, and additive
+ * summation destroys the only channel that carries identity. Adding a bright colour to
+ * the felt `#2f6d4f` saturates channels, and once two of them clip at 255 the hue is
+ * simply gone -- every bright ring converges toward the same white.
+ *
+ * That is not theoretical, and it is not a small effect. Measured on the shipped palette,
+ * slot 1 `#ff8a1e` and slot 2 `#ff4d2e` composite to `#ffe268` and `#ffae76`: two warm
+ * golds a player cannot tell apart in motion. That collision is what issue #234 was filed
+ * to fix, and it was widely assumed to require a new palette. It did not -- it required
+ * this line. Under alpha blending the same four authored colours read as blue, violet,
+ * orange and gold. Captured evidence is on #580.
+ *
+ * The cost is real and was accepted deliberately: the ring no longer lifts off the surface
+ * or brightens where it crosses a shadow. It reads as paint rather than light. Identity
+ * beat glow, because a ring nobody can attribute is not serving its purpose.
+ *
+ * Note the asymmetry with mine-warning.ts, which is still additive on purpose: its ring
+ * encodes URGENCY through brightness, not identity through hue, so clipping costs it
+ * nothing.
  */
 function makeIdentityRing(color: number): THREE.Mesh {
   const mesh = new THREE.Mesh(
@@ -153,7 +172,8 @@ function makeIdentityRing(color: number): THREE.Mesh {
       opacity: IDENTITY_RING_OPACITY,
       side: THREE.DoubleSide,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      // NOT additive -- see this function's doc comment. Pinned by entities.test.ts.
+      blending: THREE.NormalBlending,
     }),
   );
   mesh.name = 'identity-ring';

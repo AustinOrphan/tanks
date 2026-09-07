@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
-  STRIPE_TURRET_MODE, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R,
+  STRIPE_TURRET_MODE, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_OPACITY,
 } from './entities';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createWorld, type World } from '../sim/world';
@@ -1836,6 +1836,32 @@ describe('player identity: ring and shell tint', () => {
     });
     return c;
   }
+
+  it('alpha-blends the identity ring, so a slot\'s hue survives compositing (issue #580)', () => {
+    // The negative control is the shipped palette itself. Under the AdditiveBlending this
+    // used to carry, slot 1 #ff8a1e and slot 2 #ff4d2e composite over the felt #2f6d4f to
+    // #ffe268 and #ffae76 -- two warm golds. The authored colours stay distinct either
+    // way, so the existing "distinct colours" tests above pass under BOTH blend modes and
+    // cannot catch this; the blend mode is the thing that decides whether those distinct
+    // colours survive to the screen, so it is the thing that has to be asserted.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.sync(w, w, 0);
+    const rings = identityRings(scene);
+    expect(rings.length, 'no ring to assert on').toBeGreaterThan(0);
+    for (const ring of rings) {
+      const mat = ring.material as THREE.MeshBasicMaterial;
+      expect(mat.blending, 'an additive ring loses its hue to channel clipping').toBe(
+        THREE.NormalBlending,
+      );
+      // Transparency still has to be on, or NormalBlending draws an opaque disc and the
+      // opacity below is silently ignored.
+      expect(mat.transparent).toBe(true);
+      expect(mat.opacity).toBe(IDENTITY_RING_OPACITY);
+    }
+    views.dispose();
+  });
 
   it('draws no identity ring in a single-player world', () => {
     // The gap this proves: single-player must stay pixel-identical to before this

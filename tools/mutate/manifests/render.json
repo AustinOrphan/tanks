@@ -889,5 +889,19 @@
       "src/game/loop.test.ts"
     ],
     "why": "A DISCLOSED SURVIVOR, not an equivalent mutant: the behaviour it removes is the whole of the `low` tier. Under this, `?dev=1&quality=low` builds the smoke system after all and draws the full effect, so the one preset whose ruling was 'dropped entirely' becomes the preset that draws the most. It survives because nothing vitest can run reaches the line -- createRenderer builds a WebGLRenderer, which jsdom cannot provide, and loop.test.ts (which does reach renderer.ts through loop.ts's import, and is named here so the harness can prove the scope is real) injects a recording fake instead of the real factory. What DOES kill it is tools/gl/harness.ts's 'the quality preset decides how much muzzle smoke a frame draws, and `low` draws none', in a real browser, measured at both ends: with the gate intact a 32-shot volley leaves the null-preset framebuffer byte-identical to a frame with no shots at all (0 of 1,600,000 bytes differ), and with the gate removed 5,907 of those bytes differ, because `low` then draws the FULL effect. Recorded here rather than left as a number in a PR body so the claim is re-derivable, and so that a vitest case which ever does cover this flips the entry to a mismatch instead of letting it go stale."
+  },
+  {
+    "id": "identity-ring-goes-back-to-additive",
+    "file": "src/render/entities.ts",
+    "find": "      // NOT additive -- see this function's doc comment. Pinned by entities.test.ts.\n      blending: THREE.NormalBlending,",
+    "replace": "      blending: THREE.AdditiveBlending,",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "killedBy": [
+      "player identity: ring and shell tint alpha-blends the identity ring, so a slot's hue survives compositing (issue #580)"
+    ],
+    "why": "Restores the additive blending this carried until #580, which destroys the hue that identifies a slot: adding a bright colour to the felt #2f6d4f clips channels, and the shipped palette's slot 1 and slot 2 both composite to warm gold. The two existing 'distinct colours' tests pass under BOTH blend modes -- verified by applying this mutation and watching them stay green -- because authored colours stay distinct either way. Only the blend-mode assertion catches it."
   }
 ]
