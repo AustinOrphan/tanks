@@ -1196,8 +1196,11 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
  *   now agree for the rest of this session's life, on every quit/retry/advance
  *   (`switchTo` in `startGameWith` re-checks `bounds()` but never re-resolves
  *   `'random'`, because there is no `'random'` left in `resolvedConfig` to re-resolve --
- *   this also neutralizes the re-roll-on-quit mechanism issue #261 names, though #261's
- *   own Quit-routing defect is untouched here). Dropping the dev-flags argument would
+ *   which is the whole re-roll-on-quit mechanism issue #261 named, and is why leaving a
+ *   match cannot silently change the arena under the player. #261 is closed: its Quit
+ *   routing was replaced by named destinations (Change Setup and Main Menu), so this
+ *   invariant now has a second guard above it rather than being the only one. Do not read
+ *   this as describing an outstanding defect). Dropping the dev-flags argument would
  *   silently lose that dev-flag support.
  * - Widens `devFlags` with `{ mode, players, friendlyFire }` from `config` (the pane's
  *   own, unresolved config -- these three fields are untouched by resolution) so
