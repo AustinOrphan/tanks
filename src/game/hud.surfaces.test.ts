@@ -1865,7 +1865,7 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     h.setLevelSelect(3, 5);
     const versus = (result: TypedOutcome): GameplayOutcome => ({
       tally: 'ffa', attempt: ZERO_STATS, action: 'versus-setup',
-      kills: [1, 0], deaths: [0, 1], typedOutcome: result,
+      kills: [1, 0], deaths: [0, 1], shots: [4, 4], shellKills: [1, 0], typedOutcome: result,
     });
 
     h.setState('outcome-win');

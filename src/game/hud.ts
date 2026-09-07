@@ -158,7 +158,15 @@ export type GameplayOutcome = {
 } & (
   | { tally: 'solo' }
   | { tally: 'coop'; kills: number[] }
-  | { tally: 'ffa' | 'teams'; kills: number[]; deaths: number[] }
+  /**
+   * A versus result, per slot. `kills`/`deaths` are the eliminations; `shots` and
+   * `shellKills` exist only to compute per-player ACCURACY (owner ruling), and are
+   * separate from `kills` for the same reason the campaign line's are: `kills` counts
+   * every elimination including mine kills, while accuracy has always meant shells that
+   * found a tank over shells fired. Reusing `kills` as the numerator would quietly rate a
+   * mine-heavy player above a marksman.
+   */
+  | { tally: 'ffa' | 'teams'; kills: number[]; deaths: number[]; shots: number[]; shellKills: number[] }
 );
 
 /**
@@ -2278,6 +2286,23 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return;
     }
     /*
+     * NOT ON A VERSUS RESULT (owner ruling, issue #279).
+     *
+     * "Level attempt: ..." was the last campaign-scoped wording on that screen -- a versus
+     * match is not a level -- and it sat directly above a table reporting the same ground
+     * per player, in more detail and for everyone rather than for the tracked seat alone.
+     * Worse, the two DISAGREED: `attempt` counts the tracked player's shell AND mine kills
+     * against their own shots, while the table is per-slot, so the line read "7 kills ...
+     * 29% accuracy" over a Player 1 row reading 6 and 36% -- and neither was wrong.
+     *
+     * Keyed on the TALLY, which is the shape of the payload that carries the per-player
+     * table, so the line goes exactly where the table arrives.
+     */
+    if (outcomeData.tally === 'ffa' || outcomeData.tally === 'teams') {
+      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');
+      return;
+    }
+    /*
      * "Level attempt" on EVERY ending, campaign included (owner ruling).
      *
      * It read "This run" on campaign endings until issue #322, and that was wrong about
@@ -2363,7 +2388,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       versusResultsEl.classList.add('hud-versus-results--hidden');
       return;
     }
-    const { tally, kills, deaths } = outcomeData;
+    const { tally, kills, deaths, shots, shellKills } = outcomeData;
     const slots = Math.max(kills.length, deaths.length);
     /*
      * ONE ROW PER COMPETITOR, in a table (owner ruling, issue #279).
@@ -2377,25 +2402,42 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      * its rows are the two teams with each side's slots summed, and a per-player breakdown
      * there would answer a question the mode is not asking.
      */
-    const rows: Array<[string, number, number]> = [];
+    const rows: Array<[string, number, number, string]> = [];
     if (tally === 'teams') {
       const teamKills = [0, 0];
       const teamDeaths = [0, 0];
+      const teamShots = [0, 0];
+      const teamShellKills = [0, 0];
       for (let slot = 0; slot < slots; slot++) {
         const team = teamOf(slot);
         teamKills[team] += kills[slot] ?? 0;
         teamDeaths[team] += deaths[slot] ?? 0;
+        teamShots[team] += shots[slot] ?? 0;
+        teamShellKills[team] += shellKills[slot] ?? 0;
       }
-      rows.push(['Team 1', teamKills[0], teamDeaths[0]], ['Team 2', teamKills[1], teamDeaths[1]]);
+      for (const team of [0, 1]) {
+        rows.push([
+          `Team ${team + 1}`,
+          teamKills[team],
+          teamDeaths[team],
+          pct(teamShellKills[team], teamShots[team]),
+        ]);
+      }
     } else {
       for (let slot = 0; slot < slots; slot++) {
-        rows.push([`Player ${slot + 1}`, kills[slot] ?? 0, deaths[slot] ?? 0]);
+        rows.push([
+          `Player ${slot + 1}`,
+          kills[slot] ?? 0,
+          deaths[slot] ?? 0,
+          pct(shellKills[slot] ?? 0, shots[slot] ?? 0),
+        ]);
       }
     }
     const body = rows
-      .map(([label, k, d]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td></tr>`)
+      .map(([label, k, d, acc]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td><td>${acc}</td></tr>`)
       .join('');
-    versusResultsEl.innerHTML = `<tr><th></th><td>Kills</td><td>Deaths</td></tr>${body}`;
+    versusResultsEl.innerHTML =
+      `<tr><th></th><td>Kills</td><td>Deaths</td><td>Accuracy</td></tr>${body}`;
     versusResultsEl.classList.remove('hud-versus-results--hidden');
   }
 
