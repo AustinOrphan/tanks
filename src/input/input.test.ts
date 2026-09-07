@@ -11,7 +11,7 @@ import {
   DOUBLE_TAP_MAX_MS,
   DOUBLE_TAP_SLOP_PX,
 } from './touch';
-import { deadzoneVector, type GamepadLike } from './gamepad';
+import { deadzoneVector, GAMEPAD_FIRE_BUTTON, GAMEPAD_MINE_BUTTON, type GamepadLike } from './gamepad';
 import type { Vec2 } from '../sim/types';
 
 // A predictable screenToGround: echoes the client coords as a world point.
@@ -286,15 +286,25 @@ describe('createInputController — dispose', () => {
 });
 
 describe('createInputController — gamepad', () => {
-  function fakePad(overrides: Partial<{ axes: number[]; buttons: boolean[] }> = {}): GamepadLike {
+  /**
+   * Standard-mapping sized, and fire/mine pressed through the exported constants -- the
+   * same shape as `gamepad.test.ts`'s own fixture, and for the same reason: this used to
+   * pad to 2 buttons, which broke the moment fire and mine moved to the triggers. A second
+   * copy of the helper lives there; consolidating them is worth doing but is not this
+   * change's job.
+   */
+  function fakePad(
+    overrides: Partial<{ axes: number[]; buttons: boolean[]; fire: boolean; mine: boolean }> = {},
+  ): GamepadLike {
     const axes = overrides.axes ?? [0, 0, 0, 0];
     const pressedFlags = overrides.buttons ?? [];
-    return {
-      axes,
-      buttons: Array.from({ length: Math.max(pressedFlags.length, 2) }, (_, i) => ({
-        pressed: pressedFlags[i] ?? false,
-      })),
-    };
+    const pressed = Array.from(
+      { length: Math.max(pressedFlags.length, 17) },
+      (_, i) => pressedFlags[i] ?? false,
+    );
+    if (overrides.fire !== undefined) pressed[GAMEPAD_FIRE_BUTTON] = overrides.fire;
+    if (overrides.mine !== undefined) pressed[GAMEPAD_MINE_BUTTON] = overrides.mine;
+    return { axes, buttons: pressed.map((p) => ({ pressed: p })) };
   }
 
   it('is completely inert with the flag off, even with a fully-active fake pad present', () => {
@@ -304,7 +314,7 @@ describe('createInputController — gamepad', () => {
     // silently fails open (e.g. an accidentally-inverted `if`) cannot hide behind a fake
     // pad that was too quiet to move anything.
     const target = makeTarget();
-    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [1, 1, 0, 0], buttons: [true, true] })];
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [1, 1, 0, 0], fire: true, mine: true })];
     controller = createInputController(target, echoGround, { gamepad: false, getGamepads });
 
     key('keydown', 'd');
@@ -428,7 +438,7 @@ describe('createInputController — gamepad', () => {
 
   it('fires on the tick the button transitions down, not on every tick it is held', () => {
     const target = makeTarget();
-    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [true, false] })];
+    const getGamepads = (): GamepadLike[] => [fakePad({ fire: true })];
     controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
 
     expect(controller.sample().fire).toBe(true);
@@ -438,7 +448,7 @@ describe('createInputController — gamepad', () => {
 
   it('mines on its own button, independent of fire, same edge rule', () => {
     const target = makeTarget();
-    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [false, true] })];
+    const getGamepads = (): GamepadLike[] => [fakePad({ mine: true })];
     controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
 
     const s = controller.sample();
@@ -502,7 +512,7 @@ describe('createInputController — gamepad', () => {
     // still down on the first simulated tick, is not a shell.
     const target = makeTarget();
     let pressed = true;
-    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [pressed, false] })];
+    const getGamepads = (): GamepadLike[] => [fakePad({ fire: pressed })];
     controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
 
     expect(controller.sample().fire).toBe(true); // negative control: the same held A fires with no resync
@@ -535,7 +545,7 @@ describe('createInputController — gamepad', () => {
 
   it('with gamepad: false, resyncGamepad() is a no-op that does not throw, and the controller keeps working', () => {
     const target = makeTarget();
-    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [true, false] })];
+    const getGamepads = (): GamepadLike[] => [fakePad({ fire: true })];
     controller = createInputController(target, echoGround, { gamepad: false, getGamepads });
 
     expect(() => controller!.resyncGamepad()).not.toThrow();

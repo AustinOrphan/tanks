@@ -52,15 +52,28 @@ describe('deadzoneVector', () => {
 });
 
 /** A minimal fake pad, defaulting to centred sticks and released buttons. */
-function fakePad(overrides: Partial<{ axes: number[]; buttons: boolean[] }> = {}): GamepadLike {
+/**
+ * A standard-mapping pad, sized to all 17 buttons rather than to however many the caller
+ * happens to name. It used to pad to 2, which was fine while fire and mine were buttons 0
+ * and 1 and became silently wrong the moment they moved to the triggers -- every press
+ * landed on an index the fixture did not have.
+ *
+ * `buttons` still takes positional flags for the cases that genuinely mean "index N". Press
+ * fire and mine through `fire`/`mine` instead: those go through the exported constants, so
+ * a future rebinding moves the tests with the code rather than quietly invalidating them.
+ */
+function fakePad(
+  overrides: Partial<{ axes: number[]; buttons: boolean[]; fire: boolean; mine: boolean }> = {},
+): GamepadLike {
   const axes = overrides.axes ?? [0, 0, 0, 0];
   const pressedFlags = overrides.buttons ?? [];
-  return {
-    axes,
-    buttons: Array.from({ length: Math.max(pressedFlags.length, 2) }, (_, i) => ({
-      pressed: pressedFlags[i] ?? false,
-    })),
-  };
+  const pressed = Array.from(
+    { length: Math.max(pressedFlags.length, 17) },
+    (_, i) => pressedFlags[i] ?? false,
+  );
+  if (overrides.fire !== undefined) pressed[GAMEPAD_FIRE_BUTTON] = overrides.fire;
+  if (overrides.mine !== undefined) pressed[GAMEPAD_MINE_BUTTON] = overrides.mine;
+  return { axes, buttons: pressed.map((p) => ({ pressed: p })) };
 }
 
 describe('createGamepadReader: no pad present', () => {
@@ -224,14 +237,14 @@ describe('createGamepadReader: aim (right stick)', () => {
 
 describe('createGamepadReader: fire and mine are edges, never held state', () => {
   it('fires exactly once across three polls with the button held down the whole time', () => {
-    const reader = createGamepadReader(() => [fakePad({ buttons: [true, false] })]);
+    const reader = createGamepadReader(() => [fakePad({ fire: true })]);
     const results = [reader.poll(null), reader.poll(null), reader.poll(null)];
     expect(results.map((r) => r.fire)).toEqual([true, false, false]);
   });
 
   it('fires again on a second distinct press after release', () => {
     let pressed = true;
-    const reader = createGamepadReader(() => [fakePad({ buttons: [pressed, false] })]);
+    const reader = createGamepadReader(() => [fakePad({ fire: pressed })]);
     expect(reader.poll(null).fire).toBe(true);
     pressed = false;
     expect(reader.poll(null).fire).toBe(false);
@@ -240,21 +253,30 @@ describe('createGamepadReader: fire and mine are edges, never held state', () =>
   });
 
   it('mine is the independent second button, same edge rule', () => {
-    const reader = createGamepadReader(() => [fakePad({ buttons: [false, true] })]);
+    const reader = createGamepadReader(() => [fakePad({ mine: true })]);
     const results = [reader.poll(null), reader.poll(null)];
     expect(results.map((r) => r.mine)).toEqual([true, false]);
     expect(results.every((r) => !r.fire)).toBe(true);
   });
 
-  it('uses GAMEPAD_FIRE_BUTTON / GAMEPAD_MINE_BUTTON as the button indices', () => {
-    expect(GAMEPAD_FIRE_BUTTON).toBe(0);
-    expect(GAMEPAD_MINE_BUTTON).toBe(1);
+  it('reads the TRIGGERS, not the face buttons -- the twin-stick fix', () => {
+    // Pinned as literals because this is the claim, not an implementation detail: 7 is the
+    // right trigger and 6 the left, under index fingers that are free while both thumbs
+    // stay on the sticks. They were 0 and 1 -- A/Cross and B/Circle -- which sit under the
+    // right thumb, the same thumb that must hold the aim stick, so a player could aim or
+    // fire but not both.
+    expect(GAMEPAD_FIRE_BUTTON, 'fire is the right trigger').toBe(7);
+    expect(GAMEPAD_MINE_BUTTON, 'mine is the left trigger, opposite hand').toBe(6);
+    // And the two are on OPPOSITE sides, so neither hand does both jobs and a panicked
+    // press cannot hit the wrong one.
+    expect(GAMEPAD_FIRE_BUTTON % 2, 'right-hand triggers are odd in the standard mapping').toBe(1);
+    expect(GAMEPAD_MINE_BUTTON % 2, 'left-hand triggers are even').toBe(0);
   });
 
   it('a disconnect clears the held-button edge state, so a reconnect with the same button still down fires once more rather than reading as still-held', () => {
     let present = true;
     let pressed = true;
-    const reader = createGamepadReader(() => (present ? [fakePad({ buttons: [pressed, false] })] : []));
+    const reader = createGamepadReader(() => (present ? [fakePad({ fire: pressed })] : []));
     expect(reader.poll(null).fire).toBe(true);
     present = false;
     reader.poll(null); // disconnect
@@ -276,7 +298,7 @@ describe('createGamepadReader: resync (issue #494)', () => {
   it('a button already DOWN on the resync poll is adopted as held, not reported -- twin reader over the same pad is the control', () => {
     // Two readers, one pad, one differing call: the control reader proves the press is
     // real and fires; the resynced reader proves resync() alone is what silences it.
-    const pads = [fakePad({ buttons: [true, true] })];
+    const pads = [fakePad({ fire: true, mine: true })];
     const control = createGamepadReader(() => pads);
     const resynced = createGamepadReader(() => pads);
     resynced.resync();
@@ -295,7 +317,7 @@ describe('createGamepadReader: resync (issue #494)', () => {
 
   it('with fire held across polls, poll() reports fire once; a resync() mid-hold does not RE-ARM the held button', () => {
     // A naive resync that reset prevFire to false would make the next poll fire again.
-    const reader = createGamepadReader(() => [fakePad({ buttons: [true, false] })]);
+    const reader = createGamepadReader(() => [fakePad({ fire: true })]);
     expect(reader.poll(null).fire).toBe(true); // the press edge, before any resync
     reader.resync();
     expect(reader.poll(null).fire).toBe(false); // the resync poll
@@ -306,7 +328,7 @@ describe('createGamepadReader: resync (issue #494)', () => {
     // Resync must not eat a genuine press. The line is the poll: down ON the resync poll
     // is adopted (previous test); down on the NEXT poll is a press.
     let pressed = false;
-    const reader = createGamepadReader(() => [fakePad({ buttons: [pressed, false] })]);
+    const reader = createGamepadReader(() => [fakePad({ fire: pressed })]);
     reader.resync();
     expect(reader.poll(null).fire).toBe(false); // the resync poll, button up: nothing to adopt
     pressed = true;
@@ -316,7 +338,7 @@ describe('createGamepadReader: resync (issue #494)', () => {
 
   it('a release then re-press after a resync fires again -- the adopted hold is an ordinary hold', () => {
     let pressed = true;
-    const reader = createGamepadReader(() => [fakePad({ buttons: [pressed, false] })]);
+    const reader = createGamepadReader(() => [fakePad({ fire: pressed })]);
     reader.resync();
     expect(reader.poll(null).fire).toBe(false); // adopted
     pressed = false;
@@ -327,7 +349,7 @@ describe('createGamepadReader: resync (issue #494)', () => {
 
   it('resync() with no pad present is harmless, and is spent by that poll like the rest of the edge state', () => {
     let present = false;
-    const reader = createGamepadReader(() => (present ? [fakePad({ buttons: [true, false] })] : []));
+    const reader = createGamepadReader(() => (present ? [fakePad({ fire: true })] : []));
     reader.resync();
     expect(reader.poll(null)).toEqual(NEUTRAL);
     expect(reader.connected()).toBe(false);
@@ -339,7 +361,7 @@ describe('createGamepadReader: resync (issue #494)', () => {
 
   it('createGamepadInputSource(...).resyncGamepad() forwards to its reader: a held A samples fire: false, and a re-press fires', () => {
     let pressed = true;
-    const getGamepads: GetGamepads = () => [fakePad({ buttons: [pressed, false] })];
+    const getGamepads: GetGamepads = () => [fakePad({ fire: pressed })];
     const control = createGamepadInputSource(getGamepads);
     const resynced = createGamepadInputSource(getGamepads);
     // Optional on PlayerInputSource (a held or bot source has nothing to resync); a
@@ -367,7 +389,7 @@ describe('createGamepadReader: resync (issue #494)', () => {
  */
 describe('createGamepadInputSource: standalone per-slot source', () => {
   it('produces a quantized InputState from the pad alone -- move, a projected aim, and fire/mine as edges', () => {
-    const src = createGamepadInputSource(() => [fakePad({ axes: [1, 0, 1, 0], buttons: [true, false] })]);
+    const src = createGamepadInputSource(() => [fakePad({ axes: [1, 0, 1, 0], fire: true })]);
     src.setPlayerPosition({ x: 5, y: 5 });
     const state = src.sample();
     expect(state.move).toEqual(deadzoneVector(1, 0));
@@ -419,7 +441,7 @@ describe('createGamepadInputSource: standalone per-slot source', () => {
   });
 
   it('works with no player position at all: move and fire/mine still resolve, aim stays at the default', () => {
-    const src = createGamepadInputSource(() => [fakePad({ axes: [1, 0, 1, 0], buttons: [true, false] })]);
+    const src = createGamepadInputSource(() => [fakePad({ axes: [1, 0, 1, 0], fire: true })]);
     const state = src.sample(); // setPlayerPosition never called
     expect(state.move).toEqual(deadzoneVector(1, 0));
     expect(state.fire).toBe(true);

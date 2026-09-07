@@ -18,10 +18,16 @@ import type { GetGamepads, GamepadLike } from './gamepad';
 import { UI_ACTIONS, type UiAction } from './ui-actions';
 
 /**
- * Standard-mapping button indices. 0 and 1 are the same face buttons `gamepad.ts` reads
- * as fire and mine -- A/Cross confirms and B/Circle backs out, the console convention --
- * which is exactly why the resync in `loop.ts` exists. 9 is Start (Options), 12-15 the
- * D-pad in the mapping's up/down/left/right order.
+ * Standard-mapping button indices. A/Cross confirms and B/Circle backs out, the console
+ * convention. 9 is Start (Options), 12-15 the D-pad in the mapping's up/down/left/right
+ * order.
+ *
+ * These are now DISJOINT from the buttons `gamepad.ts` reads as fire and mine, which moved
+ * to the triggers so a twin-stick player need not leave the aim stick to shoot. They used
+ * to be the same two buttons, which is why the resync in `loop.ts` was written -- a Resume
+ * confirmed with A leaked a shell into the first simulated tick. That overlap is gone; the
+ * resync stays for the held-trigger case, and `gamepad-menu.test.ts` pins the separation so
+ * a future rebinding cannot quietly restore the collision.
  */
 export const MENU_CONFIRM_BUTTON = 0;
 export const MENU_BACK_BUTTON = 1;
