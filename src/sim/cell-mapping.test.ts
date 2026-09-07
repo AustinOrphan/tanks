@@ -19,15 +19,17 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 8 shipped arenas -- three at 33x27, arena-04
-    // and arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x), and the
-    // three dedicated versus boards -- plus the 17x13 fixture, untouched by the
-    // upscale = 891 + 891 + 891 + 1485 + 1485 + 567 + 459 + 459 + 221 = 7349 cells:
-    // the 567 is issue #271's 27x21 vs-duel-01 and the two 459s are #272's vs-tri-01
-    // and #273's vs-quad-01, both 27x17. Recomputed in full rather than incremented,
-    // because the enumeration above had already drifted from its own total. The
-    // non-square boards matter here: a formula that confused cols with rows would
-    // round-trip fine on a square-ish board.
+    // Population: all cells of all 8 shipped arenas -- FOUR at 33x27 now, arena-04 and
+    // arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x), and the two
+    // remaining dedicated boards at their own sizes -- plus the 17x13 fixture, untouched
+    // by the upscale = 891 + 891 + 891 + 891 + 1485 + 1485 + 567 + 459 + 221 = 7781 cells.
+    // The fourth 891 is issue #425's rebuilt vs-quad-01, which moved from 27x17 to 33x27
+    // and so joins the campaign boards' shape; the 567 is issue #271's 27x21 vs-duel-01
+    // and the 459 is #272's vs-tri-01, still 27x17.
+    //
+    // Recomputed in full rather than incremented, because the enumeration here had already
+    // drifted from its own total once. The non-square boards matter: a formula that
+    // confused cols with rows would round-trip fine on a square-ish board.
     let checked = 0;
     for (const arena of ARENAS_UNDER_TEST) {
       for (let r = 0; r < arena.rows; r++) {
@@ -38,7 +40,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(7349);
+    expect(checked).toBe(7781);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {

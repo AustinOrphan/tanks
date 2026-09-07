@@ -36,12 +36,14 @@ const DESTRUCTIBLE_COUNTS: Record<string, number> = {
   // on this board reaches the shared floor without firing a shot (sealedSpawns is 0 at
   // N=2, 3 and 4), which a destructible cap on a spawn pocket would end.
   'vs-tri-01': 19,
-  // Ten clusters of 2, mirrored about BOTH axes (issue #273): the pair flanking the core
-  // on rows 4 and 12, the four on the open cross-lanes at rows 2 and 14, and the mid-lane
-  // pair at rows 7 and 9. Five cells per quadrant, so like vs-tri-01 the count is even by
-  // construction -- and unlike it, mirrored horizontally as well, which is what makes the
-  // seeded draw hit both teams' halves alike.
-  'vs-quad-01': 20,
+  // Six 3x3 blocks, mirrored about BOTH axes (issue #425's rebuild): the four avenue
+  // flanks at rows 3-5 and 21-23, and the two centre-island shoulders at rows 12-14.
+  // 6 x 9 = 54. Every one is free-standing with open modules on all four sides, which is
+  // the property that matters here: no draw of the seeded-destructible variant can seal a
+  // pocket, because removing any of them only widens a lane that was already passable.
+  // Was 20 on the original 27x17 board, whose clusters sat ACROSS the connecting lanes --
+  // the arrangement that made egress depend on cover.
+  'vs-quad-01': 54,
 };
 
 describe('measured destructible-cell counts per shipped arena', () => {
@@ -83,7 +85,7 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
     // 27x21 term is issue #271's vs-duel-01 and the two 27x17 terms are #272's vs-tri-01
     // and #273's vs-quad-01, each written as its own factor rather than folded into a
     // total so the shape of every board stays legible here.
-    expect(compared).toBe(3 * 33 * 27 + 2 * 45 * 33 + 27 * 21 + 2 * 27 * 17);
+    expect(compared).toBe(4 * 33 * 27 + 2 * 45 * 33 + 27 * 21 + 27 * 17);
   });
 
   it('the P cell sits at the identical position in every variant, on all 8 shipped arenas', () => {
@@ -271,7 +273,7 @@ describe('room: openFloorCells rises by EXACTLY the removed count, on all 8 ship
 // ---------------------------------------------------------------------------
 
 describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measured', () => {
-  it('0 of 160 OFFERED (arena, N, seed) draws are unsuitable, and the 80 unoffered ones are accounted for', () => {
+  it('0 of 180 OFFERED (arena, N, seed) draws are unsuitable, and the 60 unoffered ones are accounted for', () => {
     // Population re-derived for the tank-egress gate (issue #423). It used to sweep all
     // 240 draws and claim 0 unsuitable, which held only because nothing checked whether a
     // tank could leave its spawn.
@@ -295,6 +297,7 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
     const OFFERED: Record<string, number[]> = {
       'arena-01': [2, 3, 4], 'arena-02': [2, 3, 4], 'arena-03': [2, 3, 4],
       'arena-04': [2, 3, 4], 'arena-05': [2, 3, 4], 'vs-duel-01': [2], 'vs-tri-01': [3],
+      'vs-quad-01': [4],
     };
     let checked = 0;
     let unsuitable = 0;
@@ -316,10 +319,19 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
         }
       }
     }
-    expect(checked, 'the offered (arena, N, seed) population').toBe(170);
+    expect(checked, 'the offered (arena, N, seed) population').toBe(180);
     expect(unsuitable).toBe(0);
-    expect(unofferedChecked).toBe(70);
-    expect(unofferedUnsuitable, 'the unoffered draws that fail, pinned so it cannot drift').toBe(44);
+    expect(unofferedChecked).toBe(60);
+    // 14, down from 44 when issue #425 rebuilt vs-quad-01. The derivation, because the
+    // drop is large enough to look like a broken sweep: the old board failed all 30 of its
+    // draws (3 counts x 10 seeds) since it failed egress before any destructible was drawn.
+    // Ten of those moved into the OFFERED set with its restored N=4 row, and the remaining
+    // twenty now pass, because the rebuilt geometry clears egress on solid walls alone and
+    // no seeded removal can take that away. 44 - 30 = 14, and what is left is vs-duel-01 at
+    // the two counts it does not promise -- a duel board's third and fourth maximin spawns
+    // landing in pockets too small to mine out of, which is the gate reporting something
+    // true about counts the board never claimed.
+    expect(unofferedUnsuitable, 'the unoffered draws that fail, pinned so it cannot drift').toBe(14);
     // 30s, not the 5s default. The sweep is O(arenas x N x seeds) real board evaluations
     // and issue #272's seventh arena took it from 180 draws to 210, measured at just over
     // 5s -- so it began timing out on content rather than on any slowdown. Raised rather

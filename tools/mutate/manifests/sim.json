@@ -182,8 +182,8 @@
     "find": "      for (let i = 0; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
     "replace": "      for (let i = 1; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
     "expect": "killed",
-    "expectFailures": 5,
-    "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee.",
+    "expectFailures": 3,
+    "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee. COUNT REMEASURED, 5 -> 3 (issue #425). `versus-spawns.test.ts` was NOT edited by that change; the drop is behavioural. vs-quad-01 went from 27x17 to 33x27, and on the roomier board P1 left on the authored `P` cell still clears two thresholds it used to violate, so two of the five detectors stop tripping. What still catches it: the mutual-line-of-sight sweep, the minimum-pairwise-distance floor, and the campaign-coop untouched check. Recorded rather than silently renumbered, because a board getting more forgiving is exactly how a symmetry rule quietly loses its guards.",
     "tests": [
       "src/sim/versus-spawns.test.ts"
     ]
@@ -904,10 +904,10 @@
   {
     "id": "quad-board-loses-its-mirror-symmetry",
     "file": "src/sim/config/data/arenas.json",
-    "find": "\"####.####...###...####.####\"",
-    "replace": "\"####.####...###...####.###.\"",
+    "find": "\"###.............P.............###\"",
+    "replace": "\"###.............P.............##.\"",
     "expect": "killed",
-    "why": "One cell of vs-quad-01's right-hand rim block turned from solid to open floor, on the board's own row axis, breaking the column mirror its notes claim (issue #273). Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still validates, still has four distinct and mutually concealed spawns at N=4, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for four players is carried ENTIRELY by the two mirrors: without them the four corners stop being one orbit of the symmetry group, and 'every spawn holds the same multiset of distances' becomes a coincidence rather than a construction. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "why": "One cell of vs-quad-01's right-hand edge mass turned from solid to open floor, breaking the column mirror the board's notes claim. Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still connects, and still passes every count-based check -- symmetry is the only thing that notices, which is why it needs a mutation rather than trust.\n\nRE-ANCHORED for issue #425. The old find string was a row of the 27x17 grid ('####.####...###...####.####') and the rebuild replaced it, so this entry silently became FAILED-TO-APPLY -- a dead guard that no test would have reported. Caught by the sweep, not by the suite. It now anchors on row 7, one of only two rows unique in arenas.json (the P and B rows), so it cannot match another board or another row of this one, and needs no `occurrence`. Column 32 mirrors to column 0, which stays solid, so flipping it is a genuine asymmetry rather than a cosmetic edit.",
     "tests": [
       "src/sim/versus-catalog-rules.test.ts"
     ],
@@ -921,12 +921,12 @@
     "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
     "replace": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
     "expect": "killed",
-    "why": "Drops the tank-egress rule out of the verdict while still computing and reporting it -- exactly the shape the defect took before issue #423. Keystone and Quarters passed clearance, connectivity, symmetry, path distance and scripted playtests and shipped unplayable: players could not leave their spawns. Every cell-based criterion stays green under this mutation, which is the point; only an assertion that a board with no tank-sized exit is UNSUITABLE catches it.",
+    "why": "Drops the tank-egress rule out of the verdict while still computing and reporting it -- exactly the shape the defect took before issue #423. Keystone and Quarters passed clearance, connectivity, symmetry, path distance and scripted playtests and shipped unplayable: players could not leave their spawns. Every cell-based criterion stays green under this mutation, which is the point; only an assertion that a board with no tank-sized exit is UNSUITABLE catches it. KILLED-BY MOVED (issue #425): this used to be caught by the shipped-arena sweep asserting the withdrawn vs-quad-01 was `suitable: false`. That board was rebuilt and no shipped board fails egress any longer, so the assertion went with it -- and this entry is what caught the loss. It is now pinned on the synthetic `twoRooms(1)` fixture, which asserts `suitable === false` as well as `egressOk === false`; the distinction is the entire point, since this mutation leaves egressOk computed and merely drops it from the verdict.",
     "tests": [
       "src/sim/versus-board.test.ts"
     ],
     "killedBy": [
-      "evaluateVersusBoard: the shipped-arena sweep every arena still offered is suitable at every N in {2, 3, 4}: 18 of 24 (arena, N) combinations",
+      "spawn egress: a tank, not a cell (issue #423) a ONE-cell passage is impassable and a TWO-cell passage is not -- the minimum width, measured",
       "spawn egress: a tank, not a cell (issue #423) folds into `suitable`, which is what makes it a gate rather than a report",
       "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
     ]
@@ -937,12 +937,12 @@
     "find": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, TANK_RADIUS, b).hit) legal[k] = 0;",
     "replace": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, 0, b).hit) legal[k] = 0;",
     "expect": "killed",
-    "why": "Shrinks the tank to a POINT, which is precisely what every pre-existing check did by reasoning about cell centres. A one-cell gap is 0.667 wide against a 1.0-wide tank and admits no legal centre position, but admits a point trivially -- so under this mutation the minimum-width fixture's 1-cell passage reads as passable and the boards that shipped unplayable read as fine. Pins that the footprint, not the topology, is what the rule measures. RE-ANCHORED after the wall-rasterisation rewrite: the original find string named the per-point wall loop that rewrite replaced, and it went stale without failing anything locally -- CI's failed-to-apply is what said so.",
+    "why": "Shrinks the tank to a POINT, which is precisely what every pre-existing check did by reasoning about cell centres. A one-cell gap is 0.667 wide against a 1.0-wide tank and admits no legal centre position, but admits a point trivially -- so under this mutation the minimum-width fixture's 1-cell passage reads as passable and the boards that shipped unplayable read as fine. Pins that the footprint, not the topology, is what the rule measures. RE-ANCHORED after the wall-rasterisation rewrite: the original find string named the per-point wall loop that rewrite replaced, and it went stale without failing anything locally -- CI's failed-to-apply is what said so. KILLED-BY MOVED (issue #425): same reason as `egress-not-gated-only-reported` -- the shipped board it used to be caught on now passes, so this is pinned on the synthetic one-cell-doorway fixture instead, which no board rebuild can take away.",
     "tests": [
       "src/sim/versus-board.test.ts"
     ],
     "killedBy": [
-      "evaluateVersusBoard: the shipped-arena sweep every arena still offered is suitable at every N in {2, 3, 4}: 18 of 24 (arena, N) combinations",
+      "spawn egress: a tank, not a cell (issue #423) a ONE-cell passage is impassable and a TWO-cell passage is not -- the minimum width, measured",
       "spawn egress: a tank, not a cell (issue #423) a ONE-cell passage is impassable and a TWO-cell passage is not -- the minimum width, measured",
       "spawn egress: a tank, not a cell (issue #423) a destructible seal is FATAL when the pocket is smaller than the mine blast",
       "spawn egress: a tank, not a cell (issue #423) folds into `suitable`, which is what makes it a gate rather than a report",

@@ -27,7 +27,7 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
   // Every board is MEASURED at every N here; what a board is OFFERED at is a separate,
   // curated question the catalog answers (vs-duel-01 declares [2] only). Suitability is
   // the floor, not the offer.
-  it('every arena still offered is suitable at every N in {2, 3, 4}: 18 of 24 (arena, N) combinations', () => {
+  it('every arena still offered is suitable at every N in {2, 3, 4}: 21 of 24 (arena, N) combinations', () => {
     // Re-derived live, not snapshotted: this recomputes open-floor counts and
     // reruns the real loadArena placement/LOS checks on every shipped grid.
     //
@@ -42,12 +42,18 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     // evidence that issue #424 fixed it: it is held to `suitable === true` at all three
     // counts here, not merely at the one it is offered at. 15 -> 18.
     //
+    // vs-quad-01 has now done the same for issue #425. 18 -> 21, and the withdrawn-board
+    // block that used to sit below this loop is gone with it: there is no longer a shipped
+    // board that fails egress, so there is nothing left for it to assert. The branch it
+    // was reading stays covered by `twoRooms(1)` in the egress suite, which exercises a
+    // one-cell doorway on purpose rather than by depending on a real board staying broken.
+    //
     // vs-duel-01 is also excluded here, at N=3 and N=4 ONLY. The egress gate finds it
     // unsuitable at those counts -- a third and fourth maximin spawn land in pockets too
     // small to mine out of -- and it is offered at neither, so this is the gate reporting
     // something true about counts the board never promised. The offered-combination sweep
     // further down is the one that covers what actually ships.
-    const WITHDRAWN = new Set(['vs-quad-01', 'vs-duel-01']);
+    const WITHDRAWN = new Set(['vs-duel-01']);
     let checked = 0;
     for (const arena of ARENA_DEFS) {
       if (WITHDRAWN.has(arena.id)) continue;
@@ -62,19 +68,8 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         expect(verdict.roomOk, `${arena.id} @ N=${n} roomOk`).toBe(true);
       }
     }
-    expect(checked).toBe(18);
+    expect(checked).toBe(21);
 
-    // ...and the withdrawn board fails, on egress specifically. This is the assertion
-    // that would have blocked it (#423), stated as a fact about the shipped grid rather
-    // than left implicit in its absence above.
-    for (const id of ['vs-quad-01']) {
-      const arena = ARENA_DEFS.find((a) => a.id === id) as Arena;
-      for (const n of [2, 3, 4] as const) {
-        const verdict = evaluateVersusBoard(arena, n);
-        expect(verdict.egressOk, `${id} @ N=${n} must still fail egress`).toBe(false);
-        expect(verdict.suitable, `${id} @ N=${n}`).toBe(false);
-      }
-    }
     // ...and vs-duel-01 passes at the ONE count it is offered at.
     const duel = ARENA_DEFS.find((a) => a.id === 'vs-duel-01') as Arena;
     expect(evaluateVersusBoard(duel, 2).suitable, 'vs-duel-01 @ N=2 is offered and must hold').toBe(true);
@@ -290,16 +285,20 @@ describe('versusBoardCatalog', () => {
     expect(rows.length).toBe(24);
     const labels = rows.map((r) => `${r.arenaId}@${r.playerCount}`);
     expect(new Set(labels).size).toBe(24); // every row is a distinct (arena, N) pair
-    // 19 of 24 suitable, not all: this function sweeps ARENA_DEFS at every N, not the
-    // offer, so it still REPORTS the withdrawn board (3 failing combinations) and
-    // vs-duel-01 at the two counts it is not offered at (2 more). Naming them here is
-    // what keeps "report, don't gatekeep" honest. It was 16 while vs-tri-01 failed all
-    // three counts too; issue #424's rebuild moved exactly those three rows and nothing
-    // else, which is why the set below is the old one minus its three entries.
-    expect(rows.filter((r) => r.suitable).length).toBe(19);
+    // 22 of 24 suitable, not all: this function sweeps ARENA_DEFS at every N rather than
+    // the offer, so it still REPORTS vs-duel-01 at the two counts it is not offered at.
+    // Naming them here is what keeps "report, don't gatekeep" honest.
+    //
+    // The derivation, since this number has now moved twice: 24 rows = 8 arenas x 3
+    // counts. It was 16 while vs-tri-01 failed all three counts and vs-quad-01 failed all
+    // three; issue #424's rebuild moved vs-tri-01's three rows (16 -> 19) and issue #425's
+    // rebuild of Quarters moved vs-quad-01's three (19 -> 22). What remains unsuitable is
+    // vs-duel-01 at N=3 and N=4 ONLY, which is not a defect: a dedicated duel board's third
+    // and fourth maximin spawns land in pockets too small to mine out of, and it is offered
+    // at neither count. No shipped board now fails egress at a count it is offered at.
+    expect(rows.filter((r) => r.suitable).length).toBe(22);
     const unsuitable = rows.filter((r) => !r.suitable).map((r) => `${r.arenaId}@${r.playerCount}`);
     expect(new Set(unsuitable)).toEqual(new Set([
-      'vs-quad-01@2', 'vs-quad-01@3', 'vs-quad-01@4',
       'vs-duel-01@3', 'vs-duel-01@4',
     ]));
   });
@@ -421,6 +420,18 @@ describe('spawn egress: a tank, not a cell (issue #423)', () => {
     expect(narrow.spawnsInLargestRegion).toBe(1);
     expect(wide.egressOk, 'a 2-cell passage must count as egress').toBe(true);
     expect(wide.spawnsInLargestRegion).toBe(2);
+
+    // AND THE VERDICT MUST CARRY IT, not merely report it. `egressOk` being false is not
+    // the same claim as the board being refused: the defect issue #423 fixed had the shape
+    // "computed and reported, then left out of `suitable`", which every egressOk assertion
+    // in this file would sail straight through.
+    //
+    // This used to be covered by asserting the withdrawn vs-quad-01 was `suitable: false`.
+    // Issue #425 rebuilt that board, so no shipped board fails egress any more and that
+    // coverage went with it -- caught by the mutation manifest, not by the suite. Pinned
+    // here instead, on the synthetic fixture, where no future board rebuild can remove it.
+    expect(narrow.suitable, 'a sealed board must be REFUSED, not just reported on').toBe(false);
+    expect(wide.suitable, 'and a passable one must not be').toBe(true);
   });
 
   it('names the blocked slots and the region sizes, so a failure is actionable', () => {
@@ -455,11 +466,12 @@ describe('spawn egress: a tank, not a cell (issue #423)', () => {
         checked += 1;
       }
     }
-    // 17 = five campaign boards x 3 counts, plus vs-duel-01 and vs-tri-01 at their single
-    // counts. Withdrawing vs-tri-01 and vs-quad-01 (#424/#425) took this from 18 to 16;
-    // #424's rebuild returns vs-tri-01's one combination, so 17. vs-quad-01's is still
-    // out, pending #425.
-    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(17);
+    // 18 = five campaign boards x 3 counts (15), plus vs-duel-01, vs-tri-01 and vs-quad-01
+    // at their single curated counts (3). Withdrawing vs-tri-01 and vs-quad-01 (#424/#425)
+    // took this from 18 to 16; #424's rebuild returned vs-tri-01's one combination (17) and
+    // #425's rebuild returns vs-quad-01's (18). Back to where it started, with both boards
+    // now holding the egress guarantee they were withdrawn for lacking.
+    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(18);
   });
 
   it('a destructible seal is fine when the pocket is big enough to survive blowing it', () => {
@@ -514,12 +526,20 @@ describe('spawn egress: a tank, not a cell (issue #423)', () => {
     expect(tri.sealedSpawns).toBe(0);
     expect(tri.egressOk).toBe(true);
 
-    // Quarters fails for the OTHER reason, and the two must not be conflated: its pockets
-    // are 3.81 across -- big enough to mine safely -- but the seal is SOLID, so no mine
-    // helps at all. fatalEscapes is 0 and it is still refused.
+    // Quarters used to sit here too, as the SOLID-seal example against vs-duel-01's
+    // fatal-mine-pocket one. Issue #425 rebuilt it and it now passes, so the same note the
+    // Keystone move above carries applies again -- and twice is a pattern worth naming.
+    //
+    // THE BRANCH IS NOT UNCOVERED. `twoRooms(1)` above pins it directly: a one-cell doorway
+    // is refused, reports 'disjoint spawn region', and names both spawns. That fixture is
+    // strictly better than a shipped board was, because it exercises the branch on purpose
+    // rather than by depending on a real board staying broken -- a dependency that has now
+    // been invalidated twice by the two boards being fixed, which is the outcome everyone
+    // wanted. A control that a bug fix can delete is not a control.
     const quad = evaluateVersusBoard(ARENA_DEFS.find((a) => a.id === 'vs-quad-01') as Arena, 4);
-    expect(quad.fatalEscapes, 'Quarters pockets are roomy; the wall is just solid').toBe(0);
-    expect(quad.egressOk).toBe(false);
-    expect(quad.egressDiagnosis).toContain('disjoint spawn region');
+    expect(quad.fatalEscapes, 'issue #425: Quarters seals no spawn').toBe(0);
+    expect(quad.sealedSpawns).toBe(0);
+    expect(quad.egressOk).toBe(true);
+    expect(quad.egressDiagnosis).toBe('');
   });
 });
