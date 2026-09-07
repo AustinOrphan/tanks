@@ -3699,9 +3699,13 @@ describe('tallyCoopKills', () => {
 describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue #279)', () => {
   const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
     ({ id, kind, controlledBy }) as Tank;
-  const world = (mode: 'ffa' | 'teams' | 'campaign') =>
+  // 'campaign-coop' rather than a made-up 'campaign': it is the REAL shipped campaign mode
+  // at every player count (GameMode has exactly three values), so the mode guard is tested
+  // against a value the game actually runs on. A cast-through-`as never` placeholder would
+  // pass while a guard rewritten to name the real mode broke campaign play.
+  const world = (mode: 'ffa' | 'teams' | 'campaign-coop') =>
     ({
-      rules: resolveWorldRules({ mode } as never),
+      rules: resolveWorldRules({ mode }),
       // Tank 3 is a NON-PLAYER tank, which a versus arena cannot actually contain: ffa and
       // teams strip every non-player spawn letter (arena.ts). It is here as the known-bad
       // control the player-only guard needs -- NOT as a claim that this occurs, and not a
@@ -3763,7 +3767,7 @@ describe('tallyVersusAccuracy: the versus result table\'s accuracy column (issue
 
     const campaignShots: number[] = [];
     const campaignShells: number[] = [];
-    tallyVersusAccuracy([fired(1), destroyed(2, 1, 'shell')], world('campaign'), campaignShots, campaignShells);
+    tallyVersusAccuracy([fired(1), destroyed(2, 1, 'shell')], world('campaign-coop'), campaignShots, campaignShells);
     expect(campaignShots, 'a campaign world filled the versus table').toEqual([]);
     expect(campaignShells).toEqual([]);
   });
