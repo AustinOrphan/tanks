@@ -34,3 +34,10 @@ Each candidate also ships a redesigned board at the current size, and all three 
 For reference: the withdrawn board is 30.7% solid, and `vs-tri-01` — which works at this size, for three
 players — is 32.5%.
 
+## The shipped rebuild, in engine
+
+`5-rebuilt-in-engine.png` — the Rotunda layout as the game actually renders it, four-player FFA,
+`dev=1&seed=42`, three bot slots. All four tanks are out of their spawn corners and moving in the
+shared space, which is the thing the withdrawn board made impossible. Slot 0 (blue, top-left) is the
+idle human the driver leaves parked in its corner; the other three are bot-driven.
+
