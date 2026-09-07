@@ -3,8 +3,12 @@ dist
 *.log
 .DS_Store
 
-# local scratch output
+# local scratch output. Root-anchored like the rest of this section, so a legitimately
+# named directory deeper in the tree is not silently ignored. `scratchpad/` is where
+# agent working notes and throwaway logs land; a `git add -A` swept one into a commit
+# before this entry existed.
 /tmp/
+/scratchpad/
 
 # generated renders -- visual gate output and gallery stills
 visual-out/
