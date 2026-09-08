@@ -753,5 +753,19 @@
       "the screen capture adapter fails a capture whose measured selector matched nothing, but not one that is merely hidden"
     ],
     "why": "Stops noticing that a measured selector matched nothing, which is how a renamed class turns a state's report into an empty caption while the screenshot still looks plausible. Deliberately NOT an is-visible check: several states exist to show a control is ABSENT, so presence is the property that distinguishes 'the control is hidden, as intended' from 'this state is measuring nothing at all'. Pinned by a case that drives the real adapter with the child process stubbed through its own `deps.runProcess` seam -- an earlier version named a catalogue test that could not possibly see this and SURVIVED, which is how the gap showed up."
+  },
+  {
+    "id": "gallery-waits-for-the-canvas-before-starting",
+    "file": "tools/gallery/enter-gameplay.mjs",
+    "find": "      if (await start.count()) await start.click();\n      else await page.keyboard.press('Enter');\n      await page.locator(GAME_CANVAS).waitFor({ state: 'attached', timeout });",
+    "replace": "      await page.locator(GAME_CANVAS).waitFor({ state: 'attached', timeout });\n      if (await start.count()) await start.click();\n      else await page.keyboard.press('Enter');",
+    "expect": "killed",
+    "tests": [
+      "tools/gallery/enter-gameplay.test.ts"
+    ],
+    "killedBy": [
+      "enterGameplay: the order is the fix presses Start BEFORE waiting for the canvas that Start creates"
+    ],
+    "why": "Restores the ordering that made `--scene game` fail on every invocation (issue #581): waiting for the game canvas before pressing Start, when that canvas is created BY starting a session (`bootCanvas`, from session-host.ts). The real symptom was a 30-second locator timeout naming a selector rather than the missing session, which is why three separate agents diagnosed it independently and each wrote their own driver instead. Nothing tested this file before -- `run.mjs` drives a browser and had no coverage at all, which is how an always-failing code path shipped. The fake page in the scoped test models the one property that matters, that no session means no canvas, so this mutation fails there in milliseconds."
   }
 ]
