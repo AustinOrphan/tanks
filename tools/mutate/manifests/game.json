@@ -289,8 +289,8 @@
   {
     "id": "browser-deps-drops-the-developer-gate",
     "file": "src/game/loop.ts",
-    "find": "    developerMode: parseDeveloperMode(search),",
-    "replace": "    developerMode: false,",
+    "find": "    developerMode,\n  };",
+    "replace": "    developerMode: false,\n  };",
     "expect": "killed",
     "why": "The composition half of the entry above: the parser can be correct and still never reach GameDeps. Only a test that enters through createBrowserDeps with a real location.search can see this, which is what loop.test.ts's 'carries the parsed browser query state into GameDeps' block does. Scoped to loop.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
     "tests": [
@@ -5549,5 +5549,90 @@
       "createLevelSystem: pp1Roles reaches the built world (issue #358, composition not unit) reaches every tank of a real two-player coop world, co-players included"
     ],
     "why": "Drops issue #358's role-matrix arm from the ONE call that carries it into a campaign world, which is the shape a trailing positional invites: `createWorldFor` takes it eighth in a long list, so a lost argument is silently `undefined` rather than a type error, and `?dev=1&pp1Roles=1` then plays the shipped roster while the menu says the arm is on -- a flag that changes a value and not the game. MEASURED while landing this: with the argument removed, all 89 cases across levels.test.ts, pp1-roles.test.ts and dev-config.test.ts stayed green, because those two prove only that loadArena stamps a cap and that the refusal reads one. Caught by the campaign case and its two-player coop sibling, named in killedBy; the flag-off control survives by design, since dropping the argument and leaving the flag off are the same world."
+  },
+  {
+    "id": "devbadge-ignores-the-master-gate",
+    "file": "src/game/hud.ts",
+    "find": "  devBadge.classList.toggle('hud-devbadge--hidden', !developerMode);",
+    "replace": "  devBadge.classList.toggle('hud-devbadge--hidden', false);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "developer mode: entry, indicator and exit (issue #243) shows neither the entry nor the indicator without the gate"
+    ],
+    "why": "Paints the DEV indicator on an ORDINARY page. The gate is issue #243's whole subject and this is the failure with the widest blast radius: every player sees a developer badge on the shipped game, and no existing test would have said so, because ~200 of them build `createHud(root)` and simply never look for developer UI. The control that catches it has to assert the ABSENCE explicitly, which is what the named test does."
+  },
+  {
+    "id": "devtools-exit-offered-unwired",
+    "file": "src/game/hud.ts",
+    "find": "  devToolsExitBtn.hidden = !opts.exitDeveloperMode;",
+    "replace": "  devToolsExitBtn.hidden = false;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "developer mode: entry, indicator and exit (issue #243) does not offer Exit when nothing is wired to it"
+    ],
+    "why": "Offers 'Exit Developer Mode' when nothing is bound to it, so the pane's only real affordance silently does nothing -- the exact defect boot.ts's `reload` seam documents as its reason for being required rather than defaulted. A visible dead control is worse than an absent one, and it is invisible to every test that DOES wire the seam, which is why the control here is the unwired HUD."
+  },
+  {
+    "id": "devbadge-opens-with-the-menu-opener",
+    "file": "src/game/hud.ts",
+    "find": "    openLayer('developer-tools', devBadge);",
+    "replace": "    openLayer('developer-tools', devToolsOpenBtn);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "developer mode: entry, indicator and exit (issue #243) reopens the tools from the persistent indicator, and Back returns to where it was pressed"
+    ],
+    "why": "Records the MENU entry as the control that opened the pane even when the badge did, so Back restores focus to a button that is not on screen -- the badge exists precisely so the tools are reachable mid-match, where the Main Menu footer is hidden. The pane still opens and still closes, so only an assertion about WHERE Back lands can see it; issue #318's origin/focus contract is the thing being broken, not the layer stack itself."
+  },
+  {
+    "id": "developer-exit-only-drops-the-gate",
+    "file": "src/game/dev-config.ts",
+    "find": "  const drop = new Set([...knownDevParams(), ...deprecated]);",
+    "replace": "  const drop = new Set(['dev', ...deprecated]);",
+    "expect": "killed",
+    "tests": [
+      "src/game/dev-config.test.ts"
+    ],
+    "killedBy": [
+      "developerExitSearch removes the master gate AND every other developer parameter",
+      "developerExitSearch sweeps the registry rather than a hand-kept list, so a new flag cannot outlive Exit"
+    ],
+    "why": "Turns Exit into `canonicalDevSearch(.., {keepGate:false})` -- which is the mistake this function exists to prevent, and the one a reader is most likely to make, since that call already existed and looks like it means 'leave developer mode'. It drops the gate and KEEPS every flag, so Exit hands back `?aimRay=1&pp1Roles=1`: developer state survives, and a reload re-enters the arm the player just asked to leave. Sweeping `knownDevParams()` is also what makes a flag added tomorrow removable on the same day, with no second list to remember."
+  },
+  {
+    "id": "developer-exit-keeps-the-whole-url",
+    "file": "src/game/loop.ts",
+    "find": "developerExitSearch(search)",
+    "replace": "search",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-shell.test.ts"
+    ],
+    "killedBy": [
+      "createBrowserDeps: leaving developer mode (issue #243) turns the gate on from the URL and binds an Exit that strips every developer parameter"
+    ],
+    "why": "Exit navigates to the URL it was already on, so the page reloads straight back into developer mode. This is the seam NEITHER unit test can see: `developerExitSearch` is proven correct in dev-config.test.ts and the HUD is proven to call its injected seam exactly once in hud.navigation.test.ts, and both stay green here -- only the wiring decides what the seam is actually bound to. Measured with the same mutation shaped as the likelier real mistake (binding `canonicalDevSearch(search, {keepGate:false})`, which looks like it means 'leave developer mode' and keeps every flag): 1 of 14 in app-shell.test.ts failed and the other two files stayed green."
+  },
+  {
+    "id": "browser-deps-hud-never-gets-the-gate",
+    "file": "src/game/loop.ts",
+    "find": "        developerMode,\n",
+    "replace": "        developerMode: false,\n",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-shell.test.ts"
+    ],
+    "killedBy": [
+      "createBrowserDeps: leaving developer mode (issue #243) turns the gate on from the URL and binds an Exit that strips every developer parameter"
+    ],
+    "why": "The gate reaches `GameDeps` (the entry above pins that) but never reaches the HUD, so `?dev=1` produces a page with no developer UI at all -- no indicator, no menu entry -- while every non-UI consumer still believes developer mode is on. The two bindings are separate lines and the sibling entry cannot see this one. Measured while landing this: the exit half of the scoped test passes under this mutation, because Exit's visibility depends on the seam being BOUND and not on the gate, so the assertion that catches it has to be about the indicator being on screen."
   }
 ]

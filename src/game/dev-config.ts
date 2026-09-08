@@ -382,6 +382,40 @@ export function explainDevConfig(search: string): DevConfigState {
  */
 export const DEPRECATED_DEV_PARAMS: readonly string[] = [];
 
+/**
+ * The query string to leave developer mode with (issue #243).
+ *
+ * The COMPLEMENT of `canonicalDevSearch` below, and deliberately not a mode of it. That
+ * function KEEPS every developer parameter and only chooses whether to carry the gate,
+ * because its job is to produce a shareable canonical developer URL; `keepGate: false`
+ * therefore still returns `?aimRay=1&topbar=...`, which is a developer URL missing its
+ * gate rather than an ordinary one. Exiting is the opposite operation: every known
+ * developer parameter goes, the master gate included.
+ *
+ * Unrelated parameters survive with their order and their duplicates intact, because they
+ * belong to something else -- a deep link, a campaign tag, a router -- and leaving
+ * developer mode has no standing to normalise them.
+ *
+ * Retired parameters are dropped as well. They were developer parameters, so leaving one
+ * behind would mean an Exit that produces a URL still carrying developer state.
+ *
+ * @param search a `location.search`, with or without the leading `?`.
+ * @returns a search string with a leading `?`, or `''` when nothing is left.
+ */
+export function developerExitSearch(
+  search: string,
+  deprecated: readonly string[] = DEPRECATED_DEV_PARAMS,
+): string {
+  const drop = new Set([...knownDevParams(), ...deprecated]);
+  const out = new URLSearchParams();
+  for (const [k, v] of toParams(search).entries()) {
+    if (drop.has(k)) continue;
+    out.append(k, v);
+  }
+  const s = out.toString();
+  return s === '' ? '' : `?${s}`;
+}
+
 export interface CanonicalDevUrlOptions {
   /** Keep the `dev=1` gate in the output. Default true; false strips developer mode. */
   readonly keepGate?: boolean;
