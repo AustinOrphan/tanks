@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createAppShell, createBrowserAppShell, type AppShell } from './app-shell';
 import { createAppSettings, type AppSettings } from './app-settings';
 import { createMemoryStorage, createStores } from './storage';
@@ -217,5 +217,74 @@ describe('createBrowserAppShell: the one real probe on the page (issue #470)', (
     } finally {
       shell.dispose();
     }
+  });
+});
+
+describe('createBrowserDeps: leaving developer mode (issue #243)', () => {
+  // THE COMPOSITION, which neither half proves on its own. `developerExitSearch` is unit
+  // tested in dev-config.test.ts and the HUD is proven to call its injected seam exactly
+  // once in hud.navigation.test.ts -- but only this wiring decides WHICH function the seam
+  // is bound to, and the wrong one (`canonicalDevSearch`, which keeps every flag) would
+  // satisfy both of those tests while leaving developer mode on after Exit.
+  //
+  // `location` is STUBBED WHOLE rather than spied on: jsdom refuses to redefine
+  // `location.assign` ("Cannot redefine property"), and a real assignment would be a
+  // navigation it does not implement anyway. The stub carries exactly the three fields
+  // this wiring reads, so a binding that reached for a fourth would fail loudly here.
+  const withLocation = <T>(url: string, fn: (assigned: string[]) => T): T => {
+    const u = new URL(url, 'https://example.test');
+    const assigned: string[] = [];
+    vi.stubGlobal('location', {
+      pathname: u.pathname,
+      search: u.search,
+      hash: u.hash,
+      assign: (to: string) => assigned.push(to),
+    });
+    try {
+      return fn(assigned);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+
+  it('turns the gate on from the URL and binds an Exit that strips every developer parameter', () => {
+    const { shell } = build();
+    withLocation('/play?ref=keep&dev=1&aimRay=1&pp1Roles=1#frag', (assigned) => {
+      const deps = createBrowserDeps(shell);
+      expect(deps.developerMode, 'the gate came from the URL').toBe(true);
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      const hud = deps.createHud(root);
+      // The gate reaches the HUD, not merely `GameDeps`: these are two separate bindings,
+      // and Exit's own visibility depends on the SEAM being bound rather than on the gate,
+      // so without this line a HUD built with `developerMode: false` would still pass the
+      // assertion below while showing the player no developer UI whatsoever.
+      const badge = root.querySelector('.hud-devbadge') as HTMLElement;
+      expect(getComputedStyle(badge).display, 'the indicator must be on screen').not.toBe('none');
+
+      (root.querySelector('.hud-devtools-exit') as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
+      // The unrelated parameter survives, the fragment survives, and every developer
+      // parameter is gone -- including the two flags a `keepGate: false` canonicalisation
+      // would have carried through.
+      expect(assigned).toEqual(['/play?ref=keep#frag']);
+
+      hud.dispose();
+      document.body.innerHTML = '';
+    });
+  });
+
+  it('leaves an ordinary URL with no developer UI and nothing to exit', () => {
+    const { shell } = build();
+    withLocation('/play?ref=keep', () => {
+      const deps = createBrowserDeps(shell);
+      expect(deps.developerMode).toBe(false);
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      const hud = deps.createHud(root);
+      const badge = root.querySelector('.hud-devbadge') as HTMLElement;
+      expect(getComputedStyle(badge).display, 'no developer UI on an ordinary page').toBe('none');
+      hud.dispose();
+      document.body.innerHTML = '';
+    });
   });
 });
