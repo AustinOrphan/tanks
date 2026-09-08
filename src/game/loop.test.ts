@@ -8878,6 +8878,92 @@ describe('versusResultFromWorld', () => {
  * is therefore the thing under test, not a stand-in for it: `requestVersusSession` disposes
  * the live handle and starts a second real session, exactly as it does on the page.
  */
+describe('one run, from Launch to the next mission (issue #323)', () => {
+  /**
+   * THE CHAINED SCENARIO the issue's last acceptance criterion asks for: Launch -> Campaign
+   * -> pause -> death -> mission clear -> next mission, in ONE continuous test, asserting
+   * the state at each hop.
+   *
+   * Every hop already had coverage before this. What none of them had was CONTINUITY: each
+   * suite sets up its own hop and drives that hop alone, so a run that survives every step
+   * individually and falls over between two of them is exactly what nothing here could see.
+   *
+   * DELIBERATELY NOT `boot()`. That helper hands `startGameWith` a synthetic `CONTINUE`
+   * intent and lets a test jump phases with `setState`, and a scenario assembled from those
+   * would assert the harness rather than the game. This drives the real `bootPage` through
+   * `bootPageOn`, asks for the match through the same application seam the route UI uses,
+   * and moves between phases only by doing something a player does.
+   */
+  it('carries one campaign run through every phase without losing its place', () => {
+    // A run already in progress on level 2 of 5, so "the correct persisted run" is a claim
+    // with a wrong answer available: a session that started fresh would open on level 1.
+    const world = worldWithPlayerAboutToDie();
+    const h = makeDeps({ world, levelCount: 5, levelStart: 1, savedRun: { level: 1, lives: LIVES }, tracksProgress: true });
+    const page = bootPageOn(h, { startEmpty: true });
+
+    // ---- HOP 1: Launch -------------------------------------------------------------
+    // The page-level gate, read off the REAL shell rather than inferred from the HUD.
+    expect(page.shell.launchDismissed(), 'the page opened past its own Launch gate').toBe(false);
+    page.pointerdown();
+    expect(page.shell.launchDismissed(), 'the gesture did not dismiss Launch').toBe(true);
+    expect(h.rec.hudStates.at(-1), 'the splash did not hand over to the menu').toBe('main-menu');
+
+    // ---- HOP 2: Campaign, in one activation ----------------------------------------
+    // `page.start` is the APPLICATION start seam, and it is exactly the call the Main
+    // Menu's Continue button makes: `route-host.ts`'s `onStartRestart` handler, with no
+    // live session, issues `requests.requestStart({ kind: 'campaign-continue' })` and
+    // nothing else. This is not `boot()`'s shortcut -- that hands the intent to
+    // `startGameWith` directly, bypassing the page.
+    //
+    // What it does skip is the DOM click, and that half is pinned on its own in
+    // `route-host.test.ts` ("a fresh Continue click turns into exactly one
+    // campaign-continue request"). Stated rather than glossed: the two together cover
+    // button-to-intent and intent-to-run, and this test owns the second.
+    page.start({ kind: 'campaign-continue' });
+    expect(h.rec.hudStates.at(-1), 'one activation did not reach gameplay').toBe('playing');
+    expect(h.rec.hudLevels.at(-1), 'Continue did not open on the run own level').toEqual([2, 5]);
+    expect(h.rec.lives.at(-1), 'the resumed run did not carry its lives').toBe(LIVES);
+
+    // ---- HOP 3: pause, and back ----------------------------------------------------
+    page.sm.pause();
+    expect(h.rec.hudStates.at(-1), 'pause did not reach the HUD').toBe('paused');
+    page.sm.resume();
+    expect(h.rec.hudStates.at(-1), 'resume did not return to play').toBe('playing');
+
+    // ---- HOP 4: an ordinary death --------------------------------------------------
+    // A life is spent and NOTHING is asked. This is the criterion "ordinary death with
+    // lives remaining requires no player confirmation", and it holds structurally: the
+    // simulation emits no terminal event while lives remain, so there is no panel for a
+    // confirmation to appear on. Asserted as the absence of a state change, because that
+    // absence IS the behaviour.
+    const statesBeforeDeath = h.rec.hudStates.length;
+    h.fireFrame(20);
+    expect(h.rec.runLivesSets.at(-1), 'the death did not cost a life').toBe(LIVES - 1);
+    expect(
+      h.rec.hudStates.slice(statesBeforeDeath),
+      'an ordinary death changed the screen -- a confirmation, or an ending',
+    ).toEqual([]);
+
+    // ---- HOP 5: the mission is cleared ---------------------------------------------
+    page.sm.onEvents([{ type: 'win' } as unknown as SimEvent]);
+    expect(h.rec.hudStates.at(-1), 'the win did not reach an ending').toBe('outcome-win');
+    // The run advanced AT the win, not at the Next Level click -- so quitting here keeps
+    // the clear. That ordering is what makes the next hop a navigation rather than a save.
+    expect(h.rec.runAdvances.at(-1)?.level, 'the run did not advance on the win').toBe(2);
+
+    // ---- HOP 6: on to the next mission ---------------------------------------------
+    // Through the panel's own primary action, which is what a player presses.
+    const buildsBefore = h.rec.levelBuilds.length;
+    h.hud.startRestart();
+    expect(h.rec.hudStates.at(-1), 'Next Level did not return to play').toBe('playing');
+    expect(h.rec.levelBuilds.length, 'Next Level built no board').toBeGreaterThan(buildsBefore);
+    expect(h.rec.hudLevels.at(-1), 'the next mission is not the one after the one cleared').toEqual([3, 5]);
+    // ...and the lives carried across the boundary rather than resetting, which is the
+    // half of "one run" that a per-level test cannot see.
+    expect(h.rec.lives.at(-1), 'the next mission reset the run lives').toBe(LIVES - 1);
+  });
+});
+
 function bootPageOn(
   h: ReturnType<typeof makeDeps>,
   opts: { startEmpty?: boolean } = {},
