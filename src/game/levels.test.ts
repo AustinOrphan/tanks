@@ -9,6 +9,7 @@ import { createMemoryStorage } from './storage';
 import { DEV_FLAGS_OFF } from './devflags';
 import { ARENAS, arenaBounds, arenaById, createWorldFor, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { LIVES } from '../sim/constants';
+import { configFor } from '../sim/config';
 import type { VersusConfig } from './versus-config';
 
 /** No active run -- the boot-with-nothing-started case. */
@@ -145,6 +146,42 @@ describe('createLevelSystem: aiPerception reaches the built world (issue #472, c
     expect(w.rules.aiTargetPerception).toBe('line-of-sight');
     expect(w.rules.coopAttempts).toBe(false);
     expect(w.tanks.filter((t) => t.kind === 'player')).toHaveLength(2);
+  });
+});
+
+describe('createLevelSystem: pp1Roles reaches the built world (issue #358, composition not unit)', () => {
+  // pp1-roles.test.ts proves loadArena stamps the arm's caps, and bullets.test.ts proves a
+  // stamped cap is what the refusal reads. Neither can see whether the DEV FLAG that turns
+  // the arm on actually travels from the URL through createLevelSystem's closure into
+  // createWorldFor's trailing positional -- and it is a trailing positional in a long call,
+  // where a dropped argument is silently `undefined` rather than a type error. Measured: with
+  // `flags.pp1Roles` removed from that call, all 89 cases in levels.test.ts, pp1-roles.test.ts
+  // and dev-config.test.ts stayed green, so a campaign playing the SHIPPED roster under
+  // `?dev=1&pp1Roles=1` was the failure nothing reported. Same composition question
+  // aiPerception gets above.
+  const CAPPED = 4; // PP1_ROLE_SHELL_CAPS.player, and deliberately not imported: this asserts
+  // the number a player actually gets, so importing the table would let both move together.
+
+  it('pp1Roles off leaves the shipped roster cap, which is the control this rests on', () => {
+    const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
+    const p = sys.world(CAMPAIGN_LEVELS[0], 42).tanks.find((t) => t.kind === 'player');
+    expect(p?.shellCap, 'no flag must mean no stamp, or the arm ships to everyone').toBeUndefined();
+    expect(configFor('player').weapon.maxActiveProjectiles, 'the shipped premise moved').toBeGreaterThan(CAPPED);
+  });
+
+  it('pp1Roles=1 reaches the player tank in a campaign world', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, pp1Roles: true }, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).tanks.find((t) => t.kind === 'player')?.shellCap).toBe(CAPPED);
+  });
+
+  it('reaches every tank of a real two-player coop world, co-players included', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, players: 2, pp1Roles: true }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, undefined, 2);
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players).toHaveLength(2);
+    // BOTH, not just the first: two players on different budgets is an experiment measuring
+    // two rosters at once, and the co-op placer is a separate spawn site from the grid loop.
+    expect(players.map((t) => t.shellCap)).toEqual([CAPPED, CAPPED]);
   });
 });
 

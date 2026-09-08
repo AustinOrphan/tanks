@@ -154,14 +154,15 @@ export function createLevelSystem(
     // resolveWorldRules's default ('full'); `los` is the only value that ever reaches the
     // world. It used to be written onto the built world by loop.ts's buildWorld, after
     // the fact -- exactly the post-construction rule write a frozen `World.rules` forbids.
+    // `flags.pp1Roles` (issue #358) reaches the CAMPAIGN world only, not the sandbox above:
+    // the sandbox is a test rig with an authored tank composition, and the matrix is about
+    // the campaign roster -- an arm applied to a rig would measure the rig. False, the
+    // flag's own "off", leaves every tank on its authored roster cap.
     world: (level, seed, unarmedTrigger, lives, playerCount) =>
       createWorldFor(
         arenaById(level.arenaId), seed, unarmedTrigger, lives,
         flags.corpseBlock, !flags.muzzleInside, playerCount, !flags.coopPool,
         flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,
-        // `pp1Roles` reaches the CAMPAIGN world only, not the sandbox above: the sandbox is
-        // a test rig with an authored tank composition, and issue #358's matrix is about the
-        // campaign roster. An arm applied to a rig would measure the rig.
         flags.aiPerception ?? undefined, flags.pp1Roles,
       ),
     bounds: (level) => ({
