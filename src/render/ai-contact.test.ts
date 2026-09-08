@@ -99,6 +99,43 @@ describe('contactLabel', () => {
     expect(contactLabel(t, 'visible')).toBe('#4 c27');
   });
 
+  it('shows WHY the target last changed, while that change is still recent (issue #359)', () => {
+    // One glyph, not a word: this label sits over a tank in a live match, and the reason is
+    // the least of its three facts -- a reader scans for the target and the commitment.
+    const at = (reason: Tank['aiRetargetReason'], age: number): string =>
+      contactLabel(
+        tank(1, 'brown', 0, 0, { aiTargetId: 4, aiTargetTicks: 27, aiRetargetReason: reason, aiRetargetAgeTicks: age }),
+        'visible',
+      );
+    expect(at('acquired', 0)).toBe('#4 c27 a');
+    expect(at('target-lost', 3)).toBe('#4 c27 l');
+    expect(at('switched-on-expiry', 29)).toBe('#4 c27 s');
+    // ...and every reason gets its own glyph, so two causes cannot read as one.
+    expect(new Set([at('acquired', 0), at('target-lost', 0), at('switched-on-expiry', 0)]).size).toBe(3);
+  });
+
+  it('drops the reason once it is stale, so the label does not claim a switch that was seconds ago', () => {
+    // A reason from four seconds back says nothing about what the tank is doing now, and a
+    // label carrying one forever would read as if the tank had just switched every time it
+    // was looked at. 30 ticks is half a second.
+    const stale = tank(1, 'brown', 0, 0, {
+      aiTargetId: 4, aiTargetTicks: 27, aiRetargetReason: 'acquired', aiRetargetAgeTicks: 31,
+    });
+    expect(contactLabel(stale, 'visible')).toBe('#4 c27');
+    // The boundary itself is INCLUDED, which is the half a `> ` versus `>= ` slip would get
+    // wrong without changing any other case here.
+    const edge = { ...stale, aiRetargetAgeTicks: 30 };
+    expect(contactLabel(edge, 'visible')).toBe('#4 c27 a');
+  });
+
+  it('shows the reason beside the memory span too, not instead of it', () => {
+    const t = tank(1, 'brown', 0, 0, {
+      aiTargetId: 4, aiTargetTicks: 27, aiLastSeenTicks: 61,
+      aiRetargetReason: 'target-lost', aiRetargetAgeTicks: 0,
+    });
+    expect(contactLabel(t, 'remembered')).toBe('#4 c27 m61 l');
+  });
+
   it('says searching when no target is committed at all', () => {
     expect(contactLabel(tank(1, 'brown', 0, 0), 'none')).toBe('-- searching');
   });

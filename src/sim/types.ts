@@ -168,6 +168,26 @@ export interface Tank {
   aiLastSeenTicks?: number;
   aiTargetId?: number;
   aiTargetTicks?: number;
+  /**
+   * WHY this tank's committed opponent last changed, and how long ago (issue #359).
+   *
+   * `commitTarget` has always computed a reason -- it returns one from its single writer --
+   * and every caller threw it away, so the one question a thrashing AI raises ("why did it
+   * switch?") had no answer anywhere. The commitment ITSELF was already observable through
+   * `aiTargetId`/`aiTargetTicks` and the contact overlay; only the cause was missing.
+   *
+   * DETERMINISTIC SIM STATE rather than an event, for two reasons. It is a property of the
+   * tank at a tick, so a trace that samples the world sees it for free and needs no new
+   * channel; and adding a `SimEvent` would put a diagnostic on the stream that render,
+   * audio and haptics all consume, which is a wide change for something only a developer
+   * reads.
+   *
+   * `aiRetargetAgeTicks` counts UP from the change and is not a countdown: it answers "how
+   * recently", where `aiTargetTicks` already answers "how much longer". Both optional like
+   * the pair above; absent means this tank has never chosen a target.
+   */
+  aiRetargetReason?: 'acquired' | 'target-lost' | 'switched-on-expiry';
+  aiRetargetAgeTicks?: number;
   aiShotPlan?: 'bank' | 'direct';
   aiShotPlanTicks?: number;
   /**

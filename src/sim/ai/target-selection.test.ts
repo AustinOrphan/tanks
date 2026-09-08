@@ -267,6 +267,57 @@ describe('committed opponent selection', () => {
   });
 });
 
+describe('the retarget REASON is recorded, not just returned (issue #359)', () => {
+  // THE GAP THIS CLOSES: `commitTarget` has always computed a reason and returned it, and
+  // every caller in the game discarded it -- `ai/index.ts` calls it as a bare statement. So
+  // the one question a thrashing AI raises, "why did it switch?", had no answer anywhere in
+  // the running game. The commitment itself was already observable; only the cause was not.
+
+  it('records ACQUIRED on the first commitment, and ages from there', () => {
+    const ai = tank(1, 'brown', { x: 0, y: 0 });
+    const w = world([ai, tank(2, 'player', { x: 5, y: 0 })]);
+    expect(ai.aiRetargetReason, 'a tank that has never chosen carries no reason').toBeUndefined();
+
+    expect(commitTarget(w, ai)).toBe('acquired');
+    expect(ai.aiRetargetReason).toBe('acquired');
+    expect(ai.aiRetargetAgeTicks, 'the change is this tick, so its age is zero').toBe(0);
+
+    // Ages while nothing changes. This is what makes the field answer "how recently" -- the
+    // countdown beside it, `aiTargetTicks`, answers "how much longer", and a reader needs
+    // both to tell a fresh switch from a commitment that is simply running out.
+    commitTarget(w, ai);
+    commitTarget(w, ai);
+    expect(ai.aiRetargetAgeTicks).toBe(2);
+    expect(ai.aiRetargetReason, 'ageing overwrote the reason').toBe('acquired');
+  });
+
+  it('records TARGET-LOST when the committed opponent dies, and resets the age', () => {
+    const prey = tank(2, 'player', { x: 5, y: 0 });
+    const ai = tank(1, 'brown', { x: 0, y: 0 });
+    const w = world([ai, prey, tank(3, 'player', { x: 40, y: 0 })]);
+    commitTarget(w, ai);
+    commitTarget(w, ai);
+    expect(ai.aiRetargetAgeTicks).toBe(1);
+
+    prey.alive = false;
+    expect(commitTarget(w, ai)).toBe('target-lost');
+    expect(ai.aiRetargetReason).toBe('target-lost');
+    expect(ai.aiRetargetAgeTicks, 'a new reason did not reset the age').toBe(0);
+  });
+
+  it('keeps the LAST reason while a commitment simply runs down', () => {
+    // Rule 6: expiry is not a reason to move. A tank that re-commits to the same opponent
+    // has not retargeted, so the recorded reason must not change and its age must not
+    // reset -- otherwise every span boundary would read as a fresh switch.
+    const ai = tank(1, 'brown', { x: 0, y: 0 });
+    const w = world([ai, tank(2, 'player', { x: 5, y: 0 })]);
+    commitTarget(w, ai);
+    for (let i = 0; i < span('brown') + 2; i++) commitTarget(w, ai);
+    expect(ai.aiRetargetReason, 'running out of span was recorded as a retarget').toBe('acquired');
+    expect(ai.aiRetargetAgeTicks, 'the age reset without a retarget').toBeGreaterThan(span('brown'));
+  });
+});
+
 describe('the commitment reaches the game, not just this file', () => {
   it('stepAi writes and HOLDS a committed target across ticks, with two players on the board', () => {
     // This used to be pinned by the golden trace: five of its runs' timing depended on the

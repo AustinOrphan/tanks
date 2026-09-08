@@ -142,13 +142,38 @@ function makeLabel(): { sprite: THREE.Sprite; draw: (text: string) => void } {
  * Exported and pure so the string can be pinned without a canvas: jsdom draws no glyphs,
  * so a test that went through `draw` would assert nothing about what it says.
  */
+/**
+ * The retarget reason, as one character (issue #359): `a`cquired, target `l`ost, `s`witched
+ * on expiry. Abbreviated because this label sits over a tank in a live match and the reason
+ * is the least of its three facts -- the target and the commitment are what a reader scans
+ * for, and a word would push them off the glyph budget.
+ *
+ * Only while the change is RECENT. A reason from four seconds ago says nothing about what
+ * the tank is doing now, and a label that carried one forever would read as if the tank had
+ * just switched every time it was looked at.
+ */
+const REASON_GLYPH: Record<NonNullable<Tank['aiRetargetReason']>, string> = {
+  acquired: 'a',
+  'target-lost': 'l',
+  'switched-on-expiry': 's',
+};
+const REASON_FRESH_TICKS = 30; // 0.5s
+
+function reasonSuffix(tank: Tank): string {
+  const reason = tank.aiRetargetReason;
+  if (reason === undefined) return '';
+  if ((tank.aiRetargetAgeTicks ?? 0) > REASON_FRESH_TICKS) return '';
+  return ` ${REASON_GLYPH[reason]}`;
+}
+
 export function contactLabel(tank: Tank, state: ContactState): string {
   if (tank.aiTargetId === undefined) return '-- searching';
   const commit = tank.aiTargetTicks ?? 0;
   const memory = tank.aiLastSeenTicks ?? 0;
+  const why = reasonSuffix(tank);
   return state === 'remembered'
-    ? `#${tank.aiTargetId} c${commit} m${memory}`
-    : `#${tank.aiTargetId} c${commit}`;
+    ? `#${tank.aiTargetId} c${commit} m${memory}${why}`
+    : `#${tank.aiTargetId} c${commit}${why}`;
 }
 
 export function createAiContact(scene: THREE.Scene): AiContact {
