@@ -344,6 +344,27 @@ interface OutcomePanelCopy {
    * entry that opens the same pane.
    */
   readonly chooseLevel: boolean;
+  /**
+   * Whether this ending offers `Practice This Level` beside the primary action. True for
+   * `mission-clear` and nothing else (issue #323).
+   *
+   * IT IS NOT `chooseLevel` WITH A DIFFERENT LABEL. That flag opens the Levels pane, which
+   * is a different destination: a player who has just cleared a mission wants THIS level
+   * again, not a menu of levels. Two flags rather than one tri-state because the two
+   * endings that offer `Choose Level` are practice endings and this one is a campaign
+   * ending -- they are never both true, but the table stays flat data either way.
+   *
+   * WHY THIS AND NOT `Retry Mission`, which this issue's scope originally asked for. Retry
+   * would replay the mission inside the active run, and issue #360's mastery route is gated
+   * on per-run DEATHLESS play: clear a mission having lost a life, retry it cleanly, and a
+   * run recovers eligibility that #360 says costs an entire fresh campaign. Practice is the
+   * same gesture with none of that reach -- it cannot touch the run's lives, its position,
+   * or its progress -- so it serves the want without laundering the record.
+   *
+   * Gated on `levelChoice` at the point of use, exactly like `chooseLevel`: a sandbox or
+   * one-level system has no practice to offer.
+   */
+  readonly practiceThisLevel: boolean;
 }
 
 /**
@@ -402,6 +423,7 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
     subtitle: '',
     action: 'Next Level',
     chooseLevel: false,
+    practiceThisLevel: true,
   },
   'campaign-over': {
     title: () => 'Game Over',
@@ -413,6 +435,7 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
     subtitle: '',
     action: 'Start New Campaign',
     chooseLevel: false,
+    practiceThisLevel: false,
   },
   'campaign-complete': {
     title: () => 'Campaign Complete!',
@@ -423,6 +446,7 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
     subtitle: '',
     action: 'Start New Campaign',
     chooseLevel: false,
+    practiceThisLevel: false,
   },
   /*
    * The two practice endings name the LEVEL, not the mode, and carry no subtitle at all
@@ -444,12 +468,14 @@ const OUTCOME_PANEL: Readonly<Record<OutcomePanelKey, OutcomePanelCopy>> = {
     subtitle: '',
     action: 'Retry',
     chooseLevel: true,
+    practiceThisLevel: false,
   },
   'practice-failed': {
     title: () => 'Level Failed',
     subtitle: '',
     action: 'Retry',
     chooseLevel: true,
+    practiceThisLevel: false,
   },
 };
 
@@ -1656,6 +1682,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            through the same two paths those controls already use -- see
            handleChooseLevel, which is deliberately not a third route into the grid. -->
       <button class="ui-btn ui-btn--slab hud-choose-level hud-choose-level--hidden" type="button">Choose Level</button>
+      <!-- PRACTICE THIS LEVEL (issue #323), the mission-clear screen's second action and
+           the only button on this panel that belongs to a CAMPAIGN ending. Same convention
+           as its Choose Level sibling above: OUTCOME_PANEL decides when it appears (see
+           applyPracticeThisLevel), and isHiddenWithin keeps the roving focus and the D-pad
+           off it for every state that does not.
+
+           Its click leaves the run and starts practice on the level just cleared -- the
+           same two paths a Levels pick already uses, not a third route into practice. -->
+      <button class="ui-btn ui-btn--slab hud-practice-level hud-practice-level--hidden" type="button">Practice This Level</button>
       <!-- CHANGE SETUP (issue #261), the Pause twin of Choose Level: a versus match's own
            configuration surface, reachable from the match without going through the menu
            by hand. Shown at Pause in a versus session and nowhere else -- see
@@ -1876,6 +1911,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
   const chooseLevelBtn = el.querySelector('.hud-choose-level') as HTMLButtonElement;
+  const practiceLevelBtn = el.querySelector('.hud-practice-level') as HTMLButtonElement;
   const changeSetupBtn = el.querySelector('.hud-change-setup') as HTMLButtonElement;
   const continueBtn = el.querySelector('.hud-continue') as HTMLButtonElement;
   const newGameBtn = el.querySelector('.hud-new-game') as HTMLButtonElement;
@@ -4196,6 +4232,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * PRACTICE THIS LEVEL, on the mission-clear screen only (issue #323). Same three terms as
+   * `applyChooseLevel` above -- at an outcome, the table says so, and the session has a
+   * level choice to offer -- plus one this needs and that does not: a mission ordinal.
+   *
+   * Without a pushed status there is no level to practise, and the handler would have
+   * nothing to name. Every css and gallery fixture is in exactly that state, so the button
+   * must hide there rather than appear and do nothing when pressed.
+   */
+  function applyPracticeThisLevel(): void {
+    const atOutcome = shownState === 'outcome-win' || shownState === 'outcome-lose';
+    const copy = atOutcome ? outcomePanelCopyNow() : null;
+    practiceLevelBtn.classList.toggle(
+      'hud-practice-level--hidden',
+      !(copy?.practiceThisLevel ?? false) || !levelChoice || statusData === null,
+    );
+  }
+
+  /**
    * CHANGE SETUP, at Pause, in a versus session only (issue #261).
    *
    * Keyed on `statusData.kind` -- the same projection the pause EXIT label branches on,
@@ -4245,6 +4299,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       actionBtn.textContent = copy.action;
     }
     applyChooseLevel();
+    applyPracticeThisLevel();
     // ...and Change Setup, for the identical ordering reason (issue #279): a versus
     // ending reaches this function through `renderLegacyOutcomeCopy` above, and the
     // OUTCOME that says it is a versus ending arrives after the surface does. Deciding
@@ -4503,6 +4558,34 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     quitInto('levelselect', levelSelectOpenBtn);
   };
   /**
+   * PRACTICE THIS LEVEL: leave the run, then start practice on the level just cleared
+   * (issue #323).
+   *
+   * Reuses `levelSelectCbs` rather than adding a seam. That callback already carries
+   * exactly this meaning -- `loop.ts` responds to it by reassigning the session identity to
+   * practice, building the named level with a fresh independent lives pool, and never
+   * reading or writing the campaign run again -- and it is the callback the Levels grid
+   * fires. A second seam would be a second place for "what a level pick means" to drift.
+   *
+   * The ORDINAL is 1-based on screen and 0-based in the callback, which is the one seam in
+   * this handler worth stating: `statusData.mission` is what the topbar and the headline
+   * show ("Level 3 cleared!"), and `levelSelectCbs` indexes `deps.levels.levels`. Off by
+   * one here would practise the wrong level, silently, on a screen that names the right one.
+   *
+   * `handleQuit` first, and for the same reason `handleChooseLevel` does it: `loop.ts`
+   * guards the level-select handler on `sm.atMainMenu`, so the run must be left before the
+   * pick is reported or the handler drops it on the floor. NOT `quitInto` -- that exists to
+   * suppress the Main Menu while a PANE opens over it, and this opens no pane. The state
+   * change that follows is `main-menu` then `playing`, and entry into gameplay is instant
+   * by the transition contract, so the menu settles rather than crossfading.
+   */
+  const handlePracticeThisLevel = (): void => {
+    const mission = statusData?.mission ?? null;
+    if (mission === null) return;
+    handleQuit();
+    for (const cb of levelSelectCbs) cb(mission - 1);
+  };
+  /**
    * Leave the match, then open the retained Versus Setup -- the same shape as
    * `handleChooseLevel` above, through the same two existing paths in the same order,
    * because a third route into the pane is how the pane's own contract gets a second
@@ -4526,6 +4609,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   levelSelectOpenBtn.addEventListener('click', blurIfPointer);
   chooseLevelBtn.addEventListener('click', handleChooseLevel);
   chooseLevelBtn.addEventListener('click', blurIfPointer);
+  practiceLevelBtn.addEventListener('click', handlePracticeThisLevel);
+  practiceLevelBtn.addEventListener('click', blurIfPointer);
   changeSetupBtn.addEventListener('click', handleChangeSetup);
   changeSetupBtn.addEventListener('click', blurIfPointer);
   levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
@@ -5484,6 +5569,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // player was on. The end screens themselves reach it again through
     // `renderOutcomeCopy`, once the outcome that decides it has landed.
     applyChooseLevel();
+    applyPracticeThisLevel();
     // THE OUTCOME PANEL'S THREE LINES belong to the END screens alone. The surface's
     // half of the answer is recorded above, before the `playing` early return, in the
     // variable `setOutcome` reads -- so a later push into an already-open panel repaints
@@ -5687,6 +5773,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // next `setState`, which on the practice end screen is the screen the player is
       // already looking at.
       applyChooseLevel();
+      applyPracticeThisLevel();
+    applyPracticeThisLevel();
     },
     onLevelSelect(cb: (level: number) => void): void {
       levelSelectCbs.push(cb);
@@ -6056,6 +6144,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       levelSelectOpenBtn.removeEventListener('click', handleLevelSelectOpen);
       levelSelectOpenBtn.removeEventListener('click', blurIfPointer);
       chooseLevelBtn.removeEventListener('click', handleChooseLevel);
+      practiceLevelBtn.removeEventListener('click', handlePracticeThisLevel);
       chooseLevelBtn.removeEventListener('click', blurIfPointer);
       levelSelectBackBtn.removeEventListener('click', handleLevelSelectBack);
       levelSelectBackBtn.removeEventListener('click', blurIfPointer);

@@ -1831,9 +1831,19 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     h.setLevelSelect(3, 5); // a real level choice exists, so Choose Level is not withheld
     h.setStatus(atLevel(3, 5));
 
+    // The tuple carries BOTH secondary controls (issue #323 added the second). Reading only
+    // `chooseLevelShown` would have let `Practice This Level` appear on every ending, or on
+    // none, without a single line of this file changing -- and this is the test that exists
+    // to say which screen offers what.
+    const practiceShown = (r: HTMLElement): boolean =>
+      !(r.querySelector('.hud-practice-level') as HTMLElement).classList
+        .contains('hud-practice-level--hidden');
     const screen = (outcome: TypedOutcome): string[] => {
       drive(h, outcome);
-      return [title(root), subtitle(root), action(root), String(chooseLevelShown(root))];
+      return [
+        title(root), subtitle(root), action(root),
+        String(chooseLevelShown(root)), String(practiceShown(root)),
+      ];
     };
 
     // NO SUBTITLE on any of them, by owner ruling, arrived at over three separate rulings
@@ -1842,20 +1852,92 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
     // the lives and a button reading Next Level; "Out of lives. This run is over." over
     // "Game Over"; "Every level cleared. This run is finished." directly under "Campaign
     // Complete!".
-    expect(screen(MISSION_CLEAR)).toEqual(['Level 3 cleared!', '', 'Next Level', 'false']);
-    expect(screen(CAMPAIGN_OVER)).toEqual(['Game Over', '', 'Start New Campaign', 'false']);
+    expect(screen(MISSION_CLEAR)).toEqual(['Level 3 cleared!', '', 'Next Level', 'false', 'true']);
+    expect(screen(CAMPAIGN_OVER)).toEqual(['Game Over', '', 'Start New Campaign', 'false', 'false']);
     expect(screen(CAMPAIGN_COMPLETE)).toEqual([
       'Campaign Complete!',
       '',
       'Start New Campaign',
       'false',
+      'false',
     ]);
+    // The last column is `Practice This Level`, and it is TRUE on exactly one screen. A
+    // practice ending already offers Retry, which replays the same level -- offering
+    // "practice this level" from inside practice would be the same button twice under two
+    // names. Mission Clear is the only ending where the level just played and the mode the
+    // player is in differ, which is the whole reason the control exists (issue #323).
+    //
     // The practice endings name the LEVEL and carry no subtitle (owner ruling). They said
     // "Practice Cleared"/"Practice Failed" over a topbar chip already reading PRACTICE,
     // and a subtitle promising the campaign run was safe -- reassurance that mostly
     // raised the doubt it answered.
-    expect(screen(PRACTICE_WON)).toEqual(['Level Cleared', '', 'Retry', 'true']);
-    expect(screen(PRACTICE_LOST)).toEqual(['Level Failed', '', 'Retry', 'true']);
+    expect(screen(PRACTICE_WON)).toEqual(['Level Cleared', '', 'Retry', 'true', 'false']);
+    expect(screen(PRACTICE_LOST)).toEqual(['Level Failed', '', 'Retry', 'true', 'false']);
+  });
+
+  it('Practice This Level leaves the run, then reports the level just cleared (issue #323)', () => {
+    // WHAT THIS OWNS: that the button reports the RIGHT level through the RIGHT seam, in
+    // the right order. What a level-select report then DOES -- reassign the identity to
+    // practice, build with fresh independent lives, never touch the run -- is `loop.ts`'s,
+    // and is already pinned there ("practice lands on the picked level and leaves the run
+    // untouched"). Reusing that seam rather than adding one is what makes that split hold.
+    const { hud: h, root } = mount();
+    const picks: number[] = [];
+    let quits = 0;
+    let quitsWhenPicked: number | null = null;
+    h.onQuitToTitle(() => { quits += 1; });
+    h.onLevelSelect((level) => { picks.push(level); quitsWhenPicked = quits; });
+    h.setLevelSelect(3, 5);
+    h.setStatus(atLevel(3, 5));
+    drive(h, MISSION_CLEAR);
+
+    (root.querySelector('.hud-practice-level') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+
+    // THE OFF-BY-ONE IS THE CONTROL. The screen says "Level 3 cleared!" and the callback
+    // indexes `deps.levels.levels`, so the right answer is 2 and the plausible wrong one is
+    // 3 -- which would practise level FOUR, silently, from a screen naming level three. An
+    // assertion on "a pick happened" would pass on that.
+    expect(picks, 'the level just cleared was not reported, or was reported twice').toEqual([2]);
+    // ORDER, because `loop.ts` guards the level-select handler on `sm.atMainMenu`: reporting
+    // the pick before leaving the run has it dropped on the floor and nothing happens.
+    expect(quits, 'the run was never left').toBe(1);
+    expect(quitsWhenPicked, 'the pick was reported before the run was left').toBe(1);
+  });
+
+  it('offers Practice This Level on NO other ending, and not without a level to name', () => {
+    const { hud: h, root } = mount();
+    const shown = (): boolean =>
+      !(root.querySelector('.hud-practice-level') as HTMLElement).classList
+        .contains('hud-practice-level--hidden');
+    h.setLevelSelect(3, 5);
+
+    // No status pushed: there is no level to practise, so the button must not offer to.
+    // Every css and gallery fixture is in exactly this state, and a button that appeared
+    // there would do nothing when pressed -- `handlePracticeThisLevel` returns early.
+    drive(h, MISSION_CLEAR);
+    expect(shown(), 'offered with no level to name').toBe(false);
+
+    h.setStatus(atLevel(3, 5));
+    drive(h, MISSION_CLEAR);
+    expect(shown(), 'not offered on the one ending it belongs to').toBe(true);
+
+    // ...and on NO OTHER ending, which is what this test is named for and what it did not
+    // actually check until a mutation said so: dropping the table term from the gate left
+    // every other case here passing, because they all turn on the other two terms. A
+    // campaign game-over did not clear the level, and the two practice endings already
+    // offer Retry -- which replays the same level, so this would be that button twice.
+    for (const ending of [CAMPAIGN_OVER, CAMPAIGN_COMPLETE, PRACTICE_WON, PRACTICE_LOST]) {
+      drive(h, ending);
+      expect(shown(), 'offered on an ending that is not Mission Clear').toBe(false);
+    }
+
+    // ...and withheld when the session has no level choice at all -- a sandbox or a
+    // one-level system, whose Main Menu already hides the Practice entry. Same gate as
+    // Choose Level, and asserted here because the two flags are independent.
+    h.setLevelSelect(0, 1);
+    drive(h, MISSION_CLEAR);
+    expect(shown(), 'offered on a session with no practice to offer').toBe(false);
   });
 
   it('THE GAP (issue #323): no two endings render as the same screen any more', () => {
