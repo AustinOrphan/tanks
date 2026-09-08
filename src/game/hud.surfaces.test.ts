@@ -1531,6 +1531,43 @@ describe('hud: the pause exit is contextual (issue #323)', () => {
     expect(paneOpen(), 'the match was left but the setup pane never opened').toBe(true);
   });
 
+  it('never paints the Main Menu on the way to the setup pane (issue #566)', () => {
+    // THE MIDPOINT IS THE CLAIM, not the settled state. Settled, the pane is open and the
+    // panel is hidden whether or not this bug is present -- which is exactly why 235 HUD
+    // tests passed over it. The flash is one crossfade long, so it has to be read at the
+    // instant the handler returns, before any transition settles.
+    //
+    // What used to happen: `handleChangeSetup` called `handleQuit()`, that reached
+    // `setState('main-menu')` synchronously through the quit subscribers, and `setState`
+    // switched the panel on because the route said Main Menu. The pane's own transition
+    // then faded it away. TANKS! and all six menu buttons, painted on the way to a
+    // destination the player asked for directly.
+    const { hud: h, root } = mount();
+    const panelHidden = (): boolean =>
+      (root.querySelector('.hud-panel') as HTMLElement).classList.contains('hud-panel--hidden');
+    // A quit subscriber, because that is what makes the flash reachable: without one,
+    // `handleQuit` reaches no `setState` and the bug cannot occur in the fixture.
+    h.onQuitToTitle(() => h.setState('main-menu'));
+    h.setStatus(paused('versus'));
+    h.setState('paused');
+    expect(panelHidden(), 'the pause panel should be up before this starts').toBe(false);
+
+    (root.querySelector('.hud-change-setup') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+
+    // Read IMMEDIATELY. No timer advance: this is the frame the Main Menu used to appear in.
+    expect(
+      panelHidden(),
+      'the Main Menu was painted between leaving the match and opening the pane',
+    ).toBe(true);
+
+    // ...and the handoff is not a permanent suppression. A plain Quit still wants the menu,
+    // so the flag must be clear by the time anything else asks. Without this the "fix"
+    // could be a panel that never comes back, which is a far worse bug than the flash.
+    h.setState('main-menu');
+    expect(panelHidden(), 'the Main Menu never came back after the handoff').toBe(false);
+  });
+
   it('reopens the setup a player CHOSE, not a fresh one (issue #261)', () => {
     // THE GAP, proven before this test existed: replacing `handleChangeSetup`'s reopen
     // with `seedAndRenderVersus(<a hardcoded default config>)` -- the pane forgetting
