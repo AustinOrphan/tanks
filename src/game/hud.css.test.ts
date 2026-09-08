@@ -736,12 +736,13 @@ describe('hud.css is syntactically whole', () => {
     // The first +1 is issue #289's motion toggle, the first control the Settings pane's
     // Accessibility section ever held; the second is issue #540's quality toggle, which
     // put a second one beside it; the third is issue #323's Choose Level, the outcome
-    // panel's own second action.
+    // panel's own second action; and the fourth is the same issue's Practice This Level,
+    // which gives the mission-clear screen a second action of its own. 119 -> 120.
     //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(119);
+    expect(buttons.length).toBe(120);
     expect(unstyled).toEqual([]);
 
     dispose();

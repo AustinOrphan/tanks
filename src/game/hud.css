@@ -1109,6 +1109,7 @@
 .hud-customize-open,
 .hud-levelselect-open,
 .hud-choose-level,
+.hud-practice-level,
 .hud-controllers-open,
 .hud-settings-open,
 .hud-versus-open,
@@ -1123,6 +1124,15 @@
  * campaign end screens and on the Main Menu, where its click would leave a session that
  * is not finished or none at all. */
 .hud-choose-level--hidden {
+  display: none;
+}
+
+/* Practice This Level (issue #323) is hidden on every ending but Mission Clear, on a
+ * session with no level choice, and whenever no status has been pushed and there is no
+ * level to name -- see hud.ts's applyPracticeThisLevel for all three halves of that gate.
+ * Without this rule it stands on every panel it does not belong to, and on the fixtures
+ * with no status it would offer to practise a level it cannot identify. */
+.hud-practice-level--hidden {
   display: none;
 }
 

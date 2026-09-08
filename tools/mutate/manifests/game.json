@@ -4081,13 +4081,13 @@
   {
     "id": "campaign-over-and-practice-share-one-verdict",
     "file": "src/game/hud.ts",
-    "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n  },\n  'campaign-complete'",
-    "replace": "    subtitle: 'Out of lives.',\n    action: 'Retry',\n    chooseLevel: false,\n  },\n  'campaign-complete'",
+    "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  'campaign-complete'",
+    "replace": "    subtitle: 'Out of lives.',\n    action: 'Retry',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  'campaign-complete'",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Puts the pre-#323 wording back on one table entry. This is the exact screen issue #323 opened about: `Game Over` / `Out of lives.` over a button reading `Retry` was what a campaign that ran out of lives AND a practice level that ran out of lives both showed, and the word `Retry` was doubly untrue on the campaign one -- the click ends that run and begins a new campaign at level 1 (pinned in loop.test.ts). The panel still renders, still routes and still offers the Main Menu beside it, so only copy assertions can see this. RE-ANCHORED after the owner ruled the subtitle off this screen: the find string embedded the sentence that no longer exists, so it now anchors on the empty subtitle plus the action and the next table key, which is the smallest span that is still unique. The mutation is unchanged in substance -- it restores the pre-#323 verdict wording and the shared `Retry` button.",
+    "why": "Puts the pre-#323 wording back on one table entry. This is the exact screen issue #323 opened about: `Game Over` / `Out of lives.` over a button reading `Retry` was what a campaign that ran out of lives AND a practice level that ran out of lives both showed, and the word `Retry` was doubly untrue on the campaign one -- the click ends that run and begins a new campaign at level 1 (pinned in loop.test.ts). The panel still renders, still routes and still offers the Main Menu beside it, so only copy assertions can see this. RE-ANCHORED after the owner ruled the subtitle off this screen: the find string embedded the sentence that no longer exists, so it now anchors on the empty subtitle plus the action and the next table key, which is the smallest span that is still unique. The mutation is unchanged in substance -- it restores the pre-#323 verdict wording and the shared `Retry` button. RE-ANCHORED for issue #323, which added a `practiceThisLevel` term to every OUTCOME_PANEL entry: this entry's find string ran through the changed lines and stopped matching, so it reported FAILED-TO-APPLY -- a guard that had quietly stopped guarding.",
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action",
       "hud: every ending gets its own screen (issue #323) replaces the opening copy when the ending lands AFTER the panel is already up"
@@ -4111,14 +4111,14 @@
   {
     "id": "choose-level-survives-onto-every-other-screen",
     "file": "src/game/hud.ts",
-    "find": "    applyChooseLevel();\n    // THE OUTCOME PANEL'S THREE LINES",
-    "replace": "    // THE OUTCOME PANEL'S THREE LINES",
+    "find": "    applyChooseLevel();\n    applyPracticeThisLevel();\n    // THE OUTCOME PANEL'S THREE LINES",
+    "replace": "    applyPracticeThisLevel();\n    // THE OUTCOME PANEL'S THREE LINES",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts",
       "src/game/hud.navigation.test.ts"
     ],
-    "why": "Leaves the outcome panel's third action to be hidden only by the end screens themselves, so it is never taken back down: `renderOutcomeCopy` puts it up on a practice result and nothing lowers it again on the pause panel, the campaign end screens or the Main Menu, all of which are the same `.hud-panel` element. Its click leaves the session, so on a PAUSED game that is a button that abandons a match in progress under a name that says nothing about doing so. Invisible to any test that only reads the screen it belongs on, which is why the sweep walks the other surfaces after it.",
+    "why": "Leaves the outcome panel's third action to be hidden only by the end screens themselves, so it is never taken back down: `renderOutcomeCopy` puts it up on a practice result and nothing lowers it again on the pause panel, the campaign end screens or the Main Menu, all of which are the same `.hud-panel` element. Its click leaves the session, so on a PAUSED game that is a button that abandons a match in progress under a name that says nothing about doing so. Invisible to any test that only reads the screen it belongs on, which is why the sweep walks the other surfaces after it. RE-ANCHORED for issue #323, which added a `practiceThisLevel` term to every OUTCOME_PANEL entry: this entry's find string ran through the changed lines and stopped matching, so it reported FAILED-TO-APPLY -- a guard that had quietly stopped guarding. The replacement now drops ONLY `applyChooseLevel`, leaving its new sibling in place, so this stays a test of Choose Level's own gate rather than of both at once.",
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) offers Choose Level on the practice endings and nowhere else"
     ]
@@ -5004,13 +5004,13 @@
   {
     "id": "campaign-complete-says-its-own-headline-twice",
     "file": "src/game/hud.ts",
-    "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n  },\n  /*",
-    "replace": "    subtitle: 'Every level cleared. This run is finished.',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n  },\n  /*",
+    "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  /*",
+    "replace": "    subtitle: 'Every level cleared. This run is finished.',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  /*",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
-    "why": "Restores a subtitle sitting directly under the headline that already says it. The owner floated \"Campaign run complete\" instead of deleting; that is the same restatement in fewer words, so the line went rather than shrank. Anchored on the `action`/`chooseLevel` tail plus the comment delimiter that follows this entry, because `subtitle: ''` is the value of all five entries and `action: 'Start New Campaign'` is shared with `campaign-over` -- only the trailing `/*` separates them. An earlier version of this entry INSERTED a second `subtitle` key above the existing one and survived: a duplicate key is legal here and the LATER one wins, so the empty string was still what shipped. Recorded because the mutation looked obviously fatal and was not.",
+    "why": "Restores a subtitle sitting directly under the headline that already says it. The owner floated \"Campaign run complete\" instead of deleting; that is the same restatement in fewer words, so the line went rather than shrank. Anchored on the `action`/`chooseLevel` tail plus the comment delimiter that follows this entry, because `subtitle: ''` is the value of all five entries and `action: 'Start New Campaign'` is shared with `campaign-over` -- only the trailing `/*` separates them. An earlier version of this entry INSERTED a second `subtitle` key above the existing one and survived: a duplicate key is legal here and the LATER one wins, so the empty string was still what shipped. Recorded because the mutation looked obviously fatal and was not. RE-ANCHORED for issue #323, which added a `practiceThisLevel` term to every OUTCOME_PANEL entry: this entry's find string ran through the changed lines and stopped matching, so it reported FAILED-TO-APPLY -- a guard that had quietly stopped guarding.",
     "killedBy": [
       "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
     ]
@@ -5477,5 +5477,47 @@
       "hud: the pause exit is contextual (issue #323) never paints the Main Menu on the way to the setup pane (issue #566)"
     ],
     "why": "Drops the handoff from the panel's visibility decision, restoring issue #566: leaving gameplay for Level Select or Versus Setup switches the Main Menu on and the pane's own transition then fades it away, so TANKS! and all six buttons paint for one crossfade on the way somewhere the player asked for directly. SETTLED STATE IS IDENTICAL either way -- the pane ends open and the panel hidden -- which is why 235 HUD tests passed over this. Only a midpoint read catches it, so the scoped test asserts before any transition settles."
+  },
+  {
+    "id": "practice-this-level-practises-the-wrong-one",
+    "file": "src/game/hud.ts",
+    "find": "    for (const cb of levelSelectCbs) cb(mission - 1);",
+    "replace": "    for (const cb of levelSelectCbs) cb(mission);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) Practice This Level leaves the run, then reports the level just cleared (issue #323)"
+    ],
+    "why": "Reports the 1-based ordinal the screen shows instead of the 0-based index the callback takes, so clearing level 3 practises level FOUR -- silently, from a screen that names level three. The plausible wrong answer, not a random one: `statusData.mission` is what the headline reads and `levelSelectCbs` indexes `deps.levels.levels`. An assertion that a pick merely happened passes on this, which is why the scoped test pins the exact array."
+  },
+  {
+    "id": "practice-this-level-reports-before-it-quits",
+    "file": "src/game/hud.ts",
+    "find": "    handleQuit();\n    for (const cb of levelSelectCbs) cb(mission - 1);",
+    "replace": "    for (const cb of levelSelectCbs) cb(mission - 1);\n    handleQuit();",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) Practice This Level leaves the run, then reports the level just cleared (issue #323)"
+    ],
+    "why": "Reports the pick before leaving the run. `loop.ts` guards its level-select handler on `sm.atMainMenu`, so the report arrives while the machine is still at an outcome and is dropped on the floor: the button does nothing at all. Same ordering constraint `handleChooseLevel` obeys, and the same one issue #566's `quitInto` exists to hold for panes -- this path opens no pane, so it keeps the two calls and the test pins their order."
+  },
+  {
+    "id": "practice-this-level-offered-on-every-ending",
+    "file": "src/game/hud.ts",
+    "find": "      !(copy?.practiceThisLevel ?? false) || !levelChoice || statusData === null,",
+    "replace": "      !levelChoice || statusData === null,",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: every ending gets its own screen (issue #323) offers Practice This Level on NO other ending, and not without a level to name"
+    ],
+    "why": "Drops the table term, so every outcome screen offers Practice This Level -- including the two practice endings, where it duplicates Retry under a second name, and Campaign Over, where the level was not cleared at all. The other two terms stay, so the button still hides without a level to name: a mutation that removed the whole gate would be caught by more tests and prove less."
   }
 ]
