@@ -166,12 +166,18 @@ describe('createLevelSystem: pp1Roles reaches the built world (issue #358, compo
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
     const p = sys.world(CAMPAIGN_LEVELS[0], 42).tanks.find((t) => t.kind === 'player');
     expect(p?.shellCap, 'no flag must mean no stamp, or the arm ships to everyone').toBeUndefined();
+    expect(p?.mineCap, 'the same for the mine axis').toBeUndefined();
     expect(configFor('player').weapon.maxActiveProjectiles, 'the shipped premise moved').toBeGreaterThan(CAPPED);
   });
 
-  it('pp1Roles=1 reaches the player tank in a campaign world', () => {
+  it('pp1Roles=1 reaches the player tank in a campaign world, on BOTH axes', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, pp1Roles: true }, noRun());
-    expect(sys.world(CAMPAIGN_LEVELS[0], 42).tanks.find((t) => t.kind === 'player')?.shellCap).toBe(CAPPED);
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42);
+    expect(w.tanks.find((t) => t.kind === 'player')?.shellCap).toBe(CAPPED);
+    // The mine axis rides the same argument, so this would not catch a dropped flag on its
+    // own -- it catches an arm wired for one axis and not the other. Brown, because the
+    // player's approved mine direction is "retain", which is indistinguishable from no arm.
+    expect(w.tanks.find((t) => t.kind === 'brown')?.mineCap, 'brown carries none under the arm').toBe(0);
   });
 
   it('reaches every tank of a real two-player coop world, co-players included', () => {

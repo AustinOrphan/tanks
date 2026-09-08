@@ -2,7 +2,7 @@ import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameM
 import { createWorld, type World } from './world';
 import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
-import { PP1_ROLE_SHELL_CAPS } from './config/pp1-roles';
+import { PP1_ROLE_SHELL_CAPS, PP1_ROLE_MINE_CAPS } from './config/pp1-roles';
 import { SPAWN_LETTERS } from './config/arena-types';
 import {
   CAMPAIGN,
@@ -426,13 +426,18 @@ export function loadArena(
   // roster's cap of 5 while P1 carried the arm's 4, which is an experiment measuring two
   // different rosters at once. Walking the finished list cannot miss one.
   //
-  // A kind with no entry -- yellow today -- keeps its authored cap even with the arm on, so
-  // a kind joining the campaign later is not silently opted into an experiment nobody ran
-  // for it.
+  // A kind with no entry keeps its authored value even with the arm on, and the two tables
+  // are consulted independently because their memberships differ. Yellow is in neither: it
+  // is outside PP1, so a kind joining the campaign later is not silently opted into an
+  // experiment nobody ran for it. Grey is in the SHELL table only -- its approved mine
+  // direction is a placement policy rather than a capacity, so it takes the shell arm and
+  // keeps its authored mine capacity.
   if (pp1Roles) {
     for (const tank of tanks) {
-      const cap = PP1_ROLE_SHELL_CAPS[tank.kind];
-      if (cap !== undefined) tank.shellCap = cap;
+      const shells = PP1_ROLE_SHELL_CAPS[tank.kind];
+      if (shells !== undefined) tank.shellCap = shells;
+      const mines = PP1_ROLE_MINE_CAPS[tank.kind];
+      if (mines !== undefined) tank.mineCap = mines;
     }
   }
 

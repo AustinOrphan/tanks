@@ -285,6 +285,16 @@ export interface Tank {
    */
   shellCap?: number;
   /**
+   * This tank's active-mine budget, when a session overrides the roster's (issue #358).
+   *
+   * The exact counterpart of `shellCap` above, and absent is likewise the shipped case,
+   * meaning "use `configFor(kind).mineCapacity`". Separate from `shellCap` rather than one
+   * combined "ordnance" field because the two axes are approved independently and one of
+   * them can be applied without the other -- Grey takes the shell arm but keeps its
+   * authored mine capacity, since its approved mine direction is a placement policy.
+   */
+  mineCap?: number;
+  /**
    * Which of the 2 alternating teams this player-kind tank belongs to, `teamOf(slot) =
    * slot % 2` (arena.ts). OPTIONAL like `controlledBy`/`respawnAtTick`: stamped ONLY when
    * `loadArena` is called with `mode === 'teams'` (arena.ts's PASS 1a/1b), so every

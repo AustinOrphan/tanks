@@ -1592,5 +1592,33 @@
       "stamping the arm at spawn stamps CO-PLAYERS too, not just the tanks one spawn pass builds"
     ],
     "why": "Stamps only the first tank, which is the shape the bug would really take: this file has THREE spawn sites -- the grid loop, the campaign co-op placer and the versus branch -- and stamping at each rather than over the finished list is how one gets missed. A co-player carrying the roster's 5 while P1 carries the arm's 4 is an experiment measuring two different rosters at once, and every single-player fixture would pass over it."
+  },
+  {
+    "id": "mine-cap-ignores-the-tanks-own-budget",
+    "file": "src/sim/mines.ts",
+    "find": "  if (owner.activeMineIds.length >= (owner.mineCap ?? configFor(owner.kind).mineCapacity)) return false",
+    "replace": "  if (owner.activeMineIds.length >= configFor(owner.kind).mineCapacity) return false",
+    "expect": "killed",
+    "tests": [
+      "src/sim/mines.test.ts"
+    ],
+    "killedBy": [
+      "dropMine honours a tank's own mineCap over the roster's, and only when one is stamped (issue #358)"
+    ],
+    "why": "The mine-axis twin of shell-cap-ignores-the-tanks-own-budget: reads the roster's capacity and ignores the tank's own, so issue #358's arm zeroes Brown/Teal/Green on paper while they keep laying two mines each. Shipped behaviour is identical either way (no tank carries a cap without the flag), so only a fixture that stamps one can tell -- which is also why mines.test.ts's mkTank has to pass `mineCap` through: measured while landing this, deleting that one line reproduces this exact failure, because the fixture then builds a tank that silently ignores the cap it claims."
+  },
+  {
+    "id": "pp1-arm-skips-the-mine-directions",
+    "file": "src/sim/arena.ts",
+    "find": "      const mines = PP1_ROLE_MINE_CAPS[tank.kind];\n      if (mines !== undefined) tank.mineCap = mines;\n",
+    "replace": "      void PP1_ROLE_MINE_CAPS[tank.kind];\n",
+    "expect": "killed",
+    "tests": [
+      "src/sim/config/pp1-roles.test.ts"
+    ],
+    "killedBy": [
+      "the arm's mine directions, as capacities (issue #358's second axis) stamps mine capacities at spawn, alongside the shell caps and only with the arm on"
+    ],
+    "why": "Applies HALF the approved matrix: shell caps stamped, mine directions silently skipped, so `?dev=1&pp1Roles=1` claims the PP1 role arm while Brown/Teal/Green still carry the two mines the matrix removes. A half-applied arm is worse than none, because a playtest under it produces evidence attributed to a roster nobody approved. The two tables are consulted in one pass but independently -- their memberships differ, since grey takes the shell arm only -- and that independence is exactly what makes dropping one of them invisible to the other axis's tests. Replaced with a `void` read rather than a deletion so the import stays used and the mutation is the missing STAMP, not a compile error."
   }
 ]
