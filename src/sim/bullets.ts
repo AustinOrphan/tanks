@@ -81,7 +81,9 @@ function muzzlePoint(world: World, owner: Tank, dir: Vec2): MuzzleSolution {
 export function shellCapReached(world: World, ownerId: number): boolean {
   const owner = world.tanks.find((t) => t.id === ownerId)
   if (!owner) return false
-  return ownerShellCount(world, ownerId) >= configFor(owner.kind).weapon.maxActiveProjectiles
+  // `owner.shellCap` first, then the roster's (issue #358). Absent is the shipped case, so
+  // this reads exactly as it did before the field existed unless a session stamped one.
+  return ownerShellCount(world, ownerId) >= (owner.shellCap ?? configFor(owner.kind).weapon.maxActiveProjectiles)
 }
 
 export function ownerShellCount(world: World, ownerId: number): number {

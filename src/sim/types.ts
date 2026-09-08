@@ -270,6 +270,21 @@ export interface Tank {
    */
   stockRemaining?: number;
   /**
+   * This tank's active-shell budget, when a session overrides the roster's (issue #358).
+   *
+   * ABSENT IS THE SHIPPED CASE and means "use `configFor(kind).weapon.maxActiveProjectiles`",
+   * so every existing world, fixture and save is unchanged by this field's existence. It is
+   * stamped at spawn, by `loadArena`, only when a session asks for the PP1 role-first arm --
+   * today that is `?dev=1&pp1Roles=1` and nothing else.
+   *
+   * PER TANK rather than per world or per module, following `stockRemaining` directly above:
+   * an ordnance budget is a property of the tank that owns it, the firing refusal already
+   * has the owner in hand, and a value stamped at spawn cannot drift from the tank it
+   * belongs to. A module-level override would also have had to be readable from `src/sim/`,
+   * which forbids runtime flags outright.
+   */
+  shellCap?: number;
+  /**
    * Which of the 2 alternating teams this player-kind tank belongs to, `teamOf(slot) =
    * slot % 2` (arena.ts). OPTIONAL like `controlledBy`/`respawnAtTick`: stamped ONLY when
    * `loadArena` is called with `mode === 'teams'` (arena.ts's PASS 1a/1b), so every

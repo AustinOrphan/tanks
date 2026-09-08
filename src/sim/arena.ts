@@ -2,6 +2,7 @@ import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameM
 import { createWorld, type World } from './world';
 import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
+import { PP1_ROLE_SHELL_CAPS } from './config/pp1-roles';
 import { SPAWN_LETTERS } from './config/arena-types';
 import {
   CAMPAIGN,
@@ -221,6 +222,15 @@ export function loadArena(
   // never stamps `Tank.team` at all (see its own doc comment in types.ts), which is why
   // threading this cannot move FFA behaviour either.
   teams?: readonly (number | undefined)[],
+  // Trailing and optional, same precedent again: absent -- every existing call site --
+  // stamps no `shellCap` at all, so every tank resolves its roster cap exactly as before
+  // and `BASELINE_HASH` is untouched by this parameter existing (issue #358).
+  //
+  // A BOOLEAN, not a table. The arm's values live in `config/pp1-roles.ts` so that changing
+  // them is a one-line edit in one place; threading the table instead would give a caller a
+  // way to invent an unapproved roster, which is exactly what the issue's "not permission to
+  // retune every tank" note forbids.
+  pp1Roles: boolean = false,
 ): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[]; arenaGeometry: ArenaGeometry } {
   const { cols, rows, cellSize, legend } = arena;
 
@@ -409,6 +419,23 @@ export function loadArena(
     walls.push({ id: id++, aabb, kind: 'solid', destroyed: false });
   }
 
+  // The PP1 role-first ordnance arm (issue #358), stamped in ONE pass over every tank
+  // rather than at each `makeTank`. There are three spawn sites in this file -- PASS 1a's
+  // grid loop, the campaign co-op placer, and PASS 1b's versus branch -- and stamping at
+  // each is how one gets missed: a co-player spawned by a site that forgot would carry the
+  // roster's cap of 5 while P1 carried the arm's 4, which is an experiment measuring two
+  // different rosters at once. Walking the finished list cannot miss one.
+  //
+  // A kind with no entry -- yellow today -- keeps its authored cap even with the arm on, so
+  // a kind joining the campaign later is not silently opted into an experiment nobody ran
+  // for it.
+  if (pp1Roles) {
+    for (const tank of tanks) {
+      const cap = PP1_ROLE_SHELL_CAPS[tank.kind];
+      if (cap !== undefined) tank.shellCap = cap;
+    }
+  }
+
   // Not `arena` itself: `Arena`'s shape happens to match `ArenaGeometry` field-for-field
   // today, but building the World-facing copy explicitly here means a future field added
   // to `Arena` for some OTHER reason does not silently leak onto every World.
@@ -477,6 +504,10 @@ export function createWorldFor(
   // instead; `World.rules` is frozen now, so a rule has to arrive here, before the world
   // exists, like every other rule does.
   aiTargetPerception?: AiTargetPerception,
+  // Trailing and optional, same precedent as every parameter above it: absent -- which is
+  // every existing call site -- stamps no per-tank cap and leaves the roster's own in force
+  // (issue #358). Threaded straight to loadArena, which does the stamping.
+  pp1Roles?: boolean,
 ): World {
   // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
   // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
@@ -486,7 +517,7 @@ export function createWorldFor(
   // (replayMetaFor, game/replay.ts) enough to reproduce the exact board it was played
   // on, with no extra field.
   return createWorld({
-    ...loadArena(arena, playerCount, mode, seed, stock, teams),
+    ...loadArena(arena, playerCount, mode, seed, stock, teams, pp1Roles),
     lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
     mode, friendlyFire, aiTargetPerception,
   });

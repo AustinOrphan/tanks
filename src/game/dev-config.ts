@@ -67,6 +67,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   bots: 'VS/Bots',
   mode: 'VS/Bots',
   friendlyFire: 'VS/Bots',
+  pp1Roles: 'Gameplay',
   coopPool: 'VS/Bots',
   gamepad: 'VS/Bots',
 

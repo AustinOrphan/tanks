@@ -159,7 +159,10 @@ export function createLevelSystem(
         arenaById(level.arenaId), seed, unarmedTrigger, lives,
         flags.corpseBlock, !flags.muzzleInside, playerCount, !flags.coopPool,
         flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,
-        flags.aiPerception ?? undefined,
+        // `pp1Roles` reaches the CAMPAIGN world only, not the sandbox above: the sandbox is
+        // a test rig with an authored tank composition, and issue #358's matrix is about the
+        // campaign roster. An arm applied to a rig would measure the rig.
+        flags.aiPerception ?? undefined, flags.pp1Roles,
       ),
     bounds: (level) => ({
       ...arenaBounds(arenaById(level.arenaId)),
