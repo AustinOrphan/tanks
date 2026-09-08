@@ -41,6 +41,25 @@ function heldTarget(world: World, tank: Tank): Tank | undefined {
  * to diff the ids itself.
  */
 export function commitTarget(world: World, tank: Tank): RetargetReason | null {
+  const reason = decideCommitment(world, tank);
+  // RECORDED AT THE ONE WRITER (issue #359). Every caller of this function threw the reason
+  // away, so a thrashing AI could be watched switching and never asked why. Writing it here
+  // rather than at the call site keeps the guarantee the rest of this module rests on:
+  // there is exactly one place `aiTargetId` changes, and now exactly one place the cause of
+  // that change is recorded, so the two cannot disagree.
+  if (reason !== null) {
+    tank.aiRetargetReason = reason;
+    tank.aiRetargetAgeTicks = 0;
+  } else if (tank.aiRetargetReason !== undefined) {
+    // Ages only once a reason exists, so a tank that has never chosen a target carries no
+    // age at all rather than a growing count against nothing.
+    tank.aiRetargetAgeTicks = (tank.aiRetargetAgeTicks ?? 0) + 1;
+  }
+  return reason;
+}
+
+/** The policy itself, unchanged: rules 5 and 6 of the issue's binding target policy. */
+function decideCommitment(world: World, tank: Tank): RetargetReason | null {
   const cfg = configFor(tank.kind);
   const preferred = cfg.ai.preferredDistance;
   const span = Math.round(cfg.ai.targetCommitmentTime * TICK_HZ);

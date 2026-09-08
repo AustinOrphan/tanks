@@ -903,5 +903,19 @@
       "player identity: ring and shell tint alpha-blends the identity ring, so a slot's hue survives compositing (issue #580)"
     ],
     "why": "Restores the additive blending this carried until #580, which destroys the hue that identifies a slot: adding a bright colour to the felt #2f6d4f clips channels, and the shipped palette's slot 1 and slot 2 both composite to warm gold. The two existing 'distinct colours' tests pass under BOTH blend modes -- verified by applying this mutation and watching them stay green -- because authored colours stay distinct either way. Only the blend-mode assertion catches it."
+  },
+  {
+    "id": "retarget-reason-never-goes-stale",
+    "file": "src/render/ai-contact.ts",
+    "find": "  if ((tank.aiRetargetAgeTicks ?? 0) > REASON_FRESH_TICKS) return '';",
+    "replace": "  if (false) return '';",
+    "expect": "killed",
+    "tests": [
+      "src/render/ai-contact.test.ts"
+    ],
+    "killedBy": [
+      "contactLabel drops the reason once it is stale, so the label does not claim a switch that was seconds ago"
+    ],
+    "why": "Carries the retarget reason forever, so a label read at any moment says the tank just switched -- a diagnostic that is always true is worse than none, because it is read as current. The scoped test also pins the boundary itself (age exactly 30 still shows), which is the half a `>` versus `>=` slip would get wrong without changing any other case."
   }
 ]

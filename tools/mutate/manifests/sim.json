@@ -1535,5 +1535,34 @@
     "killedBy": [
       "the decision functions solve from the PERCEIVED world, not the real one teal does the same, through its own wiring rather than a copy that could rot"
     ]
+  },
+  {
+    "id": "ai-forgets-why-it-retargeted",
+    "file": "src/sim/ai/target-selection.ts",
+    "find": "  if (reason !== null) {\n    tank.aiRetargetReason = reason;\n    tank.aiRetargetAgeTicks = 0;",
+    "replace": "  if (false) {\n    tank.aiRetargetReason = reason;\n    tank.aiRetargetAgeTicks = 0;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "killedBy": [
+      "the retarget REASON is recorded, not just returned (issue #359) records ACQUIRED on the first commitment, and ages from there",
+      "the retarget REASON is recorded, not just returned (issue #359) records TARGET-LOST when the committed opponent dies, and resets the age"
+    ],
+    "why": "Restores the state before issue #359: `commitTarget` computes a reason, returns it, and nothing records it -- which is exactly what shipped, since `ai/index.ts` calls it as a bare statement and discards the return. The commitment itself stayed observable through `aiTargetId`/`aiTargetTicks` the whole time, so a thrashing AI could be watched switching and never asked why. This mutation is the shipped bug, not an invented one."
+  },
+  {
+    "id": "retarget-age-does-not-reset-on-a-new-reason",
+    "file": "src/sim/ai/target-selection.ts",
+    "find": "    tank.aiRetargetReason = reason;\n    tank.aiRetargetAgeTicks = 0;",
+    "replace": "    tank.aiRetargetReason = reason;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/ai/target-selection.test.ts"
+    ],
+    "killedBy": [
+      "the retarget REASON is recorded, not just returned (issue #359) records TARGET-LOST when the committed opponent dies, and resets the age"
+    ],
+    "why": "Writes the new reason but leaves the age running, so a switch that happened this tick reports the age of the PREVIOUS one. The reason would still be right and the label would still show a glyph -- it is only the staleness cutoff downstream that goes wrong, hiding a fresh switch or showing a stale one. A test asserting only that the reason changed passes on this."
   }
 ]
