@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { configFor } from './config'
 import { createWorld } from './world'
 import type { World } from './world'
 import { dropMine, stepMines, detonateMine, tripMineProximity, blastReaches, stepBlasts, blastRadiusAt, BLAST_LIFETIME_TICKS } from './mines'
@@ -37,6 +38,7 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     invincible: p.invincible,
     shieldUntilTick: p.shieldUntilTick,
     team: p.team,
+    mineCap: p.mineCap,
   }
 }
 
@@ -52,6 +54,20 @@ describe('dropMine', () => {
     expect(dropMine(world, 1, [])).toBe(true)
     expect(player.activeMineIds.length).toBe(MINE_CAP)
     expect(dropMine(world, 1, [])).toBe(false)
+  })
+
+  it("honours a tank's own mineCap over the roster's, and only when one is stamped (issue #358)", () => {
+    // The mirror of bullets.test.ts's shellCap case. A brown tank ships with a capacity of 2
+    // and the PP1 arm zeroes it, so the arm's brown must be refused its FIRST mine while an
+    // unstamped brown in the same world still gets both -- the control that makes this about
+    // the field rather than about brown.
+    const armed = mkTank({ id: 1, kind: 'brown', pos: { x: 0, y: 0 }, mineCap: 0 })
+    const shipped = mkTank({ id: 2, kind: 'brown', pos: { x: 20, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [armed, shipped], spawns: [], lives: 3 })
+    expect(configFor('brown').mineCapacity, 'the shipped premise moved').toBeGreaterThan(0)
+    expect(dropMine(world, 1, []), 'a stamped cap of 0 must refuse the first mine').toBe(false)
+    expect(armed.activeMineIds.length).toBe(0)
+    expect(dropMine(world, 2, []), 'an unstamped tank must still use the roster').toBe(true)
   })
 
   it('rejects a mine from a NON-player owner at MINE_CAP (cap applies to every owner)', () => {

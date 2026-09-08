@@ -52,3 +52,31 @@ export const PP1_ROLE_BANDS: Partial<Record<TankKind, readonly [number, number]>
   olive: [1, 1],
   green: [1, 2],
 };
+
+/**
+ * The PP1 mine directions, as CAPACITIES (issue #358's second axis).
+ *
+ * The 2026-08-26 matrix gives each kind a mine direction, and three of them are plain
+ * capacity statements: Brown and Green carry "none", and Teal is to be tested "without
+ * mines to remove role overlap" with its ricochet-skirmisher role. Those are the entries
+ * that can be an ordnance arm at all.
+ *
+ * GREY IS DELIBERATELY ABSENT. Its approved direction is "deliberate retreat-oriented
+ * placement", which is a mine-laying POLICY and not a number -- the AI has no such policy
+ * today, and inventing one would put an AI behaviour change inside an experiment whose
+ * point is to isolate ordnance budgets. It also sits on the `behaviour` rung of the
+ * difficulty-compensation ladder this issue orders, which is only to be reached after
+ * evidence of a difficulty drop. Grey therefore keeps its authored capacity under this arm.
+ *
+ * Player and Olive are listed although they MATCH the shipped roster, because the matrix
+ * states a direction for them ("retain the current two-mine capacity", "none") and a test
+ * below pins each against `configFor`. That way the arm's "matches" claim fails loudly if
+ * the shipped value ever moves, instead of the table quietly ceasing to be the matrix.
+ */
+export const PP1_ROLE_MINE_CAPS: Partial<Record<TankKind, number>> = {
+  player: 2, // "retain the current two-mine capacity" -- matches the shipped roster
+  brown: 0, // stationary direct-fire sentry: none
+  teal: 0, // tested WITHOUT mines, to remove overlap with its ricochet role
+  olive: 0, // none -- matches the shipped roster
+  green: 0, // stationary ricochet sniper: none
+};

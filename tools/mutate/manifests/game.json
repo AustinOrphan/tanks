@@ -5545,7 +5545,7 @@
       "src/game/levels.test.ts"
     ],
     "killedBy": [
-      "createLevelSystem: pp1Roles reaches the built world (issue #358, composition not unit) pp1Roles=1 reaches the player tank in a campaign world",
+      "createLevelSystem: pp1Roles reaches the built world (issue #358, composition not unit) pp1Roles=1 reaches the player tank in a campaign world, on BOTH axes",
       "createLevelSystem: pp1Roles reaches the built world (issue #358, composition not unit) reaches every tank of a real two-player coop world, co-players included"
     ],
     "why": "Drops issue #358's role-matrix arm from the ONE call that carries it into a campaign world, which is the shape a trailing positional invites: `createWorldFor` takes it eighth in a long list, so a lost argument is silently `undefined` rather than a type error, and `?dev=1&pp1Roles=1` then plays the shipped roster while the menu says the arm is on -- a flag that changes a value and not the game. MEASURED while landing this: with the argument removed, all 89 cases across levels.test.ts, pp1-roles.test.ts and dev-config.test.ts stayed green, because those two prove only that loadArena stamps a cap and that the refusal reads one. Caught by the campaign case and its two-player coop sibling, named in killedBy; the flag-off control survives by design, since dropping the argument and leaving the flag off are the same world."

@@ -34,7 +34,10 @@ export function dropMine(world: World, ownerId: number, events: SimEvent[]): boo
   // 'player' when the player was the only mine-dropper; that made it a no-op for AI owners.
   // The owner's resolved mine capacity (configFor); MINE_CAP for every shipped kind
   // today, so behaviour-identical (see config/roster.test.ts).
-  if (owner.activeMineIds.length >= configFor(owner.kind).mineCapacity) return false
+  // `owner.mineCap ?? ...` (issue #358): the tank's own budget when a session stamped one,
+  // the roster's otherwise. No tank carries one unless the PP1 role arm is on, so this
+  // reads exactly as it did before for every shipped world.
+  if (owner.activeMineIds.length >= (owner.mineCap ?? configFor(owner.kind).mineCapacity)) return false
   const mine: Mine = {
     id: world.nextId++,
     ownerId,
