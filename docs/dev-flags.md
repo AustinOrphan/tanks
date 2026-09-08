@@ -13,7 +13,7 @@ Nothing below does anything unless `dev` is present in the query string: `?aimRa
 alone is inert, it needs `?dev=1&aimRay=1`. A shared link cannot turn a flag on by
 accident.
 
-## Boolean flags (16)
+## Boolean flags (17)
 
 | Flag | Param | Default | Description |
 | --- | --- | --- | --- |
@@ -29,6 +29,7 @@ accident.
 | `mineReach` | `mineReach` | `false` | Rings a mine's proximity-trigger radius and its kill radius. |
 | `mineTimer` | `mineTimer` | `false` | Shows each mine's remaining fuse, in seconds, beside it. |
 | `muzzleInside` | `muzzleInside` | `false` | Restores today's pre-clearance behaviour: a shell can be born already inside an adjacent live tank's hit circle. |
+| `pp1Roles` | `pp1Roles` | `false` | Applies issue #358's approved PP1 role-first ordnance matrix -- lower, role-specific active-shell caps -- instead of the roster's authored values. |
 | `replay` | `replay` | `false` | Records the per-tick input stream and publishes it on the dev console object. |
 | `sandboxDisarmed` | `disarmed` | `true` | Controls whether sandbox enemies carry weapons. |
 | `saveIo` | `saveIo` | `false` | Publishes save export/import and the player-settings surface (snapshot, effective values, status, reset) on the dev console object (`__tanks`). |
@@ -45,6 +46,10 @@ Notes:
 - **mineReach**: In the playtest bundle.
 - **mineTimer**: In the playtest bundle.
 - **muzzleInside**: Applies in both the campaign and the sandbox.
+- **pp1Roles**: An EXPERIMENT ARM, not shipped balance: absent, every kind keeps its authored cap.
+- **pp1Roles**: Caps are stamped per tank at spawn, so a session started without it is unaffected.
+- **pp1Roles**: Campaign worlds only. The sandbox keeps its authored composition.
+- **pp1Roles**: Yellow is exempt: it is outside PP1 because no shipped campaign level contains it.
 - **sandboxDisarmed**: Only read when `level=sandbox`.
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.

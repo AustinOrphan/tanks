@@ -285,6 +285,12 @@ export interface DevFlags {
    */
   friendlyFire: boolean;
   /**
+   * Applies issue #358's approved PP1 role-first ordnance matrix instead of the roster's
+   * authored active-shell caps. Stamped per tank at spawn; absent leaves every kind on its
+   * shipped value.
+   */
+  pp1Roles: boolean;
+  /**
    * Enemy tanks also fire the identity death pulse (a coloured world ring) on death.
    *
    * Off = players only, enemies keep just the explosion burst -- the shipped rule.
@@ -401,6 +407,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   bots: null,
   mode: null,
   friendlyFire: false,
+  pp1Roles: false,
   enemyDeathPulse: false,
   backdrop: null,
   mineWarn: null,
@@ -640,6 +647,7 @@ export function parseDevFlags(search: string): DevFlags {
     bots: asBots(params),
     mode: asMode(params),
     friendlyFire: isOn(params, 'friendlyFire'),
+    pp1Roles: isOn(params, 'pp1Roles'),
     enemyDeathPulse: isOn(params, 'enemyDeathPulse'),
     backdrop: asBackdrop(params),
     mineWarn: asMineWarn(params),
@@ -941,6 +949,18 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     notes: [
       'Unrecognised or absent leaves the campaign-coop default.',
       'Strips every enemy spawn from the built arena: versus modes have no AI opponents.',
+    ],
+  },
+  pp1Roles: {
+    kind: 'boolean',
+    description:
+      "Applies issue #358's approved PP1 role-first ordnance matrix -- lower, " +
+      'role-specific active-shell caps -- instead of the roster\'s authored values.',
+    notes: [
+      'An EXPERIMENT ARM, not shipped balance: absent, every kind keeps its authored cap.',
+      'Caps are stamped per tank at spawn, so a session started without it is unaffected.',
+      'Campaign worlds only. The sandbox keeps its authored composition.',
+      'Yellow is exempt: it is outside PP1 because no shipped campaign level contains it.',
     ],
   },
   friendlyFire: {

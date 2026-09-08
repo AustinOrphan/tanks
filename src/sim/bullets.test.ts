@@ -41,6 +41,10 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     invincible: p.invincible,
     shieldUntilTick: p.shieldUntilTick,
     team: p.team,
+    // Issue #358's per-tank ordnance cap. Omitted, a fixture stamping one would silently
+    // measure the roster's -- which is precisely the failure the comment above describes,
+    // and which the shellCap test below caught on its first run.
+    shellCap: p.shellCap,
   }
 }
 
@@ -49,6 +53,32 @@ function mkWall(id: number, aabb: AABB, kind: WallKind = 'solid'): Wall {
 }
 
 describe('spawnBullet + ownerShellCount', () => {
+  it("honours a tank's own shellCap over the roster's, and only when one is stamped (issue #358)", () => {
+    // The PP1 role-first arm reaches the firing refusal through this one field. Without it
+    // the flag would stamp a number nothing reads -- an experiment that changes a value and
+    // not the game, which is the failure mode a menu-label feature has.
+    const armed = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 }, shellCap: 2 })
+    const world = createWorld({ walls: [], tanks: [armed], spawns: [], lives: 3 })
+    const events: SimEvent[] = []
+    expect(spawnBullet(world, 1, 0, 'normal', events)).toBe(true)
+    expect(spawnBullet(world, 1, 0, 'normal', events)).toBe(true)
+    // The third is refused at the stamped cap, well below the roster's SHELL_CAP -- so this
+    // fails if the refusal reads the roster and ignores the tank.
+    expect(spawnBullet(world, 1, 0, 'normal', events), 'the stamped cap was ignored').toBe(false)
+    expect(ownerShellCount(world, 1)).toBe(2)
+    expect(2, 'the fixture cap must be BELOW the roster cap or this asserts nothing')
+      .toBeLessThan(SHELL_CAP)
+
+    // ...and an unstamped tank is untouched, which is every shipped session. A refusal that
+    // read `shellCap ?? 0` would pass the case above and break the whole game here.
+    const plain = mkTank({ id: 2, kind: 'player', pos: { x: 10, y: 0 } })
+    const w2 = createWorld({ walls: [], tanks: [plain], spawns: [], lives: 3 })
+    for (let i = 0; i < SHELL_CAP; i++) {
+      expect(spawnBullet(w2, 2, 0, 'normal', events), 'an unstamped tank lost its roster cap').toBe(true)
+    }
+    expect(spawnBullet(w2, 2, 0, 'normal', events)).toBe(false)
+  });
+
   it("rejects the player's 6th concurrent shell while 5 are live", () => {
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
     const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
