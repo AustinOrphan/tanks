@@ -4459,9 +4459,48 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * HUD with no quit subscriber -- every unit fixture -- degrades to the container rather
    * than to a wrong control.
    */
+  /**
+   * WHICH LAYER THIS STATE CHANGE IS HANDING OFF TO, or null when it is not (issue #566).
+   *
+   * Leaving gameplay to open a pane is two calls -- `handleQuit()` then `openLayer(...)` --
+   * and `handleQuit` reaches `setState` synchronously through the quit subscribers. So
+   * `setState` ran with no idea a pane was about to open, switched `PANEL_SURFACE` on
+   * because the route is `main-menu`, and the pane's own transition then faded that menu
+   * away: TANKS! and all six buttons painted for one crossfade on the way to somewhere the
+   * player asked for directly.
+   *
+   * The measured dead ends, so they are not retried:
+   *
+   * - **Reversing the two calls** leaves the pane closed. `setState`'s close-all is
+   *   unconditional, so opening first just has that work undone a moment later.
+   * - **Teaching `cleanupHide` to skip an `--entering` surface** keeps the pane, and the
+   *   panel stays up forever, because its visibility is decided separately in the
+   *   `transitionTo` below and nothing there knew either.
+   *
+   * Both fail for one reason: the panel's visibility is the decision that matters, and it
+   * is made in `setState`. So `setState` is told. The pane's close-all needs no exception --
+   * arriving from gameplay there is no pane open for it to close.
+   */
+  let handingOffTo: HudLayerId | null = null;
+
+  /**
+   * Leave gameplay and open `id` as ONE transition, rather than two with the Main Menu
+   * painted between them. The flag is cleared in a `finally`, so a throwing subscriber
+   * cannot leave the panel permanently suppressed -- the failure mode that would be much
+   * harder to notice than the flash this replaces.
+   */
+  function quitInto(id: HudLayerId, opener: HTMLElement | null): boolean {
+    handingOffTo = id;
+    try {
+      handleQuit();
+    } finally {
+      handingOffTo = null;
+    }
+    return openLayer(id, opener);
+  }
+
   const handleChooseLevel = (): void => {
-    handleQuit();
-    openLayer('levelselect', levelSelectOpenBtn);
+    quitInto('levelselect', levelSelectOpenBtn);
   };
   /**
    * Leave the match, then open the retained Versus Setup -- the same shape as
@@ -4474,13 +4513,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * in gameplay"). No world is built and no seed drawn on the way -- issue #261 asks for
    * that explicitly, and it holds because this reaches the pane rather than a match.
    *
-   * KNOWN COSMETIC ISSUE, shared with `handleChooseLevel` and not introduced here: the
-   * Main Menu is painted for one crossfade between the two calls. That is issue #566,
-   * and this is now the third caller of the pattern it describes.
+   * Through `quitInto`, so the Main Menu is not painted between the two calls -- that was
+   * issue #566, and this was one of the two callers of the pattern it described.
    */
   const handleChangeSetup = (): void => {
-    handleQuit();
-    openLayer('versus-setup', versusOpenBtn);
+    quitInto('versus-setup', versusOpenBtn);
   };
   const handleLevelSelectBack = (): void => {
     back();
@@ -5241,7 +5278,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     transitionTo(
       [
         [SPLASH_SURFACE, atLaunch],
-        [PANEL_SURFACE, !(s === 'playing' || atLaunch)],
+        // ...and NOT when this state change is handing off to a pane (issue #566). The
+        // pane is about to cover this panel anyway; switching it on first is what painted
+        // the Main Menu for one crossfade on the way to Level Select or Versus Setup.
+        // `handingOffTo` is set only for the duration of the quit dispatch, so every other
+        // route into `main-menu` -- including a plain Quit, which really does want the menu
+        // -- is untouched.
+        [PANEL_SURFACE, !(s === 'playing' || atLaunch) && handingOffTo === null],
         // On for the Main Menu and nothing else (issue #317). Deliberately NOT
         // `!atLaunch`-shaped like the splash line above: Launch keeps the arena behind its
         // own scrim, and pause and the outcome screens are read over the board the player

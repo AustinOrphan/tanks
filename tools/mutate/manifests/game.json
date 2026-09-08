@@ -4152,20 +4152,6 @@
     ]
   },
   {
-    "id": "choose-level-opens-the-pane-over-the-finished-session",
-    "file": "src/game/hud.ts",
-    "find": "    handleQuit();\n    openLayer('levelselect', levelSelectOpenBtn);",
-    "replace": "    openLayer('levelselect', levelSelectOpenBtn);\n    handleQuit();",
-    "expect": "killed",
-    "tests": [
-      "src/game/hud.surfaces.test.ts"
-    ],
-    "why": "Swaps the two halves of Choose Level, which LOOKS identical and is not. `loop.ts` acts on a level pick only from the Main Menu -- its own guard, not a CSS class -- so a pane opened before the session is left is opened over an end screen, and `setState('main-menu')` arriving from the quit a moment later empties the layer stack and closes it again. The player sees the grid flash and lands on the menu. Only an assertion that records the pane's state AT the quit can see this; an assertion made inside the quit callback cannot, because jsdom swallows a throw from an event listener -- measured, and stated in the test that kills this.",
-    "killedBy": [
-      "hud: every ending gets its own screen (issue #323) leaves the finished session and opens the Levels pane, in that order"
-    ]
-  },
-  {
     "id": "quit-is-inert-on-a-losing-end-screen",
     "file": "src/game/loop.ts",
     "find": "    if (!sm.isPaused && !sm.hasOutcome) return;",
@@ -5254,24 +5240,25 @@
     "why": "Keeps the SURFACE half of the gate and drops the KIND half, which is the half-fix a reader is most likely to write: Pause is obviously the right surface, and the session kind is the easier condition to forget. A paused campaign or practice round then offers a versus configuration pane. Distinct from the entry above because a test that only checked the end screens kills that one and survives this. Re-anchored for issue #279: the half-fix is now keeping the ENDING arm intact while dropping the kind check from the pause arm, which is the same mistake in the shape the code has today."
   },
   {
-    "id": "change-setup-opens-the-pane-over-a-live-match",
+    "id": "pane-handoff-opens-before-it-quits",
     "file": "src/game/hud.ts",
-    "find": "  const handleChangeSetup = (): void => {\n    handleQuit();\n    openLayer('versus-setup', versusOpenBtn);\n  };",
-    "replace": "  const handleChangeSetup = (): void => {\n    openLayer('versus-setup', versusOpenBtn);\n    handleQuit();\n  };",
+    "find": "    try {\n      handleQuit();\n    } finally {\n      handingOffTo = null;\n    }\n    return openLayer(id, opener);",
+    "replace": "    const opened = openLayer(id, opener);\n    try {\n      handleQuit();\n    } finally {\n      handingOffTo = null;\n    }\n    return opened;",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
     ],
     "killedBy": [
-      "hud: the pause exit is contextual (issue #323) leaves the match before opening the setup pane, through the paths that already exist"
+      "hud: the pause exit is contextual (issue #323) leaves the match before opening the setup pane, through the paths that already exist",
+      "hud: every ending gets its own screen (issue #323) leaves the finished session and opens the Levels pane, in that order"
     ],
-    "why": "Reverses the two calls, so a configuration surface is opened over a match that is still running before the quit lands. Both orders settle to the same final state, which is why the test reads the pane's visibility from INSIDE the quit callback -- the one moment the difference is observable. `handleChooseLevel` has the identical ordering and the identical reason."
+    "why": "Opens the pane BEFORE leaving the match, so it is opened over a live session and `setState`'s unconditional close-all then takes it straight back down -- the pane the player asked for never appears. \n\nCONSOLIDATED from two entries (issue #566). The order used to be written out at both call sites, `handleChooseLevel` and `handleChangeSetup`, so each needed its own entry and each could be fixed without the other. `quitInto` puts the order in ONE place, so this single mutation breaks both callers and both their tests -- named above. That is a stronger guard than the pair it replaces, not a smaller one: a half-applied fix is no longer expressible. \n\nThe retired sibling was `choose-level-opens-the-pane-over-the-finished-session`, whose scoped test is the second `killedBy` here."
   },
   {
     "id": "change-setup-reopens-a-forgotten-pane",
     "file": "src/game/hud.ts",
-    "find": "  const handleChangeSetup = (): void => {\n    handleQuit();\n    openLayer('versus-setup', versusOpenBtn);\n  };",
-    "replace": "  const handleChangeSetup = (): void => {\n    handleQuit();\n    openLayer('versus-setup', versusOpenBtn);\n    seedAndRenderVersus({ mode: 'ffa', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: false, slots: defaultSlots(2) });\n  };",
+    "find": "  const handleChangeSetup = (): void => {\n    quitInto('versus-setup', versusOpenBtn);\n  };",
+    "replace": "  const handleChangeSetup = (): void => {\n    quitInto('versus-setup', versusOpenBtn);\n    seedAndRenderVersus({ mode: 'ffa', players: 2, slots: defaultSlots(2), arenaId: 'random', teams: null });\n  };",
     "expect": "killed",
     "tests": [
       "src/game/hud.surfaces.test.ts"
@@ -5279,7 +5266,7 @@
     "killedBy": [
       "hud: the pause exit is contextual (issue #323) reopens the setup a player CHOSE, not a fresh one (issue #261)"
     ],
-    "why": "Change Setup reopens the pane with a hardcoded default instead of what the player chose, so the button that exists to ADJUST a configuration discards it. THE GAP WAS REAL AND MEASURED: this exact mutation passed all 1833 tests in `src/game/` before the killer above was written. The sibling cases proved the pane opens and proved the call order; nothing asserted what it opened ONTO, which is the half issue #261's criterion is about (\"return to the retained VS Setup\"). Found by an adversarial audit of that criterion rather than by the change that introduced the button."
+    "why": "Change Setup reopens the pane with a hardcoded default instead of what the player chose, so the button that exists to ADJUST a configuration discards it. THE GAP WAS REAL AND MEASURED: this exact mutation passed all 1833 tests in `src/game/` before the killer above was written. The sibling cases proved the pane opens and proved the call order; nothing asserted what it opened ONTO, which is the half issue #261's criterion is about (\"return to the retained VS Setup\"). Found by an adversarial audit of that criterion rather than by the change that introduced the button. RE-ANCHORED for issue #566: the handler's two calls became one `quitInto`, so this entry's find string stopped matching and it reported FAILED-TO-APPLY -- a guard that had stopped guarding, reported by the sweep and by nothing else."
   },
   {
     "id": "session-host-builds-a-session-it-never-shows",
@@ -5476,5 +5463,19 @@
       "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) drops the campaign attempt line, because the table below already says it per player"
     ],
     "why": "The over-broad half of the same edit: the line is dropped everywhere rather than on the screen that replaced it. A campaign or practice ending has no per-player table to fall back on, so its only tally of the round just played disappears. Distinct from the entry above because a test that merely checked the versus screen is clean would kill that one and survive this."
+  },
+  {
+    "id": "main-menu-painted-on-the-way-to-a-pane",
+    "file": "src/game/hud.ts",
+    "find": "        [PANEL_SURFACE, !(s === 'playing' || atLaunch) && handingOffTo === null],",
+    "replace": "        [PANEL_SURFACE, !(s === 'playing' || atLaunch)],",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "hud: the pause exit is contextual (issue #323) never paints the Main Menu on the way to the setup pane (issue #566)"
+    ],
+    "why": "Drops the handoff from the panel's visibility decision, restoring issue #566: leaving gameplay for Level Select or Versus Setup switches the Main Menu on and the pane's own transition then fades it away, so TANKS! and all six buttons paint for one crossfade on the way somewhere the player asked for directly. SETTLED STATE IS IDENTICAL either way -- the pane ends open and the panel hidden -- which is why 235 HUD tests passed over this. Only a midpoint read catches it, so the scoped test asserts before any transition settles."
   }
 ]
