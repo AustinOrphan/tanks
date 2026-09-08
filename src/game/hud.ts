@@ -45,6 +45,7 @@ export type HudLayerId =
   | 'versus-setup'
   | 'settings'
   | 'about'
+  | 'developer-tools'
   | 'confirm-new-campaign';
 
 /**
@@ -1277,6 +1278,25 @@ export interface HudOptions {
    * value that cannot change within a page load.
    */
   readonly topbar?: TopbarTreatment | null;
+  /**
+   * Is the developer master gate on (issue #243)? Absent -- every existing test, and every
+   * ordinary page load -- means no, and no developer UI is built into the surface at all.
+   *
+   * The EFFECTIVE GATE, passed in, rather than anything derived from the other fields on
+   * this interface. A bare `?dev=1` parses to exactly `DEV_FLAGS_OFF`, so comparing flags
+   * against their defaults cannot tell "developer mode on, nothing enabled" from "no
+   * developer mode", and the issue requires visibility to come from the gate itself.
+   */
+  readonly developerMode?: boolean;
+  /**
+   * Leave developer mode (issue #243): strip the developer parameters and reload.
+   *
+   * Injected because the HUD may not touch `location`, and REQUIRED IN PRACTICE by the
+   * control's own visibility -- Exit is only rendered when this is supplied, so a caller
+   * that turns the gate on without wiring the exit gets a pane with no dead button rather
+   * than a button that silently does nothing. `createBrowserDeps` binds the real one.
+   */
+  readonly exitDeveloperMode?: () => void;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -1725,6 +1745,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--slab hud-customize-open" type="button">Customize</button>
         <button class="ui-btn ui-btn--slab hud-records-open" type="button">Records</button>
         <button class="ui-btn ui-btn--slab hud-settings-open" type="button">Settings</button>
+        <!-- The ONE Developer Tools entry (issue #243), hidden unless the master gate is on.
+             IN THIS ROW RATHER THAN THE FOOTER, and the reason is controller reach. Arrow
+             and D-pad navigation walks focusableControls WITHIN the active panel, and the
+             DEV badge is a sibling of the panes on the HUD root -- inside no panel, so it is
+             reachable by pointer and Tab but never by a gamepad. The footer is Main-Menu
+             only, so an entry there left a controller player with NO way into the tools once
+             a match had started. MEASURED before this moved: at pause, 4 reachable controls
+             and Developer Tools not among them.
+
+             This row is shown at Pause AND the Main Menu (see setState), which is exactly
+             the pair of surfaces a gamepad can navigate -- the playing surface has no active
+             panel at all, because the pad is driving the tank. It is still ONE entry, so the
+             issue's "exactly one entry on the title/menu surface" holds; it is un-gated at
+             Pause unlike its records sibling, because reaching the tools mid-session is the
+             whole point of the reopen requirement. -->
+        <button class="ui-btn ui-btn--slab hud-devtools-open hud-devtools-open--hidden" type="button">Developer Tools</button>
       </div>
       <!-- A setup-pane versus session's title has nothing for Continue/Practice-open to
            do (see setRelaunchTarget's own doc comment on the Hud interface) -- this
@@ -1863,6 +1899,27 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--slab ui-btn--danger hud-confirm-accept" type="button">Start new campaign</button>
       </div>
     </div>
+    <!-- DEVELOPER TOOLS (issue #243), the shell only: entering, recognising, reopening and
+         leaving developer mode. Registry-generated controls, presets, the gallery and
+         runtime actions are all explicitly out of this issue's scope and land later, which
+         is why the pane holds a status line and two buttons and nothing else. -->
+    <div class="hud-devtools hud-devtools--hidden" tabindex="-1" aria-labelledby="hud-devtools-title">
+      <h1 id="hud-devtools-title">Developer Tools</h1>
+      <p class="hud-devtools-line">Developer mode is on for this page.</p>
+      <p class="hud-devtools-line hud-devtools-note">It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from the address and reloads.</p>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devtools-exit" type="button">Exit Developer Mode</button>
+      <button class="ui-btn ui-btn--slab hud-devtools-back" type="button">Back</button>
+    </div>
+    <!-- The persistent DEV indicator (issue #243). On the HUD ROOT rather than in the
+         topbar, because the topbar is gameplay-status-only since issue #226 and is hidden
+         at the Main Menu -- so a topbar indicator could not be the "throughout menus and
+         gameplay" the issue asks for. Being outside it also keeps this clear of issue
+         #552's topbar arms, which rearrange that bar's contents.
+
+         A BUTTON, not a decoration: the issue requires activating it to reopen the tools
+         shell, so it has to be reachable by keyboard and controller like any other
+         control. -->
+    <button class="ui-btn ui-btn--sm ui-btn--danger hud-devbadge hud-devbadge--hidden" type="button" aria-label="Developer mode is on. Open Developer Tools.">DEV</button>
   `;
   root.appendChild(el);
 
@@ -1982,6 +2039,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const aboutOpenBtn = el.querySelector('.hud-about-open') as HTMLButtonElement;
   const aboutView = el.querySelector('.hud-about') as HTMLElement;
   const aboutBackBtn = el.querySelector('.hud-about-back') as HTMLButtonElement;
+  const devToolsOpenBtn = el.querySelector('.hud-devtools-open') as HTMLButtonElement;
+  const devToolsView = el.querySelector('.hud-devtools') as HTMLElement;
+  const devToolsExitBtn = el.querySelector('.hud-devtools-exit') as HTMLButtonElement;
+  const devToolsBackBtn = el.querySelector('.hud-devtools-back') as HTMLButtonElement;
+  const devBadge = el.querySelector('.hud-devbadge') as HTMLButtonElement;
   const confirmView = el.querySelector('.hud-confirm') as HTMLElement;
   const confirmBodyEl = el.querySelector('.hud-confirm-body') as HTMLElement;
   const confirmAcceptBtn = el.querySelector('.hud-confirm-accept') as HTMLButtonElement;
@@ -2599,6 +2661,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const VERSUS_SETUP_SURFACE: Surface = { el: versusSetupView, hidden: 'hud-versus-setup--hidden' };
   const SETTINGS_SURFACE: Surface = { el: settingsView, hidden: 'hud-settings--hidden' };
   const ABOUT_SURFACE: Surface = { el: aboutView, hidden: 'hud-about--hidden' };
+  const DEVTOOLS_SURFACE: Surface = { el: devToolsView, hidden: 'hud-devtools--hidden' };
   const CONFIRM_SURFACE: Surface = { el: confirmView, hidden: 'hud-confirm--hidden' };
   /**
    * The two surfaces `setState` moves between that are NOT in the panel family, plus the
@@ -2976,6 +3039,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     else closeSurface(ABOUT_SURFACE);
   }
 
+  /** The developer shell (issue #243). Static like About, for now -- see the markup. */
+  function showDeveloperTools(show: boolean): void {
+    if (show) swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
+    else closeSurface(DEVTOOLS_SURFACE);
+  }
+
   /**
    * The replace-run confirmation. Its body is written from the run summary the Main Menu
    * is already showing, so the question names the run it would destroy rather than
@@ -3224,6 +3293,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       versusSetupView,
       settingsView,
       aboutView,
+      devToolsView,
       confirmView,
     ]) {
       // A surface fading OUT is displayed but no longer active (issue #364). Before the
@@ -3539,6 +3609,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     settings: { container: settingsView, open: () => showSettings(true), close: () => showSettings(false) },
     about: { container: aboutView, open: () => showAbout(true), close: () => showAbout(false) },
+    'developer-tools': {
+      container: devToolsView,
+      open: () => showDeveloperTools(true),
+      close: () => showDeveloperTools(false),
+    },
     'confirm-new-campaign': {
       container: confirmView,
       open: () => showConfirmNewCampaign(true),
@@ -3753,6 +3828,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleAboutBack = (): void => {
     back();
   };
+  /*
+   * Two openers, one pane, exactly like About above -- the menu entry and the persistent
+   * badge -- and each records its own control, so Back from the tools returns to whichever
+   * was used rather than always to the menu. That is what makes the badge usable DURING a
+   * match: Back goes to the arena it was pressed over, not to the Main Menu.
+   */
+  const handleDevToolsOpen = (): void => {
+    openLayer('developer-tools', devToolsOpenBtn);
+  };
+  const handleDevBadgeOpen = (): void => {
+    openLayer('developer-tools', devBadge);
+  };
+  const handleDevToolsBack = (): void => {
+    back();
+  };
+  const handleDevToolsExit = (): void => {
+    opts.exitDeveloperMode?.();
+  };
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
   customizeOpenBtn.addEventListener('click', handleCustomizeOpen);
@@ -3783,6 +3876,28 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   aboutOpenBtn.addEventListener('click', blurIfPointer);
   aboutBackBtn.addEventListener('click', handleAboutBack);
   aboutBackBtn.addEventListener('click', blurIfPointer);
+  devToolsOpenBtn.addEventListener('click', handleDevToolsOpen);
+  devToolsOpenBtn.addEventListener('click', blurIfPointer);
+  devBadge.addEventListener('click', handleDevBadgeOpen);
+  devBadge.addEventListener('click', blurIfPointer);
+  devToolsBackBtn.addEventListener('click', handleDevToolsBack);
+  devToolsBackBtn.addEventListener('click', blurIfPointer);
+  devToolsExitBtn.addEventListener('click', handleDevToolsExit);
+  devToolsExitBtn.addEventListener('click', blurIfPointer);
+
+  /*
+   * The gate is a URL fact, so it is read ONCE here rather than re-evaluated per surface:
+   * nothing during a session can turn developer mode on or off, and the one thing that
+   * ends it -- Exit -- reloads the page. Toggling classes on every state change would be
+   * re-deciding a constant, and would put developer UI inside `setState`'s hot path.
+   *
+   * Exit is hidden without a bound seam for the reason `HudOptions` states: a visible
+   * control that does nothing is worse than an absent one.
+   */
+  const developerMode = opts.developerMode ?? false;
+  devBadge.classList.toggle('hud-devbadge--hidden', !developerMode);
+  devToolsOpenBtn.classList.toggle('hud-devtools-open--hidden', !developerMode);
+  devToolsExitBtn.hidden = !opts.exitDeveloperMode;
   settingsMuteBtn.addEventListener('click', handleMute);
   settingsMuteBtn.addEventListener('click', blurIfPointer);
   settingsVolumeEl.addEventListener('input', handleSettingsVolume);
@@ -5333,6 +5448,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // so it must not survive one and leave a question hanging over the next screen.
     cleanupHide(settingsView, 'hud-settings--hidden');
     cleanupHide(aboutView, 'hud-about--hidden');
+    cleanupHide(devToolsView, 'hud-devtools--hidden');
     cleanupHide(confirmView, 'hud-confirm--hidden');
     disarmReset();
     // ...and the layer stack with them (issue #318): a surface change is never a Back,
@@ -6194,6 +6310,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       aboutOpenBtn.removeEventListener('click', blurIfPointer);
       aboutBackBtn.removeEventListener('click', handleAboutBack);
       aboutBackBtn.removeEventListener('click', blurIfPointer);
+      devToolsOpenBtn.removeEventListener('click', handleDevToolsOpen);
+      devToolsOpenBtn.removeEventListener('click', blurIfPointer);
+      devBadge.removeEventListener('click', handleDevBadgeOpen);
+      devBadge.removeEventListener('click', blurIfPointer);
+      devToolsBackBtn.removeEventListener('click', handleDevToolsBack);
+      devToolsBackBtn.removeEventListener('click', blurIfPointer);
+      devToolsExitBtn.removeEventListener('click', handleDevToolsExit);
+      devToolsExitBtn.removeEventListener('click', blurIfPointer);
       statsBackBtn.removeEventListener('click', handleStatsBack);
       statsBackBtn.removeEventListener('click', blurIfPointer);
       resetStatsBtn.removeEventListener('click', handleResetStats);

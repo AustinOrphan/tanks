@@ -739,10 +739,16 @@ describe('hud.css is syntactically whole', () => {
     // panel's own second action; and the fourth is the same issue's Practice This Level,
     // which gives the mission-clear screen a second action of its own. 119 -> 120.
     //
+    // Issue #243 adds FOUR: the Main Menu's Developer Tools entry, the persistent DEV
+    // badge, and the pane's Exit and Back. 120 -> 124. All four are rendered by this
+    // fixture regardless of the gate -- the markup is always built and the gate only
+    // toggles `--hidden` modifiers -- so they are counted here whether or not a page is
+    // in developer mode, which is what keeps this number a property of the MARKUP.
+    //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(120);
+    expect(buttons.length).toBe(124);
     expect(unstyled).toEqual([]);
 
     dispose();

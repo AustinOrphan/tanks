@@ -668,6 +668,7 @@
 .hud-versus-setup:focus,
 .hud-settings:focus,
 .hud-about:focus,
+.hud-devtools:focus,
 .hud-confirm:focus {
   outline: none;
 }
@@ -758,6 +759,7 @@
 .hud-versus-setup,
 .hud-settings,
 .hud-about,
+.hud-devtools,
 .hud-confirm,
 .hud-splash {
   touch-action: pan-y;
@@ -1313,6 +1315,76 @@
 
 /* Without this rule the About pane covers every screen from page load. */
 .hud-about--hidden {
+  display: none;
+}
+
+/* ---- Developer Tools (issue #243) -------------------------------------------------- */
+
+/* The same pane geometry as .hud-about above, restated rather than shared: the two are
+   alike today by coincidence of both being short static panes, and the developer shell
+   grows registry-generated controls in a later issue, at which point a shared rule would
+   have to be unpicked with About depending on it. */
+.hud-devtools {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
+  overflow-y: auto;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+/* Same reason as .hud-about--hidden: without it the pane covers the page from load. */
+.hud-devtools--hidden {
+  display: none;
+}
+
+/* Same measure and de-emphasis as .hud-about-line: prose takes a measure rather than the
+   pane's full width, and `opacity` is how this file dims text -- there is no muted token. */
+.hud-devtools-line {
+  margin: 0;
+  max-width: 46ch;
+  text-align: center;
+  opacity: 0.9;
+}
+
+/* The non-privilege statement reads as a footnote to the line above it, not a second claim
+   of equal weight -- the issue requires the gate be explicitly non-authoritative. */
+.hud-devtools-note {
+  font-size: 0.9em;
+  opacity: 0.72;
+}
+
+/* The persistent DEV indicator. FIXED to the viewport, not absolute within the HUD: it
+   has to hold the same corner across menus and gameplay, and the HUD's surfaces are
+   themselves `position: absolute; inset: 0` layers that come and go under it.
+
+   z-index above the surfaces so an open pane does not bury it, but it is a small badge in
+   a corner rather than anything that overlays content: the arena's own controls sit along
+   the bottom edge on touch, which is why this is bottom-LEFT, clear of the fire and mine
+   thumbs on the right. */
+.hud-devbadge {
+  position: fixed;
+  left: max(var(--hud-space-4), env(safe-area-inset-left));
+  bottom: max(var(--hud-space-4), env(safe-area-inset-bottom));
+  z-index: 5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.hud-devbadge--hidden {
+  display: none;
+}
+
+/* The menu entry is hidden by the gate, independently of the footer's own visibility. */
+.hud-devtools-open--hidden {
   display: none;
 }
 

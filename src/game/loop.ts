@@ -102,6 +102,7 @@ import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, parseDeveloperMode, type DevFlags } from './devflags';
+import { developerExitSearch } from './dev-config';
 import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
 
@@ -1071,6 +1072,7 @@ export type BrowserPageDeps = GameDeps & Pick<RouteHostDeps, 'createHud'>;
 export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): BrowserPageDeps {
   const search = globalThis.location?.search ?? '';
   const devFlags = parseDevFlags(search);
+  const developerMode = parseDeveloperMode(search);
   // Resolved ONCE and shared by all six stores. It used to be resolved per
   // store, which was harmless only because localStorage hands back the same
   // object every time -- with the in-memory fallback it would have given each
@@ -1142,6 +1144,21 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // injected HUD in a test has an opinion about. `null` is the shipped bar, so
         // every one of them keeps rendering it.
         topbar: devFlags.topbar,
+        // Issue #243's developer shell. The EFFECTIVE GATE, read from the same `search`
+        // the flags came from: `parseDevFlags` returns `DEV_FLAGS_OFF` for a bare
+        // `?dev=1`, so nothing on `devFlags` can distinguish "developer mode, nothing
+        // enabled" from "no developer mode" -- which is exactly the derivation the issue
+        // forbids and the reason this is its own parse rather than a fold of the others.
+        developerMode,
+        // Leaving strips every known developer parameter and reloads. `assign`, not
+        // `reload`: the point is to land on a DIFFERENT url, and `location.reload()`
+        // would faithfully reload the developer one. Bound here because the HUD may not
+        // touch `location`, and absent from every injected HUD in a test -- which is what
+        // keeps them off the History/Location APIs entirely.
+        exitDeveloperMode: () => {
+          const target = `${globalThis.location.pathname}${developerExitSearch(search)}${globalThis.location.hash}`;
+          globalThis.location.assign(target);
+        },
       }),
     levels: createLevelSystem(devFlags, run),
     progress,
@@ -1165,7 +1182,7 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
     },
     host: globalThis.window as unknown as HostWindow,
     devFlags,
-    developerMode: parseDeveloperMode(search),
+    developerMode,
   };
 }
 
