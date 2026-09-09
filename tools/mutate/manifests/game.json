@@ -5634,5 +5634,62 @@
       "createBrowserDeps: leaving developer mode (issue #243) turns the gate on from the URL and binds an Exit that strips every developer parameter"
     ],
     "why": "The gate reaches `GameDeps` (the entry above pins that) but never reaches the HUD, so `?dev=1` produces a page with no developer UI at all -- no indicator, no menu entry -- while every non-UI consumer still believes developer mode is on. The two bindings are separate lines and the sibling entry cannot see this one. Measured while landing this: the exit half of the scoped test passes under this mutation, because Exit's visibility depends on the seam being BOUND and not on the gate, so the assertion that catches it has to be about the indicator being on screen."
+  },
+  {
+    "id": "dev-url-builder-cannot-say-off",
+    "file": "src/game/dev-config.ts",
+    "find": "    if (value === undefined || value === null) return;",
+    "replace": "    if (value === undefined || value === null || value === false) return;",
+    "expect": "killed",
+    "tests": [
+      "src/game/dev-config.test.ts"
+    ],
+    "killedBy": [
+      "devSearchFrom: BUILDING a developer URL (issue #623) emits an explicit off, because one flag defaults to ON",
+      "DEV_PRESETS (issue #623) every preset produces the flags it claims, through the real parser"
+    ],
+    "why": "Folds an explicit `false` into 'absent', which is the obvious-looking simplification and is wrong for exactly one flag. `sandboxDisarmed` is the single boolean whose default is TRUE (DEV_FLAGS_OFF, and parseDevFlags reads `params.has('disarmed') ? isOn(...) : true`), so absent and off are OPPOSITE values for it and this mutation makes an armed sandbox unexpressible -- silently, since the URL still builds and still parses. It is harmless for the other 31 booleans, which is what makes it easy to miss: the Armed Sandbox preset is the case that notices, and this was a real bug in the first draft of the function."
+  },
+  {
+    "id": "dev-url-builder-emits-field-names",
+    "file": "src/game/dev-config.ts",
+    "find": "    emit(FLAG_REGISTRY[field].param ?? field, selection[field]);",
+    "replace": "    emit(field, selection[field]);",
+    "expect": "killed",
+    "tests": [
+      "src/game/dev-config.test.ts"
+    ],
+    "killedBy": [
+      "devSearchFrom: BUILDING a developer URL (issue #623) translates field names to parameter names, which is why it is keyed by field"
+    ],
+    "why": "Emits the registry FIELD where the query parameter differs, producing `?sandboxTanks=brown` instead of `?tanks=brown`. The parser does not know that spelling, so it is a silent no-op: the URL is well-formed, Copy Link hands out something that looks right, and the flag simply never applies. Three fields rename (the sandbox trio) and 29 do not, so every assertion that happens to use a non-renamed flag stays green -- which is the reason this function is keyed by field and translates ONCE here rather than making every caller remember."
+  },
+  {
+    "id": "dev-url-builder-order-diverges-from-canonical",
+    "file": "src/game/dev-config.ts",
+    "find": "  emit(PLAYTEST_BUNDLE.param, selection.playtest);\n  for (const field of Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[]) {\n    emit(FLAG_REGISTRY[field].param ?? field, selection[field]);\n  }",
+    "replace": "  for (const field of Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[]) {\n    emit(FLAG_REGISTRY[field].param ?? field, selection[field]);\n  }\n  emit(PLAYTEST_BUNDLE.param, selection.playtest);",
+    "expect": "killed",
+    "tests": [
+      "src/game/dev-config.test.ts"
+    ],
+    "killedBy": [
+      "devSearchFrom: BUILDING a developer URL (issue #623) is a FIXED POINT of the canonicaliser, so the two cannot disagree about a selection"
+    ],
+    "why": "Moves the bundle after the registry fields, so a built URL is no longer what `canonicalDevSearch` would produce for the same selection. Every flag still parses identically -- order is meaningless to `URLSearchParams` -- so nothing about BEHAVIOUR changes and only the fixed-point property notices. It matters because Copy Link and Apply and Reload would then emit different strings for the same choices, and a URL a developer shares would not match the one the menu shows."
+  },
+  {
+    "id": "dev-preset-names-a-value-the-parser-rejects",
+    "file": "src/game/dev-config.ts",
+    "find": "    selection: { players: 2, mode: 'ffa' },",
+    "replace": "    selection: { players: 2, mode: 'deathmatch' },",
+    "expect": "killed",
+    "tests": [
+      "src/game/dev-config.test.ts"
+    ],
+    "killedBy": [
+      "DEV_PRESETS (issue #623) no preset silently loses a value to a rejecting parser"
+    ],
+    "why": "A preset naming a versus mode that does not exist. The parser REJECTS an unrecognised value to the flag's default rather than throwing, so the preset still builds a URL, still loads, and simply lands on the shipped mode -- a button labelled '2-player VS' that quietly does something else. Hand-named assertions cannot catch this in general, which is why the killing test is a SWEEP over every preset asserting no `rejected` note, rather than a case per preset."
   }
 ]
