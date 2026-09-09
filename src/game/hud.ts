@@ -1745,6 +1745,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--slab hud-customize-open" type="button">Customize</button>
         <button class="ui-btn ui-btn--slab hud-records-open" type="button">Records</button>
         <button class="ui-btn ui-btn--slab hud-settings-open" type="button">Settings</button>
+        <!-- The ONE Developer Tools entry (issue #243), hidden unless the master gate is on.
+             IN THIS ROW RATHER THAN THE FOOTER, and the reason is controller reach. Arrow
+             and D-pad navigation walks focusableControls WITHIN the active panel, and the
+             DEV badge is a sibling of the panes on the HUD root -- inside no panel, so it is
+             reachable by pointer and Tab but never by a gamepad. The footer is Main-Menu
+             only, so an entry there left a controller player with NO way into the tools once
+             a match had started. MEASURED before this moved: at pause, 4 reachable controls
+             and Developer Tools not among them.
+
+             This row is shown at Pause AND the Main Menu (see setState), which is exactly
+             the pair of surfaces a gamepad can navigate -- the playing surface has no active
+             panel at all, because the pad is driving the tank. It is still ONE entry, so the
+             issue's "exactly one entry on the title/menu surface" holds; it is un-gated at
+             Pause unlike its records sibling, because reaching the tools mid-session is the
+             whole point of the reopen requirement. -->
+        <button class="ui-btn ui-btn--slab hud-devtools-open hud-devtools-open--hidden" type="button">Developer Tools</button>
       </div>
       <!-- A setup-pane versus session's title has nothing for Continue/Practice-open to
            do (see setRelaunchTarget's own doc comment on the Hud interface) -- this
@@ -1766,12 +1782,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            stack sends Back to whichever of them was used. -->
       <div class="hud-menu-footer hud-menu-footer--hidden">
         <button class="ui-btn ui-btn--sm hud-about-open" type="button">About &amp; Legal</button>
-        <!-- The ONE Developer Tools entry (issue #243). Hidden unless the master gate is
-             on, and hidden by its own modifier rather than by omission from the markup so
-             the footer's existing visibility rule keeps owning WHEN the footer shows and
-             this owns WHETHER the entry is in it. Beside About because both are utility
-             destinations, and the issue asks for exactly one entry on the menu surface. -->
-        <button class="ui-btn ui-btn--sm hud-devtools-open hud-devtools-open--hidden" type="button">Developer Tools</button>
       </div>
     </div>
     <!-- SETTINGS (issue #226), the durable home for every preference that survives a

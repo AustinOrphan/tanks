@@ -2877,6 +2877,52 @@ describe('developer mode: entry, indicator and exit (issue #243)', () => {
     }
   });
 
+  it('puts the entry where a GAMEPAD can reach it, at the Main Menu and at Pause', () => {
+    /*
+     * The acceptance criterion this exists for is "focus, back and activation behaviour for
+     * keyboard, touch AND controller". Arrow/D-pad navigation walks `focusableControls`
+     * within `activePanelContainer()`, and the DEV badge is a sibling of the panes on the
+     * HUD ROOT -- inside no panel at all. It is therefore reachable by pointer and by Tab,
+     * and never by a gamepad, which is fine for an indicator but cannot be the only way in.
+     *
+     * MEASURED before the entry moved out of the Main Menu footer: at `paused` the walk
+     * found 4 controls and Developer Tools was not among them, so a controller player who
+     * had started a match had no route to the tools at all. `playing` has no active panel
+     * by design -- the pad is driving -- so Pause is the mid-session surface that matters.
+     *
+     * NO MANIFEST ENTRY, deliberately. The proving mutation is a DOM RELOCATION -- the
+     * button back inside `.hud-menu-footer`, which is Main-Menu-only -- and that is two
+     * hunks in two places, which the harness's single find/replace cannot express. It was
+     * applied BY HAND and this test failed on it with
+     * `expected [ 'hud-action', ...(3) ] to include 'hud-devtools-open'`. Every proxy
+     * available as one hunk pins a different property: dropping the button into a fresh
+     * container leaves it visible everywhere (measured: SURVIVES), and rewriting the
+     * utilities row's own class hides Settings at Pause too, so it would be killed by
+     * unrelated tests and would stop being about this entry at all.
+     */
+    const reachable = (r: HTMLElement): string[] => {
+      const active = ['.hud-panel', '.hud-devtools', '.hud-settings', '.hud-about']
+        .map((sel) => r.querySelector(sel) as HTMLElement)
+        .find((c) => c !== null && !c.classList.contains('ui-surface--leaving') && shown(c));
+      if (active === undefined) return [];
+      return Array.from(active.querySelectorAll<HTMLElement>('button, [tabindex]'))
+        .filter((e) => !(e instanceof HTMLButtonElement && e.disabled) && shown(e))
+        .map((e) => Array.from(e.classList).find((c) => c.startsWith('hud-')) ?? e.tagName);
+    };
+    const { hud: h, root } = mountDev({ developerMode: true });
+
+    h.setState('main-menu');
+    expect(reachable(root), 'the menu walk must offer the tools').toContain('hud-devtools-open');
+    h.setState('paused');
+    expect(reachable(root), 'and so must Pause, or a gamepad is locked out mid-session')
+      .toContain('hud-devtools-open');
+
+    // The badge is deliberately NOT in either walk -- it floats over every surface and
+    // belongs to no panel. Asserted so its absence stays a decision rather than a bug, and
+    // so that making it panel-owned (which would break the float) fails here.
+    expect(reachable(root)).not.toContain('hud-devbadge');
+  });
+
   it('is a real control, not a decoration: the indicator is a focusable button', () => {
     // The issue requires activating it to reopen the shell, so it has to be reachable by
     // keyboard and controller like any other control -- which a <div> would not be.
