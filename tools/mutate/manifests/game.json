@@ -5691,5 +5691,33 @@
       "DEV_PRESETS (issue #623) no preset silently loses a value to a rejecting parser"
     ],
     "why": "A preset naming a versus mode that does not exist. The parser REJECTS an unrecognised value to the flag's default rather than throwing, so the preset still builds a URL, still loads, and simply lands on the shipped mode -- a button labelled '2-player VS' that quietly does something else. Hand-named assertions cannot catch this in general, which is why the killing test is a SWEEP over every preset asserting no `rejected` note, rather than a case per preset."
+  },
+  {
+    "id": "finish-with-re-ends-an-ended-session",
+    "file": "src/game/state.ts",
+    "find": "      if (current.kind !== 'gameplay') return false;\n      if (current.phase.kind !== 'playing') return false;\n      setLocation(locationInGameplay(current.session, outcomePhase(outcome)));",
+    "replace": "      if (current.kind !== 'gameplay') return false;\n      setLocation(locationInGameplay(current.session, outcomePhase(outcome)));",
+    "expect": "killed",
+    "tests": [
+      "src/game/state.test.ts"
+    ],
+    "killedBy": [
+      "finishWith -- ending a session with a given outcome (issue #591) refuses to re-end an ended session, which is what keeps the panel still"
+    ],
+    "why": "Drops the `playing` guard, so an already-ended session can be ended again. Issue #591's capture flag fires from `onSimulated`, which runs on EVERY frame, so this turns one ending into an ending rebuilt sixty times a second -- under a player who may already have pressed a button on the panel. The loop clears its own arm after the first success, which is why only a test that calls `finishWith` twice can see this: the two halves guard the same thing from opposite sides, and either alone looks sufficient."
+  },
+  {
+    "id": "capture-arm-collapses-the-practice-pair",
+    "file": "src/game/loop.ts",
+    "find": "    case 'practice-failed':\n      return { kind: 'practice-result', cleared: false };",
+    "replace": "    case 'practice-failed':\n      return { kind: 'practice-result', cleared: true };",
+    "expect": "killed",
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "killedBy": [
+      "typedOutcomeForArm: the capture arm as the model speaks it (issue #591) resolves the two practice SCREENS back to the one outcome kind they share"
+    ],
+    "why": "Makes `outcome=practice-failed` photograph the practice-CLEARED screen. `practice-result` is one outcome kind carrying a `cleared` boolean and TWO panel entries, which is the whole reason the flag's arms name screens rather than kinds -- and it is why this mutation is invisible to anything checking that the flag 'produced an outcome'. The capture would succeed, the file would be written under the failed name, and the pair would silently be one screen twice."
   }
 ]

@@ -107,3 +107,31 @@ it from outside the page (a blocked storage, a throwing probe) is already caught
 classified as something more specific, which is the module working as designed. Reaching it
 would need a deliberate failure seam in `boot.ts`, which is a production change and its own
 decision. Stated here rather than left as a silently missing row.
+
+### The ending screens prove the panel, not the path to it
+
+The five `screen.ending.*` states are reached with `?dev=1&outcome=`, a development flag that
+ends the running session on its first simulated frame with a named ending (issue #591).
+
+**What that buys.** The flag enters the real outcome phase through the same state-machine
+transition a played ending uses, so the real `OUTCOME_PANEL` entry renders through the real
+gates, over a live session that has pushed its level choice and its status. That is what makes
+`Choose Level` and `Practice This Level` worth measuring here: each carries a multi-term
+visibility gate, and both are in the measured selector set of all five states, so a screen that
+stops offering one — or starts offering one it should not — fails rather than photographing
+quietly.
+
+**What it does not buy.** It does not play a match. These captures would not catch a game that
+stopped being winnable, and nothing here should be read as claiming otherwise. They are
+evidence about the SCREEN; the played-through capture is issue #617, filed rather than promised.
+
+**Its cost.** One development flag in `FLAG_REGISTRY`, registered and documented through the
+generator like every other, plus `finishWith` on the state machine — the same transition
+`onEvents` makes, minus the classifier that decides which ending the events mean. Two options
+were weighed and rejected on #591: a seeded save cannot express "one enemy left, one shot in
+flight" (persisted state is progress and lives, not a world snapshot), and playing through
+needs a new step kind whose capture time then depends on the AI.
+
+**The session is part of the recipe.** The flag ends whatever session is running and the panel
+describes that session, so each state starts the session its ending belongs to — a campaign
+ending photographed over a practice session would be a screen no player can reach.

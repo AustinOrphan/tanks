@@ -94,6 +94,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   aiContact: 'Diagnostics',
   shellCount: 'Diagnostics',
   seed: 'Diagnostics',
+  outcome: 'Diagnostics',
   autoplay: 'Diagnostics',
   replay: 'Diagnostics',
 

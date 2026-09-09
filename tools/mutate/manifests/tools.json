@@ -767,5 +767,19 @@
       "enterGameplay: the order is the fix presses Start BEFORE waiting for the canvas that Start creates"
     ],
     "why": "Restores the ordering that made `--scene game` fail on every invocation (issue #581): waiting for the game canvas before pressing Start, when that canvas is created BY starting a session (`bootCanvas`, from session-host.ts). The real symptom was a 30-second locator timeout naming a selector rather than the missing session, which is why three separate agents diagnosed it independently and each wrote their own driver instead. Nothing tested this file before -- `run.mjs` drives a browser and had no coverage at all, which is how an always-failing code path shipped. The fake page in the scoped test models the one property that matters, that no session means no canvas, so this mutation fails there in milliseconds."
+  },
+  {
+    "id": "ending-captures-seed-the-wrong-namespace",
+    "file": "tools/screens/states.mjs",
+    "find": "    storage: MID_CAMPAIGN_DEV,\n    query: '?dev=1&outcome=mission-clear',",
+    "replace": "    storage: MID_CAMPAIGN,\n    query: '?dev=1&outcome=mission-clear',",
+    "expect": "killed",
+    "tests": [
+      "tools/screens/states.test.ts"
+    ],
+    "killedBy": [
+      "the screen-state catalogue seeds the DEVELOPER key namespace on every state whose URL carries the dev gate"
+    ],
+    "why": "Seeds a PRODUCTION save on a state whose URL carries the dev gate. Issue #245 selects the storage namespace from `location.search` at boot, so a `?dev=1` page persists behind `tanks.dev.` and cannot see those keys at all -- the capture boots a first-time player, and its own recipe then times out clicking a Continue that is not offered. MEASURED: this is exactly what the five ending states did on their first run, and it presents as a broken recipe rather than as a namespace rule, which is why the catalogue now asserts the pairing in both directions."
   }
 ]

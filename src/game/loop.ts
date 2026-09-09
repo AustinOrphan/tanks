@@ -101,7 +101,7 @@ import { resolveOwnerColor } from '../presentation/identity';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
-import { parseDevFlags, parseDeveloperMode, type DevFlags } from './devflags';
+import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } from './devflags';
 import { developerExitSearch } from './dev-config';
 import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
@@ -1069,6 +1069,33 @@ export type BrowserPageDeps = GameDeps & Pick<RouteHostDeps, 'createHud'>;
  * read off globalThis so that a mis-call under node yields undefined at the use
  * site rather than a ReferenceError at import.
  */
+/**
+ * Issue #591's `outcome=` arm, as the `TypedOutcome` the state machine speaks.
+ *
+ * The two lists differ, which is why this exists: `practice-result` is ONE outcome kind
+ * carrying a `cleared` boolean and TWO screens, so the arm names the screen and this
+ * resolves it back to the payload. `vs-match-end` is deliberately not an arm at all --
+ * `OUTCOME_PANEL` has no entry for it, and issue #279 owns that screen.
+ */
+export function typedOutcomeForArm(arm: OutcomeArm | null): TypedOutcome | null {
+  switch (arm) {
+    case null:
+      return null;
+    case 'mission-clear':
+    case 'campaign-over':
+    case 'campaign-complete':
+      return { kind: arm };
+    case 'practice-cleared':
+      return { kind: 'practice-result', cleared: true };
+    case 'practice-failed':
+      return { kind: 'practice-result', cleared: false };
+    default: {
+      const unreachable: never = arm;
+      return unreachable;
+    }
+  }
+}
+
 export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): BrowserPageDeps {
   const search = globalThis.location?.search ?? '';
   const devFlags = parseDevFlags(search);
@@ -1974,6 +2001,17 @@ export function startGameWith(
   });
 
   /**
+   * Issue #591's capture flag: the ending this session is to be photographed on, or `null`
+   * for every ordinary session -- which is every session that did not ask for one by URL.
+   *
+   * Cleared the moment it fires, so it ends the session ONCE. Without that it would re-fire
+   * on every subsequent frame; `finishWith` would refuse (the phase is no longer `playing`)
+   * but `pushOutcome` would not, and the panel would be rebuilt under the player every
+   * frame -- including after they pressed a button on it.
+   */
+  let captureEnding: TypedOutcome | null = typedOutcomeForArm(deps.devFlags.outcome);
+
+  /**
    * THE PRODUCTION CLASSIFIER (issue #316's finding 1).
    *
    * Both facts a terminal event must be read against are owned here and
@@ -2457,6 +2495,25 @@ export function startGameWith(
       // `pushOutcome` call still does one section below -- the two are the same world by
       // the time either callback runs (driver.ts assigns `curr` before calling either),
       // but `w` is the value this specific callback is given.
+
+      /*
+       * Issue #591's capture flag, LAST in this callback so the frame it ends is otherwise
+       * complete: the topbar, the round phase and the music have already been updated for
+       * `w`, which is the state the photographed screen sits over.
+       *
+       * `finishWith` makes the same transition `onEvents` does, so the outcome phase, every
+       * subscriber and the HUD projection are the real ones; `pushOutcome` then runs exactly
+       * as it does for a played ending, with this session's level choice and pushed status.
+       * What is skipped is `classify` -- the part that reads WHICH ending the events mean --
+       * because here the URL has already said.
+       *
+       * Guarded on `finishWith` returning true rather than on the flag alone: a session that
+       * is not playing must not have an outcome pushed at it.
+       */
+      if (captureEnding !== null && sm.finishWith(captureEnding)) {
+        pushOutcome(w, captureEnding);
+        captureEnding = null;
+      }
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake

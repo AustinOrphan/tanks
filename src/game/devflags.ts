@@ -17,6 +17,14 @@ import { BLOCKED_FIRE_CUES, isBlockedFireCue, type BlockedFireCue } from '../pre
 import { MENU_TRANSITIONS, isMenuTransition, type MenuTransition } from './menu-transition';
 import { TOPBAR_TREATMENTS, isTopbarTreatment, type TopbarTreatment } from './topbar-treatment';
 
+/** One of the five ending screens issue #591 photographs. */
+export type OutcomeArm =
+  | 'mission-clear'
+  | 'campaign-over'
+  | 'campaign-complete'
+  | 'practice-cleared'
+  | 'practice-failed';
+
 export interface DevFlags {
   /**
    * Draw the player's computed aim: a ray along the turret and a marker where
@@ -276,6 +284,20 @@ export interface DevFlags {
    */
   mode: 'ffa' | 'teams' | null;
   /**
+   * End the running session on its first simulated frame, with this ending (issue #591).
+   *
+   * A CAPTURE FLAG, and the only production consumer is the screen-state harness. The five
+   * ending screens carry the most conditional controls in the game and nothing visual could
+   * reach them: a state is declarative -- click, press, waitVisible -- and no step in that
+   * vocabulary wins a level.
+   *
+   * WHAT IT PROVES AND WHAT IT DOES NOT. It enters the real outcome phase, so the real
+   * `OUTCOME_PANEL` entry renders through the real gates, with the level choice and pushed
+   * status a live session supplies. It does NOT play a match, so it is evidence about the
+   * screen and not about reaching it -- see the note in `tools/screens/README.md`.
+   */
+  outcome: OutcomeArm | null;
+  /**
    * Whether a shell or mine blast harms a teammate -- meaningful only once `mode` is
    * 'teams'. Default off (this flag's off state, `false`): protect teammates by
    * default, the "Owner forks" call in the arc design. Resolved into
@@ -406,6 +428,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   quality: null,
   bots: null,
   mode: null,
+  outcome: null,
   friendlyFire: false,
   pp1Roles: false,
   enemyDeathPulse: false,
@@ -460,6 +483,30 @@ function asMode(params: URLSearchParams): Extract<GameMode, 'ffa' | 'teams'> | n
   const raw = params.get('mode');
   if (raw === null) return null;
   return VERSUS_MODE_NAMES.has(raw) ? (raw as Extract<GameMode, 'ffa' | 'teams'>) : null;
+}
+
+/**
+ * The five ENDING SCREENS, as the capture harness names them (issue #591).
+ *
+ * Spelled as the five SCREENS rather than the five `TypedOutcome` kinds, because those two
+ * are not the same list: `practice-result` is one kind carrying a `cleared` boolean and two
+ * screens, and `vs-match-end` is a kind with no entry in `OUTCOME_PANEL` at all (issue #279
+ * owns that screen). A flag whose job is "photograph ending N" has to name what a reader
+ * would ask for, and `outcome=practice-result` could not say which of the two they meant.
+ */
+const OUTCOME_ARMS = new Set([
+  'mission-clear',
+  'campaign-over',
+  'campaign-complete',
+  'practice-cleared',
+  'practice-failed',
+]);
+
+/** One of the five ending screens, or null when absent or unrecognised. */
+function asOutcomeArm(params: URLSearchParams): OutcomeArm | null {
+  const raw = params.get('outcome');
+  if (raw === null) return null;
+  return OUTCOME_ARMS.has(raw) ? (raw as OutcomeArm) : null;
 }
 
 /** One of the four UnarmedTrigger values, or null when absent or unrecognised. */
@@ -646,6 +693,7 @@ export function parseDevFlags(search: string): DevFlags {
     aiPerception: asAiPerception(params),
     bots: asBots(params),
     mode: asMode(params),
+    outcome: asOutcomeArm(params),
     friendlyFire: isOn(params, 'friendlyFire'),
     pp1Roles: isOn(params, 'pp1Roles'),
     enemyDeathPulse: isOn(params, 'enemyDeathPulse'),
@@ -949,6 +997,20 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     notes: [
       'Unrecognised or absent leaves the campaign-coop default.',
       'Strips every enemy spawn from the built arena: versus modes have no AI opponents.',
+    ],
+  },
+  outcome: {
+    kind: 'valued',
+    values: [...OUTCOME_ARMS],
+    description:
+      'Ends the running session on its first simulated frame with the named ending, so the ' +
+      'five outcome screens can be photographed.',
+    notes: [
+      'A CAPTURE flag: its only consumer is the screen-state harness (issue #591).',
+      'Evidence about the SCREEN, not about reaching it -- it does not play a match.',
+      'The session still decides which screen fits: pick the ending to match the session ' +
+        'the URL starts, or the panel will describe a session nobody played.',
+      'Unrecognised or absent leaves the session to end on its own, as it always has.',
     ],
   },
   pp1Roles: {

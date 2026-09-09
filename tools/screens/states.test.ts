@@ -16,6 +16,7 @@ import {
 } from './states.mjs';
 import { buildScreenArguments, runScreenState } from '../capture/screen-adapter.mjs';
 import { CAPTURE_RECIPES } from '../capture/registry.mjs';
+import { DEVELOPER_KEY_PREFIX } from '../../src/game/storage';
 
 const STABLE_ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 
@@ -91,6 +92,39 @@ describe('the screen-state catalogue', () => {
   it('findScreenState answers for every ID and refuses anything else', () => {
     for (const id of SCREEN_STATE_IDS) expect(findScreenState(id)?.id).toBe(id);
     expect(findScreenState('screen.not-a-state')).toBeNull();
+  });
+
+  it('seeds the DEVELOPER key namespace on every state whose URL carries the dev gate', () => {
+    /*
+     * Issue #245 selects the namespace from `location.search` at boot, so a `?dev=1` page
+     * persists behind `tanks.dev.` and cannot see a production save at all. A state that
+     * carried the gate and seeded unprefixed keys would boot a FIRST-TIME player -- no
+     * Continue, no Levels grid -- and its recipe's own clicks would then time out.
+     *
+     * MEASURED: that is exactly what the five ending states did on their first run, and it
+     * is the kind of thing that looks like a broken recipe rather than a namespace rule.
+     *
+     * Both directions, so a state cannot seed the wrong half either way.
+     */
+    for (const state of SCREEN_STATES) {
+      const keys = Object.keys(state.storage);
+      if (keys.length === 0) continue;
+      const gated = state.query.includes('dev=1');
+      for (const key of keys) {
+        expect(
+          key.startsWith(DEVELOPER_KEY_PREFIX),
+          `${state.id} seeds '${key}' but ${gated ? 'IS' : 'is NOT'} behind the dev gate`,
+        ).toBe(gated);
+      }
+    }
+  });
+
+  it('pins the developer prefix this module spells by hand', () => {
+    // states.mjs imports nothing by design, so `MID_CAMPAIGN_DEV` writes 'tanks.dev.' as a
+    // literal. This is what stops that literal rotting if storage.ts ever renames it.
+    const dev = SCREEN_STATES.find((s) => s.id === 'screen.ending.mission-clear');
+    expect(Object.keys(dev!.storage).every((k) => k.startsWith(DEVELOPER_KEY_PREFIX))).toBe(true);
+    expect(DEVELOPER_KEY_PREFIX).toBe('tanks.dev.');
   });
 
   it('ships a capture recipe for every state, and no recipe for a state that is gone', () => {

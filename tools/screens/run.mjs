@@ -189,17 +189,21 @@ async function main() {
     const page = await context.newPage();
     page.on('pageerror', (e) => pageErrors.push(String(e)));
 
+    // The state's own query, if it has one (issue #591). Both `goto`s use it: the storage
+    // seed visits first only to get an origin, and a capture whose flag is in the URL must
+    // carry it on the visit that actually boots.
+    const url = `${base}${state.query ?? ''}`;
     if (state.webgl !== 'ok') await page.addInitScript(webglOverrideSource(state.webgl));
     if (Object.keys(state.storage).length > 0) {
       // localStorage needs an origin, so the first visit exists only to get one. The
       // reload is what makes the boot this capture photographs read the seeded save.
-      await page.goto(base, { waitUntil: 'load' });
+      await page.goto(url, { waitUntil: 'load' });
       await page.evaluate((entries) => {
         localStorage.clear();
         for (const [k, v] of entries) localStorage.setItem(k, v);
       }, Object.entries(state.storage));
     }
-    await page.goto(base, { waitUntil: 'load' });
+    await page.goto(url, { waitUntil: 'load' });
 
     for (const step of state.steps) await runStep(page, step, timeout);
     // One settle after the last step, at the reduced-motion duration, so a crossfade that

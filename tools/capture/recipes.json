@@ -1144,5 +1144,250 @@
     "altText": "Screenshot of the Tanks! pause, campaign round screen.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.ending.mission-clear",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.ending.mission-clear"
+    },
+    "fixture": {
+      "id": "screen.ending.mission-clear",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Mission clear",
+    "description": "A level cleared inside a live run: Next Level, and the Practice This Level offer #323 added.",
+    "altText": "Screenshot of the Tanks! mission clear ending screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.ending.campaign-over",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.ending.campaign-over"
+    },
+    "fixture": {
+      "id": "screen.ending.campaign-over",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Campaign over",
+    "description": "The run ended out of lives: Game Over, with the route back that #323 restored.",
+    "altText": "Screenshot of the Tanks! campaign over ending screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.ending.campaign-complete",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.ending.campaign-complete"
+    },
+    "fixture": {
+      "id": "screen.ending.campaign-complete",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Campaign complete",
+    "description": "The end of the whole campaign -- otherwise five levels of play away from any capture.",
+    "altText": "Screenshot of the Tanks! campaign complete ending screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.ending.practice-cleared",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.ending.practice-cleared"
+    },
+    "fixture": {
+      "id": "screen.ending.practice-cleared",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Practice cleared",
+    "description": "A level-select attempt won, which consumes no run and offers its own way back.",
+    "altText": "Screenshot of the Tanks! practice cleared ending screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.ending.practice-failed",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.ending.practice-failed"
+    },
+    "fixture": {
+      "id": "screen.ending.practice-failed",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Practice failed",
+    "description": "The same attempt lost: the pair to practice-cleared, and a different panel.",
+    "altText": "Screenshot of the Tanks! practice failed ending screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
   }
 ]

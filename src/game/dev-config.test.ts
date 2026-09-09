@@ -132,7 +132,7 @@ describe('control type is derived from the registry, not declared twice', () => 
     // and the first draft of this line guessed 17 -- the assertion caught it, which is the
     // only reason a stated population is worth writing down.
     expect(toggles).toBe(17);
-    expect(controls).toHaveLength(32); // +1 each: aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm)
+    expect(controls).toHaveLength(33); // +1 each: aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm), outcome (#591's capture arm)
   });
 
   it('reads each parameter from the registry, using the field name only where none is given', () => {
@@ -169,7 +169,7 @@ describe('explainDevConfig', () => {
     // `?players=1` look rejected.
     const valued = (Object.keys(FLAG_REGISTRY) as (keyof typeof FLAG_REGISTRY)[])
       .filter((f) => FLAG_REGISTRY[f].kind === 'valued');
-    expect(valued.length, 'the population this premise covers').toBe(15); // +1 each: aiPerception, blockedFire, menuTransition, topbar
+    expect(valued.length, 'the population this premise covers').toBe(16); // +1 each: aiPerception, blockedFire, menuTransition, topbar, outcome
     for (const f of valued) {
       expect(DEV_FLAGS_OFF[f], `${f} defaults to something a valid value could parse to`).toBeNull();
     }

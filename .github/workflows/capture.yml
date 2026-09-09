@@ -57,6 +57,11 @@ on:
           - screen.main-menu.fresh
           - screen.no-script
           - screen.pause.campaign
+          - screen.ending.mission-clear
+          - screen.ending.campaign-over
+          - screen.ending.campaign-complete
+          - screen.ending.practice-cleared
+          - screen.ending.practice-failed
           - screen.pause.versus
           - screen.records.achievements
           - screen.records.stats

@@ -527,3 +527,46 @@ describe('Navigation-only transitions do not resolve or persist', () => {
     expect(sm.descriptor).toBe(null);
   });
 });
+
+describe('finishWith -- ending a session with a given outcome (issue #591)', () => {
+  it('makes the SAME transition onEvents makes, so the phase is a real ending', () => {
+    // The whole value of the capture flag rests on this: if `finishWith` produced anything
+    // other than the phase a played ending produces, the photographed screen would be a
+    // screen no player reaches. Asserted against the classifier's own output rather than
+    // against a literal, so the two cannot drift apart.
+    const sm = makeMachine();
+    sm.enterGameplay(buildCampaignSession());
+    expect(sm.finishWith({ kind: 'mission-clear' })).toBe(true);
+    expect(sm.hasOutcome).toBe(true);
+    expect(sm.outcome).toEqual({ kind: 'mission-clear' });
+    expect(sm.location.kind).toBe('gameplay');
+  });
+
+  it('carries a payload outcome whole, which is why the arm names the SCREEN', () => {
+    // `practice-result` is one kind and two screens. A transition that dropped `cleared`
+    // would land both arms on the same panel entry and the pair would be pointless.
+    const sm = makeMachine();
+    sm.enterGameplay(buildPracticeSession());
+    sm.finishWith({ kind: 'practice-result', cleared: false });
+    expect(sm.outcome).toEqual({ kind: 'practice-result', cleared: false });
+    expect(sm.presentsAsWin, 'a failed practice is not a win').toBe(false);
+    expect(sm.presentsAsLose, 'it presents as a loss').toBe(true);
+  });
+
+  it('refuses from a route, so a flag cannot end a session that does not exist', () => {
+    const sm = makeMachine();
+    expect(sm.finishWith({ kind: 'mission-clear' })).toBe(false);
+    expect(sm.hasOutcome).toBe(false);
+  });
+
+  it('refuses to re-end an ended session, which is what keeps the panel still', () => {
+    // The capture flag fires from `onSimulated`, which runs every frame. Without this the
+    // second call would rebuild the panel under a player who had already pressed a button
+    // on it. The loop clears its own arm too; this is the half the machine owns.
+    const sm = makeMachine();
+    sm.enterGameplay(buildCampaignSession());
+    expect(sm.finishWith({ kind: 'mission-clear' })).toBe(true);
+    expect(sm.finishWith({ kind: 'campaign-over' }), 'a second ending must be refused').toBe(false);
+    expect(sm.outcome, 'and the first ending must stand').toEqual({ kind: 'mission-clear' });
+  });
+});
