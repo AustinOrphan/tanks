@@ -68,6 +68,24 @@ const MID_CAMPAIGN = Object.freeze({
   }),
 });
 
+/**
+ * The same save, in the DEVELOPER key namespace (issue #245).
+ *
+ * Any state whose `query` carries the `dev` gate needs this instead of `MID_CAMPAIGN`, and
+ * the reason is easy to miss: `selectStorageNamespace(location.search)` reads the gate at
+ * boot, so a developer page persists behind `tanks.dev.` and cannot see a production save at
+ * all. Seeding the unprefixed keys on a `?dev=1` capture boots a FIRST-TIME player -- no
+ * Continue, no Levels grid -- which is what the ending captures first did.
+ *
+ * DERIVED from `MID_CAMPAIGN` rather than written out again, so the two saves cannot drift
+ * into describing different runs. The prefix is spelled here because this module imports
+ * nothing by design; `states.test.ts` pins it against `DEVELOPER_KEY_PREFIX` so the literal
+ * cannot rot.
+ */
+const MID_CAMPAIGN_DEV = Object.freeze(
+  Object.fromEntries(Object.entries(MID_CAMPAIGN).map(([key, value]) => [`tanks.dev.${key}`, value])),
+);
+
 /** Dismiss the Launch splash. Every state that wants a rendered UI starts with this. */
 const PAST_SPLASH = Object.freeze([
   Object.freeze({ press: 'Space' }),
@@ -78,6 +96,15 @@ const state = (s) => Object.freeze({
   storage: {},
   webgl: 'ok',
   javascript: 'on',
+  /**
+   * A query string, with its leading `?`, appended to the page URL (issue #591).
+   *
+   * Needed because two of what this catalogue photographs are only reachable by URL: a
+   * level jump, and the ending a session finishes on. Empty for every state that a player
+   * could click their way to, which is most of them -- a capture that needs a query is
+   * saying something about how the page was ASKED for, and that belongs in the record.
+   */
+  query: '',
   steps: [],
   measure: [],
   ...s,
@@ -210,6 +237,88 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-quit' },
     ],
     measure: ['.hud-panel', '.hud-quit', '.hud-change-setup', '.hud-settings-open'],
+  }),
+
+  // ---- The five ENDING SCREENS (issue #591) -----------------------------------------
+  //
+  // Reached with `?dev=1&outcome=`, which ends the running session on its first simulated
+  // frame with the named ending. That enters the REAL outcome phase, so the real
+  // `OUTCOME_PANEL` entry renders through the real gates, with the level choice and pushed
+  // status a live session supplies -- which is what makes the two secondary controls
+  // (`Choose Level`, `Practice This Level`) meaningful here rather than merely present.
+  //
+  // WHAT THESE ARE NOT. They do not play a match, so they are evidence about the SCREEN and
+  // not about reaching it. See the "Known gap" section of this directory's README, and
+  // issue #617 for the played-through capture.
+  //
+  // THE SESSION IS PART OF THE RECIPE. The flag ends whatever session is running, and the
+  // panel describes that session -- so each state below starts the session its ending
+  // belongs to. A campaign ending photographed over a practice session would be a screen no
+  // player can reach, which is exactly the kind of thing a capture must not manufacture.
+  //
+  // Both secondary controls are measured on ALL FIVE, not only where they appear. That is
+  // the point: `Choose Level` and `Practice This Level` each carry a multi-term gate, and a
+  // screen that stops offering one -- or starts offering one it should not -- fails the
+  // measurement rather than photographing quietly.
+  state({
+    id: 'screen.ending.mission-clear',
+    title: 'Mission clear',
+    description: 'A level cleared inside a live run: Next Level, and the Practice This Level offer #323 added.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1&outcome=mission-clear',
+    steps: [...PAST_SPLASH, { click: '.hud-continue' }, { waitVisible: '.hud-action' }],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
+  }),
+  state({
+    id: 'screen.ending.campaign-over',
+    title: 'Campaign over',
+    description: 'The run ended out of lives: Game Over, with the route back that #323 restored.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1&outcome=campaign-over',
+    steps: [...PAST_SPLASH, { click: '.hud-continue' }, { waitVisible: '.hud-action' }],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
+  }),
+  state({
+    id: 'screen.ending.campaign-complete',
+    title: 'Campaign complete',
+    description: 'The end of the whole campaign -- otherwise five levels of play away from any capture.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1&outcome=campaign-complete',
+    steps: [...PAST_SPLASH, { click: '.hud-continue' }, { waitVisible: '.hud-action' }],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
+  }),
+  // The practice pair, entered through Levels so the session really is a practice one --
+  // its panel says different things from the campaign endings above, and that difference is
+  // the whole reason both are here.
+  state({
+    id: 'screen.ending.practice-cleared',
+    title: 'Practice cleared',
+    description: 'A level-select attempt won, which consumes no run and offers its own way back.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1&outcome=practice-cleared',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-levelselect-open' },
+      { waitVisible: '.hud-levelselect' },
+      { click: '.hud-level-btn' },
+      { waitVisible: '.hud-action' },
+    ],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
+  }),
+  state({
+    id: 'screen.ending.practice-failed',
+    title: 'Practice failed',
+    description: 'The same attempt lost: the pair to practice-cleared, and a different panel.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1&outcome=practice-failed',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-levelselect-open' },
+      { waitVisible: '.hud-levelselect' },
+      { click: '.hud-level-btn' },
+      { waitVisible: '.hud-action' },
+    ],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
   }),
 
   // ---- The branded failure states (issue #325) --------------------------------------

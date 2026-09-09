@@ -68,6 +68,11 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.no-script` | `screen.no-script` | `capture.png` | still |
 | `screen.pause.versus` | `screen.pause.versus` | `capture.png` | still |
 | `screen.pause.campaign` | `screen.pause.campaign` | `capture.png` | still |
+| `screen.ending.mission-clear` | `screen.ending.mission-clear` | `capture.png` | still |
+| `screen.ending.campaign-over` | `screen.ending.campaign-over` | `capture.png` | still |
+| `screen.ending.campaign-complete` | `screen.ending.campaign-complete` | `capture.png` | still |
+| `screen.ending.practice-cleared` | `screen.ending.practice-cleared` | `capture.png` | still |
+| `screen.ending.practice-failed` | `screen.ending.practice-failed` | `capture.png` | still |
 
 The `screen.*` recipes are the `screen` producer (issue #561): they boot the BUILT page
 into a named application state from [`tools/screens/states.mjs`](../screens/states.mjs) and

@@ -54,7 +54,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (15)
+## Valued flags (16)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -67,6 +67,7 @@ Notes:
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |
 | `mineWarn` | `mineWarn` | `lance`, `slump`, `spike` | `null` | Draws the mine fuse and proximity warnings with a named experimental treatment (issue #276 playtest round); the shipped default is the glow + illumination pair. |
 | `mode` | `mode` | `ffa`, `teams` | `null` | Sets which versus mode a session builds with -- free-for-all or teams -- instead of the shipped campaign-coop rule (win as every enemy dead, or coop's shared lives). |
+| `outcome` | `outcome` | `mission-clear`, `campaign-over`, `campaign-complete`, `practice-cleared`, `practice-failed` | `null` | Ends the running session on its first simulated frame with the named ending, so the five outcome screens can be photographed. |
 | `players` | `players` | an integer 1-4 (1 is an explicit no-op; 2-4 add co-players) | `null` | Sets how many player-controlled tanks share the world -- couch co-op, generalized past two. |
 | `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter, and how much muzzle smoke is drawn) for this session, overriding the player's stored Settings choice without changing it. |
 | `sandboxTanks` | `tanks` | a comma-separated multiset (repeats and order kept), each element one of the values below: `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
@@ -88,6 +89,10 @@ Notes:
 - **menuTransition**: Every value collapses to an instant change under resolved reduced motion, movement included.
 - **mode**: Unrecognised or absent leaves the campaign-coop default.
 - **mode**: Strips every enemy spawn from the built arena: versus modes have no AI opponents.
+- **outcome**: A CAPTURE flag: its only consumer is the screen-state harness (issue #591).
+- **outcome**: Evidence about the SCREEN, not about reaching it -- it does not play a match.
+- **outcome**: The session still decides which screen fits: pick the ending to match the session the URL starts, or the panel will describe a session nobody played.
+- **outcome**: Unrecognised or absent leaves the session to end on its own, as it always has.
 - **players**: Composes freely with `gamepad`: slot 0's optional pad[0] merge and every co-player slot's own dedicated pad index (`pad[i] -> slot[i]`) read different indices of the same pads array, so they never collide.
 - **players**: Named tradeoff: a session's only physical pad (usually browser index 0) now feeds slot 0 (if `gamepad` is on), not slot 1 -- "P1 on keyboard, hand the one pad to P2" has no zero-flag path anymore.
 - **players**: Not part of the playtest bundle.

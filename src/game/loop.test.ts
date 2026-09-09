@@ -6,7 +6,7 @@ import { defaultSlots, type VersusSlotSetup } from './versus-setup';
 // around. frame.test.ts and driver.test.ts deliberately do NOT use jsdom.
 import { describe, it, expect } from 'vitest';
 import { resolveWorldRules } from '../sim/rules';
-import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
+import { DEV_FLAGS_OFF, FLAG_REGISTRY, type DevFlags } from './devflags';
 import { QUALITY_PRESETS } from '../render/quality';
 import { ZERO_STATS } from './stats';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
@@ -107,6 +107,7 @@ import {
   isPauseHotkey,
   DEV_CONSOLE_KEY,
   createBrowserDeps,
+  typedOutcomeForArm,
   applyVersusToDeps,
   seedAssignment,
   versusAwareDeps,
@@ -1089,6 +1090,19 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       get presentsAsWin(): boolean { return currentSurface === 'outcome-win'; },
       get presentsAsLose(): boolean { return currentSurface === 'outcome-lose'; },
+      // Issue #591's capture flag ends a session the same way `onEvents` does, so the
+      // double models it the same way: record the outcome and flip the surface. Without
+      // this the flag would appear to do nothing here and its loop test would pass on a
+      // production path that never ran.
+      finishWith(outcome: TypedOutcome): boolean {
+        if (currentSurface !== 'playing') return false;
+        rec.typedOutcomes.push(outcome);
+        setSurface(
+          legacyOutcomePresentation(outcome) === 'win' ? 'outcome-win' : 'outcome-lose',
+          outcome,
+        );
+        return true;
+      },
       onEvents(events: SimEvent[]): void {
         rec.machineSaw.push(events);
         // Run the REAL production classifier, so campaign completion and
@@ -9717,5 +9731,35 @@ describe('startGameWith: the gamepad edge resync on entry into play (issue #494)
     expect(h.rec.resyncs, 'the resume did not resync').toBe(slot0 + 2);
     expect(h.rec.slotResyncs[1]).toBe(slot1 + 2);
     h.handle.dispose();
+  });
+});
+
+describe('typedOutcomeForArm: the capture arm as the model speaks it (issue #591)', () => {
+  it('resolves the two practice SCREENS back to the one outcome kind they share', () => {
+    // The reason the arm names screens and not kinds: `practice-result` is a single kind
+    // carrying `cleared`, and a flag spelled `outcome=practice-result` could not say which
+    // of the two screens the caller meant.
+    expect(typedOutcomeForArm('practice-cleared')).toEqual({ kind: 'practice-result', cleared: true });
+    expect(typedOutcomeForArm('practice-failed')).toEqual({ kind: 'practice-result', cleared: false });
+  });
+
+  it('passes the three payload-free endings through as themselves', () => {
+    expect(typedOutcomeForArm('mission-clear')).toEqual({ kind: 'mission-clear' });
+    expect(typedOutcomeForArm('campaign-over')).toEqual({ kind: 'campaign-over' });
+    expect(typedOutcomeForArm('campaign-complete')).toEqual({ kind: 'campaign-complete' });
+  });
+
+  it('maps no arm to no ending, which is every ordinary session', () => {
+    expect(typedOutcomeForArm(null)).toBeNull();
+  });
+
+  it('covers every arm the flag accepts, swept rather than listed', () => {
+    // The registry is the population. A sixth arm added there without a case here would
+    // return `undefined` and the session would never end -- a flag that silently does
+    // nothing, which is the failure mode a capture flag has.
+    for (const arm of FLAG_REGISTRY.outcome.values ?? []) {
+      expect(typedOutcomeForArm(arm as never), `${arm} has no mapping`).not.toBeUndefined();
+      expect(typedOutcomeForArm(arm as never), `${arm} maps to nothing`).not.toBeNull();
+    }
   });
 });

@@ -186,6 +186,23 @@ export interface GameStateMachine {
    * unless the classifier decides otherwise.
    */
   onEvents(events: SimEvent[]): void;
+  /**
+   * End the live session with a GIVEN outcome, for issue #591's capture flag.
+   *
+   * The same transition `onEvents` makes -- `outcomePhase(outcome)` on the current
+   * session, through `setLocation`, so every subscriber, the HUD projection and
+   * `loop.ts`'s `pushOutcome` see an ending indistinguishable from a played one. What it
+   * skips is `classify`, which is the part that decides WHICH ending the events mean;
+   * here the caller has already decided.
+   *
+   * Same legality as `onEvents`, and for the same reason: only a session that is PLAYING
+   * can finish. A paused or already-ended session ignores this, so a flag cannot reopen a
+   * screen the player has left.
+   *
+   * @returns whether the session actually finished, so a caller can tell "did nothing"
+   *          from "ended" rather than assuming.
+   */
+  finishWith(outcome: TypedOutcome): boolean;
 
   /**
    * Subscribe to location changes. Returns the unsubscribe.
@@ -396,6 +413,16 @@ export function createGameStateMachine(config: GameStateMachineConfig): GameStat
       const outcome = classify(events, current.session);
       if (outcome === null) return;
       setLocation(locationInGameplay(current.session, outcomePhase(outcome)));
+    },
+
+    finishWith(outcome: TypedOutcome): boolean {
+      // The same two guards `onEvents` opens with, deliberately duplicated rather than
+      // shared: they are the legality of FINISHING, and a helper would invite a third
+      // caller to finish something that is not playing.
+      if (current.kind !== 'gameplay') return false;
+      if (current.phase.kind !== 'playing') return false;
+      setLocation(locationInGameplay(current.session, outcomePhase(outcome)));
+      return true;
     },
 
     onChange(cb: (location: AppLocation) => void): () => void {
