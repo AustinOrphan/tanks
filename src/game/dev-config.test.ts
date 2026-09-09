@@ -18,6 +18,8 @@ import {
   knownDevParams,
   canonicalDevSearch,
   developerExitSearch,
+  devSearchFrom,
+  DEV_PRESETS,
   DEPRECATED_DEV_PARAMS,
 } from './dev-config';
 
@@ -252,6 +254,119 @@ describe('explainDevConfig', () => {
 // ---------------------------------------------------------------------------
 // CANONICAL URLs. One focused test per behaviour issue #244 lists, plus the round trip.
 // ---------------------------------------------------------------------------
+describe('devSearchFrom: BUILDING a developer URL (issue #623)', () => {
+  it('builds a URL from values, which canonicalDevSearch cannot do at all', () => {
+    // The premise this function exists for, asserted rather than described. The
+    // canonicaliser reads from a URLSearchParams built from ITS INPUT, so handed a URL that
+    // carries no `aimRay` it can never produce one -- it rewrites, it cannot construct.
+    expect(devSearchFrom({ aimRay: true })).toBe('?dev=1&aimRay=1');
+    expect(canonicalDevSearch('?dev=1').search, 'the canonicaliser invents nothing').toBe('?dev=1');
+  });
+
+  it('always emits the gate, so a built URL can never be silently inert', () => {
+    // Every other developer parameter is dead without it -- parseDevFlags returns
+    // DEV_FLAGS_OFF when the gate is shut -- so a builder able to omit it could hand back a
+    // URL that looks configured and does nothing.
+    expect(devSearchFrom({})).toBe('?dev=1');
+    expect(parseDevFlags(devSearchFrom({ aimRay: true })).aimRay).toBe(true);
+  });
+
+  it('is a FIXED POINT of the canonicaliser, so the two cannot disagree about a selection', () => {
+    // Ordering here is not cosmetic. If a built URL and a canonicalised one differed, Copy
+    // Link and Apply and Reload would produce different strings for the same choices. Swept
+    // over a selection touching the gate, the bundle, both ends of registry order and a
+    // renamed param, not one sample.
+    const built = devSearchFrom({
+      playtest: true, aimRay: true, sandboxTanks: 'brown,grey', saveIo: true, mode: 'ffa',
+    });
+    expect(canonicalDevSearch(built).search).toBe(built);
+  });
+
+  it('translates field names to parameter names, which is why it is keyed by field', () => {
+    // The three sandbox knobs are the only ones whose param differs from their field, and a
+    // control knows its FIELD. Getting this wrong produces `?sandboxTanks=...`, which the
+    // parser ignores entirely -- a silent no-op rather than an error.
+    expect(devSearchFrom({ sandboxTanks: 'brown', sandboxWalls: 4 })).toBe('?dev=1&tanks=brown&walls=4');
+  });
+
+  it('emits an explicit off, because one flag defaults to ON', () => {
+    // `sandboxDisarmed` is the single boolean whose default is true, so absent and off are
+    // OPPOSITE values for it and folding `false` into absent would make an armed sandbox
+    // unexpressible. Both directions asserted through the real parser.
+    expect(devSearchFrom({ sandboxDisarmed: false })).toBe('?dev=1&disarmed=0');
+    expect(parseDevFlags(devSearchFrom({ sandboxDisarmed: false })).sandboxDisarmed).toBe(false);
+    expect(parseDevFlags(devSearchFrom({})).sandboxDisarmed, 'absent still means the default').toBe(true);
+  });
+
+  it('omits a flag left at null or undefined rather than spelling out a default', () => {
+    expect(devSearchFrom({ aimRay: null, mode: undefined, seed: null })).toBe('?dev=1');
+  });
+
+  it("preserves the caller's unrelated parameters, with order and duplicates", () => {
+    // Composed from developerExitSearch, which already means "everything that is not a
+    // developer parameter". The base's own dev params are replaced by the selection rather
+    // than merged with it -- the selection is the complete developer intent.
+    expect(devSearchFrom({ aimRay: true }, '?ref=a&dev=1&utm=x&ref=b&shellCount=1'))
+      .toBe('?dev=1&aimRay=1&ref=a&utm=x&ref=b');
+  });
+
+  it('Reset Options is this function with nothing selected, and is NOT the exit URL', () => {
+    // Reset keeps developer mode and drops the options; Exit drops developer mode too. They
+    // are one character apart in intent and completely different URLs.
+    expect(devSearchFrom({}, '?dev=1&aimRay=1&ref=keep')).toBe('?dev=1&ref=keep');
+    expect(developerExitSearch('?dev=1&aimRay=1&ref=keep')).toBe('?ref=keep');
+  });
+});
+
+describe('DEV_PRESETS (issue #623)', () => {
+  it('names the six presets issue #246 asks for, once each', () => {
+    expect(DEV_PRESETS.map((p) => p.id)).toEqual([
+      'playtest', 'armed-sandbox', 'vs-2p', 'vs-4p', 'all-bots', 'visual-debug',
+    ]);
+  });
+
+  it('every preset produces the flags it claims, through the real parser', () => {
+    // THE POINT OF THE TABLE BEING DATA. Each selection is built into a URL and parsed by
+    // the same parser the boot path uses, so a preset naming a value the parser rejects
+    // fails here instead of silently landing on a default and looking like it worked.
+    const flagsOf = (id: string) =>
+      parseDevFlags(devSearchFrom(DEV_PRESETS.find((p) => p.id === id)!.selection));
+
+    expect(flagsOf('playtest').invincible, 'the bundle still expands').toBe(true);
+    const sandbox = flagsOf('armed-sandbox');
+    expect(sandbox.level).toBe('sandbox');
+    expect(sandbox.sandboxDisarmed, 'ARMED is the whole name').toBe(false);
+    expect(flagsOf('vs-2p').players).toBe(2);
+    expect(flagsOf('vs-4p').players).toBe(4);
+    const bots = flagsOf('all-bots');
+    expect(bots.bots, 'every slot computer-controlled').toBe(bots.players);
+    const debug = flagsOf('visual-debug');
+    expect([debug.aimRay, debug.aiContact, debug.shellCount]).toEqual([true, true, true]);
+  });
+
+  it('no preset silently loses a value to a rejecting parser', () => {
+    // The sweep the case above cannot be, because it names fields by hand. Every parameter a
+    // preset emits must survive the round trip; a rejected value parses back to its default,
+    // and `explainDevConfig` reports exactly that as a `rejected` note.
+    for (const preset of DEV_PRESETS) {
+      const { notes } = explainDevConfig(devSearchFrom(preset.selection));
+      expect(notes.filter((n) => n.reason === 'rejected'), `${preset.id} emits a rejected value`)
+        .toEqual([]);
+    }
+  });
+
+  it('every preset is previewable and introduces no parameter the model does not know', () => {
+    // #246 requires "presets must not introduce hidden state". Built through the same
+    // builder and read by the same explainer as a typed URL, so an unknown parameter in a
+    // preset would surface here exactly as it would for a user's own URL.
+    for (const preset of DEV_PRESETS) {
+      const state = explainDevConfig(devSearchFrom(preset.selection));
+      expect(state.developerMode, `${preset.id} must keep the gate`).toBe(true);
+      expect(state.unknownParams, `${preset.id} invented a parameter`).toEqual([]);
+    }
+  });
+});
+
 describe('developerExitSearch', () => {
   it('removes the master gate AND every other developer parameter', () => {
     // The whole point, and the reason this is not `canonicalDevSearch(.., {keepGate:false})`:

@@ -383,6 +383,169 @@ export function explainDevConfig(search: string): DevConfigState {
 export const DEPRECATED_DEV_PARAMS: readonly string[] = [];
 
 /**
+ * A chosen set of developer parameters, as the values a UI holds (issue #623).
+ *
+ * KEYED BY REGISTRY FIELD, not by query parameter, because that is what a control knows:
+ * `devControls()` hands a UI `{field, param, ...}`, and three fields spell their parameter
+ * differently (`sandboxTanks` -> `tanks`, and its two siblings). Translating once, here,
+ * means no caller has to remember which is which. `'playtest'` is accepted alongside the
+ * fields because the bundle is a control too, and `devControls()` emits it as one.
+ *
+ * `null` and `undefined` mean ABSENT -- the parameter is not emitted, so the flag takes
+ * whatever `DEV_FLAGS_OFF` says. `false` is DIFFERENT: it is emitted as `=0`, an explicit
+ * off.
+ *
+ * Those two have to be distinguishable, and `sandboxDisarmed` is why. It is the one boolean
+ * whose default is TRUE (`DEV_FLAGS_OFF`, and `parseDevFlags` reads
+ * `params.has('disarmed') ? isOn(...) : true`), so "absent" and "off" are opposite values
+ * for it. Folding `false` into absent would make an armed sandbox unexpressible -- which is
+ * exactly what one of the presets below is.
+ */
+export type DevSelection = Readonly<
+  Partial<Record<keyof DevFlags | 'playtest', string | number | boolean | null>>
+>;
+
+/**
+ * BUILD a developer query string from chosen values (issue #623).
+ *
+ * THE COMPLEMENT OF `canonicalDevSearch`, and the reason that function could not be used
+ * for this. It reads from a `URLSearchParams` built from ITS INPUT and emits only what that
+ * input already carried -- it rewrites, it cannot construct. Apply and Reload, Copy Link and
+ * Reset Options (issue #246) all need to turn a set of control values into a URL, and there
+ * was nothing to do it with.
+ *
+ * COMPOSED, not duplicated. `developerExitSearch(base)` already returns exactly the
+ * parameters that are NOT developer parameters, so it is what preserves the caller's
+ * unrelated query -- a deep link, a campaign tag, a router -- with its order and duplicates
+ * intact. This function adds the developer half in front of it.
+ *
+ * ORDER MATCHES `canonicalDevSearch` EXACTLY: the gate, then the bundle, then registry
+ * order, then everything else. That is not cosmetic -- it is what makes the output a fixed
+ * point of the canonicaliser, so a built URL and a canonicalised one are the same string and
+ * two callers cannot disagree about what the same selection means. A test pins it.
+ *
+ * THE GATE IS ALWAYS EMITTED. Every other developer parameter is inert without it
+ * (`parseDevFlags` returns `DEV_FLAGS_OFF` when the gate is shut), so a builder that could
+ * omit it would be able to produce a URL that silently does nothing. Reset Options is
+ * therefore `devSearchFrom({})`: the gate alone, which is exactly "developer mode, no
+ * options" -- and NOT `developerExitSearch`, whose whole job is to remove the gate too.
+ *
+ * @param selection the chosen values, keyed by registry field (or `'playtest'`).
+ * @param base a `location.search` whose non-developer parameters are carried through.
+ * @returns a search string with a leading `?`; never empty, since the gate is always set.
+ */
+export function devSearchFrom(selection: DevSelection, base = ''): string {
+  const out = new URLSearchParams();
+  out.append('dev', '1');
+
+  const emit = (param: string, value: string | number | boolean | null | undefined): void => {
+    if (value === undefined || value === null) return;
+    // `1`/`0`, the forms every boolean parser accepts and the forms `canonicalDevSearch`
+    // carries through, so a built URL reads like a typed one. `false` is emitted rather
+    // than skipped -- see the type's doc comment for the flag that makes that necessary.
+    if (typeof value === 'boolean') return void out.append(param, value ? '1' : '0');
+    out.append(param, String(value));
+  };
+
+  emit(PLAYTEST_BUNDLE.param, selection.playtest);
+  for (const field of Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[]) {
+    emit(FLAG_REGISTRY[field].param ?? field, selection[field]);
+  }
+
+  // The caller's own parameters, untouched. Sliced off the leading `?` that
+  // `developerExitSearch` adds, since this string already has one.
+  const unrelated = developerExitSearch(base).slice(1);
+  return `?${out.toString()}${unrelated === '' ? '' : `&${unrelated}`}`;
+}
+
+/**
+ * A named set of developer parameters (issue #623), for issue #246's preset buttons.
+ *
+ * URL-LEVEL, NOT PARSER-LEVEL, and deliberately not shaped like `PLAYTEST_BUNDLE`. That
+ * bundle is a real query parameter with its own branch in `parseDevFlags`; following it
+ * would mean five more parameters that must also enter `knownDevParams()`,
+ * `canonicalDevSearch`'s ordering, `developerExitSearch`'s drop set and the generated doc --
+ * for no gain, because a preset is only ever "these parameters". It also could not WORK:
+ * `BundleSpec.expandsTo` is `readonly BooleanFlagKey[]`, so a bundle can set booleans true
+ * and nothing else, while five of the six presets here are defined by valued flags.
+ *
+ * A preset is therefore a `DevSelection`, and previewing one is `devSearchFrom` followed by
+ * the same `explainDevConfig` every other URL goes through -- no second code path, and no
+ * state that exists only inside a preset, which is what #246 requires of them.
+ *
+ * `playtest` is expressed as a member here too, so the six read as one list rather than
+ * "five presets and the bundle".
+ */
+export interface DevPresetSpec {
+  /** Stable identifier, for a control's `data-preset` and for tests. */
+  readonly id: string;
+  /** What the button says. */
+  readonly label: string;
+  /** One line, suitable for display beside the button. */
+  readonly description: string;
+  readonly selection: DevSelection;
+}
+
+/**
+ * The six presets issue #246 names. Ordered as that issue lists them.
+ *
+ * Every value here is a real registry parameter value, and a test parses each preset through
+ * `explainDevConfig` to prove the flags it claims are the flags it produces -- so a preset
+ * that names a value the parser rejects fails rather than silently landing on a default.
+ */
+export const DEV_PRESETS: readonly DevPresetSpec[] = [
+  {
+    id: 'playtest',
+    label: 'Playtest',
+    description: 'The playtest bundle: survivable, with the ordnance readouts on.',
+    selection: { playtest: true },
+  },
+  {
+    id: 'armed-sandbox',
+    label: 'Armed Sandbox',
+    description: 'The sandbox rig with its enemies ARMED, which is not the sandbox default.',
+    // `sandboxDisarmed: false` is the whole point of the name: the sandbox disarms its
+    // enemies unless told otherwise, so this preset exists to say otherwise. Roster and wall
+    // count are left unset deliberately -- the rig's own defaults are a fine starting point,
+    // and a preset that pinned them would be making a level-design choice this issue has no
+    // standing to make.
+    selection: { level: 'sandbox', sandboxDisarmed: false },
+  },
+  {
+    id: 'vs-2p',
+    label: '2-player VS',
+    description: 'A two-player free-for-all.',
+    selection: { players: 2, mode: 'ffa' },
+  },
+  {
+    id: 'vs-4p',
+    label: '4-player VS',
+    description: 'A four-player free-for-all.',
+    selection: { players: 4, mode: 'ffa' },
+  },
+  {
+    id: 'all-bots',
+    label: 'All Bots',
+    description: 'Four slots, every one of them computer-controlled -- nobody drives.',
+    // `bots` counts how many of the PLAYER SLOTS are computer-controlled (its registry
+    // description), so "all bots" is bots === players rather than a flag of its own.
+    selection: { players: 4, bots: 4, mode: 'ffa' },
+  },
+  {
+    id: 'visual-debug',
+    label: 'Visual Debug',
+    description: 'The overlays that draw what the simulation is thinking.',
+    // THE ONE PRESET WITH NO FLAG-DEFINED MEMBERSHIP, and the only judgement call in this
+    // table. It cannot be derived from the Diagnostics group: that group also holds
+    // `autoplay` and `replay`, which change what RUNS rather than what is drawn, and `seed`,
+    // which is not an overlay at all. So this is the three Diagnostics flags that put
+    // something on screen. `mineReach` is the borderline case and is left to the playtest
+    // bundle, which already carries it. Changing this membership is a one-line edit.
+    selection: { aimRay: true, aiContact: true, shellCount: true },
+  },
+];
+
+/**
  * The query string to leave developer mode with (issue #243).
  *
  * The COMPLEMENT of `canonicalDevSearch` below, and deliberately not a mode of it. That
