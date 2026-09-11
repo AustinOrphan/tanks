@@ -2741,8 +2741,8 @@
   {
     "id": "back-writes-the-retained-config",
     "file": "src/game/hud.ts",
-    "find": "    setState(popped.origin);\n    restoreFocus(popped);",
-    "replace": "    setState(popped.origin);\n    restoreFocus(popped);\n    if (opts.versusSetup) opts.versusSetup.set({ ...versusConfigState });",
+    "find": "    setState(popped.origin);\n    applyModalIsolation();\n    restoreFocus(popped);",
+    "replace": "    setState(popped.origin);\n    applyModalIsolation();\n    restoreFocus(popped);\n    if (opts.versusSetup) opts.versusSetup.set({ ...versusConfigState });",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
@@ -2799,8 +2799,8 @@
   {
     "id": "hud-never-syncs-the-mirror",
     "file": "src/game/hud.ts",
-    "find": "    LAYERS[id].open(initial);\n    mirror.sync(layers.depth);\n    return true;",
-    "replace": "    LAYERS[id].open(initial);\n    return true;",
+    "find": "    LAYERS[id].open(initial);\n    applyModalIsolation();\n    mirror.sync(layers.depth);\n    return true;",
+    "replace": "    LAYERS[id].open(initial);\n    applyModalIsolation();\n    return true;",
     "tests": [
       "src/game/hud.navigation.test.ts"
     ],
@@ -3831,8 +3831,8 @@
   {
     "id": "confirm-not-announced-as-modal",
     "file": "src/game/hud.ts",
-    "find": "role=\"alertdialog\" aria-modal=\"true\"",
-    "replace": "role=\"alertdialog\"",
+    "find": "<div class=\"hud-confirm hud-confirm--hidden\" tabindex=\"-1\" role=\"alertdialog\" aria-modal=\"true\"",
+    "replace": "<div class=\"hud-confirm hud-confirm--hidden\" tabindex=\"-1\" role=\"alertdialog\"",
     "why": "The replace-run confirmation keeps the menu on screen behind a scrim, which is what a modal is; without `aria-modal` a screen reader is free to wander into that menu while an unanswered destructive question is open. Focus containment already holds (the roving walk stays inside the confirmation), so this attribute is the part that tells assistive technology the same thing. Raised in review of PR #523.",
     "tests": [
       "src/game/hud.navigation.test.ts"
@@ -5719,5 +5719,50 @@
       "typedOutcomeForArm: the capture arm as the model speaks it (issue #591) resolves the two practice SCREENS back to the one outcome kind they share"
     ],
     "why": "Makes `outcome=practice-failed` photograph the practice-CLEARED screen. `practice-result` is one outcome kind carrying a `cleared` boolean and TWO panel entries, which is the whole reason the flag's arms name screens rather than kinds -- and it is why this mutation is invisible to anything checking that the flag 'produced an outcome'. The capture would succeed, the file would be written under the failed name, and the pair would silently be one screen twice."
+  },
+  {
+    "id": "modal-overlay-isolates-nothing",
+    "file": "src/game/hud.ts",
+    "find": "      const isolate = overlay !== null && !child.contains(overlay) && child !== toastsEl;",
+    "replace": "      const isolate = false;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "modal isolation: a blocking overlay is really modal (issue #327) isolates everything outside the dialog, including the DEV badge",
+      "modal isolation: a blocking overlay is really modal (issue #327) releases the isolation when the dialog is dismissed",
+      "modal isolation: a blocking overlay is really modal (issue #327) releases it when a surface change empties the stack, not only on Back"
+    ],
+    "why": "Restores the shipped state this issue fixes, and it is a FALSE CLAIM rather than a missing feature: the confirmation carries `role=alertdialog aria-modal=true`, which tells assistive technology that everything outside it is unavailable, and measured before this landed `src/` contained no Tab handler, no focus containment and no `inert` at all. Focus left the dialog into the panes behind it, the on-screen driving controls and the DEV badge -- every one a sibling of every pane on the HUD root. The dialog still opens, still closes and still answers its buttons under this mutation, so only an assertion about what is reachable OUTSIDE it can see the difference."
+  },
+  {
+    "id": "modal-isolation-traps-routes-too",
+    "file": "src/game/hud.ts",
+    "find": "    if (top === null || top.kind !== 'overlay') return null;",
+    "replace": "    if (top === null) return null;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "modal isolation: a blocking overlay is really modal (issue #327) does NOT trap a route, because a full-screen destination is not a dialog",
+      "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)"
+    ],
+    "why": "Traps every layer rather than the blocking kind, so opening Settings or Records isolates the rest of the HUD. That strands a player in a full-screen destination whose only exit is a Back button the trap keeps them from reaching -- strictly worse than the defect this feature fixes. `navigation.ts` already draws the line (an overlay is the blocking kind, and a route may not be pushed over one), which is why this reads the stack's own answer instead of inventing a second notion of \"is a dialog\". Notably it also breaks an EXISTING issue-#494 test about Escape with the volume slider focused, which is independent confirmation that routes must stay reachable."
+  },
+  {
+    "id": "modal-isolation-silences-the-live-region",
+    "file": "src/game/hud.ts",
+    "find": " && child !== toastsEl;",
+    "replace": ";",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "modal isolation: a blocking overlay is really modal (issue #327) leaves the live region announceable, which is why it is exempt"
+    ],
+    "why": "Isolates the toast region along with everything else. `inert` removes a subtree from the ACCESSIBILITY TREE as well as the tab order, so this silences the page's one `aria-live` region for as long as a dialog is open -- and a confirmation is exactly when a player is most likely to be told something. The region holds nothing focusable, so exempting it costs no containment at all, which is the trade this line records. Invisible to every containment assertion, because containment is unaffected."
   }
 ]

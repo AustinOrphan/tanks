@@ -3473,6 +3473,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     moveFocus(container, action);
   };
   window.addEventListener('keydown', onNavKeyDown, true);
+  document.addEventListener('focusin', onModalFocusIn, true);
 
   // Each toast owns its own timer, so several landing at once stack and expire
   // independently. Timers are tracked to be cleared in dispose(): a pending
@@ -3631,6 +3632,68 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   const OVERLAY_LAYERS: ReadonlySet<HudLayerId> = new Set<HudLayerId>(['confirm-new-campaign']);
   const layers = createLayerStack<HudLayerId, HudSurface, HudRestore>();
+
+  /**
+   * MODAL ISOLATION for a blocking overlay (issue #327, which this file's confirm markup
+   * already names as the owner of dialogs).
+   *
+   * THE DEFECT THIS FIXES was an affirmative false claim, not a missing feature. The
+   * confirmation carries `role="alertdialog" aria-modal="true"`, which tells assistive
+   * technology that everything outside it is unavailable -- and nothing made that true.
+   * MEASURED before this: no `Tab` handler, no focus containment and no `inert` existed
+   * anywhere in `src/`, so Tab walked straight out of the dialog into the panes behind it,
+   * the on-screen driving controls and (with `?dev=1`) the DEV badge, all of which are
+   * siblings of every pane on the HUD root. A dialog that announces itself as modal and
+   * then lets focus leave is worse than one that never claimed it.
+   *
+   * ONLY an `overlay` layer, never a route. `navigation.ts` already draws that line -- an
+   * overlay is the blocking kind, and a route may not be pushed over one -- so this reads
+   * the stack's own answer rather than inventing a second notion of "is a dialog". The
+   * eight content panes are full-screen destinations, not modals, and trapping focus in
+   * them would strand a player whose only way out is a Back button they cannot reach.
+   *
+   * `inert` rather than a `Tab` key handler: it is the platform primitive that removes a
+   * subtree from the tab order AND from the accessibility tree, which is exactly the pair
+   * of promises `aria-modal` makes. A key handler could only manage the first, and only
+   * for keys this HUD sees.
+   *
+   * THE TOAST REGION IS EXEMPT, deliberately. It is the page's one `aria-live` region and
+   * holds nothing focusable, so isolating it would buy no containment and would silence
+   * announcements for as long as the dialog is open.
+   */
+  function blockingOverlayContainer(): HTMLElement | null {
+    const top = layers.top();
+    if (top === null || top.kind !== 'overlay') return null;
+    return LAYERS[top.id].container;
+  }
+
+  function applyModalIsolation(): void {
+    const overlay = blockingOverlayContainer();
+    for (const child of Array.from(el.children)) {
+      if (!(child instanceof HTMLElement)) continue;
+      // `contains` rather than identity: an overlay nested deeper than the root's own
+      // children would otherwise have its ANCESTOR isolated, which hides the dialog too.
+      const isolate = overlay !== null && !child.contains(overlay) && child !== toastsEl;
+      if (isolate) child.setAttribute('inert', '');
+      else child.removeAttribute('inert');
+    }
+  }
+
+  /**
+   * The containment half, for the focus that is already outside when a dialog opens and
+   * for anything that moves focus programmatically past `inert`.
+   *
+   * On `document`, not on `el`: `focusin` bubbles only through the tree it happened in, so
+   * a listener on the HUD root cannot see focus landing outside the HUD. Same registration
+   * and teardown shape as `onNavKeyDown`'s window listener above.
+   */
+  function onModalFocusIn(event: FocusEvent): void {
+    const overlay = blockingOverlayContainer();
+    if (overlay === null) return;
+    const target = event.target;
+    if (target instanceof Node && overlay.contains(target)) return;
+    overlay.focus();
+  }
   /**
    * The browser's Back, kept in step with the stack (issue #318). With no `opts.history`
    * this is inert and the stack is the whole of navigation; with one, a layer open means
@@ -3715,6 +3778,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return true;
     }
     LAYERS[id].open(initial);
+    applyModalIsolation();
     mirror.sync(layers.depth);
     return true;
   }
@@ -3730,6 +3794,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (popped === null) return false;
     LAYERS[popped.id].close();
     setState(popped.origin);
+    applyModalIsolation();
     restoreFocus(popped);
     mirror.sync(layers.depth);
     return true;
@@ -3754,6 +3819,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /** Every surface change empties the stack -- see the composition comment above. */
   function resetLayers(): void {
     layers.reset();
+    // Before `mirror.sync`, and unconditionally: a surface change empties the stack, so any
+    // isolation an overlay was holding has to come off with it. Without this a dialog left
+    // by a state change (rather than by Back) would leave the whole HUD inert.
+    applyModalIsolation();
     mirror.sync(0);
   }
 
@@ -6237,6 +6306,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();
       window.removeEventListener('keydown', onNavKeyDown, true);
+      document.removeEventListener('focusin', onModalFocusIn, true);
       mirror.dispose(); // the popstate listener, on the same page-teardown path
       splashEl.removeEventListener('pointerdown', onSplashPointerDown);
       panel.removeEventListener('click', onPanelClickCapture, true);
