@@ -463,7 +463,7 @@ describe('hud.css is syntactically whole', () => {
       // the generator can emit (heading, paragraph, note, code, list item, table cell).
       // `.hud-legal-body--hidden` earns its place the way `.hud-splash--hidden` does: with
       // no rule behind it every document is open from the moment the pane is built.
-      '.hud-about-subtitle', '.hud-about-links', '.hud-legal',
+      '.hud-about-subtitle', '.hud-about-subline', '.hud-about-links', '.hud-legal',
       '.hud-legal-link', '.hud-legal-link-hint',
       '.hud-legal-doc', '.hud-legal-toggle', '.hud-legal-toggle-state',
       '.hud-legal-body', '.hud-legal-body--hidden',
@@ -848,6 +848,37 @@ describe('hud.css is syntactically whole', () => {
     // number -- which is the prompt to re-measure rather than to adjust the literal.
     expect(buttons.length).toBe(130);
     expect(unstyled).toEqual([]);
+
+    dispose();
+  });
+
+  it('gives the legal surface one left edge that does not move with a font size', () => {
+    // A MEASURED regression, not a hypothetical. The shared measure was `72ch`, and `ch`
+    // resolves against the element's OWN font: with the "Documents" heading at 18px and the
+    // disclosure rows at the pane's 16px, one 72ch box came out 648px and the other 691px, so
+    // the heading sat 22px right of the rows it introduces. Captured at 1280x800.
+    //
+    // Equality alone would NOT have caught it -- all four elements carried the identical
+    // declaration, and jsdom reports the declared string. The unit is the assertion.
+    const { root, dispose } = mountEveryButton();
+    const selectors = ['.hud-about-subtitle', '.hud-about-subline', '.hud-about-links', '.hud-legal'];
+    const widths = selectors.map((sel) => {
+      const el = root.querySelector(sel);
+      expect(el, `${sel} is not in the fixture`).not.toBeNull();
+      return getComputedStyle(el!).maxWidth;
+    });
+    for (const [i, width] of widths.entries()) {
+      expect(width, `${selectors[i]} takes a different measure from its siblings`).toBe(widths[0]);
+      // `ch`, `em` and `ex` resolve against the ELEMENT's font; `rem` resolves against the
+      // root's, which is the whole point of choosing it, so the pattern requires a digit
+      // before the unit and `43rem` is deliberately not a match.
+      expect(width, `${selectors[i]} measures in an element-font-relative unit`).not.toMatch(
+        /[0-9.](ch|em|ex)$/,
+      );
+    }
+    // Non-vacuity: an empty string would satisfy both assertions above for every selector.
+    expect(widths[0]).not.toBe('');
+    expect(widths[0]).not.toBe('none');
 
     dispose();
   });

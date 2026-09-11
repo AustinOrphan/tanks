@@ -1935,7 +1935,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <p class="hud-about-line">It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local storage and are never sent anywhere.</p>
       <div class="hud-about-links"></div>
       <h2 class="hud-about-subtitle">Documents</h2>
-      <p class="hud-about-line">Each one is the full text committed to this repository. Open a document to read it here.</p>
+      <p class="hud-about-subline">Each one is the full text committed to this repository. Open a document to read it here.</p>
       <div class="hud-legal"></div>
       <button class="ui-btn ui-btn--slab hud-about-back" type="button">Back</button>
     </div>
