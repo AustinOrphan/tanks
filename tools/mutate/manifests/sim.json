@@ -1620,5 +1620,33 @@
       "the arm's mine directions, as capacities (issue #358's second axis) stamps mine capacities at spawn, alongside the shell caps and only with the arm on"
     ],
     "why": "Applies HALF the approved matrix: shell caps stamped, mine directions silently skipped, so `?dev=1&pp1Roles=1` claims the PP1 role arm while Brown/Teal/Green still carry the two mines the matrix removes. A half-applied arm is worse than none, because a playtest under it produces evidence attributed to a roster nobody approved. The two tables are consulted in one pass but independently -- their memberships differ, since grey takes the shell arm only -- and that independence is exactly what makes dropping one of them invisible to the other axis's tests. Replaced with a `void` read rather than a deletion so the import stays used and the mutation is the missing STAMP, not a compile error."
+  },
+  {
+    "id": "world-init-lets-derived-rules-carry-the-old-geometry",
+    "file": "src/sim/arena.ts",
+    "find": "  const worldRules: WorldRulesInit = { ...rules };\n  delete worldRules.arenaGeometry;",
+    "replace": "  const worldRules: WorldRulesInit = { ...rules };",
+    "expect": "killed",
+    "tests": [
+      "src/sim/arena.test.ts"
+    ],
+    "killedBy": [
+      "createWorldFor's init object (issue #493) builds the arena it was given, not the one a caller derived its rules from"
+    ],
+    "why": "The hazard the init object introduces, and the reason the two lines exist. `arenaGeometry` is a `WorldRulesInit` key AND the one rule `loadArena` derives, so with `...worldRules` spread over `loadArena`'s result a caller passing `rules: { ...world.rules }` stamps the OLD board's geometry onto the NEW board -- and that spread is the shape rules.ts documents for deriving a variant (`resolveWorldRules({ ...world.rules, mode: 'ffa' })`), so it is actively invited. INVISIBLE to everything else: every tank, wall and spawn is the new arena's, `World.rules` is otherwise correct, and `arenaGeometry` is read by presentation rather than by `step`, so no simulation assertion moves and the golden trace does not budge. What breaks is a camera framing the wrong board. The old positional signature could not express this at all -- it named the seven rule keys one by one -- so the entry pins a risk this refactor created rather than one it inherited."
+  },
+  {
+    "id": "world-init-ignores-the-player-count-it-was-given",
+    "file": "src/sim/arena.ts",
+    "find": "  const { lives = LIVES, playerCount = 1, stock, teams, pp1Roles, rules = {} } = init;",
+    "replace": "  const { lives = LIVES, stock, teams, pp1Roles, rules = {} } = init;\n  const playerCount = 1;",
+    "expect": "killed",
+    "tests": [
+      "src/sim/arena.test.ts"
+    ],
+    "killedBy": [
+      "createWorldFor's init object (issue #493) takes every knob by name, so a new rule cannot grow its signature"
+    ],
+    "why": "A key silently dropped from the destructure, which is the failure mode a positional list could not have: a missing positional is an arity error, a missing destructured key is a default. Every versus board would then load for one player -- no co-players placed, no stock, no teams -- while the world still builds, still steps, and still reports the mode it was asked for. Scoped here rather than to the versus suites because the point is the DESTRUCTURE, not the behaviour any one caller depends on; the killing case drives every knob in one call with each value off its default, so whichever key is dropped fails it."
   }
 ]
