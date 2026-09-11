@@ -2640,32 +2640,45 @@
 
 /* A grid rather than the flex row its siblings use, so the cards line up in columns
    whatever their names measure -- `auto-fill` with a minimum is what makes the same rule
-   serve a phone (one column), a desktop (three or four) and a TV, with no breakpoint to
-   keep in step with the pane's other rows. */
+   serve a phone (one column), a desktop (two or three) and a TV, with no breakpoint to keep
+   in step with the pane's other rows.
+
+   `max-width` rather than shrink-to-fit, and it is load-bearing rather than cosmetic: this
+   pane centres its children, so without a definite width the grid sizes to content and
+   `auto-fill` resolves against whatever that happened to be. The measure also bounds how far
+   Start can be pushed down the pane -- see the card rule below. */
 .hud-versus-map-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   justify-content: center;
   gap: var(--hud-space-2);
+  width: 100%;
+  max-width: 46rem;
 }
 
 /* The card itself is still a `.ui-btn`, so it is themed, selectable and focusable exactly
-   as the pills it replaces were. Only its box is new: a column, left-aligned, with the
-   schematic on top. */
+   as the pills it replaces were. Only its box is new.
+
+   SCHEMATIC BESIDE THE TEXT, NOT ABOVE IT, and that was measured rather than preferred. The
+   first draft stacked them -- a full-width preview over three lines -- and at 1280x800 it
+   put Start at y = 1594, so a player reached it only after scrolling past every card. Laid
+   out in two columns the same seven cards leave Start reachable in roughly a screen. */
 .hud-versus-map-card {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--hud-space-2);
+  align-items: start;
   padding: var(--hud-space-2);
   text-align: left;
 }
 
-/* `aspect-ratio` rather than a fixed height: the canvas's own attributes are 132x108, and
-   letting CSS pick a different shape would stretch the board the drawing took care to keep
-   square. `width: 100%` lets a card grow with its column and the ratio follows. */
+/* Spans all three text rows, so the preview keeps its height however long an intent
+   phrase wraps. `aspect-ratio` rather than a fixed height: the canvas's own attributes are
+   132x108, and letting CSS pick a different shape would stretch the board the drawing took
+   care to keep square. */
 .hud-versus-map-canvas {
-  width: 100%;
+  grid-row: 1 / span 3;
+  width: 74px;
   aspect-ratio: 132 / 108;
   border-radius: var(--hud-radius-sm);
   background: var(--hud-scrim-pane);
