@@ -2932,3 +2932,101 @@ describe('developer mode: entry, indicator and exit (issue #243)', () => {
     expect(document.activeElement).toBe(badge(root));
   });
 });
+
+describe('modal isolation: a blocking overlay is really modal (issue #327)', () => {
+  /**
+   * THE DEFECT. The confirmation carries `role="alertdialog" aria-modal="true"`, which tells
+   * assistive technology that everything outside it is unavailable. Nothing made that true:
+   * MEASURED before this landed, `src/` contained no Tab handler, no focus containment and
+   * no `inert` at all, so focus left the dialog into the panes behind it, the on-screen
+   * driving controls, and -- with the gate on -- the DEV badge, every one of which is a
+   * sibling of every pane on the HUD root.
+   */
+  function mountDev(opts: Parameters<typeof createHud>[1] = {}): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, opts);
+    return { hud, root };
+  }
+
+  const click = (b: HTMLButtonElement): void => {
+    b.dispatchEvent(new MouseEvent('click'));
+  };
+
+  const openConfirm = (h: Hud, root: HTMLElement): HTMLElement => {
+    h.setState('main-menu');
+    h.setContinueAvailable(true); // the confirmation appears only when there is a run to replace
+    click(root.querySelector('.hud-new-game') as HTMLButtonElement);
+    const dialog = root.querySelector('.hud-confirm') as HTMLElement;
+    expect(dialog.classList.contains('hud-confirm--hidden'), 'it did not open').toBe(false);
+    return dialog;
+  };
+
+  /** Every focusable control that is NOT inside the given container, by inert-ancestor. */
+  const reachableOutside = (root: HTMLElement, container: HTMLElement): string[] =>
+    Array.from(root.querySelectorAll<HTMLElement>('button, [tabindex], input, select, textarea'))
+      .filter((c) => !container.contains(c))
+      .filter((c) => c.closest('[inert]') === null)
+      .map((c) => Array.from(c.classList).find((x) => x.startsWith('hud-')) ?? c.tagName);
+
+  it('isolates everything outside the dialog, including the DEV badge', () => {
+    const { hud: h, root } = mountDev({ developerMode: true });
+    const dialog = openConfirm(h, root);
+    // The badge is called out because it is the newest sibling of every pane (issue #243)
+    // and would otherwise be the easiest place for focus to escape to.
+    expect(reachableOutside(root, dialog), 'focus can still leave the dialog').toEqual([]);
+    expect((root.querySelector('.hud-devbadge') as HTMLElement).closest('[inert]')).not.toBeNull();
+  });
+
+  it('leaves the live region announceable, which is why it is exempt', () => {
+    // `inert` removes a subtree from the accessibility tree, so isolating the one
+    // `aria-live` region would silence every announcement for as long as the dialog is up.
+    // It holds nothing focusable, so exempting it costs no containment.
+    const { hud: h, root } = mountDev();
+    openConfirm(h, root);
+    const toasts = root.querySelector('.hud-toasts') as HTMLElement;
+    expect(toasts.hasAttribute('inert'), 'the live region must keep announcing').toBe(false);
+    expect(toasts.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('pulls focus back when something lands outside the open dialog', () => {
+    // The containment half: `inert` governs Tab and the accessibility tree, and this covers
+    // focus that is already outside when the dialog opens, or moved programmatically.
+    const { hud: h, root } = mountDev({ developerMode: true });
+    const dialog = openConfirm(h, root);
+    const outside = root.querySelector('.hud-devbadge') as HTMLButtonElement;
+    outside.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(document.activeElement, 'focus was allowed to rest outside the dialog').toBe(dialog);
+  });
+
+  it('does NOT trap a route, because a full-screen destination is not a dialog', () => {
+    // The line `navigation.ts` already draws: an overlay is the blocking kind. The eight
+    // content panes are destinations, and trapping one would strand a player whose only way
+    // out is a Back button the trap would keep them from reaching.
+    const { hud: h, root } = mountDev({ developerMode: true });
+    h.setState('main-menu');
+    click(root.querySelector('.hud-settings-open') as HTMLButtonElement);
+    const pane = root.querySelector('.hud-settings') as HTMLElement;
+    expect(pane.classList.contains('hud-settings--hidden')).toBe(false);
+    expect(root.querySelector('[inert]'), 'a route must not isolate anything').toBeNull();
+  });
+
+  it('releases the isolation when the dialog is dismissed', () => {
+    const { hud: h, root } = mountDev({ developerMode: true });
+    openConfirm(h, root);
+    expect(root.querySelector('[inert]')).not.toBeNull();
+    click(root.querySelector('.hud-confirm-cancel') as HTMLButtonElement);
+    expect(root.querySelector('[inert]'), 'the HUD stayed inert').toBeNull();
+  });
+
+  it('releases it when a surface change empties the stack, not only on Back', () => {
+    // `resetLayers` drops every layer without popping it, so a dialog left by a state change
+    // -- a session starting under it -- would otherwise leave the whole HUD permanently
+    // inert, with no dialog on screen to explain why nothing responds.
+    const { hud: h, root } = mountDev({ developerMode: true });
+    openConfirm(h, root);
+    expect(root.querySelector('[inert]')).not.toBeNull();
+    h.setState('playing');
+    expect(root.querySelector('[inert]'), 'a surface change must release the isolation').toBeNull();
+  });
+});
