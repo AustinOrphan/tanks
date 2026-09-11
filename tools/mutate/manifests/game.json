@@ -5911,5 +5911,163 @@
       "src/game/loop.test.ts"
     ],
     "why": "Severs the dev flag from the renderer, so `?dev=1&identityMarker=shape` parses, validates, reports as ACCEPTED in the developer pane, and changes nothing on screen. That is the worst shape of failure for a feature whose entire purpose is to be turned on and compared -- the owner would conclude the candidate looks identical to the default rather than that it never ran. Invisible to every test of the marker geometry itself, which never goes through loop.ts. Killed by the threads-the-identityMarker-dev-flag case, which asserts BOTH arms: a wiring that hardcoded one style would pass a single-arm test."
+  },
+  {
+    "id": "legal-collapsed-document-modifier-does-nothing",
+    "file": "src/game/hud.css",
+    "find": ".hud-legal-body--hidden {\n  display: none;\n}",
+    "replace": ".hud-legal-body--hidden {\n}",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "killedBy": [
+      "hud.css is syntactically whole hides a collapsed legal document with display, not with a class that does nothing"
+    ],
+    "why": "The modifier reduced to a class that styles nothing -- the same shape as `app-ground-hidden-modifier-does-nothing` and `.hud-splash--hidden`, one pane further in. EVERY OTHER ASSERTION ABOUT A COLLAPSED DOCUMENT READS THE CLASS, not the resolved display: legal.test.ts checks `classList.contains`, hud.surfaces.test.ts filters on the same class, and hud.css.test.ts's presence sweep uses `toContain('.hud-legal-body--hidden')`, which an empty rule satisfies. So without this entry's case the About pane would open with all five documents expanded -- roughly 25 KB of licence text between the intro prose and the Back button -- and nothing in the suite would be red. Killed only by the case that measures the SAME element with the modifier removed as its own control, so a stylesheet that hid documents unconditionally fails there too."
+  },
+  {
+    "id": "legal-about-pane-recentres-its-scroll-axis",
+    "file": "src/game/hud.css",
+    "find": "  justify-content: flex-start;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;",
+    "replace": "  justify-content: center;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "killedBy": [
+      "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+    ],
+    "why": "Restores what the About pane actually shipped before issue #117. `justify-content: center` on an `overflow-y: auto` flex column puts the overflow ABOVE the scrollable area, where no scrollbar reaches it, so an open licence loses its first screenful with no way to scroll back up to it. Invisible to everything else: the pane still opens, every document still expands, every control is still reachable by the roving walk, and jsdom lays nothing out -- the defect is a real browser's scroll geometry. The case that kills this sweeps every `overflow-y: auto` element the fixture builds and PINS the three siblings that still carry the same shape (Versus Setup, Settings, Developer Tools), so it fails both when the About pane regresses and when a fourth pane joins them."
+  },
+  {
+    "id": "legal-disclosure-never-reports-that-it-opened",
+    "file": "src/game/legal.ts",
+    "find": "  disclosure.toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');",
+    "replace": "  disclosure.toggle.setAttribute('aria-expanded', 'false');",
+    "expect": "killed",
+    "tests": [
+      "src/game/legal.test.ts",
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "the legal document disclosures moves the attribute, the word and the class together when a document opens",
+      "the About & Legal pane in the assembled HUD (issue #117) opens a document when its toggle is clicked, and closes it on a second click"
+    ],
+    "why": "One of three carriers of one fact goes stale: the document is revealed and the state word says Hide, but the button keeps telling a screen reader the region is collapsed. Visually perfect and silently wrong, which is why the case that kills it asserts all three carriers in BOTH directions rather than asserting the body is visible. Note the second-order effect this entry also pins: `isLegalExpanded` reads the attribute, so the HUD's click handler -- which toggles on `!isLegalExpanded(...)` -- can never close a document again either, and the composition case is what catches that half."
+  },
+  {
+    "id": "legal-state-word-joins-the-accessible-name",
+    "file": "src/game/legal.ts",
+    "find": "  state.setAttribute('aria-hidden', 'true');",
+    "replace": "  state.setAttribute('aria-hidden', 'false');",
+    "expect": "killed",
+    "tests": [
+      "src/game/legal.test.ts"
+    ],
+    "killedBy": [
+      "the legal document disclosures names each toggle by its document alone, with the state word out of the name"
+    ],
+    "why": "Renames every disclosure from \"Privacy\" to \"Privacy Show\", and makes a screen reader announce the collapsed/expanded state twice -- once from the name, once from `aria-expanded`. The same two-announcements-of-one-fact collision issue #629 called out between the achievement rows' visible marker and their `ui-sr-only` span, arrived at from the other direction. Nothing else can see it: hud.a11y.test.ts's sweep asks whether a control has a NON-EMPTY name and whether that name is a bare digit, and \"Privacy Show\" passes both."
+  },
+  {
+    "id": "legal-link-drops-the-roving-tabindex",
+    "file": "src/game/legal.ts",
+    "find": "\n    a.tabIndex = 0;",
+    "replace": "",
+    "expect": "killed",
+    "tests": [
+      "src/game/legal.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "the outbound legal links is a link, opens safely, and says so in its name",
+      "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone"
+    ],
+    "why": "Takes both outbound destinations away from the gamepad and the D-pad while leaving them perfectly clickable by mouse and reachable by Tab -- so the defect is invisible to a person testing with a keyboard and a pointer, and it is exactly half of issue #117's \"touch/controller accessible\" criterion. The mechanism is one line in hud.ts: `focusableControls` selects `'button, [tabindex]'`, and a bare `<a href>` matches neither, native focusability notwithstanding. MEASURED: with this line removed the roving walk's control count drops from 85 to 83, which is the second case's failure."
+  },
+  {
+    "id": "legal-link-hands-the-new-tab-a-live-opener",
+    "file": "src/game/legal.ts",
+    "find": "    a.rel = 'noopener noreferrer';",
+    "replace": "    a.rel = '';",
+    "expect": "killed",
+    "tests": [
+      "src/game/legal.test.ts"
+    ],
+    "killedBy": [
+      "the outbound legal links is a link, opens safely, and says so in its name"
+    ],
+    "why": "`target=\"_blank\"` without `rel=\"noopener\"` gives the opened page a live `window.opener` back into the game, and without `noreferrer` it sends the game's URL along. The only two outbound links in the application are these, so this is the whole of the app's external-link posture. Nothing observable changes: the link still opens the right page in a new tab, so no behavioural assertion anywhere else can distinguish it."
+  },
+  {
+    "id": "legal-document-text-becomes-markup",
+    "file": "src/game/legal.ts",
+    "find": "  el.textContent = content;",
+    "replace": "  el.innerHTML = content;",
+    "expect": "killed",
+    "tests": [
+      "src/game/legal.test.ts"
+    ],
+    "killedBy": [
+      "the legal block renderer puts document text in as text, so a document cannot inject markup"
+    ],
+    "why": "Turns the one promise legal.ts's header makes into its opposite: every heading, paragraph, note, list item and table cell in five legal documents would be parsed as HTML. Today no committed document contains markup -- the generator's `assertSupported` rejects inline HTML and `inlineText` flattens the rest -- so EVERY assertion driven from `LEGAL_DOCUMENTS` passes on this mutation, byte for byte, and the pane looks identical. The case that kills it uses a hostile fixture (`<img src=x onerror=...>`) precisely because the shipped data cannot expose the difference, and it checks the child count as well as the text, since `innerHTML` of a string with no valid tags still round-trips through `textContent`."
+  },
+  {
+    "id": "legal-table-column-header-heads-its-row-instead",
+    "file": "src/game/legal.ts",
+    "find": "        th.setAttribute('scope', 'col');",
+    "replace": "        th.setAttribute('scope', 'row');",
+    "expect": "killed",
+    "tests": [
+      "src/game/legal.test.ts"
+    ],
+    "killedBy": [
+      "the legal block renderer heads a table by column with scope, and names it"
+    ],
+    "why": "The wrong half of issue #629's finding, applied to the five generated tables: `scope=\"row\"` on a header in `<thead>` tells a screen reader that \"Key\" heads the cells beside it rather than the column beneath it, so every storage key in the privacy policy's table is announced under the heading of the row above it. Still a `<th>`, still inside `<thead>`, still captioned -- so a structural check for headers, or for a named table, passes. Only the `scope` value distinguishes it, which is why that assertion is per-cell rather than a count."
+  },
+  {
+    "id": "about-pane-never-builds-its-documents",
+    "file": "src/game/hud.ts",
+    "find": "  const legalDisclosures = renderLegalDocuments(legalListEl);",
+    "replace": "  const legalDisclosures = renderLegalDocuments(document.createElement('div'));",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "the About & Legal pane in the assembled HUD (issue #117) builds the documents and the outbound links into the pane"
+    ],
+    "why": "The composition failure a unit test on `renderLegalDocuments` structurally cannot see. The documents are still built, the disclosures still exist, every click handler is still wired, and legal.test.ts stays entirely green -- into a detached div. On screen the pane shows its intro prose, the heading \"Documents\", the sentence promising them, and nothing else. `.hud-legal` is an EMPTY container in the markup on purpose, so there is no missing-element type error either. This is the entry that makes the case asserting the documents are inside `.hud-about` -- rather than merely inside the HUD -- load-bearing."
+  },
+  {
+    "id": "about-pane-keeps-a-document-open-across-a-visit",
+    "file": "src/game/hud.ts",
+    "find": "\n      collapseLegalDocuments(legalDisclosures);",
+    "replace": "",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.surfaces.test.ts"
+    ],
+    "killedBy": [
+      "the About & Legal pane in the assembled HUD (issue #117) collapses every document when the pane closes, so a second visit opens on the index"
+    ],
+    "why": "Leaves whatever was open still open, so re-entering About & Legal drops the player into the middle of the PolyForm licence rather than onto the index -- and since the pane scrolls from the top, the five toggles are then separated by a document the player did not ask for again. Deliberately hung off `showAbout(false)` rather than off the Back handler, so it covers every route out of the pane; the case that kills this leaves by Back and then re-opens, which is what distinguishes the two placements."
+  },
+  {
+    "id": "legal-content-hand-edited-away-from-its-source",
+    "file": "src/game/legal-content.ts",
+    "find": "    title: 'Privacy Policy',",
+    "replace": "    title: 'Privacy Notice',",
+    "expect": "killed",
+    "tests": [
+      "tools/legal/generate.test.ts"
+    ],
+    "killedBy": [
+      "src/game/legal-content.ts is generated, not hand-edited matches what renderLegalModule() produces right now -- run `npm run legal` to fix"
+    ],
+    "why": "A hand edit to the generated module -- one word of one document's title, the smallest plausible one. This is the exact defect class issue #117's \"no legal content is duplicated into a hand-maintained list that can drift from repository sources\" criterion names, and the reason the content is generated at all rather than written into hud.ts's markup. It has to be caught by byte-comparison against a fresh `renderLegalModule()`, because a rendered title is just a string: the pane displays it, the disclosure still opens, and every structural assertion in legal.test.ts passes. Same regenerate-and-diff idiom as `notices-hand-edited` and the devflags/tanks doc entries."
   }
 ]
