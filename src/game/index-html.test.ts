@@ -18,7 +18,12 @@ describe('index.html carries the rules touch input depends on', () => {
     expect(html.length).toBeGreaterThan(400);
     // NOT '<canvas': the canvas is created in JS, not markup -- this check caught that
     // on its first run, which is the point of having it.
-    expect(html).toContain('<div id="app">');
+    // `<main id="app">` since issue #629. The tag carries the document's only landmark --
+    // referenced everywhere by ID and never by tag, so the element name was free to mean
+    // something. Pinned as `<main` rather than the whole string so an added attribute
+    // does not fail this, but a silent return to a plain `<div>` does.
+    expect(html).toContain('<main id="app">');
+    expect(html, 'the landmark is closed, not left as a div').toContain('</main>');
     expect(html).toContain('canvas {'); // ...the style rule for it, which IS here
   });
 

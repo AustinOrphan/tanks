@@ -124,7 +124,12 @@
     </style>
   </head>
   <body>
-    <div id="app">
+    <!-- A <main> rather than a <div> (issue #629): this is the document's one landmark,
+         and without it a screen-reader user has no structural entry point at all and must
+         traverse the whole HUD linearly from the top. Referenced everywhere by ID
+         (`main.ts`, `boot.ts`, `tools/visual/verify.mjs`), never by tag, so the element
+         name is free to carry meaning. -->
+    <main id="app">
       <!-- Removed by boot.ts once the route UI exists (issue #325). Present in the
            markup rather than written by script, because the gap it covers is the one
            before any script has run. -->
@@ -154,7 +159,7 @@
           page, or open the game in another browser.
         </div>
       </noscript>
-    </div>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
