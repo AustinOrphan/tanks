@@ -5814,5 +5814,78 @@
       "src/game/hud.navigation.test.ts"
     ],
     "why": "Leaves the dropped-map notice up after the player picks a new map, so a sentence explaining that a PREVIOUS choice was unavailable sits under the choice now selected and reads as a warning about it. Nothing about the clamp itself changes, so every assertion on replacement and on the launch gate still passes; caught only by the dedicated clears-the-notice case. Filed as its own entry rather than folded into the clamp entries because the defect is the note's LIFETIME, which no assertion about the moment of the drop can reach."
+  },
+  {
+    "id": "a11y-swatch-named-by-tooltip-only",
+    "file": "src/game/hud.ts",
+    "find": "    b.setAttribute('aria-label', `Hull: ${swatch.label}`);",
+    "replace": "    b.removeAttribute('aria-label');",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.a11y.test.ts"
+    ],
+    "why": "Restores the shipped defect: the hull swatches carry no text -- the colour IS the content -- so their only accessible name came from `title`, a tooltip that some screen readers ignore and none promise. The button still LOOKS identical and still has a title, so nothing about the rendered pane changes; only the name goes. Caught by the gives-every-rendered-control-a-non-empty-accessible-name sweep, whose helper deliberately does NOT fall back to `title` -- that shortfall is the assertion, not a limitation of it."
+  },
+  {
+    "id": "a11y-level-button-named-by-its-digit",
+    "file": "src/game/hud.ts",
+    "find": "        btn.setAttribute('aria-label', `Level ${i + 1}`);",
+    "replace": "        btn.removeAttribute('aria-label');",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.a11y.test.ts"
+    ],
+    "why": "Puts the level grid back to a row of bare digits, announced as '1', '2', '3' with nothing saying what they select. Killed by the never-names-a-control-with-a-bare-digit rule alone and NOT by the non-empty-name sweep, which is the point of having both: a digit is a name, so an emptiness check passes straight over the entire defect this issue records."
+  },
+  {
+    "id": "a11y-slot-controls-lose-their-player",
+    "file": "src/game/hud.ts",
+    "find": "        btn.setAttribute('aria-label', `Player ${slot + 1} ${opt.label}`);",
+    "replace": "        btn.setAttribute('aria-label', opt.label);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.a11y.test.ts"
+    ],
+    "why": "Drops the slot context from the who's-playing role buttons, so four slots announce four identical runs of Human/Bot/Off and the only thing tying a control to its player is screen position -- the one cue a non-visual reader does not get. Note the replacement still SETS a name: an emptiness sweep and a bare-digit sweep both pass. It is caught only by the uniqueness rule, which is why that rule is written as 'no two of these share a name' rather than as a spot-check on one label."
+  },
+  {
+    "id": "a11y-stats-table-headers-become-data",
+    "file": "src/game/hud.ts",
+    "find": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Level attempt</th></tr></thead>'",
+    "replace": "      + '<thead><tr><td></td><td>Lifetime</td><td>Level attempt</td></tr></thead>'",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/game/hud.a11y.test.ts",
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Rebuilds the column headers out of DATA cells, exactly as they shipped: 'Lifetime' and 'Level attempt' head nothing and every figure beneath them is announced bare. The table still renders identically -- <td> and <th> differ in default weight and alignment, which this table's own CSS already overrides -- so no visual guard can see it. Killed by 2: the scoped-header assertion here, and the stats-page wording test in hud.controls.test.ts, which reads those two names THROUGH `thead th[scope=col]` for precisely this reason. The wording it pins is only worth something while it is still attached to a column."
+  },
+  {
+    "id": "a11y-achievement-state-back-to-a-class",
+    "file": "src/game/hud.ts",
+    "find": "      state.textContent = got ? 'Earned. ' : 'Locked. ';",
+    "replace": "      state.textContent = '';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.a11y.test.ts"
+    ],
+    "why": "Returns earned state to living only in the `--earned` class, so an earned row and a locked row are announced identically and the single fact the Records pane exists to report is the one thing a screen reader cannot get. The span survives, so a structural check for `.ui-sr-only` still passes -- the assertion has to read its CONTENT, and does."
+  },
+  {
+    "id": "a11y-panes-stop-being-landmarks",
+    "file": "src/game/hud.ts",
+    "find": "    <div class=\"hud-customize hud-customize--hidden\" role=\"region\" tabindex=\"-1\" aria-labelledby=\"hud-customize-title\">",
+    "replace": "    <div class=\"hud-customize hud-customize--hidden\" tabindex=\"-1\" aria-labelledby=\"hud-customize-title\">",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.a11y.test.ts"
+    ],
+    "why": "Takes the landmark role off ONE pane. Chosen over removing all ten deliberately: a sweep that only checked 'some pane has role=region' would survive this, and a partial rollout is the realistic regression -- a pane added later that copies an older sibling's markup. The named-region sweep iterates every focus target and names the offender, so it fails on the first one that drifts rather than on the last."
   }
 ]
