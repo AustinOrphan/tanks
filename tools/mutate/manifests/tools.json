@@ -810,7 +810,7 @@
     "id": "legal-nested-list-flattens-into-its-parent",
     "file": "tools/legal/parse.mjs",
     "find": "        assertSupported(lines[i], source, i + 1);",
-    "replace": "",
+    "replace": "        void lines[i];",
     "expect": "killed",
     "tests": [
       "tools/legal/generate.test.ts"
