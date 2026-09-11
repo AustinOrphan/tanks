@@ -6069,5 +6069,21 @@
       "src/game/legal-content.ts is generated, not hand-edited matches what renderLegalModule() produces right now -- run `npm run legal` to fix"
     ],
     "why": "A hand edit to the generated module -- one word of one document's title, the smallest plausible one. This is the exact defect class issue #117's \"no legal content is duplicated into a hand-maintained list that can drift from repository sources\" criterion names, and the reason the content is generated at all rather than written into hud.ts's markup. It has to be caught by byte-comparison against a fresh `renderLegalModule()`, because a rendered title is just a string: the pane displays it, the disclosure still opens, and every structural assertion in legal.test.ts passes. Same regenerate-and-diff idiom as `notices-hand-edited` and the devflags/tanks doc entries."
+  },
+  {
+    "id": "legal-sections-become-siblings-of-their-document",
+    "file": "src/game/legal.ts",
+    "find": "      return text(block.level === 2 ? 'h4' : 'h5', 'hud-legal-heading', block.text);",
+    "replace": "      return text(block.level === 2 ? 'h3' : 'h4', 'hud-legal-heading', block.text);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.a11y.test.ts",
+      "src/game/legal.test.ts"
+    ],
+    "killedBy": [
+      "About & Legal heading structure (issue #117) nests every document section under the document, and skips no level",
+      "the legal block renderer renders every block kind the generator can emit, and the shipped data uses all of them"
+    ],
+    "why": "Restores the outline this pane shipped in draft: the document title is an h3 and so is every section inside it, so a screen reader's heading navigation is told the PolyForm licence's twenty clauses are siblings of the licence rather than parts of it. A no-skipped-levels walk cannot see it -- nothing is skipped, h1 -> h2 -> h3 -> h3 is monotonic -- which is why the case that kills this asserts the RELATIONSHIP (every section strictly deeper than its own document's title) beside the walk. Nothing visible moves either: `.hud-legal-heading` styles by class, so an h3 and an h4 render identically. MEASURED by hand before this entry existed: reverting the one ternary fails with `expected 3 to be greater than 3` on hud-legal-body-privacy."
   }
 ]
