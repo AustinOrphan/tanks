@@ -4,8 +4,9 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type GameplayOutcome, type GameplayStatus, type Hud } from './hud';
 import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
-import { versusMapChoices, type VersusConfig } from './versus-config';
+import { resolveVersusConfig, versusMapChoices, type VersusConfig } from './versus-config';
 import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
+import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
 import type { TypedOutcome } from './app-state';
@@ -48,6 +49,8 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     root.querySelector(`.hud-versus-map-row [data-map="${map}"]`) as HTMLButtonElement;
   const friendlyFireBtn = (root: HTMLElement): HTMLButtonElement | null =>
     root.querySelector('.hud-versus-friendlyfire-btn');
+  const mapNote = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-versus-map-note') as HTMLElement;
   // The who's-playing SETUP rows (issue #260). These used to be
   // .hud-controller-row/.hud-controller-source-btn, shared with the real Controllers
   // panel and therefore needing a `view(root)` scope; they are now the pane's own
@@ -209,6 +212,130 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     expect(seen).toEqual([
       { mode: 'teams', players: 3, arenaId: choices[1], stock: 5, friendlyFire: true, slots: defaultSlots(3) },
     ]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // A retained map choice that the NEW (players, mode) does not support.
+  //
+  // Three shipped entries are narrower than {2,3,4} x both modes -- vs-duel-01 at two
+  // players, vs-tri-01 at three, vs-quad-01 at four (issues #271-#273) -- so a choice
+  // made at one combination can stop being offered at the next. The pane's Players and
+  // Mode handlers follow every OTHER dependent field when that happens (`slots` is
+  // resized, `mode` falls back to ffa where Teams is unofferable, each with a comment
+  // saying why) and left `arenaId` alone, which three doc comments across two files
+  // asserted was safe because no entry was narrow enough to reach it. That stopped being
+  // true when #271-#273 shipped.
+  //
+  // The consequence is not a wrong board: `resolveVersusConfig` is the launch gate and
+  // THROWS on an unsupported combination rather than launching one. Nothing catches it,
+  // so the exception escapes the Start click handler and the button silently does
+  // nothing. Issue #274's criterion 4 is the fix -- replace the invalid choice with an
+  // obvious valid default and say why.
+  // ---------------------------------------------------------------------------
+
+  it('replaces a retained map the new player count does not support, and says why (issue #274)', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+
+    // vs-duel-01 is the durable fixture for this, deliberately. It is offered at TWO
+    // players and structurally cannot widen -- a dedicated duel board -- whereas
+    // vs-tri-01 reaches the same bug only while a CURATION ruling holds it narrow, and
+    // issue #627 has already moved that ruling once. A control anchored to a shipped
+    // board that a ruling can widen deletes itself the day the ruling changes.
+    expect(versusMapChoices(2, 'ffa'), 'the fixture board is offered at two').toContain('vs-duel-01');
+    expect(versusMapChoices(3, 'ffa'), 'and not at three').not.toContain('vs-duel-01');
+
+    mapBtn(root, 'vs-duel-01').dispatchEvent(new MouseEvent('click'));
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+
+    // The row rebuilt without it, which the pane already did. What it did NOT do is stop
+    // carrying it: the assertion below is on what Start EMITS, not on what is drawn.
+    expect(mapBtn(root, 'vs-duel-01'), 'the stale choice left the row').toBeNull();
+
+    // NAMED, not just replaced. A silent swap is its own defect -- the player chose a
+    // board and would launch a different one with nothing said -- so the notice is asserted
+    // on content rather than on presence: it names the board that went, the axis that took
+    // it, and what is selected instead.
+    // The NAME, read from the catalog rather than typed here: `vs-duel-01` displays as
+    // "Pinwheel", and a test that hardcodes a display name pins the wrong thing -- the
+    // contract is that the notice says what the button said, whatever that is.
+    const note = mapNote(root);
+    const dropped = versusCatalogEntryById('vs-duel-01').displayName;
+    expect(note.textContent, 'the notice names the dropped board').toContain(dropped);
+    expect(note.textContent, 'and the axis that dropped it').toContain('3 players');
+    expect(note.textContent, 'and what replaced it').toContain('Random');
+    expect(note.classList.contains('hud-versus-map-note--hidden'), 'and is shown').toBe(false);
+
+    const seen: VersusConfig[] = [];
+    h.onVersusStart((config) => seen.push(config));
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(seen).toHaveLength(1);
+    expect(seen[0].arenaId, 'Random is the fallback the storage path already uses').toBe('random');
+
+    // The real failure, asserted through the real gate rather than restated: this is the
+    // call loop.ts makes at the Start boundary (`applyVersusToDeps`), and on the stale
+    // config it threw `map 'vs-duel-01' does not support N=3 mode=ffa`.
+    expect(
+      () => resolveVersusConfig(seen[0], 0),
+      'the emitted config survives the launch gate',
+    ).not.toThrow();
+  });
+
+  it('clears the dropped-map notice once the player has chosen again (issue #274)', () => {
+    // The note describes a state the next click ends. Left up, it reads as a live warning
+    // about the choice now selected -- which is the opposite of what it says.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    mapBtn(root, 'vs-duel-01').dispatchEvent(new MouseEvent('click'));
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    expect(mapNote(root).textContent, 'precondition: the notice is up').not.toBe('');
+
+    mapBtn(root, versusMapChoices(3, 'ffa')[0]).dispatchEvent(new MouseEvent('click'));
+    expect(mapNote(root).textContent, 'a fresh choice clears it').toBe('');
+    expect(mapNote(root).classList.contains('hud-versus-map-note--hidden')).toBe(true);
+  });
+
+  it('does not announce a drop when the retained map survives the change (issue #274)', () => {
+    // The negative control. Without it every assertion above passes on a pane that shows
+    // the notice unconditionally, which would be a worse bug than the one being fixed.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const everywhere = 'arena-01';
+    expect(versusMapChoices(2, 'ffa')).toContain(everywhere);
+    expect(versusMapChoices(4, 'ffa')).toContain(everywhere);
+
+    mapBtn(root, everywhere).dispatchEvent(new MouseEvent('click'));
+    playersBtn(root, 4).dispatchEvent(new MouseEvent('click'));
+    expect(mapNote(root).textContent, 'a surviving choice says nothing').toBe('');
+    expect(mapBtn(root, everywhere).getAttribute('aria-pressed'), 'and stays selected').toBe('true');
+  });
+
+  it('replaces a retained map the new MODE does not support (issue #274)', () => {
+    // The same defect through the other axis. Which board is narrow by MODE is a curation
+    // ruling rather than a structural fact, so this case is driven from the catalog
+    // instead of naming one: it finds whatever entry the current data narrows and skips
+    // if none does, which is honest about the coverage rather than pinning a board that
+    // a ruling can widen out from under it. (Issue #627 widened the last one, so this
+    // currently skips -- the branch it guards is exercised by the player-count case
+    // above and by the unit tests on the clamp itself.)
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const ffaOnlyAtThree = versusMapChoices(3, 'ffa')
+      .filter((id) => !versusMapChoices(3, 'teams').includes(id));
+    if (ffaOnlyAtThree.length === 0) return;
+
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    mapBtn(root, ffaOnlyAtThree[0]).dispatchEvent(new MouseEvent('click'));
+    modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
+
+    const seen: VersusConfig[] = [];
+    h.onVersusStart((config) => seen.push(config));
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(() => resolveVersusConfig(seen[0], 0)).not.toThrow();
   });
 
   it('stock defaults to VERSUS_STOCK, the same constant the sim boundary uses (constants.ts)', () => {

@@ -3,7 +3,13 @@ import { defaultSlots } from './versus-setup';
 // Both are consumed by createVersusLevelSystem (levels.test.ts), but are pure and
 // node-testable on their own -- no World, no RunStore.
 import { describe, it, expect } from 'vitest';
-import { versusMapChoices, pickVersusArena, resolveVersusConfig, type VersusConfig } from './versus-config';
+import {
+  versusMapChoices,
+  pickVersusArena,
+  resolveVersusConfig,
+  retainArenaChoice,
+  type VersusConfig,
+} from './versus-config';
 import { versusBoardCatalog } from '../sim/versus-board';
 import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
 
@@ -122,6 +128,78 @@ describe('versusMapChoices', () => {
     expect(versusMapChoices(2, 'teams', entries)).toEqual(['vs-both']); // mode predicate
     expect(versusMapChoices(3, 'ffa', entries)).toEqual(['vs-both']); // players predicate
     expect(versusMapChoices(4, 'ffa', entries)).toEqual([]); // both predicates
+  });
+});
+
+describe('retainArenaChoice (issue #274)', () => {
+  // SYNTHETIC ENTRIES, not the shipped catalog, and the reason is the whole point of the
+  // function. Two of the three `ArenaDropReason` values cannot be produced by the shipped
+  // data at all right now -- `mode` needs an entry narrowed by mode, and issue #627 just
+  // widened the last one; `gone` needs an id naming no entry. A suite that could only
+  // reach `players` would leave two branches unexecuted while reading as covered, and
+  // would additionally re-break the day a curation ruling moves. Fixtures own their data.
+  const entries = [
+    entryFixture({ id: 'vs-both', players: [2, 3], modes: ['ffa', 'teams'] }),
+    entryFixture({ id: 'vs-ffa-duo', players: [2], modes: ['ffa'] }),
+    entryFixture({ id: 'vs-teamless-trio', players: [3], modes: ['ffa'] }),
+  ];
+
+  it('keeps a choice the new combination still offers, and reports no drop', () => {
+    // The negative control. Every assertion below is about a REPLACEMENT, and all of them
+    // pass on a function that replaces unconditionally.
+    expect(retainArenaChoice('vs-both', 3, 'teams', entries)).toEqual({
+      arenaId: 'vs-both',
+      dropped: null,
+    });
+  });
+
+  it("keeps 'random', which is the one value that cannot go stale", () => {
+    // Not an optimisation: `pickVersusArena` resolves 'random' against the CURRENT catalog
+    // for the CURRENT combination, so it is valid at every combination by construction.
+    // Were this to fall through to the offer-list check it would be replaced by itself --
+    // harmless, and it would report a `dropped` that never happened, which is not.
+    expect(retainArenaChoice('random', 4, 'teams', entries)).toEqual({
+      arenaId: 'random',
+      dropped: null,
+    });
+  });
+
+  it('replaces a choice the new PLAYER COUNT drops, and blames the count', () => {
+    expect(retainArenaChoice('vs-ffa-duo', 3, 'ffa', entries)).toEqual({
+      arenaId: 'random',
+      dropped: { id: 'vs-ffa-duo', reason: 'players' },
+    });
+  });
+
+  it('replaces a choice the new MODE drops, and blames the mode', () => {
+    // The distinction the pane's notice is built on: this entry DOES declare three
+    // players, so telling the player it is unavailable "with 3 players" would be a lie
+    // about a control they may not have touched.
+    expect(retainArenaChoice('vs-teamless-trio', 3, 'teams', entries)).toEqual({
+      arenaId: 'random',
+      dropped: { id: 'vs-teamless-trio', reason: 'mode' },
+    });
+  });
+
+  it("reports 'gone' for an id that names no entry at all", () => {
+    // Reachable from a stored setup written by a build that shipped a board since
+    // retired. `sanitizeSetup` screens that on the way in, so this is defence in depth --
+    // but the branch decides a user-visible sentence, and an unexercised branch that
+    // writes UI text is how "undefined is not available" reaches a screen.
+    expect(retainArenaChoice('vs-retired', 2, 'ffa', entries)).toEqual({
+      arenaId: 'random',
+      dropped: { id: 'vs-retired', reason: 'gone' },
+    });
+  });
+
+  it('blames the count when BOTH predicates drop the entry', () => {
+    // Ordering, pinned deliberately rather than left to fall out of the implementation.
+    // The count is the coarser axis and the one the player is likelier to have just
+    // changed; naming the mode here would send them to a control that is not the reason.
+    expect(retainArenaChoice('vs-ffa-duo', 4, 'teams', entries)).toEqual({
+      arenaId: 'random',
+      dropped: { id: 'vs-ffa-duo', reason: 'players' },
+    });
   });
 });
 

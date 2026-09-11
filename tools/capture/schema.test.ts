@@ -39,6 +39,7 @@ describe('capture recipe schema', () => {
       'screen.customize',
       'screen.versus-setup',
       'screen.versus-setup.teams',
+      'screen.versus-setup.map-replaced',
       'screen.about',
       'screen.confirm.new-campaign',
       'screen.startup.unsupported-render',

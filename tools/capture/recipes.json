@@ -805,6 +805,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.versus-setup.map-replaced",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.versus-setup.map-replaced"
+    },
+    "fixture": {
+      "id": "screen.versus-setup.map-replaced",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Versus Setup, a map choice replaced",
+    "description": "The Versus Setup pane after a player count change dropped the chosen map.",
+    "altText": "Screenshot of the Tanks! versus setup screen showing a notice that the chosen map is unavailable.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.about",
     "producer": {
       "kind": "screen",
