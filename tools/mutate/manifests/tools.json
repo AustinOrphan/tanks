@@ -781,5 +781,29 @@
       "the screen-state catalogue seeds the DEVELOPER key namespace on every state whose URL carries the dev gate"
     ],
     "why": "Seeds a PRODUCTION save on a state whose URL carries the dev gate. Issue #245 selects the storage namespace from `location.search` at boot, so a `?dev=1` page persists behind `tanks.dev.` and cannot see those keys at all -- the capture boots a first-time player, and its own recipe then times out clicking a Continue that is not offered. MEASURED: this is exactly what the five ending states did on their first run, and it presents as a broken recipe rather than as a namespace rule, which is why the catalogue now asserts the pairing in both directions."
+  },
+  {
+    "id": "screens-report-defaults-to-the-working-directory",
+    "file": "tools/screens/paths.mjs",
+    "find": "    report: report == null ? join(dirname(outPath), REPORT_BASENAME) : resolve(report),",
+    "replace": "    report: resolve(report ?? REPORT_BASENAME),",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/screens/paths.test.ts"
+    ],
+    "why": "Restores issue #637 exactly: an omitted --report resolves its bare basename against the WORKING DIRECTORY instead of following the frame, so `npm run screens --out somewhere/frame.png` drops producer.json in the repository root, where .gitignore does not cover it (its scratch entries are root-anchored at /tmp/ and /scratchpad/) and the next `git add -A` commits it. That happened twice before the fix. Invisible to the capture framework, which is the trap: tools/capture/screen-adapter.mjs passes --report explicitly, so every FRAMEWORK capture reads identically under this mutation and only a hand-run is affected -- the reason the defect survived as long as it did. Killed by 1, the beside-the-frame case. The never-defaults-into-the-repo-root case does NOT kill it and must not be expected to: with no --out given, the default frame is under tmp/ and the mutated report resolves to the root, so that assertion does fail -- but it fails in the OTHER entry below too, and pinning both here would hide which behaviour each entry actually protects."
+  },
+  {
+    "id": "screens-frame-defaults-to-the-repo-root",
+    "file": "tools/screens/paths.mjs",
+    "find": "export const DEFAULT_OUT = 'tmp/screen.png';",
+    "replace": "export const DEFAULT_OUT = 'screen.png';",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "tools/screens/paths.test.ts"
+    ],
+    "why": "The other half of issue #637, and the half the filed issue did not name: --out defaulted to a bare basename too, so a bare `npm run screens` left screen.png in the repository root alongside producer.json -- a binary artifact, and the worse of the two to commit. Killed by 2: the repo-root invariant (which catches BOTH artifacts, since an omitted --report then follows the frame into the root) and the pins-the-destination case. Those two are deliberately separate assertions rather than one: the invariant states what must never happen and survives a future move to another ignored directory, while the destination pin makes such a move a deliberate edit instead of a silent one."
   }
 ]
