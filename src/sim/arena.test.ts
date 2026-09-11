@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createArenaWorld, createWorldFor } from './arena';
+// The module's own text, for the signature assertion in `createWorldFor's init object`
+// below: a parameter list is a property of the source, and `Function.length` cannot see a
+// positional appended after a defaulted one.
+import arenaSource from './arena.ts?raw';
 import { raySegmentVsAABB } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
 import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS, TICK_HZ } from './constants';
@@ -774,11 +778,17 @@ describe("createWorldFor's init object (issue #493)", () => {
   });
 
   it('takes every knob by name, so a new rule cannot grow its signature', () => {
-    // The outcome #493 asks for, asserted as arity rather than as prose: three parameters,
-    // and the third is an object. The thirteen positionals this replaced are what made
-    // `levels.ts` pass `undefined, undefined,` to reach the last one, and what made half the
-    // call sites in the tree carry three or four `undefined`s to name a mode.
-    expect(createWorldFor.length, 'createWorldFor grew a positional again').toBe(2);
+    // The outcome #493 asks for, asserted against the SIGNATURE TEXT rather than against
+    // `createWorldFor.length`. Measured: `Function.prototype.length` counts parameters before
+    // the first defaulted one, so `(arena, seed?, init = {})` reports 2 -- and so does
+    // `(arena, seed?, init = {}, extra?)`, which is exactly the "trailing and optional, same
+    // precedent" move that produced the thirteen positionals this issue exists to remove.
+    // `((a, b, c = {}, d) => 0).length === 2`, run rather than reasoned. The length check
+    // could therefore only have caught an insertion BEFORE `init`, which is not where one
+    // would go.
+    expect(arenaSource, 'createWorldFor grew a positional again').toContain(
+      'export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit = {}): World {',
+    );
 
     // Every knob reaches the world it names. One call, each value distinct from its default,
     // so a key silently dropped from the destructure fails here rather than in whichever
