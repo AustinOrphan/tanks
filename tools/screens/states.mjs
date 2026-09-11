@@ -189,6 +189,35 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-versus-setup', '.hud-versus-start'],
   }),
   state({
+    id: 'screen.versus-setup.teams',
+    title: 'Versus Setup, three-player Teams',
+    description: 'The 2v1 configuration: three players, Teams, and the map row that offers Keystone.',
+    storage: MID_CAMPAIGN,
+    // The pane opens at its retained default (two players, FFA), and the two clicks below
+    // are the whole reason this state exists beside `screen.versus-setup`. Three of the
+    // pane's rows change under them -- Teams is not even offered at two players (issue
+    // #281), the friendly-fire toggle exists only under Teams, and the MAP row is filtered
+    // by both axes -- so the default capture is evidence for none of it.
+    //
+    // Issue #627 is what made the map row worth a picture. Keystone (`vs-tri-01`) declared
+    // `ffa` alone until #584 established that asymmetric Teams are intentionally supported,
+    // so this row offered five boards and Random here and now offers six and Random. That
+    // button is reachable in exactly this state and no other.
+    //
+    // Waiting on the friendly-fire toggle rather than on the Keystone button is deliberate:
+    // it confirms the pane really entered Teams, which is the precondition. Waiting on the
+    // thing under test would pass vacuously the day the mode click silently stops working.
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { click: '.hud-versus-players-row [data-players="3"]' },
+      { click: '.hud-versus-mode-row [data-mode="teams"]' },
+      { waitVisible: '.hud-versus-friendlyfire-btn' },
+    ],
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-friendlyfire-btn'],
+  }),
+  state({
     id: 'screen.about',
     title: 'About & Legal',
     description: 'The prose pane, which is the widest text measure in the kit.',
