@@ -623,6 +623,62 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
+  it('hides a collapsed legal document with display, not with a class that does nothing', () => {
+    // Same failure as the ground above, one pane further in (issue #117). Every test that
+    // asserts a document is collapsed -- in legal.test.ts and in hud.surfaces.test.ts -- reads
+    // the CLASS, and the presence sweep above is satisfied by an EMPTY rule, so deleting this
+    // declaration leaves ~25 KB of licence text open on the pane from the moment it is built
+    // with nothing red anywhere. This is the only assertion that would notice.
+    const el = document.createElement('div');
+    el.className = 'hud-legal-body hud-legal-body--hidden';
+    document.body.appendChild(el);
+    expect(getComputedStyle(el).display).toBe('none');
+    el.className = 'hud-legal-body';
+    expect(getComputedStyle(el).display, 'a document is hidden even unmodified').not.toBe('none');
+    document.body.innerHTML = '';
+  });
+
+  it('never centres the main axis of a pane that scrolls', () => {
+    // `justify-content: center` on an `overflow-y: auto` flex column puts the overflow ABOVE
+    // the scrollable area, where no scrollbar reaches it: the first screenful of a long
+    // document is lost and cannot be scrolled back to. The About pane shipped exactly that --
+    // harmless while it held three short lines, a defect the moment issue #117 gave it
+    // documents -- so this sweeps every scroller in the file rather than pinning the one pane.
+    //
+    // Measured through the real elements, not by reading the stylesheet: a rule that set
+    // `center` inside an `@media` block, or a later rule that re-centred, is invisible to a
+    // text search and lands here.
+    const { root, dispose } = mountEveryButton();
+    const scrollers = Array.from(root.querySelectorAll<HTMLElement>('*')).filter(
+      (el) => getComputedStyle(el).overflowY === 'auto',
+    );
+    // Non-vacuity: `.hud-about`, `.hud-settings`, `.hud-devtools`, the achievement list and
+    // the versus pane are the scrollers this fixture builds. A filter that matched nothing
+    // would pass while measuring nothing, and this guard's whole subject is a property of
+    // the elements that DO scroll.
+    expect(scrollers.length).toBeGreaterThan(3);
+    const centred = scrollers
+      .filter((el) => getComputedStyle(el).justifyContent === 'center')
+      .map((el) => (el.className.split(' ')[0]));
+    // THE POPULATION IS PINNED, NOT EMPTIED, and the residual is stated rather than swept
+    // under a narrower selector. Measured: three sibling panes carry the same shape today --
+    // Versus Setup, Settings and Developer Tools are each `overflow-y: auto` with
+    // `justify-content: center`. They are NOT fixed here. Each is a visible vertical-alignment
+    // change on a pane issue #117 does not own, owing its own before/after evidence, and this
+    // change's subject is the About pane, whose documents make the clip reachable in ordinary
+    // use rather than only on a short viewport.
+    //
+    // What this asserts is therefore two things, and both can fail:
+    //  - `.hud-about` is NOT in the list, so the pane regressing to `center` is caught;
+    //  - no FOURTH pane joins it, so a new scroller inherits the decision rather than the bug.
+    expect(centred.sort()).toEqual(['hud-devtools', 'hud-settings', 'hud-versus-setup']);
+    expect(centred, 'the About pane centres its main axis and clips its own documents').not.toContain(
+      'hud-about',
+    );
+
+    dispose();
+  });
+
   it('never lets a button fall through to browser default styling', () => {
     // `.hud-achievements-open` shipped with NO rule of its own -- only its `--hidden`
     // modifier -- so on the main menu it rendered as a stock grey browser button
