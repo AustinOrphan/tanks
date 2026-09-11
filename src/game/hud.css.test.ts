@@ -1143,7 +1143,14 @@ describe('hud.css is syntactically whole', () => {
       // which is #634's defect with the class present and the RULE overriding it.
       // `.hud-legal-link` is an `<a>`, and `shape()` reads a selector rather than a tag, so
       // it belongs in the same list as the buttons it sits beside.
-      '.hud-legal-toggle', '.hud-legal-link'];
+      '.hud-legal-toggle', '.hud-legal-link',
+      // Issue #634's control, and the two it sits beside in the same slot row. The sweep
+      // above says each HAS a size; these three say they have the SAME size, which is what
+      // "matching its siblings in the pane" means and what a bespoke rule duplicating
+      // `--sm`'s padding would have quietly failed to guarantee. The team and difficulty
+      // buttons were `--sm` all along and were simply never listed -- the same omission that
+      // let the role button ship sizeless, one step less harmful.
+      '.hud-versus-role-btn', '.hud-versus-team-btn', '.hud-versus-difficulty-btn'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
     for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));
     // Without this the two loops above would both pass on a stylesheet that gave every
