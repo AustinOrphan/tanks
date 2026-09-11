@@ -654,7 +654,7 @@ describe('createWorldFor: mode/friendlyFire threading (n-player arc PR 4)', () =
   });
 
   it('threads an explicit mode and friendlyFire onto the built world, and strips enemies to match', () => {
-    const w = createWorldFor(ARENAS[0], 1, undefined, undefined, undefined, undefined, 4, undefined, 'teams', true);
+    const w = createWorldFor(ARENAS[0], 1, { playerCount: 4, rules: { mode: 'teams', friendlyFire: true } });
     expect(w.rules.mode).toBe('teams');
     expect(w.rules.friendlyFire).toBe(true);
     expect(w.tanks.every((t) => t.kind === 'player')).toBe(true);

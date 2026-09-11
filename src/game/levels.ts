@@ -94,12 +94,14 @@ export function createLevelSystem(
             walls: flags.sandboxWalls ?? 0,
             seed,
           },
-          unarmedTrigger,
-          // Same two playtest switches as the campaign branch below -- see there for why
-          // these are closed over rather than threaded as `world()` parameters.
-          flags.corpseBlock,
-          !flags.muzzleInside,
-          flags.aiPerception ?? undefined,
+          {
+            unarmedTrigger,
+            // Same two playtest switches as the campaign branch below -- see there for why
+            // these are closed over rather than threaded as `world()` parameters.
+            corpseBlocksShells: flags.corpseBlock,
+            muzzleClearsTanks: !flags.muzzleInside,
+            aiTargetPerception: flags.aiPerception ?? undefined,
+          },
         ),
     };
   }
@@ -159,12 +161,20 @@ export function createLevelSystem(
     // the campaign roster -- an arm applied to a rig would measure the rig. False, the
     // flag's own "off", leaves every tank on its authored roster cap.
     world: (level, seed, unarmedTrigger, lives, playerCount) =>
-      createWorldFor(
-        arenaById(level.arenaId), seed, unarmedTrigger, lives,
-        flags.corpseBlock, !flags.muzzleInside, playerCount, !flags.coopPool,
-        flags.mode ?? 'campaign-coop', flags.friendlyFire, undefined, undefined,
-        flags.aiPerception ?? undefined, flags.pp1Roles,
-      ),
+      createWorldFor(arenaById(level.arenaId), seed, {
+        lives,
+        playerCount,
+        pp1Roles: flags.pp1Roles,
+        rules: {
+          unarmedTrigger,
+          corpseBlocksShells: flags.corpseBlock,
+          muzzleClearsTanks: !flags.muzzleInside,
+          coopAttempts: !flags.coopPool,
+          mode: flags.mode ?? 'campaign-coop',
+          friendlyFire: flags.friendlyFire,
+          aiTargetPerception: flags.aiPerception ?? undefined,
+        },
+      }),
     bounds: (level) => ({
       ...arenaBounds(arenaById(level.arenaId)),
       cellSize: arenaById(level.arenaId).cellSize,
@@ -247,23 +257,34 @@ export function createVersusLevelSystem(
         // that makes that safe. `arenaById` throws if `config.arenaId` is still
         // `'random'` (a caller bug), rather than silently re-rolling per call the way
         // the pre-#278 code did.
-        arenaById(config.arenaId), seed, unarmedTrigger, lives,
-        flags.corpseBlock, !flags.muzzleInside,
-        // `config.players`, not the positional `playerCount` this method's own
-        // interface accepts -- a versus session's player count is authoritative from
-        // its OWN config, closed over here, the same treatment `createLevelSystem`'s
-        // campaign branch gives `flags.mode`/`flags.friendlyFire` above rather than
-        // trusting a call-site argument that (today) always agrees with it anyway.
-        config.players, undefined, config.mode, config.friendlyFire, config.stock,
-        // The CONFIGURED teams (issue #281), read off the same per-slot descriptor the
-        // setup pane writes. A slot with no choice yet is `undefined`, which `loadArena`
-        // falls back to `teamOf(slot)` for -- so a config saved before teams could be
-        // chosen builds exactly the board it always did.
-        config.slots.map((slot) => slot.team),
-        // `aiPerception` the same way `corpseBlock`/`muzzleInside` above reach a versus
-        // playtest: from the session's real dev flags (issue #472 moved it here from
-        // loop.ts's post-build write, which a frozen `World.rules` no longer permits).
-        flags.aiPerception ?? undefined,
+        arenaById(config.arenaId),
+        seed,
+        {
+          lives,
+          // `config.players`, not the positional `playerCount` this method's own
+          // interface accepts -- a versus session's player count is authoritative from
+          // its OWN config, closed over here, the same treatment `createLevelSystem`'s
+          // campaign branch gives `flags.mode`/`flags.friendlyFire` above rather than
+          // trusting a call-site argument that (today) always agrees with it anyway.
+          playerCount: config.players,
+          stock: config.stock,
+          // The CONFIGURED teams (issue #281), read off the same per-slot descriptor the
+          // setup pane writes. A slot with no choice yet is `undefined`, which `loadArena`
+          // falls back to `teamOf(slot)` for -- so a config saved before teams could be
+          // chosen builds exactly the board it always did.
+          teams: config.slots.map((slot) => slot.team),
+          rules: {
+            unarmedTrigger,
+            corpseBlocksShells: flags.corpseBlock,
+            muzzleClearsTanks: !flags.muzzleInside,
+            mode: config.mode,
+            friendlyFire: config.friendlyFire,
+            // `aiPerception` the same way `corpseBlock`/`muzzleInside` above reach a versus
+            // playtest: from the session's real dev flags (issue #472 moved it here from
+            // loop.ts's post-build write, which a frozen `World.rules` no longer permits).
+            aiTargetPerception: flags.aiPerception ?? undefined,
+          },
+        },
       ),
     // That arena's own bounds -- same shape as the campaign branch above. Requires a
     // resolved `config.arenaId` for the same reason `world()` above does; see this

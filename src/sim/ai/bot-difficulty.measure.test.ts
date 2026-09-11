@@ -117,7 +117,7 @@ interface Match {
 
 function duel(difficulty: BotDifficulty, seed: number): Match {
   const arena = arenaById('vs-duel-01');
-  let w = createWorldFor(arena, seed, undefined, 3, undefined, undefined, 2, undefined, MODE);
+  let w = createWorldFor(arena, seed, { lives: 3, playerCount: 2, rules: { mode: MODE } });
   const players = w.tanks.filter((t) => t.kind === 'player').map((t) => t.id);
   const rnd = players.map((_, i) => mulberry32(seed * 31 + i + 1));
   const ai = rnd.map((r) => createPlayerAiState(r));

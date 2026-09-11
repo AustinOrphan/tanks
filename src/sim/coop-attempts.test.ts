@@ -401,7 +401,7 @@ describe('resetArena via a full wipe, verified at N=2 and N=4 on a real shipped 
   // same one stepRespawns' own P2 test insures, extended here to the whole-board
   // resetArena path and to N=4.
   function realCoopWorld(playerCount: number, lives: number): World {
-    return createWorldFor(ARENAS[0], 1, undefined, lives, undefined, undefined, playerCount, true);
+    return createWorldFor(ARENAS[0], 1, { lives: lives, playerCount: playerCount, rules: { coopAttempts: true } });
   }
 
   for (const n of [2, 4]) {

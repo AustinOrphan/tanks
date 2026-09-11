@@ -316,14 +316,14 @@ describe('stepRespawns gate: campaign-coop needs 2+ players, ffa/teams need none
 // pick a stock count without touching campaign-coop's own byte-identical trace path.
 describe('createWorldFor/loadArena: a defaulted per-match stock', () => {
   it('a versus world built with an explicit stock stamps it on every player tank', () => {
-    const w = createWorldFor(ARENA_01, 7, undefined, 3, undefined, undefined, 3, undefined, 'ffa', undefined, 5);
+    const w = createWorldFor(ARENA_01, 7, { lives: 3, playerCount: 3, stock: 5, rules: { mode: 'ffa' } });
     const players = w.tanks.filter((t) => t.kind === 'player');
     expect(players.length).toBe(3);
     for (const t of players) expect(t.stockRemaining).toBe(5);
   });
 
   it('omitting stock keeps the shipped VERSUS_STOCK default — the defaulted-param negative control', () => {
-    const w = createWorldFor(ARENA_01, 7, undefined, 3, undefined, undefined, 2, undefined, 'ffa');
+    const w = createWorldFor(ARENA_01, 7, { lives: 3, playerCount: 2, rules: { mode: 'ffa' } });
     for (const t of w.tanks.filter((t) => t.kind === 'player')) {
       expect(t.stockRemaining).toBe(VERSUS_STOCK);
     }

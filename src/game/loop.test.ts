@@ -1609,25 +1609,29 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // means a `mode: 'ffa'` fixture can never quietly get a campaign-coop world.
         const wantsVersus = (opts.devFlags?.mode ?? 'campaign-coop') !== 'campaign-coop';
         if ((playerCount !== undefined && playerCount > 1) || wantsVersus) {
-          const real = createWorldFor(
+          const real = createWorldFor(arenaById(fakeLevels[i].arenaId), seed, {
+            lives,
             // playerCount defaults to 1 when the branch was entered for versus alone.
-            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount ?? 1,
-            // Mirrors levels.ts's own closure: `!flags.coopPool` -- absent/false leaves
-            // the shared-attempts default (true), coopPool=1 restores the shipped pool
-            // model (false). Read straight off opts.devFlags, the same source the real
-            // devFlags merge below is built from, so this cannot drift from what the
-            // game itself would have wired.
-            !opts.devFlags?.coopPool,
-            // n-player arc PR 4 (FFA + teams): mirrors levels.ts's campaign branch
-            // (`flags.mode ?? 'campaign-coop'`, `flags.friendlyFire`) so a versus test
-            // that sets opts.devFlags.mode gets a REAL FFA/teams world -- enemies
-            // actually stripped, Tank.team actually stamped -- rather than a coop world
-            // that happens to have the right playerCount. Before this, the fake ignored
-            // devFlags.mode entirely: any test passing mode: 'ffa' here would silently
-            // get a coop world back.
-            opts.devFlags?.mode ?? 'campaign-coop',
-            opts.devFlags?.friendlyFire,
-          );
+            playerCount: playerCount ?? 1,
+            rules: {
+              unarmedTrigger: policy,
+              // Mirrors levels.ts's own closure: `!flags.coopPool` -- absent/false leaves
+              // the shared-attempts default (true), coopPool=1 restores the shipped pool
+              // model (false). Read straight off opts.devFlags, the same source the real
+              // devFlags merge below is built from, so this cannot drift from what the
+              // game itself would have wired.
+              coopAttempts: !opts.devFlags?.coopPool,
+              // n-player arc PR 4 (FFA + teams): mirrors levels.ts's campaign branch
+              // (`flags.mode ?? 'campaign-coop'`, `flags.friendlyFire`) so a versus test
+              // that sets opts.devFlags.mode gets a REAL FFA/teams world -- enemies
+              // actually stripped, Tank.team actually stamped -- rather than a coop world
+              // that happens to have the right playerCount. Before this, the fake ignored
+              // devFlags.mode entirely: any test passing mode: 'ffa' here would silently
+              // get a coop world back.
+              mode: opts.devFlags?.mode ?? 'campaign-coop',
+              friendlyFire: opts.devFlags?.friendlyFire,
+            },
+          });
           // Back-dated past COUNTDOWN_TICKS, same convention every live-play fixture
           // in this file uses (see winningWorld below): a fresh world cannot act on
           // its first ticks, and a co-op test wants input live immediately.
@@ -8001,21 +8005,21 @@ describe('startGameWith: the input recorder', () => {
     // behaviour (the review of this PR caught exactly that staleness here, and it
     // recurred: this call stopped at coopAttempts while the meta had since grown
     // mode/friendlyFire, and issue #492 added aiTargetPerception).
-    const rebuilt = createWorldFor(
-      arenaById(t.meta.arenaId),
-      t.meta.seed,
-      t.meta.unarmedTrigger,
-      t.meta.lives,
-      t.meta.corpseBlocksShells,
-      t.meta.muzzleClearsTanks,
-      undefined,
-      t.meta.coopAttempts,
-      t.meta.mode,
-      t.meta.friendlyFire,
-      undefined, // stock: versus-only, not a ReplayMeta field
-      undefined, // teams: versus-only, not a ReplayMeta field
-      t.meta.aiTargetPerception,
-    );
+    // `stock` and `teams` are deliberately absent: both are versus-only and neither is a
+    // ReplayMeta field. They used to be two `undefined`s carried in the positional list to
+    // reach `aiTargetPerception` past them.
+    const rebuilt = createWorldFor(arenaById(t.meta.arenaId), t.meta.seed, {
+      lives: t.meta.lives,
+      rules: {
+        unarmedTrigger: t.meta.unarmedTrigger,
+        corpseBlocksShells: t.meta.corpseBlocksShells,
+        muzzleClearsTanks: t.meta.muzzleClearsTanks,
+        coopAttempts: t.meta.coopAttempts,
+        mode: t.meta.mode,
+        friendlyFire: t.meta.friendlyFire,
+        aiTargetPerception: t.meta.aiTargetPerception,
+      },
+    });
     const replayed = replayTrace(t, rebuilt);
     expect(replayed.world.tick).toBe(live.tick);
     expect(replayed.world.tanks.map((tk) => tk.pos)).toEqual(live.tanks.map((tk) => tk.pos));
@@ -8834,10 +8838,11 @@ describe('startGameWith: canonical session identity at the production boundary',
 describe('versusResultFromWorld', () => {
   /** A real versus world with `players` slots in `mode`. */
   function versusWorld(mode: 'ffa' | 'teams', players: number): World {
-    return createWorldFor(
-      arenaById(ARENA_DEFS[0].id), 1, undefined, undefined, undefined, undefined,
-      players, undefined, mode, false, 1,
-    );
+    return createWorldFor(arenaById(ARENA_DEFS[0].id), 1, {
+      playerCount: players,
+      stock: 1,
+      rules: { mode, friendlyFire: false },
+    });
   }
 
   /** Eliminate every listed slot the way a stock-exhausted death does. */

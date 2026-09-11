@@ -1,5 +1,6 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry, AiTargetPerception } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry } from './types';
 import { createWorld, type World } from './world';
+import type { WorldRulesInit } from './rules';
 import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
 import { PP1_ROLE_SHELL_CAPS, PP1_ROLE_MINE_CAPS } from './config/pp1-roles';
@@ -496,6 +497,14 @@ export interface WorldForInit {
  */
 export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit = {}): World {
   const { lives = LIVES, playerCount = 1, stock, teams, pp1Roles, rules = {} } = init;
+  // `arenaGeometry` is a `WorldRulesInit` key and also the one rule `loadArena` DERIVES, so
+  // it is taken off `rules` here rather than left to the spread below. A caller passing
+  // `rules: { ...world.rules }` -- which is the documented way to derive a variant, and
+  // exactly what a versus rematch would reach for -- otherwise overwrites the geometry of the
+  // board just loaded with the geometry of the board it came from. No caller does that today,
+  // which is why nothing would have caught it: the spread is well-typed and every test passes.
+  const worldRules: WorldRulesInit = { ...rules };
+  delete worldRules.arenaGeometry;
   // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
   // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
   // campaign-coop call, which is every call that does not set a mode, is unaffected).
@@ -510,7 +519,7 @@ export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit =
   // left to the spread.
   return createWorld({
     ...loadArena(arena, playerCount, rules.mode, seed, stock, teams, pp1Roles),
-    ...rules,
+    ...worldRules,
     lives,
     seed,
   });

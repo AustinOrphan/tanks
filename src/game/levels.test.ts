@@ -452,7 +452,7 @@ describe('createVersusLevelSystem', () => {
     // ANY of mode/players/stock/friendlyFire/arena is dropped on the floor between
     // this method and createWorldFor.
     expect(w).toEqual(
-      createWorldFor(arenaById('arena-02'), 42, undefined, 3, undefined, undefined, 3, undefined, 'teams', true, 2),
+      createWorldFor(arenaById('arena-02'), 42, { lives: 3, playerCount: 3, stock: 2, rules: { mode: 'teams', friendlyFire: true } }),
     );
   });
 

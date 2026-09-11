@@ -74,21 +74,22 @@ function scriptedInputs(
 }
 
 function worldFor(meta: ReplayMeta, playerCount = 1): World {
-  return createWorldFor(
-    arenaById(meta.arenaId),
-    meta.seed,
-    meta.unarmedTrigger,
-    meta.lives,
-    meta.corpseBlocksShells,
-    meta.muzzleClearsTanks,
+  // `stock` and `teams` are deliberately absent: both are versus-only and neither is a
+  // ReplayMeta field. They used to be two `undefined`s carried in the positional list to
+  // reach `aiTargetPerception` past them.
+  return createWorldFor(arenaById(meta.arenaId), meta.seed, {
+    lives: meta.lives,
     playerCount,
-    meta.coopAttempts,
-    meta.mode,
-    meta.friendlyFire,
-    undefined, // stock: versus-only, not a ReplayMeta field
-    undefined, // teams: versus-only, not a ReplayMeta field
-    meta.aiTargetPerception,
-  );
+    rules: {
+      unarmedTrigger: meta.unarmedTrigger,
+      corpseBlocksShells: meta.corpseBlocksShells,
+      muzzleClearsTanks: meta.muzzleClearsTanks,
+      coopAttempts: meta.coopAttempts,
+      mode: meta.mode,
+      friendlyFire: meta.friendlyFire,
+      aiTargetPerception: meta.aiTargetPerception,
+    },
+  });
 }
 
 describe('canonical / fingerprint', () => {
@@ -264,7 +265,7 @@ describe('createRecordingInput', () => {
 
 describe('replayMetaFor', () => {
   it('reads the world, not the flags that built it', () => {
-    const world = createWorldFor(ARENAS[1], 4242, 'both', 2);
+    const world = createWorldFor(ARENAS[1], 4242, { lives: 2, rules: { unarmedTrigger: 'both' } });
     expect(replayMetaFor(world, 'arena-02')).toEqual({
       arenaId: 'arena-02',
       seed: 4242,
@@ -284,7 +285,7 @@ describe('replayMetaFor', () => {
     // Same claim as the case above, for the two NEW World-level switches: a replay
     // must reproduce whatever corpseBlocksShells/muzzleClearsTanks the recorded world
     // was actually built with, not today's defaults.
-    const world = createWorldFor(ARENAS[0], 7, 'none', 3, true, false);
+    const world = createWorldFor(ARENAS[0], 7, { lives: 3, rules: { unarmedTrigger: 'none', corpseBlocksShells: true, muzzleClearsTanks: false } });
     expect(replayMetaFor(world, 'arena-01')).toEqual({
       arenaId: 'arena-01',
       seed: 7,
@@ -304,7 +305,7 @@ describe('replayMetaFor', () => {
     // Same claim again, for the shared-attempts switch: a replay must reproduce
     // whatever coopAttempts the recorded world was actually built with (pool mode,
     // false), not the shared-attempts default.
-    const world = createWorldFor(ARENAS[0], 8, 'none', 3, undefined, undefined, 2, false);
+    const world = createWorldFor(ARENAS[0], 8, { lives: 3, playerCount: 2, rules: { unarmedTrigger: 'none', coopAttempts: false } });
     expect(replayMetaFor(world, 'arena-01')).toEqual({
       arenaId: 'arena-01',
       seed: 8,
@@ -321,7 +322,7 @@ describe('replayMetaFor', () => {
   });
 
   it('reads mode and friendlyFire off the world too, when a versus mode was requested (n-player arc PR 4)', () => {
-    const world = createWorldFor(ARENAS[0], 11, 'none', 3, undefined, undefined, 4, undefined, 'teams', true);
+    const world = createWorldFor(ARENAS[0], 11, { lives: 3, playerCount: 4, rules: { unarmedTrigger: 'none', mode: 'teams', friendlyFire: true } });
     expect(replayMetaFor(world, 'arena-01')).toEqual({
       arenaId: 'arena-01',
       seed: 11,
@@ -343,10 +344,11 @@ describe('replayMetaFor', () => {
     // so playback rebuilt at the shipped 'full' while the fingerprint still reported a
     // match. Every field is asserted, so a rule the meta stops reading is caught here
     // whichever of the seven it is.
-    const world = createWorldFor(
-      ARENAS[0], 13, 'none', 3, undefined, undefined, 1, undefined,
-      undefined, undefined, undefined, undefined, 'line-of-sight',
-    );
+    const world = createWorldFor(ARENAS[0], 13, {
+      lives: 3,
+      playerCount: 1,
+      rules: { unarmedTrigger: 'none', aiTargetPerception: 'line-of-sight' },
+    });
     expect(replayMetaFor(world, 'arena-01')).toEqual({
       arenaId: 'arena-01',
       seed: 13,
@@ -363,7 +365,7 @@ describe('replayMetaFor', () => {
   });
 
   it('round-trips mode and friendlyFire through createWorldFor -- enemies stay stripped on the rebuilt world too', () => {
-    const recorded = createWorldFor(ARENAS[0], 12, 'none', 3, undefined, undefined, 4, undefined, 'ffa', undefined);
+    const recorded = createWorldFor(ARENAS[0], 12, { lives: 3, playerCount: 4, rules: { unarmedTrigger: 'none', mode: 'ffa' } });
     const meta = replayMetaFor(recorded, 'arena-01');
     expect(meta.mode).toBe('ffa');
     const rebuilt = worldFor(meta, 4);
@@ -377,7 +379,7 @@ describe('replayMetaFor', () => {
     // values, but a replay is only faithful if REBUILDING from that meta reproduces
     // them too. worldFor() in this file is the same rebuild loop.test.ts's replay
     // round-trip performs against a live game.
-    const recorded = createWorldFor(ARENAS[0], 9, 'none', 3, true, false);
+    const recorded = createWorldFor(ARENAS[0], 9, { lives: 3, rules: { unarmedTrigger: 'none', corpseBlocksShells: true, muzzleClearsTanks: false } });
     const meta = replayMetaFor(recorded, 'arena-01');
     const rebuilt = worldFor(meta);
     expect(rebuilt.rules.corpseBlocksShells).toBe(true);
@@ -388,7 +390,7 @@ describe('replayMetaFor', () => {
     // The one field that is not an argument to createWorldFor: loop.ts sets it on
     // the player tank, and a replay that dropped it would kill a player the
     // recorded run did not.
-    const world = createWorldFor(ARENAS[0], 5, 'none', 3);
+    const world = createWorldFor(ARENAS[0], 5, { lives: 3, rules: { unarmedTrigger: 'none' } });
     world.tanks.find((t) => t.kind === 'player')!.invincible = true;
     expect(replayMetaFor(world, 'arena-01').invincible).toBe(true);
   });
@@ -536,10 +538,11 @@ describe('replayTrace', () => {
     // the rebuild the defect produced. arena-01 would prove nothing here -- its three
     // enemies commit to the player under both rules (measured over the same seeds at
     // COUNTDOWN_TICKS + 120, + 240 and + 480).
-    const recorded = createWorldFor(
-      arenaById('arena-02'), 12345, 'none', 3, undefined, undefined, 1, undefined,
-      undefined, undefined, undefined, undefined, 'line-of-sight',
-    );
+    const recorded = createWorldFor(arenaById('arena-02'), 12345, {
+      lives: 3,
+      playerCount: 1,
+      rules: { unarmedTrigger: 'none', aiTargetPerception: 'line-of-sight' },
+    });
     const meta = replayMetaFor(recorded, 'arena-02');
     expect(meta.aiTargetPerception).toBe('line-of-sight');
     expect(worldFor(meta).rules.aiTargetPerception).toBe('line-of-sight');
