@@ -123,7 +123,7 @@ describe('the legal block renderer', () => {
     expect([...kinds].sort()).toEqual(['code', 'heading', 'list', 'note', 'paragraph', 'table']);
 
     const tags = new Map<string, string>([
-      ['heading', 'H3'],
+      ['heading', 'H4'],
       ['paragraph', 'P'],
       ['note', 'P'],
       ['code', 'PRE'],
@@ -133,10 +133,28 @@ describe('the legal block renderer', () => {
     for (const doc of LEGAL_DOCUMENTS) {
       for (const block of doc.blocks) {
         const el = legalBlockElement(block);
-        const expected = block.kind === 'heading' && block.level === 3 ? 'H4' : tags.get(block.kind);
+        const expected = block.kind === 'heading' && block.level === 3 ? 'H5' : tags.get(block.kind);
         expect(el.tagName, `${doc.id}: ${block.kind}`).toBe(expected);
       }
     }
+  });
+
+  it('nests a third-level heading under the second, which no committed document exercises', () => {
+    // MEASURED, not assumed: an awk pass over all five documents finds `#` and `##` headings
+    // and no `###`, so the loop above walks the `h4` branch for every shipped heading and
+    // never the `h5` one. Without this case that branch is untested -- the same shape as the
+    // empty-table case below, where the shipped data cannot reach the code.
+    const deepest = new Map<number, number>();
+    for (const doc of LEGAL_DOCUMENTS) {
+      for (const block of doc.blocks) {
+        if (block.kind === 'heading') deepest.set(block.level, (deepest.get(block.level) ?? 0) + 1);
+      }
+    }
+    expect(deepest.get(2), 'the shipped documents have level-2 headings').toBeGreaterThan(0);
+    expect(deepest.get(3), 'a committed document now uses ### -- the sweep above covers it').toBe(
+      undefined,
+    );
+    expect(legalBlockElement({ kind: 'heading', level: 3, text: 'Sub-clause' }).tagName).toBe('H5');
   });
 
   it('distinguishes a note from a paragraph, which share a tag', () => {

@@ -57,15 +57,21 @@ function text<K extends keyof HTMLElementTagNameMap>(
  * assert only over `LEGAL_DOCUMENTS`, which would leave the `textContent` promise in this
  * module's header untested precisely because no committed document violates it today.
  *
- * Heading levels are shifted down twice: the pane's own `<h1>` is "About & Legal" and each
- * document is an `<h2>`, so a document's own `##` is an `<h3>`. A flat run of `<h2>`s would
- * say every licence clause is a sibling of the pane title, which is the structural half of
- * the same defect #629 fixed by giving the panes landmarks.
+ * Heading levels are shifted down to sit under the surface that contains them. The outline
+ * is `<h1>` "About & Legal" -> `<h2>` "Documents" -> `<h3>` the document's own title ->
+ * `<h4>`/`<h5>` its sections. A flat run of `<h2>`s would say every licence clause is a
+ * sibling of the pane title, which is the structural half of the same defect #629 fixed by
+ * giving the panes landmarks.
+ *
+ * `level` is only ever 2 or 3 -- the generator clamps deeper headings with `Math.min(level, 3)`
+ * -- and no committed document uses `###` today, so the `h5` branch is reachable only from
+ * legal.test.ts's synthetic case. That is stated rather than left to be discovered: a sweep
+ * over `LEGAL_DOCUMENTS` cannot measure it.
  */
 export function legalBlockElement(block: LegalBlock): HTMLElement {
   switch (block.kind) {
     case 'heading':
-      return text(block.level === 2 ? 'h3' : 'h4', 'hud-legal-heading', block.text);
+      return text(block.level === 2 ? 'h4' : 'h5', 'hud-legal-heading', block.text);
     case 'paragraph':
       return text('p', 'hud-legal-para', block.text);
     case 'note':

@@ -989,7 +989,15 @@ describe('hud.css is syntactically whole', () => {
       '.hud-haptics-toggle', '.hud-motion-toggle', '.hud-quality-toggle',
       '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
       '.hud-settings-about', '.hud-about-open', '.hud-records-tab-stats',
-      '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress'];
+      '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress',
+      // Issue #117's two: a document disclosure and an outbound link, both `--sm` because
+      // both lay out in a row inside a pane rather than stacking as panel slabs. Listed here
+      // because this population is a hand-maintained list, not a sweep -- a `--sm` control
+      // left off it is silently outside the one guard that says the modifier means one shape,
+      // which is #634's defect with the class present and the RULE overriding it.
+      // `.hud-legal-link` is an `<a>`, and `shape()` reads a selector rather than a tag, so
+      // it belongs in the same list as the buttons it sits beside.
+      '.hud-legal-toggle', '.hud-legal-link'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
     for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));
     // Without this the two loops above would both pass on a stylesheet that gave every

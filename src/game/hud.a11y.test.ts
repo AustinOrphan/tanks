@@ -204,3 +204,52 @@ describe('HUD achievement list (issue #629)', () => {
     expect(earned.querySelector('.ui-sr-only')?.textContent?.trim()).toBe('Earned.');
   });
 });
+
+describe('About & Legal heading structure (issue #117)', () => {
+  const levels = (el: Element): number[] =>
+    Array.from(el.querySelectorAll('h1, h2, h3, h4, h5, h6')).map((h) => Number(h.tagName[1]));
+
+  it('nests every document section under the document, and skips no level', () => {
+    // Two separable failures, and the second is the one this pane actually had in draft.
+    //
+    // A SKIPPED level (h2 -> h4) tells a screen reader's heading navigation that a section is
+    // missing. A section heading at the SAME level as its document's title says the licence
+    // clauses are siblings of the licence, not parts of it -- which is what the first draft
+    // shipped (title `h3`, sections `h3`), and which no skip check can see because nothing is
+    // skipped. The structural half of what #629 fixed by giving the panes landmarks.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    (root.querySelector('.hud-about-open') as HTMLButtonElement).click();
+    // Every document open, so the sections are in the tree at all.
+    for (const toggle of Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-legal-toggle'))) {
+      toggle.click();
+    }
+    const about = root.querySelector('.hud-about') as HTMLElement;
+
+    const order = levels(about);
+    // Non-vacuity: an empty pane, or one whose documents never opened, passes a no-skip walk
+    // trivially. Five titles plus their sections is dozens of headings.
+    expect(order.length).toBeGreaterThan(20);
+    expect(order[0], 'the pane heads itself').toBe(1);
+    for (let i = 1; i < order.length; i += 1) {
+      expect(order[i], `heading ${i} skips a level after h${order[i - 1]}`).toBeLessThanOrEqual(
+        order[i - 1] + 1,
+      );
+    }
+
+    const bodies = Array.from(root.querySelectorAll<HTMLElement>('.hud-legal-body'));
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) {
+      const [title, ...sections] = levels(body);
+      expect(title, `${body.id} has no title heading`).not.toBeUndefined();
+      // Not `toBeGreaterThan(title)` alone: a document with no sections would pass an empty
+      // loop, so the population is pinned first for the documents that have them.
+      expect(sections.length, `${body.id} has no section headings`).toBeGreaterThan(0);
+      for (const level of sections) {
+        expect(level, `${body.id}: a section is not nested under its document title`).toBeGreaterThan(
+          title,
+        );
+      }
+    }
+  });
+});
