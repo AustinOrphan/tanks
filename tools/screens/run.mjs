@@ -5,6 +5,9 @@
  *   node tools/screens/run.mjs --state screen.records.stats --dist dist \
  *     --out tmp/frame.png --report tmp/producer.json --w 1280 --h 800 --dpr 2
  *
+ * `--report` may be omitted, and then lands beside `--out`; both default under `tmp/`
+ * rather than the repository root (issue #637, tools/screens/paths.mjs).
+ *
  * A standalone CLI writing one frame and one report, which is the shape
  * `tools/capture/gallery-adapter.mjs` already established for the `moment` producer -- the
  * adapter shells out, reads `producer.json` back, and validates it. Playwright arrives
@@ -27,6 +30,7 @@ import { existsSync } from 'node:fs';
 import { extname, dirname, resolve } from 'node:path';
 import { resolveRequestPath } from '../visual/serve-path.mjs';
 import { findScreenState, SCREEN_STATE_IDS, STEP_KINDS, WEBGL_MODES } from './states.mjs';
+import { screenCapturePaths } from './paths.mjs';
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
@@ -160,8 +164,10 @@ async function main() {
     throw new Error(`--state must name a screen state (${SCREEN_STATE_IDS.join(', ')})`);
   }
   const dist = resolve(arg('dist', 'dist'));
-  const out = resolve(arg('out', 'screen.png'));
-  const reportPath = resolve(arg('report', 'producer.json'));
+  // Both artifacts through one resolver (issue #637): a bare default used to resolve
+  // against the working directory, dropping `screen.png` and `producer.json` into the
+  // repository root where neither is ignored. See tools/screens/paths.mjs.
+  const { out, report: reportPath } = screenCapturePaths({ out: arg('out'), report: arg('report') });
   const width = Number(arg('w', 1280));
   const height = Number(arg('h', 800));
   const dpr = Number(arg('dpr', 2));
