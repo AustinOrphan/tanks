@@ -183,10 +183,34 @@ export const SCREEN_STATES = Object.freeze([
   state({
     id: 'screen.versus-setup',
     title: 'Versus Setup',
-    description: 'Mode, players, map, stock and the who is-playing cards.',
+    description:
+      'Mode, players, the map cards, stock and the who is-playing cards. Random is the ' +
+      'pane default, so this is also the one state showing a selected card that is not a board.',
     storage: MID_CAMPAIGN,
     steps: [...PAST_SPLASH, { click: '.hud-versus-open' }, { waitVisible: '.hud-versus-setup' }],
-    measure: ['.hud-versus-setup', '.hud-versus-start'],
+    // `.hud-versus-start` is measured for its Y: the map cards (issue #274) lengthened this
+    // pane, and how far down Start sits is the number that says whether it is still
+    // reachable in about a screen. Measured at 793 before the cards and 1240 after.
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-card', '.hud-versus-start'],
+  }),
+  state({
+    id: 'screen.versus-setup.selected',
+    title: 'Versus Setup, a board chosen',
+    description:
+      'Arena 3 picked (issue #274). The pane default is Random, so this is the only state ' +
+      'showing the selection ring on a card with a board schematic in it -- the state ' +
+      "#274's \"selected state remains obvious without relying on color\" criterion is about.",
+    storage: MID_CAMPAIGN,
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { click: '.hud-versus-map-row [data-map="arena-03"]' },
+      // Waiting on the ROW rather than on the clicked card: the row is replaced wholesale on
+      // every selection, so the node clicked above is gone by the time this resolves.
+      { waitVisible: '.hud-versus-map-row' },
+    ],
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-card'],
   }),
   state({
     id: 'screen.versus-setup.teams',
@@ -215,7 +239,7 @@ export const SCREEN_STATES = Object.freeze([
       { click: '.hud-versus-mode-row [data-mode="teams"]' },
       { waitVisible: '.hud-versus-friendlyfire-btn' },
     ],
-    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-friendlyfire-btn'],
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-card', '.hud-versus-friendlyfire-btn'],
   }),
   state({
     id: 'screen.versus-setup.map-replaced',

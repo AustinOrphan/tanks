@@ -756,6 +756,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.versus-setup.selected",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.versus-setup.selected"
+    },
+    "fixture": {
+      "id": "screen.versus-setup.selected",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Versus Setup, a board chosen",
+    "description": "The Versus Setup pane with Arena 3 picked, showing the selection ring on a map card.",
+    "altText": "Screenshot of the Tanks! versus setup screen, a grid of map cards each showing a board schematic, with Arena 3 ringed as the current choice.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.versus-setup.teams",
     "producer": {
       "kind": "screen",

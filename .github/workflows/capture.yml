@@ -72,6 +72,7 @@ on:
           - screen.startup.probe-blocked
           - screen.startup.unsupported-render
           - screen.versus-setup
+          - screen.versus-setup.selected
           - screen.versus-setup.teams
           - screen.versus-setup.map-replaced
       ref:
