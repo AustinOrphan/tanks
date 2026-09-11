@@ -4972,6 +4972,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * its id, and names the axis that dropped it rather than restating the whole
    * combination: the player just moved one control, and the sentence that helps is the one
    * about the control they touched.
+   *
+   * READS THE ALREADY-UPDATED `versusConfigState`, which is an ordering requirement and not
+   * an accident: the numbers in this sentence are the combination the player just moved TO,
+   * so `setVersusAxis` must have called `setVersusConfig` before this runs. It does, and it
+   * is the only path that reaches this function -- the other two `renderVersusMapNote`
+   * callers pass `null` and never build a message. Anything that changes that ordering
+   * makes this sentence describe the combination the player LEFT, which is worse than
+   * silence because it reads as true.
    */
   function versusMapDropNotice(dropped: NonNullable<RetainedArena['dropped']>): string {
     const name = arenaLabel(dropped.id);
