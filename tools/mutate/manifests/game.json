@@ -5887,5 +5887,17 @@
       "src/game/hud.a11y.test.ts"
     ],
     "why": "Takes the landmark role off ONE pane. Chosen over removing all ten deliberately: a sweep that only checked 'some pane has role=region' would survive this, and a partial rollout is the realistic regression -- a pane added later that copies an older sibling's markup. The named-region sweep iterates every focus target and names the offender, so it fails on the first one that drifts rather than on the last."
+  },
+  {
+    "id": "a11y-column-header-takes-the-row-header-look",
+    "file": "src/game/hud.css",
+    "find": ".hud-stats-table thead th,\n.hud-versus-results thead th {\n  text-align: right;",
+    "replace": ".hud-stats-table thead th,\n.hud-versus-results thead th {\n  text-align: left;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "why": "Restores the REGRESSION issue #629 introduced and nearly shipped. Making the column headers <th scope=\"col\"> was correct -- as <td> they headed nothing and every figure beneath them was announced bare -- but each table's existing `th` rule was written for its ROW headers (left-flush, heavier, dimmed), so the column names fell out of alignment with the numerals they head. The unit suite passed, the full mutation sweep passed, and the visual gate passed, because that gate photographs the ARENA and never opens Records. It was found only by pixel-diffing a before/after capture of the pane, which is a step a person has to remember. This entry is what makes forgetting it safe: the alignment contract is asserted by POSITION (a column header matches its data cells, a row header deliberately does not), and the negative control in that test is what stops the fix being 'delete the row-header rule so everything matches'."
   }
 ]

@@ -1482,6 +1482,33 @@
   padding: 3px 0 3px 22px;
 }
 
+/* COLUMN headers keep the DATA-cell treatment (issue #629). They became <th> for the
+ * semantics -- as <td> they headed nothing, and every figure beneath them was announced
+ * bare -- but the `th` rule above is the ROW header's look: left-aligned, its own padding,
+ * heavier and dimmed. Applied to a column header it pulls the name out of alignment with
+ * the numbers it heads, which is a real regression and was caught by diffing the capture
+ * rather than by looking at it.
+ *
+ * So the rule is split by POSITION rather than by tag: a row header is left-flush against
+ * the labels it belongs to, a column header sits right-flush over its numerals. `inherit`
+ * and `1` here are not cosmetic choices -- they restore exactly what the <td> gave, which
+ * is what makes this change invisible on screen, as an accessibility fix to a shipped
+ * layout should be. */
+.hud-stats-table thead th,
+.hud-versus-results thead th {
+  text-align: right;
+  font-weight: inherit;
+  opacity: 1;
+}
+
+.hud-stats-table thead th {
+  padding: 3px 0 3px 22px;
+}
+
+.hud-versus-results thead th {
+  padding: 2px 0 2px 22px;
+}
+
 .hud-stats-actions {
   display: flex;
   gap: var(--hud-space-4);

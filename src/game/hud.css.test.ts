@@ -1475,6 +1475,59 @@ describe('hud.css is syntactically whole', () => {
  * "rgba(255, 255, 255, 0.14)" against `.hud-stat`'s "rgba(0, 0, 0, 0)"), and it is read
  * through the same helper only so both halves of the case read the same way.
  */
+describe('hud.css: a column header is not a row header (issue #629)', () => {
+  /*
+   * A REGRESSION THIS SUITE LET THROUGH ONCE, which is why it is pinned here rather than
+   * left to a picture.
+   *
+   * Both data tables shipped their column headers as <td>. Issue #629 made them
+   * <th scope="col"> so they actually head their columns -- as <td> they named nothing and
+   * every figure beneath them was announced bare. But each table already had a `th` rule,
+   * written for the ROW headers: left-aligned, its own padding, heavier, dimmed. Applying
+   * that to a column header pulled "Lifetime" and "Level attempt" out of alignment with
+   * the numerals underneath them.
+   *
+   * Nothing caught it. The unit suite passed, the mutation sweep passed, and the visual
+   * gate passed -- it photographs the ARENA, not the Records pane. It was found by
+   * diffing a before/after capture, and the diff is a thing a person has to remember to
+   * do; this assertion is not.
+   *
+   * So the contract is stated by POSITION rather than by tag: a row header is left-flush
+   * against the labels it belongs to, a column header sits right-flush over its numerals,
+   * exactly as the <td> it replaced did. An accessibility fix to a shipped layout should
+   * be invisible on screen, and "invisible" is checkable.
+   */
+  const TABLES = [
+    { table: '.hud-stats-table', label: 'stats' },
+    { table: '.hud-versus-results', label: 'versus results' },
+  ] as const;
+
+  it('aligns every column header with the data column it heads', () => {
+    for (const { table, label } of TABLES) {
+      const head = document.createElement('table');
+      head.className = table.slice(1);
+      head.innerHTML =
+        '<thead><tr><td></td><th scope="col">Col</th></tr></thead>'
+        + '<tbody><tr><th scope="row">Row</th><td>1</td></tr></tbody>';
+      document.body.appendChild(head);
+      const colHead = head.querySelector('thead th') as HTMLElement;
+      const rowHead = head.querySelector('tbody th') as HTMLElement;
+      const dataCell = head.querySelector('tbody td') as HTMLElement;
+
+      expect(resolved(colHead, 'textAlign'), `${label}: column header alignment`)
+        .toBe(resolved(dataCell, 'textAlign'));
+      expect(resolved(colHead, 'paddingLeft'), `${label}: column header padding`)
+        .toBe(resolved(dataCell, 'paddingLeft'));
+      // The negative control. Without it every assertion above is satisfied by deleting
+      // the row-header rule and letting all three cells share one look, which would trade
+      // this regression for a different one.
+      expect(resolved(rowHead, 'textAlign'), `${label}: row header still reads left`)
+        .not.toBe(resolved(dataCell, 'textAlign'));
+      head.remove();
+    }
+  });
+});
+
 describe('hud.css: the Practice chip reads as an identity, not a fourth stat', () => {
   it('carries a heavier weight and a ground its neighbours do not, live', () => {
     const root = document.createElement('div');
