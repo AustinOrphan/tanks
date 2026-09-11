@@ -834,5 +834,19 @@
       "the selectors names an element the shipped page actually has"
     ],
     "why": "Restores the exact selector that shipped and failed TWICE. It is a denylist of the HUD canvases known at the time it was written: a bare `canvas` lost to the Customize preview when the route UI began building before a session (issue #468), the preview was excluded by class, and the same shape returned the moment issue #274 gave each versus map card a board schematic. MEASURED both times rather than reasoned -- CI and a local run each reported the visual gate's probe reading `bufferWidth: 132, bufferHeight: 108, hasContext: false`, a schematic canvas, while every screenshot-based check on the same run passed (board 71.3% painted, 96.7% of width). The gate was therefore reporting a renderer failure that had not happened, which is the worst failure a gate has. NOTHING ELSE CATCHES IT: `npm run visual` and `npm run gallery` both need a real browser and neither runs under vitest, so the unit suite's only purchase on this rule is the structural fixture the killing case builds -- a page with the HUD and its two canvases BEFORE the gameplay canvas, which is the document order the real page has and the reason a denylist ever went wrong."
+  },
+  {
+    "id": "roundtrip-pins-a-literal-canvas-headcount",
+    "file": "tools/visual/roundtrip.mjs",
+    "find": "    const allowed = when === 'in match' ? bootCanvases + 1 : bootCanvases;",
+    "replace": "    const allowed = when === 'in match' ? 2 : 2;",
+    "expect": "killed",
+    "tests": [
+      "tools/gallery/enter-gameplay.test.ts"
+    ],
+    "killedBy": [
+      "the selectors is the only definition: both visual tools import it rather than spelling their own"
+    ],
+    "why": "Restores the literal `canvases <= 2` this check shipped with -- the gameplay canvas plus the HUD's Customize preview, correct on the day it was written and wrong the moment the page grew more page-owned canvases. Issue #274's seven map schematics took the boot census to 8, so the literal form reports six phantom leaks per gesture on a page that leaks nothing, which is a required gate failing for a reason no session caused. MEASURED: with the structural form the sweep prints `boot {canvases: 8, gameplay: 0}` and `in match {canvases: 9, gameplay: 1}` and exits 0. Nothing that runs under vitest drives this file -- it needs a real browser -- so the only purchase the unit suite has on the rule is the source guard the killing case applies, which is why the entry mutates the comparison into a literal rather than breaking the sweep's behaviour."
   }
 ]
