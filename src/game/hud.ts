@@ -271,7 +271,12 @@ import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achieve
 import type { RoundPhase } from '../sim/round';
 import { VERSUS_STOCK } from '../sim/constants';
 import { configFor } from '../sim/config';
-import { versusMapChoices, type VersusConfig } from './versus-config';
+import {
+  retainArenaChoice,
+  versusMapChoices,
+  type RetainedArena,
+  type VersusConfig,
+} from './versus-config';
 import {
   defaultSlots,
   resizeSlots,
@@ -1509,6 +1514,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <div class="hud-versus-row">
         <h2>Map</h2>
         <div class="hud-versus-map-row"></div>
+        <!-- Why a map the player had already chosen is no longer selected (issue #274).
+             Empty and hidden until a Players or Mode change actually drops one. role=status
+             rather than aria-describedby: the mode note beside it describes a DISABLED
+             BUTTON that is still there to point at, and this one reports that a choice has
+             LEFT the row, so there is no control to hang it off. NO BACKTICKS in this
+             markup: it lives in a template literal, and one closes the string. -->
+        <p class="ui-hint hud-versus-map-note hud-versus-map-note--hidden" role="status"></p>
       </div>
       <div class="hud-versus-row">
         <h2>Stock</h2>
@@ -2017,6 +2029,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const versusModeNoteEl = el.querySelector('.hud-versus-mode-note') as HTMLElement;
   const versusPlayersRow = el.querySelector('.hud-versus-players-row') as HTMLElement;
   const versusMapRow = el.querySelector('.hud-versus-map-row') as HTMLElement;
+  const versusMapNoteEl = el.querySelector('.hud-versus-map-note') as HTMLElement;
   const versusStockRow = el.querySelector('.hud-versus-stock-row') as HTMLElement;
   const versusFriendlyFireRow = el.querySelector('.hud-versus-friendlyfire-row') as HTMLElement;
   const versusSlotRowsEl = el.querySelector('.hud-versus-slot-rows') as HTMLElement;
@@ -4923,6 +4936,54 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     opts.versusSetup?.set({ ...next });
   }
 
+  /**
+   * A Players or Mode change, applied with the retained MAP re-checked against it.
+   *
+   * Both controls filter the Map row, so either can leave `arenaId` naming an entry the
+   * row no longer offers -- and the launch gate throws on one rather than launching it
+   * (`retainArenaChoice`, versus-config.ts, carries the full account). Every other
+   * dependent field was already followed inline by the two handlers; this is the same
+   * move for the one that was missed, factored out only because BOTH handlers need it and
+   * a second inline copy is how the first one drifts.
+   *
+   * Deliberately NOT folded into `setVersusConfig`: the Map row's own click handler goes
+   * through that too, and there the player is CHOOSING an arena rather than retaining one.
+   * Re-checking a fresh, valid choice would be harmless today and exactly the wrong shape
+   * the first time a choice is legal to make but not yet reflected in the state read here.
+   */
+  function setVersusAxis(next: VersusConfig): void {
+    const retained = retainArenaChoice(next.arenaId, next.players, next.mode);
+    setVersusConfig(retained.dropped === null ? next : { ...next, arenaId: retained.arenaId });
+    renderVersusMapNote(retained.dropped);
+  }
+
+  /**
+   * The dropped-map notice. Cleared by passing `null`, which every path that is not a drop
+   * does -- a fresh map click, and the pane being (re)seeded -- so the note never outlives
+   * the state it describes.
+   */
+  function renderVersusMapNote(dropped: RetainedArena['dropped']): void {
+    versusMapNoteEl.textContent = dropped === null ? '' : versusMapDropNotice(dropped);
+    versusMapNoteEl.classList.toggle('hud-versus-map-note--hidden', dropped === null);
+  }
+
+  /**
+   * Why the choice went away, in the pane's own vocabulary. Names the BOARD rather than
+   * its id, and names the axis that dropped it rather than restating the whole
+   * combination: the player just moved one control, and the sentence that helps is the one
+   * about the control they touched.
+   */
+  function versusMapDropNotice(dropped: NonNullable<RetainedArena['dropped']>): string {
+    const name = arenaLabel(dropped.id);
+    if (dropped.reason === 'gone') return `${name} is no longer available. Random selected.`;
+    if (dropped.reason === 'mode') {
+      const label = VERSUS_MODE_OPTIONS.find((o) => o.id === versusConfigState.mode)?.label
+        ?? versusConfigState.mode;
+      return `${name} is not available in ${label}. Random selected.`;
+    }
+    return `${name} is not available with ${versusConfigState.players} players. Random selected.`;
+  }
+
   function renderVersusModeSelection(): void {
     const offered = teamsOfferedAt(versusConfigState.players);
     for (const b of Array.from(versusModeRow.children) as HTMLButtonElement[]) {
@@ -4975,6 +5036,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       setSelected(b, choice === versusConfigState.arenaId);
       b.addEventListener('click', () => {
         setVersusConfig({ ...versusConfigState, arenaId: choice });
+        renderVersusMapNote(null); // the note described the choice this click replaces
         renderVersusMapRow(); // REPLACE -- rebuilds the whole row for the new selection ring
       });
       b.addEventListener('click', blurIfPointer);
@@ -5245,7 +5307,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     b.dataset.mode = opt.id;
     b.textContent = opt.label;
     b.addEventListener('click', () => {
-      setVersusConfig({ ...versusConfigState, mode: opt.id });
+      // setVersusAxis, not setVersusConfig -- Mode filters the Map row, so it can strand
+      // the retained choice (issue #274).
+      setVersusAxis({ ...versusConfigState, mode: opt.id });
       renderVersusModeSelection();
       renderVersusFriendlyFireRow(); // absent <-> present follows mode directly
       renderVersusMapRow(); // REPLACE -- Mode filters the map list too (issue #270)
@@ -5275,7 +5339,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // requires that switching modes does not corrupt retained choices, which includes
       // the round trip 4 -> 2 -> 4.
       const mode = teamsOfferedAt(players) ? versusConfigState.mode : 'ffa';
-      setVersusConfig({
+      // ...and the MAP must follow the count for the same reason (issue #274): three
+      // shipped entries are narrower than {2,3,4}, so the retained choice can stop being
+      // offered here. Fed the already-clamped `mode`, so a single click that changes both
+      // axes is re-checked against the combination it actually lands on.
+      setVersusAxis({
         ...versusConfigState,
         players,
         mode,
@@ -5389,6 +5457,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   function seedAndRenderVersus(initial?: VersusConfig | null): void {
     if (initial) setVersusConfig({ ...initial });
+    renderVersusMapNote(null); // a reopened pane carries no note from its last visit
     renderVersusModeSelection();
     renderVersusPlayersSelection();
     renderVersusStockSelection();

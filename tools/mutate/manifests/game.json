@@ -5764,5 +5764,55 @@
       "modal isolation: a blocking overlay is really modal (issue #327) leaves the live region announceable, which is why it is exempt"
     ],
     "why": "Isolates the toast region along with everything else. `inert` removes a subtree from the ACCESSIBILITY TREE as well as the tab order, so this silences the page's one `aria-live` region for as long as a dialog is open -- and a confirmation is exactly when a player is most likely to be told something. The region holds nothing focusable, so exempting it costs no containment at all, which is the trade this line records. Invisible to every containment assertion, because containment is unaffected."
+  },
+  {
+    "id": "versus-clamp-keeps-a-stranded-map",
+    "file": "src/game/versus-config.ts",
+    "find": "  if (versusMapChoices(players, mode, entries).includes(arenaId)) {",
+    "replace": "  if (true) {",
+    "expect": "killed",
+    "expectFailures": 5,
+    "tests": [
+      "src/game/versus-config.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "Forces the retained map to be kept at EVERY (players, mode), which is the exact pre-#274 behaviour: the pane's Players and Mode handlers rebuild the Map row without the stranded choice but keep carrying it in `versusConfigState`, and `resolveVersusConfig` -- the launch gate -- then THROWS `map 'vs-duel-01' does not support N=3 mode=ffa` out of the Start click handler, which nothing catches, so Start silently does nothing. Invisible to any assertion about what the Map ROW draws, which is why the hud case asserts what Start EMITS and then runs the emitted config through the real gate rather than restating the rule. Killed by 5: four retainArenaChoice unit cases (players, mode, gone, both-predicates) and the hud pane case. The 'random' and still-offered cases are NOT among them and must not be -- they are the negative controls, and they pass under this mutation precisely because it only ever keeps, which is what makes them controls."
+  },
+  {
+    "id": "versus-clamp-blames-the-wrong-axis",
+    "file": "src/game/versus-config.ts",
+    "find": "    entry === undefined ? 'gone' : entry.players.includes(players) ? 'mode' : 'players';",
+    "replace": "    entry === undefined ? 'gone' : entry.players.includes(players) ? 'players' : 'mode';",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/versus-config.test.ts",
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "Swaps the two axis reasons, so the notice sends the player to the control that did NOT drop their board -- 'not available with 3 players' about an entry that declares three players, and vice versa. The replacement still clamps and still shows a notice, so it is invisible to any test asserting only that the choice was replaced or that some text appeared; it is caught only because the reason is asserted by name in the unit cases and because the hud case asserts the notice CONTENT ('3 players') rather than its presence. That is the whole reason the hud assertion is written on content."
+  },
+  {
+    "id": "versus-axis-change-skips-the-clamp",
+    "file": "src/game/hud.ts",
+    "find": "    setVersusConfig(retained.dropped === null ? next : { ...next, arenaId: retained.arenaId });",
+    "replace": "    setVersusConfig(next);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "Computes the clamp and then ignores it, keeping the stranded id in the config while STILL rendering the notice -- the pane says the board was replaced and launches the board it said it replaced. A pure-function test on retainArenaChoice cannot see this and neither can a notice-presence assertion; only the hud case's launch-gate assertion on the emitted config catches it, which is why that assertion runs resolveVersusConfig rather than reading versusConfigState."
+  },
+  {
+    "id": "versus-map-note-outlives-its-choice",
+    "file": "src/game/hud.ts",
+    "find": "        renderVersusMapNote(null); // the note described the choice this click replaces",
+    "replace": "        void 0; // the note described the choice this click replaces",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "why": "Leaves the dropped-map notice up after the player picks a new map, so a sentence explaining that a PREVIOUS choice was unavailable sits under the choice now selected and reads as a warning about it. Nothing about the clamp itself changes, so every assertion on replacement and on the launch gate still passes; caught only by the dedicated clears-the-notice case. Filed as its own entry rather than folded into the clamp entries because the defect is the note's LIFETIME, which no assertion about the moment of the drop can reach."
   }
 ]

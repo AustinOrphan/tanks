@@ -2410,7 +2410,14 @@
  * class because they sit in different boxes -- one in the pane, one inside a slot row --
  * and a future spacing rule will almost certainly want to tell them apart. */
 .hud-versus-start-reason--hidden,
-.hud-versus-slot-reason--hidden {
+.hud-versus-slot-reason--hidden,
+/* The dropped-map notice (issue #274). Grouped with the refusals rather than given its own
+ * rule because it needs exactly what they need -- `.ui-hint` for the look, `display: none`
+ * for the hiding -- and a fourth near-identical rule is what this group exists to avoid.
+ * It keeps `.ui-hint`'s dimming, unlike the two refusals below: a swapped map choice is
+ * information, not a refusal, and the pane already carries a genuine refusal treatment
+ * that this must not compete with. */
+.hud-versus-map-note--hidden {
   display: none;
 }
 

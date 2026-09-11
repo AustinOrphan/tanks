@@ -11,7 +11,7 @@ import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalo
 // for a wall-clock or engine RNG that would make two "random" picks with the same seed
 // disagree.
 import { mulberry32 } from '../sim/ai/player-profile';
-import type { VersusSlotSetup } from './versus-setup';
+import { RANDOM_ARENA, type VersusSlotSetup } from './versus-setup';
 
 /**
  * One versus match's selections -- what the setup pane collects and what
@@ -100,6 +100,66 @@ export function versusMapChoices(
   return entries
     .filter((e) => e.players.includes(players) && e.modes.includes(mode))
     .map((e) => e.id);
+}
+
+/**
+ * Which axis stopped offering a retained map, so the pane can say why rather than
+ * silently swapping the player's choice. `'players'` when the entry does not declare the
+ * new count at all, `'mode'` when it declares the count but not the mode, and `'gone'`
+ * when the id names no entry -- reachable only from a stored setup written by an older
+ * build, which `sanitizeSetup` already screens, but not this module's business to assume.
+ */
+export type ArenaDropReason = 'players' | 'mode' | 'gone';
+
+/** A retained map choice after a (players, mode) change -- see `retainArenaChoice`. */
+export interface RetainedArena {
+  /** What to keep: the original id, or `RANDOM_ARENA` when it is no longer offered. */
+  arenaId: string;
+  /** The id that was dropped and why, or `null` when the original is still offered. */
+  dropped: { id: string; reason: ArenaDropReason } | null;
+}
+
+/**
+ * The retained map choice, re-checked against a NEW (players, mode).
+ *
+ * WHY THIS EXISTS. The pane's Players and Mode controls both filter the Map row
+ * (`versusMapChoices` reads both axes), so either can leave the retained `arenaId` naming
+ * an entry the row no longer offers. Both handlers already follow every other dependent
+ * field -- `slots` is resized to the new count, `mode` falls back to `ffa` where Teams is
+ * unofferable -- and `arenaId` was the one left alone, on a premise three doc comments in
+ * two files stated outright: that every shipped entry declared all of {2,3,4} x both
+ * modes, so nothing could reach it. Issues #271-#273 shipped three narrower entries and
+ * that premise stopped being true without the comments changing.
+ *
+ * What the stranded id costs is not a wrong board. `resolveVersusConfig` below is the
+ * launch gate and THROWS rather than launching an unsupported combination, nothing on the
+ * Start path catches it, so the exception escapes the click handler and the button appears
+ * to do nothing at all. That is issue #274's criterion 4, and this is its pure half.
+ *
+ * `RANDOM_ARENA` is the fallback for the same reason `sanitizeSetup` (versus-setup.ts)
+ * already uses it on the storage path: `pickVersusArena` resolves it against the CURRENT
+ * catalog for the CURRENT (players, mode), so it is the one value that cannot itself go
+ * stale. Keeping the two paths on the same fallback means a player who trips this in the
+ * pane and one who trips it across a build land in the same place.
+ *
+ * A pure function of its arguments, with the same injected `entries` seam as its
+ * neighbours -- the shipped catalog cannot currently produce every `ArenaDropReason`, and
+ * a fixture must be able to.
+ */
+export function retainArenaChoice(
+  arenaId: string,
+  players: number,
+  mode: VersusMode,
+  entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
+): RetainedArena {
+  if (arenaId === RANDOM_ARENA) return { arenaId, dropped: null };
+  if (versusMapChoices(players, mode, entries).includes(arenaId)) {
+    return { arenaId, dropped: null };
+  }
+  const entry = entries.find((e) => e.id === arenaId);
+  const reason: ArenaDropReason =
+    entry === undefined ? 'gone' : entry.players.includes(players) ? 'mode' : 'players';
+  return { arenaId: RANDOM_ARENA, dropped: { id: arenaId, reason } };
 }
 
 /**
