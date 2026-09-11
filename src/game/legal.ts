@@ -52,12 +52,17 @@ function text<K extends keyof HTMLElementTagNameMap>(
 /**
  * One block as one element.
  *
+ * Exported for `legal.test.ts`, which drives it with hostile fixtures the shipped documents
+ * do not contain -- text that looks like markup, an empty table. The alternative was to
+ * assert only over `LEGAL_DOCUMENTS`, which would leave the `textContent` promise in this
+ * module's header untested precisely because no committed document violates it today.
+ *
  * Heading levels are shifted down twice: the pane's own `<h1>` is "About & Legal" and each
  * document is an `<h2>`, so a document's own `##` is an `<h3>`. A flat run of `<h2>`s would
  * say every licence clause is a sibling of the pane title, which is the structural half of
  * the same defect #629 fixed by giving the panes landmarks.
  */
-function blockElement(block: LegalBlock): HTMLElement {
+export function legalBlockElement(block: LegalBlock): HTMLElement {
   switch (block.kind) {
     case 'heading':
       return text(block.level === 2 ? 'h3' : 'h4', 'hud-legal-heading', block.text);
@@ -139,7 +144,7 @@ function disclosureFor(doc: LegalDocument): LegalDisclosure {
   body.appendChild(
     text('p', 'hud-legal-source', `The full text of ${doc.source} in this repository.`),
   );
-  for (const block of doc.blocks) body.appendChild(blockElement(block));
+  for (const block of doc.blocks) body.appendChild(legalBlockElement(block));
 
   wrap.appendChild(toggle);
   wrap.appendChild(body);

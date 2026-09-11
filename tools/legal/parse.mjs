@@ -210,6 +210,11 @@ export function parseLegalDocument(text, source) {
       flushParagraph();
       const items = [];
       while (i < lines.length && (/^[-*]\s/.test(lines[i]) || (items.length > 0 && /^\s+\S/.test(lines[i])))) {
+        // Checked HERE and not only in `assertSupported`, which this loop never reaches for
+        // a continuation line: an indented `- nested` matches the wrapped-item rule below and
+        // was silently appended to its parent's text as "top - nested". Found by the guard's
+        // own negative control rather than by reading, which is the reason that control exists.
+        assertSupported(lines[i], source, i + 1);
         if (/^[-*]\s/.test(lines[i])) items.push(lines[i].slice(2).trim());
         else items[items.length - 1] += ` ${lines[i].trim()}`;
         i += 1;
