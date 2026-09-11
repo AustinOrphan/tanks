@@ -5438,7 +5438,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       for (const opt of VERSUS_ROLE_OPTIONS) {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'ui-btn ui-selectable hud-versus-role-btn';
+        // `--sm`, like the team and difficulty buttons beside it in this row (issue #634).
+        // It shipped without a size modifier and without a rule of its own, so it took
+        // `.ui-btn`'s deliberately sizeless base and rendered with ZERO padding -- the one
+        // control in the pane that did.
+        btn.className = 'ui-btn ui-btn--sm ui-selectable hud-versus-role-btn';
         btn.dataset.role = opt.role;
         btn.textContent = opt.label;
         // SLOT CONTEXT (issue #629). Up to four slots build the same three words, so a
