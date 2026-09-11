@@ -212,4 +212,15 @@ describe('the selectors', () => {
       /canvases\s*>\s*\d/,
     );
   });
+
+  // NOT MUTATION-COVERED, and the gap is stated rather than left to be discovered. An entry
+  // mutating either CLI is REFUSED by the harness -- `tools/mutate/run.mjs` checks that a
+  // declared test can reach the file it mutates, and vitest's dependency graph relates
+  // nothing to verify.mjs or roundtrip.mjs: this file reads them with `?raw`, which is not a
+  // module edge, and a real import is impossible because both call `process.exit` at load
+  // when they find no dist argument. The assertions above are therefore the whole of the
+  // unit-level protection for a rule whose real exercise needs a browser. Making them
+  // mutable would mean gating each CLI's `main()` behind an invoked-directly check, which is
+  // a change to two tools' entry points and is not this issue's.
+  
 });
