@@ -6085,5 +6085,119 @@
       "the legal block renderer renders every block kind the generator can emit, and the shipped data uses all of them"
     ],
     "why": "Restores the outline this pane shipped in draft: the document title is an h3 and so is every section inside it, so a screen reader's heading navigation is told the PolyForm licence's twenty clauses are siblings of the licence rather than parts of it. A no-skipped-levels walk cannot see it -- nothing is skipped, h1 -> h2 -> h3 -> h3 is monotonic -- which is why the case that kills this asserts the RELATIONSHIP (every section strictly deeper than its own document's title) beside the walk. Nothing visible moves either: `.hud-legal-heading` styles by class, so an h3 and an h4 render identically. MEASURED by hand before this entry existed: reverting the one ternary fails with `expected 3 to be greater than 3` on hud-legal-body-privacy."
+  },
+  {
+    "id": "schematic-rect-width-reads-the-far-edge",
+    "file": "src/game/arena-schematic.ts",
+    "find": "      w: wall.aabb.maxX - wall.aabb.minX,",
+    "replace": "      w: wall.aabb.maxX,",
+    "expect": "killed",
+    "tests": [
+      "src/game/arena-schematic.test.ts"
+    ],
+    "killedBy": [
+      "arenaSchematic draws the same cover the simulation builds, not a second grid walk",
+      "arenaSchematic keeps every rectangle inside the floor it reports"
+    ],
+    "why": "An AABB's far edge used as a width -- the single most available slip when flattening `{minX, maxX}` into `{x, w}`, and the one that still draws something board-shaped. Every rectangle grows rightward to its own right edge again, so cover smears across the board and the card stops describing the arena; but the card still renders, the canvas still fills, and every structural assertion about the card (a canvas exists, it has a box, it is aria-hidden) passes. jsdom has no 2D context, so no HUD test can see a pixel of it either. Killed only by the two cases that compare the rectangles against `wallsForQuery`'s own AABBs and check each one stays inside the reported floor."
+  },
+  {
+    "id": "schematic-stretches-the-board-to-fill-its-box",
+    "file": "src/game/arena-schematic.ts",
+    "find": "  const scale = Math.min(width / schematic.width, height / schematic.height);\n  const offsetX = (width - schematic.width * scale) / 2;\n  const offsetY = (height - schematic.height * scale) / 2;",
+    "replace": "  const scale = width / schematic.width;\n  const offsetX = 0;\n  const offsetY = 0;",
+    "expect": "killed",
+    "tests": [
+      "src/game/arena-schematic.test.ts"
+    ],
+    "killedBy": [
+      "drawArenaSchematic draws through a fake context, in the order and geometry a board needs"
+    ],
+    "why": "Fits the board to the box's width and anchors it at the corner, which is what a first draft of any fit-to-box routine does. A card comparing eight boards is then comparing eight differently-distorted pictures, and the distortion is largest on exactly the boards whose shape is the reason to pick them. Invisible to every other assertion in the repository: the call still returns true, the same number of rectangles is still painted, and the aspect check cannot be done in jsdom at all -- which is why the case that kills this runs a hand-rolled 2D context and measures the painted floor's ratio and margins rather than the scale factor."
+  },
+  {
+    "id": "schematic-drops-breakable-cover",
+    "file": "src/game/arena-schematic.ts",
+    "find": "    rects: walls.map((wall) => ({",
+    "replace": "    rects: walls.filter((wall) => wall.kind === 'solid').map((wall) => ({",
+    "expect": "killed",
+    "tests": [
+      "src/game/arena-schematic.test.ts"
+    ],
+    "killedBy": [
+      "arenaSchematic draws the same cover the simulation builds, not a second grid walk",
+      "arenaSchematic gives every board both kinds of cover, so a card can tell them apart"
+    ],
+    "why": "Draws permanent cover only. Every card still shows a plausible board -- solid walls are the structure a player reads first -- while the one distinction the intent phrases talk about (\"destructible-heavy centre\", \"cover is mostly permanent\", \"few breakables\") is missing from the picture that is supposed to show it. This is the defect a card-shaped guard cannot catch: the canvas exists, has a box, and is drawn into."
+  },
+  {
+    "id": "map-card-support-line-echoes-the-current-selection",
+    "file": "src/game/hud.ts",
+    "find": "    const counts = entry.players.map((n) => String(n)).join('/');",
+    "replace": "    const counts = String(versusConfigState.players);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "the versus map cards (issue #274) says what a board supports, not what is currently selected"
+    ],
+    "why": "Reads the selection instead of the catalog, which makes every card agree with the count already chosen -- true of the moment and useless for the choice the line exists to inform. The row is filtered to eligible boards, so the number is never WRONG; a player at two players sees \"2 players\" on Pinwheel, which is two-only, and on Arena 1, which is 2/3/4, and cannot tell that changing the count would keep one and drop the other. Every card still renders with a plausible line, which is why the case that kills this compares two boards with DIFFERENT declared support in one fixture rather than asserting a format."
+  },
+  {
+    "id": "map-card-random-counts-itself-among-the-boards",
+    "file": "src/game/hud.ts",
+    "find": "        const eligible = choices.length - 1;",
+    "replace": "        const eligible = choices.length;",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "the versus map cards (issue #274) tells Random how many boards it will draw from, counting the row and not the catalog"
+    ],
+    "why": "Random counts ITSELF among the boards it will draw from -- the off-by-one available at this exact line, since `choices` is the eligible boards plus Random and the `- 1` is the only thing separating them. The card then claims seven boards where six are offered, which is issue #274's \"Random never selects outside the displayed eligible set\" broken as a STATEMENT rather than as behaviour: `pickVersusArena` still draws correctly from `versusMapChoices`, so nothing about the match is wrong and nothing else in the suite can see it. Spelled as this slip rather than as `VERSUS_CATALOG.length`, which hud.ts does not import and would therefore be killed by a ReferenceError -- a crash proves nothing about the assertion. Note what this entry cannot prove: every shipped (players, mode) combination yields exactly six eligible boards, so a hardcoded `6` would survive it; the case that kills this pins that population so the day a catalog edit breaks the tie it asks for a better fixture rather than staying quietly vacuous."
+  },
+  {
+    "id": "map-card-intent-joins-the-accessible-name",
+    "file": "src/game/hud.ts",
+    "find": "      intent.setAttribute('aria-hidden', 'true');",
+    "replace": "      intent.setAttribute('aria-hidden', 'false');",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "the versus map cards (issue #274) keeps the picture and the sentence out of the card's name, and the sentence in its description"
+    ],
+    "why": "Folds a whole sentence into each card's accessible name, so a screen reader walking the map row reads seven paragraphs before reaching the eighth control -- and reads each one TWICE, since `aria-describedby` still points at the same node. Nothing visible moves and the sweeps in hud.a11y.test.ts pass: the name is non-empty and is not a bare digit. The same two-announcements-of-one-fact collision issue #629 called out on the achievement rows."
+  },
+  {
+    "id": "map-card-canvas-enters-the-accessibility-tree",
+    "file": "src/game/hud.ts",
+    "find": "      canvas.setAttribute('aria-hidden', 'true');",
+    "replace": "      canvas.setAttribute('aria-hidden', 'false');",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.navigation.test.ts"
+    ],
+    "killedBy": [
+      "the versus map cards (issue #274) keeps the picture and the sentence out of the card's name, and the sentence in its description"
+    ],
+    "why": "Puts an unlabelled `<canvas>` into the accessibility tree inside every map card. It has no text and no accessible name of its own, so it contributes nothing to the name and announces as an empty graphic -- an object a screen reader stops on for no reason, seven times in a row. The picture says nothing the two lines beside it do not already say in words, which is the whole reason it is hidden. Invisible on screen and invisible to every name sweep, because an empty node changes no name."
+  },
+  {
+    "id": "versus-pane-recentres-its-scroll-axis",
+    "file": "src/game/hud.css",
+    "find": "  justify-content: flex-start;\n  gap: var(--hud-space-3);\n  background: var(--hud-scrim-pane);",
+    "replace": "  justify-content: center;\n  gap: var(--hud-space-3);\n  background: var(--hud-scrim-pane);",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "killedBy": [
+      "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+    ],
+    "why": "Restores what the versus pane shipped before issue #274, and what issue #642 still describes for its two remaining siblings: `justify-content: center` on an `overflow-y: auto` column puts the overflow ABOVE the scrollable area, where no scrollbar reaches it. Latent while the map row was a line of pills; a defect the moment the row became seven cards, measured at 1280x800 with the Mode and Players rows pushed off the top and unreachable. jsdom lays nothing out, so the case that kills this reads the computed `justify-content` of every scroller the fixture builds and pins the set that still carries the shape -- which is also what makes a THIRD pane joining them a red test rather than a quiet inheritance."
   }
 ]
