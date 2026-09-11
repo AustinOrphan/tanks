@@ -60,12 +60,17 @@ describe('VERSUS_CATALOG', () => {
     expect(new Set(VERSUS_CATALOG.map((e) => e.id))).toEqual(new Set(Object.keys(CURATED_COUNTS)));
     for (const e of VERSUS_CATALOG) {
       expect(e.players, e.id).toEqual(CURATED_COUNTS[e.id]);
-      // `modes` is NOT uniform, and this is the deliberate edit that records why rather
-      // than the table quietly absorbing it: three players cannot be split into fair
-      // teams, so vs-tri-01 declares `ffa` alone. It is the only entry that ever has.
+      // `modes` is UNIFORM again, and the history is the point. vs-tri-01 was the only
+      // entry that ever narrowed it, declaring `ffa` alone on the reasoning that three
+      // players cannot be split into fair teams. Issue #627 retired that reasoning:
+      // #584 established that asymmetric Teams are intentionally supported in PP1, so
+      // 2v1 at three players is a supported split rather than a defect, and numerical
+      // asymmetry is not by itself grounds for withholding a combination.
       // Pinned per entry for the same reason the counts are -- a board silently gaining
-      // or losing a mode fails here, in either direction.
-      expect(e.modes, e.id).toEqual(e.id === 'vs-tri-01' ? ['ffa'] : ['ffa', 'teams']);
+      // or losing a mode fails here, in either direction. That a uniform expectation
+      // now reads as a table with no exceptions is exactly what the pin is for: the
+      // next narrowed board has to come back here and say why.
+      expect(e.modes, e.id).toEqual(['ffa', 'teams']);
       expect(e.variants, e.id).toEqual(['seeded-destructible']);
       expect(e.spawnPolicy, e.id).toBe('maximin');
     }

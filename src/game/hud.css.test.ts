@@ -719,7 +719,7 @@ describe('hud.css is syntactically whole', () => {
     // restructure rather than the kit growing. MEASURED at this fixture's state; the
     // arithmetic is recorded so the next change re-derives instead of adjusting a literal:
     //
-    //   versus pane      41  = 16 option (mode 2 + players 3 + map 6 + stock 5)
+    //   versus pane      42  = 17 option (mode 2 + players 3 + map 7 + stock 5)
     //                         + 9 role (3 slots x Human/Bot/Off)
     //                         + 9 team (3 slots x A/B/C -- issue #281)
     //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
@@ -745,10 +745,24 @@ describe('hud.css is syntactically whole', () => {
     // toggles `--hidden` modifiers -- so they are counted here whether or not a page is
     // in developer mode, which is what keeps this number a property of the MARKUP.
     //
+    // Issue #627 adds ONE: vs-tri-01 (Keystone) gained `teams` alongside `ffa`, so the
+    // map row this fixture renders -- `versusMapChoices(3, 'teams')`, since it clicks
+    // THREE players and then Teams above -- offers 5 campaign boards + Keystone + Random
+    // where it offered 6. 124 -> 125. The new button is the same
+    // `.ui-btn.ui-selectable.hud-versus-option-btn` as the six beside it, so it is themed
+    // by the rule they already share, and `unstyled` stays empty -- which is the check
+    // this pin exists to prompt, performed rather than assumed.
+    //
+    // Note what moved this number: not a UI change at all, but a CURATION ruling about
+    // one board's declared modes (issue #584's asymmetric-Teams policy, applied to
+    // Keystone by #627). The map row is the one row in this pane whose population is
+    // read from `versus-catalog.json` rather than from a fixed option list, so catalog
+    // data edits land here. That is worth knowing before the next one.
+    //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(124);
+    expect(buttons.length).toBe(125);
     expect(unstyled).toEqual([]);
 
     dispose();

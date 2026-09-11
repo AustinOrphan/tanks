@@ -756,6 +756,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.versus-setup.teams",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.versus-setup.teams"
+    },
+    "fixture": {
+      "id": "screen.versus-setup.teams",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Versus Setup, three-player Teams",
+    "description": "The Versus Setup pane at three players in Teams, where the map row offers Keystone.",
+    "altText": "Screenshot of the Tanks! versus setup screen configured for three-player Teams.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.about",
     "producer": {
       "kind": "screen",

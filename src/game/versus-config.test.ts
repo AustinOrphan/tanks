@@ -22,7 +22,8 @@ describe('versusMapChoices', () => {
   const CAMPAIGN_BOARDS = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
   /** N=2 additionally offers the dedicated duel board (issue #271). */
   const DUEL = 'vs-duel-01';
-  /** N=3 ffa additionally offers the dedicated tri board (issue #272, rebuilt by #424). */
+  /** N=3 additionally offers the dedicated tri board (issue #272, rebuilt by #424,
+   *  and given `teams` alongside `ffa` by issue #627). */
   const TRI = 'vs-tri-01';
   const QUAD = 'vs-quad-01';
 
@@ -30,27 +31,36 @@ describe('versusMapChoices', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
     // suitable, versus-board-rules plan), and the declared catalog must not move that
     // offer. Each dedicated board adds to it at exactly one count rather than moving it:
-    // 6 (N, mode) combinations swept, the duel board appears in 2 of them (N=2, both
-    // modes), the tri board in 1 (N=3, ffa only -- issue #272 declares no `teams`,
-    // because three players have no fair team split, so the mode predicate drops it)
-    // and issue #273's quad board in 2 (N=4, both modes: its four corner spawns split
-    // into a top pair and a bottom pair holding mirrored territory, so `teams` is
-    // declared alongside `ffa` and the mode predicate keeps it at both).
+    // 6 (N, mode) combinations swept, and since issue #627 each dedicated board appears
+    // in 2 of them -- the duel board at N=2, the tri board at N=3 and the quad board at
+    // N=4, each in both modes.
+    //
+    // THE MODE PREDICATE NO LONGER HAS SHIPPED-DATA COVERAGE HERE, and that is a
+    // deliberate, recorded loss rather than an oversight. vs-tri-01's `ffa`-only
+    // declaration used to be the one asymmetry that made this pin discriminate
+    // `e.modes.includes(mode)`: drop that conjunct and the tri board leaked into N=3
+    // `teams`, and this pin caught it. #627 gave the board `teams`, so every shipped
+    // entry declares both modes again and dropping the conjunct changes nothing here.
+    // The synthetic fails-if-a-predicate-is-dropped fixture below is now the SOLE killer
+    // of that mutation (`versus-config-choices-drop-mode-predicate`, expectFailures 2 ->
+    // 1), which is the right place for it: a fixture that owns its own narrow entry
+    // cannot be invalidated by a curation ruling about a shipped board, and this count
+    // has already oscillated with vs-tri-01's existence three times before this one.
+    //
+    // The sweep stays written per (N, mode) rather than collapsing to per N. It costs
+    // nothing, and the next narrowed board has to come back here and restate its case
+    // instead of finding a loop that silently cannot express it.
     for (const n of [2, 3, 4] as const) {
       for (const mode of ['ffa', 'teams'] as const) {
-        // vs-tri-01 is BACK (issue #424 rebuilt its geometry; it clears the tank-egress
-        // gate in versus-board.test.ts at N=2, 3 and 4). It returns at N=3 AND `ffa`
-        // alone: three players have no fair team split, so the catalog declares one mode
-        // and the mode predicate drops it from N=3 `teams`. That asymmetry between the
-        // two `extra` arms is the whole reason this pin is written per (N, mode) rather
-        // than per N.
-        //
-        // vs-quad-01 is BACK (issue #425 rebuilt its geometry; it clears the tank-egress
-        // gate at N=2, 3 and 4). It returns at N=4 and at BOTH modes -- four corner spawns
-        // split into a top pair and a bottom pair holding mirrored territory, so the
-        // catalog declares `teams` alongside `ffa`, which is why this arm is unconditional
-        // on mode where vs-tri-01's is not.
-        const extra = n === 2 ? [DUEL] : n === 3 && mode === 'ffa' ? [TRI] : n === 4 ? [QUAD] : [];
+        // Each dedicated board returns at its own count and at BOTH modes. vs-tri-01
+        // (issue #424 rebuilt its geometry; it clears the tank-egress gate in
+        // versus-board.test.ts at N=2, 3 and 4) gained `teams` in issue #627: #584
+        // established that asymmetric Teams are intentionally supported, so the 2v1 a
+        // three-player split produces is a supported match rather than the unfairness
+        // the old `ffa`-only declaration was justified by. vs-quad-01 (issue #425)
+        // splits its four corner spawns into a top pair and a bottom pair holding
+        // mirrored territory. All three arms are now unconditional on mode.
+        const extra = n === 2 ? [DUEL] : n === 3 ? [TRI] : n === 4 ? [QUAD] : [];
         expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }

@@ -21,7 +21,25 @@ function playMatch(mode: GameMode, seed: number) {
     firstContactTick: -1, shots: 0, mines: 0, kills: 0, breaches: 0,
     minSeparation: Infinity, maxSeparation: 0, sepSum: 0, pairTicks: 0,
     wallsAtStart: w.walls.length, firstKillTick: -1,
+    teamSizes: [0, 0] as [number, number],
+    teamDeaths: [0, 0] as [number, number],
   };
+  // Which side each tank started on, so a death can be attributed to one. Sampled at t=0
+  // alongside `teamSizes` and for the same reason: `tank-destroyed` carries `tankId`, and
+  // the tank is gone by the time the event is read.
+  const teamById = new Map(
+    w.tanks.filter((x) => x.kind === 'player').map((x) => [x.id, x.team]),
+  );
+  // Sampled once at t=0, before any death can empty a side: whether `teams` really split
+  // this board, and HOW. At three players `teamOf(slot) = slot % 2` (arena.ts) stamps
+  // 0/1/0 over the picker's order, so the split is 2v1 by construction -- which since
+  // issue #584 is a supported match rather than the unfairness vs-tri-01's `ffa`-only
+  // declaration was once justified by. The pane can override it per slot
+  // (`teams?.[i] ?? teamOf(i)`, arena.ts:363); this harness measures the DEFAULT stamp,
+  // which is the assignment a player who never touches the team controls will get.
+  for (const t of w.tanks.filter((x) => x.kind === 'player')) {
+    if (t.team === 0 || t.team === 1) obs.teamSizes[t.team]++;
+  }
   for (let t = 0; t < HZ * SECONDS; t++) {
     const inputs = players.map((id, i) => decidePlayerInput(w, id, rnd[i], ai[i]));
     const res = stepInputs(w, inputs);
@@ -32,7 +50,18 @@ function playMatch(mode: GameMode, seed: number) {
       // and reads as a peaceful match. The assertions below are what would catch that.
       if (e.type === 'fire') obs.shots++;
       if (e.type === 'mine-dropped') obs.mines++;
-      if (e.type === 'tank-destroyed') obs.kills++;
+      if (e.type === 'tank-destroyed') {
+        obs.kills++;
+        // THE MEASUREMENT 2v1 ACTUALLY TURNS ON. `teams=2v1` only says the split happened;
+        // it says nothing about whether the lone side can contest the board, which is the
+        // concrete positional question issue #627 asks. Deaths per side is the cheapest
+        // figure that speaks to it: a solo player who simply dies over and over, on every
+        // seed, is the shape of the "practical inability for one side to contest space"
+        // the issue names. It remains SUPPORTING evidence -- three bot seeds are not a
+        // ruling, and this counts deaths rather than who caused them.
+        const team = teamById.get(e.tankId);
+        if (team === 0 || team === 1) obs.teamDeaths[team]++;
+      }
       if (e.type === 'wall-destroyed') obs.breaches++;
     }
     // Every LIVING pair, not just one: at N=3 the interesting quantity is whether the
@@ -63,21 +92,31 @@ function playMatch(mode: GameMode, seed: number) {
 // because hand-flipping a skip is a one-word diff easy to miss in review.
 //
 // Issue #272 asks for normal-speed playtest observations for every declared mode, and
-// vs-tri-01 declares exactly one (`ffa`: three players have no fair team split). There is
-// still no shipped path to a bot-vs-bot match on a CHOSEN versus board -- the setup pane's
-// slot rows offer Keyboard/None, bot roles come from #260's slot-source model, and the
-// `bots` dev flag runs the campaign level system -- so the match is driven here instead,
-// at the sim layer, through the REAL scripted-player AI all three sides use, at the real
-// 60 Hz fixed timestep for 90 seconds. It is not a video, and it is not a human's read of
-// how the board feels.
+// since issue #627 vs-tri-01 declares TWO -- `ffa` and `teams` -- so both are driven here.
+// The `teams` arm is new: the board declared `ffa` alone until #584 established that
+// asymmetric Teams are intentionally supported in PP1, which retired the "three players
+// have no fair team split" reasoning the narrowing rested on.
+//
+// WHAT THIS HARNESS IS NOT. #627 rules that normal-speed HUMAN play is authoritative for
+// whether Keystone is a good 2v1 board, and automated measurement is supporting evidence
+// only. This is automated measurement: bots, at the sim layer, with no read on how the
+// board feels. It can show that a 2v1 match on this board is fought rather than stalled,
+// and it can show the default stamp is 2v1 at all; it cannot show that the axis spawn is
+// not quietly doomed against two allied bases. Do not cite it as the ruling.
+//
+// There is still no shipped path to a bot-vs-bot match on a CHOSEN versus board -- the
+// setup pane's slot rows offer Keyboard/None, bot roles come from #260's slot-source
+// model, and the `bots` dev flag runs the campaign level system -- so the match is driven
+// here instead, at the sim layer, through the REAL scripted-player AI all three sides use,
+// at the real 60 Hz fixed timestep for 90 seconds.
 const measure = import.meta.env.VITE_RUN_MEASURE ? describe : describe.skip;
 
 measure('vs-tri-01 bot-vs-bot playtest (set VITE_RUN_MEASURE=1 to run)', () => {
   it('records observations for every declared mode', () => {
-    for (const mode of ['ffa'] as GameMode[]) {
+    for (const mode of ['ffa', 'teams'] as GameMode[]) {
       for (const seed of [7, 11, 23]) {
         const o = playMatch(mode, seed);
-        console.log(`PLAYTEST ${mode} seed=${seed} players=${o.players} shots=${o.shots} mines=${o.mines} kills=${o.kills} breaches=${o.breaches} firstContact=${o.firstContactSec}s firstKill=${o.firstKillSec}s sep(min/mean/max)=${o.minSeparation.toFixed(2)}/${o.meanSeparation.toFixed(2)}/${o.maxSeparation.toFixed(2)}`);
+        console.log(`PLAYTEST ${mode} seed=${seed} players=${o.players} shots=${o.shots} mines=${o.mines} kills=${o.kills} breaches=${o.breaches} firstContact=${o.firstContactSec}s firstKill=${o.firstKillSec}s sep(min/mean/max)=${o.minSeparation.toFixed(2)}/${o.meanSeparation.toFixed(2)}/${o.maxSeparation.toFixed(2)} teams=${o.teamSizes.join('v')} deaths=${o.teamDeaths.join('v')}`);
         // NOT `expect(true).toBe(true)`. Each of these fails on a specific, previously-made
         // mistake rather than decorating the run:
         //   - players: the board really seated THREE tanks, so this is an N=3 observation
@@ -94,6 +133,32 @@ measure('vs-tri-01 bot-vs-bot playtest (set VITE_RUN_MEASURE=1 to run)', () => {
         expect(o.players, `${mode} seed=${seed}: seated players`).toBe(PLAYERS);
         expect(o.shots + o.mines, `${mode} seed=${seed}: the match was fought`).toBeGreaterThan(0);
         expect(o.pairTicks, `${mode} seed=${seed}: separation was sampled`).toBeGreaterThan(0);
+        //   - teamSizes: the one assertion that discriminates BETWEEN the two modes rather
+        //     than repeating the ffa run twice, and at three players it also pins the SHAPE
+        //     of the split. 2v1 is the whole of what issue #627 approved: an even split is
+        //     arithmetically impossible here, so `[2, 1]` failing would mean either that
+        //     `teams` stamped nobody (the mode silently not applying) or that the default
+        //     stamp had drifted off `teamOf(slot) = slot % 2`. The ffa branch asserts the
+        //     complement -- no team stamped at all -- so neither direction can drift into
+        //     the other unnoticed.
+        if (mode === 'teams') {
+          expect(o.teamSizes, `${mode} seed=${seed}: the 2v1 split #627 approved`).toEqual([2, 1]);
+          //   - teamDeaths: a HARNESS-correctness check, deliberately not a fairness one.
+          //     Every death in a teams match belongs to one of the two stamped sides, so
+          //     the per-side tally must account for all of them -- this is what fails if
+          //     `teamById` is built after the first death, or keyed off a slot index
+          //     rather than a tank id, either of which would silently report 0v0 and make
+          //     the logged figure a decoration. What the figure MEANS is a judgement for
+          //     the issue, not an expectation here: pinning a survivable ratio would be
+          //     asserting Keystone's 2v1 fairness from three bot seeds, which is exactly
+          //     the ruling #627 reserves for normal-speed human play.
+          expect(
+            o.teamDeaths[0] + o.teamDeaths[1],
+            `${mode} seed=${seed}: every death attributed to a side`,
+          ).toBe(o.kills);
+        } else {
+          expect(o.teamSizes, `${mode} seed=${seed}: ffa stamps no team`).toEqual([0, 0]);
+        }
       }
     }
   }, 300000);
