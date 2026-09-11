@@ -23,25 +23,33 @@ import { TANK_RADIUS } from './constants';
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 8 shipped entries validate clean: 0 failures over 35 declared (entry, N, mode) combinations', () => {
-    // 35, not 48: five entries declare 3 player counts x 2 modes (30), issue #271's
-    // vs-duel-01 declares 1 x 2, issue #272's vs-tri-01 declares 1 x 1 -- three players
-    // have no fair team split, so it offers `ffa` alone -- and issue #273's vs-quad-01
-    // declares 1 x 2, four players splitting evenly into two mirrored pairs. The sweep
-    // covers what each entry PROMISES, so a narrowed declaration shrinks this denominator
-    // rather than leaving combinations silently unchecked.
+  it('all 8 shipped entries validate clean: 0 failures over 36 declared (entry, N, mode) combinations', () => {
+    // 36, not 48: five entries declare 3 player counts x 2 modes (30), and issue #271's
+    // vs-duel-01, issue #272's vs-tri-01 and issue #273's vs-quad-01 each declare 1 x 2.
+    // The sweep covers what each entry PROMISES, so a narrowed declaration shrinks this
+    // denominator rather than leaving combinations silently unchecked.
     //
     // History of this number, each step re-derived rather than renumbered: 35 with all
-    // eight entries, then 32 when vs-tri-01 (1 x 1) and vs-quad-01 (1 x 2) were WITHDRAWN
-    // pending #424/#425 because human playtesting found players could not leave their
-    // spawns on either board; 33 when #424's rebuild returned vs-tri-01's one combination;
-    // and 35 now that #425's rebuild returns vs-quad-01's two. 33 + 2 = 35, back to the
-    // original denominator with both boards now holding the egress guarantee they lacked.
+    // eight entries, then 32 when vs-tri-01 (then 1 x 1) and vs-quad-01 (1 x 2) were
+    // WITHDRAWN pending #424/#425 because human playtesting found players could not leave
+    // their spawns on either board; 33 when #424's rebuild returned vs-tri-01's one
+    // combination; 35 when #425's rebuild returned vs-quad-01's two; and 36 now that
+    // issue #627 gives vs-tri-01 `teams` alongside `ffa`.
+    //
+    // That last step is the first that widens a DECLARATION rather than restoring a
+    // withdrawn board, and it adds a combination this sweep had never run: (vs-tri-01,
+    // N=3, teams). It passes for a structural reason worth stating rather than
+    // discovering -- `versusCatalogEntryFailures` evaluates geometry once per declared N
+    // and reports it per declared mode (`playerPositions` loads every board through
+    // `loadArena(..., 'ffa')`; see versus-board.ts's 'ffa'-stands-for-both note), so a
+    // second mode on an already-clean N cannot fail here. The corollary matters more
+    // than the pass: this sweep is mode-BLIND, so it is not evidence that Keystone plays
+    // well as 2v1. That question is #627's, and it is answered by play, not by geometry.
     expect(VERSUS_CATALOG.length).toBe(8);
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(35);
+    ).toBe(36);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }

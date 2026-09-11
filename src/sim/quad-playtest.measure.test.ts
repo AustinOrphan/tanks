@@ -70,9 +70,11 @@ function playMatch(mode: GameMode, seed: number) {
 // because hand-flipping a skip is a one-word diff easy to miss in review.
 //
 // Issue #273 asks for normal-speed playtest observations for every declared mode, and
-// vs-quad-01 declares TWO -- `ffa` and `teams` -- so both are driven here. That is the
-// difference from vs-tri-01's harness, which declares `ffa` alone: three players have no
-// fair team split, four do. There is still no shipped path to a bot-vs-bot match on a
+// vs-quad-01 declares TWO -- `ffa` and `teams` -- so both are driven here. vs-tri-01's
+// harness now does the same: it declared `ffa` alone on the reasoning that three players
+// have no fair team split, and issue #627 retired that, so the difference between the two
+// harnesses is the SHAPE of the split (2v2 here, 2v1 there) rather than whether one
+// exists. There is still no shipped path to a bot-vs-bot match on a
 // CHOSEN versus board -- the setup pane's slot rows offer Keyboard/None, bot roles come
 // from #260's slot-source model, and the `bots` dev flag runs the campaign level system --
 // so the match is driven here instead, at the sim layer, through the REAL scripted-player
