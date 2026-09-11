@@ -72,6 +72,7 @@ on:
           - screen.startup.unsupported-render
           - screen.versus-setup
           - screen.versus-setup.teams
+          - screen.versus-setup.map-replaced
       ref:
         description: capture mode only. A branch, tag or SHA. Blank uses the default branch.
         required: false

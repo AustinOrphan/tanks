@@ -218,6 +218,32 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-friendlyfire-btn'],
   }),
   state({
+    id: 'screen.versus-setup.map-replaced',
+    title: 'Versus Setup, a map choice replaced',
+    description: 'The notice shown when a player count change drops the map the player had chosen.',
+    storage: MID_CAMPAIGN,
+    // The one state in the pane that only a SEQUENCE produces: choose Pinwheel, which is
+    // offered at two players and nowhere else (issue #271), then move to three. The board
+    // leaves the row, so the pane replaces the retained choice with Random and says why
+    // (issue #274). Before that fix the choice was kept silently and the launch gate threw
+    // out of the Start handler, which is a state no capture could show because nothing was
+    // drawn -- the button simply did nothing.
+    //
+    // Pinwheel rather than Keystone deliberately: its two-player restriction is structural
+    // (a dedicated duel board), where Keystone's was a curation ruling that issue #627 has
+    // already reversed once. A capture anchored to a ruling goes stale the next time one
+    // moves.
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { click: '.hud-versus-map-row [data-map="vs-duel-01"]' },
+      { click: '.hud-versus-players-row [data-players="3"]' },
+      { waitVisible: '.hud-versus-map-note' },
+    ],
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-note'],
+  }),
+  state({
     id: 'screen.about',
     title: 'About & Legal',
     description: 'The prose pane, which is the widest text measure in the kit.',
