@@ -7,6 +7,11 @@ import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
 import { identityApplies, resolveOwnerColor } from '../presentation/identity';
+import { identityMarkerGeometry } from './identity-marker';
+import {
+  identityMarkerSpin,
+  type IdentityMarkerStyle,
+} from '../presentation/identity-marker';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -163,9 +168,16 @@ export const IDENTITY_RING_OPACITY = 0.85;
  * encodes URGENCY through brightness, not identity through hue, so clipping costs it
  * nothing.
  */
-function makeIdentityRing(color: number): THREE.Mesh {
+function makeIdentityRing(color: number, marker: IdentityMarkerStyle | null, slot: number): THREE.Mesh {
+  // `?? new RingGeometry(...)`, not a circle case inside the builder: with no marker this
+  // is the exact expression that shipped, so the default rendering is unchanged down to
+  // the vertex rather than merely equivalent to it (issue #630's identity-marker.ts says
+  // why that distinction is the point of the comparison).
   const mesh = new THREE.Mesh(
-    new THREE.RingGeometry(IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_SEGMENTS),
+    identityMarkerGeometry(
+      marker, slot, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_SEGMENTS,
+    )
+    ?? new THREE.RingGeometry(IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_SEGMENTS),
     new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -351,6 +363,11 @@ export function createEntityViews(
    * the shipped default treatment. See mine-warning.ts's style section.
    */
   mineWarnStyle: MineWarnStyle | null = null,
+  /**
+   * Experimental second identity channel (the `identityMarker` dev flag, issue #630);
+   * null/absent = today's solid hue-only ring. See identity-marker.ts.
+   */
+  identityMarker: IdentityMarkerStyle | null = null,
 ): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
@@ -1117,7 +1134,7 @@ export function createEntityViews(
       if (t.kind === 'player') {
         if (multiPlayer && !view.ring) {
           const color = resolveOwnerColor(curr, t);
-          view.ring = makeIdentityRing(color);
+          view.ring = makeIdentityRing(color, identityMarker, slot);
           view.group.add(view.ring);
         } else if (!multiPlayer && view.ring) {
           disposeObject(view.ring);
@@ -1154,6 +1171,14 @@ export function createEntityViews(
       const turretA = p ? lerpAngle(p.turretAngle, t.turretAngle, alpha) : t.turretAngle;
       view.group.position.set(pos.x, 0, pos.y);
       view.group.rotation.y = -bodyA;
+      // HOLD THE MARKER STILL while the hull turns (issue #630). The ring is a child of
+      // this group, so without this it spins with the tank -- invisible for a circular
+      // annulus, and fatal for a shape or an arc count, since a square turned 45 degrees
+      // is the diamond. Guarded on a marker being active so the shipped default never
+      // takes a write it did not take before.
+      if (identityMarker !== null && view.ring) {
+        view.ring.rotation.z = identityMarkerSpin(bodyA);
+      }
       // The turret is a CHILD of group, so its world heading composes with the
       // body's. turretAngle is an absolute world angle (angleOf(aim - pos)), so
       // it has to be expressed relative to the parent -- writing it directly

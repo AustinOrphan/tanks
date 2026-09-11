@@ -5899,5 +5899,17 @@
       "src/game/hud.css.test.ts"
     ],
     "why": "Restores the REGRESSION issue #629 introduced and nearly shipped. Making the column headers <th scope=\"col\"> was correct -- as <td> they headed nothing and every figure beneath them was announced bare -- but each table's existing `th` rule was written for its ROW headers (left-flush, heavier, dimmed), so the column names fell out of alignment with the numerals they head. The unit suite passed, the full mutation sweep passed, and the visual gate passed, because that gate photographs the ARENA and never opens Records. It was found only by pixel-diffing a before/after capture of the pane, which is a step a person has to remember. This entry is what makes forgetting it safe: the alignment contract is asserted by POSITION (a column header matches its data cells, a row header deliberately does not), and the negative control in that test is what stops the fix being 'delete the row-header rule so everything matches'."
+  },
+  {
+    "id": "identity-marker-flag-ignored-by-the-renderer",
+    "file": "src/game/loop.ts",
+    "find": "    identityMarker: deps.devFlags.identityMarker,",
+    "replace": "    identityMarker: null,",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Severs the dev flag from the renderer, so `?dev=1&identityMarker=shape` parses, validates, reports as ACCEPTED in the developer pane, and changes nothing on screen. That is the worst shape of failure for a feature whose entire purpose is to be turned on and compared -- the owner would conclude the candidate looks identical to the default rather than that it never ran. Invisible to every test of the marker geometry itself, which never goes through loop.ts. Killed by the threads-the-identityMarker-dev-flag case, which asserts BOTH arms: a wiring that hardcoded one style would pass a single-arm test."
   }
 ]

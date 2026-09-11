@@ -12,6 +12,11 @@ import type { TankKind, UnarmedTrigger, GameMode } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import { QUALITY_PRESET_IDS, type QualityPreset } from '../presentation/quality';
 import type { AiTargetPerception } from '../sim/types';
+import {
+  IDENTITY_MARKER_STYLES,
+  isIdentityMarkerStyle,
+  type IdentityMarkerStyle,
+} from '../presentation/identity-marker';
 import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
 import { BLOCKED_FIRE_CUES, isBlockedFireCue, type BlockedFireCue } from '../presentation/blocked-fire';
 import { MENU_TRANSITIONS, isMenuTransition, type MenuTransition } from './menu-transition';
@@ -346,6 +351,17 @@ export interface DevFlags {
    */
   mineWarn: MineWarnStyle | null;
   /**
+   * Which experimental SECOND IDENTITY CHANNEL to draw on the identity ring (issue #630).
+   * `null` -- absent or unrecognised -- keeps today's solid ring, where WHO a tank belongs
+   * to is carried by hue and nothing else.
+   *
+   * Two candidates are in the tree because the owner has not chosen between them and the
+   * evidence that settles it is a real match, not a mockup: `arcs` counts, `shape`
+   * recognises. See render/identity-marker.ts for both, and why the marker is held
+   * world-fixed rather than spinning with the hull.
+   */
+  identityMarker: IdentityMarkerStyle | null;
+  /**
    * Which experimental blocked-fire cue to play when the active-shell cap refuses a shot
    * (issue #356). `null` -- absent or unrecognised -- keeps the shipped silence.
    *
@@ -434,6 +450,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   enemyDeathPulse: false,
   backdrop: null,
   mineWarn: null,
+  identityMarker: null,
   aiPerception: null,
 };
 
@@ -561,6 +578,13 @@ function asMineWarn(params: URLSearchParams): MineWarnStyle | null {
   const raw = params.get('mineWarn');
   if (raw === null) return null;
   return MINE_WARN_STYLES.has(raw) ? (raw as MineWarnStyle) : null;
+}
+
+/** One of the named identity-marker candidates, or null when absent or unrecognised. */
+function asIdentityMarker(params: URLSearchParams): IdentityMarkerStyle | null {
+  const raw = params.get('identityMarker');
+  if (raw === null) return null;
+  return isIdentityMarkerStyle(raw) ? raw : null;
 }
 
 /** A positive integer flag, or null when absent, empty, or not one. */
@@ -699,6 +723,7 @@ export function parseDevFlags(search: string): DevFlags {
     enemyDeathPulse: isOn(params, 'enemyDeathPulse'),
     backdrop: asBackdrop(params),
     mineWarn: asMineWarn(params),
+    identityMarker: asIdentityMarker(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -1068,6 +1093,14 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Draws the mine fuse and proximity warnings with a named experimental treatment ' +
       '(issue #276 playtest round); the shipped default is the glow + illumination pair.',
+  },
+  identityMarker: {
+    kind: 'valued',
+    values: [...IDENTITY_MARKER_STYLES],
+    description:
+      'Adds a second, non-colour channel to the player identity ring (issue #630): ' +
+      "'arcs' breaks it into one arc per slot, 'shape' gives each slot its own outline. " +
+      'The shipped default carries identity in hue alone.',
   },
   menuTransition: {
     kind: 'valued',

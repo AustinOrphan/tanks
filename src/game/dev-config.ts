@@ -72,6 +72,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   gamepad: 'VS/Bots',
 
   quality: 'Rendering',
+  identityMarker: 'Rendering',
   enemyDeathPulse: 'Rendering',
   backdrop: 'Rendering',
   menuTransition: 'Rendering',
