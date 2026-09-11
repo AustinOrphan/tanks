@@ -36,6 +36,18 @@ function outerAngles(geo: THREE.BufferGeometry): number[] {
  * outer rim and count the angular jumps that are far larger than the sampling step.
  * Deliberately not "count the runs I passed in" -- that would assert the input back.
  */
+/**
+ * The biggest angular gap anywhere around the marker, in radians. For a closed ring every
+ * gap is one sampling step; a real break is many times that. Written to be immune to the
+ * `atan2` wrap that made an earlier version of the one-arc assertion vacuous.
+ */
+function largestGap(geo: THREE.BufferGeometry): number {
+  const sorted = outerAngles(geo).map((a) => (a + Math.PI * 2) % (Math.PI * 2)).sort((x, y) => x - y);
+  let max = sorted[0] + Math.PI * 2 - sorted[sorted.length - 1]; // the wrap-around gap
+  for (let i = 1; i < sorted.length; i++) max = Math.max(max, sorted[i] - sorted[i - 1]);
+  return max;
+}
+
 function arcRuns(geo: THREE.BufferGeometry): number {
   const angles = outerAngles(geo);
   const step = (Math.PI * 2) / SEGMENTS;
@@ -88,9 +100,14 @@ describe('identity marker: arcs (issue #630)', () => {
     // A closed ring and a nearly-closed one read differently. Were slot 1 drawn solid,
     // "the unbroken one is player 1" would be a rule a player has to be told rather than
     // one they can see -- and it would be indistinguishable from the shipped default.
-    const angles = outerAngles(build('arcs', 0));
-    const span = Math.abs(angles[angles.length - 1] - angles[0]);
-    expect(span).toBeLessThan(Math.PI * 2 * 0.95);
+    //
+    // MEASURED AS THE LARGEST GAP, not as the span between the first and last vertex. The
+    // first draft did the latter and was VACUOUS: `atan2` wraps to (-PI, PI], so with the
+    // gap closed the first and last sample both land on -PI/2 and the span reads as zero,
+    // which passed the assertion it was supposed to fail. The mutation
+    // `identity-arcs-lose-their-gap-at-one` SURVIVED and is the only reason that was
+    // caught -- reading the test did not catch it, and neither did watching it pass.
+    expect(largestGap(build('arcs', 0))).toBeGreaterThan((Math.PI * 2) / SEGMENTS * 3);
   });
 
   it('keeps every slot inside the ring band the shipped ring occupies', () => {

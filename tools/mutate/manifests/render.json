@@ -917,5 +917,53 @@
       "contactLabel drops the reason once it is stale, so the label does not claim a switch that was seconds ago"
     ],
     "why": "Carries the retarget reason forever, so a label read at any moment says the tank just switched -- a diagnostic that is always true is worse than none, because it is read as current. The scoped test also pins the boundary itself (age exactly 30 still shows), which is the half a `>` versus `>=` slip would get wrong without changing any other case."
+  },
+  {
+    "id": "identity-marker-spins-with-the-hull",
+    "file": "src/presentation/identity-marker.ts",
+    "find": "  return bodyAngle;",
+    "replace": "  return 0;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/identity-marker.test.ts"
+    ],
+    "why": "Stops the counter-rotation, so the marker spins with the hull again -- which is what it did before issue #630 noticed, and is invisible for the circular annulus that shipped. It is fatal for BOTH candidates: slots 3 and 4 of the shape style are the same 4-gon 45 degrees apart, so a spinning marker makes the square and the diamond one marker wearing two names for most of every match. The failure mode this guards is specifically NOT a crash or a blank screen -- it is a marker that looks fine in a still and is unreadable in play, which no unit assertion on geometry alone can see. Killed by the holds-a-marker-vertex-at-a-fixed-world-position case, which composes the real parent/child matrices at seven body angles rather than trusting the sign; its negative control proves the same case fails when the counter-rotation is absent, so this entry cannot be killed by an accidentally symmetric marker."
+  },
+  {
+    "id": "identity-marker-spin-takes-the-wrong-sign",
+    "file": "src/presentation/identity-marker.ts",
+    "find": "  return bodyAngle;\n}",
+    "replace": "  return -bodyAngle;\n}",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/identity-marker.test.ts"
+    ],
+    "why": "The OTHER way to get the counter-rotation wrong, and the reason the derivation is written out in the function's own comment. A flipped sign does not hold the marker still and does not leave it alone: it spins it at DOUBLE rate. At small turn rates that reads as wobble rather than as a bug, which is exactly how a wrong sign survives a look-at-it review. Filed separately from the returns-zero entry above because the two are different mistakes with different symptoms, and an assertion that caught only one of them would leave the likelier one uncovered."
+  },
+  {
+    "id": "identity-arcs-lose-their-gap-at-one",
+    "file": "src/render/identity-marker.ts",
+    "find": "    const gap = step * 0.28;",
+    "replace": "    const gap = count === 1 ? 0 : step * 0.28;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/identity-marker.test.ts"
+    ],
+    "why": "Closes slot 1's arc into a full ring. Tempting, and wrong twice over: a solid ring is indistinguishable from the SHIPPED default, so the one slot a player is most likely to be would give them no marker at all; and 'the unbroken one is player 1' is a rule that has to be explained rather than seen, which is the failure the whole issue is about. Slots 2-4 are untouched, so every count assertion still passes -- caught only by the leaves-a-gap-even-at-one case, which measures the angular span of the single run."
+  },
+  {
+    "id": "identity-shape-square-becomes-the-diamond",
+    "file": "src/render/identity-marker.ts",
+    "find": "    { sides: 4, rotation: -Math.PI / 4 },",
+    "replace": "    { sides: 4, rotation: 0 },",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/render/identity-marker.test.ts"
+    ],
+    "why": "Collapses slots 3 and 4 into the same outline -- two players with an identical marker, differing again only in hue, which is the exact defect issue #630 exists to remove. It is a one-character-class edit to a table of four rotations and produces no error, no warning and a perfectly plausible-looking marker. Killed by 2: the gives-each-of-the-four-slots-a-different-outline case (which compares all four signatures rather than spot-checking a pair) and the distinguishes-the-square-from-the-diamond case that states the 45-degree relationship outright."
   }
 ]
