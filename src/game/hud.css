@@ -1305,7 +1305,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* flex-start, not center (issue #117). With `justify-content: center` on a scroll
+     container the OVERFLOW goes above the scrollable area and cannot be reached -- the
+     classic centred-overflow clip -- so an open licence lost its first screenful with no
+     way to scroll back up to it. Harmless while the pane held three short lines; a
+     defect the moment it holds a document. */
+  justify-content: flex-start;
   gap: var(--hud-space-4);
   padding: var(--hud-space-5);
   overflow-y: auto;
@@ -1395,6 +1400,169 @@
   max-width: 46ch;
   text-align: center;
   opacity: 0.9;
+}
+
+/* ---- The legal document surface (issue #117) -------------------------------------- */
+
+/* One measure for everything in this surface. 72ch rather than the prose lines' 46ch:
+   these are licences and tables, not centred blurbs, and a licence clause broken every
+   46 characters reads as poetry. */
+.hud-about-subtitle,
+.hud-about-links,
+.hud-legal {
+  width: 100%;
+  max-width: 72ch;
+}
+
+.hud-about-subtitle {
+  margin: var(--hud-space-2) 0 0;
+  font-size: 15px;
+  color: var(--hud-text-bright);
+}
+
+.hud-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hud-space-2);
+}
+
+/* An <a> carrying `.ui-btn` (issue #117). The shared theme styles by class, not by tag,
+   so the colour/border/radius/font all arrive; these four properties are what a link
+   needs and a button does not -- a browser's own link colour and underline would fight
+   the theme, and `inline-flex` is what stacks the label over its "Opens a new tab" hint. */
+.hud-legal-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-decoration-line: none;
+  color: var(--hud-text);
+}
+
+.hud-legal-link-hint {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.hud-legal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hud-space-1);
+}
+
+.hud-legal-doc {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The toggle takes the full measure with its state word pushed to the far end, so the
+   five of them read as one column of rows rather than as five loose buttons. */
+.hud-legal-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hud-space-3);
+  width: 100%;
+  text-align: left;
+}
+
+/* The state IN WORDS beside `aria-expanded` (issue #630's class of defect: a fact carried
+   only by a rotating caret is carried only by shape). */
+.hud-legal-toggle-state {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.hud-legal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hud-space-2);
+  margin: var(--hud-space-1) 0 var(--hud-space-3);
+  padding: var(--hud-space-3);
+  border-radius: var(--hud-radius-sm);
+  background: var(--hud-scrim-panel);
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* The class does nothing on its own: without this rule every document is open from the
+   moment the pane is built, which is the failure `.hud-splash--hidden` and
+   `.ui-app-ground--hidden` each carry their own note about. */
+.hud-legal-body--hidden {
+  display: none;
+}
+
+.hud-legal-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--hud-text-bright);
+}
+
+/* Which file this is, so a reader can go and check it against the repository. */
+.hud-legal-source {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.hud-legal-heading {
+  margin: var(--hud-space-2) 0 0;
+  font-size: 13px;
+  color: var(--hud-text-bright);
+}
+
+.hud-legal-para {
+  margin: 0;
+}
+
+/* A blockquote in the source. The bar is the only thing that says so once the marker is
+   flattened away, and the text stays full-contrast because two of the three quoted
+   passages are the licence's own required notices. */
+.hud-legal-note {
+  margin: 0;
+  padding-left: var(--hud-space-3);
+  border-left: 2px solid var(--hud-quiet-fill);
+}
+
+.hud-legal-list {
+  margin: 0;
+  padding-left: var(--hud-space-6);
+}
+
+.hud-legal-item {
+  margin: 0;
+}
+
+/* `pre-wrap`, not `pre`: the licence texts inside a fence are hard-wrapped by their
+   authors, so the newlines are kept -- but a phone narrower than the widest line must
+   wrap rather than scroll sideways under the pane. */
+.hud-legal-code {
+  margin: 0;
+  padding: var(--hud-space-2);
+  border-radius: var(--hud-radius-sm);
+  background: var(--hud-scrim-pane);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hud-legal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.hud-legal-th,
+.hud-legal-td {
+  padding: var(--hud-space-1);
+  border-bottom: 1px solid var(--hud-quiet-fill);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.hud-legal-th {
+  color: var(--hud-text-bright);
 }
 
 /* ---- Replace-run confirmation (issue #226) --------------------------------------- */
