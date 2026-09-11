@@ -1295,6 +1295,42 @@ function galleryOpts(over: Partial<GalleryOptions>): GalleryOptions {
   };
 }
 
+check('the posed gallery HONOURS a render-variant flag instead of dropping it', () => {
+  // THE REGRESSION THIS FIXES, asserted where it actually lives. `main.ts` read
+  // `?mineWarn=` off the URL from the day the flag existed and handed it to the MOMENT
+  // scene only; the posed gallery called `createEntityViews(scene)` bare, so
+  // `npm run gallery -- --mineWarn <style>` rendered the shipped treatment and exited 0.
+  // A capture tool that silently ignores the variant it was asked for is worse than one
+  // that refuses: the frames look like evidence, and they are evidence of the default.
+  //
+  // Driven through `identityMarker` because its effect is unconditional geometry on a
+  // posed tank -- no timing, no event, nothing to stage. `elements: ['identity']` is the
+  // four-slot subject, needed because the identity ring only exists where two or more
+  // player tanks do.
+  const a = galleryCanvas();
+  const b = galleryCanvas();
+  const plain = buildGallery(a, a.width, a.height, galleryOpts({ elements: ['identity'] }));
+  const marked = buildGallery(
+    b, b.width, b.height, galleryOpts({ elements: ['identity'], identityMarker: 'shape' }),
+  );
+  plain.draw(0, 0);
+  marked.draw(0, 0);
+  const glA = (a.getContext('webgl2') ?? a.getContext('webgl')) as WebGLRenderingContext;
+  const glB = (b.getContext('webgl2') ?? b.getContext('webgl')) as WebGLRenderingContext;
+  const before = grab(glA, a.width, a.height);
+  const after = grab(glB, b.width, b.height);
+  plain.dispose();
+  marked.dispose();
+  a.remove();
+  b.remove();
+  const moved = bytesDiffering(before, after);
+  // Same tanks, same poses, same camera, same hues: the only difference is the ring's
+  // geometry. 0 means the flag never reached `createEntityViews` -- which is precisely
+  // what happened for the whole life of `--mineWarn`, undetectably.
+  if (moved < 200) return `only ${moved} of ${before.length} bytes differ with identityMarker=shape -- the flag is not reaching the posed scene`;
+  return null;
+});
+
 check('the gallery paints the chosen skin onto the tank it renders', () => {
   const a = galleryCanvas();
   const b = galleryCanvas();

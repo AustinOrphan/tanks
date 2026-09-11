@@ -66,6 +66,7 @@ export const DEFAULTS = {
    */
   skin: 'solid',
   mineWarn: null,
+  identityMarker: null,
   /**
    * Which of issue #356's candidate blocked-fire cues to render, matching the game's own
    * `?dev=1&blockedFire=<cue>`. Only meaningful with `--scene blocked-fire`, whose
@@ -212,6 +213,32 @@ export function parseArgs(argv) {
   }
   if (out.mineWarn !== null && !['lance', 'slump', 'spike'].includes(out.mineWarn)) {
     throw new Error(`--mineWarn must be one of lance|slump|spike, got '${out.mineWarn}'`);
+  }
+  if (out.identityMarker !== null) {
+    // Hardcoded like --mineWarn's list above, and for the same reason: this file is .mjs
+    // and cannot import the TypeScript that owns the vocabulary. IDENTITY_MARKER_STYLES
+    // (src/presentation/identity-marker.ts) is the source of truth, and args.test.ts pins
+    // the two together so a value added there without a change here fails.
+    const styles = ['arcs', 'shape'];
+    if (!styles.includes(out.identityMarker)) {
+      throw new Error(
+        `--identityMarker must be one of ${styles.join('|')}, got '${out.identityMarker}'`,
+      );
+    }
+    // REFUSE rather than render a ring-less tank, exactly as --blocked-fire does below.
+    // The identity ring only exists where `identityApplies` is true -- two or more player
+    // tanks -- so `--elements tank --identityMarker shape` would produce a perfectly
+    // ordinary frame with no marker in it and report success. That silent no-op is the
+    // bug this whole change exists to end; reintroducing it for a sibling flag would be
+    // an odd way to celebrate.
+    const withRings = ['coop', 'identity'];
+    const chosen = out.elements.split(',').map((e) => e.trim()).filter(Boolean);
+    if (!chosen.some((e) => withRings.includes(e))) {
+      throw new Error(
+        `--identityMarker needs an element set that poses two or more player tanks `
+        + `(${withRings.join(' or ')}), got --elements '${out.elements}'`,
+      );
+    }
   }
   if (out.blockedFire !== null) {
     // Named here rather than imported from src/presentation/blocked-fire.ts: this is a

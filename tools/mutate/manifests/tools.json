@@ -834,5 +834,29 @@
       "the selectors names an element the shipped page actually has"
     ],
     "why": "Restores the exact selector that shipped and failed TWICE. It is a denylist of the HUD canvases known at the time it was written: a bare `canvas` lost to the Customize preview when the route UI began building before a session (issue #468), the preview was excluded by class, and the same shape returned the moment issue #274 gave each versus map card a board schematic. MEASURED both times rather than reasoned -- CI and a local run each reported the visual gate's probe reading `bufferWidth: 132, bufferHeight: 108, hasContext: false`, a schematic canvas, while every screenshot-based check on the same run passed (board 71.3% painted, 96.7% of width). The gate was therefore reporting a renderer failure that had not happened, which is the worst failure a gate has. NOTHING ELSE CATCHES IT: `npm run visual` and `npm run gallery` both need a real browser and neither runs under vitest, so the unit suite's only purchase on this rule is the structural fixture the killing case builds -- a page with the HUD and its two canvases BEFORE the gameplay canvas, which is the document order the real page has and the reason a denylist ever went wrong."
+  },
+  {
+    "id": "gallery-marker-flag-accepts-a-ringless-scene",
+    "file": "tools/gallery/args.mjs",
+    "find": "    if (!chosen.some((e) => withRings.includes(e))) {",
+    "replace": "    if (false) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/gallery/args.test.ts"
+    ],
+    "why": "Drops the refusal, so `--elements tank --identityMarker shape` runs, exits 0, and produces a frame with NO marker in it -- the identity ring exists only where `identityApplies` is true (two or more player tanks). That is the same silent no-op this whole change exists to end: `--mineWarn` behaved exactly this way in the posed scene for its entire life, and nothing in the tool or the output said so. Modelled on the --blocked-fire guard, which carries the same reasoning in its own comment."
+  },
+  {
+    "id": "gallery-marker-flag-skips-its-vocabulary-check",
+    "file": "tools/gallery/args.mjs",
+    "find": "    if (!styles.includes(out.identityMarker)) {",
+    "replace": "    if (false) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/gallery/args.test.ts"
+    ],
+    "why": "Lets an unrecognised style through to the URL, where the render layer's own reject-to-null parse quietly resolves it to the shipped default -- so a typo'd `--identityMarker shapes` captures the DEFAULT rendering while the operator believes they captured a candidate. Worse than an unstyled frame, because the frame looks like a legitimate comparison. Killed by the two-way pin against IDENTITY_MARKER_STYLES, which also fails if a style is added to the renderer without being added here."
   }
 ]
