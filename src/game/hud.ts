@@ -2439,10 +2439,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // the name it needs to be worth navigating to at all -- the <h1> above says
     // "Records", which is the pane, not this table.
     //
+    // The caption is `.ui-sr-only`. A <caption> renders as visible text above the table by
+    // default, and this issue is about SEMANTICS -- giving the table a name a screen
+    // reader can navigate to, not adding a heading to a pane whose visual design nobody
+    // asked to change. The <h1> above already says "Records" to a sighted reader; what
+    // was missing was a name for the table itself, and only one audience lacked it.
+    //
     // The corner cell stays a <td>. It heads neither its row nor its column, and a <th>
     // there would announce an empty heading on every row.
     statsTable.innerHTML =
-      '<caption>Statistics, lifetime and this level attempt</caption>'
+      '<caption class="ui-sr-only">Statistics, lifetime and this level attempt</caption>'
       + '<thead><tr><td></td><th scope="col">Lifetime</th><th scope="col">Level attempt</th></tr></thead>'
       + `<tbody>${rows}</tbody>`;
   }
@@ -2610,7 +2616,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       .join('');
     const caption = tally === 'teams' ? 'Match results by team' : 'Match results by player';
     versusResultsEl.innerHTML =
-      `<caption>${caption}</caption>`
+      `<caption class="ui-sr-only">${caption}</caption>`
       + '<thead><tr><td></td><th scope="col">Kills</th><th scope="col">Deaths</th>'
       + '<th scope="col">Accuracy</th></tr></thead>'
       + `<tbody>${body}</tbody>`;
