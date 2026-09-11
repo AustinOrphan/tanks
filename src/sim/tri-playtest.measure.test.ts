@@ -22,7 +22,14 @@ function playMatch(mode: GameMode, seed: number) {
     minSeparation: Infinity, maxSeparation: 0, sepSum: 0, pairTicks: 0,
     wallsAtStart: w.walls.length, firstKillTick: -1,
     teamSizes: [0, 0] as [number, number],
+    teamDeaths: [0, 0] as [number, number],
   };
+  // Which side each tank started on, so a death can be attributed to one. Sampled at t=0
+  // alongside `teamSizes` and for the same reason: `tank-destroyed` carries `tankId`, and
+  // the tank is gone by the time the event is read.
+  const teamById = new Map(
+    w.tanks.filter((x) => x.kind === 'player').map((x) => [x.id, x.team]),
+  );
   // Sampled once at t=0, before any death can empty a side: whether `teams` really split
   // this board, and HOW. At three players `teamOf(slot) = slot % 2` (arena.ts) stamps
   // 0/1/0 over the picker's order, so the split is 2v1 by construction -- which since
@@ -43,7 +50,18 @@ function playMatch(mode: GameMode, seed: number) {
       // and reads as a peaceful match. The assertions below are what would catch that.
       if (e.type === 'fire') obs.shots++;
       if (e.type === 'mine-dropped') obs.mines++;
-      if (e.type === 'tank-destroyed') obs.kills++;
+      if (e.type === 'tank-destroyed') {
+        obs.kills++;
+        // THE MEASUREMENT 2v1 ACTUALLY TURNS ON. `teams=2v1` only says the split happened;
+        // it says nothing about whether the lone side can contest the board, which is the
+        // concrete positional question issue #627 asks. Deaths per side is the cheapest
+        // figure that speaks to it: a solo player who simply dies over and over, on every
+        // seed, is the shape of the "practical inability for one side to contest space"
+        // the issue names. It remains SUPPORTING evidence -- three bot seeds are not a
+        // ruling, and this counts deaths rather than who caused them.
+        const team = teamById.get(e.tankId);
+        if (team === 0 || team === 1) obs.teamDeaths[team]++;
+      }
       if (e.type === 'wall-destroyed') obs.breaches++;
     }
     // Every LIVING pair, not just one: at N=3 the interesting quantity is whether the
@@ -98,7 +116,7 @@ measure('vs-tri-01 bot-vs-bot playtest (set VITE_RUN_MEASURE=1 to run)', () => {
     for (const mode of ['ffa', 'teams'] as GameMode[]) {
       for (const seed of [7, 11, 23]) {
         const o = playMatch(mode, seed);
-        console.log(`PLAYTEST ${mode} seed=${seed} players=${o.players} shots=${o.shots} mines=${o.mines} kills=${o.kills} breaches=${o.breaches} firstContact=${o.firstContactSec}s firstKill=${o.firstKillSec}s sep(min/mean/max)=${o.minSeparation.toFixed(2)}/${o.meanSeparation.toFixed(2)}/${o.maxSeparation.toFixed(2)} teams=${o.teamSizes.join('v')}`);
+        console.log(`PLAYTEST ${mode} seed=${seed} players=${o.players} shots=${o.shots} mines=${o.mines} kills=${o.kills} breaches=${o.breaches} firstContact=${o.firstContactSec}s firstKill=${o.firstKillSec}s sep(min/mean/max)=${o.minSeparation.toFixed(2)}/${o.meanSeparation.toFixed(2)}/${o.maxSeparation.toFixed(2)} teams=${o.teamSizes.join('v')} deaths=${o.teamDeaths.join('v')}`);
         // NOT `expect(true).toBe(true)`. Each of these fails on a specific, previously-made
         // mistake rather than decorating the run:
         //   - players: the board really seated THREE tanks, so this is an N=3 observation
@@ -125,6 +143,19 @@ measure('vs-tri-01 bot-vs-bot playtest (set VITE_RUN_MEASURE=1 to run)', () => {
         //     the other unnoticed.
         if (mode === 'teams') {
           expect(o.teamSizes, `${mode} seed=${seed}: the 2v1 split #627 approved`).toEqual([2, 1]);
+          //   - teamDeaths: a HARNESS-correctness check, deliberately not a fairness one.
+          //     Every death in a teams match belongs to one of the two stamped sides, so
+          //     the per-side tally must account for all of them -- this is what fails if
+          //     `teamById` is built after the first death, or keyed off a slot index
+          //     rather than a tank id, either of which would silently report 0v0 and make
+          //     the logged figure a decoration. What the figure MEANS is a judgement for
+          //     the issue, not an expectation here: pinning a survivable ratio would be
+          //     asserting Keystone's 2v1 fairness from three bot seeds, which is exactly
+          //     the ruling #627 reserves for normal-speed human play.
+          expect(
+            o.teamDeaths[0] + o.teamDeaths[1],
+            `${mode} seed=${seed}: every death attributed to a side`,
+          ).toBe(o.kills);
         } else {
           expect(o.teamSizes, `${mode} seed=${seed}: ffa stamps no team`).toEqual([0, 0]);
         }
