@@ -71,6 +71,7 @@ on:
           - screen.startup.probe-blocked
           - screen.startup.unsupported-render
           - screen.versus-setup
+          - screen.versus-setup.teams
       ref:
         description: capture mode only. A branch, tag or SHA. Blank uses the default branch.
         required: false
