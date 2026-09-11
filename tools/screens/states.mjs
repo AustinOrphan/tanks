@@ -246,9 +246,27 @@ export const SCREEN_STATES = Object.freeze([
   state({
     id: 'screen.about',
     title: 'About & Legal',
-    description: 'The prose pane, which is the widest text measure in the kit.',
+    description:
+      'The index: two outbound links and one collapsed disclosure per legal document ' +
+      '(issue #117). The widest text measure in the kit.',
     steps: [...PAST_SPLASH, { click: '.hud-about-open' }, { waitVisible: '.hud-about' }],
-    measure: ['.hud-about', '.hud-about-line'],
+    measure: ['.hud-about', '.hud-about-line', '.hud-about-links', '.hud-legal-toggle'],
+  }),
+  state({
+    id: 'screen.about.document',
+    title: 'About & Legal, a document open',
+    description:
+      'Privacy expanded in place (issue #117). The one state that shows the document ' +
+      "surface itself -- headings, prose, and the storage-key table's captioned columns -- " +
+      'which screen.about above cannot, because every document is collapsed there.',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-about-open' },
+      { waitVisible: '.hud-about' },
+      { click: '.hud-legal-doc[data-legal="privacy"] .hud-legal-toggle' },
+      { waitVisible: '#hud-legal-body-privacy' },
+    ],
+    measure: ['.hud-about', '#hud-legal-body-privacy', '.hud-legal-table'],
   }),
   state({
     id: 'screen.confirm.new-campaign',

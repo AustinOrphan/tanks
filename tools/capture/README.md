@@ -63,6 +63,7 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.versus-setup.teams` | `screen.versus-setup.teams` | `capture.png` | still |
 | `screen.versus-setup.map-replaced` | `screen.versus-setup.map-replaced` | `capture.png` | still |
 | `screen.about` | `screen.about` | `capture.png` | still |
+| `screen.about.document` | `screen.about.document` | `capture.png` | still |
 | `screen.confirm.new-campaign` | `screen.confirm.new-campaign` | `capture.png` | still |
 | `screen.startup.unsupported-render` | `screen.startup.unsupported-render` | `capture.png` | still |
 | `screen.startup.probe-blocked` | `screen.startup.probe-blocked` | `capture.png` | still |
