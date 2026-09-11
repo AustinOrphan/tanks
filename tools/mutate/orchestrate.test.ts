@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
@@ -332,6 +332,34 @@ describe('validateManifest', () => {
       expect(existsSync(join(ROOT, entry.file)), `${entry.file} (from ${entry.id})`).toBe(true);
       for (const t of entry.tests) {
         expect(existsSync(join(ROOT, t)), `${t} (from ${entry.id})`).toBe(true);
+      }
+    }
+
+    // ...and every `find` must still OCCUR in the file it names. The file existing is not
+    // the same question: a refactor that rewrites a call site leaves the file in place and
+    // the anchor behind, and the entry then reports FAILED-TO-APPLY -- which is the silent
+    // form of an entry that has stopped measuring anything, since it neither kills nor
+    // survives. Until this check existed the only thing that noticed was CI's
+    // `verify (current)`, twenty-odd minutes into a run, and only for the entries a
+    // changed-file selection happened to reach; a local `--only` naming the entries already
+    // known to be affected cannot see a stale anchor on an entry nobody thought to name.
+    // Issue #493 is the worked example: collapsing `createWorldFor`'s positionals stranded
+    // four anchors in `levels.ts`, three of which were found by reading and the fourth by CI.
+    //
+    // `findOccurrences` rather than `String.includes`, so this asks the question the runner
+    // asks: an `occurrence` entry needs that many matches, and an entry without one needs
+    // exactly one -- an anchor that has become ambiguous is refused by `applyAt` at run time
+    // and is just as dead as one that has vanished.
+    for (const entry of entries) {
+      const content = readFileSync(join(ROOT, entry.file), 'utf8');
+      const hits = findOccurrences(content, entry.find).length;
+      const wanted = entry.occurrence ?? 1;
+      expect(
+        hits,
+        `${entry.id}: "find" matches ${hits}x in ${entry.file}, needs ${wanted === 1 && entry.occurrence === undefined ? 'exactly 1' : `at least ${wanted}`}`,
+      ).toBeGreaterThanOrEqual(wanted);
+      if (entry.occurrence === undefined) {
+        expect(hits, `${entry.id}: "find" is ambiguous in ${entry.file} -- applyAt would refuse it`).toBe(1);
       }
     }
   });
