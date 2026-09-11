@@ -95,5 +95,29 @@
       "player identity: ring and shell tint TEAM_COLORS: exactly 3 hues, measurably clear of each other, the player hull and the placeholder"
     ],
     "why": "Restores the blue team B that issue #579 replaced. It is unequal to every other colour in the game, so the byte-inequality sweep this entry's test replaced passed on it -- and it sits 2.09 from the player's default hull #3d7bd6 once composited, which is a blue ring drawn around a blue tank. That is the whole case for measuring instead of comparing: the defect and the assertion that was supposed to catch it coexisted happily. Filed in presentation.json because its file is src/presentation/identity.ts -- `validateManifest`'s one-file-per-area rule (issue #505) requires it, and caught this entry filed under render.json."
+  },
+  {
+    "id": "identity-marker-spins-with-the-hull",
+    "file": "src/presentation/identity-marker.ts",
+    "find": "  return bodyAngle;",
+    "replace": "  return 0;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/identity-marker.test.ts"
+    ],
+    "why": "Stops the counter-rotation, so the marker spins with the hull again -- which is what it did before issue #630 noticed, and is invisible for the circular annulus that shipped. It is fatal for BOTH candidates: slots 3 and 4 of the shape style are the same 4-gon 45 degrees apart, so a spinning marker makes the square and the diamond one marker wearing two names for most of every match. The failure mode this guards is specifically NOT a crash or a blank screen -- it is a marker that looks fine in a still and is unreadable in play, which no unit assertion on geometry alone can see. Killed by the holds-a-marker-vertex-at-a-fixed-world-position case, which composes the real parent/child matrices at seven body angles rather than trusting the sign; its negative control proves the same case fails when the counter-rotation is absent, so this entry cannot be killed by an accidentally symmetric marker."
+  },
+  {
+    "id": "identity-marker-spin-takes-the-wrong-sign",
+    "file": "src/presentation/identity-marker.ts",
+    "find": "  return bodyAngle;\n}",
+    "replace": "  return -bodyAngle;\n}",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/identity-marker.test.ts"
+    ],
+    "why": "The OTHER way to get the counter-rotation wrong, and the reason the derivation is written out in the function's own comment. A flipped sign does not hold the marker still and does not leave it alone: it spins it at DOUBLE rate. At small turn rates that reads as wobble rather than as a bug, which is exactly how a wrong sign survives a look-at-it review. Filed separately from the returns-zero entry above because the two are different mistakes with different symptoms, and an assertion that caught only one of them would leave the likelier one uncovered."
   }
 ]
