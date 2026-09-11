@@ -457,6 +457,19 @@ describe('hud.css is syntactically whole', () => {
                               // now and have no rule of their own to be present
       // About & Legal (issue #226): the pane, its hidden rule, and the prose measure.
       '.hud-about', '.hud-about--hidden', '.hud-about-line',
+      // The legal document surface (issue #117). Every class the generated data reaches:
+      // the shared measure, the links row and one anchor's two parts, the disclosure row
+      // and its state word, the body and its hidden rule, and one selector per block kind
+      // the generator can emit (heading, paragraph, note, code, list item, table cell).
+      // `.hud-legal-body--hidden` earns its place the way `.hud-splash--hidden` does: with
+      // no rule behind it every document is open from the moment the pane is built.
+      '.hud-about-subtitle', '.hud-about-subline', '.hud-about-links', '.hud-legal',
+      '.hud-legal-link', '.hud-legal-link-hint',
+      '.hud-legal-doc', '.hud-legal-toggle', '.hud-legal-toggle-state',
+      '.hud-legal-body', '.hud-legal-body--hidden',
+      '.hud-legal-title', '.hud-legal-source', '.hud-legal-heading', '.hud-legal-para',
+      '.hud-legal-note', '.hud-legal-code', '.hud-legal-list', '.hud-legal-item',
+      '.hud-legal-table', '.hud-legal-th', '.hud-legal-td',
       // The replace-run confirmation (issue #226): the file's one blocking layer.
       '.hud-confirm', '.hud-confirm--hidden', '.hud-confirm-body', '.hud-confirm-actions',
       // Records is one Main Menu entry with two tabs (issue #226): the tab row's layout,
@@ -610,6 +623,67 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
+  it('hides a collapsed legal document with display, not with a class that does nothing', () => {
+    // Same failure as the ground above, one pane further in (issue #117). Every test that
+    // asserts a document is collapsed -- in legal.test.ts and in hud.surfaces.test.ts -- reads
+    // the CLASS, and the presence sweep above is satisfied by an EMPTY rule, so deleting this
+    // declaration leaves ~25 KB of licence text open on the pane from the moment it is built
+    // with nothing red anywhere. This is the only assertion that would notice.
+    const el = document.createElement('div');
+    el.className = 'hud-legal-body hud-legal-body--hidden';
+    document.body.appendChild(el);
+    expect(getComputedStyle(el).display).toBe('none');
+    el.className = 'hud-legal-body';
+    expect(getComputedStyle(el).display, 'a document is hidden even unmodified').not.toBe('none');
+    document.body.innerHTML = '';
+  });
+
+  it('never centres the main axis of a pane that scrolls', () => {
+    // `justify-content: center` on an `overflow-y: auto` flex column puts the overflow ABOVE
+    // the scrollable area, where no scrollbar reaches it: the first screenful of a long
+    // document is lost and cannot be scrolled back to. The About pane shipped exactly that --
+    // harmless while it held three short lines, a defect the moment issue #117 gave it
+    // documents -- so this sweeps every scroller in the file rather than pinning the one pane.
+    //
+    // Measured through the real elements, not by reading the stylesheet: a rule that set
+    // `center` inside an `@media` block, or a later rule that re-centred, is invisible to a
+    // text search and lands here.
+    const { root, dispose } = mountEveryButton();
+    const scrollers = Array.from(root.querySelectorAll<HTMLElement>('*')).filter(
+      (el) => getComputedStyle(el).overflowY === 'auto',
+    );
+    // Non-vacuity: `.hud-about`, `.hud-settings`, `.hud-devtools`, the achievement list and
+    // the versus pane are the scrollers this fixture builds. A filter that matched nothing
+    // would pass while measuring nothing, and this guard's whole subject is a property of
+    // the elements that DO scroll.
+    expect(scrollers.length).toBeGreaterThan(3);
+    const centred = scrollers
+      .filter((el) => getComputedStyle(el).justifyContent === 'center')
+      .map((el) => (el.className.split(' ')[0]));
+    // THE POPULATION IS PINNED, NOT EMPTIED, and the residual is stated rather than swept
+    // under a narrower selector. Measured: three sibling panes carry the same shape today --
+    // Versus Setup, Settings and Developer Tools are each `overflow-y: auto` with
+    // `justify-content: center`. They are NOT fixed here. Each is a visible vertical-alignment
+    // change on a pane issue #117 does not own, owing its own before/after evidence, and this
+    // change's subject is the About pane, whose documents make the clip reachable in ordinary
+    // use rather than only on a short viewport. MEASURED through tools/screens at 900x500
+    // with the Privacy document open, the two values differing and nothing else: with
+    // `center` the open document's top box sits at y = -454, above the scroll origin and
+    // unreachable; with `flex-start` it sits at y = +388.
+    //
+    // What this asserts is therefore two things, and both can fail:
+    //  - `.hud-about` is NOT in the list, so the pane regressing to `center` is caught;
+    //  - no FOURTH pane joins it, so a new scroller inherits the decision rather than the bug.
+    // Filed as issue #642 with the measurement above, so the residual has a home outside a
+    // test comment. Fixing it makes THIS line fail, which is the prompt to narrow the set.
+    expect(centred.sort()).toEqual(['hud-devtools', 'hud-settings', 'hud-versus-setup']);
+    expect(centred, 'the About pane centres its main axis and clips its own documents').not.toContain(
+      'hud-about',
+    );
+
+    dispose();
+  });
+
   it('never lets a button fall through to browser default styling', () => {
     // `.hud-achievements-open` shipped with NO rule of its own -- only its `--hidden`
     // modifier -- so on the main menu it rendered as a stock grey browser button
@@ -759,11 +833,98 @@ describe('hud.css is syntactically whole', () => {
     // read from `versus-catalog.json` rather than from a fixed option list, so catalog
     // data edits land here. That is worth knowing before the next one.
     //
+    // Issue #117 adds FIVE: one disclosure toggle per legal document in the About & Legal
+    // pane -- Privacy, Credits, Third-party notices, Code licence, Content licence. 125 ->
+    // 130. The population is `LEGAL_DOCUMENTS.length`, generated by `npm run legal` from the
+    // five markdown files at the repository root, so this figure moves when a document is
+    // ADDED to `LEGAL_SOURCES` in tools/legal/parse.mjs -- not when a document's text
+    // changes. Each toggle is `.ui-btn.ui-btn--sm.hud-legal-toggle` and `unstyled` stays
+    // empty, which is the check this pin exists to prompt, performed rather than assumed.
+    //
+    // What this sweep does NOT count, stated because it is a real hole rather than an
+    // omission: the same pane's two outbound links are `<a class="ui-btn">`, and this
+    // selector is `'button'`. They are measured against a bare `<a>` in their own case
+    // below ("themes the two outbound legal links, which are anchors and not buttons"),
+    // because an `.ui-btn` that is not a `<button>` is invisible to every sweep in this
+    // file and #634 is the standing example of what an unswept control costs.
+    //
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(125);
+    expect(buttons.length).toBe(130);
     expect(unstyled).toEqual([]);
+
+    dispose();
+  });
+
+  it('gives the legal surface one left edge that does not move with a font size', () => {
+    // A MEASURED regression, not a hypothetical. The shared measure was `72ch`, and `ch`
+    // resolves against the element's OWN font: with the "Documents" heading at 18px and the
+    // disclosure rows at the pane's 16px, one 72ch box came out 648px and the other 691px, so
+    // the heading sat 22px right of the rows it introduces. Captured at 1280x800.
+    //
+    // Equality alone would NOT have caught it -- all four elements carried the identical
+    // declaration, and jsdom reports the declared string. The unit is the assertion.
+    const { root, dispose } = mountEveryButton();
+    const selectors = ['.hud-about-subtitle', '.hud-about-subline', '.hud-about-links', '.hud-legal'];
+    const widths = selectors.map((sel) => {
+      const el = root.querySelector(sel);
+      expect(el, `${sel} is not in the fixture`).not.toBeNull();
+      return getComputedStyle(el!).maxWidth;
+    });
+    for (const [i, width] of widths.entries()) {
+      expect(width, `${selectors[i]} takes a different measure from its siblings`).toBe(widths[0]);
+      // `ch`, `em` and `ex` resolve against the ELEMENT's font; `rem` resolves against the
+      // root's, which is the whole point of choosing it, so the pattern requires a digit
+      // before the unit and `43rem` is deliberately not a match.
+      expect(width, `${selectors[i]} measures in an element-font-relative unit`).not.toMatch(
+        /[0-9.](ch|em|ex)$/,
+      );
+    }
+    // Non-vacuity: an empty string would satisfy both assertions above for every selector.
+    expect(widths[0]).not.toBe('');
+    expect(widths[0]).not.toBe('none');
+
+    dispose();
+  });
+
+  it('themes the two outbound legal links, which are anchors and not buttons', () => {
+    // The sweep above selects `'button'`, so the About & Legal pane's two `<a class="ui-btn">`
+    // links are outside it -- and an `.ui-btn` that no sweep in this file reaches is exactly
+    // #634's defect ("the class is a handle with nothing behind it"), one tag name further
+    // out. Measured the same way, against a BARE ANCHOR rather than a bare button, because
+    // the browser's own link treatment (blue, underlined) is what falls through here, and a
+    // bare `<button>` would not report it.
+    const { root, dispose } = mountEveryButton();
+    const bare = document.createElement('a');
+    bare.href = 'https://example.com';
+    document.body.appendChild(bare);
+
+    const links = Array.from(root.querySelectorAll<HTMLAnchorElement>('.hud-legal-link'));
+    // Non-vacuity: `LEGAL_LINKS` is generated, and a sweep over an empty list passes while
+    // measuring nothing. Two today -- the project site and the repository the privacy
+    // policy sends questions to.
+    expect(links.length).toBe(2);
+    for (const link of links) {
+      expect(link.tagName, 'an outbound destination is a link, not a button').toBe('A');
+      // `cursor` is dropped from THEMED_PROPS here and nowhere else: a bare `<a href>`
+      // ALREADY resolves to `pointer`, so matching the bare anchor on that property is
+      // agreement rather than fall-through, and including it would fail this case for a
+      // perfectly themed link. What remains -- background, colour, radius -- is measured.
+      const props = THEMED_PROPS.filter((p) => p !== 'cursor');
+      const bareProps = props.filter((p) => resolved(link, p) === resolved(bare, p));
+      expect(bareProps, `${link.className} falls through to the browser's own link style`).toEqual(
+        [],
+      );
+    }
+    // THE UNDERLINE IS CHECKED IN THE TEXT, not in the cascade, and the reason is a
+    // measured jsdom limitation rather than a preference: probed directly, a bare `<a href>`
+    // and a `.hud-legal-link` BOTH report `textDecoration: 'underline'` and BOTH report
+    // `textDecorationLine: 'none'` -- jsdom applies neither the shorthand nor the longhand
+    // for this property, so a computed-style assertion on it is vacuous in exactly the way
+    // `resolved`'s own header warns about. This substring is the only route that fails when
+    // the declaration is deleted.
+    expect(css).toContain('text-decoration-line: none');
 
     dispose();
   });
@@ -864,7 +1025,15 @@ describe('hud.css is syntactically whole', () => {
       '.hud-haptics-toggle', '.hud-motion-toggle', '.hud-quality-toggle',
       '.hud-versus-friendlyfire-btn', '.hud-settings-controllers',
       '.hud-settings-about', '.hud-about-open', '.hud-records-tab-stats',
-      '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress'];
+      '.hud-records-tab-achievements', '.hud-reset-stats', '.hud-reset-progress',
+      // Issue #117's two: a document disclosure and an outbound link, both `--sm` because
+      // both lay out in a row inside a pane rather than stacking as panel slabs. Listed here
+      // because this population is a hand-maintained list, not a sweep -- a `--sm` control
+      // left off it is silently outside the one guard that says the modifier means one shape,
+      // which is #634's defect with the class present and the RULE overriding it.
+      // `.hud-legal-link` is an `<a>`, and `shape()` reads a selector rather than a tag, so
+      // it belongs in the same list as the buttons it sits beside.
+      '.hud-legal-toggle', '.hud-legal-link'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
     for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));
     // Without this the two loops above would both pass on a stylesheet that gave every

@@ -50,6 +50,7 @@ on:
           - gallery.fire.still
           - gallery.ricochet.still
           - screen.about
+          - screen.about.document
           - screen.confirm.new-campaign
           - screen.customize
           - screen.levels

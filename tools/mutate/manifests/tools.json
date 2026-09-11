@@ -805,5 +805,19 @@
       "tools/screens/paths.test.ts"
     ],
     "why": "The other half of issue #637, and the half the filed issue did not name: --out defaulted to a bare basename too, so a bare `npm run screens` left screen.png in the repository root alongside producer.json -- a binary artifact, and the worse of the two to commit. Killed by 2: the repo-root invariant (which catches BOTH artifacts, since an omitted --report then follows the frame into the root) and the pins-the-destination case. Those two are deliberately separate assertions rather than one: the invariant states what must never happen and survives a future move to another ignored directory, while the destination pin makes such a move a deliberate edit instead of a silent one."
+  },
+  {
+    "id": "legal-nested-list-flattens-into-its-parent",
+    "file": "tools/legal/parse.mjs",
+    "find": "        assertSupported(lines[i], source, i + 1);",
+    "replace": "        void lines[i];",
+    "expect": "killed",
+    "tests": [
+      "tools/legal/generate.test.ts"
+    ],
+    "killedBy": [
+      "src/game/legal-content.ts is generated, not hand-edited refuses a construct it would otherwise drop on the floor"
+    ],
+    "why": "Reopens a hole the guard's own negative control found, rather than one written from imagination. `assertSupported` is called on every line the block walk reaches, but a bullet list's continuation-line rule consumes wrapped items BEFORE that walk sees them -- so an indented `- nested` matched the wrap rule and was appended to its parent's text as \"top - nested\", silently, with no throw and nothing red. This second call inside the list loop is what closes it. The failure is quiet by construction: a flattened nested list is still a list of strings, so the pane renders it, and only a fixture containing one can tell."
   }
 ]

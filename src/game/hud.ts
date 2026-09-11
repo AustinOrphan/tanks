@@ -268,6 +268,13 @@ import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topb
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
+import {
+  collapseLegalDocuments,
+  isLegalExpanded,
+  renderLegalDocuments,
+  renderLegalLinks,
+  setLegalExpanded,
+} from './legal';
 import type { RoundPhase } from '../sim/round';
 import { VERSUS_STOCK } from '../sim/constants';
 import { configFor } from '../sim/config';
@@ -1906,8 +1913,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--slab hud-settings-back" type="button">Back</button>
     </div>
     <!-- ABOUT & LEGAL (issue #226). One pane, two entry points: the Main Menu footer and
-         Settings -> About & Legal. Static prose, so it is markup rather than a render
-         function -- there is nothing here derived from state.
+         Settings -> About & Legal. The prose and the headings are markup; the two outbound
+         links and the five document disclosures are built into the empty containers below
+         from generated data (issue #117), so nothing legal is written twice.
+
+         THE DEPENDENCY SENTENCE IS GONE (issue #117). This pane used to end "Built with
+         Three.js and Howler.js, which are used under their own licences" -- a
+         hand-maintained list of the runtime dependencies, sitting one screen away from
+         THIRD-PARTY-NOTICES.md, which 'npm run notices' derives from package.json for
+         exactly that reason. A third dependency would have made the sentence false with
+         nothing red. The Third-party notices document below now says it, generated.
 
          THE STORAGE CLAIM IS CHECKED, NOT ASSERTED: 'src/' contains no 'fetch', no
          'XMLHttpRequest' and no 'sendBeacon', and every persistence path in the build
@@ -1918,7 +1933,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <h1 id="hud-about-title">About &amp; Legal</h1>
       <p class="hud-about-line">Tanks! is a browser arena shooter.</p>
       <p class="hud-about-line">It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local storage and are never sent anywhere.</p>
-      <p class="hud-about-line">Built with Three.js and Howler.js, which are used under their own licences.</p>
+      <div class="hud-about-links"></div>
+      <h2 class="hud-about-subtitle">Documents</h2>
+      <p class="hud-about-subline">Each one is the full text committed to this repository. Open a document to read it here.</p>
+      <div class="hud-legal"></div>
       <button class="ui-btn ui-btn--slab hud-about-back" type="button">Back</button>
     </div>
     <!-- THE REPLACE-RUN CONFIRMATION (issue #226): "Starting a replacement campaign
@@ -2082,6 +2100,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const aboutOpenBtn = el.querySelector('.hud-about-open') as HTMLButtonElement;
   const aboutView = el.querySelector('.hud-about') as HTMLElement;
   const aboutBackBtn = el.querySelector('.hud-about-back') as HTMLButtonElement;
+  const aboutLinksEl = el.querySelector('.hud-about-links') as HTMLElement;
+  const legalListEl = el.querySelector('.hud-legal') as HTMLElement;
   const devToolsOpenBtn = el.querySelector('.hud-devtools-open') as HTMLButtonElement;
   const devToolsView = el.querySelector('.hud-devtools') as HTMLElement;
   const devToolsExitBtn = el.querySelector('.hud-devtools-exit') as HTMLButtonElement;
@@ -3133,10 +3153,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     }
   }
 
-  // Static prose: nothing to render on open, so this is the smallest of the panes.
+  /*
+   * The documents are built ONCE, at construction, and only their disclosure state moves
+   * (issue #117). `LEGAL_DOCUMENTS` is generated data that cannot change while the page
+   * lives, so a render-on-open would rebuild ~25 KB of identical DOM on every visit and
+   * would also throw away the ids `aria-controls` points at mid-visit.
+   *
+   * Closing DOES collapse every document, so a second visit presents the index rather
+   * than whatever was left open two screens ago -- the same reason the Records panes
+   * re-render on open instead of keeping their scroll position across a visit.
+   */
   function showAbout(show: boolean): void {
     if (show) swapSurface(openSurface(), ABOUT_SURFACE, () => aboutView.focus());
-    else closeSurface(ABOUT_SURFACE);
+    else {
+      closeSurface(ABOUT_SURFACE);
+      collapseLegalDocuments(legalDisclosures);
+    }
   }
 
   /** The developer shell (issue #243). Static like About, for now -- see the markup. */
@@ -3997,6 +4029,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleAboutBack = (): void => {
     back();
   };
+
+  /*
+   * ONE DOCUMENT AT A TIME IS NOT ENFORCED, deliberately: a reader comparing the content
+   * licence against the code licence needs both open, and an accordion would close the one
+   * they just read. The pane scrolls, so the cost of two open documents is scroll length
+   * rather than lost content.
+   */
+  const legalDisclosures = renderLegalDocuments(legalListEl);
+  renderLegalLinks(aboutLinksEl);
+  for (const disclosure of legalDisclosures) {
+    // Listener per toggle with no removal in `destroy`, exactly like the versus option rows
+    // and the level grid: these elements are created by this HUD and go when its tree does,
+    // so there is no listener here that can outlive the node it is on.
+    disclosure.toggle.addEventListener('click', () => {
+      setLegalExpanded(disclosure, !isLegalExpanded(disclosure));
+    });
+    disclosure.toggle.addEventListener('click', blurIfPointer);
+  }
   /*
    * Two openers, one pane, exactly like About above -- the menu entry and the persistent
    * badge -- and each records its own control, so Back from the tools returns to whichever

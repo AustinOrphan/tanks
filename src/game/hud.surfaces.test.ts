@@ -2535,3 +2535,81 @@ describe('createHud application transition contract', () => {
     }
   });
 });
+
+describe('the About & Legal pane in the assembled HUD (issue #117)', () => {
+  // `legal.test.ts` drives `renderLegalDocuments` directly, which cannot prove the HUD ever
+  // calls it or ever wires a click to it -- the composition these cases own.
+  const openAbout = (root: HTMLElement, h: Hud): void => {
+    h.setState('main-menu');
+    (root.querySelector('.hud-about-open') as HTMLButtonElement).click();
+  };
+  const bodies = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll<HTMLElement>('.hud-legal-body'));
+  const openBodies = (root: HTMLElement): HTMLElement[] =>
+    bodies(root).filter((b) => !b.classList.contains('hud-legal-body--hidden'));
+
+  it('builds the documents and the outbound links into the pane', () => {
+    // The HUD could typecheck, render the pane, and simply never call either renderer -- the
+    // containers are empty in the markup on purpose. This is the only case that would notice.
+    const { hud: h, root } = mount();
+    openAbout(root, h);
+    expect(root.querySelectorAll('.hud-legal-doc').length).toBeGreaterThan(0);
+    expect(root.querySelectorAll('.hud-legal-link').length).toBeGreaterThan(0);
+    // Inside the pane, not merely inside the HUD: a container resolved from the wrong
+    // `querySelector` would put the documents somewhere the About pane never shows.
+    const about = root.querySelector('.hud-about') as HTMLElement;
+    expect(about.contains(root.querySelector('.hud-legal-doc'))).toBe(true);
+    expect(about.contains(root.querySelector('.hud-legal-link'))).toBe(true);
+  });
+
+  it('opens a document when its toggle is clicked, and closes it on a second click', () => {
+    // The wiring, end to end through a real click. A missing `addEventListener` leaves the
+    // five toggles inert and every unit assertion in legal.test.ts still green.
+    const { hud: h, root } = mount();
+    openAbout(root, h);
+    const toggle = root.querySelector('.hud-legal-toggle') as HTMLButtonElement;
+    expect(openBodies(root).length).toBe(0);
+
+    toggle.click();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(openBodies(root).length).toBe(1);
+
+    toggle.click();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(openBodies(root).length).toBe(0);
+  });
+
+  it('leaves a second document open beside the first, rather than swapping', () => {
+    // Deliberate, and asserted so a later accordion is a decision rather than a drift: a
+    // reader comparing the content licence against the code licence needs both open at once.
+    const { hud: h, root } = mount();
+    openAbout(root, h);
+    const toggles = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-legal-toggle'));
+    expect(toggles.length).toBeGreaterThan(1);
+    toggles[0].click();
+    toggles[1].click();
+    expect(openBodies(root).length).toBe(2);
+  });
+
+  it('collapses every document when the pane closes, so a second visit opens on the index', () => {
+    // Back is what closes the pane, so this also pins that `showAbout(false)` is the path a
+    // Back takes -- a collapse hung off the click handler instead would miss a close by any
+    // other route.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      openAbout(root, h);
+      (root.querySelector('.hud-legal-toggle') as HTMLButtonElement).click();
+      expect(openBodies(root).length).toBe(1);
+
+      (root.querySelector('.hud-about-back') as HTMLButtonElement).click();
+      vi.advanceTimersByTime(1000);
+      expect(openBodies(root).length, 'a document survived the pane closing').toBe(0);
+
+      (root.querySelector('.hud-about-open') as HTMLButtonElement).click();
+      expect(openBodies(root).length, 'the pane reopened onto an open document').toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
