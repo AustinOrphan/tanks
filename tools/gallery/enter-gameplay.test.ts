@@ -16,6 +16,10 @@ import { enterGameplay, GAME_CANVAS, START_CAMPAIGN } from './enter-gameplay.mjs
 // `process.exit` at module load when it finds no dist argument. Reading it is what proves the
 // gate uses this constant instead of its own copy.
 import verifySource from '../visual/verify.mjs?raw';
+// The real page this selector runs against. `--scene game` loads vite's root, which serves
+// this file; the gallery's OTHER scenes load tools/gallery/index.html and use a bare
+// `canvas` locator, so they are unaffected by this rule either way.
+import indexHtml from '../../index.html?raw';
 
 type Call = string;
 
@@ -160,6 +164,22 @@ describe('the selectors', () => {
     game.remove();
     expect(document.querySelector(GAME_CANVAS)).toBeNull();
     document.body.innerHTML = '';
+  });
+
+  it('names an element the shipped page actually has', () => {
+    // The fixture above proves the RULE; this proves the rule is about the real page. Both
+    // users of this selector drive vite's root, which serves index.html, and `bootCanvas`
+    // appends the gameplay canvas to `document.getElementById('app')` (main.ts -> boot.ts ->
+    // session-host.ts). A selector rooted at an id the page does not have would match
+    // nothing and time out in a browser rather than fail here.
+    const id = /#([A-Za-z][\w-]*)\s*>/.exec(GAME_CANVAS);
+    expect(id, 'the selector is no longer rooted at an id').not.toBeNull();
+    expect(indexHtml).toMatch(new RegExp(`id="${(id as RegExpExecArray)[1]}"`));
+    // Not `<div id="app">`: issue #640 made it a `<main>`, and an id selector does not care.
+    // Pinned as the negative so a future tag change cannot quietly invalidate this case.
+    expect(GAME_CANVAS, 'the selector must not depend on the root element tag').not.toMatch(
+      /^[a-z]+#/,
+    );
   });
 
   it('is the only definition: the visual gate imports it rather than spelling its own', () => {
