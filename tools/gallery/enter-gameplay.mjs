@@ -14,8 +14,18 @@
  * thirty seconds of a real Chromium.
  */
 
-/** The game canvas. The HUD's own preview canvas exists from page load and is not it. */
-export const GAME_CANVAS = 'canvas:not(.hud-preview)';
+/**
+ * The game canvas, by STRUCTURE rather than by exclusion.
+ *
+ * `bootCanvas` appends it directly to `#app`; every HUD canvas -- the Customize preview,
+ * and since issue #274 one board schematic per versus map card -- is nested inside the HUD
+ * element beside it. The child combinator separates them and needs no list to maintain,
+ * which the previous `canvas:not(.hud-preview)` did: that denylist was written when the
+ * preview broke a bare `canvas` selector, and it broke again the moment the map cards
+ * arrived. MUST EQUAL `tools/visual/verify.mjs`'s `GAME_CANVAS`, which asks the same
+ * question of the same page; enter-gameplay.test.ts asserts the two agree.
+ */
+export const GAME_CANVAS = '#app > canvas';
 
 /**
  * The Main Menu's campaign entry, whichever of the two is showing: `Continue Campaign` on

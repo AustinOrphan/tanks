@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+//
 // The order in which `--scene game` reaches gameplay (issue #581).
 //
 // This is the test that did not exist. `run.mjs` drives a real browser and had no coverage
@@ -10,6 +12,10 @@
 // session is created. That is enough to make the bug reproducible in milliseconds.
 import { describe, it, expect } from 'vitest';
 import { enterGameplay, GAME_CANVAS, START_CAMPAIGN } from './enter-gameplay.mjs';
+// The visual gate's source, read as TEXT rather than imported: verify.mjs is a CLI and calls
+// `process.exit` at module load when it finds no dist argument. Reading it is what proves the
+// gate uses this constant instead of its own copy.
+import verifySource from '../visual/verify.mjs?raw';
 
 type Call = string;
 
@@ -113,7 +119,60 @@ describe('the selectors', () => {
     expect(START_CAMPAIGN, 'the Versus pane must not be reachable from here').not.toContain('versus');
   });
 
-  it('excludes the HUD preview canvas, which exists from page load', () => {
-    expect(GAME_CANVAS).toBe('canvas:not(.hud-preview)');
+  it('picks the gameplay canvas by structure, so a new HUD canvas cannot win it', () => {
+    // Was `canvas:not(.hud-preview)`. That denylist was written when the Customize preview
+    // broke a bare `canvas` selector, and it broke AGAIN when issue #274 gave each versus
+    // map card a board schematic: the visual gate's probe reported a 132x108 buffer with no
+    // WebGL context while every screenshot check on the same run passed. A rule that has to
+    // be amended for each canvas the page grows is the defect, not the list's contents.
+    //
+    // `bootCanvas` appends the gameplay canvas directly to `#app`; every HUD canvas is
+    // nested inside the HUD element beside it. Asserted as the shape rather than as the
+    // string, plus the string, so a rewrite that happens to keep the same effect passes and
+    // a return to exclusion does not.
+    expect(GAME_CANVAS).toBe('#app > canvas');
+    expect(GAME_CANVAS, 'a denylist cannot keep up with the canvases a page grows').not.toContain(
+      ':not(',
+    );
+
+    // The rule, exercised against a DOM shaped like the real page: one gameplay canvas as a
+    // direct child of `#app`, and two HUD canvases nested beside it.
+    const app = document.createElement('div');
+    app.id = 'app';
+    const hud = document.createElement('div');
+    const preview = document.createElement('canvas');
+    preview.className = 'hud-preview';
+    const schematic = document.createElement('canvas');
+    schematic.className = 'hud-versus-map-canvas';
+    hud.append(preview, schematic);
+    const game = document.createElement('canvas');
+    // HUD FIRST, which is the order the real page has and the reason a bare `canvas`
+    // selector ever went wrong: the route UI is built before a session exists.
+    app.append(hud, game);
+    document.body.appendChild(app);
+
+    expect(document.querySelector(GAME_CANVAS)).toBe(game);
+    expect(document.querySelectorAll(GAME_CANVAS)).toHaveLength(1);
+
+    // ...and on a page where no match has started there is no gameplay canvas at all, which
+    // is the property issue #428 needed: match NOTHING rather than report a live context for
+    // some other canvas.
+    game.remove();
+    expect(document.querySelector(GAME_CANVAS)).toBeNull();
+    document.body.innerHTML = '';
+  });
+
+  it('is the only definition: the visual gate imports it rather than spelling its own', () => {
+    // Two tools, one page, one rule. Both times this selector was wrong it was wrong in
+    // every copy at once, which is the argument for one definition rather than two that
+    // agree. Asserted against the gate's SOURCE because verify.mjs is a CLI that calls
+    // `process.exit` at module load, so importing it here would end the run.
+    expect(verifySource).toContain("from '../gallery/enter-gameplay.mjs'");
+    expect(verifySource, 'the gate grew its own canvas selector again').not.toMatch(
+      /querySelector\(\s*['"`]canvas/,
+    );
+    expect(verifySource, 'the gate grew its own canvas denylist again').not.toContain(
+      'canvas:not(',
+    );
   });
 });
