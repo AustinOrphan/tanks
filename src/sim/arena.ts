@@ -455,76 +455,64 @@ export function loadArena(
 export const CURRENT_ARENA: Arena = ARENAS[0];
 
 /**
- * Build a playable world from any arena. The progression's per-level constructor;
- * `lives` is how a cleared level's remaining lives carry into the next one.
+ * Everything a caller may say about the world beyond which arena and which seed
+ * (issue #493). Every key optional; an absent key means the shipped default, chosen in
+ * `loadArena` or `resolveWorldRules` and nowhere else.
+ *
+ * WHY AN OBJECT AND NOT A RUN OF POSITIONALS. `createWorldFor` reached thirteen of them,
+ * seven rule-shaped, each added as "trailing and optional, same precedent" until the
+ * precedent was the problem: `levels.ts` passed `undefined, undefined,` to reach the last
+ * one, and half the call sites in the tree carried three or four `undefined`s to name a
+ * mode. A rule added to `WorldRules` now grows `WorldRulesInit` and nothing else.
+ *
+ * WHY THE RULES NEST rather than flattening into this object. `WorldRules` is a closed,
+ * frozen set with one resolver, and `rules.ts` owns which keys are in it -- `RULE_KEYS`'s
+ * `satisfies` is what makes a new rule a compile error at the one place it is being added.
+ * Flattening would put `lives` and `mode` in one bag and lose that boundary; nesting keeps
+ * `init.rules` assignable to `WorldRulesInit` and nothing else.
+ *
+ * `seed` stays positional. It is the one value nearly every caller passes, it reaches BOTH
+ * `loadArena` (it picks a versus variant) and `createWorld`, and `createWorldFor(arena, 7)`
+ * is the shape most of the suite is written in.
  */
-export function createWorldFor(
-  arena: Arena,
-  seed?: number,
-  unarmedTrigger?: UnarmedTrigger,
-  lives: number = LIVES,
-  corpseBlocksShells?: boolean,
-  muzzleClearsTanks?: boolean,
-  // Trailing and optional, same precedent as corpseBlocksShells/muzzleClearsTanks above:
-  // every positional caller (createArenaWorld, tools/baseline/trace.ts's 2-arg call,
-  // tools/gl/harness.ts's createArenaWorld(1) calls, levels.ts's 5-arg call) is
-  // untouched. Threaded straight to loadArena; no call site in the tree passes a
-  // non-default value yet -- that is the second-input-routing PR's job.
-  playerCount: number = 1,
-  // Trailing and optional, same precedent again: undefined here means createWorld's
-  // own default (true, the shared-attempts ruling) applies. Only levels.ts's campaign
-  // branch ever passes a non-default value, closed over from `?dev=1&coopPool=1` --
-  // see WorldRules.coopAttempts.
-  coopAttempts?: boolean,
-  // Trailing and optional, same precedent again (n-player arc PR 4): undefined here
-  // means loadArena's/createWorld's own default ('campaign-coop') applies, which is
-  // the whole trace argument -- every existing call site (trace.ts's 2-arg call, the gl
-  // harness, createArenaWorld) stays on that default. Threaded to BOTH loadArena (so
-  // versus modes strip enemies and stamp team) and createWorld (so World.rules.mode matches
-  // what was actually built).
-  mode?: GameMode,
-  // Trailing and optional, same precedent: undefined here means createWorld's own
-  // default (false) applies. Only levels.ts's campaign branch ever passes a non-default
-  // value, closed over from `?dev=1&friendlyFire=1` -- see WorldRules.friendlyFire.
-  friendlyFire?: boolean,
-  // Trailing and optional, same precedent again: undefined here means loadArena's own
-  // default (VERSUS_STOCK) applies, so every existing call site (none of which pass an
-  // 11th argument today) is untouched. Threaded straight to loadArena, which is the only
-  // place stock is ever stamped -- see loadArena's own doc comment above. Only meaningful
-  // in combination with mode 'ffa'/'teams'; a campaign-coop call ignores it exactly as it
-  // already ignores VERSUS_STOCK. The versus-setup-menu plan's per-match stock picker is
-  // the first caller that will ever pass a non-default value.
-  stock?: number,
-  // Trailing and optional, same precedent again: undefined here means `loadArena`'s own
-  // derivation (`teamOf(slot)`) applies, so every existing call site -- none of which
-  // passes a 12th argument -- is byte-identical to before this existed. Threaded straight
-  // to `loadArena`, which is the only place `Tank.team` is ever stamped. Only meaningful
-  // with mode `'teams'`; issue #281's setup pane is the first caller to pass one.
-  teams?: readonly (number | undefined)[],
-  // Trailing and optional, same precedent again (issue #472): undefined here means
-  // `resolveWorldRules`'s own default ('full', issue #359's owner ruling) applies, so
-  // every existing call site -- none of which passes a 13th argument -- is untouched.
-  // Only levels.ts ever passes a non-default value, closed over from
-  // `?dev=1&aiPerception=los`. It used to be SET on the built world by game/loop.ts
-  // instead; `World.rules` is frozen now, so a rule has to arrive here, before the world
-  // exists, like every other rule does.
-  aiTargetPerception?: AiTargetPerception,
-  // Trailing and optional, same precedent as every parameter above it: absent -- which is
-  // every existing call site -- stamps no per-tank cap and leaves the roster's own in force
-  // (issue #358). Threaded straight to loadArena, which does the stamping.
-  pp1Roles?: boolean,
-): World {
+export interface WorldForInit {
+  /** Starting lives. Defaults to `LIVES`; how a cleared level's remaining lives carry in. */
+  lives?: number;
+  /** How many player tanks the board is loaded for. Defaults to 1. */
+  playerCount?: number;
+  /** Versus stock per player. Defaults to `loadArena`'s `VERSUS_STOCK`; ignored outside 'ffa'/'teams'. */
+  stock?: number;
+  /** Per-slot team override. Defaults to `loadArena`'s `teamOf(slot)`; only meaningful under 'teams'. */
+  teams?: readonly (number | undefined)[];
+  /** Stamp the approved PP1 per-role ordnance caps. Absent leaves the roster's own in force. */
+  pp1Roles?: boolean;
+  /** Everything `World.rules` carries. See `WorldRulesInit` in rules.ts. */
+  rules?: WorldRulesInit;
+}
+
+/**
+ * Build a playable world from any arena. The progression's per-level constructor;
+ * `init.lives` is how a cleared level's remaining lives carry into the next one.
+ */
+export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit = {}): World {
+  const { lives = LIVES, playerCount = 1, stock, teams, pp1Roles, rules = {} } = init;
   // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
   // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
-  // campaign-coop call, which is every existing call site that does not pass mode, is
-  // unaffected). Reusing the SAME seed a versus session already carries (rather than a
-  // second variant-only seed) is what makes a recorded replay's own stamped seed
+  // campaign-coop call, which is every call that does not set a mode, is unaffected).
+  // Reusing the SAME seed a versus session already carries (rather than a second
+  // variant-only seed) is what makes a recorded replay's own stamped seed
   // (replayMetaFor, game/replay.ts) enough to reproduce the exact board it was played
   // on, with no extra field.
+  //
+  // `rules.mode` is threaded to BOTH loadArena (so versus modes strip enemies and stamp
+  // team) and createWorld (so `World.rules.mode` matches what was actually built). It is
+  // the one key that is not purely a rule, which is why it is read out here rather than
+  // left to the spread.
   return createWorld({
-    ...loadArena(arena, playerCount, mode, seed, stock, teams, pp1Roles),
-    lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
-    mode, friendlyFire, aiTargetPerception,
+    ...loadArena(arena, playerCount, rules.mode, seed, stock, teams, pp1Roles),
+    ...rules,
+    lives,
+    seed,
   });
 }
 
@@ -540,5 +528,5 @@ export function createWorldFor(
  * headline metric) mean "level 1" when they say createArenaWorld.
  */
 export function createArenaWorld(seed?: number, unarmedTrigger?: UnarmedTrigger): World {
-  return createWorldFor(ARENAS[0], seed, unarmedTrigger);
+  return createWorldFor(ARENAS[0], seed, { rules: { unarmedTrigger } });
 }
