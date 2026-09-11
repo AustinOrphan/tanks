@@ -9,6 +9,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
+// hud.ts's own text, so the script-read token exemption below can prove the exemption is
+// still true rather than asserting it. A TEST may read a fixture; this is the same shape
+// `index-html.test.ts` uses for index.html.
+import hudSource from './hud.ts?raw';
 import { createHud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
 
@@ -378,8 +382,43 @@ describe('hud.css is syntactically whole', () => {
     // Vacuity guard: a regex that stopped matching would make the loop below trivially true.
     expect(declared.length).toBeGreaterThan(20);
 
-    const unused = declared.filter((name) => !css.includes(`var(${name})`));
+    // READ BY SCRIPT, not by a rule (issue #274). A `<canvas>` cannot take a class, so the
+    // board schematic's three colours are pulled out of this block by `getComputedStyle` in
+    // hud.ts and handed to `drawArenaSchematic`. They are the only tokens in the file with
+    // no `var()` reference and are exempted BY NAME rather than by a pattern, so a fourth
+    // dead token cannot arrive under the exemption -- and each is asserted to be read from
+    // hud.ts below, which is what stops this list outliving its reason.
+    const READ_BY_SCRIPT = ['--hud-schematic-floor', '--hud-schematic-solid', '--hud-schematic-destructible'];
+    for (const name of READ_BY_SCRIPT) {
+      expect(declared, `${name} is exempted here but not declared`).toContain(name);
+      expect(hudSource, `${name} is exempted as script-read but hud.ts never reads it`).toContain(
+        `'${name}'`,
+      );
+    }
+
+    const unused = declared.filter(
+      (name) => !css.includes(`var(${name})`) && !READ_BY_SCRIPT.includes(name),
+    );
     expect(unused, 'declared but never referenced').toEqual([]);
+  });
+
+  it('resolves every token the board schematic is painted from', () => {
+    // The fallbacks in `schematicPaint` exist for a stylesheet that failed to load, not for
+    // a token that was renamed: `fillStyle = ''` is a silent no-op that keeps the previous
+    // colour, so a missing token would draw a board of one flat tone rather than throwing.
+    // This is the assertion that says the shipped path never reaches a fallback.
+    const probe = document.createElement('div');
+    document.body.appendChild(probe);
+    const style = getComputedStyle(probe);
+    for (const name of ['--hud-schematic-floor', '--hud-schematic-solid', '--hud-schematic-destructible']) {
+      expect(style.getPropertyValue(name).trim(), name).not.toBe('');
+    }
+    // Non-vacuity AND the thing the card is for: the two cover kinds must not resolve to the
+    // same paint, or a schematic cannot tell permanent cover from breakable.
+    expect(style.getPropertyValue('--hud-schematic-solid').trim()).not.toBe(
+      style.getPropertyValue('--hud-schematic-destructible').trim(),
+    );
+    document.body.innerHTML = '';
   });
 
   it('still carries the rules the features depend on', () => {

@@ -30,6 +30,18 @@
   --hud-quiet-fill-hover: rgba(216, 221, 230, 0.28);
   --hud-danger-fill-hover: rgba(255, 90, 90, 0.30);
   --hud-gold: #e0c04a;
+
+  /* The versus map card's board schematic (issue #274). Three tokens for three values each
+   * used ONCE, which the block header above otherwise reserves for repeated roles -- named
+   * anyway for a reason no other value here has: a `<canvas>` cannot take a class, so these
+   * are read out of this stylesheet by `getComputedStyle` in hud.ts and handed to
+   * `drawArenaSchematic`. A literal in TypeScript would be the only colour in the
+   * application living outside this file, invisible to every guard in hud.css.test.ts and
+   * to whatever retunes the palette next. Deliberately quiet: a card is a diagram of a
+   * board, not a picture of one, and it must not out-shout the name beside it. */
+  --hud-schematic-floor: rgba(216, 221, 230, 0.10);
+  --hud-schematic-solid: rgba(216, 221, 230, 0.58);
+  --hud-schematic-destructible: rgba(224, 192, 74, 0.62);
   /* The application backdrop's ground (issue #317, option A3). Referenced ONCE, which
    * the block header above otherwise reserves for literals -- named anyway, on the
    * adopted ruling: "It is one token value, so retuning the exact hex later costs one
@@ -2609,11 +2621,77 @@
   gap: var(--hud-space-2);
 }
 
-/* One button per choice -- Mode, Players, Map and Stock all reuse this ONE control
- * rather than four near-identical rules, the same "one button per option, a ring for
- * the current one" convention .hud-level-btn/.hud-controller-source-btn already use. */
+/* One button per choice -- Mode, Players and Stock reuse this ONE control rather than three
+ * near-identical rules, the same "one button per option, a ring for the current one"
+ * convention .hud-level-btn/.hud-controller-source-btn already use. The Map row left this
+ * group at issue #274: a card carries a picture and two lines, which is a different box,
+ * not a different padding. */
 .hud-versus-option-btn {
   padding: 6px 14px;
+}
+
+/* ---- Versus map cards (issue #274) ------------------------------------------------ */
+
+/* A grid rather than the flex row its siblings use, so the cards line up in columns
+   whatever their names measure -- `auto-fill` with a minimum is what makes the same rule
+   serve a phone (one column), a desktop (three or four) and a TV, with no breakpoint to
+   keep in step with the pane's other rows. */
+.hud-versus-map-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  justify-content: center;
+  gap: var(--hud-space-2);
+}
+
+/* The card itself is still a `.ui-btn`, so it is themed, selectable and focusable exactly
+   as the pills it replaces were. Only its box is new: a column, left-aligned, with the
+   schematic on top. */
+.hud-versus-map-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: var(--hud-space-2);
+  text-align: left;
+}
+
+/* `aspect-ratio` rather than a fixed height: the canvas's own attributes are 132x108, and
+   letting CSS pick a different shape would stretch the board the drawing took care to keep
+   square. `width: 100%` lets a card grow with its column and the ratio follows. */
+.hud-versus-map-canvas {
+  width: 100%;
+  aspect-ratio: 132 / 108;
+  border-radius: var(--hud-radius-sm);
+  background: var(--hud-scrim-pane);
+}
+
+/* Random draws no board, so its box says so with a pattern rather than sitting empty --
+   an empty canvas reads as "this board is open ground", which is a claim. */
+.hud-versus-map-canvas--random {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      var(--hud-scrim-pane) 0 6px,
+      var(--hud-quiet-fill) 6px 12px
+    );
+}
+
+.hud-versus-map-name {
+  font-weight: var(--hud-weight-strong);
+}
+
+/* Which counts and modes the board supports, and what it plays like. Both are quieter than
+   the name; the intent is quieter still and wraps to as many lines as it needs. */
+.hud-versus-map-config {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.hud-versus-map-intent {
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.65;
+  white-space: normal;
 }
 
 /* The who's-playing note. Since issue #260 it is unconditional -- devices really are

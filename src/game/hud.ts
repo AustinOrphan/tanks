@@ -261,6 +261,7 @@ import { isDirection, spatialNext, type Direction, type Rect } from './spatial-f
 import { keyHint, type Modality } from './modality';
 import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
+import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
@@ -268,6 +269,7 @@ import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topb
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
+import { arenaSchematic, drawArenaSchematic, type SchematicPaint } from './arena-schematic';
 import {
   collapseLegalDocuments,
   isLegalExpanded,
@@ -5166,18 +5168,133 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * `resolveVersusConfig`'s launch gate is the loud backstop, and the reset ships
    * with the first narrower entry (#271-#273).
    */
+  /**
+   * The card's schematic box, in device-independent pixels.
+   *
+   * Fixed attributes rather than a measured size: `drawArenaSchematic` scales the board into
+   * exactly this box, and reading a laid-out size would make the same call produce different
+   * geometry under test (jsdom lays nothing out) than in a browser. 4:3-ish, which suits
+   * every shipped board -- the widest is 33x27 cells and the schematic letterboxes the rest.
+   */
+  const SCHEMATIC_W = 132;
+  const SCHEMATIC_H = 108;
+
+  /**
+   * The schematic's three colours, read out of the stylesheet on every row build.
+   *
+   * A `<canvas>` cannot take a class, so this is the seam where a CSS value becomes a
+   * JavaScript string. The fallbacks are never reached in the shipped application --
+   * hud.css.test.ts asserts all three tokens resolve -- and exist only so a stylesheet that
+   * failed to load paints a legible grey card rather than calling `fillStyle = ''`, which
+   * silently keeps the previous colour and would draw a board of one flat tone.
+   */
+  function schematicPaint(): SchematicPaint {
+    const root = getComputedStyle(el);
+    const token = (name: string, fallback: string): string =>
+      root.getPropertyValue(name).trim() || fallback;
+    return {
+      floor: token('--hud-schematic-floor', 'rgba(216, 221, 230, 0.10)'),
+      solid: token('--hud-schematic-solid', 'rgba(216, 221, 230, 0.58)'),
+      destructible: token('--hud-schematic-destructible', 'rgba(224, 192, 74, 0.62)'),
+    };
+  }
+
+  /**
+   * The configuration a board supports, in words (issue #274's "supported configuration").
+   *
+   * READ FROM THE CATALOG ENTRY, never from the current selection: the point of the line is
+   * to say what a board offers BESIDES what is selected right now -- a player at three
+   * players wants to know Pinwheel is two-only before clicking it, which is exactly what a
+   * row filtered to valid choices can no longer tell them.
+   */
+  function versusMapConfigLine(entry: VersusCatalogEntry): string {
+    const counts = entry.players.map((n) => String(n)).join('/');
+    // The SAME words the Mode row offers, read from its own option list rather than
+    // re-spelled here -- a card saying "Free-for-all" beside a button saying "FFA" is two
+    // names for one thing on one screen.
+    const modes = entry.modes
+      .map((m) => VERSUS_MODE_OPTIONS.find((o) => o.id === m)?.label ?? m)
+      .join(' and ');
+    return `${counts} players \u00b7 ${modes}`;
+  }
+
+  /**
+   * One card per eligible board, and Random last (issue #274).
+   *
+   * STILL ONE `<button>` PER CHOICE carrying `data-map`, which is what keeps the pane's
+   * roving focus, its spatial walk and its selection ring working exactly as they did for
+   * the pills this replaces -- the card is a richer label on the same control, not a new
+   * interaction. `.hud-versus-option-btn` is gone from this row alone; Mode, Players and
+   * Stock still use it.
+   *
+   * THE PREVIEW IS A `<canvas>` DRAWN FROM THE GRID, with no asset and no WebGL: see
+   * `arena-schematic.ts`. It is `aria-hidden` because the two lines beside it already say
+   * in words everything the picture says, and an unlabelled canvas in the accessibility
+   * tree is an announcement of nothing.
+   *
+   * The drawing is deliberately NOT depended on. `drawArenaSchematic` reports `false` where
+   * there is no 2D context -- jsdom, every unit test that mounts this pane -- and the card
+   * is fully built, named and clickable either way. A card that only worked when it could
+   * paint would be a pane that failed under test for a reason the player never sees.
+   */
   function renderVersusMapRow(): void {
     versusMapRow.replaceChildren();
     const choices: string[] = [
       ...versusMapChoices(versusConfigState.players, versusConfigState.mode),
       'random',
     ];
+    const paint = schematicPaint();
     for (const choice of choices) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ui-btn ui-selectable hud-versus-option-btn';
+      b.className = 'ui-btn ui-selectable hud-versus-map-card';
       b.dataset.map = choice;
-      b.textContent = choice === 'random' ? 'Random' : arenaLabel(choice);
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'hud-versus-map-canvas';
+      // Attributes, not CSS pixels: `drawArenaSchematic` scales to these, and reading a
+      // laid-out size would make the same call produce different geometry under test.
+      canvas.width = SCHEMATIC_W;
+      canvas.height = SCHEMATIC_H;
+      canvas.setAttribute('aria-hidden', 'true');
+      b.appendChild(canvas);
+
+      const name = document.createElement('span');
+      name.className = 'hud-versus-map-name';
+      name.textContent = choice === 'random' ? 'Random' : arenaLabel(choice);
+      b.appendChild(name);
+
+      const config = document.createElement('span');
+      config.className = 'hud-versus-map-config';
+      const intent = document.createElement('span');
+      intent.className = 'hud-versus-map-intent';
+      // OUT OF THE NAME, IN THE DESCRIPTION. The intent phrases are whole sentences, and
+      // folding one into each of seven card names gives a screen reader seven paragraphs to
+      // walk before it reaches the eighth. `aria-hidden` keeps it out of name-from-content;
+      // an `aria-describedby` reference still reads it, which is the documented way to say
+      // "this text describes the control without naming it".
+      intent.id = `hud-versus-map-intent-${choice}`;
+      intent.setAttribute('aria-hidden', 'true');
+      b.setAttribute('aria-describedby', intent.id);
+
+      if (choice === 'random') {
+        // Random has no board to draw and no catalog entry to read, so it states what it
+        // will draw FROM -- and the count is the row's own eligible population, so it can
+        // never claim boards this filter is not offering.
+        const eligible = choices.length - 1;
+        config.textContent = `${eligible} eligible board${eligible === 1 ? '' : 's'}`;
+        intent.textContent =
+          'One of the boards shown here, drawn when the match starts and kept for the run.';
+        canvas.classList.add('hud-versus-map-canvas--random');
+      } else {
+        const entry = versusCatalogEntryById(choice);
+        config.textContent = versusMapConfigLine(entry);
+        intent.textContent = entry.intent;
+        drawArenaSchematic(canvas, arenaSchematic(entry.arenaId), paint);
+      }
+      b.appendChild(config);
+      b.appendChild(intent);
+
       setSelected(b, choice === versusConfigState.arenaId);
       b.addEventListener('click', () => {
         setVersusConfig({ ...versusConfigState, arenaId: choice });
