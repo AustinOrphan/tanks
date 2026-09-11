@@ -4934,13 +4934,13 @@
   {
     "id": "records-columns-still-called-a-run",
     "file": "src/game/hud.ts",
-    "find": "      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;",
-    "replace": "      `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;",
+    "find": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Level attempt</th></tr></thead>'",
+    "replace": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">This run</th></tr></thead>'",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement. Re-anchored when the column was renamed from \"Current attempt\" to \"Level attempt\" -- one scope, one name, matching the ending screens.",
+    "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement. Re-anchored when the column was renamed from \"Current attempt\" to \"Level attempt\" -- one scope, one name, matching the ending screens. RE-ANCHORED for issue #629, which rebuilt this header row out of <th scope=\"col\"> instead of <td> -- the column names moved but this entry's question did not, so the anchor follows them rather than the entry being retired.",
     "killedBy": [
       "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
     ]
@@ -4948,13 +4948,13 @@
   {
     "id": "records-column-renamed-without-its-test",
     "file": "src/game/hud.ts",
-    "find": "      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;",
-    "replace": "      `<tr><th></th><td>Lifetime</td><td>Attempt</td></tr>${rows}`;",
+    "find": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Level attempt</th></tr></thead>'",
+    "replace": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Attempt</th></tr></thead>'",
     "expect": "killed",
     "tests": [
       "src/game/hud.controls.test.ts"
     ],
-    "why": "Renames the column to something plausible-but-unpinned. This entry used to assert the OPPOSITE -- that Records must NOT borrow the ending screens' \"This level\" -- and the owner then ruled the two should share one label after all, which made that claim false rather than merely stale. What survives is the part that was always the point: the heading is exact copy and a test names it, so a drive-by shortening cannot slip through. Kept rather than deleted because deleting it would leave the column's wording pinned by one entry instead of two.",
+    "why": "Renames the column to something plausible-but-unpinned. This entry used to assert the OPPOSITE -- that Records must NOT borrow the ending screens' \"This level\" -- and the owner then ruled the two should share one label after all, which made that claim false rather than merely stale. What survives is the part that was always the point: the heading is exact copy and a test names it, so a drive-by shortening cannot slip through. Kept rather than deleted because deleting it would leave the column's wording pinned by one entry instead of two. RE-ANCHORED for issue #629, which rebuilt this header row out of <th scope=\"col\"> instead of <td> -- the column names moved but this entry's question did not, so the anchor follows them rather than the entry being retired.",
     "killedBy": [
       "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
     ]
@@ -5354,7 +5354,7 @@
   {
     "id": "versus-results-collapse-back-into-one-line",
     "file": "src/game/hud.ts",
-    "find": "    versusResultsEl.innerHTML =\n      `<tr><th></th><td>Kills</td><td>Deaths</td><td>Accuracy</td></tr>${body}`;",
+    "find": "    versusResultsEl.innerHTML =\n      `<caption class=\"ui-sr-only\">${caption}</caption>`\n      + '<thead><tr><td></td><th scope=\"col\">Kills</th><th scope=\"col\">Deaths</th>'\n      + '<th scope=\"col\">Accuracy</th></tr></thead>'\n      + `<tbody>${body}</tbody>`;",
     "replace": "    versusResultsEl.textContent = rows.map(([l, k, d, a]) => `${l}: ${k}/${d} ${a}`).join(' \u00b7 ');",
     "expect": "killed",
     "tests": [
@@ -5364,7 +5364,7 @@
       "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the ffa results line, per-slot kills/deaths",
       "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the teams results line as PER-TEAM sums, not per-slot"
     ],
-    "why": "Puts the per-competitor figures back on one run-on line, which is what the owner's ruling replaced: at four players `P1: 6/2 \\u00b7 P2: 2/6 \\u00b7 P3: 1/5 \\u00b7 P4: 0/6` is a row of numbers a reader has to parse before they can compare anyone to anyone. The killers read ROWS OF CELLS rather than `textContent` for exactly this reason -- a string comparison cannot tell a table from the same digits run together, so a test written that way would have passed this mutation. Re-anchored when the accuracy column landed: the collapsed line now carries three figures per competitor, which is worse still on one line -- `Player 1: 6/2 36% \u00b7 Player 2: 2/6 11% \u00b7 ...`."
+    "why": "Puts the per-competitor figures back on one run-on line, which is what the owner's ruling replaced: at four players `P1: 6/2 \\u00b7 P2: 2/6 \\u00b7 P3: 1/5 \\u00b7 P4: 0/6` is a row of numbers a reader has to parse before they can compare anyone to anyone. The killers read ROWS OF CELLS rather than `textContent` for exactly this reason -- a string comparison cannot tell a table from the same digits run together, so a test written that way would have passed this mutation. Re-anchored when the accuracy column landed: the collapsed line now carries three figures per competitor, which is worse still on one line -- `Player 1: 6/2 36% \u00b7 Player 2: 2/6 11% \u00b7 ...`. RE-ANCHORED for issue #629: the assignment grew a caption and a <thead>, so the find string is the whole five-line assignment now. Widened rather than trimmed to the first line on purpose -- a one-line anchor here would leave the remaining four lines dangling after the mutation and fail to compile, which reports as a kill for the wrong reason."
   },
   {
     "id": "versus-accuracy-counts-mine-kills-as-hits",
@@ -5425,8 +5425,8 @@
   {
     "id": "versus-results-drop-the-accuracy-column",
     "file": "src/game/hud.ts",
-    "find": "      .map(([label, k, d, acc]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td><td>${acc}</td></tr>`)",
-    "replace": "      .map(([label, k, d]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td></tr>`)",
+    "find": "      .map(([label, k, d, acc]) =>\n        `<tr><th scope=\"row\">${label}</th><td>${k}</td><td>${d}</td><td>${acc}</td></tr>`)",
+    "replace": "      .map(([label, k, d]) =>\n        `<tr><th scope=\"row\">${label}</th><td>${k}</td><td>${d}</td></tr>`)",
     "expect": "killed",
     "tests": [
       "src/game/hud.match.test.ts"
@@ -5434,7 +5434,7 @@
     "killedBy": [
       "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the ffa results line, per-slot kills/deaths"
     ],
-    "why": "Drops the per-player accuracy the owner asked for, leaving the header row promising a column the body does not fill -- a table whose heading and rows disagree, which reads as a rendering bug rather than a missing feature. The killers assert rows of CELLS, so a body row short of a cell fails; a `textContent` comparison would not have noticed."
+    "why": "Drops the per-player accuracy the owner asked for, leaving the header row promising a column the body does not fill -- a table whose heading and rows disagree, which reads as a rendering bug rather than a missing feature. The killers assert rows of CELLS, so a body row short of a cell fails; a `textContent` comparison would not have noticed. RE-ANCHORED for issue #629, which added scope=\"row\" and wrapped the arrow body onto its own line; the row shape this entry removes is unchanged."
   },
   {
     "id": "versus-result-keeps-the-campaign-attempt-line",
