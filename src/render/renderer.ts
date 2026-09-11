@@ -8,6 +8,7 @@ import { QUALITY_PRESETS, type RenderQuality } from './quality';
 import { DEFAULT_QUALITY_PRESET } from '../presentation/quality';
 import { createEntityViews, type EntityViews } from './entities';
 import type { MineWarnStyle } from './mine-warning';
+import type { IdentityMarkerStyle } from '../presentation/identity-marker';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
@@ -82,6 +83,9 @@ export interface RendererOptions {
   readonly mineTimer?: boolean;
   /** Experimental mine-warning treatment (`mineWarn` dev flag); absent = shipped default. */
   readonly mineWarn?: MineWarnStyle | null;
+  /** Experimental second identity channel (`identityMarker` dev flag, issue #630);
+   *  absent = today's solid hue-only ring. */
+  readonly identityMarker?: IdentityMarkerStyle | null;
   /** The paint shop's saved hull colour, applied from the first frame. */
   readonly playerColor?: string;
   /** The paint shop's saved skin, applied from the first frame. */
@@ -140,7 +144,9 @@ export function createRenderer(
   // pointing at the CURRENT arena's centre.
   let centre: Vec2 = { x: worldWidth / 2, y: worldHeight / 2 };
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary, options.quality);
-  const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures, options.mineWarn ?? null);
+  const entities: EntityViews = createEntityViews(
+    ctx.scene, ctx.textures, options.mineWarn ?? null, options.identityMarker ?? null,
+  );
   if (options.playerColor || options.playerSkin || options.playerAccent) {
     entities.setPlayerStyle(
       options.playerColor ?? null,

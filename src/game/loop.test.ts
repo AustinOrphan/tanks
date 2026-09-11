@@ -4854,7 +4854,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     // catches a NEW overlay flag shipped defaulting to on. Adding a flag should make you
     // come here and write `false`.
     const off = boot();
-    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null });
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null });
     off.handle.dispose();
   });
 
@@ -4862,20 +4862,38 @@ describe('startGameWith: dev flags stay off by default', () => {
     // One at a time, so a wiring that turns them all on together -- or crosses two of
     // them -- fails rather than passing on the aggregate.
     const ray = boot(makeDeps({ devFlags: { aimRay: true } }));
-    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null });
+    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null });
     ray.handle.dispose();
 
     const reach = boot(makeDeps({ devFlags: { mineReach: true } }));
-    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null });
+    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null });
     reach.handle.dispose();
 
     const timer = boot(makeDeps({ devFlags: { mineTimer: true } }));
-    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null });
+    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null });
     timer.handle.dispose();
 
     const contact = boot(makeDeps({ devFlags: { aiContact: true } }));
-    expect(contact.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: true, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null });
+    expect(contact.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: true, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null });
     contact.handle.dispose();
+  });
+
+  it('threads the identityMarker dev flag through to the renderer (issue #630)', () => {
+    // Two candidate second channels for player identity live in the tree at once, because
+    // the owner has not chosen between them and the evidence that decides it is a real
+    // match. Both arms are asserted rather than one: the wiring that would hand the
+    // renderer a hardcoded 'arcs' for either value passes a single-arm test.
+    for (const style of ['arcs', 'shape'] as const) {
+      const h = boot(makeDeps({ devFlags: { identityMarker: style } }));
+      const options = h.rec.rendererArgs[0][4] as { identityMarker?: string | null };
+      expect(options.identityMarker, style).toBe(style);
+      h.handle.dispose();
+    }
+    // ...and the default stays off, which is the whole posture of this change: neither
+    // candidate ships as the shipped rendering until it is played and chosen.
+    const off = boot();
+    expect((off.rec.rendererArgs[0][4] as { identityMarker?: string | null }).identityMarker).toBeNull();
+    off.handle.dispose();
   });
 
   it('threads the enemyDeathPulse dev flag through to the renderer', () => {

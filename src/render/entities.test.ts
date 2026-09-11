@@ -1905,6 +1905,38 @@ describe('player identity: ring and shell tint', () => {
     views.dispose();
   });
 
+  it('keeps the identity marker ONE mesh under every candidate style (issue #630)', () => {
+    // THE INVARIANT THE WHOLE FEATURE HAD TO BE BUILT AROUND. `TankView.ring` is a single
+    // `THREE.Mesh | null`, and four assertions in this file count objects named
+    // `identity-ring` expecting exactly one per player. An arc count implemented as three
+    // sibling meshes per tank is the obvious way to write it and breaks all of them -- so
+    // the arcs are merged into one BufferGeometry instead, which is also cheaper to draw
+    // and needs no new teardown path.
+    for (const style of ['arcs', 'shape'] as const) {
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene, undefined, null, style);
+      const w = twoPlayerWorld();
+      views.sync(w, w, 0);
+      expect(identityRings(scene), style).toHaveLength(2);
+      views.dispose();
+    }
+  });
+
+  it('leaves the shipped ring a RingGeometry when no marker is selected (issue #630)', () => {
+    // The control for the comparison above. Both candidates are developer experiments and
+    // neither ships as the default, so the absence of a flag has to leave the geometry the
+    // shipped one -- not a circle that merely resembles it. A `shape` slot-1 outline is a
+    // 48-gon band and would look identical on screen while failing this.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.sync(w, w, 0);
+    for (const ring of identityRings(scene)) {
+      expect(ring.geometry.type, 'the default ring is no longer a RingGeometry').toBe('RingGeometry');
+    }
+    views.dispose();
+  });
+
   it('draws no ring on an enemy tank sharing a >=2-player world', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);

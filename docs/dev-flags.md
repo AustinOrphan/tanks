@@ -54,7 +54,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (16)
+## Valued flags (17)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -62,6 +62,7 @@ Notes:
 | `backdrop` | `backdrop` | `felt` | `null` | Draws the application backdrop with a named alternative treatment; the shipped default is the flat application ground. |
 | `blockedFire` | `blockedFire` | `ring`, `muzzle`, `pips`, `hud`, `audio`, `click`, `clunk`, `thunk-soft`, `pitch-empty`, `haptic`, `haptic-tap`, `haptic-double`, `haptic-long`, `haptic-rise`, `haptic-audio`, `ring-audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default adds none of them. |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
+| `identityMarker` | `identityMarker` | `arcs`, `shape` | `null` | Adds a second, non-colour channel to the player identity ring (issue #630): 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own outline. The shipped default carries identity in hue alone. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `menuTransition` | `menuTransition` | `fade`, `fade-long`, `rise`, `settle` | `null` | Runs a named menu transition between application surfaces (issue #542); `rise` is the shipped 150ms crossfade plus a 16px upward lift, and `fade` is the opacity-only transition that shipped before it. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |

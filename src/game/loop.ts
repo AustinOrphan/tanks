@@ -161,6 +161,7 @@ export interface GameDeps {
       blockedFire?: BlockedFireCue | null;
       mineTimer?: boolean;
       mineWarn?: import('../render/mine-warning').MineWarnStyle | null;
+      identityMarker?: import('../presentation/identity-marker').IdentityMarkerStyle | null;
       playerColor?: string;
       playerSkin?: SkinId;
       playerAccent?: string | null;
@@ -1775,6 +1776,7 @@ export function startGameWith(
     blockedFire: deps.devFlags.blockedFire,
     mineTimer: deps.devFlags.mineTimer,
     mineWarn: deps.devFlags.mineWarn,
+    identityMarker: deps.devFlags.identityMarker,
     // The paint shop's saved colour, skin and accent, applied from the first frame.
     playerColor: deps.customization.hexFor(deps.customization.hull()),
     playerSkin: deps.customization.skin(),
