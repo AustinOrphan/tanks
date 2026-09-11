@@ -272,6 +272,12 @@ async function runGesture(page, gesture) {
  * page grew more page-owned canvases (issue #274's seven map schematics). What the check is
  * actually about is GROWTH -- a canvas that appears during a round trip and is never removed
  * -- and the boot reading is what "page-owned" means without anyone maintaining a count.
+ *
+ * It does assume no gesture CHANGES the page-owned count. None does today: the versus
+ * gesture opens the pane and clicks Start without touching the player count or mode, so the
+ * map row keeps the six boards plus Random it was built with. A gesture that did re-filter
+ * would be reported here, which is the right answer -- a reader looks and sees a filter
+ * change rather than a leak -- but it is worth knowing before adding one.
  */
 function faults({ before, inMatch, after }, id, bootCanvases) {
   const out = [];
