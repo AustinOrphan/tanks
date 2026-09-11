@@ -666,11 +666,16 @@ describe('hud.css is syntactically whole', () => {
     // `justify-content: center`. They are NOT fixed here. Each is a visible vertical-alignment
     // change on a pane issue #117 does not own, owing its own before/after evidence, and this
     // change's subject is the About pane, whose documents make the clip reachable in ordinary
-    // use rather than only on a short viewport.
+    // use rather than only on a short viewport. MEASURED through tools/screens at 900x500
+    // with the Privacy document open, the two values differing and nothing else: with
+    // `center` the open document's top box sits at y = -454, above the scroll origin and
+    // unreachable; with `flex-start` it sits at y = +388.
     //
     // What this asserts is therefore two things, and both can fail:
     //  - `.hud-about` is NOT in the list, so the pane regressing to `center` is caught;
     //  - no FOURTH pane joins it, so a new scroller inherits the decision rather than the bug.
+    // Filed as issue #642 with the measurement above, so the residual has a home outside a
+    // test comment. Fixing it makes THIS line fail, which is the prompt to narrow the set.
     expect(centred.sort()).toEqual(['hud-devtools', 'hud-settings', 'hud-versus-setup']);
     expect(centred, 'the About pane centres its main axis and clips its own documents').not.toContain(
       'hud-about',
