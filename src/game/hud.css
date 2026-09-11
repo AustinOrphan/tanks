@@ -2577,7 +2577,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* flex-start, not center (issue #274, the mechanism issue #642 describes). This pane
+     scrolls, and `justify-content: center` on a scroll container puts the overflow ABOVE
+     the scrollable area, where no scrollbar reaches it. Latent while the map row was a
+     line of pills; a defect the moment the row became seven cards, which pushed Mode and
+     Players off the top of a 1280x800 viewport with no way to scroll back up to them.
+     Measured that way before this line changed. #642 owns the two panes still like this. */
+  justify-content: flex-start;
   gap: var(--hud-space-3);
   background: var(--hud-scrim-pane);
   color: var(--hud-text);
