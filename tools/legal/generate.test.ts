@@ -23,6 +23,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderLegalModule } from './render.mjs';
 import { LEGAL_SOURCES, inlineText, parseLegalDocument, legalLinks } from './parse.mjs';
+// IMPORTED as well as read as text, and both are load-bearing. The text comparison catches a
+// hand edit; evaluating the module catches a `lit()` escaping bug that produces a file which
+// still parses and still diffs clean against a generator carrying the same bug. It is also
+// what relates the two files in vitest's dependency graph, without which the mutation harness
+// refuses this file's entries as unmeasurable (`declared tests do not reach the file they
+// mutate`, tools/mutate/run.mjs).
+import { LEGAL_DOCUMENTS, LEGAL_LINKS } from '../../src/game/legal-content';
 
 const OUT = fileURLToPath(new URL('../../src/game/legal-content.ts', import.meta.url));
 const repoFile = (name: string): string =>
@@ -37,6 +44,21 @@ describe('src/game/legal-content.ts is generated, not hand-edited', () => {
     // documents produce today and well over anything a broken generator would emit.
     expect(generated.length).toBeGreaterThan(20_000);
     expect(readFileSync(OUT, 'utf8')).toBe(generated);
+  });
+
+  it('evaluates to the same documents the generator parsed', () => {
+    // Deep equality against the parse, not a spot-check: every escape the emitter performs --
+    // apostrophes in "browser's localStorage", backslashes, the newlines inside a licence's
+    // code fence -- is a chance to produce a module that is valid TypeScript and wrong.
+    const documents = LEGAL_SOURCES.map((entry) => {
+      const { title, blocks } = parseLegalDocument(repoFile(entry.source), entry.source);
+      return { ...entry, title: title ?? entry.label, blocks };
+    });
+    expect(LEGAL_DOCUMENTS).toEqual(documents);
+    expect(LEGAL_LINKS).toEqual(legalLinks());
+    // Non-vacuity: two toEqual comparisons between two empty arrays pass.
+    expect(LEGAL_DOCUMENTS.length).toBe(LEGAL_SOURCES.length);
+    expect(LEGAL_DOCUMENTS.some((d) => d.blocks.length > 10)).toBe(true);
   });
 
   it('self-describes as generated', () => {
