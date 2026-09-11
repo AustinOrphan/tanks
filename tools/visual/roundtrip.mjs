@@ -35,6 +35,7 @@ import { extname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
 import { resolveRequestPath } from './serve-path.mjs';
+import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 
 const TYPES = {
   '.html': 'text/html',
@@ -81,10 +82,23 @@ function serve(dist) {
   return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
 }
 
-/** What the document is holding right now. */
-const CENSUS = () => {
+/**
+ * What the document is holding right now.
+ *
+ * A gameplay canvas is one `bootCanvas` appended, which is a DIRECT child of `#app`
+ * (`GAME_CANVAS`). It used to be "every canvas that is not the Customize preview", and that
+ * denylist broke the moment the page grew another HUD canvas: issue #274 gave each versus
+ * map card a board schematic, and this census then reported seven gameplay canvases sitting
+ * on the Main Menu -- a session-lifecycle leak that was really a menu drawing pictures.
+ * Structure separates the two and needs no list to maintain.
+ *
+ * `canvases` stays a count of EVERY canvas, because the total is what catches one leaked
+ * somewhere this selector does not look. It is compared against the page's own boot census
+ * rather than a literal; see `faults`.
+ */
+const CENSUS = (sel) => {
   const all = [...document.querySelectorAll('canvas')];
-  const gameplay = all.filter((c) => !c.classList.contains('hud-preview'));
+  const gameplay = [...document.querySelectorAll(sel)];
   const live = gameplay.filter((c) => {
     const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
     return !!ctx && !ctx.isContextLost();
@@ -214,7 +228,7 @@ async function dismissReplaceRun(page) {
 
 /** One gesture: census before, start, census in match, return, census after. */
 async function runGesture(page, gesture) {
-  const before = await page.evaluate(CENSUS);
+  const before = await page.evaluate(CENSUS, GAME_CANVAS);
   for (const sel of gesture.clicks) await clickWhenReady(page, gesture.id, sel);
   await dismissReplaceRun(page);
 
@@ -223,25 +237,25 @@ async function runGesture(page, gesture) {
   // is what that looked like from out here.
   try {
     await page.waitForFunction(
-      () => {
-        const c = document.querySelector('canvas:not(.hud-preview)');
+      (sel) => {
+        const c = document.querySelector(sel);
         return !!c && c.width > 0;
       },
-      undefined,
+      GAME_CANVAS,
       { timeout: 20000 },
     );
   } catch {
     throw new UnreachableControl(gesture.id, 'a sized gameplay canvas');
   }
-  const inMatch = await page.evaluate(CENSUS);
+  const inMatch = await page.evaluate(CENSUS, GAME_CANVAS);
 
   await quitToMenu(page, gesture.id);
   await page
-    .waitForFunction(() => !document.querySelector('canvas:not(.hud-preview)'), undefined, {
+    .waitForFunction((sel) => !document.querySelector(sel), GAME_CANVAS, {
       timeout: 5000,
     })
     .catch(() => {});
-  const after = await page.evaluate(CENSUS);
+  const after = await page.evaluate(CENSUS, GAME_CANVAS);
   return { before, inMatch, after };
 }
 
@@ -249,12 +263,17 @@ async function runGesture(page, gesture) {
  * What each census has to say, stated once so the printed numbers and the exit code cannot
  * drift apart.
  *
- * `canvases <= 2` on every reading, not just at the end: the second is the HUD's persistent
- * Customize preview, which is page-owned and correct to keep, and a third at any point is a
- * gameplay canvas nobody removed. Checking only the final reading would let a match stack a
- * canvas and then have the LAST quit tidy up, which is the accumulation this exists to catch.
+ * The total is checked on every reading, not just at the end: checking only the final one
+ * would let a match stack a canvas and then have the LAST quit tidy up, which is the
+ * accumulation this exists to catch.
+ *
+ * Against the page's OWN BOOT CENSUS rather than the literal 2 it used to be. Two was the
+ * gameplay canvas plus the Customize preview, and it stopped being the number the day the
+ * page grew more page-owned canvases (issue #274's seven map schematics). What the check is
+ * actually about is GROWTH -- a canvas that appears during a round trip and is never removed
+ * -- and the boot reading is what "page-owned" means without anyone maintaining a count.
  */
-function faults({ before, inMatch, after }, id) {
+function faults({ before, inMatch, after }, id, bootCanvases) {
   const out = [];
   if (before.gameplay !== 0 || before.liveContexts !== 0)
     out.push(`${id}: entered with ${before.gameplay} gameplay canvas(es), ${before.liveContexts} live context(s)`);
@@ -262,8 +281,12 @@ function faults({ before, inMatch, after }, id) {
     out.push(`${id}: in match with ${inMatch.gameplay} gameplay canvas(es), ${inMatch.liveContexts} live context(s) -- expected exactly 1 of each`);
   if (after.gameplay !== 0 || after.liveContexts !== 0)
     out.push(`${id}: LEAKED ${after.gameplay} gameplay canvas(es) and ${after.liveContexts} live context(s) after the return`);
-  for (const [when, c] of [['before', before], ['in match', inMatch], ['after', after]])
-    if (c.canvases > 2) out.push(`${id}: ${c.canvases} canvases ${when} -- more than the gameplay canvas and the HUD preview`);
+  for (const [when, c] of [['before', before], ['in match', inMatch], ['after', after]]) {
+    // `in match` is allowed exactly one more than boot: the gameplay canvas itself.
+    const allowed = when === 'in match' ? bootCanvases + 1 : bootCanvases;
+    if (c.canvases > allowed)
+      out.push(`${id}: ${c.canvases} canvases ${when} -- the page owned ${bootCanvases} at boot`);
+  }
   return out;
 }
 
@@ -301,7 +324,7 @@ async function main() {
   await page.waitForTimeout(300);
 
   const problems = [];
-  const boot = await page.evaluate(CENSUS);
+  const boot = await page.evaluate(CENSUS, GAME_CANVAS);
   console.log('after boot, before any match:', JSON.stringify(boot));
   if (boot.gameplay !== 0 || boot.liveContexts !== 0)
     problems.push(`boot: the page loaded owning ${boot.gameplay} gameplay canvas(es) and ${boot.liveContexts} live context(s)`);
@@ -328,7 +351,7 @@ async function main() {
       console.log(
         `${tag}: before ${JSON.stringify(census.before)} | in match ${JSON.stringify(census.inMatch)} | after ${JSON.stringify(census.after)}`,
       );
-      problems.push(...faults(census, tag));
+      problems.push(...faults(census, tag, boot.canvases));
     }
   }
 
@@ -341,7 +364,7 @@ async function main() {
   // nothing to inspect. Census before and after, because a Back that reached the session
   // host (a disposed session, a rebuilt canvas) would show up there and nowhere else.
   try {
-    const beforeBack = await page.evaluate(CENSUS);
+    const beforeBack = await page.evaluate(CENSUS, GAME_CANVAS);
     await clickWhenReady(page, 'browser-back', '.hud-versus-open');
     await page.waitForFunction(
       () => {
@@ -363,7 +386,7 @@ async function main() {
       undefined,
       { timeout: 5000 },
     );
-    const afterBack = await page.evaluate(CENSUS);
+    const afterBack = await page.evaluate(CENSUS, GAME_CANVAS);
     console.log(`browser back: pane consumed, page kept | before ${JSON.stringify(beforeBack)} | after ${JSON.stringify(afterBack)}`);
     if (JSON.stringify(beforeBack) !== JSON.stringify(afterBack))
       problems.push('browser back: the census changed -- Back reached the session host');

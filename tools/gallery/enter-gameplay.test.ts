@@ -16,6 +16,7 @@ import { enterGameplay, GAME_CANVAS, START_CAMPAIGN } from './enter-gameplay.mjs
 // `process.exit` at module load when it finds no dist argument. Reading it is what proves the
 // gate uses this constant instead of its own copy.
 import verifySource from '../visual/verify.mjs?raw';
+import roundtripSource from '../visual/roundtrip.mjs?raw';
 // The real page this selector runs against. `--scene game` loads vite's root, which serves
 // this file; the gallery's OTHER scenes load tools/gallery/index.html and use a bare
 // `canvas` locator, so they are unaffected by this rule either way.
@@ -182,17 +183,33 @@ describe('the selectors', () => {
     );
   });
 
-  it('is the only definition: the visual gate imports it rather than spelling its own', () => {
-    // Two tools, one page, one rule. Both times this selector was wrong it was wrong in
-    // every copy at once, which is the argument for one definition rather than two that
-    // agree. Asserted against the gate's SOURCE because verify.mjs is a CLI that calls
-    // `process.exit` at module load, so importing it here would end the run.
-    expect(verifySource).toContain("from '../gallery/enter-gameplay.mjs'");
-    expect(verifySource, 'the gate grew its own canvas selector again').not.toMatch(
-      /querySelector\(\s*['"`]canvas/,
-    );
-    expect(verifySource, 'the gate grew its own canvas denylist again').not.toContain(
-      'canvas:not(',
+  it('is the only definition: both visual tools import it rather than spelling their own', () => {
+    // THREE files asked this question and all three had their own copy, which is why the
+    // rule was wrong in every copy at once -- twice. Asserted against SOURCE because both
+    // are CLIs that call `process.exit` at module load, so importing either here would end
+    // the run.
+    //
+    // roundtrip.mjs is in this list because it is where the SECOND failure hid: the visual
+    // gate failed first, its step gated the round trip out, and the round trip's own copy of
+    // the denylist -- plus a literal `canvases <= 2` headcount -- was only reached once the
+    // first was fixed. One rule, checked in one place, is what stops that sequence.
+    for (const [name, source] of [
+      ['verify.mjs', verifySource],
+      ['roundtrip.mjs', roundtripSource],
+    ] as const) {
+      expect(source, `${name} does not import the shared selector`).toContain(
+        "from '../gallery/enter-gameplay.mjs'",
+      );
+      expect(source, `${name} grew its own canvas selector again`).not.toMatch(
+        /querySelector(All)?\(\s*['"`]canvas:/,
+      );
+      expect(source, `${name} grew its own canvas denylist again`).not.toContain('canvas:not(');
+    }
+    // ...and the round trip must not go back to a literal canvas headcount: the page owns a
+    // variable number now (one Customize preview plus one schematic per offered map), so a
+    // fixed total is a number that goes stale rather than a property.
+    expect(roundtripSource, 'the round trip pinned a literal canvas total again').not.toMatch(
+      /canvases\s*>\s*\d/,
     );
   });
 });
