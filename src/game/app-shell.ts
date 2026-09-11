@@ -112,9 +112,10 @@ export function createBrowserAppShell(): AppShell {
   return createAppShell({
     settings: createBrowserAppSettings(),
     audio: createAudioEngine(AUDIO_MANIFEST),
-    // The one real probe on the page. It runs BEFORE the first session by construction --
-    // `boot.ts` builds the shell, then starts the host -- which is the ordering issue #470
-    // asks for and issue #428 will rely on once eager startup goes away.
+    // The one real probe on the page. It runs BEFORE any session by construction --
+    // `boot.ts` builds the shell first, and since issue #428 there is no session at boot
+    // at all, so the answer is available while the host is still empty. That ordering is
+    // what issue #470 asked for and what the capability gate in `boot.ts` reads.
     render: probeRenderCapability(),
   });
 }

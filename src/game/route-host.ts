@@ -33,10 +33,14 @@ import type { SlotSource } from '../input/assignment';
  * is empty -- exactly the shape `route-ui.ts`'s `setStyleSink(sink | null)` already uses,
  * and for the same reason.
  *
- * WHAT IS NOT HERE. Match creation timing is unchanged: `boot.ts` still starts a session
- * eagerly, and `requestVersusSession`/`requestCampaignSession` still reboot one. Issue
- * #428 owns removing that; this issue owns only the ownership boundary that makes it
- * possible. Route history, Back semantics and focus restoration are issue #318's.
+ * WHEN A SESSION EXISTS AT ALL is issue #428's, and it is settled here rather than left
+ * to `boot.ts`: the page boots with an EMPTY host, and the four gestures that reach
+ * `SessionRequests.requestStart` -- Continue, New Game, a Practice level pick, Versus
+ * Start -- are the only things that can produce a world, a seed or a renderer. Three of
+ * the seven trampolines below branch on the empty slot to do it.
+ *
+ * WHAT IS NOT HERE. Route history, Back semantics and focus restoration are issue #318's;
+ * screen redesign is #226's; branded capability/recovery presentation is #325's.
  */
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
