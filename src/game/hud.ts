@@ -1340,6 +1340,32 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   const modeChipLabels: Record<HudSessionKind, string> = MODE_CHIP_LABELS;
   el.innerHTML = `
+    <!-- LANDMARKS (issue #629). Every focus-target pane below carries \`role="region"\`
+         beside the \`aria-labelledby\` it already had, which makes it a NAMED LANDMARK: a
+         screen-reader user can jump to the current screen and hear what it is, instead of
+         traversing the whole HUD linearly from the top. The document's one \`<main>\` is
+         \`#app\` itself (index.html), which this template fills. Add the role only to a
+         pane that HAS a name: a region without an accessible name is not a landmark at
+         all, and only adds a level of nesting for the reader to step through.
+
+         TEN REGIONS, ONE AT A TIME. Every pane hides behind a \`--hidden\` modifier that
+         resolves to \`display: none\`, which removes the subtree from the accessibility
+         tree outright -- so the ten never compete, and landmark navigation offers exactly
+         the screen that is up. That is why this is a region per pane rather than one
+         region around the lot.
+
+         THE TWO DIALOGS ARE DELIBERATELY EXCLUDED. \`.hud-splash\` is a \`dialog\` and
+         \`.hud-confirm\` an \`alertdialog\`; both already declare a stronger role that a
+         region would overwrite, and \`.hud-confirm\` backs its \`aria-modal\` with real
+         \`inert\` isolation (issue #327/#628). Do not sweep them into the pattern below.
+
+         NOT DONE HERE, and the reasoning is worth keeping: the RECORDS TAB ROWS are not
+         \`role="tablist"\`. See their own comment -- Stats and Achievements are separate
+         entries in \`HudLayerId\`, opened through \`openLayer\` as siblings on the layer
+         stack, so neither is a \`tabpanel\` inside the other's container. Declaring tab
+         roles would point \`aria-controls\` at a pane that is \`display: none\`, and after
+         the switch the tablist said to control it no longer exists. That is the same
+         shape of false promise \`aria-modal\` without a focus trap was (#628). -->
     <!-- The application backdrop (issue #317). FIRST in the markup so it paints under
          every other layer, and aria-hidden because it is scenery: it carries no content
          and there is nothing here for a screen reader to announce. Shown on the Main
@@ -1431,7 +1457,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     <!-- tabindex="-1" for the same reason .hud-panel carries one: it is what lets
          showAchievements(true) focus the PANE on arrival rather than a control inside it
          (see .hud-panel's own note on why arrivals land on the container). -->
-    <div class="hud-achievements hud-achievements--hidden" tabindex="-1" aria-labelledby="hud-achievements-title">
+    <div class="hud-achievements hud-achievements--hidden" role="region" tabindex="-1" aria-labelledby="hud-achievements-title">
       <h1 id="hud-achievements-title">Records</h1>
       <!-- The Records tab row (issue #226). Both tabs appear in BOTH panes and each
            pane's own tab is the selected one, so the pair reads as one destination with
@@ -1444,7 +1470,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--sm ui-selectable ui-selectable--on hud-records-tab hud-records-tab-achievements" type="button" aria-pressed="true">Achievements</button>
       </div>
       <p class="hud-achievements-count"></p>
-      <div class="hud-achievement-list"></div>
+      <!-- role=list/listitem rather than <ul>/<li> (issue #629): the rows are a list and
+           a screen reader should say how many there are, but the whole pane's layout is
+           built on these class names and a <ul> arrives with margins, padding and
+           markers of its own. The role buys the semantics without the cascade. -->
+      <div class="hud-achievement-list" role="list"></div>
       <button class="ui-btn ui-btn--slab hud-achievements-back" type="button">Back</button>
     </div>
     <!-- The level select panel: reached from the "Levels" button on the main menu,
@@ -1454,7 +1484,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          setState like its siblings. The .hud-levels row carries no hidden class of its
          own -- the panel wrapper is the one chokepoint, same as .hud-achievement-list
          inside .hud-achievements. -->
-    <div class="hud-levelselect hud-levelselect--hidden" tabindex="-1" aria-labelledby="hud-levelselect-title">
+    <div class="hud-levelselect hud-levelselect--hidden" role="region" tabindex="-1" aria-labelledby="hud-levelselect-title">
       <h1 id="hud-levelselect-title">Levels</h1>
       <div class="hud-levels"></div>
       <!-- The grid stops at the highest unlocked level (#555), so nothing here is dimmed
@@ -1473,7 +1503,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          setState('main-menu') --
          see handleControllersBack, which routes to shownState instead. The heading
          text itself branches on shownState too, in showControllers. -->
-    <div class="hud-controllers hud-controllers--hidden" tabindex="-1" aria-labelledby="hud-controllers-title">
+    <div class="hud-controllers hud-controllers--hidden" role="region" tabindex="-1" aria-labelledby="hud-controllers-title">
       <h1 class="hud-controllers-title" id="hud-controllers-title"></h1>
       <!-- REPLACE, never append -- rebuilt on open and on every detection refresh, same
            convention setLevelSelect already uses for .hud-levels. -->
@@ -1496,7 +1526,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          ancestor in every selector that reads them), the same trick
          .hud-aimstick .hud-stick-base already uses to share .hud-stick-base between
          the driving and aiming sticks. -->
-    <div class="hud-versus-setup hud-versus-setup--hidden" tabindex="-1" aria-labelledby="hud-versus-setup-title">
+    <div class="hud-versus-setup hud-versus-setup--hidden" role="region" tabindex="-1" aria-labelledby="hud-versus-setup-title">
       <h1 id="hud-versus-setup-title">Versus Setup</h1>
       <div class="hud-versus-row">
         <h2>Mode</h2>
@@ -1560,7 +1590,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--primary hud-versus-start" type="button">Start</button>
       <button class="ui-btn ui-btn--slab hud-versus-back" type="button">Back</button>
     </div>
-    <div class="hud-customize hud-customize--hidden" tabindex="-1" aria-labelledby="hud-customize-title">
+    <div class="hud-customize hud-customize--hidden" role="region" tabindex="-1" aria-labelledby="hud-customize-title">
       <h1 id="hud-customize-title">Customize</h1>
       <!-- The live preview: render/preview.ts builds a SECOND small WebGL scene against
            this canvas, using the SAME tank-building code (render/entities.ts) and skin
@@ -1625,7 +1655,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          .hud-stats-actions moved to Settings -> Data: the issue's ruling is that
          "destructive reset/import actions live under Data, not Records", and a page whose
          purpose is reading progress should not put deleting it one mis-click away. -->
-    <div class="hud-stats hud-stats--hidden" tabindex="-1" aria-labelledby="hud-stats-title">
+    <div class="hud-stats hud-stats--hidden" role="region" tabindex="-1" aria-labelledby="hud-stats-title">
       <h1 id="hud-stats-title">Records</h1>
       <div class="hud-records-tabs" role="group" aria-label="Records views">
         <button class="ui-btn ui-btn--sm ui-selectable ui-selectable--on hud-records-tab hud-records-tab-stats" type="button" aria-pressed="true">Stats</button>
@@ -1663,7 +1693,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          attributes cannot match isMuteHotkey/isPauseHotkey's
          closest('input,select,textarea') guard, so this cannot make the hotkeys go dead
          on the container. -->
-    <div class="hud-panel hud-panel--hidden" tabindex="-1" aria-labelledby="hud-panel-title">
+    <div class="hud-panel hud-panel--hidden" role="region" tabindex="-1" aria-labelledby="hud-panel-title">
       <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
       <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
@@ -1810,7 +1840,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          hiding leans on in the other direction -- hide every control in a section and it
          collapses with no further change here -- and #290's UI-scale control is the next
          thing to land beside the motion toggle. -->
-    <div class="hud-settings hud-settings--hidden" tabindex="-1" aria-labelledby="hud-settings-title">
+    <div class="hud-settings hud-settings--hidden" role="region" tabindex="-1" aria-labelledby="hud-settings-title">
       <h1 id="hud-settings-title">Settings</h1>
       <section class="hud-settings-section" data-section="audio" aria-labelledby="hud-settings-audio">
         <h2 id="hud-settings-audio">Audio</h2>
@@ -1884,7 +1914,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          goes through 'storage.ts' on an injected 'Storage' (CLAUDE.md's persistence
          invariant). If that stops being true this copy becomes false, which is what the
          guard in hud.controls.test.ts is for. -->
-    <div class="hud-about hud-about--hidden" tabindex="-1" aria-labelledby="hud-about-title">
+    <div class="hud-about hud-about--hidden" role="region" tabindex="-1" aria-labelledby="hud-about-title">
       <h1 id="hud-about-title">About &amp; Legal</h1>
       <p class="hud-about-line">Tanks! is a browser arena shooter.</p>
       <p class="hud-about-line">It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local storage and are never sent anywhere.</p>
@@ -1915,7 +1945,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          leaving developer mode. Registry-generated controls, presets, the gallery and
          runtime actions are all explicitly out of this issue's scope and land later, which
          is why the pane holds a status line and two buttons and nothing else. -->
-    <div class="hud-devtools hud-devtools--hidden" tabindex="-1" aria-labelledby="hud-devtools-title">
+    <div class="hud-devtools hud-devtools--hidden" role="region" tabindex="-1" aria-labelledby="hud-devtools-title">
       <h1 id="hud-devtools-title">Developer Tools</h1>
       <p class="hud-devtools-line">Developer mode is on for this page.</p>
       <p class="hud-devtools-line hud-devtools-note">It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from the address and reloads.</p>
@@ -2203,6 +2233,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     b.type = 'button';
     b.className = 'ui-selectable hud-swatch';
     b.dataset.hull = swatch.id;
+    // TITLE IS NOT A NAME (issue #629). These buttons have no text -- the colour IS the
+    // content -- so before this their only accessible name came from `title`, which is a
+    // tooltip: some screen readers ignore it entirely and none of them promise it. The
+    // row is named "Hull" by an <h2> a sighted reader can see, but a <section> with no
+    // accessible name announces nothing, so the context has to travel on the control.
+    // `title` stays for the sighted pointer user it already served.
+    b.setAttribute('aria-label', `Hull: ${swatch.label}`);
     b.title = swatch.label;
     b.style.background = swatch.hex;
     b.addEventListener('click', (e) => {
@@ -2270,6 +2307,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     b.type = 'button';
     b.className = 'ui-selectable hud-swatch';
     b.dataset.accent = accentSwatch.id;
+    // Named "Accent: X" rather than "X", and here the context is load-bearing rather than
+    // symmetrical: accents share the "Skin" section with the skin buttons, so a bare
+    // colour name would sit in a group whose heading says nothing about accents.
+    b.setAttribute('aria-label', `Accent: ${accentSwatch.label}`);
     b.title = accentSwatch.label;
     b.style.background = accentSwatch.hex ?? '#4a4f58';
     b.addEventListener('click', (e) => {
@@ -2378,8 +2419,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       'hud-stats-empty--hidden',
       Object.values(lifetime).some((v) => v !== 0),
     );
+    // `scope="row"` (issue #629). The row headers were already <th>, which is half the
+    // job: without a scope a screen reader has to GUESS whether a <th> heads its row or
+    // its column, and the guess it makes on a table with both is not reliable. Stating it
+    // is what lets "Shots fired, Lifetime, 412" be read as a sentence.
     const rows = STAT_ROWS.map(
-      ([label, get]) => `<tr><th>${label}</th><td>${get(lifetime)}</td><td>${get(attempt)}</td></tr>`,
+      ([label, get]) =>
+        `<tr><th scope="row">${label}</th><td>${get(lifetime)}</td><td>${get(attempt)}</td></tr>`,
     ).join('');
     // "Level attempt", the same words the ending screens use, by owner ruling. It read
     // "Current attempt" for one PR, which was accurate but made two names for one scope --
@@ -2387,8 +2433,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // place. The scope IS the level attempt whether or not a level is on screen; the
     // column heading names the scope, and "Current" was doing no work the table's own
     // Lifetime/attempt pairing did not already do.
+    // COLUMN HEADERS WERE <td> (issue #629): the header row was built out of data cells,
+    // so "Lifetime" and "Level attempt" named nothing and every number below was read
+    // bare. <thead>/<tbody> is what separates the two, and the <caption> gives the table
+    // the name it needs to be worth navigating to at all -- the <h1> above says
+    // "Records", which is the pane, not this table.
+    //
+    // The corner cell stays a <td>. It heads neither its row nor its column, and a <th>
+    // there would announce an empty heading on every row.
     statsTable.innerHTML =
-      `<tr><th></th><td>Lifetime</td><td>Level attempt</td></tr>${rows}`;
+      '<caption>Statistics, lifetime and this level attempt</caption>'
+      + '<thead><tr><td></td><th scope="col">Lifetime</th><th scope="col">Level attempt</th></tr></thead>'
+      + `<tbody>${rows}</tbody>`;
   }
 
   function renderAttemptSummary(): void {
@@ -2544,11 +2600,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         ]);
       }
     }
+    // Same treatment as the stats table above, and the same reason -- see its comment for
+    // why the corner cell stays a <td>. The caption names WHICH match's figures these are
+    // by the axis the rows are built on, which changes with mode: `rows` is per team under
+    // Teams and per player otherwise, a few lines up.
     const body = rows
-      .map(([label, k, d, acc]) => `<tr><th>${label}</th><td>${k}</td><td>${d}</td><td>${acc}</td></tr>`)
+      .map(([label, k, d, acc]) =>
+        `<tr><th scope="row">${label}</th><td>${k}</td><td>${d}</td><td>${acc}</td></tr>`)
       .join('');
+    const caption = tally === 'teams' ? 'Match results by team' : 'Match results by player';
     versusResultsEl.innerHTML =
-      `<tr><th></th><td>Kills</td><td>Deaths</td><td>Accuracy</td></tr>${body}`;
+      `<caption>${caption}</caption>`
+      + '<thead><tr><td></td><th scope="col">Kills</th><th scope="col">Deaths</th>'
+      + '<th scope="col">Accuracy</th></tr></thead>'
+      + `<tbody>${body}</tbody>`;
     versusResultsEl.classList.remove('hud-versus-results--hidden');
   }
 
@@ -2970,6 +3035,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       const row = document.createElement('div');
       row.className = got ? 'hud-achievement hud-achievement--earned' : 'hud-achievement';
       row.dataset.achievement = a.id;
+      row.setAttribute('role', 'listitem');
       const name = document.createElement('span');
       name.className = 'hud-achievement-label';
       name.textContent = a.label;
@@ -2978,7 +3044,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // Locked entries keep their criteria visible: the list doubles as the
       // to-do, and later as the place unlock gating is explained.
       desc.textContent = a.description;
-      row.append(name, desc);
+      // EARNED STATE, IN WORDS (issue #629). It lived only in `--earned`, which is a
+      // class: the row read "Name. Description." whether or not it had been earned, so
+      // the single fact this whole pane exists to report was the one thing a screen
+      // reader could not get. A text node rather than `aria-label` on the row, because a
+      // `listitem` is announced from its CONTENTS in browse mode and a label on it is
+      // unreliable; `.ui-sr-only` keeps it out of the visual design.
+      //
+      // THE VISUAL HALF IS NOT THIS ISSUE'S. #630 owns making earned-vs-locked survive
+      // without colour on screen (today it is `opacity: 0.45` plus a border hue). When
+      // that lands it should REPLACE this span with whatever visible marker it chooses,
+      // not sit beside it -- two announcements of the same fact is the predictable way
+      // these two fixes collide.
+      const state = document.createElement('span');
+      state.className = 'ui-sr-only';
+      state.textContent = got ? 'Earned. ' : 'Locked. ';
+      row.append(state, name, desc);
       achListEl.appendChild(row);
     }
     achCountEl.textContent = `${earnedIds.size} of ${ACHIEVEMENTS.length} earned`;
@@ -5187,6 +5268,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         btn.className = 'ui-btn ui-selectable hud-versus-role-btn';
         btn.dataset.role = opt.role;
         btn.textContent = opt.label;
+        // SLOT CONTEXT (issue #629). Up to four slots build the same three words, so a
+        // screen reader tabbing this pane heard "Human, Bot, Off, Human, Bot, Off, ..."
+        // with nothing tying a control to the player it configures. The visible
+        // `Player N` span does that job by POSITION, which is exactly the cue a
+        // non-visual reader does not get. The row is not given `role="group"` with that
+        // span as its name: naming each control is what survives an assistive technology
+        // that does not announce group names on focus, and the two together would say
+        // "Player 1" twice for every button.
+        btn.setAttribute('aria-label', `Player ${slot + 1} ${opt.label}`);
         setSelected(btn, slots[slot].role === opt.role);
         const forSlot = slot; // captured per-iteration, not the loop's shared binding
         btn.addEventListener('click', () => {
@@ -5209,6 +5299,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
           btn.type = 'button';
           btn.className = 'ui-btn ui-btn--sm ui-selectable hud-versus-team-btn';
           btn.dataset.team = String(team);
+          // "Player 2 team B" -- the letter alone is the least self-describing control in
+          // the pane, since A/B/C next to a digit row reads as neither a name nor a value.
+          btn.setAttribute('aria-label', `Player ${slot + 1} team ${VERSUS_TEAM_LABELS[team]}`);
           // A LETTER, not a colour name and not a bare number. The issue asks for the
           // choice to be reinforced "with label/marker in addition to color", and a letter
           // is the reinforcement that survives both a colour-blind reader and the
@@ -5242,6 +5335,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
           btn.className = 'ui-btn ui-btn--sm ui-selectable hud-versus-difficulty-btn';
           btn.dataset.difficulty = level;
           btn.textContent = VERSUS_DIFFICULTY_LABELS[level];
+          // Slot context again, and this row needs it most: it is present only for BOT
+          // slots, so which "Easy" belongs to which player is not even positionally
+          // regular down the pane.
+          btn.setAttribute('aria-label', `Player ${slot + 1} ${VERSUS_DIFFICULTY_LABELS[level]}`);
           // `?? DEFAULT_BOT_DIFFICULTY`, so an untouched slot shows Normal as chosen
           // rather than showing nothing chosen -- absence IS normal, and a row with no
           // selection would read as an unmade decision the Start gate was ignoring.
@@ -5337,6 +5434,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     b.className = 'ui-btn ui-selectable hud-versus-option-btn';
     b.dataset.players = String(players);
     b.textContent = String(players);
+    // Same bare-digit gap as the level grid, and worse here: this pane has THREE digit
+    // rows (players, stock, and the team letters), so unlabelled they are three
+    // interchangeable runs of numbers. Always plural -- the option set starts at two.
+    b.setAttribute('aria-label', `${players} players`);
     b.addEventListener('click', () => {
       // `slots` MUST follow the count, or Start emits a config whose slot array does not
       // describe the match being started (issue #260). Resized rather than rebuilt so
@@ -5374,6 +5475,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     b.className = 'ui-btn ui-selectable hud-versus-option-btn';
     b.dataset.stock = String(stock);
     b.textContent = String(stock);
+    // "1 life", not "1 lives". The singular is reachable -- VERSUS_STOCK_OPTIONS starts
+    // at 1 -- so this is a real case rather than defensive pluralisation.
+    b.setAttribute('aria-label', `${stock} ${stock === 1 ? 'life' : 'lives'}`);
     b.addEventListener('click', () => {
       setVersusConfig({ ...versusConfigState, stock });
       renderVersusStockSelection();
@@ -6015,6 +6119,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         btn.type = 'button';
         btn.className = 'ui-btn hud-level-btn';
         btn.textContent = String(i + 1);
+        // A BARE DIGIT IS NOT A NAME (issue #629). Visually the grid sits under a heading
+        // that says what the numbers are; to a screen reader tabbing the row it was "1",
+        // "2", "3" with nothing saying what they select.
+        btn.setAttribute('aria-label', `Level ${i + 1}`);
         btn.addEventListener('click', (e) => {
           for (const cb of levelSelectCbs) cb(i);
           if ((e as MouseEvent).detail > 0) btn.blur();

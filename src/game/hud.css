@@ -2409,6 +2409,26 @@
  * look; only visibility is theirs. Kept as separate selectors rather than one shared
  * class because they sit in different boxes -- one in the pane, one inside a slot row --
  * and a future spacing rule will almost certainly want to tell them apart. */
+/* Available to a screen reader, invisible on screen (issue #629). The clip-inset idiom
+ * rather than `display: none` or `visibility: hidden`, both of which take the text out of
+ * the accessibility tree along with the picture -- which would defeat the entire purpose.
+ * Not `width/height: 0` either: a zero-sized box is dropped by some screen readers.
+ * `white-space: nowrap` stops a long string reflowing the 1px box into a visible sliver.
+ *
+ * FIRST GENUINELY SHARED UTILITY of its kind here, so it takes the kit's `ui-` prefix
+ * rather than a `hud-` one: nothing about it belongs to a single pane. */
+.ui-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .hud-versus-start-reason--hidden,
 .hud-versus-slot-reason--hidden,
 /* The dropped-map notice (issue #274). Grouped with the refusals rather than given its own

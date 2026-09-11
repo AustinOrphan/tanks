@@ -930,8 +930,13 @@ describe('hud: the stats page', () => {
     h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
 
+    // `th[scope="col"]`, not `td`, since issue #629 gave this table real column headers:
+    // the header row used to be built out of DATA cells, so these two names headed
+    // nothing and every figure below them was announced bare. Reading them through the
+    // scoped selector means this test now also fails if they regress to `td` -- the
+    // wording it pins is only worth anything while it is attached to the column.
     const header = Array.from(
-      (root.querySelector('.hud-stats-table tr') as HTMLElement).querySelectorAll('td'),
+      root.querySelectorAll('.hud-stats-table thead th[scope="col"]'),
     ).map((c) => c.textContent);
     expect(header).toEqual(['Lifetime', 'Level attempt']);
 
