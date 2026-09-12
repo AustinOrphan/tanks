@@ -1,0 +1,14 @@
+{
+  "id": "renderer-drops-a-system-from-the-motion-fanout",
+  "file": "src/render/renderer.ts",
+  "find": "      barrelRecoil.setReducedMotion(on);",
+  "replace": "      void on;",
+  "expect": "killed",
+  "tests": [
+    "src/render/motion-policy.test.ts"
+  ],
+  "killedBy": [
+    "the reduced-motion fan-out (issue #651) routes the policy to EVERY render system that declares an answer to it"
+  ],
+  "why": "The hole issue #651 names: 'no test asserts the fan-out at all. A mutation that drops a module from renderer.ts's list survives today.' It did -- `createRenderer` builds a real WebGLRenderer, which jsdom cannot provide, so nothing could construct one to spy on. Under this the barrel recoil kicks at full strength for a player who asked for reduced motion, and every other reduced treatment still works, so the feature looks wired. Barrel recoil is the one picked because it is unconditional: the three blocked-fire systems are `?dev=1` only and muzzle smoke is null on the `low` preset, so dropping any of those would be a weaker mutation than this."
+}
