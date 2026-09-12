@@ -184,7 +184,17 @@ export function versusCatalogEntryFailures(
     // criteria, one evaluation per N (geometry is mode-independent; see
     // versus-board.ts's 'ffa'-stands-for-both note), reported per declared mode.
     const authored = evaluateVersusBoard(arena, n);
-    const unreachable = unreachableSpawnCells(arena, playerPositions(arena, n));
+    // Hoisted, not memoised (issue #664). This was called twice per (entry, N) with
+    // identical arguments -- once here and once for the clearance rule below -- and each
+    // call runs a full `loadArena` spawn placement, the single most expensive thing in
+    // this sweep. A local is the whole fix: same values, same order, no cache and no
+    // module state, so nothing about determinism changes. A MEMO would have been the
+    // wrong tool here even though it is faster still: this file's own
+    // "two runs on the same entry are deep-equal" test, and the two catalog sweeps that
+    // deliberately reach the same answer by different routes, all become vacuous the
+    // moment a cache returns the first run's object to the second.
+    const positions = playerPositions(arena, n);
+    const unreachable = unreachableSpawnCells(arena, positions);
 
     // Advertised seeded variants, ungated draws at the shipped fraction: the two
     // criteria destructible removal can regress (the map-variants plan's proof
@@ -205,7 +215,7 @@ export function versusCatalogEntryFailures(
     }
 
     const clearance = (opts.clearanceRule ?? defaultClearanceRule)({
-      arena, grid: arena.grid, playerCount: n, positions: playerPositions(arena, n),
+      arena, grid: arena.grid, playerCount: n, positions,
     });
 
     for (const mode of entry.modes) {
