@@ -9,7 +9,8 @@ import {
 } from './args.mjs';
 import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/presentation/customization';
 import { MOMENTS } from './moments';
-import { VIEWS } from './subjects';
+import { ELEMENTS, VIEWS, compose } from './subjects';
+import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
 
 const ESC = String.fromCharCode(27);
 
@@ -244,6 +245,45 @@ describe('gallery args', () => {
     expect([...GALLERY_VIEW_IDS].sort()).toEqual(Object.keys(VIEWS).sort());
     for (const id of GALLERY_VIEW_IDS) expect(parseArgs(['--view', id]).view).toBe(id);
     expect(() => parseArgs(['--view', 'overhead-ish'])).toThrow(/--view must be one of/);
+  });
+
+  it('pins --identityMarker to the vocabulary the renderer actually owns', () => {
+    // args.mjs is .mjs and cannot import the TypeScript that owns the styles, so it
+    // hardcodes them. This is the two-way pin that keeps the copy honest -- the same
+    // shape the --view/VIEWS pin above uses, and for the same reason: a style added to
+    // IDENTITY_MARKER_STYLES without a change there would be rejected by the CLI with a
+    // message naming values that are no longer the whole set.
+    for (const style of IDENTITY_MARKER_STYLES) {
+      expect(parseArgs(['--elements', 'identity', '--identityMarker', style]).identityMarker)
+        .toBe(style);
+    }
+    expect(() => parseArgs(['--elements', 'identity', '--identityMarker', 'solid']))
+      .toThrow(/--identityMarker must be one of/);
+  });
+
+  it('refuses --identityMarker on an element set with no identity ring in it', () => {
+    // The --blocked-fire precedent, applied to the flag whose own bug was silence.
+    // `identityApplies` needs two or more player tanks, so a lone `tank` renders no ring
+    // at all -- and a capture that quietly contains no marker is the exact failure this
+    // change exists to end.
+    expect(() => parseArgs(['--elements', 'tank', '--identityMarker', 'shape']))
+      .toThrow(/needs an element set that poses two or more player tanks/);
+    expect(parseArgs(['--elements', 'coop', '--identityMarker', 'arcs']).identityMarker).toBe('arcs');
+  });
+
+  it('pins the ring-bearing element list to the subjects that really pose two players', () => {
+    // MEASURED, not declared twice. args.mjs names `coop` and `identity` as the sets a
+    // marker can be shown on; this runs every element's own `place` and counts the player
+    // tanks it actually produces, so a new multi-player subject that forgets to join the
+    // list -- or a subject that stops posing two -- fails here rather than silently
+    // producing a marker-less capture.
+    const ringBearing = Object.keys(ELEMENTS).filter(
+      (name) => compose([name], 0).world.tanks.filter((t) => t.kind === 'player').length >= 2,
+    );
+    expect(ringBearing.sort()).toEqual(['coop', 'identity']);
+    for (const name of ringBearing) {
+      expect(parseArgs(['--elements', name, '--identityMarker', 'shape']).identityMarker).toBe('shape');
+    }
   });
 
   it('rejects a --scene that is neither gallery/game nor a known moment', () => {

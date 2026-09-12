@@ -21,6 +21,7 @@ const hull = params.get('hull');
 const accent = params.get('accent');
 const spawnAnimParam = params.get('spawn-anim') as SpawnAnimId | null;
 const mineWarnParam = params.get('mineWarn') as import('../../src/render/mine-warning').MineWarnStyle | null;
+const identityMarkerParam = params.get('identityMarker') as import('../../src/presentation/identity-marker').IdentityMarkerStyle | null;
 const blockedFireParam = params.get('blockedFire') as import('../../src/presentation/blocked-fire').BlockedFireCue | null;
 
 // `scene` selects one of MOMENTS's scripted timelines over the default posed gallery.
@@ -62,6 +63,12 @@ const g = moment
       // setPlayerStyle at all.
       spawnAnim: spawnAnimParam ?? undefined,
       frames: params.has('frames') ? Number(params.get('frames')) : null,
+      // Forwarded to the POSED scene, which until now dropped both (subjects.ts's
+      // GalleryOptions comment has the account). The moment branch above always passed
+      // `mineWarn`; only this one did not, which is why the same flag worked or did
+      // nothing depending on a `--scene` the user may never have set.
+      mineWarn: mineWarnParam,
+      identityMarker: identityMarkerParam,
     });
 
 // The runner calls this per frame and screenshots between calls, so no pixels ever cross

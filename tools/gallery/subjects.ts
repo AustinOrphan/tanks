@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createWorld } from '../../src/sim/world';
 import type { World } from '../../src/sim/world';
 import { createEntityViews, BULLET_Y } from '../../src/render/entities';
+import type { MineWarnStyle } from '../../src/render/mine-warning';
+import type { IdentityMarkerStyle } from '../../src/presentation/identity-marker';
 import { createMineDebug } from '../../src/render/minedebug';
 import {
   DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
@@ -125,6 +127,35 @@ export const ELEMENTS: Record<string, ElementDef> = {
         id: 100 + w.bullets.length, ownerId: p2, type: 'normal', bouncesLeft: 1, alive: true,
         pos: { x: x + 0.3, y: 0.45 }, vel: { x: -NORMAL_SPEED, y: 0 },
       });
+    },
+  },
+  /**
+   * FOUR player tanks, one per identity slot, at four body angles (issue #630).
+   *
+   * `coop` above poses two, which is enough to show that identity applies at all and not
+   * enough to CHOOSE between marker candidates: the interesting pair is slots 3 and 4,
+   * and under the `shape` candidate those are the same polygon 45 degrees apart. This
+   * subject exists so that comparison can be made from a deterministic frame instead of a
+   * live match, where spawn spread and camera are not controllable.
+   *
+   * THE BODY ANGLES ARE NOT DECORATION. Each tank faces a different way, so a marker that
+   * spins with its hull is visible as such in a still -- which is the defect the
+   * counter-rotation fixes and the one a four-identical-tanks row would hide. Slot 4 at
+   * 45 degrees is the specific case that collapses the square onto the diamond.
+   */
+  identity: {
+    width: 7.2, frames: 1, focusY: 0.3,
+    place: (w, x) => {
+      const angles = [0, Math.PI / 2, Math.PI, Math.PI / 4];
+      for (let slot = 0; slot < 4; slot++) {
+        w.tanks.push({
+          id: 1 + w.tanks.length, kind: 'player', controlledBy: slot,
+          pos: { x: x - 2.7 + slot * 1.8, y: 0 },
+          bodyAngle: angles[slot], turretAngle: angles[slot], alive: true,
+          desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+          aiState: 'idle', aiTimer: 0,
+        });
+      }
     },
   },
   /** One shell broadside and one nose-on: a shell's read changes with angle. */
@@ -258,6 +289,21 @@ export function timelineDt(fromTicks: number, toTicks: number): number {
 export interface GalleryOptions {
   /** Names of elements to place, left to right. */
   elements: string[];
+  /**
+   * RENDER-VARIANT FLAGS, forwarded to `createEntityViews`.
+   *
+   * These were silently dropped until issue #637's follow-up. `main.ts` had read
+   * `?mineWarn=` off the URL since the flag existed and handed it to `buildMomentScene`
+   * only; the posed gallery below called `createEntityViews(scene)` bare, so
+   * `npm run gallery -- --mineWarn <style>` produced the SHIPPED treatment and reported
+   * success. A capture tool that silently ignores the variant it was asked for is worse
+   * than one that refuses: the frames look like evidence and are evidence of the default.
+   *
+   * Optional, and absent means "shipped default" -- the same contract
+   * `createEntityViews` already gives its own parameters.
+   */
+  mineWarn?: MineWarnStyle | null;
+  identityMarker?: IdentityMarkerStyle | null;
   view: string;
   /** Draw the mine dev overlay. */
   reach: boolean;
@@ -319,7 +365,12 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  const views = createEntityViews(scene);
+  // Forwarded, not dropped (see GalleryOptions). `?? null` rather than leaving them
+  // undefined so a flag that arrives as an empty string still resolves to the default
+  // rather than to a falsy value the renderer would have to interpret.
+  const views = createEntityViews(
+    scene, undefined, opts.mineWarn ?? null, opts.identityMarker ?? null,
+  );
   // Same call the game makes (renderer.ts's setPlayerStyle) and the Customize preview
   // makes -- the gallery has no skin machinery of its own to drift from it.
   //
