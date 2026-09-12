@@ -1001,6 +1001,104 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.devtools",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.devtools"
+    },
+    "fixture": {
+      "id": "screen.devtools",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Developer Tools",
+    "description": "The developer shell behind ?dev=1, with the Controller Self-Test entry issue #599 added to it.",
+    "altText": "Screenshot of the Tanks! developer tools screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.devtools.controller-selftest",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.devtools.controller-selftest"
+    },
+    "fixture": {
+      "id": "screen.devtools.controller-selftest",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Controller Self-Test",
+    "description": "The controller compatibility self-test over two synthetic pads, one standard-mapped and one not.",
+    "altText": "Screenshot of the Tanks! controller self-test screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.confirm.new-campaign",
     "producer": {
       "kind": "screen",

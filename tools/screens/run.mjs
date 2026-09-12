@@ -85,6 +85,54 @@ function webglOverrideSource(mode) {
   })()`;
 }
 
+/**
+ * The synthetic pads `{ fakeGamepads }` installs (issue #599).
+ *
+ * A headless browser has no controller, and a browser reports no pad until one has been
+ * ACTUATED, so without this the controller self-test photographs its empty state on every
+ * capture machine -- true, and evidence for nothing the pane does.
+ *
+ * Overriding `navigator.getGamepads` is not a back door: it is the SAME seam production
+ * reads through (`readNavigatorGamepads` in src/input/gamepad.ts) and the same one every
+ * unit test in that directory injects. Nothing downstream can tell these from real pads,
+ * which is exactly what makes the picture evidence.
+ *
+ * The two disagree about mapping, axis count, button count and which button is down, so
+ * one frame carries both rendering paths and a filled bar rather than seventeen zeroes.
+ */
+const GAMEPAD_FIXTURE_PADS = {
+  none: null,
+  mixed: [
+    {
+      index: 0,
+      id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)',
+      mapping: 'standard',
+      axes: [0.62, -0.41, 0, 0],
+      buttons: Array.from({ length: 17 }, (_, i) => ({
+        pressed: i === 7,
+        value: i === 7 ? 1 : i === 6 ? 0.35 : 0,
+      })),
+    },
+    {
+      index: 1,
+      id: 'HuiJia  USB GamePad',
+      mapping: '',
+      axes: [0.05, -0.98, 0, 0, 1, -1],
+      buttons: Array.from({ length: 12 }, (_, i) => ({ pressed: i === 3, value: i === 3 ? 1 : 0 })),
+    },
+  ],
+};
+
+function gamepadOverrideSource(fixture) {
+  const pads = GAMEPAD_FIXTURE_PADS[fixture];
+  if (pads === undefined) throw new Error(`unknown gamepad fixture '${fixture}'`);
+  if (pads === null) return '(() => {})()';
+  return `(() => {
+    const pads = ${JSON.stringify(pads)};
+    navigator.getGamepads = () => pads;
+  })()`;
+}
+
 /** The properties a measurement records beside the box, chosen to catch layout drift. */
 const WATCHED = ['display', 'opacity', 'color', 'background-color', 'font-size', 'margin-top', 'margin-bottom'];
 
@@ -138,6 +186,12 @@ async function runStep(page, step, timeout) {
     // already succeeded. `addInitScript` would run before the probe and produce a boot
     // failure instead, which is a different screen.
     return void (await page.evaluate(webglOverrideSource(step.breakWebgl)));
+  }
+  if (kind === 'fakeGamepads') {
+    // Applied to the LIVE page like `breakWebgl`, not as an init script: the self-test
+    // reads `navigator.getGamepads` on every frame while its pane is open, so the override
+    // only has to be in place before the pane is, and boot must be left alone.
+    return void (await page.evaluate(gamepadOverrideSource(step.fakeGamepads)));
   }
   await page.waitForFunction(
     `(() => {
