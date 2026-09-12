@@ -191,7 +191,10 @@ export const SCREEN_STATES = Object.freeze([
     // `.hud-versus-start` is measured for its Y: the map cards (issue #274) lengthened this
     // pane, and how far down Start sits is the number that says whether it is still
     // reachable in about a screen. Measured at 793 before the cards and 1240 after.
-    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-card', '.hud-versus-start'],
+    // `.hud-versus-role-btn` is measured for its BOX (issue #634): it shipped with no size
+    // modifier and no rule of its own, so it rendered at zero padding beside team and
+    // difficulty buttons that are `--sm`. The recorded width/height is what says so.
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-card', '.hud-versus-role-btn', '.hud-versus-start'],
   }),
   state({
     id: 'screen.versus-setup.selected',

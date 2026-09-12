@@ -6199,5 +6199,19 @@
       "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
     ],
     "why": "Restores what the versus pane shipped before issue #274, and what issue #642 still describes for its two remaining siblings: `justify-content: center` on an `overflow-y: auto` column puts the overflow ABOVE the scrollable area, where no scrollbar reaches it. Latent while the map row was a line of pills; a defect the moment the row became seven cards, measured at 1280x800 with the Mode and Players rows pushed off the top and unreachable. jsdom lays nothing out, so the case that kills this reads the computed `justify-content` of every scroller the fixture builds and pins the set that still carries the shape -- which is also what makes a THIRD pane joining them a red test rather than a quiet inheritance."
+  },
+  {
+    "id": "versus-role-button-loses-its-size-again",
+    "file": "src/game/hud.ts",
+    "find": "        btn.className = 'ui-btn ui-btn--sm ui-selectable hud-versus-role-btn';",
+    "replace": "        btn.className = 'ui-btn ui-selectable hud-versus-role-btn';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "killedBy": [
+      "hud.css is syntactically whole gives every control in the kit a size: a modifier, or a rule of its own"
+    ],
+    "why": "Restores the SHIPPED defect, not an invented one: the per-slot Human/Bot/Off buttons carried `.ui-btn` with no size modifier and no rule of their own, so they took the primitive's deliberately sizeless base and rendered with zero padding -- a hit area the height of their own text, in a row whose team and difficulty buttons are `--sm`. THREE existing sweeps pass on it, which is why it shipped: the fall-through guard measures the RESOLVED style against a bare `<button>` and `.ui-btn` supplies colour, border, radius and font, so the control looks themed and is merely the wrong size; the primitive-grouping guard checks for `.ui-btn`, which is present; and both shape-group cases walk hand-maintained lists this control was never added to. The case that kills it derives its population from the DOM instead -- every `.ui-btn` must carry a size modifier or have a rule of its own -- so the next control added without one fails without anyone remembering to list it."
   }
 ]

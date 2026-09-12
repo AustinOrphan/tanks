@@ -929,6 +929,75 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
+  it('gives every control in the kit a size: a modifier, or a rule of its own', () => {
+    // Issue #634. `.ui-btn` is deliberately sizeless -- its own comment says so, and size
+    // comes from a `--slab`/`--sm` modifier -- so a control carrying the primitive and
+    // nothing else is themed, clickable, and renders with ZERO padding.
+    // `.hud-versus-role-btn` shipped exactly that way: colour, border, radius and font all
+    // correct, and a hit area the height of its own text, in a row whose other two controls
+    // are `--sm`.
+    //
+    // WHY NEITHER EXISTING SWEEP CAUGHT IT, which is why this one is derived rather than listed:
+    //  - "never lets a button fall through to browser default styling" measures the RESOLVED
+    //    style against a bare <button>, and `.ui-btn` supplies colour, border, radius and
+    //    font. The button did not look unstyled. It looked themed and was the wrong size.
+    //  - "groups every button under a primitive" checks for `.ui-btn`, which was present.
+    //  - The two shape-group cases walk HAND-MAINTAINED lists, and this control was never on
+    //    one. A list cannot catch the control nobody remembered to add to it.
+    //
+    // WHY THIS IS A CLASS/STYLESHEET CHECK AND NOT A COMPUTED-PADDING ONE, measured rather
+    // than assumed: jsdom DROPS a tokenised shorthand. Probed directly, `.hud-versus-map-card`
+    // declares `padding: var(--hud-space-2)` and `getComputedStyle` reports `padding: "0"` --
+    // identical to a bare `.ui-btn`, and not even recoverable through `resolved()`, since
+    // there is no `var(...)` left to resolve. A computed-padding sweep would therefore
+    // report every tokenised control as sizeless. `.hud-level-btn` is the other shape a
+    // computed check gets wrong: it sizes with `width`/`height: var(--hud-control-min)`, a
+    // 44px touch target rather than padding, and has a real hit area with no padding at all.
+    //
+    // So the question asked is the one issue #634 states: a size MODIFIER, or a rule of the
+    // control's own. Both are valid ways to have a size, and neither is invisible here.
+    const SIZE_MODIFIERS = ['ui-btn--slab', 'ui-btn--sm'];
+    const ownRule = (cls: string): boolean =>
+      new RegExp(`(^|[,\\s])\\.${cls}\\s*(,|\\{)`, 'm').test(stripComments(css));
+
+    const { root, dispose } = mountEveryButton();
+    const controls = Array.from(root.querySelectorAll<HTMLElement>('.ui-btn'));
+    // Non-vacuity, and it is the denominator: a selector that matched nothing would make the
+    // assertion below pass while measuring nothing. Exactly, not a floor, for the same reason
+    // the button sweep above pins its own.
+    // The denominator, DERIVED rather than counted once and pinned: 130 buttons in this
+    // fixture (the sweep above pins that figure and itemises it), minus the 18 that
+    // deliberately do not carry the primitive -- 11 colour swatches, 4 preview-rotate icon
+    // buttons, and the pause/fire/mine driving controls, each named in
+    // "groups every button under a primitive" -- leaves 112. Plus the 2 `<a class="ui-btn">`
+    // outbound links in About & Legal, which are `.ui-btn` without being `<button>`, and
+    // which are exactly the kind of control a `button`-only sweep misses.
+    //
+    //   130 - (11 + 4 + 1 + 1 + 1) + 2 = 114
+    //
+    // Non-vacuity as well as arithmetic: a selector that matched nothing would make the
+    // assertion below pass while measuring nothing.
+    expect(controls.length).toBe(114);
+
+    const sizeless = controls
+      .filter((el) => {
+        const classes = Array.from(el.classList);
+        if (classes.some((c) => SIZE_MODIFIERS.includes(c))) return false;
+        return !classes.some((c) => c !== 'ui-btn' && c !== 'ui-selectable' && ownRule(c));
+      })
+      .map((el) => Array.from(el.classList).join('.'));
+    expect(sizeless, 'an .ui-btn with no size: themed, clickable, and no hit area').toEqual([]);
+
+    // The control on the control: the rule-lookup must be capable of saying NO, or the filter
+    // above passes for every control whatever the stylesheet says.
+    expect(ownRule('hud-level-btn'), 'the rule lookup cannot find a rule that exists').toBe(true);
+    expect(ownRule('hud-no-such-control'), 'the rule lookup finds a rule that does not exist').toBe(
+      false,
+    );
+
+    dispose();
+  });
+
   it('themes the two outbound legal links, which are anchors and not buttons', () => {
     // The sweep above selects `'button'`, so the About & Legal pane's two `<a class="ui-btn">`
     // links are outside it -- and an `.ui-btn` that no sweep in this file reaches is exactly
@@ -1074,7 +1143,14 @@ describe('hud.css is syntactically whole', () => {
       // which is #634's defect with the class present and the RULE overriding it.
       // `.hud-legal-link` is an `<a>`, and `shape()` reads a selector rather than a tag, so
       // it belongs in the same list as the buttons it sits beside.
-      '.hud-legal-toggle', '.hud-legal-link'];
+      '.hud-legal-toggle', '.hud-legal-link',
+      // Issue #634's control, and the two it sits beside in the same slot row. The sweep
+      // above says each HAS a size; these three say they have the SAME size, which is what
+      // "matching its siblings in the pane" means and what a bespoke rule duplicating
+      // `--sm`'s padding would have quietly failed to guarantee. The team and difficulty
+      // buttons were `--sm` all along and were simply never listed -- the same omission that
+      // let the role button ship sizeless, one step less harmful.
+      '.hud-versus-role-btn', '.hud-versus-team-btn', '.hud-versus-difficulty-btn'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
     for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));
     // Without this the two loops above would both pass on a stylesheet that gave every
