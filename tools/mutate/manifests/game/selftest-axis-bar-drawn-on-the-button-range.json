@@ -1,0 +1,14 @@
+{
+  "id": "selftest-axis-bar-drawn-on-the-button-range",
+  "file": "src/game/controller-selftest.ts",
+  "find": "          writeChannel(row.axes[a], pad.axes[a] ?? 0, true, false);",
+  "replace": "          writeChannel(row.axes[a], pad.axes[a] ?? 0, false, false);",
+  "expect": "killed",
+  "tests": [
+    "src/game/controller-selftest.test.ts"
+  ],
+  "killedBy": [
+    "renderControllerSelfTest: live values fills an axis from the CENTRE and a button from the left"
+  ],
+  "why": "An axis travels -1..1 and rests in the MIDDLE of its range; a button travels 0..1 and rests at the bottom of its. Drawing an axis with the button's geometry puts a resting stick at half fill and loses the direction of a push entirely -- measured in the first capture of this pane, where a centred Axis 2 drew a longer bar than a trigger genuinely held at 0.35."
+}

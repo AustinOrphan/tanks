@@ -1,0 +1,14 @@
+{
+  "id": "selftest-pane-centres-its-scroll-axis",
+  "file": "src/game/hud.css",
+  "find": "  align-items: center;\n  justify-content: flex-start;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Same reason as .hud-devtools--hidden",
+  "replace": "  align-items: center;\n  justify-content: center;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Same reason as .hud-devtools--hidden",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ],
+  "why": "The self-test's list is as tall as the connected hardware makes it -- a standard pad alone is 21 channel rows -- so centring the main axis of its scroll container puts the heading and the first pad above the scroll origin on the FIRST connected controller, not only on a short viewport. The sweep pins the centred set exactly, which is what makes a third pane joining it a red test."
+}

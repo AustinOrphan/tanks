@@ -1,0 +1,14 @@
+{
+  "id": "selftest-poll-outlives-its-pane",
+  "file": "src/game/route-ui.ts",
+  "find": "    if (selfTestPolling) selfTestFrame = deps.raf.request(pollSelfTest);",
+  "replace": "    selfTestFrame = deps.raf.request(pollSelfTest);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the controller self-test poll is scoped to the pane (issue #599) a frame already dispatched when the pane closes does not queue another"
+  ],
+  "why": "Cancelling the pending handle cannot reach a callback that has already run and re-requested, so the flag is the half that ends the chain. Without it the poll reads the hardware on every frame for the life of the page over a pane that is gone -- and the driver does not tick while a pane is up, so nothing else would ever notice. MEASURED AS A SURVIVOR first: with only the open/close/stop cases, removing the flag left every one of them green, because a cancelled frame simply never runs. The case that kills it takes a dispatched frame OUT of the queue before closing, which is the state `cancelAnimationFrame` cannot reach."
+}

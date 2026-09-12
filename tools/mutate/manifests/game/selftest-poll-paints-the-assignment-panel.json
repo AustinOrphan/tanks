@@ -1,0 +1,15 @@
+{
+  "id": "selftest-poll-paints-the-assignment-panel",
+  "file": "src/game/route-ui.ts",
+  "find": "    hud.setPadDiagnostics(deps.readPadDiagnostics());",
+  "replace": "    hud.setDetectedPads(deps.readDetectedPads());",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the controller self-test poll is scoped to the pane (issue #599) changes NOTHING by being opened, polled and closed -- no store write, no HUD setter but its own",
+    "the controller self-test poll is scoped to the pane (issue #599) reads once on open and once per frame after that, without waiting for a hotplug"
+  ],
+  "why": "The self-test's poll and the assignment panel's hotplug read sit twenty lines apart and take near-identical shapes, so painting the wrong surface from the wrong reader is the copy-paste this wiring invites. It is also the failing control for the no-side-effects case: repainting the assignment panel sixty times a second IS altering a surface the self-test is not allowed to touch, and nothing in a store would record it."
+}

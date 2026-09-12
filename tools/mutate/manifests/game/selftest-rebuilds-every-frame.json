@@ -1,0 +1,14 @@
+{
+  "id": "selftest-rebuilds-every-frame",
+  "file": "src/game/controller-selftest.ts",
+  "find": "      if (keys !== rows.map((r) => r.key).join('\\n')) {",
+  "replace": "      if (true) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/controller-selftest.test.ts"
+  ],
+  "killedBy": [
+    "renderControllerSelfTest: structure keeps the SAME nodes across a frame whose pad set has not changed"
+  ],
+  "why": "`update` runs on every animation frame while the pane is open, so an unconditional rebuild replaces every node sixty times a second. `hud.navigation.test.ts` already records what that costs on the assignment panel next door: a hotplug repaints every row and takes the focused control with it."
+}

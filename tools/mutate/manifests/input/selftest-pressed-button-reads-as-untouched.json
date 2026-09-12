@@ -1,0 +1,14 @@
+{
+  "id": "selftest-pressed-button-reads-as-untouched",
+  "file": "src/input/gamepad-diagnostics.ts",
+  "find": "  return { pressed, value: button.value ?? (pressed ? 1 : 0) };",
+  "replace": "  return { pressed, value: button.value ?? 0 };",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "readPadDiagnostics reads a pressed button with no reported value as fully travelled, not as untouched"
+  ],
+  "why": "`GamepadLike.value` is optional, and a browser may report a button object without one. Reading `undefined` as 0 draws a HELD button as fully up -- the readout states the opposite of what the tester is doing, on exactly the pads whose behaviour is already in question."
+}
