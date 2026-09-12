@@ -1,0 +1,14 @@
+{
+  "id": "map-card-phone-clamp-copies-the-desktop-one",
+  "file": "src/game/hud.css",
+  "find": "    -webkit-line-clamp: 2;\n    line-clamp: 2;\n    min-height: calc(1.35em * 2);",
+  "replace": "    -webkit-line-clamp: 4;\n    line-clamp: 4;\n    min-height: calc(1.35em * 4);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The narrow-viewport override made to agree with the base rule, which is the tempting simplification -- one number for both widths. It is wrong because the text column is not one width: MEASURED at 138px beside the canvas in a 240px desktop grid column and 288px in the single full-width column below 760px. Every shipped intent takes two lines there, so four reserves two empty ones on every card, ~30px of whitespace down a seven-card phone column -- the screen issue #658's fit complaint was about.",
+  "killedBy": [
+    "hud.css is syntactically whole holds every map card to one height, with the clamp and the reserved space agreeing at both widths"
+  ]
+}
