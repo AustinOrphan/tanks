@@ -1,0 +1,14 @@
+{
+  "id": "arrival-flag-accepts-an-unbuilt-arm",
+  "file": "src/game/devflags.ts",
+  "find": "  return isArrivalLanguage(raw) ? raw : null;",
+  "replace": "  return raw as ArrivalLanguage;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "Reject-to-null dropped, so `?dev=1&arrival=converge` becomes an `ArrivalLanguage` that no consumer branches on -- every `=== 'opposed'` test fails and the build renders the shipped language while the URL says otherwise. The same guard `topbar`, `menuTransition`, `mineWarn`, `blockedFire` and `backdrop` each carry. `converge` and `detonate` are the near-misses that matter here: they name the two halves of this language and are exactly what someone who read the issue would type.",
+  "killedBy": [
+    "parseDevFlags: arrival (issue #230 -- spawn and death told apart) rejects anything else to null rather than guessing -- population: the 6 forms below"
+  ]
+}

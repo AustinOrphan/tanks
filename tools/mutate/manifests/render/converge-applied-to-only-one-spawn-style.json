@@ -1,0 +1,14 @@
+{
+  "id": "converge-applied-to-only-one-spawn-style",
+  "file": "src/render/spawn-anim.ts",
+  "find": "      ring: opposed ? convergeRing(p, reducedMotion) : {\n        radius: reducedMotion ? 1 : 0.9 + 0.3 * Math.sin(p * Math.PI),",
+  "replace": "      ring: {\n        radius: reducedMotion ? 1 : 0.9 + 0.3 * Math.sin(p * Math.PI),",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "why": "`rise` left out of the arm. The player picks a spawn STYLE, but arrival-versus-destruction is a property of the EVENT, so a language that holds for warp and beacon and not rise leaves a third of players seeing the exact confusion the issue reports -- and seeing it intermittently, which is the hardest kind to report. Chosen as the mutation because `rise` is the one style whose shipped ring is a symmetric bump rather than an obvious expansion, so it is the one an author is most likely to think already reads differently.",
+  "killedBy": [
+    "converge: an arrival gathers instead of expanding (issue #230) opposed: every style converges instead"
+  ]
+}

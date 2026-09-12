@@ -13,6 +13,11 @@ import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import { QUALITY_PRESET_IDS, type QualityPreset } from '../presentation/quality';
 import type { AiTargetPerception } from '../sim/types';
 import {
+  ARRIVAL_LANGUAGES,
+  isArrivalLanguage,
+  type ArrivalLanguage,
+} from '../presentation/arrival-language';
+import {
   IDENTITY_MARKER_STYLES,
   isIdentityMarkerStyle,
   type IdentityMarkerStyle,
@@ -362,6 +367,13 @@ export interface DevFlags {
    */
   identityMarker: IdentityMarkerStyle | null;
   /**
+   * Which experimental ARRIVAL/DESTRUCTION language to speak (issue #230). `null` keeps the
+   * shipped pair, where a spawn entrance and a death pulse both expand a ring and are, in
+   * the issue's words, "hard to tell apart at normal speed". `opposed` converges the
+   * entrance and detonates the death. See presentation/arrival-language.ts.
+   */
+  arrival: ArrivalLanguage | null;
+  /**
    * Which experimental blocked-fire cue to play when the active-shell cap refuses a shot
    * (issue #356). `null` -- absent or unrecognised -- keeps the shipped silence.
    *
@@ -451,6 +463,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   backdrop: null,
   mineWarn: null,
   identityMarker: null,
+  arrival: null,
   aiPerception: null,
 };
 
@@ -578,6 +591,13 @@ function asMineWarn(params: URLSearchParams): MineWarnStyle | null {
   const raw = params.get('mineWarn');
   if (raw === null) return null;
   return MINE_WARN_STYLES.has(raw) ? (raw as MineWarnStyle) : null;
+}
+
+/** One of the named arrival languages, or null when absent or unrecognised. */
+function asArrival(params: URLSearchParams): ArrivalLanguage | null {
+  const raw = params.get('arrival');
+  if (raw === null) return null;
+  return isArrivalLanguage(raw) ? raw : null;
 }
 
 /** One of the named identity-marker candidates, or null when absent or unrecognised. */
@@ -724,6 +744,7 @@ export function parseDevFlags(search: string): DevFlags {
     backdrop: asBackdrop(params),
     mineWarn: asMineWarn(params),
     identityMarker: asIdentityMarker(params),
+    arrival: asArrival(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -1093,6 +1114,14 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Draws the mine fuse and proximity warnings with a named experimental treatment ' +
       '(issue #276 playtest round); the shipped default is the glow + illumination pair.',
+  },
+  arrival: {
+    kind: 'valued',
+    values: [...ARRIVAL_LANGUAGES],
+    description:
+      'Speaks an experimental arrival/destruction language (issue #230). The shipped pair '
+      + 'both expand a ring and read alike at speed; \'opposed\' converges the spawn '
+      + 'entrance onto the tank and throws a fat, hard-attacked band outward on death.',
   },
   identityMarker: {
     kind: 'valued',

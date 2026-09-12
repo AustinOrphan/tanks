@@ -1,0 +1,14 @@
+{
+  "id": "gallery-arrival-flag-accepts-an-eventless-scene",
+  "file": "tools/gallery/args.mjs",
+  "find": "    if (!withEvents.includes(out.scene)) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "Drops the refusal, so `--elements tank --arrival opposed` runs, exits 0, and produces a frame with neither an arrival nor a destruction in it. The posed gallery has no sim timeline at all, so this language -- which changes exactly two EVENTS -- cannot appear there however the flag is set. Same silent no-op `--mineWarn` shipped with for its whole life and #637 was filed about: the frames look like evidence and are evidence of the default.",
+  "killedBy": [
+    "gallery args refuses --arrival on a scene that stages neither event"
+  ]
+}

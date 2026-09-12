@@ -1,0 +1,14 @@
+{
+  "id": "detonate-travels-linearly",
+  "file": "src/render/death-pulse.ts",
+  "find": "        const eased = 1 - (1 - k) ** 3;",
+  "replace": "        const eased = k;",
+  "expect": "killed",
+  "tests": [
+    "src/render/death-pulse.test.ts"
+  ],
+  "why": "The ease-out dropped, which makes the detonate arm's growth identical to the shipped swell. A blast is fast then slow; an even expansion is the swell the spawn entrances also do, and matching it is precisely what the issue says makes the two events hard to tell apart. The ring still reaches the same radius at the same moment, so nothing but the envelope distinguishes the two builds.",
+  "killedBy": [
+    "detonate: a destruction blasts instead of swelling (issue #230) throws the ring out FRONT-LOADED, where the shipped one travels evenly"
+  ]
+}

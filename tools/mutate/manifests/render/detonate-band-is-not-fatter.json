@@ -1,0 +1,14 @@
+{
+  "id": "detonate-band-is-not-fatter",
+  "file": "src/render/death-pulse.ts",
+  "find": "makeSpawnRing(color, opposed)",
+  "replace": "makeSpawnRing(color)",
+  "expect": "killed",
+  "tests": [
+    "src/render/death-pulse.test.ts"
+  ],
+  "why": "Weight is the half of the opposition that survives motion. Direction reads in a still frame; a heavy band versus a thin line is what still reads when both events last under a second and the player is looking somewhere else. Dropping it leaves the arm relying entirely on a direction change the issue's own complaint says is easy to miss.",
+  "killedBy": [
+    "detonate: a destruction blasts instead of swelling (issue #230) carries a FATTER band, so weight separates the events as well as direction"
+  ]
+}

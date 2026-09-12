@@ -1,0 +1,14 @@
+{
+  "id": "converge-ring-swallows-the-tank",
+  "file": "src/render/spawn-anim.ts",
+  "find": "radius: reducedMotion ? 1 : 2.4 - 1.4 * p, opacity: p",
+  "replace": "radius: reducedMotion ? 1 : 2.4 - 2.4 * p, opacity: p",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "why": "The ring collapses to a point instead of landing on the tank's own footprint. Still converges, so the direction test passes; what changes is the READING -- a ring that shrinks past the tank and vanishes into it reads as the tank being consumed, which is closer to a death than to an arrival and defeats the arm's purpose while appearing to implement it.",
+  "killedBy": [
+    "converge: an arrival gathers instead of expanding (issue #230) lands on the tank rather than passing through it"
+  ]
+}

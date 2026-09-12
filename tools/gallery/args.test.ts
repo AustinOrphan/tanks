@@ -11,6 +11,7 @@ import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/presentat
 import { MOMENTS } from './moments';
 import { ELEMENTS, VIEWS, compose } from './subjects';
 import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
+import { ARRIVAL_LANGUAGES } from '../../src/presentation/arrival-language';
 
 const ESC = String.fromCharCode(27);
 
@@ -284,6 +285,29 @@ describe('gallery args', () => {
     for (const name of ringBearing) {
       expect(parseArgs(['--elements', name, '--identityMarker', 'shape']).identityMarker).toBe('shape');
     }
+  });
+
+  it('pins --arrival to the vocabulary the renderer actually owns', () => {
+    // The --identityMarker/--view pin, for issue #230's flag. args.mjs is .mjs and
+    // hardcodes the list; a language added to ARRIVAL_LANGUAGES without a change there
+    // would be refused by the CLI with a message naming a set that is no longer whole.
+    for (const language of ARRIVAL_LANGUAGES) {
+      expect(parseArgs(['--scene', 'respawn', '--arrival', language]).arrival).toBe(language);
+    }
+    expect(() => parseArgs(['--scene', 'respawn', '--arrival', 'converge']))
+      .toThrow(/--arrival must be one of/);
+  });
+
+  it('refuses --arrival on a scene that stages neither event', () => {
+    // The --identityMarker and --blocked-fire precedent. This language changes exactly
+    // two events, and the posed gallery has no sim timeline, so the flag there would
+    // shoot the shipped treatment and report success.
+    expect(() => parseArgs(['--elements', 'tank', '--arrival', 'opposed']))
+      .toThrow(/needs a scene that stages an arrival or a destruction/);
+    expect(() => parseArgs(['--scene', 'fire', '--arrival', 'opposed']))
+      .toThrow(/needs a scene that stages an arrival or a destruction/);
+    expect(parseArgs(['--scene', 'respawn', '--arrival', 'opposed']).arrival).toBe('opposed');
+    expect(parseArgs(['--scene', 'destroyed', '--arrival', 'opposed']).arrival).toBe('opposed');
   });
 
   it('rejects a --scene that is neither gallery/game nor a known moment', () => {

@@ -352,3 +352,83 @@ describe('death pulse under the reduced-motion policy (issue #289)', () => {
     }
   });
 });
+
+describe('detonate: a destruction blasts instead of swelling (issue #230)', () => {
+  /*
+   * The complement of spawn-anim.test.ts's converge block. The issue's complaint is that
+   * spawn and death are "hard to tell apart at normal speed"; converge changes where the
+   * ARRIVAL ring goes, and this changes how the DESTRUCTION ring gets there.
+   *
+   * Shipped growth and fade are both linear, which is a swell. These pin the three things
+   * that make it a blast -- front-loaded travel, an attack hold, and a fat band -- against
+   * the shipped arm as the negative control in every case.
+   */
+  function ring(opposed: boolean, seconds: number, reduced = false) {
+    const scene = new THREE.Scene();
+    const dp = createDeathPulseSystem(scene, opposed);
+    const deadTank = makeTank(1, 'player', 5, 8, { controlledBy: 0, alive: false });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 8 }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [deadTank], spawns, lives: 3 });
+    dp.setReducedMotion(reduced);
+    dp.spawn([destroyedEvent(1, 'player', 5, 8)], world, { enemyEnabled: false });
+    dp.update(seconds);
+    const m = deathRings(scene)[0];
+    return m
+      ? { scale: m.scale.x, opacity: m.material.opacity, present: true, mesh: m }
+      : { scale: 0, opacity: 0, present: false, mesh: null };
+  }
+
+  it('throws the ring out FRONT-LOADED, where the shipped one travels evenly', () => {
+    // Mutation this catches: dropping the ease-out and reusing the linear `k`. At a third
+    // of the life an eased ring has covered ~70% of its travel and a linear one exactly
+    // a third -- a blast is fast then slow, a swell is even.
+    const early = 0.6 / 3;
+    const blast = ring(true, early).scale;
+    const swell = ring(false, early).scale;
+    expect(blast).toBeGreaterThan(swell);
+    // ...and both still arrive at the same place, so this is envelope and not reach.
+    // Sampled just short of expiry, since the ring recycles exactly at its lifetime.
+    expect(ring(true, 0.599).scale).toBeCloseTo(ring(false, 0.599).scale, 1);
+  });
+
+  it('HOLDS at full brightness before it fades, which is the impact frame', () => {
+    // Mutation this catches: dropping the `k < ATTACK` branch. Without the hold the ring
+    // starts dimming on the first frame, and a fade that begins immediately reads as
+    // something leaving rather than something breaking.
+    const inAttack = 0.6 * 0.1; // inside ATTACK (0.18)
+    expect(ring(true, inAttack).opacity).toBe(1);
+    expect(ring(false, inAttack).opacity).toBeLessThan(1); // the shipped ring is already fading
+    // And it does fade afterwards -- a hold that never released would be a ring that
+    // vanishes at full brightness.
+    expect(ring(true, 0.6 * 0.5).opacity).toBeLessThan(1);
+  });
+
+  it('carries a FATTER band, so weight separates the events as well as direction', () => {
+    // Direction alone reads in a still frame and much less well at speed, which is exactly
+    // where the issue's complaint lives. Asserted on the geometry because the width is
+    // baked in at construction, not animated.
+    const fat = ring(true, 0.01).mesh!.geometry as THREE.RingGeometry;
+    const thin = ring(false, 0.01).mesh!.geometry as THREE.RingGeometry;
+    expect(fat.parameters.innerRadius).toBeLessThan(thin.parameters.innerRadius);
+    expect(fat.parameters.outerRadius).toBe(thin.parameters.outerRadius); // grown inward
+  });
+
+  it('keeps the attack under reduced motion while dropping the travel', () => {
+    // The rule the file already states, applied to the new arm. The hold is TIMING, not
+    // movement, and it is the thing that distinguishes the event -- calming a cue must not
+    // quietly delete what was being compared. #652's `.hud-capacity` trap, again.
+    const reduced = ring(true, 0.6 * 0.1, true);
+    expect(reduced.scale).toBe(1);
+    expect(reduced.opacity).toBe(1);
+    expect(ring(true, 0.6 * 0.5, true).opacity).toBeLessThan(1);
+  });
+
+  it('recycles on the same frame either way: the arm changes look, not pacing', () => {
+    // Same reasoning as the reduced-motion block above. If `opposed` also changed when a
+    // ring expired, an experiment flag would be altering felt pacing, and the owner's
+    // read on the LANGUAGE would be confounded by a read on the timing.
+    for (const seconds of [0.4, 1.0, 2.0]) {
+      expect(ring(true, seconds).present).toBe(ring(false, seconds).present);
+    }
+  });
+});

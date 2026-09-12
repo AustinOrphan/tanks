@@ -1,0 +1,14 @@
+{
+  "id": "converge-ring-ignores-the-reduced-motion-policy",
+  "file": "src/render/spawn-anim.ts",
+  "find": "  return { radius: reducedMotion ? 1 : 2.4 - 1.4 * p",
+  "replace": "  return { radius: 2.4 - 1.4 * p",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "why": "The new arm skipping the policy every other animator in this file honours (#289/#651). A converging ring is 1.4 world units of travel toward the player's own tank, which is more motion than the shipped entrance it replaces -- so an experimental flag would give a player who asked for less movement more of it, in the one place they are looking.",
+  "killedBy": [
+    "converge: an arrival gathers instead of expanding (issue #230) holds still under reduced motion without vanishing"
+  ]
+}
