@@ -1,0 +1,14 @@
+{
+  "id": "failure-screen-action-does-nothing",
+  "file": "src/boot.ts",
+  "find": "    action.addEventListener('click', () => deps.reload());",
+  "replace": "    void deps.reload;",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "The worse half of the entry above, and the reason `reload` is an injected seam rather than a direct `location.reload()`: a button that renders and does nothing is worse than no button, because the player spends their one idea on it and concludes the page is dead. The control is present, labelled and focusable under this mutation, so only pressing it can tell.",
+  "killedBy": [
+    "boot: the message itself OFFERS A WAY OUT, and the way out works"
+  ]
+}

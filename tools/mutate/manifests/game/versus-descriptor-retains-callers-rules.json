@@ -1,0 +1,14 @@
+{
+  "id": "versus-descriptor-retains-callers-rules",
+  "file": "src/game/app-state.ts",
+  "find": "  return Object.freeze({\n    kind: 'versus' as const,\n    rules: Object.freeze({\n      mode: rules.mode,\n      players: rules.players,\n      friendlyFire: rules.friendlyFire,\n      stock: rules.stock,\n      arenaSelection: rules.arenaSelection,\n    }),\n  });",
+  "replace": "  return Object.freeze({ kind: 'versus' as const, rules });",
+  "expect": "killed",
+  "why": "The pre-fix exported boundary. VersusRules is a plain interface and versusDescriptor is exported, so a caller can hand-build a structurally valid MUTABLE rules object, pass it in, and then keep editing it -- silently rewriting the retained intent of a session already in progress. Freezing only the wrapper does not close that; snapshotting the fields does. Note the mutation still freezes the DESCRIPTOR, so a test asserting only Object.isFrozen(d) cannot kill it: the killing assertion is the post-hoc mutation of the caller's own object. Scoped to app-state.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+  "tests": [
+    "src/game/app-state.test.ts"
+  ],
+  "killedBy": [
+    "SessionDescriptor construction versus rules -- retained intent is an immutable snapshot SNAPSHOTS an unvalidated mutable rules object -- the caller cannot alter it afterwards"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "perception-re-derived-from-the-old-field-with-a-fallback",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  const bounded = world.rules.aiTargetPerception === 'line-of-sight';",
+  "replace": "  const bounded = ((world as unknown as { aiTargetPerception?: string }).aiTargetPerception ?? 'full') === 'line-of-sight';",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-selection.test.ts"
+  ],
+  "why": "The consumer-side half of #471, kept as a regression class under #472: a consumer that reads a rule from where it USED to live (a top-level World field), through a fallback that turns the miss into the shipped default. The rule now lives only on World.rules, so this read always sees undefined, the line-of-sight bound is silently gone, and nothing throws -- which is the whole point of forbidding `??` at rule consumers. Caught by 2 of the 16 cases in target-selection.test.ts: 'acquires only what it can SEE, for a profile that does not bank' (direct commitTarget/resolveOpponent under the bound: wall-blind brown now acquires through the wall) and 'the bound survives a REAL TICK' (the same through stepInputs). The banking-profile case survives by construction (grey perceives what it could bank at, bound or no bound), and the 'full' control passes under the mutation because 'full' is exactly what the fallback produces -- it discriminates the other way.",
+  "killedBy": [
+    "committed opponent selection under the dev flag, acquires only what it can SEE, for a profile that does not bank",
+    "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it"
+  ]
+}

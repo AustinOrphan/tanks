@@ -1,0 +1,15 @@
+{
+  "id": "browser-deps-hardcodes-the-storage-namespace",
+  "file": "src/game/loop.ts",
+  "find": "    storageNamespace: appSettings.namespace,",
+  "replace": "    storageNamespace: 'production',",
+  "expect": "killed",
+  "why": "Labels every export 'production' regardless of the session, which is the issue #250 defect reintroduced in the wiring rather than the logic. createBrowserDeps is unpinned wiring that no gameplay test enters, so this is caught only by app-shell.test.ts calling it directly against a shell built on each namespace.",
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "killedBy": [
+    "createBrowserDeps: the storage namespace reaches the save API (issue #250) carries the namespace the settings owner resolved, both values",
+    "createBrowserDeps: the storage namespace reaches the save API (issue #250) is the SAME namespace the storage adapter is applying, not a second answer"
+  ]
+}

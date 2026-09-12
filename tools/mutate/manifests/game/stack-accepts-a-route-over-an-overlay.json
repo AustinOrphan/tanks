@@ -1,0 +1,12 @@
+{
+  "id": "stack-accepts-a-route-over-an-overlay",
+  "file": "src/game/navigation.ts",
+  "find": "      if (entry.kind === 'route' && top !== null && top.kind === 'overlay') return 'refused';",
+  "replace": "      void top;",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The refusal that keeps a full-screen destination from opening under a modal is deleted, so a route push while a confirmation is up succeeds: the Levels grid opens over the dialog the player was answering, and the next Back closes the grid and drops the player back INTO a confirmation they had already navigated away from. The LIFO order the module claims by construction (an overlay is always above every route) stops being true. Fails 1 of 15 in navigation.test.ts: `a route pushed over an open overlay is refused and the stack is unchanged`, at its `'refused'` assertion. The overlay-over-overlay control in the same case still passes, which is what shows the assertion is about the route/overlay pairing and not about any push over an overlay."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "route-host-haptics-toggle-reads-the-effective-value",
+  "file": "src/game/route-host.ts",
+  "find": "    hud.setHaptics(deps.settings.snapshot().input.deviceHaptics);",
+  "replace": "    hud.setHaptics(effective.deviceHaptics);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Reads the effective value for a control that EDITS the stored preference -- one of only two lines in this function that read the store rather than `effective`, which is what makes it the tempting edit. On a device without vibration the switch then shows forced-off, which reads as the preference having been erased: what issue #320 forbids. This was the code until #324, harmless only because the block ran on session-less pages where `loop.ts` corrected it; making the page the sole writer would have shipped it everywhere.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED haptics preference, not the effective one"
+  ]
+}

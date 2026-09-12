@@ -1,0 +1,12 @@
+{
+  "id": "history-mirror-drops-a-push-during-leaving",
+  "file": "src/game/navigation.ts",
+  "find": "      } else if (phase === 'leaving') {\n        phase = 'repush';\n      }",
+  "replace": "      } else if (phase === 'leaving') {\n        void phase;\n      }",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "`sync(d>0)` during a pending retirement no longer records `repush`, so when the traversal lands it is treated as a plain retirement and nothing is pushed for the layer the player opened meanwhile. That layer is then on screen with no sentinel under it: the next browser Back leaves the page instead of closing it. Fails 1 of 15 in navigation.test.ts: `a push during a pending retirement is honoured when the traversal lands`, first at the `'repush'` phase assertion and again at the landing's `host.calls`."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "route-host-settings-paint-skips-a-live-session",
+  "file": "src/game/route-host.ts",
+  "find": "    const effective = deps.effectiveSettings.current();\n    hud.setMuted(effective.muted);",
+  "replace": "    if (live !== null) return;\n    const effective = deps.effectiveSettings.current();\n    hud.setMuted(effective.muted);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Restores the early return this block carried until issue #324, when `loop.ts` pushed the same values from its own subscription and painting in both places meant two owners. #324 removed the session's push, which turns the guard from a courtesy into a hole: Settings is reachable DURING a match, so a preference changed there would not redraw for as long as the match lasted. The exact line a reader following the file's history would put back.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot"
+  ]
+}

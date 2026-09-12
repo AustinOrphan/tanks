@@ -1,0 +1,13 @@
+{
+  "id": "settings-future-payload-overwritten",
+  "file": "src/game/settings.ts",
+  "find": "    if (!lockedFuture) write(shadow);",
+  "replace": "    write(shadow);",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The future-schema lock. A payload whose `version` exceeds this build's is real data a NEWER build wrote; reinterpreting it field by field or overwriting it destroys settings this build cannot represent. Dropping the guard makes the next ordinary change stamp a version-1 payload over it. Killed by settings.test.ts's 'does NOT overwrite a future-schema payload', which asserts the RAW bytes are unchanged after a setter runs. 1 of 62 across the two declared files -- deliberately narrow: this is one specific byte-level property, and a broader failure population would mean some other test had started depending on the lock incidentally.",
+  "tests": [
+    "src/game/settings.test.ts",
+    "src/game/save.test.ts"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-glows-instead-of-obscuring",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "          transparent: true,\n          opacity: SMOKE.fired.peakOpacity,\n          depthWrite: false,\n        }),",
+  "replace": "          transparent: true,\n          opacity: SMOKE.fired.peakOpacity,\n          depthWrite: false,\n          blending: THREE.AdditiveBlending,\n        }),",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Makes the smoke additive, the treatment every other effect in this renderer uses for light. Additive smoke BRIGHTENS the felt and the hull behind it, which is the one thing smoke cannot do -- and since #536 it breaks the refusal outright, because under additive blending a near-black tint adds almost nothing, so the DARKER puff would be the invisible one and the ruling would invert. The geometry, the colour, the motion and the lifetime all stay correct under this, so only an assertion about the blend mode itself can see it.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) is not made of light: normally blended, and textured"
+  ]
+}

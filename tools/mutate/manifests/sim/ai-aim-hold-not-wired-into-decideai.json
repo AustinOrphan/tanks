@@ -1,0 +1,16 @@
+{
+  "id": "ai-aim-hold-not-wired-into-decideai",
+  "file": "src/sim/ai/index.ts",
+  "find": "    turretAngle: aim.angle,",
+  "replace": "    turretAngle: decision.turretAngle,",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/dispatch.test.ts"
+  ],
+  "why": "Pins the WIRING, not the helper: holdAimFor can be correct and fully unit-tested while decideAi quietly discards its result, which would leave every unit test in aim-hold.test.ts green and the shipped game completely unchanged. The write-back pair is deliberately left intact here so the mutation is a pure 'result ignored', not a type error. Failure count went 2 -> 3 when issue #371 added dispatch.test.ts's barrel-arrival case, which also depends on the held angle reaching the trigger.",
+  "killedBy": [
+    "aim hold (issue #344) a held aim does NOT suppress the firing solution: hasSolution still reads the fresh solve",
+    "aim hold (issue #344) decideAi returns the HELD aim angle, not the fresh solution, while the span is live",
+    "stepAi turret slew SEARCHES rather than holding the last angle when it has no line of sight (issue #371)"
+  ]
+}

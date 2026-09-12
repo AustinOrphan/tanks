@@ -1,0 +1,13 @@
+{
+  "id": "session-host-teardown-does-not-latch",
+  "file": "src/game/session-host.ts",
+  "find": "      stop();\n      spent = true;",
+  "replace": "      stop();",
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "Disposes the running session on page teardown but never latches, so the host will still build another one. Both reboot seams are already in a HUD click handler's hands when `pagehide` fires, and a click that lands in the same task then constructs a canvas, renderer, input controller and frame loop onto a document that is going away -- holding a GL context nothing will ever dispose. The teardown itself still looks correct, which is why nothing else notices. 2 of 54, both in session-host.test.ts: 'dispose() latches: a late reboot request starts no session on a dying page' and 'start() after dispose() starts nothing', the second because `start()` routes through the same guard. COUNT MOVED 2 -> 3 for issue #427: the empty-host case that fires a late `requestCampaignSession` AFTER dispose -- asserting the host stays empty rather than building a session onto a dying page -- is exactly what the latch prevents, so it detects this too. Re-measured on the tree, not predicted. COUNT RE-MEASURED for issue #428: 3 -> 2, because DOWN by one, and the reason is worth stating: a case that drove the latch through a Campaign return no longer builds a session there, so it stops discriminating on this mutation. The two that remain both drive `dispose()` directly. The failing SET was compared, not the number renumbered.",
+  "tests": [
+    "src/game/session-host.test.ts",
+    "src/boot.test.ts"
+  ]
+}

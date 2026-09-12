@@ -1,0 +1,12 @@
+{
+  "id": "route-host-continue-asks-for-a-new-run",
+  "file": "src/game/route-host.ts",
+  "find": "    requests.requestStart({ kind: 'campaign-continue' });",
+  "replace": "    requests.requestStart({ kind: 'campaign-new' });",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "Continue asks for a FRESH run. The most destructive single-token defect in this issue: a player resuming a campaign at level 8 silently has their run replaced with a level-one one, and the persistence write happens at the start boundary before anything is on screen to warn them. Both intents land on a playable campaign board, so nothing about the transition looks wrong. 1 of 25 -- 'Continue asks for the active campaign run'. The New Game case asserts the value this mutation hardcodes and keeps passing, which is the pair that makes either assertion mean anything."
+}

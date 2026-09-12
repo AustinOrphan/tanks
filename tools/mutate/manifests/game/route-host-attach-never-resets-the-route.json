@@ -1,0 +1,12 @@
+{
+  "id": "route-host-attach-never-resets-the-route",
+  "file": "src/game/route-host.ts",
+  "find": "      if (deps.launchGate.dismissed()) sm.toMainMenu();",
+  "replace": "      void deps.launchGate.dismissed();",
+  "expect": "killed",
+  "expectFailures": 2,
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The page-scoped state machine keeps whatever route the OUTGOING session left it on. Before this issue every Campaign<->Versus reboot built a fresh machine, which opened at Main Menu; a machine that now survives the reboot has to do that reset explicitly, or the incoming session is born mid-gameplay -- or at an outcome screen -- having never entered gameplay. That is the 'stale route state' issue #468's acceptance criteria name. 1 of 18, 'resets to Main Menu for a replacement session', which is the only case that drives the machine INTO gameplay before re-attaching. Re-measured at 2 of 75 for issue #324's step S7: the added case is the attach-ordering pin, which drives the same replacement and requires the route reset to actually paint before it can compare the two pushes. The original case still fails, so the failing SET was compared, not the number renumbered."
+}

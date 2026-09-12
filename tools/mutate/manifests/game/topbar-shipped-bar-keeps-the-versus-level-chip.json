@@ -1,0 +1,15 @@
+{
+  "id": "topbar-shipped-bar-keeps-the-versus-level-chip",
+  "file": "src/game/hud.ts",
+  "find": "    let sequence: GameplayStatus | null = inSequence?.kind === 'versus' ? null : inSequence;",
+  "replace": "    let sequence: GameplayStatus | null = inSequence;",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "The shipped versus bar carries `VS  Level: 1  P1 3  P2 3` -- the chip and the ordinal it was chosen to replace, side by side. The design the ruling adopted is that the VS chip TAKES the leading slot, not that a fourth reading joins the row. Reachable on exactly one session, `?dev=1&mode=ffa`, the only versus with a multi-level sequence, which is why nothing outside the arm suite sees it: a setup-pane match has no chip to keep. MEASURED on this branch: killed, 2 of the 12 cases in the arm suite.",
+  "killedBy": [
+    "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

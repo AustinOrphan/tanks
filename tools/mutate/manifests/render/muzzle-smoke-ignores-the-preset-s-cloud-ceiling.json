@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-ignores-the-preset-s-cloud-ceiling",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      if (active.length >= quality.maxClouds) {",
+  "replace": "      if (active.length >= FULL_MUZZLE_SMOKE.maxClouds) {",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Holds every preset to the full effect's ceiling, so the half of the cheapening aimed at the CROWDED frame stops working while the half aimed at the ordinary one keeps working. That is the failure mode worth pinning: a busy firefight is exactly when a frame is already expensive, and this leaves `medium` carrying 32 clouds there while every quiet-frame assertion about it still passes. The mutation reads a real constant of this file's own, so it looks like a tidy-up rather than a regression.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) takes its cloud ceiling from the preset, not from a constant of its own"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mutate-only-missing-names-just-the-first-id",
+  "file": "tools/mutate/run.mjs",
+  "find": "    missing: ids.filter((id) => !present.has(id)),",
+  "replace": "    missing: ids.filter((id) => !present.has(id)).slice(0, 1),",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Reports only the first unmatched id. The run still refuses, so the outcome looks right, but a reader fixes one typo, re-runs, and is stopped again by a second one the first refusal already knew about. \"Names the id\" has to mean every id in the list, which is the property the multi-id flag added and the single-id flag never had to have.",
+  "killedBy": [
+    "selectOnly / missingOnlyReport names EVERY id that matched nothing, not just the first -- one typo must not hide a second"
+  ]
+}

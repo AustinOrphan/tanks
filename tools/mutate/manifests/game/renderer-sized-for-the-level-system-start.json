@@ -1,0 +1,12 @@
+{
+  "id": "renderer-sized-for-the-level-system-start",
+  "file": "src/game/loop.ts",
+  "find": "  let shownBounds = deps.levels.bounds(level);\n",
+  "replace": "  let shownBounds = deps.levels.bounds(deps.levels.start);\n",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "The renderer is sized from the level system's own `start` instead of the level the START BOUNDARY chose. Those were the same level until issue #428; now New Game opens on level one while `start` is the saved run's level, and a Practice pick opens on the picked level, and the boot build never passes through `switchTo`'s refit. Seen in the browser as level one's 11x9 walls sitting in the corner of a 15x11 floor. 2 of 417 in loop.test.ts: the New Game and Practice-pick cases under \"born fitting the STARTED level\"; the Continue case is the negative control and passes either way."
+}

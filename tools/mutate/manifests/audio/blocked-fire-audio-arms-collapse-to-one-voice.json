@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-audio-arms-collapse-to-one-voice",
+  "file": "src/audio/director.ts",
+  "find": "          const voice = BLOCKED_FIRE_ARMS[cue] ?? BLOCKED_FIRE_BASELINE;",
+  "replace": "          const voice = BLOCKED_FIRE_BASELINE;",
+  "expect": "killed",
+  "tests": [
+    "src/audio/director.test.ts"
+  ],
+  "why": "Every audio arm plays the shipped click again, so issue #516's audio column becomes five flag values for one sound. The channel gate is untouched and the one-row-per-cue membership table still passes -- each arm DOES sound -- which is exactly why that table alone could not catch this: MEASURED, this mutation left all 18 of director.test.ts's tests green before the per-arm voice table was added, and fails only that table now. What it destroys is the comparison #356 exists to run.",
+  "killedBy": [
+    "blocked-fire cue (issue #356) gives each audio arm its OWN voice -- one row per arm (issue #516)"
+  ]
+}

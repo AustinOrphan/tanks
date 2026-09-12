@@ -1,0 +1,16 @@
+{
+  "id": "hud-move-focus-measures-nothing",
+  "file": "src/game/hud.ts",
+  "find": "      list.map((el) => ({ item: el, rect: measure(el) })),",
+  "replace": "      list.map((el) => ({ item: el, rect: { left: 0, top: 0, width: 0, height: 0 } })),",
+  "why": "The HUD must feed real rectangles to the spatial model; with empty rects every pane degrades to the document-order walk, and the pure module's tests cannot see that the HUD never measured. The drawn-layout tests in hud.test.ts are what catch it.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
+    "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
+    "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card"
+  ]
+}

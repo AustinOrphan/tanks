@@ -1,0 +1,14 @@
+{
+  "id": "mine-warning-haptics-lose-their-distance-gate",
+  "file": "src/game/haptics.ts",
+  "find": "        if (playerPos !== null && distance(e.pos, playerPos) <= MINE_DANGER_RADIUS) {\n          vibrate(MINE_TRIP_PATTERN_MS);",
+  "replace": "        if (playerPos !== null) {\n          vibrate(MINE_TRIP_PATTERN_MS);",
+  "expect": "killed",
+  "tests": [
+    "src/game/haptics.test.ts"
+  ],
+  "why": "Ungated, a mine tripped anywhere on the map buzzes this player's device -- the presence-only anti-pattern CLAUDE.md names, and the mechanism by which several simultaneous mines become the unbounded spam the issue asks us to prevent. The gate is also what makes the cue mean 'near YOU'.",
+  "killedBy": [
+    "mine warning haptics (issue #276) pulses the TRIP pattern inside the danger radius, and NOT outside it"
+  ]
+}

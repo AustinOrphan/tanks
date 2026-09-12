@@ -1,0 +1,14 @@
+{
+  "id": "hud-capture-focus-forgets-the-row",
+  "file": "src/game/hud.ts",
+  "find": "      (same ?? sameRow ?? controls[0])?.focus();",
+  "replace": "      (same ?? controls[0])?.focus();",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "When the focused candidate vanishes (its pad unplugged), focus must stay on that row rather than jump to the first row's first control.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the semantic action dispatcher (issue #494) focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not"
+  ]
+}

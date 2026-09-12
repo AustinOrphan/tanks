@@ -1,0 +1,14 @@
+{
+  "id": "failure-screen-is-not-announced",
+  "file": "src/boot.ts",
+  "find": "    page.setAttribute('role', 'alert');",
+  "replace": "    page.setAttribute('role', 'presentation');",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "The page is replaced with no navigation, so nothing tells a screen reader to read it again. Without the alert role a non-sighted player is left on a page that silently became something else, which is issue #325's 'announce state changes accessibly'. Entirely invisible to any assertion about text or structure.",
+  "killedBy": [
+    "boot: the message itself is ANNOUNCED and focused, not merely drawn"
+  ]
+}

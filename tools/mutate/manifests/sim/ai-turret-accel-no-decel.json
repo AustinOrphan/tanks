@@ -1,0 +1,14 @@
+{
+  "id": "ai-turret-accel-no-decel",
+  "file": "src/sim/ai/turret-accel.ts",
+  "find": "  const vDes = Math.sign(err) * Math.min(vMax, vStop);",
+  "replace": "  const vDes = Math.sign(err) * vMax;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/turret-accel.test.ts"
+  ],
+  "why": "Ramping IN without ramping OUT is a half-fix that still slams the turret to a halt at the end of every sweep -- the same discontinuity at the other end of the motion. vStop is the fastest speed from which the remaining error can still be shed at aMax, so dropping it means the turret arrives at full tilt and stops dead.",
+  "killedBy": [
+    "accelSlew decelerates on approach so it can stop ON the target, not past it"
+  ]
+}

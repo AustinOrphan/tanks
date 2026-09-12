@@ -1,0 +1,15 @@
+{
+  "id": "dev-url-builder-cannot-say-off",
+  "file": "src/game/dev-config.ts",
+  "find": "    if (value === undefined || value === null) return;",
+  "replace": "    if (value === undefined || value === null || value === false) return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config.test.ts"
+  ],
+  "killedBy": [
+    "devSearchFrom: BUILDING a developer URL (issue #623) emits an explicit off, because one flag defaults to ON",
+    "DEV_PRESETS (issue #623) every preset produces the flags it claims, through the real parser"
+  ],
+  "why": "Folds an explicit `false` into 'absent', which is the obvious-looking simplification and is wrong for exactly one flag. `sandboxDisarmed` is the single boolean whose default is TRUE (DEV_FLAGS_OFF, and parseDevFlags reads `params.has('disarmed') ? isOn(...) : true`), so absent and off are OPPOSITE values for it and this mutation makes an armed sandbox unexpressible -- silently, since the URL still builds and still parses. It is harmless for the other 31 booleans, which is what makes it easy to miss: the Armed Sandbox preset is the case that notices, and this was a real bug in the first draft of the function."
+}

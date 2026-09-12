@@ -1,0 +1,14 @@
+{
+  "id": "records-columns-still-called-a-run",
+  "file": "src/game/hud.ts",
+  "find": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Level attempt</th></tr></thead>'",
+  "replace": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">This run</th></tr></thead>'",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Restores the header issue #322 came to fix. The store has exactly two scopes -- `lifetime()` and `attempt()`, the latter zeroed on every world build -- and no run-sized tally at all, so this column has never held what it claimed. stats.ts's own doc names this exact string as the ambiguous use of `run` issue #153 asks to remove, which is why the fix is a rename and not a new measurement. Re-anchored when the column was renamed from \"Current attempt\" to \"Level attempt\" -- one scope, one name, matching the ending screens. RE-ANCHORED for issue #629, which rebuilt this header row out of <th scope=\"col\"> instead of <td> -- the column names moved but this entry's question did not, so the anchor follows them rather than the entry being retired.",
+  "killedBy": [
+    "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
+  ]
+}

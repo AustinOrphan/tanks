@@ -1,0 +1,14 @@
+{
+  "id": "hud-controller-rows-drop-focus-on-re-render",
+  "file": "src/game/hud.ts",
+  "find": "      container.appendChild(row);\n    }\n    restoreFocus();",
+  "replace": "      container.appendChild(row);\n    }",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "A hotplug or reassignment rebuilds the Controllers rows; without the restore the focused candidate is gone and focus falls to body.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the semantic action dispatcher (issue #494) focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not"
+  ]
+}

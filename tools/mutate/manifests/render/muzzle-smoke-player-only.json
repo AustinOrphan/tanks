@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-player-only",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      if (!owner || !owner.alive) continue;",
+  "replace": "      if (!owner || !owner.alive || owner.kind !== 'player') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Restores the player-only gate this had as a refusal arm, where it was correct: an enemy's REFUSAL would have reported the enemy's ammunition state to the player. That reason does not survive #536 -- firing is already visible, the shell is right there -- and the gate now produces enemy guns that fire clean while the player's smokes. A stale guard whose original justification has been removed is exactly the kind of thing a port forward reintroduces, and barrel-recoil-player-only records the identical mistake one file over.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) smokes EVERY living tank, enemies included, and never a dead one"
+  ]
+}

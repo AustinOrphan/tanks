@@ -1,0 +1,14 @@
+{
+  "id": "page-music-stops-following-the-game",
+  "file": "src/game/route-host.ts",
+  "find": "    followMusic(location);",
+  "replace": "    void location;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Removes the per-change half of the page's music ownership (issue #485), leaving the eager call at construction intact. The bed then starts in the menu suite and stays there forever: entering a match keeps the menu music, pausing never ducks, and finishing never returns. MEASURED: this mutation survived all 80 route-host cases before the 'FOLLOWS the game' case was written, because every other assertion about music reads the opening screen, which the eager call still paints. That is why the killer drives three location changes rather than asserting a call count.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "muzzle-smoke-ignores-the-billow-budget",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "    const billows = BILLOWS.slice(0, quality.billowsPerCloud).map((b) => {",
+  "replace": "    const billows = BILLOWS.map((b) => {",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Accepts the preset and then draws the whole table anyway -- the shape a revert takes when someone restores the pre-budget line and leaves the parameter threaded. Everything about the cloud is still correct: right place, right tint, right growth, right lifetime, right ceiling. What is gone is the only lever that reduces draw calls, since a SpriteMaterial per billow means the billow count IS the draw-call count, so `medium` becomes `high` wearing a smaller ceiling and the tier stops paying for itself.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) draws only as many billows per cloud as the quality preset asks for",
+    "muzzle smoke (issue #536, parent #356) takes its cloud ceiling from the preset, not from a constant of its own"
+  ]
+}

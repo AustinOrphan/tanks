@@ -1,0 +1,14 @@
+{
+  "id": "back-writes-the-retained-config",
+  "file": "src/game/hud.ts",
+  "find": "    setState(popped.origin);\n    applyModalIsolation();\n    restoreFocus(popped);",
+  "replace": "    setState(popped.origin);\n    applyModalIsolation();\n    restoreFocus(popped);\n    if (opts.versusSetup) opts.versusSetup.set({ ...versusConfigState });",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "Back writes the retained Versus Setup store on its way out. The issue's own criterion is that Back never changes persisted settings; this is the smallest write a Back could make and the spies in the callback sweep must see it. hud.navigation.test.ts (244): the callback-and-store sweep under \"navigation layers\", whose spy on `versusSetup.set` counts the write. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back fires no start, pick, reset, quit, pause, setup or open callback, leaves no reset armed, and writes nothing to the retained VS store"
+  ]
+}

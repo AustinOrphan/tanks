@@ -1,0 +1,18 @@
+{
+  "id": "gamepad-resync-does-not-suppress-fire",
+  "file": "src/input/gamepad.ts",
+  "find": "const fire = firePressed && !prevFire && !resyncPending;",
+  "replace": "const fire = firePressed && !prevFire;",
+  "expect": "killed",
+  "why": "The resync poll must adopt a held fire button as already-down; reporting the edge fires a shell on the first tick after a pad-confirmed Resume.",
+  "tests": [
+    "src/input/gamepad.test.ts",
+    "src/input/input.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadReader: resync (issue #494) a button already DOWN on the resync poll is adopted as held, not reported -- twin reader over the same pad is the control",
+    "createGamepadReader: resync (issue #494) a release then re-press after a resync fires again -- the adopted hold is an ordinary hold",
+    "createGamepadReader: resync (issue #494) createGamepadInputSource(...).resyncGamepad() forwards to its reader: a held A samples fire: false, and a re-press fires",
+    "createInputController \u2014 gamepad resyncGamepad(): an A already down on the resync sample is adopted as held and does not fire; a later fresh press does"
+  ]
+}

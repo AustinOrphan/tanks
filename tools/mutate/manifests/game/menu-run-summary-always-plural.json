@@ -1,0 +1,16 @@
+{
+  "id": "menu-run-summary-always-plural",
+  "file": "src/game/hud.ts",
+  "find": "    const lives = `${run.lives} ${run.lives === 1 ? 'life' : 'lives'} left`;",
+  "replace": "    const lives = `${run.lives} lives left`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "\"1 lives left\" at exactly the moment the number matters most. The summary exists to build confidence about a run the player is deciding whether to continue, and the last life is when it is read most carefully -- a wording defect there costs more trust than the same defect at three. Invisible to any assertion that only checks the line contains the number.",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) names the run it would replace",
+    "hud: the Main Menu hierarchy (issue #226) says \"1 life left\", and degrades to the lives half when the mission cannot be resolved"
+  ]
+}

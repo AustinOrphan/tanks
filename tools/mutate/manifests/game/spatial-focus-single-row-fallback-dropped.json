@@ -1,0 +1,25 @@
+{
+  "id": "spatial-focus-single-row-fallback-dropped",
+  "file": "src/game/spatial-focus.ts",
+  "find": "  if (rows.length === 1) {",
+  "replace": "  if (false) {",
+  "why": "With one row (every rect empty under jsdom, or a genuinely single-row pane) Up and Down would wrap onto the same row and land on the focused control: a dead end, and the pre-#495 keyboard walk that closes over every control would spin.",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/spatial-focus.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) leaves ArrowLeft/ArrowRight on the preview canvas for its own rotation scheme",
+    "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
+    "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Settings, then Controllers, then Quit from the pause panel",
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+    "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert",
+    "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
+    "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
+    "hud: the semantic action dispatcher (issue #494) a direction walks the active panel like the arrows do, and reports unconsumed with nothing shown",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly",
+    "spatial-focus: no layout to follow (every rect empty, as jsdom reports) Up and Down walk document order and wrap, the pre-#495 cycle",
+    "spatial-focus: no layout to follow (every rect empty, as jsdom reports) a genuinely single visual row behaves the same way -- the negative control for the fallback"
+  ]
+}

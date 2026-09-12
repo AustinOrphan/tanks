@@ -1,0 +1,14 @@
+{
+  "id": "compare-reports-cleanup-clean-before-it-ran",
+  "file": "tools/compare/orchestrate.mjs",
+  "find": "  return { ...result, cleanupFailures };",
+  "replace": "  return { ...result, cleanupFailures: [] };",
+  "expect": "killed",
+  "tests": [
+    "tools/compare/orchestrate.test.ts"
+  ],
+  "why": "Reports every run as having cleaned up. A leaked worktree needs a human and makes the command exit non-zero, so swallowing that is the failure mode this tool can least afford -- and it is the exact bug the original code had by returning from inside the try block, where the value was fixed before the finally block ran.",
+  "killedBy": [
+    "compareRefs: cleanup surfaces a cleanup failure to the caller instead of reporting a clean run"
+  ]
+}

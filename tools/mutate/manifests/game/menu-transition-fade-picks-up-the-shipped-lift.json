@@ -1,0 +1,16 @@
+{
+  "id": "menu-transition-fade-picks-up-the-shipped-lift",
+  "file": "src/game/hud.css",
+  "find": ".hud--menu-transition-fade .ui-surface--entering:not(.hud-splash) > *,\n.hud--menu-transition-fade-long .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+  "replace": ".hud--menu-transition-fade-long .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+  "expect": "killed",
+  "why": "The one way back to the pre-#542 transition quietly stops being one. `fade` drops out of the opacity-only pair, so it inherits the shipped lift and becomes a second name for the default -- while the flag, the registry, the generated doc and every structural check still say it is the old behaviour. This is the defect the whole rule exists to prevent, and it is the one the owner's ruling created: `fade` used to be the treatment with NO rule, reproducing the shipped path by construction, and adoption turned it into a rule that can drift. Nobody would notice from the game -- the transition would look right, because it would be the new one -- and the report it exists to answer ('did the new default cause this?') would come back 'no' every time. Scoped to menu-transition.test.ts, whose fade case pins the pre-#542 values as literals rather than diffing against a no-flag path that no longer means what it did.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menuTransition: `fade` still reproduces the pre-#542 transition crossfades at the shipped duration and moves no content at all",
+    "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag",
+    "menu transitions in hud.css gives the SHIPPED treatment no rule of its own, and every other one at least one"
+  ]
+}

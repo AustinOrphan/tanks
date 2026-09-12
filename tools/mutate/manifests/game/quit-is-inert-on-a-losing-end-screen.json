@@ -1,0 +1,15 @@
+{
+  "id": "quit-is-inert-on-a-losing-end-screen",
+  "file": "src/game/loop.ts",
+  "find": "    if (!sm.isPaused && !sm.hasOutcome) return;",
+  "replace": "    if (!sm.isPaused && !sm.presentsAsWin) return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The guard exactly as it shipped, and as it stayed through PR #563 -- which put the Main Menu button on every end screen in `hud.ts` and changed no handler. The result was a button that was visible, focusable and did nothing on all three losing endings: a campaign game-over, a failed practice level and a versus draw. That is the stranding issue #323 opened about, moved one layer down, and no test in this file reached it because every quit case drove the handler from `paused` or from `outcome-win`. It is also what Choose Level rides on, so this breaks the practice end screen's other action with it.",
+  "killedBy": [
+    "startGameWith: leaving a CLEARED level for the main menu keeps the run also reaches the Main Menu from a LOST match, which is where it was inert",
+    "startGameWith: canonical session identity at the production boundary Practice LEAVING Practice cannot retain a Practice descriptor on a campaign board"
+  ]
+}

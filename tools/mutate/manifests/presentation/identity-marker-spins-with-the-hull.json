@@ -1,0 +1,12 @@
+{
+  "id": "identity-marker-spins-with-the-hull",
+  "file": "src/presentation/identity-marker.ts",
+  "find": "  return bodyAngle;",
+  "replace": "  return 0;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/render/identity-marker.test.ts"
+  ],
+  "why": "Stops the counter-rotation, so the marker spins with the hull again -- which is what it did before issue #630 noticed, and is invisible for the circular annulus that shipped. It is fatal for BOTH candidates: slots 3 and 4 of the shape style are the same 4-gon 45 degrees apart, so a spinning marker makes the square and the diamond one marker wearing two names for most of every match. The failure mode this guards is specifically NOT a crash or a blank screen -- it is a marker that looks fine in a still and is unreadable in play, which no unit assertion on geometry alone can see. Killed by the holds-a-marker-vertex-at-a-fixed-world-position case, which composes the real parent/child matrices at seven body angles rather than trusting the sign; its negative control proves the same case fails when the counter-rotation is absent, so this entry cannot be killed by an accidentally symmetric marker."
+}

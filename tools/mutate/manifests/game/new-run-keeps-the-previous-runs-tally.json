@@ -1,0 +1,14 @@
+{
+  "id": "new-run-keeps-the-previous-runs-tally",
+  "file": "src/game/loop.ts",
+  "find": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;\n      // The run's TALLY starts over with the run itself. Paired at every `startNewRun`\n      // call rather than folded into the run store, because run.ts is a pure key-value\n      // store that deliberately knows nothing about statistics.\n      deps.stats.startRun();",
+  "replace": "      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the start boundary (issue #428) campaign-new lands on level one and writes the run exactly once"
+  ],
+  "why": "Replaces the run record without replacing its tally, so the new campaign's end screen reports the previous campaign's numbers on top of its own. The pairing is a convention rather than something the type system enforces -- run.ts is a pure key-value store that deliberately knows nothing about statistics -- so nothing but this test holds the two `startNewRun`/`startRun` call sites together. An earlier version wrapped the call in `if (false)` and left a dangling statement the suite could not even collect; deleting the line is the mutation a real revert would make. Pinned at the START BOUNDARY, which is a different call site from the in-session New Game button's: an earlier version of this entry was declared against a test driving `hud.newGame()` and SURVIVED, because that path reaches a different `startNewRun` altogether. Three call sites, and each needs its own net."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "reduced-motion-cancels-a-cue-that-rests-invisible",
+  "file": "src/game/hud.css",
+  "find": ".hud--reduced-motion .hud-capacity--flash {\n  animation-name: hud-capacity-flash--still;",
+  "replace": ".hud--reduced-motion .hud-capacity--flash {\n  animation: none;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.css.test.ts",
+    "src/game/menu-transition.test.ts"
+  ],
+  "why": "The plausible-looking wrong fix, and the one the shipped stylesheet's own comment warns against: `.hud-capacity` rests at `opacity: 0`, so cancelling its animation does not calm the blocked-fire cue -- it DELETES it. A player with reduced motion would simply never learn why their shot was refused. Reads as a tidier rule than the motionless keyframe set it replaces, which is what makes it the likely edit. Killed by the never-answers-by-cancelling case, which is written about the two cues that rest invisible rather than about this one line."
+}

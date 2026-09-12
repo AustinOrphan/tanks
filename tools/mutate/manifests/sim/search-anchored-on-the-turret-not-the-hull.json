@@ -1,0 +1,15 @@
+{
+  "id": "search-anchored-on-the-turret-not-the-hull",
+  "file": "src/sim/ai/search.ts",
+  "find": "  return tank.bodyAngle + draw * AI_SEARCH_SWEEP;",
+  "replace": "  return tank.turretAngle + draw * AI_SEARCH_SWEEP;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/search.test.ts"
+  ],
+  "why": "Anchoring on the turret makes the target chase the barrel: the aim-hold layer sees a solution that moves every tick as the turret slews toward it, breaks its hold and re-solves, reintroducing the per-tick chasing issue #344 removed. The bound also stops meaning anything, since it is then measured from a moving reference.",
+  "killedBy": [
+    "idle turret search heading does not move when only the TURRET moves",
+    "idle turret search heading stays inside the sweep of the HULL angle, at every tick of a long run"
+  ]
+}

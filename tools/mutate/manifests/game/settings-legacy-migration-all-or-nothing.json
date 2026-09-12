@@ -1,0 +1,12 @@
+{
+  "id": "settings-legacy-migration-all-or-nothing",
+  "file": "src/game/settings.ts",
+  "find": "          touchScheme: legacy.scheme ?? DEFAULT_TOUCH_SCHEME,",
+  "replace": "          touchScheme: legacy.fireMode === null ? DEFAULT_TOUCH_SCHEME : (legacy.scheme ?? DEFAULT_TOUCH_SCHEME),",
+  "expect": "killed",
+  "expectFailures": 5,
+  "why": "Migration rule 3: a valid legacy field survives a malformed sibling. This makes a corrupt `fireMode` also discard a perfectly good `scheme` -- the all-or-nothing read that `tanks.touch.v1`'s own store was written to avoid (touch-settings.ts's original comment) and that the migration has to carry forward. Killed by settings.test.ts's per-field corruption sweep, whose fixtures put every value OFF its default so a defaulted answer cannot pass by coincidence. 5 of 41 in settings.test.ts.",
+  "tests": [
+    "src/game/settings.test.ts"
+  ]
+}

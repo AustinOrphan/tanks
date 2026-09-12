@@ -1,0 +1,16 @@
+{
+  "id": "versus-slot-seeding-ignores-the-descriptor",
+  "file": "src/game/loop.ts",
+  "find": "  if (versusSlots) return resolveSources(versusSlots, connectedPads);",
+  "replace": "  if (versusSlots && false) return resolveSources(versusSlots, connectedPads);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "This exact mutation SURVIVED the whole suite before the seam was extracted -- measured, not supposed. Without the VS branch a versus session falls back to the derived positional rule, so bots land in the LAST slots regardless of where the player put them and the pane's displayed assignment is silently discarded at Start. That is the precise defect issue #260 opens with, and it is invisible to every test that only checks a match starts.",
+  "killedBy": [
+    "seedAssignment: the two entry paths (issue #260) VS: ignores the derived bot COUNT entirely",
+    "seedAssignment: the two entry paths (issue #260) VS: leaves a human with no controller as none, so the gate can name it",
+    "seedAssignment: the two entry paths (issue #260) VS: takes the roles from the descriptor, at the positions the player chose"
+  ]
+}

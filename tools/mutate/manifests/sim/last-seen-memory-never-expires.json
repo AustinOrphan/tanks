@@ -1,0 +1,17 @@
+{
+  "id": "last-seen-memory-never-expires",
+  "file": "src/sim/ai/target-memory.ts",
+  "find": "  tank.aiLastSeenTicks = Math.max(0, (tank.aiLastSeenTicks ?? 0) - 1);",
+  "replace": "  tank.aiLastSeenTicks = Math.max(1, (tank.aiLastSeenTicks ?? 0));",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-memory.test.ts"
+  ],
+  "why": "A memory that never ages is a permanent contact: the tank keeps its turret on a point it observed once and never hands off to issue #371's search, which is the 'bounded' half of #372's title.",
+  "killedBy": [
+    "last-seen contact memory EXPIRED: the contact is dropped after exactly its span, not before",
+    "last-seen contact memory REACQUIRED: fresh sight replaces the remembered point outright and re-arms the span",
+    "last-seen contact memory REMEMBERED: the point FREEZES when sight breaks, and does not follow the target",
+    "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+  ]
+}

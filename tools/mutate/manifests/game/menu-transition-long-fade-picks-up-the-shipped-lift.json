@@ -1,0 +1,14 @@
+{
+  "id": "menu-transition-long-fade-picks-up-the-shipped-lift",
+  "file": "src/game/hud.css",
+  "find": ".hud--menu-transition-fade .ui-surface--entering:not(.hud-splash) > *,\n.hud--menu-transition-fade-long .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+  "replace": ".hud--menu-transition-fade .ui-surface--entering:not(.hud-splash) > * {\n  animation: none;\n}",
+  "expect": "killed",
+  "why": "The same defect on the other opacity-only treatment, and worth its own entry because what it destroys is different: `fade-long` would become 'the shipped movement, but slower', which is precisely the confound it was built to rule out. Re-running issue #542's comparison with it would then credit duration for movement's effect -- the one wrong answer the treatment exists to prevent -- and its timing check would still pass, because the duration token is untouched and only the CONTENT animation moves.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag"
+  ]
+}

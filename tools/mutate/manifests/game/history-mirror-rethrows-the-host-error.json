@@ -1,0 +1,12 @@
+{
+  "id": "history-mirror-rethrows-the-host-error",
+  "file": "src/game/navigation.ts",
+  "find": "    try {\n      fn();\n    } catch {\n      active = false;\n      phase = 'absent';\n    }",
+  "replace": "    fn();",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "`safe` becomes a bare call, so a `SecurityError` from a rate-limited `pushState` (Safari, Firefox) propagates out of `sync` into the owner's keydown or click handler as an uncaught page error, the layer being opened never finishes opening, and the mirror never latches off so every later layer throws again. Fails 1 of 15 in navigation.test.ts: `a host whose pushState throws disables the mirror, never rethrows, and later syncs and pops are inert`, at its `not.toThrow()`."
+}

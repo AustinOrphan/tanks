@@ -1,0 +1,14 @@
+{
+  "id": "mutate-run-summary-drops-the-requested-count",
+  "file": "tools/mutate/run.mjs",
+  "find": "  const asked = requested > 0 ? ` of ${requested} requested by --only` : '';",
+  "replace": "  const asked = '';",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Restores the closing line issue #529 was reported against: ran over selected with no requested count beside it. Every number in the line stays correct, which is the point -- \"1/1 mutation(s) ran, 0 mismatch(es)\" is true and useless when three entries were asked for. The requested count is the only thing that makes an under-run legible.",
+  "killedBy": [
+    "formatRunSummary prints the requested count BESIDE the ran/selected pair when --only was used (issue #529)"
+  ]
+}

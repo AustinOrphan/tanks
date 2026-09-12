@@ -1,0 +1,14 @@
+{
+  "id": "mutate-only-flag-overwrites-repeats",
+  "file": "tools/mutate/run.mjs",
+  "find": "    else if (argv[i] === '--only') args.only.push(...onlyIds(value(i++)));",
+  "replace": "    else if (argv[i] === '--only') args.only = onlyIds(value(i++));",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Issue #529 verbatim: the last --only occurrence wins and every earlier one is discarded. `--only a --only b --only c` then runs one entry and reports \"1/1 mutation(s) ran ... 0 mismatch(es)\", a line no reader can tell from a clean sweep of all three. Assignment is exactly what this flag did before the fix, so this is the regression the accumulation exists to prevent rather than an invented one.",
+  "killedBy": [
+    "parseArgs ACCUMULATES repeated --only instead of keeping the last one (issue #529)"
+  ]
+}

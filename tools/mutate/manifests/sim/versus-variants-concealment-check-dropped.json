@@ -1,0 +1,12 @@
+{
+  "id": "versus-variants-concealment-check-dropped",
+  "file": "src/sim/versus-variants.ts",
+  "find": "      if (lineOfSight(positions[i], positions[j], walls)) return false;",
+  "replace": "      lineOfSight(positions[i], positions[j], walls); // concealment check dropped",
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "isVariantSuitable must reject a candidate where any spawn pair keeps mutual line of sight -- discarding the lineOfSight result instead of gating on it makes every candidate read as concealment-clean regardless of the real geometry, so pickVersusVariantGrid never retries and never falls back. Caught by 2 of 25 in versus-variants.test.ts: the seed-7920/arena-03/fraction-0.7 retry test (the first, unsuitable draw is now accepted immediately, so the picked grid never diverges from it) and the full-exhaustion fallback test (the always-unsuitable synthetic fixture is now accepted on attempt 0, so the result is no longer reference-equal to the authored grid).",
+  "tests": [
+    "src/sim/versus-variants.test.ts"
+  ]
+}

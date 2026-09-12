@@ -1,0 +1,14 @@
+{
+  "id": "mine-fuse-warning-dropped",
+  "file": "src/sim/mines.ts",
+  "find": "    if (!mine.fuseWarned && mine.timer <= MINE_FUSE_WARNING_TICKS * DT) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/mines.test.ts"
+  ],
+  "why": "The fuse's final-window warning is the whole fuse half of issue #275 (owner-revised): `mine-fuse-warning` must fire once as `timer` crosses into the last MINE_FUSE_WARNING_TICKS, with expiry timing untouched -- it is the event #276's time-is-running-out cue keys off. Suppressing the crossing is killed by the final-window fixture, which pins the event's exact call and its once-only count.",
+  "killedBy": [
+    "source-specific mine warnings (issue #275, owner-revised on PR #311) the fuse warning occupies the fuse's FINAL stretch: one event when timer crosses in, detonation exactly when it always was"
+  ]
+}

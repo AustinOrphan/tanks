@@ -1,0 +1,23 @@
+{
+  "id": "leaving-surface-still-counted-as-open",
+  "file": "src/game/hud.ts",
+  "find": "    return !surface.el.classList.contains(surface.hidden) && !surface.el.classList.contains(LEAVING);",
+  "replace": "    return !surface.el.classList.contains(surface.hidden);",
+  "expect": "killed",
+  "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at hud.controls.test.ts once #318's layer cases joined the file: both Escape cases and the fake-host mirror case also count a close callback that this mutation doubles. Pinned by name since the hud suite was split (issue #511); its killers live in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts.",
+  "tests": [
+    "src/game/hud.controls.test.ts",
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract leaks no timers and fires no duplicate callbacks under repeated fast navigation",
+    "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+    "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed",
+    "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) onControllersOpen/onControllersClose fire once per ACTUAL transition, matching onCustomizeOpen/Close's own contract",
+    "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+    "hud: the paint shop fires onCustomizeOpen/onCustomizeClose exactly on the Back-button round trip",
+    "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
+    "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+  ]
+}

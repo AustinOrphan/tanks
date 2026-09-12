@@ -1,0 +1,15 @@
+{
+  "id": "ai-aim-jitter-step",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  const eased = t * t * (3 - 2 * t);",
+  "replace": "  const eased = 0;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "Pins issue #222 AC2. Forcing the easing factor to 0 holds each bucket's own draw for the whole bucket and teleports at the boundary -- byte-for-byte the pre-fix behaviour, whose measured signature was a median 4.0-5.4 degree aim-target move on boundary ticks against 0.11-0.18 degrees elsewhere (P95 boundary step 23.19 degrees, ~10 ticks of AI_TURRET_TURN_RATE slew to absorb). Killed by the adjacent-tick continuity bound.",
+  "killedBy": [
+    "aimJitter drift across a bucket (issue #222) never moves the aim offset by half a spread in one tick, across two whole buckets",
+    "aimJitter drifts within a bucket, arriving near the next bucket's draw by its last tick"
+  ]
+}

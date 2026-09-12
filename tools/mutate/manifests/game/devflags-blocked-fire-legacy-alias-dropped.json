@@ -1,0 +1,16 @@
+{
+  "id": "devflags-blocked-fire-legacy-alias-dropped",
+  "file": "src/game/devflags.ts",
+  "find": "  if (isBlockedFireCue(raw)) return raw;\n  return LEGACY_BLOCKED_FIRE_SPELLINGS.get(raw) ?? null;",
+  "replace": "  return isBlockedFireCue(raw) ? raw : null;",
+  "why": "The properly encoded legacy spellings (`ring%2Baudio`, `haptic%2Baudio`) must keep selecting their cue after the rename to the hyphenated canonical values (issue #497); dropping the alias lookup silently breaks every pre-#497 bookmark.",
+  "tests": [
+    "src/game/devflags.test.ts",
+    "src/game/dev-config.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "canonicalDevSearch round trips every blockedFire cue, spelled as documented, and the encoded legacy spellings (issue #497)",
+    "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) the properly encoded legacy spellings stay accepted as aliases of the canonical cue"
+  ]
+}

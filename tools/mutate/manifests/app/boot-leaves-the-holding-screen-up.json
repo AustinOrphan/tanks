@@ -1,0 +1,14 @@
+{
+  "id": "boot-leaves-the-holding-screen-up",
+  "file": "src/boot.ts",
+  "find": "    deps.root.querySelector(`#${BOOT_LOADING_ID}`)?.remove();",
+  "replace": "    void BOOT_LOADING_ID;",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "`index.html` paints a 'Tanks!' holding card before any script runs (issue #325), and this line is the only thing in the bundle that can remove it. Left up, it covers a working Main Menu on every successful boot -- the loudest possible regression, and one no unit test would see by accident, because every harness here builds its own empty root rather than serving the real markup. That is why the killer plants the element and why a second case asserts `index.html` still carries the id.",
+  "killedBy": [
+    "boot: the message itself RETIRES the markup holding screen once the route UI exists"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "reduced-motion-class-never-reaches-the-root",
+  "file": "src/game/hud.ts",
+  "find": "      el.classList.toggle('hud--reduced-motion', on);",
+  "replace": "      el.classList.toggle('hud--reduced-motion', false);",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Severs the stylesheet from the resolved policy while leaving `transitionMs()` intact, so a player who asks for reduced motion gets their TRANSITIONS calmed and every keyframe ANIMATION still running -- the damage vignette, the life-loss pulse, the splash pulse, the countdown pop. Exactly the split the shipped code had before issue #631, except the OS query no longer papers over it. Invisible to any test that reads hud.css text, because the stylesheet is correct under this mutation; only an assertion on the ROOT ELEMENT after `setReducedMotion(true)` can see it."
+}

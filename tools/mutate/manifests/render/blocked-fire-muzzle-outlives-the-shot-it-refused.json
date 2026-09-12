@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-muzzle-outlives-the-shot-it-refused",
+  "file": "src/render/blocked-fire-muzzle.ts",
+  "find": "const LIFETIME_SECONDS = 0.07;",
+  "replace": "const LIFETIME_SECONDS = 0.3;",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-muzzle.test.ts"
+  ],
+  "why": "`muzzle` is 'the shot's own visual, CUT SHORT' (issue #516's wording), and the cut is the whole distinction from a real discharge: a real fire burst's particles live 0.18s and travel. At 0.3s the refusal blazes longer than the shot it stands in for, which is both a wrong cue and, at a held trigger against a full cap, visual noise of exactly the kind #356 forbids. Duration is a feel constant, so this is pinned as a BOUND rather than an exact value -- the test asserts the flash is gone inside a tenth of a second.",
+  "killedBy": [
+    "blocked-fire muzzle flash (issue #516, parent #356) is CUT SHORT: it collapses and fades, and is gone inside a tenth of a second"
+  ]
+}

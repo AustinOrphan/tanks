@@ -1,0 +1,12 @@
+{
+  "id": "roundtrip-probe-serves-files-outside-dist",
+  "file": "tools/visual/serve-path.mjs",
+  "find": "  if (file !== root && !file.startsWith(root + sep)) return null;\n",
+  "replace": "  // the resolved path is trusted\n",
+  "tests": [
+    "tools/visual/serve-path.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 4,
+  "why": "Drops the containment check entirely, leaving the resolve to escape the root the way the original join did. A raw socket sending GET /../outside.txt was measured being answered 200 with a file from outside dist. Reachability is the part worth writing down: a normalising client CANNOT get there, because WHATWG URL resolution collapses both .. and %2e%2e before the request leaves, so fetch('/../x') arrives as /x. A test driven through fetch would therefore pass against the unhardened handler and prove nothing -- the assertions sit on the resolver directly for that reason. 4 of 9 fail, the four escape shapes."
+}

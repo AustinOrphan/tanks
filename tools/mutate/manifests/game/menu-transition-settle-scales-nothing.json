@@ -1,0 +1,14 @@
+{
+  "id": "menu-transition-settle-scales-nothing",
+  "file": "src/game/hud.css",
+  "find": "@keyframes ui-surface-settle-content {\n  from {\n    transform: scale(0.94);\n  }",
+  "replace": "@keyframes ui-surface-settle-content {\n  from {\n    transform: scale(1);\n  }",
+  "expect": "killed",
+  "why": "The same defect on the movement that was NOT adopted, and worth its own entry because the identity is spelled differently: `scale(1)` rather than a zero translate, so a guard written only against `translateY(0)` would let this through. `settle` stays selectable so `rise` can be re-compared against the alternative it beat rather than against a second copy of itself, which is exactly what a scale of 1 would make it.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menu transitions in hud.css gives each movement its keyframes, moving for real and ending at no transform at all"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "angle-pin-passes-every-architecture",
+  "file": "tools/baseline/angles.ts",
+  "find": "  if (!VERIFIED_ANGLE_ARCHITECTURES.includes(arch)) return { kind: 'unverified', arch, actual };",
+  "replace": "  if (true) return { kind: 'unverified', arch, actual };",
+  "expect": "killed",
+  "tests": [
+    "tools/baseline/angles.test.ts"
+  ],
+  "killedBy": [
+    "angle probe does not treat an unverified architecture as a verified pass"
+  ],
+  "why": "Turns issue #484's fix into the defect it was supposed to avoid: EVERY architecture becomes unverified, so the native V8 fingerprint is never asserted anywhere and a real regression in the sweep, the hashing or V8 itself reports as a diagnostic line. The x86-64 pin is the whole point of keeping the probe -- the ruling weakens it on unverified architectures ONLY. Nothing else catches this: the fingerprint case still passes (it takes the reporting branch and asserts only that the digest is 64 hex digits), and the vendored pin is untouched and green. Killed only by the case that feeds the classifier synthetic (arch, hash) pairs, which exists because `process.arch` is whatever the box is and the arm64 branch cannot otherwise be reached."
+}

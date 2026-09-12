@@ -1,0 +1,16 @@
+{
+  "id": "legal-link-drops-the-roving-tabindex",
+  "file": "src/game/legal.ts",
+  "find": "    a.tabIndex = 0;",
+  "replace": "    a.tabIndex = -1;",
+  "expect": "killed",
+  "tests": [
+    "src/game/legal.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "the outbound legal links is a link, opens safely, and says so in its name",
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone"
+  ],
+  "why": "Spelled as the plausible slip -- \"take it out of the tab order\" -- rather than as a deletion, which the manifest schema refuses anyway. It takes both outbound destinations away from the gamepad and the D-pad while leaving them perfectly clickable by mouse and reachable by Tab -- so the defect is invisible to a person testing with a keyboard and a pointer, and it is exactly half of issue #117's \"touch/controller accessible\" criterion. The mechanism is one line in hud.ts: `focusableControls` selects `'button, [tabindex]'`, and a bare `<a href>` matches neither, native focusability notwithstanding. MEASURED: with this line removed the roving walk's control count drops from 85 to 83, which is the second case's failure."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "render-capability-resolves-its-host-outside-the-try",
+  "file": "src/game/render-capability.ts",
+  "find": "export function probeRenderCapability(host?: RenderCapabilityHost): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host ?? (globalThis.document as RenderCapabilityHost | undefined);",
+  "replace": "export function probeRenderCapability(\n  host: RenderCapabilityHost = globalThis.document,\n): RenderCapability {\n  let gl: ProbeContextLike | null | undefined;\n  try {\n    const resolved = host;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The defect raised by review on PR #474, as the exact code that was there. A default PARAMETER is evaluated in the parameter list, before the function body and therefore outside the try -- so a locked-down context whose `document` getter throws throws out of the probe instead of reporting `probe-failed`, defeating the one distinction this module's return type exists to make. Every other property access here is wrapped for exactly that case, and this was the one that was not. Invisible to every injected-host test by construction: the default is what an injected host BYPASSES, so only a case that drives the real `globalThis.document` through a throwing getter can see it. 1 of 16 -- 'reports probe-failed when reading the default document throws', which was written for this and confirmed to fail against the reverted code before the fix landed. Its sibling 'when there is no document at all' keeps passing under this mutation, because an ABSENT property yields undefined rather than throwing; the two guard different halves and neither stands in for the other.",
+  "tests": [
+    "src/game/render-capability.test.ts"
+  ],
+  "reads": [
+    "package.json"
+  ]
+}

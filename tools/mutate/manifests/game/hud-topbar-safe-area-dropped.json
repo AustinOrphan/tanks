@@ -1,0 +1,15 @@
+{
+  "id": "hud-topbar-safe-area-dropped",
+  "file": "src/game/hud.css",
+  "find": "max(var(--hud-topbar-pad-y), env(safe-area-inset-top))",
+  "replace": "var(--hud-topbar-pad-y)",
+  "expect": "killed",
+  "why": "The topbar's top inset is what keeps the score row out from under a portrait status bar / Dynamic Island. CSS is typechecked by nothing and read by no other test, so dropping this is invisible everywhere else -- the same class of silent loss that killed the losing-a-life vignette. Two tests fail: the presence check and the single-source-of-padding check, which reads the same declaration.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole keeps the HUD clear of display cutouts and the home-indicator strip",
+    "hud.css is syntactically whole lets no later rule quietly override the safe-area insets"
+  ]
+}

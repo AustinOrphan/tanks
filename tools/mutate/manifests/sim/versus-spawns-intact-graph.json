@@ -1,0 +1,12 @@
+{
+  "id": "versus-spawns-intact-graph",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "  return legend[ch] !== 'solid';",
+  "replace": "  return legend[ch] !== 'solid' && legend[ch] !== 'destructible';",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The geodesic graph spawn separation is measured on must treat a DESTRUCTIBLE cell as traversable -- the breached phase, the same both-wall-phases discipline spawnBlockRobust already applies in arena-claims.ts. A destructible wall is temporary by construction, so two spawns separated only by one are not separated for the length of a match. Reverting to the intact graph is not merely a different-but-equivalent reading: measured over all 5 shipped arenas x counts 2/3/4, it puts arena-02's 4-player spawns 2.67 world units apart either side of the centre barrier that level is designed to blow open. Caught by 1 of 17 in versus-spawns.test.ts -- the separation floor collapses from 11.6619... to 2.67, failing both the exact pin and the greater-than-5-world-units guarantee. Note the LOS filter deliberately does NOT follow this rule and stays on intact geometry; see isWalkable's own doc comment for why the two questions differ.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ]
+}

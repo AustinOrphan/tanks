@@ -1,0 +1,15 @@
+{
+  "id": "reduced-motion-never-reaches-the-renderer",
+  "file": "src/game/loop.ts",
+  "find": "    renderer.setReducedMotion(effective.reducedMotion);",
+  "replace": "    void renderer;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Pins the WIRING, not the effect. death-pulse.test.ts drives setReducedMotion directly and passes in full while the game never calls it, which is exactly the state before this change: the HUD had the policy since #364 and gameplay had none. The four-row matrix in loop.test.ts also fails a build that forwarded the raw media query instead of the value effective-settings.ts resolved.",
+  "killedBy": [
+    "startGameWith: reduced motion reaches the preview through the effective seam hands the GAMEPLAY RENDERER the same resolved value, not the media query (issue #289)",
+    "startGameWith: reduced motion reaches the preview through the effective seam tells the renderer at boot, and re-tells it on a live change"
+  ]
+}

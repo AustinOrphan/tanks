@@ -1,0 +1,15 @@
+{
+  "id": "hud-never-syncs-the-mirror",
+  "file": "src/game/hud.ts",
+  "find": "    LAYERS[id].open(initial);\n    applyModalIsolation();\n    mirror.sync(layers.depth);\n    return true;",
+  "replace": "    LAYERS[id].open(initial);\n    applyModalIsolation();\n    return true;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "Opening a pane never tells the browser-history mirror, so no entry exists while a pane is up: the browser's or the phone's Back leaves the game with the pane still open, which is the exact case the issue's 'consumes an in-app layer first' criterion names. In-app Back still works, which is why only the mirror cases can see it. hud.navigation.test.ts (244): the fake-host and real-jsdom-history mirror cases. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+    "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint"
+  ]
+}

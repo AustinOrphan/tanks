@@ -1,0 +1,14 @@
+{
+  "id": "teal-shot-plan-span-not-read-from-the-profile",
+  "file": "src/sim/ai/teal.ts",
+  "find": "  const nextShotPlanTicks = lapsed ? Math.round(cfg.ai.shotCommitmentTime * TICK_HZ) : planTicks - 1;",
+  "replace": "  const nextShotPlanTicks = lapsed ? 120 : planTicks - 1;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/teal.test.ts"
+  ],
+  "why": "The shipped profile authorises 2.0s = 120 ticks, EXACTLY the value of the prototype constant the field replaced -- so a test that asserts 120 against the shipped roster cannot tell a live profile read from a pin, and every acceptance criterion about a validated per-profile field would be met on paper by a hardcoded number. Killing this requires a fixture that injects a DIFFERENT shotCommitmentTime, which is why one exists.",
+  "killedBy": [
+    "teal shot-plan span (issue #332) re-arms from the PROFILE FIELD, not from a constant that happens to equal it"
+  ]
+}

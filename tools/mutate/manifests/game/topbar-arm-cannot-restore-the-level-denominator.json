@@ -1,0 +1,16 @@
+{
+  "id": "topbar-arm-cannot-restore-the-level-denominator",
+  "file": "src/game/hud.ts",
+  "find": "      levelNum.textContent = topbar.restoreDenominator\n        ? `${sequence.mission}/${sequence.missions}`\n        : String(sequence.mission);",
+  "replace": "      levelNum.textContent = String(sequence.mission);",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "The mirror image: `full`, `mode-chips` and `denominator-only` all read `Level: 1`, so the arm that exists to judge the denominator on its own says nothing about it and the pre-ruling bar is unreachable. Two entries on one ternary because collapsing it in either direction is the same tempting edit and they fail differently -- one changes what every player sees, the other only what a developer checking a regression sees, and the second is the one no other case in the repo would catch. MEASURED on this branch: killed, 3 of the 12 cases in the arm suite.",
+  "killedBy": [
+    "topbar: `full` is the pre-ruling bar reproduces the bar `origin/main` renders, at every session, class for class",
+    "topbar: the two versus shapes, which question 5 conflated showed no level chip on a setup-pane match BEFORE the ruling either",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "dependency-direction-wiring-allowlist-admits-everything",
+  "file": "src/dependency-direction.test.ts",
+  "find": "      if (allowed.includes(target)) return null;",
+  "replace": "      if (allowed.includes(target) || allowed.length >= 0) return null;",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "GAME_WIRING stops being an allowlist: any game module may import any render or audio module, so the check degrades to the pre-#473 world where hud.ts learned a colour from render/entities.ts. The real tree passes under it. 3 of 84 in dependency-direction.test.ts: `flags game -> render from a non-wiring import` (hud.ts, which IS listed -- for audio/manifest -- so this also pins that the list is per target module), `flags game -> audio from a file with no wiring entry` and `flags a wiring file reaching a render module it is not listed for` (loop.ts -> render/entities). The clean wiring fixtures and the layer-pair coverage test pass either way: the mutation widens the allowlist, not MAY_IMPORT."
+}

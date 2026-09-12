@@ -1,0 +1,15 @@
+{
+  "id": "ai-forgets-why-it-retargeted",
+  "file": "src/sim/ai/target-selection.ts",
+  "find": "  if (reason !== null) {\n    tank.aiRetargetReason = reason;\n    tank.aiRetargetAgeTicks = 0;",
+  "replace": "  if (false) {\n    tank.aiRetargetReason = reason;\n    tank.aiRetargetAgeTicks = 0;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-selection.test.ts"
+  ],
+  "killedBy": [
+    "the retarget REASON is recorded, not just returned (issue #359) records ACQUIRED on the first commitment, and ages from there",
+    "the retarget REASON is recorded, not just returned (issue #359) records TARGET-LOST when the committed opponent dies, and resets the age"
+  ],
+  "why": "Restores the state before issue #359: `commitTarget` computes a reason, returns it, and nothing records it -- which is exactly what shipped, since `ai/index.ts` calls it as a bare statement and discards the return. The commitment itself stayed observable through `aiTargetId`/`aiTargetTicks` the whole time, so a thrashing AI could be watched switching and never asked why. This mutation is the shipped bug, not an invented one."
+}

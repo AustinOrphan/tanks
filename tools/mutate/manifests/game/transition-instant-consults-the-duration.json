@@ -1,0 +1,16 @@
+{
+  "id": "transition-instant-consults-the-duration",
+  "file": "src/game/transitions.ts",
+  "find": "      const ms = instant ? 0 : deps.durationMs();",
+  "replace": "      const ms = deps.durationMs();",
+  "expect": "killed",
+  "why": "The other half of the gameplay-entry exemption, one level down: the runner honours the caller's `instant` rather than consulting the configured duration. Mutated here the flag still threads through every call site and still typechecks, so `transition-runs-on-gameplay-entry` above -- which pins the ARGUMENT -- cannot see it, and neither can transitions.test.ts, which never passes `instant` (0 call sites, checked). `instant` is a property of WHICH change this is, not of how long transitions happen to be configured to take, so a build that merely set the duration low would not restore the guarantee. `never runs a transition on gameplay entry` is again the case that measures it, through hud.ts's two `showCustomize(false, true)` / `showControllers(false, true)` cleanup closes and setState's own call. Scoped to hud.test.ts; expectFailures counts that scoped run only. The killer's NAME changed in issue #323, not its subject: the case still sweeps the non-paused states for this button, but the Main Menu is now the only one that withholds it, so the title says that instead.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract never runs a transition on gameplay entry",
+    "createHud panel setBackdrop switches the treatment class both ways, and changes nothing about WHEN the ground shows",
+    "hud: pause panel keeps Quit off the MAIN MENU, offers it on every end screen, and settings off both"
+  ]
+}

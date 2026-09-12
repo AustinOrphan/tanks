@@ -1,0 +1,12 @@
+{
+  "id": "render-capability-probe-never-runs-in-the-browser",
+  "file": "src/game/app-shell.ts",
+  "find": "    render: probeRenderCapability(),",
+  "replace": "    render: { webgl2: true, failure: null },",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "why": "The one line on the page that runs the REAL probe, replaced by an assumed answer. `createBrowserAppShell` is production-only wiring -- `main.ts` names it and `createBrowserDeps` defaults to it -- so a hardcoded `{ webgl2: true, failure: null }` makes every unsupported browser sail past boot.ts's new gate and land back on the pre-#470 path: a canvas, a session, a world and a seed all built before `THREE.WebGLRenderer` throws, which is precisely what issue #470 exists to stop. THE GAP WAS PROVED BEFORE THE TEST, by this harness: against app-shell.test.ts as it stood, this mutation SURVIVED at 0 of 11 -- every other case in the file injects the capability, which is what makes them readable without a GPU and exactly why none of them could see whether the wiring ever asked. Same class as `devflags-developer-mode-gate-always-off`: a gate that goes permanently one way for the real browser while the suite stays green. Now 1 of 12, and the failing case is necessarily 'takes a real reading rather than assuming the browser can render' -- `createBrowserAppShell()` is constructed exactly once in the file. It kills because jsdom has no WebGL at all, so a shell that genuinely probes must report `no-webgl2` there while the literal reports support. expectFailures counts that scoped run only."
+}

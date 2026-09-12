@@ -1,0 +1,18 @@
+{
+  "id": "versus-respawn-always-falls-back-to-authored-spawn",
+  "file": "src/sim/world.ts",
+  "find": "  if (mode === 'campaign-coop' || arenaGeometry === null) return { x: authored.x, y: authored.y };",
+  "replace": "  if (true) return { x: authored.x, y: authored.y };",
+  "expect": "killed",
+  "why": "respawnPos must actually reach pickVersusSpawnCell for ffa/teams -- forcing the fallback branch unconditionally (as if arenaGeometry were always absent) restores the campaign-coop-only behaviour for every mode. Caught by 5 of the 6 cases in versus-respawn.test.ts: every test that asserts a revived tank lands on the PICKED cell rather than its authored spawn. The one survivor is the dedicated fallback test itself (arenaGeometry genuinely absent), which asserts exactly the behaviour this mutation makes universal and so cannot tell the difference -- it is not blind to this mutation by accident, it is testing the state this mutation forces on every other case too.",
+  "tests": [
+    "src/sim/versus-respawn.test.ts"
+  ],
+  "killedBy": [
+    "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present avoid excludes a tank that is itself currently dead: only the living survivor constrains the pick",
+    "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present end to end through the full pipeline (stepInputs): the revived tank is alive and off its authored spawn",
+    "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present ffa N=2: the revived tank lands on the picked cell, not its own authored spawn",
+    "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present teams N=2: same wiring reaches the teams branch too",
+    "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present two same-tick revivals: the second sees the first as already alive at its NEW cell"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "start-boundary-accepts-an-out-of-range-level",
+  "file": "src/game/loop.ts",
+  "find": "    if (Number.isInteger(picked) && picked >= 0 && picked < deps.levels.levels.length) {",
+  "replace": "    if (true) {",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "Removes the bounds check, so `deps.levels.levels[7]` on a five-level sequence is `undefined` and the world build reads properties off it. Since #428 this throws out of a HUD click handler -- into `boot.ts`'s start guard, which paints the no-WebGL message for a defect that has nothing to do with WebGL. `if (true)` rather than a deletion so the branch body still runs and the entry measures the CHECK rather than the assignment. 2 of 412: the out-of-range case and the non-integer one, which is the pair that separates the range test from the integer test -- a check that kept only `picked < length` would still pass the first."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "mutate-pool-splits-a-scope-across-workers",
+  "file": "tools/mutate/run.mjs",
+  "find": "  for (const group of scopes) {\n    let lightest = slices[0];\n    for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;\n    lightest.entries.push(...group);\n    lightest.cost += costOfGroup(group);\n  }",
+  "replace": "  let turn = 0;\n  for (const group of scopes) {\n    for (const entry of group) slices[turn++ % slices.length].entries.push(entry);\n  }",
+  "why": "Dealing entries round-robin splits a test scope across workers, so the same scope is baselined once per worker instead of once per run and the hud scope's 41 entries cost 41 baselines' worth of extra vitest starts. The partition test's 'never splits an exact scope' assertion is the case.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "partitionByScope balances by entry count, largest scope first onto the lightest worker, and keeps manifest order within a worker",
+    "partitionByScope deals every entry exactly once and never splits an exact scope across workers",
+    "partitionByScope drops empty workers when there are fewer scopes than jobs, and --jobs 1 is one slice in manifest order"
+  ]
+}

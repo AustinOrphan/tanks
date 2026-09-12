@@ -1,0 +1,14 @@
+{
+  "id": "devtools-exit-offered-unwired",
+  "file": "src/game/hud.ts",
+  "find": "  devToolsExitBtn.hidden = !opts.exitDeveloperMode;",
+  "replace": "  devToolsExitBtn.hidden = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "developer mode: entry, indicator and exit (issue #243) does not offer Exit when nothing is wired to it"
+  ],
+  "why": "Offers 'Exit Developer Mode' when nothing is bound to it, so the pane's only real affordance silently does nothing -- the exact defect boot.ts's `reload` seam documents as its reason for being required rather than defaulted. A visible dead control is worse than an absent one, and it is invisible to every test that DOES wire the seam, which is why the control here is the unwired HUD."
+}

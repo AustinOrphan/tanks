@@ -1,0 +1,14 @@
+{
+  "id": "scripted-player-clock-banks-countdown-ticks",
+  "file": "src/sim/ai/player-profile.ts",
+  "find": "  state.aimTicks = roundPhase(world) === 'live' && hasSolution ? state.aimTicks + 1 : 0;",
+  "replace": "  state.aimTicks = hasSolution ? state.aimTicks + 1 : 0;",
+  "expect": "killed",
+  "why": "The same defect at the mirror site. `applyPlayerInput` already refuses the shot during the countdown (world.ts), which is exactly why this clock needed gating separately: the refusal hides the banking, and the scripted player emerges from the countdown entitled to fire on the first live tick. Without an entry here the enemy half is pinned and the player half is not, which is the asymmetry issue #367's own acceptance criterion ('every shipped profile') rules out. Scoped to the countdown test's own file since issue #502: under this mutant the win-rate suite beside it simulates games to their tick cap (179 s in CI), and the verdict lives in the one test.",
+  "tests": [
+    "src/sim/ai/player-profile.countdown.test.ts"
+  ],
+  "killedBy": [
+    "scripted player: the countdown clock countdown ticks do not satisfy the scripted player's reaction delay either (#367)"
+  ]
+}

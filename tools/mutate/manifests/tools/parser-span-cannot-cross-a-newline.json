@@ -1,0 +1,14 @@
+{
+  "id": "parser-span-cannot-cross-a-newline",
+  "file": "tools/issues/metadata.mjs",
+  "find": "        blank += 1;\n        if (blank >= 2) break;",
+  "replace": "        break;",
+  "expect": "killed",
+  "why": "Restores the exact defect issue #416 fixed: a code span that can only be seen when both backticks sit on one line. An opening backtick on one line and its closer on the next would again leave a `Parent: #N` mirror between them looking like prose, so an issue DOCUMENTING the form is audited as USING it -- a red required check whose remediation cannot be followed, because there is no parent to add. Nothing else observes it: the audit's other outputs are unchanged and the whole 181-issue corpus parses identically either way.",
+  "tests": [
+    "tools/issues/metadata.test.ts"
+  ],
+  "killedBy": [
+    "native relationship contract blanks a code span that OPENS and CLOSES on different lines (issue #416)"
+  ]
+}

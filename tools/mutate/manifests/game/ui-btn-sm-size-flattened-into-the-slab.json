@@ -1,0 +1,14 @@
+{
+  "id": "ui-btn-sm-size-flattened-into-the-slab",
+  "file": "src/game/hud.css",
+  "find": ".ui-btn--sm {\n  border-radius: var(--hud-radius-sm);\n  padding: 6px 14px;\n}",
+  "replace": ".ui-btn--sm {\n  border-radius: var(--hud-radius-md);\n  padding: 8px 20px;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The whole reason `.ui-btn` has size MODIFIERS rather than a size: the pause panel's Mute and the three toggles beside it are a smaller control than the slab a panel stacks, and flattening the two into one size is the tidy-looking edit that erases the distinction. Every button still looks themed under this mutation -- `.ui-btn` supplies fill, text colour and cursor either way -- so `never lets a button fall through to browser default styling` stays green and only `keeps each size of quiet control to ONE size` notices, because that case measures each size group against the OTHER group as well as against itself. Without its final `not.toBe`, the two loops would both pass on a stylesheet that gave every button in the HUD one shape.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps each size of quiet control to ONE size, which is what the modifier is for"
+  ]
+}

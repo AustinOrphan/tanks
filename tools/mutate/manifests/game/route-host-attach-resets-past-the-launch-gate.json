@@ -1,0 +1,12 @@
+{
+  "id": "route-host-attach-resets-past-the-launch-gate",
+  "file": "src/game/route-host.ts",
+  "find": "      if (deps.launchGate.dismissed()) sm.toMainMenu();",
+  "replace": "      sm.toMainMenu();",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The opposite error, and the reason the reset is guarded rather than unconditional: resetting on the FIRST attach of a document load skips the Launch splash entirely. That is not merely a missing screen -- the splash gesture is what unlocks the `AudioContext` (see `app-shell.ts`'s own note on ordering), so the menu comes up silent until the player happens to click something. 1 of 18, 'leaves the splash up for the FIRST session of a document load'. Paired with `route-host-attach-never-resets-the-route`: one entry per direction, because a single test cannot fail both ways and an unguarded reset passes the other one."
+}

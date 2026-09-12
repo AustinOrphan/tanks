@@ -1,0 +1,14 @@
+{
+  "id": "barrel-recoil-player-only",
+  "file": "src/render/barrel-recoil.ts",
+  "find": "      if (!owner || !owner.alive) continue;",
+  "replace": "      if (!owner || !owner.alive || owner.kind !== 'player') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/render/barrel-recoil.test.ts"
+  ],
+  "why": "Restores the player-only gate this had as a refusal arm, where it was correct: an enemy's REFUSAL would have reported the enemy's ammunition state to the player. That reason does not survive #526 -- firing is already visible, the shell is right there -- and the gate now produces enemy guns that stay rigid while the player's kicks. A stale guard whose original justification has been removed is exactly the kind of thing a port forward reintroduces.",
+  "killedBy": [
+    "barrel recoil (issue #526, parent #356) recoils EVERY living tank, enemies included, and never a dead one"
+  ]
+}

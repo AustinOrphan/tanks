@@ -1,0 +1,14 @@
+{
+  "id": "capture-arm-collapses-the-practice-pair",
+  "file": "src/game/loop.ts",
+  "find": "    case 'practice-failed':\n      return { kind: 'practice-result', cleared: false };",
+  "replace": "    case 'practice-failed':\n      return { kind: 'practice-result', cleared: true };",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "typedOutcomeForArm: the capture arm as the model speaks it (issue #591) resolves the two practice SCREENS back to the one outcome kind they share"
+  ],
+  "why": "Makes `outcome=practice-failed` photograph the practice-CLEARED screen. `practice-result` is one outcome kind carrying a `cleared` boolean and TWO panel entries, which is the whole reason the flag's arms name screens rather than kinds -- and it is why this mutation is invisible to anything checking that the flag 'produced an outcome'. The capture would succeed, the file would be written under the failed name, and the pair would silently be one screen twice."
+}

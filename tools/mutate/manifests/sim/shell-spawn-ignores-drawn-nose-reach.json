@@ -1,0 +1,22 @@
+{
+  "id": "shell-spawn-ignores-drawn-nose-reach",
+  "file": "src/sim/constants.ts",
+  "find": "  return SHELL_MUZZLE_FORWARD - bulletRadius * SHELL_NOSE_REACH_RADII;",
+  "replace": "  return SHELL_MUZZLE_FORWARD - bulletRadius;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/bullets.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "Insets the shell by its COLLISION radius instead of its DRAWN nose reach -- the intuitive fix for issue #237, and the one that does not work: it leaves the visible nose 0.225 past the barrel opening, so the daylight pop the issue is about survives untouched. Worth pinning because the shell still spawns behind the plane, so every symbolic SHELL_SPAWN_FORWARD assertion in the tree stays green; only the two assertions that constrain the inset's SIZE can see it.",
+  "killedBy": [
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a fast shell, born inside its own hull",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a normal shell, born inside its own hull",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a ricochet shell, born inside its own hull",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) holds the nose on the plane at every firing angle, and off a moving tank",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) lands the shell nose on the plane for ANY shell radius, not just the shipped one",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) retreats for a wall that covers the shell but NOT the barrel opening",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) tests clearance where the SHELL will be, not at the barrel opening",
+    "tank geometry starts the shell nose flush with the drawn muzzle opening, not past it"
+  ]
+}

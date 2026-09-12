@@ -1,0 +1,14 @@
+{
+  "id": "ending-tally-calls-a-per-attempt-count-a-run",
+  "file": "src/game/hud.ts",
+  "find": "    tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'Level attempt', outcomeData.attempt);",
+  "replace": "    tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'This run', outcomeData.attempt);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Puts the whole tally line back to \"This run\", which is wrong about the DATA and not merely loose: `stats.attempt()` is zeroed on every world build, so these numbers are one try at one level, and the words point at the campaign attempt the player has going elsewhere -- the one thing they are not. Renamed and re-anchored at issue #322: it was `practice-tally-claims-a-run-the-player-has-not-got`, pinning the PRACTICE half while campaign endings still said \"run\" by ruling. The owner's #322 ruling extended the wording to every ending, so the conditional it was anchored to is gone and the defect is now the broader one. Its sibling `every-ending-tally-reads-as-one-level` was deleted rather than re-anchored, because what that one mutated TO is now the shipped code -- it had become a no-op. Re-anchored again when the two campaign endings gained a second line: the wording moved into a `tallyLineEl` argument, and the label is now `Level attempt` so it is built the same way as `Campaign run` beside it.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) heads the tally \"Level attempt\" on EVERY ending, because that is what it counts"
+  ]
+}

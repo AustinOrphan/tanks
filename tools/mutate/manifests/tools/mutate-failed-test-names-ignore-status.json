@@ -1,0 +1,14 @@
+{
+  "id": "mutate-failed-test-names-ignore-status",
+  "file": "tools/mutate/run.mjs",
+  "find": "      if (a.status === 'failed' && typeof a.fullName === 'string') names.push(a.fullName);",
+  "replace": "      if (typeof a.fullName === 'string') names.push(a.fullName);",
+  "why": "Naming every test in the report, passed or failed, would satisfy any killedBy list whatever the mutation did; only failed assertions are killers.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "failedTestNames lists the full names of failed assertions in report order and nothing else"
+  ]
+}

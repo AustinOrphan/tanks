@@ -1,0 +1,14 @@
+{
+  "id": "run-total-shown-on-every-ending",
+  "file": "src/game/loop.ts",
+  "find": "      typedOutcome?.kind === 'campaign-complete' || typedOutcome?.kind === 'campaign-over'\n        ? deps.stats.run()\n        : undefined;",
+  "replace": "      deps.stats.run();",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: stats wiring sends the run total ONLY on the two endings that finish a run"
+  ],
+  "why": "Resolves a run total for every ending, so `mission-clear` shows a running campaign figure on every level and the practice and versus screens show a campaign the player was not playing. `mission-clear` is the sharp case: it IS campaign play and it IS mid-run, so a gate written as \"is this a campaign session\" instead of \"did this end a run\" looks correct and is not. The HUD hides the line by ABSENCE, so it has no second opinion to catch this with. Killed at the SESSION, not in the HUD: `hud.surfaces.test.ts` builds its own payload, so it proves the HUD renders a total when given one and hides the line when not -- it cannot see which endings the session resolves one for. That is this entry's claim, and it needed a loop case driving a real winning frame."
+}

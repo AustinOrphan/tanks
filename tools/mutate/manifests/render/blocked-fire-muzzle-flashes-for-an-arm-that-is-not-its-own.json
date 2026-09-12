@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own",
+  "file": "src/render/blocked-fire-muzzle.ts",
+  "find": "    if (!cueDrives(cue, 'visual') || cue !== 'muzzle') return;",
+  "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'muzzle' && cue !== 'ring')) return;",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-muzzle.test.ts"
+  ],
+  "why": "The muzzle arm's own cue gate, widened so it also flashes for `ring` -- the exact shape of defect that shipped `ring-audio` silent (see blocked-fire-ring-drops-its-paired-audio-arm): not a wrong branch but a cue no assertion mentions. Issue #516 exists to make the visual treatments COMPARABLE, so an arm that also fires under another arm's flag corrupts the comparison rather than merely looking wrong -- the owner would be judging `ring` against `ring plus a muzzle flash`. Only the one-row-per-cue table can catch it: every case written per remembered scenario passes, since `muzzle` still flashes and null still draws nothing. MEASURED with the table's `it` deleted from the file: 0 of 8 remaining tests failed (survived). With it: killed.",
+  "killedBy": [
+    "blocked-fire muzzle flash (issue #516, parent #356) flashes for EVERY cue carrying `muzzle`, and for no other -- one row per cue"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "tread-trail-level-switch-latch-never-spent",
+  "file": "src/render/tread-trails.ts",
+  "find": "    const replaced = worldWasReplaced;\n    worldWasReplaced = false;",
+  "replace": "    const replaced = worldWasReplaced;",
+  "expect": "killed",
+  "tests": [
+    "src/render/tread-trails.test.ts"
+  ],
+  "why": "The over-correction on the other side of the announcement: the latch is read but never spent, so the FIRST level switch of a session wipes the board on that frame and on every frame after it. Tread trails then look simply broken -- a tank prints one pair and it is gone by the next sync -- while every 'the board is empty after the switch' assertion in the file still passes, since they all stop syncing within a frame or two of the clear.",
+  "killedBy": [
+    "tread trails: round boundary and level switch spends the announcement on one sync and keeps printing afterwards"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "world-swap-never-announced-to-the-renderer",
+  "file": "src/game/driver.ts",
+  "find": "      deps.renderer.worldReplaced();",
+  "replace": "      void deps.renderer;",
+  "expect": "killed",
+  "tests": [
+    "src/game/driver.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The wiring issue #531's fix depends on, deleted: the driver swaps the world it renders from and never tells the renderer, so presentation is back to inferring the discontinuity from sim state and back to streaking tread marks across the board on a first-round level clear. Pinned at BOTH layers deliberately -- driver.test.ts proves `reset` makes the call before any frame can render the replaced world, and loop.test.ts proves `switchTo` actually reaches `reset` with a real driver in place, on a same-size rebuild where nothing refits. Neither alone is enough: the unit test passes against a loop that never calls `reset`, and the loop test passes against a driver that announces too late.",
+  "killedBy": [
+    "driver: lifecycle tells the renderer the world was replaced, before any frame can render it (#531)",
+    "startGameWith: per-level renderer refit announces the replaced world to the renderer on EVERY rebuild, same-size or not (#531)"
+  ]
+}

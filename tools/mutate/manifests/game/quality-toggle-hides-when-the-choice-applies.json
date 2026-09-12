@@ -1,0 +1,14 @@
+{
+  "id": "quality-toggle-hides-when-the-choice-applies",
+  "file": "src/game/hud.ts",
+  "find": "    qualityToggleBtn.title = `${QUALITY_HINT[currentQuality]} ${QUALITY_TIMING}`;",
+  "replace": "    qualityToggleBtn.title = QUALITY_HINT[currentQuality];",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Drops the one thing the label cannot show and the player cannot deduce. A session builds its renderer once, and two knobs in the preset cannot move afterwards at all (a GL context's antialias is fixed at creation, and `low` decides whether the muzzle-smoke system was ever constructed), so a change made mid-match lands on the next one. Without the sentence the control reads as broken in precisely the case it exists for: paused, mid-match, on a device that is struggling. Cheap to lose in a tidy-up, since the hint still describes the preset correctly.",
+  "killedBy": [
+    "hud: the quality toggle (issue #540) says WHEN the choice takes effect, which the label cannot show"
+  ]
+}

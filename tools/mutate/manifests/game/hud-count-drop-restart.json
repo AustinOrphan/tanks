@@ -1,0 +1,14 @@
+{
+  "id": "hud-count-drop-restart",
+  "file": "src/game/hud.ts",
+  "find": "      countEl.classList.remove('hud-count--pop');\n      void countEl.offsetWidth;\n      countEl.classList.add('hud-count--pop');",
+  "replace": "      countEl.classList.add('hud-count--pop');",
+  "expect": "killed",
+  "why": "The countdown redesign's pop animation must restart on EVERY new second, not just the first -- setRoundPhase calls this every simulated tick, so most calls repeat the same secondsLeft and must NOT restart (guarded above by the lastCountShown check), but a genuinely new second must. Dropping the remove+reflow half of the restart trick (the same one signalPlayerDeath uses) leaves only the add, which is a no-op once the class is already present -- a real browser would not replay the CSS animation for the second and third numbers, only the first. Caught by hud.surfaces.test.ts: 'restarts the pop animation on each new second, not on every call' spies on classList.remove and asserts it is called once per new second: with the restart deleted, classList.remove('hud-count--pop') is never called at all, so the first assertion (expecting exactly 1 call after the first setRoundPhase) already fails. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: round-start countdown restarts the pop animation on each new second, not on every call"
+  ]
+}

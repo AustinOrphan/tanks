@@ -1,0 +1,17 @@
+{
+  "id": "outcome-label-frozen-at-panel-open",
+  "file": "src/game/hud.ts",
+  "find": "      renderOutcomeCopy();\n    },\n    onResetStats",
+  "replace": "      // the panel keeps whatever setState wrote when it opened\n    },\n    onResetStats",
+  "expect": "killed",
+  "why": "Half-applies the projection. The outcome panel opens on the winning frame's SimEvent and the session's push for that same frame arrives afterwards, so this leaves the tally painted from the newest push and the panel's own words from whatever was known before it -- the ordering hazard `versusStocksVisible` documents at length one screen away, now in a setter feeding four elements instead of one. Since issue #323 it costs strictly more: the push is the ONLY thing that carries why the session ended, so a frozen panel does not merely keep a stale label, it keeps the pre-#323 shared verdict on every ending. It survives every test that pushes its outcome before `setState`, which is the order a test writes by default and the opposite of the one production takes.",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened",
+    "hud: every ending gets its own screen (issue #323) replaces the opening copy when the ending lands AFTER the panel is already up",
+    "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
+  ]
+}

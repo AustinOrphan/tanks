@@ -1,0 +1,14 @@
+{
+  "id": "player-bot-ignores-the-difficulty-refresh-window",
+  "file": "src/sim/ai/player-profile.ts",
+  "find": "    state.hazardTicksLeft = hazardRefreshTicks(cfg);",
+  "replace": "    state.hazardTicksLeft = hazardRefreshTicks(configFor(player.kind));",
+  "expect": "killed",
+  "why": "The hold survives but stops being difficulty-aware: the window re-arms from the tank kind's AUTHORED profile instead of the difficulty-scaled one, so every preset holds its hazard read for the same 30 ticks. This is the exact shape of the bug issue #223's own comment thread warns about -- `withBotDifficulty` is applied in this file and nowhere else, because a versus bot fills a player slot, so an axis that does not reach a decision HERE is a menu label with nothing behind it. It is invisible to bot-difficulty.test.ts (the resolved config is still correct) and to hazard-perception.test.ts (the enemy-side path is untouched). Killed by the one test that reads the re-armed counter back at all three presets and pins `normal` at the authored span exactly.",
+  "tests": [
+    "src/sim/ai/player-profile.hazard.test.ts"
+  ],
+  "killedBy": [
+    "the versus bot holds a difficulty-scaled hazard read scales the held refresh span with the DIFFICULTY, so easy lives with a bad read for longer"
+  ]
+}

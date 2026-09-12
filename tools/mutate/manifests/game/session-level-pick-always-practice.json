@@ -1,0 +1,19 @@
+{
+  "id": "session-level-pick-always-practice",
+  "file": "src/game/session-intent.ts",
+  "find": "  return bootIdentity.kind === 'campaign' ? practiceLevelIdentity() : bootIdentity;",
+  "replace": "  return practiceLevelIdentity();",
+  "expect": "killed",
+  "why": "identityForLevelPick must only convert a CAMPAIGN boot into Practice. The Levels button is genuinely reachable on ?dev=1&mode=ffa (that boot keeps the campaign LevelSystem, so levelChoice is true and the campaign-shaped title affordances leave it on screen) and createLevelSystem's world() closure stamps flags.mode on every level it builds -- so an unconditional Practice here reports practice-result for a match the sim decided by last-slot-standing, and drops the stock strip mid-session. Scoped to the two suites that enter this from both sides. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+  "tests": [
+    "src/game/session-intent.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "identityForLevelPick leaves a developer-flag VERSUS boot as versus, rules and all",
+    "identityForLevelPick leaves a setup-pane versus boot as versus",
+    "identityForLevelPick leaves the sandbox as practice-sandbox, which has no truthful ordinal",
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy a Levels pick on a developer-flag VS session stays VERSUS -- it is another FFA match, not practice",
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy a Levels pick on the SANDBOX stays practice-sandbox -- no fabricated ordinal"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "startup-failure-collapses-the-blocked-probe",
+  "file": "src/game/startup-failure.ts",
+  "find": "err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'",
+  "replace": "'unsupported-render'",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "Throws away the distinction issue #470 built `RenderCapabilityFailure` to carry, one consumer after it was created. A browser that ANSWERED no needs different hardware or different settings; a browser whose probe THREW is usually being blocked by something the player can switch off, and sending them to install another browser is the expensive advice for the likelier cause. Both are `webgl2: false`, so every count and every 'a failure screen appeared' assertion survives this.",
+  "killedBy": [
+    "boot: the shell capability probe (issue #470) tells a BLOCKED probe apart from a browser that answered no",
+    "boot: the message itself classifies each cause into its own state, and guesses at nothing"
+  ]
+}

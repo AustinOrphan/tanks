@@ -1,0 +1,14 @@
+{
+  "id": "hud-records-open-never-fires-for-the-achievements-tab",
+  "file": "src/game/hud.ts",
+  "find": "      swapSurface(openSurface(), ACH_SURFACE, () => {\n        paintRecords();\n",
+  "replace": "      swapSurface(openSurface(), ACH_SURFACE, () => {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The Achievements tab's half of the same hook -- see the Stats sibling above for why the two are separate entries. Reached by a tab switch, which REPLACES the top layer rather than stacking one (hud.ts's `openLayer`), so this really is a second open and really does need its own fire.",
+  "killedBy": [
+    "hud: the stats page fires onRecordsOpen on an open of either tab, never on a close, and in time for the render"
+  ]
+}

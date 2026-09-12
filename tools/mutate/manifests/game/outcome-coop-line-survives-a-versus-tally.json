@@ -1,0 +1,14 @@
+{
+  "id": "outcome-coop-line-survives-a-versus-tally",
+  "file": "src/game/hud.ts",
+  "find": "    if (outcomeData?.tally !== 'coop') {",
+  "replace": "    if (outcomeData?.tally !== 'coop' && outcomeData?.tally !== 'ffa') {",
+  "expect": "killed",
+  "why": "The property merging setCoopKills and setVersusResults into one discriminated projection was for: a session has exactly one tally, so switching kinds cannot leave the previous kind's line standing under the new one. This widens the coop line's own gate to admit ffa, reproducing the two-setter failure mode inside the merged setter -- an ffa outcome then prints an enemy-kill line beside the player-versus-player one, reading the versus payload's slot kills as coop's. A solo outcome still hides it and a teams outcome still hides it, so the mutation is invisible to every per-line rendering test; only the mutual-exclusion assertion sees it.",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) the two results lines are mutually exclusive BY CONSTRUCTION, not by convention"
+  ]
+}

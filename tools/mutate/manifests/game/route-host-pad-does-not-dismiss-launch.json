@@ -1,0 +1,14 @@
+{
+  "id": "route-host-pad-does-not-dismiss-launch",
+  "file": "src/game/route-host.ts",
+  "find": "  const onMenuAction = (action: UiAction): void => {\n    noteModality('gamepad');\n    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }",
+  "replace": "  const onMenuAction = (action: UiAction): void => {\n    noteModality('gamepad');\n    if (sm.atLaunch) return;",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Any pad action at Launch must dismiss the splash exactly as a key does, or a controller-only player is stuck on it.",
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) any button at Launch dismisses the splash, exactly as a key does"
+  ]
+}

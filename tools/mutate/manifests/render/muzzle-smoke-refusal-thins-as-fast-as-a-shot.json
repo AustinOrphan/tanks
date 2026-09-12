@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-refusal-thins-as-fast-as-a-shot",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 1 },",
+  "replace": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 2 },",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "The other half of the density difference: the soot goes back to the ordinary puff's squared thinning, so it is only briefly thicker and has given up 56% of itself a third of the way through its life. The raw-opacity assertion stays green under this -- the refusal still starts denser -- which is exactly why the suite compares each cloud against its OWN birth density as well. A retune that kept the higher peak and dropped the curve would look like a simplification and would quietly return most of the measured separation.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) thins a refusal SLOWER, not merely from a higher start"
+  ]
+}

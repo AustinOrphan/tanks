@@ -1,0 +1,36 @@
+{
+  "id": "ui-actions-widget-consumes-any-key",
+  "file": "src/input/ui-actions.ts",
+  "find": "  return widget instanceof HTMLButtonElement ? BUTTON_KEYS.has(key) : ADJUSTABLE_KEYS.has(key);",
+  "replace": "  return true;",
+  "expect": "killed",
+  "why": "A button, slider or select keeps only the keys it operates on; consuming every key makes M, P and Escape vanish with a slider or a button focused.",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/input/input.test.ts",
+    "src/input/ui-actions.test.ts"
+  ],
+  "killedBy": [
+    "consumesKey a button keeps Enter and Space (activation) but not Escape, the arrows or the driving keys",
+    "consumesKey a range input (the volume slider) keeps only the keys that operate it",
+    "consumesKey a select keeps the arrows that walk its options but not P",
+    "consumesKey a span nested inside a button resolves through closest(): it keeps the button's keys and no more",
+    "consumesKey the widget key set is case-insensitive",
+    "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
+    "createHud roving-tabindex focus navigation (issue #115) moves focus backward with ArrowUp, undoing an ArrowDown step",
+    "createHud roving-tabindex focus navigation (issue #115) reaches Resume, then Settings, then Controllers, then Quit from the pause panel",
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+    "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert",
+    "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
+    "createInputController \u2014 focus does not steal the tank still drives after the player has used a HUD control",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target",
+    "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
+    "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
+    "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
+    "hud: spatial focus follows the drawn layout (issue #495) negative control: with jsdom's empty rects the same Right leaves the segment in document order",
+    "hud: spatial focus follows the drawn layout (issue #495) the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated",
+    "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card",
+    "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly"
+  ]
+}

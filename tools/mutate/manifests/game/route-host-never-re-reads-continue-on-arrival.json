@@ -1,0 +1,13 @@
+{
+  "id": "route-host-never-re-reads-continue-on-arrival",
+  "file": "src/game/route-host.ts",
+  "find": "      paintContinue();\n",
+  "replace": "      void 0;\n",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "The page paints Continue once, at construction, and never again. A live session's own subscriber refreshes it on the arrivals it sees, so the only arrivals this loses are the ones after a session has been disposed (issue #429) -- which, with the session's subscriber now released at disposal, is every arrival the player makes from a route. The page must re-read the run store, not trust the last value a since-dead session painted. 2 of 458 across both scoped files (route-host.test.ts 37 + loop.test.ts 421): the arrival case in each, both of which end a run while the page is away on another route. RE-ANCHORED and re-measured at 3 of 495 (route-host.test.ts 62 + loop.test.ts 433) for issue #324's step S5. The arrival branch now paints the Levels grid beside Continue, so the find narrowed to the Continue call alone and the grid got its own entry; the third failure is loop.test.ts's Continue-availability case, which since the session stopped pushing the signal reads it through this arrival."
+}

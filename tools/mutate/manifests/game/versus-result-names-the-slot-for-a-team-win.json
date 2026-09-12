@@ -1,0 +1,14 @@
+{
+  "id": "versus-result-names-the-slot-for-a-team-win",
+  "file": "src/game/hud.ts",
+  "find": "    if (result.kind === 'winner-team') return `Team ${result.team + 1} wins`;",
+  "replace": "    if (result.kind === 'winner-team') return `Player ${result.team + 1} wins`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) keeps the VERSUS result screen OUT of the copy table, and gives it the #279 action set"
+  ],
+  "why": "Names a PLAYER for a team victory. `VersusResult` carries `winner-slot` and `winner-team` as separate shapes precisely because the two mean different things, and the numbers collide plausibly -- team 1 and player 1 are both `1` -- so a screen that read the wrong field looks right in a two-player fixture and names a player who may not even have been the last one standing in a four-player teams match."
+}

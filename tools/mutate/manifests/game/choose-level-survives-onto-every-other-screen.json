@@ -1,0 +1,15 @@
+{
+  "id": "choose-level-survives-onto-every-other-screen",
+  "file": "src/game/hud.ts",
+  "find": "    applyChooseLevel();\n    applyPracticeThisLevel();\n    // THE OUTCOME PANEL'S THREE LINES",
+  "replace": "    applyPracticeThisLevel();\n    // THE OUTCOME PANEL'S THREE LINES",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Leaves the outcome panel's third action to be hidden only by the end screens themselves, so it is never taken back down: `renderOutcomeCopy` puts it up on a practice result and nothing lowers it again on the pause panel, the campaign end screens or the Main Menu, all of which are the same `.hud-panel` element. Its click leaves the session, so on a PAUSED game that is a button that abandons a match in progress under a name that says nothing about doing so. Invisible to any test that only reads the screen it belongs on, which is why the sweep walks the other surfaces after it. RE-ANCHORED for issue #323, which added a `practiceThisLevel` term to every OUTCOME_PANEL entry: this entry's find string ran through the changed lines and stopped matching, so it reported FAILED-TO-APPLY -- a guard that had quietly stopped guarding. The replacement now drops ONLY `applyChooseLevel`, leaving its new sibling in place, so this stays a test of Choose Level's own gate rather than of both at once.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) offers Choose Level on the practice endings and nowhere else"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "hud-reopens-the-top-pane-with-a-transition",
+  "file": "src/game/hud.ts",
+  "find": "    if (result === 'already-top') {\n      // Re-render only: a second open of the pane on top must not run a transition from\n      // the pane to itself, which marks the one surface LEAVING and then ENTERING and hides\n      // it when the crossfade settles.\n      LAYERS[id].refresh?.(initial);\n      return true;\n    }",
+  "replace": "    if (result === 'already-top') {\n      LAYERS[id].open(initial);\n      return true;\n    }",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A second open of the pane already on top runs a transition from the pane to itself, which is the pre-#318 `showVersusSetup(true)` twice: the one surface is marked LEAVING and then ENTERING, and the crossfade's settle hides it. The pane the player was looking at disappears a frame later. hud.navigation.test.ts (244): \"showVersusSetup(true, cfg) twice keeps the pane open\", measured failing on the pre-#318 tree with exactly this shape. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) showVersusSetup(true, cfg) twice keeps the pane open and reseeds from the second config"
+  ]
+}

@@ -304,28 +304,70 @@ export function resolveManifestPath(root, manifestArg) {
 }
 
 /**
- * The manifest as a list of files (issue #505): one file when `path` is a JSON file, or
- * every `*.json` directly inside it, sorted by name, when it is a directory. The
- * repository keeps one file per area under `tools/mutate/manifests/`, so a PR that adds
- * entries appends to its own area's file and two PRs in different areas never conflict.
- * Returned per file so a tool that rewrites entries (`migrate-killed-by.mjs`) can put
- * each back where it came from; `readManifest` below is the flattened view.
- * @param {string} path @returns {{ path: string, entries: any[] }[]}
+ * The manifest as a list of files: ONE ENTRY PER FILE, under `manifests/<area>/<id>.json`
+ * (issue #653).
+ *
+ * WHY, and what it replaces. Issue #505 split the manifest into one file per AREA, which
+ * stopped two PRs in different areas conflicting. It could not stop two PRs in the SAME
+ * area conflicting, because every new entry appends to the same closing lines of the same
+ * file -- and with `game.json` at 429 entries and 557 KB, that was most of them. Five
+ * merge conflicts in a single session were all this, and none was a disagreement: both
+ * sides had appended, and resolution was "take the base, add the ids the branch adds"
+ * every time.
+ *
+ * Being mechanical is what made it dangerous rather than harmless. It is a hand edit to a
+ * half-megabyte file where taking one side wholesale drops the other's entries and NOTHING
+ * FAILS -- the file stays valid JSON, the ids stay unique, and the only symptom is coverage
+ * that quietly went missing.
+ *
+ * One entry per file removes the class by construction: two branches adding entries touch
+ * two different files, so there is nothing to resolve. It also makes a PR's diff read as
+ * "three new files" rather than a 38-line insertion into a blob, and gives each entry its
+ * own `git log`.
+ *
+ * SHAPES ACCEPTED. A `.json` file holds either a single entry object (the per-entry files
+ * this repository ships) or an array of them -- the array form is kept so `--manifest`
+ * pointed at a scratch file outside the repo still works, which is a real reviewer
+ * workflow. A directory holds `.json` files and/or one level of subdirectories of them;
+ * the subdirectory name is the AREA, which is what `orchestrate.test.ts`'s placement guard
+ * checks against. Returned per file so a tool that rewrites entries
+ * (`migrate-killed-by.mjs`) can put each back where it came from, in the shape it found it.
+ * @param {string} path @returns {{ path: string, entries: any[], single: boolean }[]}
  */
 export function readManifestFiles(path) {
-  // The array check lives HERE, not only in `mergeManifestFiles`: every reader goes
+  // The shape check lives HERE, not only in `mergeManifestFiles`: every reader goes
   // through this function, including `migrate-killed-by.mjs`, which rewrites each file
-  // in place and never merges. Without it a non-array file reaches that script's
+  // in place and never merges. Without it a malformed file reaches that script's
   // `entries.map` as an unnamed TypeError instead of naming the broken file.
+  //
+  // `single` records which shape it was, so a rewriter puts an entry back as an object
+  // rather than silently promoting a per-entry file to a one-element array -- which would
+  // work, and would undo the layout one file at a time.
   const parse = (/** @type {string} */ file) => {
-    const entries = JSON.parse(readFileSync(file, 'utf8'));
-    if (!Array.isArray(entries)) throw new Error(`manifest ${file}: must be a JSON array of entries`);
-    return { path: file, entries };
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    if (Array.isArray(parsed)) return { path: file, entries: parsed, single: false };
+    if (parsed !== null && typeof parsed === 'object') {
+      return { path: file, entries: [parsed], single: true };
+    }
+    throw new Error(`manifest ${file}: must be a JSON entry object, or an array of them`);
   };
   if (!statSync(path).isDirectory()) return [parse(path)];
-  const names = readdirSync(path).filter((n) => n.endsWith('.json')).sort();
-  if (names.length === 0) throw new Error(`manifest directory ${path} holds no *.json file`);
-  return names.map((n) => parse(join(path, n)));
+  // Sorted at every level, so the flattened order is stable and a report is reviewable.
+  // ONE level of nesting only: the layout is `manifests/<area>/<id>.json`, and recursing
+  // further would let a stray directory contribute entries whose area nothing states.
+  const out = [];
+  for (const name of readdirSync(path).sort()) {
+    const child = join(path, name);
+    if (statSync(child).isDirectory()) {
+      for (const inner of readdirSync(child).filter((n) => n.endsWith('.json')).sort()) {
+        out.push(parse(join(child, inner)));
+      }
+    } else if (name.endsWith('.json')) {
+      out.push(parse(child));
+    }
+  }
+  if (out.length === 0) throw new Error(`manifest directory ${path} holds no *.json file`);
+  return out;
 }
 
 /** Every entry of the manifest at `path` (a file or a directory of files), in file order

@@ -1,0 +1,15 @@
+{
+  "id": "schematic-rect-width-reads-the-far-edge",
+  "file": "src/game/arena-schematic.ts",
+  "find": "      w: wall.aabb.maxX - wall.aabb.minX,",
+  "replace": "      w: wall.aabb.maxX,",
+  "expect": "killed",
+  "tests": [
+    "src/game/arena-schematic.test.ts"
+  ],
+  "killedBy": [
+    "arenaSchematic draws the same cover the simulation builds, not a second grid walk",
+    "arenaSchematic keeps every rectangle inside the floor it reports"
+  ],
+  "why": "An AABB's far edge used as a width -- the single most available slip when flattening `{minX, maxX}` into `{x, w}`, and the one that still draws something board-shaped. Every rectangle grows rightward to its own right edge again, so cover smears across the board and the card stops describing the arena; but the card still renders, the canvas still fills, and every structural assertion about the card (a canvas exists, it has a box, it is aria-hidden) passes. jsdom has no 2D context, so no HUD test can see a pixel of it either. Killed only by the two cases that compare the rectangles against `wallsForQuery`'s own AABBs and check each one stays inside the reported floor."
+}

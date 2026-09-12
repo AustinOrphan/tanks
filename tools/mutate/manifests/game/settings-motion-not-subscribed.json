@@ -1,0 +1,12 @@
+{
+  "id": "settings-motion-not-subscribed",
+  "file": "src/game/effective-settings.ts",
+  "find": "    deps.motion.subscribe(republish),",
+  "replace": "    () => {},",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The System motion state's live half. Dropping the media subscription leaves the effective handle reporting whatever reduced-motion was at construction, forever -- which is what render/preview.ts's old inline `matchMedia` read already did, and what issue #320 requires be fixed. Killed by effective-settings.test.ts's 'reacts to a LIVE OS motion change under System', which drives a source that really publishes rather than one that is merely re-read. 1 of 19.",
+  "tests": [
+    "src/game/effective-settings.test.ts"
+  ]
+}

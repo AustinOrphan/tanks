@@ -1,0 +1,21 @@
+{
+  "id": "ui-selected-state-drawn-but-not-announced",
+  "file": "src/game/ui.ts",
+  "find": "  el.setAttribute('aria-pressed', String(selected));",
+  "replace": "  el.setAttribute('data-selected', String(selected));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/ui.test.ts"
+  ],
+  "why": "Exactly the state the HUD was in before #321: the selection ring is drawn and nothing is announced, so which choice is current is carried by a white border and by nothing else. `setSelected` exists to make the two channels inseparable, and this mutation separates them again by writing the state to a `data-` attribute instead: the value is still recorded, still moves with the choice, and is still invisible to every assistive technology. The class toggle is untouched, so every visual assertion in the suite stays green. Killed by three unit cases in ui.test.ts and by the two HUD sweeps over all 50 choice controls. COUNT MOVED 5 -> 7 for issue #281: the per-slot TEAM buttons are choice controls built with `setSelected`, so the two cases that read their `aria-pressed` -- the untouched slot showing its EFFECTIVE team, and a chosen team surviving a round trip through FFA -- detect this defect as well. Re-measured on the tree, not predicted; the harness reported the mismatch and the declaration was corrected to what it actually trips.",
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) keeps a chosen team across a round trip through FFA",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) shows the EFFECTIVE team on an untouched slot, not an empty selection",
+    "setSelected: the visual and the announced selection move together KEEPS aria-pressed on the unselected control rather than removing it",
+    "setSelected: the visual and the announced selection move together clears both when the choice moves elsewhere",
+    "setSelected: the visual and the announced selection move together marks a control in BOTH channels, not just the one you can see",
+    "the UI kit contracts, swept across every control that uses them (issue #321) announces the current choice on EVERY choice control, not only draws it",
+    "the UI kit contracts, swept across every control that uses them (issue #321) moves the announced state with the choice, not only on the first render"
+  ]
+}

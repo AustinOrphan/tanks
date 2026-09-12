@@ -1,0 +1,14 @@
+{
+  "id": "vs-clearance-picker-drops-pairwise",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "      for (const a of avoid) if (Math.hypot(a.x - p.x, a.y - p.y) < pairRequired) return false;\n      return true;",
+  "replace": "      return true;",
+  "expect": "killed",
+  "why": "pickVersusSpawnCell's candidate eligibility must include pairwise clearance against every already-placed spawn, not only wall/boundary clearance. Without it, the 5x5 cellSize-0.6 fixture keeps an 8-cell eligible pool (all within 1.15 of avoid) and picks an eligible diagonal, where the real filter empties the pool and falls back to the unfiltered ranking's far-corner pick -- the fixture asserts that fallback equality.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ],
+  "killedBy": [
+    "clearance-filtered candidate pools (issue #225) pairwise clearance can empty the pool: every eligible cell sits within 1.15 of avoid, so the fallback engages"
+  ]
+}

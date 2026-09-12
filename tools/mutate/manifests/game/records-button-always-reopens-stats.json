@@ -1,0 +1,14 @@
+{
+  "id": "records-button-always-reopens-stats",
+  "file": "src/game/hud.ts",
+  "find": "    openLayer(lastRecordsTab, recordsOpenBtn);",
+  "replace": "    openLayer('stats', recordsOpenBtn);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "killedBy": [
+    "hud: the stats page reopens on the tab you last used, and starts a fresh document on Stats"
+  ],
+  "why": "The behaviour issue #322 asked to change, restored: the Main Menu's Records button opens the Stats tab whatever the player last used, so someone comparing achievements across runs re-clicks the tab on every visit. Survives the fresh-document case entirely -- a first visit opens on Stats either way -- which is why the reopen test drives a full switch/leave/return round trip rather than asserting the opening tab once."
+}

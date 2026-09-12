@@ -1,0 +1,12 @@
+{
+  "id": "versus-spawns-drop-los-hard-filter",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "  const pool = invisible.length > 0 ? invisible : eligible;",
+  "replace": "  const pool = eligible;",
+  "expect": "killed",
+  "expectFailures": 4,
+  "why": "pickVersusSpawnCell's whole design is hard-filter-then-maximin: no line of sight to any already-chosen spawn beats every distance score, where achievable. Dropping the filter falls straight through to plain geodesic maximin over every candidate, which is a DIFFERENT function (it can and does pick a farther cell that is still in plain sight, whenever the farthest reachable cell happens to be visible). Caught by 3 of the 14 cases in versus-spawns.test.ts: the dedicated fixture built to make a visible cell strictly farther than any invisible one (picks (row0,col19) instead of the invisible (row2,col11)); the brute-force-gap fixture, whose own walls also gate LOS, so the greedy result it measures shifts too; and the real-shipped-arena sweep asserting 0 of 100 player pairs share mutual line of sight, which the mutation raises to 28.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ]
+}

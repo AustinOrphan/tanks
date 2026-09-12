@@ -1,0 +1,14 @@
+{
+  "id": "about-pane-never-builds-its-documents",
+  "file": "src/game/hud.ts",
+  "find": "  const legalDisclosures = renderLegalDocuments(legalListEl);",
+  "replace": "  const legalDisclosures = renderLegalDocuments(document.createElement('div'));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "the About & Legal pane in the assembled HUD (issue #117) builds the documents and the outbound links into the pane"
+  ],
+  "why": "The composition failure a unit test on `renderLegalDocuments` structurally cannot see. The documents are still built, the disclosures still exist, every click handler is still wired, and legal.test.ts stays entirely green -- into a detached div. On screen the pane shows its intro prose, the heading \"Documents\", the sentence promising them, and nothing else. `.hud-legal` is an EMPTY container in the markup on purpose, so there is no missing-element type error either. This is the entry that makes the case asserting the documents are inside `.hud-about` -- rather than merely inside the HUD -- load-bearing."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-hud-arm-never-reaches-the-hud",
+  "file": "src/game/loop.ts",
+  "find": "      blockedFireHud.handle(events, driver.world);\n",
+  "replace": "      void blockedFireHud;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Removes the loop's per-frame dispatch to the HUD arm, leaving the cue built, gated, tested in isolation -- and never called. Unit tests that invoke a stage directly cannot see this (CLAUDE.md's own rule); only a driven frame that reaches a REAL capacity refusal can, which is what the loop test does rather than injecting the event. This is the composition half of the arm: the flag would parse, the cue would exist, and the screen would stay silent -- the same silent-flag failure #497 and the `ring-audio` pairing already cost this repository once.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default flashes the capacity line on a REAL refusal under blockedFire=hud"
+  ]
+}

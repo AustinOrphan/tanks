@@ -1,0 +1,16 @@
+{
+  "id": "pane-covers-the-open-pane",
+  "file": "src/game/hud.ts",
+  "find": "      LAYERS[top.id].release?.();",
+  "replace": "      void LAYERS;",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A pane opened while a different pane is up keeps everything the outgoing pane owned: the Customize pane's live WebGL preview and the Controllers pane's window gamepad listeners, with no close callback ever firing for either. RE-ANCHORED by issue #558, which replaced this line's `close()` with a `release?.()` -- and NARROWED its meaning in the process, which is worth stating rather than letting the id drift. The old line also did the VISUAL half, so deleting it once left both panes on screen at once; since #558 the incoming `open()` sources its transition from `openSurface()` and always fades the outgoing pane out, so covering is no longer reachable from here at all. What survives is exactly the leak, which is what this entry is now about. SCOPED TO BOTH FILES deliberately: the leak is asserted in two places -- the navigation case counts the close callback over the gesture, and the transition case reads the same gesture's surfaces -- and naming a killer in a file the entry does not run is a mismatch rather than a claim.",
+  "killedBy": [
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pane opened while a different pane is up replaces it through that pane's own close, so its close callback fires once",
+    "createHud application transition contract still RELEASES the replaced pane, which is why the close was not simply dropped"
+  ]
+}

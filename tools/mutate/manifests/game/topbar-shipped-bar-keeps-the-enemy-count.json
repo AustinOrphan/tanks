@@ -1,0 +1,20 @@
+{
+  "id": "topbar-shipped-bar-keeps-the-enemy-count",
+  "file": "src/game/hud.ts",
+  "find": "    enemyStatEl.classList.add('hud-campaign-stat--hidden');\n    // The arms that put it back, and REMOVE-only under the same versus rule the loop",
+  "replace": "    // The arms that put it back, and REMOVE-only under the same versus rule the loop",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Issue #552's ruling half-applied: the flag would still name six arms, `full` would still read `full`, and every player would still be looking at a bar with the enemy count the owner called \"noise and unnecessary\" on it. This is the ruling's first content decision reduced to a comment about itself. It is also the direction a reviewer takes when the line looks redundant beside the loop above -- the loop does hide this element, but only for versus, so deleting the add restores the count on every board. MEASURED on this branch: killed, 6 of the 47 cases in the two scoped files.",
+  "killedBy": [
+    "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and wears its own word",
+    "hud: campaign Lives/Enemies stats hidden during versus (issue #282) a session-kind switch restores the stats -- production reboots into a FRESH Hud per session (boot.ts's requestCampaignSession -> deps.startGame), so this exercises the stronger property that the gate tracks CURRENT kind rather than latching the first kind a Hud instance ever saw",
+    "hud: campaign Lives/Enemies stats hidden during versus (issue #282) keeps Lives visible and both numbers updating for a campaign session -- the negative control against over-hiding",
+    "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+    "topbar: what each arm says carries no chip and no enemy count before a session lands -- the cascade this suite reads is live",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

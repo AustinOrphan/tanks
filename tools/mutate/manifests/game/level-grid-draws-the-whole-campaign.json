@@ -1,0 +1,16 @@
+{
+  "id": "level-grid-draws-the-whole-campaign",
+  "file": "src/game/hud.ts",
+  "find": "      for (let i = 0; i < unlocked; i++) {",
+  "replace": "      for (let i = 0; i < total; i++) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The exact behaviour issue #555 removed, restored as a one-word edit -- which is how easily it comes back. A grid sized by `total` tells a player who has cleared nothing how long the campaign is, and the ruling was that it should not. Worse than the version that shipped before #555: that one disabled the entries past the unlock line, and this loop no longer has that branch, so every level in the campaign is drawn ENABLED and clickable. Two suites catch it and they catch different halves -- surfaces reads the button labels (`['1']` becomes `['1', '2', '3']`), navigation walks the panel and finds nodes the roving tabindex did not expect.",
+  "killedBy": [
+    "hud: level select panel renders one button per UNLOCKED level, and none at all for the rest (issue #555)",
+    "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert"
+  ]
+}

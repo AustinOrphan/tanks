@@ -1,0 +1,14 @@
+{
+  "id": "records-empty-line-never-goes-away",
+  "file": "src/game/hud.ts",
+  "find": "      Object.values(lifetime).some((v) => v !== 0),",
+  "replace": "      Object.values(attempt).some((v) => v !== 0),",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Keys the empty-state line on the ATTEMPT column instead of lifetime, which is the natural-looking mistake and is permanently wrong: Records is reachable from the Main Menu alone, where no attempt is in progress, so that column is zero on every open and the line would tell a player with hundreds of lifetime kills that they have played nothing. Survives the fresh-save half of the test, which is why that case carries a populated negative control rather than standing alone.",
+  "killedBy": [
+    "hud: the stats page says so when nothing has been played, and gets out of the way once something has"
+  ]
+}

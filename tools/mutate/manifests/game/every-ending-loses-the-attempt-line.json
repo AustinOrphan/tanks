@@ -1,0 +1,14 @@
+{
+  "id": "every-ending-loses-the-attempt-line",
+  "file": "src/game/hud.ts",
+  "find": "    if (outcomeData.tally === 'ffa' || outcomeData.tally === 'teams') {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+  "replace": "    if (true) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) drops the campaign attempt line, because the table below already says it per player"
+  ],
+  "why": "The over-broad half of the same edit: the line is dropped everywhere rather than on the screen that replaced it. A campaign or practice ending has no per-player table to fall back on, so its only tally of the round just played disappears. Distinct from the entry above because a test that merely checked the versus screen is clean would kill that one and survive this."
+}

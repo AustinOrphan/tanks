@@ -1,0 +1,14 @@
+{
+  "id": "tread-trail-clears-on-every-frame",
+  "file": "src/render/tread-trails.ts",
+  "find": "    if (replaced || prev.roundStartTick !== curr.roundStartTick) {",
+  "replace": "    if (true) {",
+  "expect": "killed",
+  "tests": [
+    "src/render/tread-trails.test.ts"
+  ],
+  "why": "The degenerate 'fix' that satisfies every clear-the-board assertion at once by clearing unconditionally, and the reason the level-switch cases each carry a control that keeps ordinary play printing. Named as the control for `tread-trail-level-switch-inferred-from-round-tick`: a guard that always fires and a guard that never fires are both wrong, and a test suite that only ever checks 'is the board empty afterwards' cannot tell them apart.",
+  "killedBy": [
+    "tread trails: round boundary and level switch does not clear a board that was never announced and never changed round"
+  ]
+}

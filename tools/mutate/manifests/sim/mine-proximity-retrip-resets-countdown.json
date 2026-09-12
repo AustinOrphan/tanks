@@ -1,0 +1,18 @@
+{
+  "id": "mine-proximity-retrip-resets-countdown",
+  "file": "src/sim/mines.ts",
+  "find": "  if (mine.detonated || mine.proximityDelayLeft !== undefined) return",
+  "replace": "  if (mine.detonated) return",
+  "expect": "killed",
+  "tests": [
+    "src/sim/mines.test.ts"
+  ],
+  "why": "tripMineProximity's idempotency guard is the reaction window's contract (issue #275, owner-revised): staying in or re-entering the radius must not restart or shorten the countdown. Dropping the proximityDelayLeft check lets every in-radius tick re-stamp the delay, so the mine never detonates on schedule. Killed by the re-entry fixture, which pins ONE mine-triggered event and the original detonation call.",
+  "killedBy": [
+    "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity entry emits mine-triggered on that call and defers mine-detonate by exactly MINE_PROXIMITY_DELAY_TICKS calls",
+    "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity re-entry during the delay is idempotent: one mine-triggered, no countdown reset",
+    "stepMines detonates early when an enemy enters proximity",
+    "stepMines kills an enemy standing on the mine once the owner walks clear and the blast reaches him",
+    "stepMines kills the owner who walks back onto his own armed mine"
+  ]
+}

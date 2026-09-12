@@ -1,0 +1,16 @@
+{
+  "id": "backdrop-flag-never-reaches-the-hud",
+  "file": "src/game/route-host.ts",
+  "find": "\n  hud.setBackdrop(deps.devFlags.backdrop === 'felt' ? 'felt' : 'default');\n",
+  "replace": "\n  hud.setBackdrop('default');\n",
+  "expect": "killed",
+  "why": "The one wire between `?dev=1&backdrop=felt` and the screen, cut. Every `.ui-app-ground--felt` rule in hud.css becomes unreachable -- exactly the dead CSS the adopted ruling refused (\"B stays in the code as a switchable alternative ... reachable through a `dev=1` development flag rather than left as dead CSS\") -- and it goes silently: the flag still parses, `FLAG_REGISTRY` still generates its row in docs/dev-flags.md, hud.css.test.ts's presence sweep still finds both felt selectors, and `setBackdrop` is still called once on every page. Same class as `devflags-developer-mode-gate-always-off` -- a development gate that goes permanently off for the real browser while the suite stays green. Deliberately NOT mutated to the defensive shape (`if (deps.devFlags.backdrop === 'felt') hud.setBackdrop('felt')`, which drops only the UNCONDITIONAL default push): the markup ships no `--felt` class today, so that edit changes nothing on screen, and pinning it would pin a property whose defect is currently invisible. RE-ANCHORED for issue #324's step S5: the application ground is page chrome that outlives every match, so the push moved from the gameplay session's construction to `route-host.ts`'s. The line, the mutation and the flag reading are unchanged; only the file and the killing tests moved, and the page's own case -- which covers a page that never starts a session, a reading the session's push could not make -- joins the session-harness one that measured it before.",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the application ground the development flag names, and the default without one",
+    "startGameWith: campaign return from a versus session (Task 5b) pushes the felt treatment for ?dev=1&backdrop=felt, and nothing else does"
+  ]
+}

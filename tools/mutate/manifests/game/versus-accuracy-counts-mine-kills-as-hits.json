@@ -1,0 +1,14 @@
+{
+  "id": "versus-accuracy-counts-mine-kills-as-hits",
+  "file": "src/game/loop.ts",
+  "find": "    if (e.type !== 'tank-destroyed' || e.by.source !== 'shell') continue;",
+  "replace": "    if (e.type !== 'tank-destroyed') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) leaves a MINE kill out of the numerator, which is the whole reason it is not `kills`"
+  ],
+  "why": "Counts a mine kill as a hit, so accuracy stops meaning shells that found a tank over shells fired -- the meaning it has on the campaign line and the only one that makes the column comparable between a mine-heavy player and a marksman. Their Kills column already credits the mine; crediting it twice rates the same play higher in both columns."
+}

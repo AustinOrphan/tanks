@@ -1,0 +1,12 @@
+{
+  "id": "storage-developer-key-enumerates-the-base",
+  "file": "src/game/storage.ts",
+  "find": "      return names()[index] ?? null;",
+  "replace": "      return base.key(index);",
+  "expect": "killed",
+  "expectFailures": 2,
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "key(i) must answer the STORE-FACING name inside the namespace, not the base storage's raw key at that index. Delegating to the base leaks both directions at once: a developer session enumerating storage sees the production keys it must not know about, and sees its own keys under their `tanks.dev.`-prefixed underlying names, so key(i) stops inverting setItem. Nothing in src/ walks a Storage by index today -- save.ts works from the SAVE_KEYS allow-list -- which is precisely why this needs a manifest entry rather than trust. 2 of 40 in storage.test.ts: the scoped-enumeration case and the injectivity case that round-trips every store key back out through key(i)."
+}

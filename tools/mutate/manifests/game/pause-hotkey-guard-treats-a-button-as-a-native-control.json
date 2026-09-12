@@ -1,0 +1,17 @@
+{
+  "id": "pause-hotkey-guard-treats-a-button-as-a-native-control",
+  "file": "src/game/loop.ts",
+  "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+  "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) return false;",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "`isPauseHotkey` treats a focused button as a control that consumes Escape and P. With Back restoring focus to the Controllers button on the pause panel, this is the mutation under which the second Escape -- the one that should resume -- does nothing.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target",
+    "isPauseHotkey accepts Escape and P aimed at a focused SLIDER, which consumes only the keys that move it (issue #494)",
+    "isPauseHotkey accepts a key aimed at a focused BUTTON, which consumes Space and Enter and nothing else (issue #318)"
+  ]
+}

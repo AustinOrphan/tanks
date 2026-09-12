@@ -1,0 +1,12 @@
+{
+  "id": "route-host-disposes-on-every-click-at-a-route",
+  "file": "src/game/route-host.ts",
+  "find": "    if (wasInGameplay && !sm.inGameplay) requests.requestStop();",
+  "replace": "    if (!sm.inGameplay) requests.requestStop();",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "Drops the `wasInGameplay` half, so the rule reads only the after-state: every click made AT an application route disposes. With no session that is a stop request for something that does not exist; with one attached -- the window between a start request and the machine entering gameplay -- it disposes the session that is being set up. This is why the rule is asked on BOTH sides of the handler rather than after it, and the mutation is the reason that is written down. 3 of 32: 'a click at an application route disposes nothing', 'a Quit with no session attached asks for nothing', and 'a handler that stays in gameplay disposes nothing'."
+}

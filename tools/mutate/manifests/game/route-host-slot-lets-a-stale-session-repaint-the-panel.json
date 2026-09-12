@@ -1,0 +1,14 @@
+{
+  "id": "route-host-slot-lets-a-stale-session-repaint-the-panel",
+  "file": "src/game/route-host.ts",
+  "find": "        setControllers(assignment, botsMayDrivePlayers): void {\n          if (!current()) return;\n",
+  "replace": "        setControllers(assignment, botsMayDrivePlayers): void {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The stale-capture control for the report, the same shape `route-host-attach-does-not-invalidate-the-old-slot` pins for registration. A reassignment dispatched into an outgoing session -- or any late report from one -- would overwrite the incoming session's rows with a roster belonging to a match that is over, and the bot-allowed flag with it. `attach` is the authority on who is live, so every slot method has to ask.",
+  "killedBy": [
+    "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) a stale slot cannot repaint the Controllers panel under the session that replaced it"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "mutate-only-echo-hides-the-total",
+  "file": "tools/mutate/run.mjs",
+  "find": "  return `[select] --only: ${entries.length} of ${total} entries: ${entries.map((e) => e.id).join(', ')}`;",
+  "replace": "  return `[select] --only: ${entries.length} entries: ${entries.map((e) => e.id).join(', ')}`;",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Drops the denominator from the pre-run echo. What is left still looks informative -- it names the count and the ids -- but it is exactly the shape that cannot show issue #529's defect: '1 entries: foo' reads as success whether one entry was requested or three were and two were dropped. The number that makes the line worth printing is the one it is compared against.",
+  "killedBy": [
+    "the pre-run --only echo (issue #529) names how many entries will run against how many exist, and lists them",
+    "the pre-run --only echo (issue #529) still reports the total when a single entry was selected"
+  ]
+}

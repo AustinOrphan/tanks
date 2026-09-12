@@ -1,0 +1,14 @@
+{
+  "id": "versus-pane-recentres-its-scroll-axis",
+  "file": "src/game/hud.css",
+  "find": "  justify-content: flex-start;\n  gap: var(--hud-space-3);\n  background: var(--hud-scrim-pane);",
+  "replace": "  justify-content: center;\n  gap: var(--hud-space-3);\n  background: var(--hud-scrim-pane);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ],
+  "why": "Restores what the versus pane shipped before issue #274, and what issue #642 still describes for its two remaining siblings: `justify-content: center` on an `overflow-y: auto` column puts the overflow ABOVE the scrollable area, where no scrollbar reaches it. Latent while the map row was a line of pills; a defect the moment the row became seven cards, measured at 1280x800 with the Mode and Players rows pushed off the top and unreachable. jsdom lays nothing out, so the case that kills this reads the computed `justify-content` of every scroller the fixture builds and pins the set that still carries the shape -- which is also what makes a THIRD pane joining them a red test rather than a quiet inheritance."
+}

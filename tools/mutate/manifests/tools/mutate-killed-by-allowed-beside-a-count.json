@@ -1,0 +1,14 @@
+{
+  "id": "mutate-killed-by-allowed-beside-a-count",
+  "file": "tools/mutate/lib.mjs",
+  "find": "    if (entry.expectFailures !== undefined) {\n      throw new Error(`manifest ${label}: \"killedBy\" and \"expectFailures\" are alternatives -- pin the named tests or the exact count, not both`);\n    }",
+  "replace": "    if (false) {\n      throw new Error(`manifest ${label}: \"killedBy\" and \"expectFailures\" are alternatives -- pin the named tests or the exact count, not both`);\n    }",
+  "why": "An entry carrying both contracts is ambiguous about what a reviewer must keep true when tests are added; the validator is the one place that refuses it.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "killedBy: manifest validation refuses an empty or non-string list, a survivor with a killer, and both contracts at once"
+  ]
+}

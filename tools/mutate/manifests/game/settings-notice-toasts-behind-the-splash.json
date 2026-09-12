@@ -1,0 +1,12 @@
+{
+  "id": "settings-notice-toasts-behind-the-splash",
+  "file": "src/game/loop.ts",
+  "find": "    if (pendingNotice === null || sm.atLaunch) return;",
+  "replace": "    if (pendingNotice === null) return;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The persistence notice's VISIBILITY, which is a different property from its delivery. `.hud-splash` is `z-index: 3` over a full-bleed `rgba(14, 17, 22, 0.92)` scrim and `.hud-toasts` is `z-index: 2` (hud.css), so the title screen paints over the toast rail by design -- its own z-index comment says nothing is allowed to paint over it. Both conditions knowable at BOOT (memory-only storage, and a future-schema payload) are delivered immediately after `createHud`, while the surface is still `launch`; without this guard the toast is raised there and expires behind the scrim after TOAST_MS (3200ms), so a player who takes longer than that to press a key never sees it. Nothing else in the suite can catch this: loop.test.ts's fake HUD records `showToast` CALLS, and `npm run visual` never drives a storage failure -- which is why the test that kills this enters through `bootAtSplash` and asserts the toast is absent BEFORE the pointerdown and present after. 1 of 366.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ]
+}

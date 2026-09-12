@@ -1,0 +1,16 @@
+{
+  "id": "hazard-perception-back-dates-shells-the-wrong-way",
+  "file": "src/sim/ai/hazard-perception.ts",
+  "find": "    b.alive ? { ...b, pos: { x: b.pos.x - b.vel.x * lag, y: b.pos.y - b.vel.y * lag } } : b);",
+  "replace": "    b.alive ? { ...b, pos: { x: b.pos.x + b.vel.x * lag, y: b.pos.y + b.vel.y * lag } } : b);",
+  "expect": "killed",
+  "why": "A sign error turns the awareness delay into an awareness ADVANTAGE: the shell is placed where it is going rather than where it was, so a stale tank reacts to the future and is better than truth instead of worse. It is the most plausible defect in this file by a distance -- the arithmetic is one character -- and it is invisible to any test that only checks that the perceived world DIFFERS from the real one, which is why the unit assertion pins the exact coordinates rather than the direction. Killed by three: the exact-arithmetic unit test, and both decision-level fixtures, whose crossover (a shell falling outside THREAT_HORIZON once back-dated 4 ticks) inverts entirely when the shell moves forward instead.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "backdateHazards: the stale picture itself moves a shell BACK along its own velocity by exactly the delay",
+    "the decision functions solve from the PERCEIVED world, not the real one grey ignores a real, incoming shell its stale picture has not caught up with",
+    "the decision functions solve from the PERCEIVED world, not the real one teal does the same, through its own wiring rather than a copy that could rot"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "change-setup-offered-on-every-panel",
+  "file": "src/game/hud.ts",
+  "find": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || versusPause));",
+  "replace": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', false);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) offers Change Setup at Pause in a versus match, and on no other panel (issue #261)"
+  ],
+  "why": "Shows Change Setup on every panel: the Main Menu, both campaign end screens, a paused campaign round. Two different wrongs at once -- a campaign session has no versus setup to change, and the versus END screen already carries its own route to the pane (issue #279's set), so a second one puts two on one panel. The test drives both axes for that reason: wrong kind and wrong surface are separate mistakes and a gate keyed on only one of them survives the other. Re-anchored for issue #279, which gave the button a SECOND surface (the versus ending) -- the gate is now a disjunction, and showing it everywhere still means offering a versus configuration pane to campaign and practice sessions."
+}

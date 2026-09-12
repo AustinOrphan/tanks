@@ -1,0 +1,18 @@
+{
+  "id": "run-process-refuses-a-nonzero-exit",
+  "file": "tools/capture/process.mjs",
+  "find": "      else if (code !== 0) {",
+  "replace": "      else if (false) {",
+  "expect": "killed",
+  "why": "A subprocess that fails must not be read as a result. `toolVersion` returns the first line of STDOUT, so without this check an encoder that prints a plausible banner and then exits nonzero is accepted as an installed tool, and a decode or compose step that failed is treated as having produced its output file. Every pre-existing test of these paths replaced `runProcess` or the stage above it with a fake that resolves or throws on demand, so no test ran a real process that really failed. MEASURED: 3 of the 52 tests across the three listed files fail -- prerequisites' 'refuses a tool that is installed and broken, rather than reading its failure as a version', and the two orchestrate cases 'cleans up and removes the partial output when the real frame decode fails' and '... when the real still compositor fails', which then report an ENOENT on the file the failed shim never wrote instead of the tool's own failure. pixels' short-decode case is untouched: its shim exits 0 by design, and the byte-length guard is what catches it. Against the pre-existing tests for these three files the same mutation SURVIVES.",
+  "tests": [
+    "tools/capture/prerequisites.test.ts",
+    "tools/compare/orchestrate.test.ts",
+    "tools/compare/pixels.test.ts"
+  ],
+  "killedBy": [
+    "capture prerequisites against a really broken toolchain refuses a tool that is installed and broken, rather than reading its failure as a version",
+    "compareRefs against a really broken toolchain cleans up and removes the partial output when the real frame decode fails",
+    "compareRefs against a really broken toolchain cleans up and removes the partial output when the real still compositor fails"
+  ]
+}

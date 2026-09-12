@@ -1,0 +1,14 @@
+{
+  "id": "entrance-ring-reinfers-the-round-boundary",
+  "file": "src/render/entities.ts",
+  "find": "        const enteredRound = snap;",
+  "replace": "        const enteredRound = curr.roundStartTick !== prev.roundStartTick;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The shape the file had before issue #531: the entrance trigger recomputing the roundStartTick comparison locally instead of reading the one `snap` the sync already resolved. The two agreed for as long as `snap` was that comparison, which is exactly why the duplication survived review; the moment `snap` also carries the level-switch announcement, the local copy silently keeps the broken half. The visible result is a player who gets no entrance effect at all on the one transition that reaches a new board without a death first, and one on every other. Nothing else in the file notices: the round-restart trigger it was written for still fires.",
+  "killedBy": [
+    "spawn animation (#199) starts the entrance on an announced level switch, whose worlds agree on roundStartTick (#531)"
+  ]
+}

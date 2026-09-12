@@ -1,0 +1,17 @@
+{
+  "id": "route-ui-motion-toggle-echoes-the-click-instead-of-the-store",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onMotionChange((next) => {\n    deps.settings.setMotion(next);\n  });",
+  "replace": "  hud.onMotionChange((next) => {\n    hud.setMotion(next);\n  });",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The handler that paints instead of persisting. The label moves under the finger, so it looks like it worked -- and nothing else does: the preference is not saved, `effectiveSettings` never republishes, and `hud.setReducedMotion` never fires, so the transitions the player is trying to change carry on exactly as before. That is issue #364's fifth criterion and the whole point of issue #289, and it is why the store is the only thing a settings handler is allowed to touch.",
+  "killedBy": [
+    "the application routes work with no gameplay session behind them the settings routes write their stores",
+    "the application routes work with no gameplay session behind them drives every route while a real GameSessionHost stays EMPTY (issue #427)",
+    "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session"
+  ]
+}

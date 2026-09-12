@@ -1,0 +1,15 @@
+{
+  "id": "route-host-detach-clears-only-the-topbar",
+  "file": "src/game/route-host.ts",
+  "find": "    hud.setOutcome(null);\n    hud.setRoundPhase(null);\n    hud.setShellCount(null);\n    hud.setTouchIndicator({\n      stick: null,\n      aim: null,\n      scheme: deps.effectiveSettings.current().touchScheme,\n      used: false,\n    });\n",
+  "replace": "    void hud;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Exactly the shape that shipped before issue #324's step S7: releasing the slot resets the relaunch target and the topbar status, and leaves every OTHER retained gameplay member holding the match that just ended. `hud.ts` keeps whatever it was last told, so the visible result is a finished match's outcome tally, a frozen 3-2-1 countdown chip, the `?dev=1&shellCount=1` readout and the player's last touch thumbs, all sitting over the Main Menu until something else overwrites them. Invisible to every pre-S7 assertion, which is why it is pinned separately from the entry above rather than folded into it: that one drops the whole reset and this one drops only the half S7 added. Pinned with killedBy rather than a count -- the claim is which members are emptied, not a population.",
+  "killedBy": [
+    "createRouteHost: releasing the slot gives the menu back its page shape empties the whole gameplay sink, not just the topbar (issue #324, step S7)",
+    "createRouteHost: releasing the slot gives the menu back its page shape carries the STORED touch scheme into the cleared indicator, not a hardcoded one"
+  ]
+}

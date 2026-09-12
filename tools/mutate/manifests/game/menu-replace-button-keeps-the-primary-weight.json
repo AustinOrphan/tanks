@@ -1,0 +1,14 @@
+{
+  "id": "menu-replace-button-keeps-the-primary-weight",
+  "file": "src/game/hud.ts",
+  "find": "    newGameBtn.classList.toggle('ui-btn--primary', !hasProgress || versusKind);\n    newGameBtn.classList.toggle('hud-new-game--tertiary', hasProgress && !versusKind);",
+  "replace": "    newGameBtn.classList.toggle('ui-btn--primary', true);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Issue #226 makes Start New Campaign TERTIARY while a run exists: with Continue on screen this button is the destructive one and must not compete with it for the eye. Left at primary weight the menu offers two equally loud campaign actions, one of which deletes the other's subject -- exactly the flat competition the issue exists to remove, and a pure CSS-class change that no behavioural test would notice.",
+  "killedBy": [
+    "hud: continue vs new game the campaign start button is always offered at title, and says which of the two it is"
+  ]
+}

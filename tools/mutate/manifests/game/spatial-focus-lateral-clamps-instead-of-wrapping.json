@@ -1,0 +1,20 @@
+{
+  "id": "spatial-focus-lateral-clamps-instead-of-wrapping",
+  "file": "src/game/spatial-focus.ts",
+  "find": "    return row[(colIdx + step + row.length) % row.length].item;",
+  "replace": "    return row[Math.min(Math.max(colIdx + step, 0), row.length - 1)].item;",
+  "why": "Right at the end of a row must wrap to its start (issue #495: 'row wrap at the ends and no dead ends'); clamping leaves the player stuck on the last option.",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/spatial-focus.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
+    "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
+    "hud: spatial focus follows the drawn layout (issue #495) the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated",
+    "hud: the semantic action dispatcher (issue #494) a direction walks the active panel like the arrows do, and reports unconsumed with nothing shown",
+    "spatial-focus: every move lands somewhere Left and Right walk the row and wrap within it, never leaving it",
+    "spatial-focus: no layout to follow (every rect empty, as jsdom reports) Left and Right walk the same order, since the one row IS the document"
+  ]
+}

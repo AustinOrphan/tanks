@@ -1,0 +1,15 @@
+{
+  "id": "modality-pen-and-touch-read-as-a-mouse",
+  "file": "src/game/route-host.ts",
+  "find": "    noteModality(pointerType === 'touch' || pointerType === 'pen' ? 'touch' : 'pointer');",
+  "replace": "    noteModality('pointer');",
+  "why": "The browser's own `pointerType` is what tells a finger from a mouse on a laptop that has both; collapsing them leaves a touchscreen user reading key hints.",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+    "createRouteHost: prompts follow the input the player is using (issue #496) the first input of the page sets the hint with no threshold: a touch tap drops the key hint"
+  ]
+}

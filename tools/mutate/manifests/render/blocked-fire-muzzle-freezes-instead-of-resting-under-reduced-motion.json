@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-muzzle-freezes-instead-of-resting-under-reduced-motion",
+  "file": "src/render/blocked-fire-muzzle.ts",
+  "find": "      f.mesh.scale.setScalar(reducedMotion ? 1 : 1 - (1 - SHRINK_TO) * k);",
+  "replace": "      if (!reducedMotion) f.mesh.scale.setScalar(1 - (1 - SHRINK_TO) * k);",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-muzzle.test.ts"
+  ],
+  "why": "The landmine blocked-fire-ring.ts records, reproduced on this arm: skipping the scale term under reduced motion instead of writing a rest scale freezes an ALREADY-LIVE flash at whatever size it had collapsed to when the preference flipped, rather than moving it to rest. Reachable only mid-flight, because `prefers-reduced-motion` is a live media query -- the test that sets the preference BEFORE spawning stays green under this, which is why one reduced-motion case is not enough.",
+  "killedBy": [
+    "blocked-fire muzzle flash (issue #516, parent #356) snaps an ALREADY-LIVE flash to full size when reduced motion turns on mid-flight"
+  ]
+}

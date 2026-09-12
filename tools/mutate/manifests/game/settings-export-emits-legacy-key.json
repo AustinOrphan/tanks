@@ -1,0 +1,14 @@
+{
+  "id": "settings-export-emits-legacy-key",
+  "file": "src/game/save.ts",
+  "find": "  CUSTOM_KEY,\n  SETTINGS_KEY,\n  ACHIEVEMENTS_KEY,",
+  "replace": "  CUSTOM_KEY,\n  TOUCH_SETTINGS_KEY,\n  ACHIEVEMENTS_KEY,",
+  "expect": "killed",
+  "expectFailures": 10,
+  "why": "Puts `tanks.touch.v1` back in the EXPORT list in place of `tanks.settings.v1`. Nothing in the tree writes the legacy key any more, so this produces exports that carry stale bytes and omit the settings a player actually has. Killed broadly -- the SAVE_KEYS literal, the 'does NOT export the legacy touch key' guard, the measured store-coverage check, the round trips, and loop.test.ts's dev-console key list. 10 of 400 across the three declared files; the wide population is the point, since this key list is the wire format several suites read through.",
+  "tests": [
+    "src/game/save.test.ts",
+    "src/game/storage.test.ts",
+    "src/game/loop.test.ts"
+  ]
+}

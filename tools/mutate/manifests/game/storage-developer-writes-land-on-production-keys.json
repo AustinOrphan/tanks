@@ -1,0 +1,12 @@
+{
+  "id": "storage-developer-writes-land-on-production-keys",
+  "file": "src/game/storage.ts",
+  "find": "      base.setItem(underlying(key), value);",
+  "replace": "      base.setItem(String(key), value);",
+  "expect": "killed",
+  "expectFailures": 10,
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "The headline issue #245 defect: a developer session's WRITES land on the production keys, so a dev level jump, sandbox event or achievement check overwrites the real player's campaign. Only setItem is unnamespaced here -- reads still go through the prefix -- which is what makes it destructive rather than obviously broken: the developer session boots at defaults, writes over the player's save, and nothing in that session ever displays the collision. 10 of 40 tests in storage.test.ts, spanning the write/read-back pair, removeItem and clear scoping, enumeration, injectivity, the whole-inventory sweep, the reload round trip and the save.ts export/import case. The wide population is the point rather than noise: every property the adapter exists to provide is downstream of setItem landing in the right namespace."
+}

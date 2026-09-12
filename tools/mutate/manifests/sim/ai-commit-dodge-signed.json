@@ -1,0 +1,14 @@
+{
+  "id": "ai-commit-dodge-signed",
+  "file": "src/sim/ai/commitment.ts",
+  "find": "  if (avoidKind === 'bullet') return Math.abs(vdot(held, avoid)) < AI_COMMIT_DODGE_ALIGN_DOT;",
+  "replace": "  if (avoidKind === 'bullet') return vdot(held, avoid) < AI_COMMIT_DODGE_ALIGN_DOT;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/commitment.test.ts"
+  ],
+  "why": "Pins the mid-execution correction, and it is the single most valuable entry here because the bug it restores already shipped once in this branch and measured as a partial fix. dangerAvoidMove's bullet branch names one of two EXACT OPPOSITE perpendiculars, chosen by the side the tank sits on, so the name flips the instant the tank crosses the shell's axis while both remain equally good escapes. A SIGNED comparison scores that flip -1 and breaks the hold on precisely the oscillation the hold exists to stop: measured in that state, overall reversals fell but `bullet->bullet` ROSE from 40.6% to 68.5% of all reversals under a shooting player and grey's P95 turn stayed pinned at exactly 180.0 degrees. Killed by the flipped-perpendicular fixture.",
+  "killedBy": [
+    "commitMove does NOT break a BULLET dodge merely because the named perpendicular flipped sides"
+  ]
+}

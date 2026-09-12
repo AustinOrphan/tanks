@@ -1,0 +1,14 @@
+{
+  "id": "hud-nav-keys-use-the-old-any-input-rule",
+  "file": "src/game/hud.ts",
+  "find": "    if (consumesKey(e.target, e.key)) return;\n    const action = keyToUiAction(e.key);",
+  "replace": "    if (e.target instanceof HTMLInputElement) return;\n    const action = keyToUiAction(e.key);",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The roving-focus handler must ask the consume rule: the old any-input early return ate Escape at a focused volume slider, so Back never fired there (issue #494's product-visible ruling).",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)"
+  ]
+}

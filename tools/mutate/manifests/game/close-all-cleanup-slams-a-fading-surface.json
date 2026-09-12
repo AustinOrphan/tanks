@@ -1,0 +1,14 @@
+{
+  "id": "close-all-cleanup-slams-a-fading-surface",
+  "file": "src/game/hud.ts",
+  "find": "  function cleanupHide(el: HTMLElement, hiddenClass: string): void {\n    if (el.classList.contains(LEAVING)) return;\n    el.classList.add(hiddenClass);\n  }",
+  "replace": "  function cleanupHide(el: HTMLElement, hiddenClass: string): void {\n    el.classList.add(hiddenClass);\n  }",
+  "expect": "killed",
+  "why": "The other half of the same defect, and independently sufficient to cause it: `setState`'s close-all putting `--hidden` on a surface that is mid-crossfade. These four calls were bare `classList.add`s that bypassed the transition contract entirely, so the Back handlers' `setState` slammed the pane `showX(false)` was fading. Reverting EITHER this or `panel-close-collapsed-by-its-own-setstate` above reproduces the cut on its own -- measured, both directions -- which is why both exist as separate entries rather than one. The skip is safe because closure is still guaranteed: a surface passed over here is hidden by its own settle, and gameplay entry (where 150ms later would be too late) goes through `setState`'s own `instant` transition, whose drain settles it in the same frame. `crossfades a panel CLOSE, not only its open` is the case that measures it, at the assertion that the closing pane keeps its `--hidden` OFF while it fades. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract crossfades a panel CLOSE, not only its open"
+  ]
+}

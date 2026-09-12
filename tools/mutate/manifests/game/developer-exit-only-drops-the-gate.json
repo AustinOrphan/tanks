@@ -1,0 +1,15 @@
+{
+  "id": "developer-exit-only-drops-the-gate",
+  "file": "src/game/dev-config.ts",
+  "find": "  const drop = new Set([...knownDevParams(), ...deprecated]);",
+  "replace": "  const drop = new Set(['dev', ...deprecated]);",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config.test.ts"
+  ],
+  "killedBy": [
+    "developerExitSearch removes the master gate AND every other developer parameter",
+    "developerExitSearch sweeps the registry rather than a hand-kept list, so a new flag cannot outlive Exit"
+  ],
+  "why": "Turns Exit into `canonicalDevSearch(.., {keepGate:false})` -- which is the mistake this function exists to prevent, and the one a reader is most likely to make, since that call already existed and looks like it means 'leave developer mode'. It drops the gate and KEEPS every flag, so Exit hands back `?aimRay=1&pp1Roles=1`: developer state survives, and a reload re-enters the arm the player just asked to leave. Sweeping `knownDevParams()` is also what makes a flag added tomorrow removable on the same day, with no second list to remember."
+}

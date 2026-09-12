@@ -1,0 +1,17 @@
+{
+  "id": "topbar-shipped-arm-departs-from-the-shipped-bar",
+  "file": "src/game/topbar-treatment.ts",
+  "find": "  'spare-chips': NO_DEPARTURES,",
+  "replace": "  'spare-chips': { restoreEnemies: true, restoreDenominator: false, exceptionChip: false },",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "The default drifting from the bar it is supposed to BE -- the one failure this shape exists to make impossible. A `spare-chips` row that restates the shipped bar instead of naming no departures can disagree with it, and here it does: every player gets the enemy count back while the flag, the docs and the departures table all still say the shipped bar drops it. RE-AIMED by the ruling from `full`, which held this property while the comparison ran; the entry follows SHIPPED_TOPBAR_TREATMENT rather than a name, which is what made moving it a one-line edit. MEASURED on this branch: killed, 4 of the 12 cases in the arm suite.",
+  "killedBy": [
+    "topbar: the SHIPPED arm is the no-flag bar itself mounts the same topbar as an absent flag, at every session, with no class of its own",
+    "topbar: the flag that names an arm gives the SHIPPED arm no departures at all, and every other arm at least one",
+    "topbar: the flag that names an arm keeps the two single-removal arms genuinely single, measured against `full`",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

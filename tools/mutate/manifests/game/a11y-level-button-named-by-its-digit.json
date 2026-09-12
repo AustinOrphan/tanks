@@ -1,0 +1,12 @@
+{
+  "id": "a11y-level-button-named-by-its-digit",
+  "file": "src/game/hud.ts",
+  "find": "        btn.setAttribute('aria-label', `Level ${i + 1}`);",
+  "replace": "        btn.removeAttribute('aria-label');",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Puts the level grid back to a row of bare digits, announced as '1', '2', '3' with nothing saying what they select. Killed by the never-names-a-control-with-a-bare-digit rule alone and NOT by the non-empty-name sweep, which is the point of having both: a digit is a name, so an emptiness check passes straight over the entire defect this issue records."
+}

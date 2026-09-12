@@ -1,0 +1,14 @@
+{
+  "id": "world-init-lets-derived-rules-carry-the-old-geometry",
+  "file": "src/sim/arena.ts",
+  "find": "  const worldRules: WorldRulesInit = { ...rules };\n  delete worldRules.arenaGeometry;",
+  "replace": "  const worldRules: WorldRulesInit = { ...rules };",
+  "expect": "killed",
+  "tests": [
+    "src/sim/arena.test.ts"
+  ],
+  "killedBy": [
+    "createWorldFor's init object (issue #493) builds the arena it was given, not the one a caller derived its rules from"
+  ],
+  "why": "The hazard the init object introduces, and the reason the two lines exist. `arenaGeometry` is a `WorldRulesInit` key AND the one rule `loadArena` derives, so with `...worldRules` spread over `loadArena`'s result a caller passing `rules: { ...world.rules }` stamps the OLD board's geometry onto the NEW board -- and that spread is the shape rules.ts documents for deriving a variant (`resolveWorldRules({ ...world.rules, mode: 'ffa' })`), so it is actively invited. INVISIBLE to everything else: every tank, wall and spawn is the new arena's, `World.rules` is otherwise correct, and `arenaGeometry` is read by presentation rather than by `step`, so no simulation assertion moves and the golden trace does not budge. What breaks is a camera framing the wrong board. The old positional signature could not express this at all -- it named the seven rule keys one by one -- so the entry pins a risk this refactor created rather than one it inherited."
+}

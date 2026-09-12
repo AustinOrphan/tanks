@@ -1,0 +1,12 @@
+{
+  "id": "settings-media-query-listener-dropped",
+  "file": "src/game/capabilities.ts",
+  "find": "    query.addEventListener('change', onChange);",
+  "replace": "    void onChange;",
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "One layer lower than the mutation above: the platform registration itself. capabilities.ts is the ONLY place JavaScript touches `matchMedia('(prefers-reduced-motion: reduce)')`, so a dropped `addEventListener` makes every downstream consumer stale no matter how correctly they subscribe. Killed by capabilities.test.ts's 'REACTS while the page is open' and the exactly-one-platform-listener test. 2 of 24.",
+  "tests": [
+    "src/game/capabilities.test.ts"
+  ]
+}

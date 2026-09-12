@@ -1,0 +1,15 @@
+{
+  "id": "browser-deps-drops-the-developer-gate",
+  "file": "src/game/loop.ts",
+  "find": "    developerMode,\n  };",
+  "replace": "    developerMode: false,\n  };",
+  "expect": "killed",
+  "why": "The composition half of the entry above: the parser can be correct and still never reach GameDeps. Only a test that enters through createBrowserDeps with a real location.search can see this, which is what loop.test.ts's 'carries the parsed browser query state into GameDeps' block does. Scoped to loop.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "createBrowserDeps carries the parsed browser query state into GameDeps developerMode and devFlags are parsed from the SAME query, not from different reads",
+    "createBrowserDeps carries the parsed browser query state into GameDeps developerMode follows the real `dev` gate in the URL, both ways"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "compare-pads-a-shorter-capture",
+  "file": "tools/compare/orchestrate.mjs",
+  "find": "  if (bs.frameCount !== hs.frameCount) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/compare/orchestrate.test.ts"
+  ],
+  "why": "Drops the frame-count check, so two clips of different lengths are compared positionally and the surplus frames on the longer side are simply ignored. The issue rules this out by name: a comparison must not silently freeze, pad, truncate, or retime one side to conceal a mismatch, because the result looks exactly like a successful one.",
+  "killedBy": [
+    "compareRefs: comparability of the two captures refuses two captures that differ in frame count, rather than scaling or padding"
+  ]
+}

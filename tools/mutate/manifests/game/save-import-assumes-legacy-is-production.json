@@ -1,0 +1,16 @@
+{
+  "id": "save-import-assumes-legacy-is-production",
+  "file": "src/game/save.ts",
+  "find": "    declared === 'production' || declared === 'developer' ? declared : null;",
+  "replace": "    declared === 'developer' ? declared : 'production';",
+  "expect": "killed",
+  "why": "Reads a blob with no namespace field as production. That is the intuitive rule and it is wrong: the namespaced adapter shipped in #245 on 2026-08-25 at 18:13 while save.ts was last changed at 08:45 the same day, so ?dev=1&saveIo=1 has been exporting DEVELOPER data into unlabelled blobs ever since. Under this mutation such a blob imports into production without the warned action.",
+  "tests": [
+    "src/game/save.test.ts"
+  ],
+  "killedBy": [
+    "save namespaces (issue #250) a blob with NO namespace is foreign, not assumed production",
+    "save namespaces (issue #250) allowForeignNamespace is the explicit action that lets either through",
+    "save namespaces (issue #250) an unrecognised namespace string is unknown, not malformed"
+  ]
+}

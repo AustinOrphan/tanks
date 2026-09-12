@@ -1,0 +1,12 @@
+{
+  "id": "versus-axis-change-skips-the-clamp",
+  "file": "src/game/hud.ts",
+  "find": "    setVersusConfig(retained.dropped === null ? next : { ...next, arenaId: retained.arenaId });",
+  "replace": "    setVersusConfig(next);",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Computes the clamp and then ignores it, keeping the stranded id in the config while STILL rendering the notice -- the pane says the board was replaced and launches the board it said it replaced. A pure-function test on retainArenaChoice cannot see this and neither can a notice-presence assertion; only the hud case's launch-gate assertion on the emitted config catches it, which is why that assertion runs resolveVersusConfig rather than reading versusConfigState."
+}

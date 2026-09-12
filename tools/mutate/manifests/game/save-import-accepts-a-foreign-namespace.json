@@ -1,0 +1,12 @@
+{
+  "id": "save-import-accepts-a-foreign-namespace",
+  "file": "src/game/save.ts",
+  "find": "  if (source !== active && opts.allowForeignNamespace !== true) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "expectFailures": 5,
+  "why": "Removes the namespace gate, restoring the pre-#250 behaviour: a developer save imports straight over the player's real production save, silently and completely. This is the defect the issue exists to close, and nothing outside save.test.ts can see it because the keys written are identical either way. Measured, not estimated: 5 of 37 in save.test.ts.",
+  "tests": [
+    "src/game/save.test.ts"
+  ]
+}

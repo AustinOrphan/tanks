@@ -1,0 +1,16 @@
+{
+  "id": "hud-act-claims-pause",
+  "file": "src/game/hud.ts",
+  "find": "    if (action === 'pause') return false;\n    const container = activePanelContainer();",
+  "replace": "    if (action === 'pause') return true;\n    const container = activePanelContainer();",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The HUD does not own pause. Reporting it consumed stops the page from toggling the state machine, so Start on a pad could never pause or resume.",
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) Start pauses a simulating session and resumes a paused one; every other action is dropped mid-play",
+    "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+  ]
+}

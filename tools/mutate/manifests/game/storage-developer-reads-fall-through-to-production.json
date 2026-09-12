@@ -1,0 +1,19 @@
+{
+  "id": "storage-developer-reads-fall-through-to-production",
+  "file": "src/game/storage.ts",
+  "find": "    getItem(key: string): string | null {\n      return base.getItem(underlying(key));\n    },",
+  "replace": "    getItem(key: string): string | null {\n      return base.getItem(String(key));\n    },",
+  "expect": "killed",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "Isolation has a read half as well as a write half, and `storage-developer-writes-land-on-production-keys` only pins the write. Under this mutation a developer session WRITES to `tanks.dev.*` but READS the player's real keys, so it adopts the production campaign, the production legacy touch settings, and exports production data through save.ts -- while every write-side assertion still passes. `String(key)` rather than `key` so the mutation keeps the argument coercion the adapter does and differs only in the namespace mapping.",
+  "killedBy": [
+    "a developer session cannot reach production data exports and imports through save.ts inside its own namespace",
+    "a developer session cannot reach production data neither adopts nor deletes the production legacy touch settings",
+    "createNamespacedStorage: developer cannot see a production key, however it was written",
+    "createNamespacedStorage: developer reads back its own writes",
+    "createNamespacedStorage: developer removes only its own key",
+    "the developer namespace over the whole store inventory persists across a reload: a second store bundle reads the first one back"
+  ]
+}

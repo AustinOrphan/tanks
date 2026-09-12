@@ -1,0 +1,14 @@
+{
+  "id": "versus-accuracy-credits-a-self-elimination",
+  "file": "src/game/loop.ts",
+  "find": "    if (e.by.ownerId === e.tankId) continue;\n    const slot = slotOf(e.by.ownerId);\n    if (slot !== null) shellKills[slot] = (shellKills[slot] ?? 0) + 1;",
+  "replace": "    const slot = slotOf(e.by.ownerId);\n    if (slot !== null) shellKills[slot] = (shellKills[slot] ?? 0) + 1;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) refuses a self-elimination, so a player cannot improve their accuracy by ricocheting into themselves"
+  ],
+  "why": "Credits a player's own shell killing themselves as a hit, so a ricochet into your own tank RAISES your accuracy. `tallyCoopKills` refuses the same event as a kill; the two must agree or a slot's accuracy numerator counts something its Kills column does not."
+}

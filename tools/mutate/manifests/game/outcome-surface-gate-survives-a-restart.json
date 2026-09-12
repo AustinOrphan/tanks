@@ -1,0 +1,14 @@
+{
+  "id": "outcome-surface-gate-survives-a-restart",
+  "file": "src/game/hud.ts",
+  "find": "    outcomeVisible = isOutcome;\n    if (s === 'playing' || atLaunch) return;",
+  "replace": "    if (s === 'playing' || atLaunch) return;\n    outcomeVisible = isOutcome;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Moves the flag's assignment back below `setState`'s early return, where it sat until this change. `playing` and `launch` both return before it, so the outcome -> playing transition -- the ordinary restart -- left the flag stuck `true` and every later push re-rendered the outcome lines and rewrote the action button behind an already-hidden panel. The natural placement, since every other line of that function's body is below the return; only a test that pushes an outcome DURING play can see it, because `.hud-panel` hides the result either way.",
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) a push during PLAY repaints nothing -- the surface gate survives a restart"
+  ]
+}

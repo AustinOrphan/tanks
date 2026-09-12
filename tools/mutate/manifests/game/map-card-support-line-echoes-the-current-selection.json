@@ -1,0 +1,14 @@
+{
+  "id": "map-card-support-line-echoes-the-current-selection",
+  "file": "src/game/hud.ts",
+  "find": "    const counts = entry.players.map((n) => String(n)).join('/');",
+  "replace": "    const counts = String(versusConfigState.players);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "the versus map cards (issue #274) says what a board supports, not what is currently selected"
+  ],
+  "why": "Reads the selection instead of the catalog, which makes every card agree with the count already chosen -- true of the moment and useless for the choice the line exists to inform. The row is filtered to eligible boards, so the number is never WRONG; a player at two players sees \"2 players\" on Pinwheel, which is two-only, and on Arena 1, which is 2/3/4, and cannot tell that changing the count would keep one and drop the other. Every card still renders with a plausible line, which is why the case that kills this compares two boards with DIFFERENT declared support in one fixture rather than asserting a format."
+}

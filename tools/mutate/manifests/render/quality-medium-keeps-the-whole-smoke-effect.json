@@ -1,0 +1,14 @@
+{
+  "id": "quality-medium-keeps-the-whole-smoke-effect",
+  "file": "src/render/quality.ts",
+  "find": "export const CHEAP_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 1, maxClouds: 16 };",
+  "replace": "export const CHEAP_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 3, maxClouds: 32 };",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts"
+  ],
+  "why": "Empties the middle tier: `medium` still names a smoke budget, and it is `high`'s. The ruling was three-way -- gone, cheapened, untouched -- so a medium equal to high leaves the owner with two tiers wearing three names, and the flag that was supposed to be the cheap-but-still-smoking option silently stops being one. Every other preset field still steps down, so a test that only checked the shadow map and the pixel-ratio cap would report a healthy table.",
+  "killedBy": [
+    "medium and low are real steps down, not copies of high medium draws fewer billows and holds fewer clouds than high, and still draws some"
+  ]
+}

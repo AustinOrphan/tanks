@@ -1,0 +1,12 @@
+{
+  "id": "route-host-passes-session-scoped-request-seams-to-the-routes",
+  "file": "src/game/route-host.ts",
+  "find": "    requestVersusSession: (config) => requests.requestStart({ kind: 'versus', config }),\n    requestCampaignSession: requests.requestCampaignSession,",
+  "replace": "    requestVersusSession: deps.requestVersusSession,\n    requestCampaignSession: deps.requestCampaignSession,",
+  "expect": "killed",
+  "expectFailures": 3,
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The route UI's Versus Start and Campaign buttons wired to a SESSION's request callbacks instead of the page-level seam. That is the coupling issue #468 exists to remove -- 'gameplay-starting route actions become explicit application-level requests that do not require dereferencing an existing gameplay session' -- and with eager startup still in place it would look fine in a browser, because a session always happens to exist. It stops working the moment #428 boots into an empty host, which is the point at which it would be hardest to attribute. 3 of 18: the two empty-host request cases and 'keeps reaching the page seam across a session lifecycle'. The fixture makes this loud on purpose -- its session-scoped `requestVersusSession`/`requestCampaignSession` THROW, so a host that forwarded `deps` straight into `createRouteUi` fails rather than quietly recording nothing. RE-ANCHORED by issue #428: Versus Start now travels as a `StartIntent` on the single `requestStart` boundary rather than on its own callback, so the line the mutation replaces changed shape. What it destroys is unchanged and is now strictly worse: with the eager boot gone, a route UI wired to a session's seams cannot start the FIRST match at all."
+}

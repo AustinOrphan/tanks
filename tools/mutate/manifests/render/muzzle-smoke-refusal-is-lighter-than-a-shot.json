@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-refusal-is-lighter-than-a-shot",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 1 },",
+  "replace": "  refused: { color: 0xd6dade, peakOpacity: 0.96, fadePower: 1 },",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Inverts the owner's actual instruction, and it is the plausible mistake rather than a random one: the measurement recorded in SMOKE says a darker grey sits CLOSER to this dark green felt, so a reader optimising for raw legibility would reach for a lighter one. The ruling was `darker, blacker`, and the answer to the felt problem is density, not brightness. Nothing about the puff's density, motion or lifetime changes here, so only an assertion about the colour itself can see it.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) a REFUSAL is darker, and denser, than a shot"
+  ]
+}

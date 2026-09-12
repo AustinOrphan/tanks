@@ -1,0 +1,21 @@
+{
+  "id": "muzzle-clearance-tested-at-the-plane",
+  "file": "src/sim/bullets.ts",
+  "find": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))",
+  "replace": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD))",
+  "expect": "killed",
+  "tests": [
+    "src/sim/bullets.test.ts"
+  ],
+  "why": "Asks whether the BARREL OPENING is clear rather than whether the region the shell will occupy is -- the exact confusion splitting the two constants introduced. It both refuses shots that fit and, worse, misses a wall sitting in the span the shell is actually born into, which spawns a live shell inside solid geometry.",
+  "killedBy": [
+    "spawnBullet + ownerShellCount spawns a bullet with config speed/bounces and emits a fire event",
+    "spawnBullet: muzzleClearsTanks (adopted ruling, 2026-08-14: \"spawn at hull centre\" switch) OFF: restores the old behaviour -- the shell spawns already inside the neighbour",
+    "spawnBullet: muzzleClearsTanks (adopted ruling, 2026-08-14: \"spawn at hull centre\" switch) ON, but the neighbour is already dead: a corpse never blocks a muzzle, switch or not",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) holds the nose on the plane at every firing angle, and off a moving tank",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) retreats for a wall that covers the shell but NOT the barrel opening",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) tests clearance where the SHELL will be, not at the barrel opening",
+    "spawnBullet: where the shell is born spawns at the muzzle, offset along the FIRING angle not the body",
+    "spawnBullet: where the shell is born still uses the muzzle when the wall is behind the tank"
+  ]
+}

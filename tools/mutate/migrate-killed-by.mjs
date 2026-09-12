@@ -65,7 +65,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // One file at a time, each written back where it came from (issue #505).
   for (const file of readManifestFiles(manifestPath)) {
     const result = migrate(file.entries, byId);
-    writeFileSync(file.path, JSON.stringify(result.manifest, null, 2) + '\n');
+    // Written back in the SHAPE it was read (issue #653): a per-entry file holds the entry
+    // object, not a one-element array. Promoting it would work and would quietly undo the
+    // one-file-per-entry layout a file at a time, which is the sort of drift that only
+    // shows up as a merge conflict months later.
+    const payload = file.single ? result.manifest[0] : result.manifest;
+    writeFileSync(file.path, JSON.stringify(payload, null, 2) + '\n');
     migrated += result.migrated;
     kept.push(...result.kept);
     skipped.push(...result.skipped);

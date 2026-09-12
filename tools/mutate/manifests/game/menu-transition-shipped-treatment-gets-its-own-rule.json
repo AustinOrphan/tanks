@@ -1,0 +1,15 @@
+{
+  "id": "menu-transition-shipped-treatment-gets-its-own-rule",
+  "file": "src/game/menu-transition.ts",
+  "find": "  if (treatment === null || treatment === SHIPPED_MENU_TRANSITION) return null;",
+  "replace": "  if (treatment === null) return null;",
+  "expect": "killed",
+  "why": "The shipped transition stops BEING the shipped path and becomes a class of its own. This is the shape the feature would naturally have been written in -- one class per treatment, uniform -- and it is wrong for the reason issue #542 settled on: whatever is DEFAULT must be the shipped cascade rather than a rule that restates it and can drift the first time the token or the keyframes move. Nothing visible changes today, because `.hud--menu-transition-rise` matches no rule in the stylesheet; the class simply appears on the HUD root and the identity quietly stops being true by construction. The entry is kept from the experiment and re-aimed rather than retired, because the property it protects MOVED when `rise` was adopted -- `fade` used to hold it -- and this is what makes the move stick. Scoped to menu-transition.test.ts; the identity cases measure it, one on the mounted DOM and one on the mapping itself.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menuTransition: the flag that names a transition maps every treatment but the SHIPPED one to its own modifier class, and that one to none",
+    "menuTransition: the SHIPPED transition is the no-flag path itself mounts the same DOM as an absent flag, with no modifier class anywhere"
+  ]
+}

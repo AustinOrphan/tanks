@@ -1,0 +1,18 @@
+{
+  "id": "quit-button-says-quit-on-a-finished-match",
+  "file": "src/game/hud.ts",
+  "find": "    quitBtn.textContent = atOutcome\n      ? 'Main Menu'\n      : s === 'paused' && statusData?.kind === 'practice'\n        ? 'End Practice'\n        : s === 'paused' && statusData?.kind === 'versus'\n          ? 'Main Menu'\n          : 'Quit to Title';",
+  "replace": "    quitBtn.textContent = 'Quit to Title';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Collapses the per-state wording, so a match that is already over invites the player to \"Quit\" it. Issue #323 asks every outcome label to describe exactly what it preserves or replaces, and there is nothing left to abandon on an end screen -- on an intermediate clear the run is preserved besides, which is why this wording was already special-cased there before #323 widened it. The button still appears and still works, so only the copy assertions can see this. RE-ANCHORED by issue #323's contextual pause exit: the single-line ternary this replaced is now a three-arm chain, and collapsing the whole chain is still the same mutation -- every screen, ended or paused, invited to \"Quit\". It now flattens the practice pause wording as well, which is why the two pause-exit killers joined the list. Re-anchored for issue #261, which added the versus arm to the same ternary.",
+  "killedBy": [
+    "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people",
+    "hud: the level-cleared panel offers the main menu shows it on the FINAL win too, where the run has already ended",
+    "hud: the level-cleared panel offers the main menu shows it after clearing an INTERMEDIATE level, labelled Main Menu",
+    "hud: the pause exit is contextual (issue #323) reads End Practice at Pause, where \"quit to title\" would overstate the cost",
+    "hud: the pause exit is contextual (issue #323) names the destination at Pause wherever one can be named, and keeps the generic word where it cannot"
+  ]
+}

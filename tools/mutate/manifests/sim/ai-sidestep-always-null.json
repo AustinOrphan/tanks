@@ -1,0 +1,13 @@
+{
+  "id": "ai-sidestep-always-null",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  return best;",
+  "replace": "  return null;",
+  "expect": "killed",
+  "expectFailures": 2,
+  "tests": [
+    "src/sim/ai/danger.test.ts",
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "Makes sidestepAroundBlockage always report 'the whole wheel is blocked', so dangerAvoidMove's `?? preferred` fallback fires even when a navigable heading exists -- issue #224 AC3's exact defect, reintroduced. Measured at 2 of 107 scoped tests failing, both in the same corridor shape (north/south walled inside the horizon, east/west open): 'sidesteps onto a navigable heading when BOTH perpendiculars are walled' and 'refuses a sidestep candidate that steps toward an armed mine'. Both fixtures have a real navigable answer that this mutation discards, so the returned direction becomes the wall-blocked `preferred` heading in each case, failing their wallBlocksPath(..., dir!, AI_PATH_HORIZON_TICKS) === false assertions."
+}

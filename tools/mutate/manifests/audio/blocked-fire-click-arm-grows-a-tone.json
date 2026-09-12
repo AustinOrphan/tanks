@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-click-arm-grows-a-tone",
+  "file": "src/audio/synth.ts",
+  "find": "    noiseVoice(c, t, { duration: 0.012, peak: 0.11, type: 'highpass', from: 5200, to: 3800 }, r),\n  ],",
+  "replace": "    noiseVoice(c, t, { duration: 0.012, peak: 0.11, type: 'highpass', from: 5200, to: 3800 }, r),\n    toneVoice(c, t, { from: 210, to: 150, duration: 0.03, peak: 0.07, type: 'square' }, r),\n  ],",
+  "expect": "killed",
+  "tests": [
+    "src/audio/synth.test.ts"
+  ],
+  "why": "The `click` arm is the one audio arm that needed a recipe rather than a rate or a gain, and the reason is the layer it does NOT have: issue #516 asks it for \"a short dry mechanical click, no tone\". Giving it back the baseline's square body makes it the baseline refusal wearing a second flag value, and two arms that sound the same compare nothing. MEASURED: this mutation left all 16 of synth.test.ts's tests green before the click-arm case was added.",
+  "killedBy": [
+    "the blocked-fire `click` arm (issue #516) has NO tone layer at all -- the absent oscillator IS the design"
+  ]
+}

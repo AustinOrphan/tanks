@@ -1,0 +1,15 @@
+{
+  "id": "loop-quality-flag-stops-overriding-the-setting",
+  "file": "src/game/loop.ts",
+  "find": "    quality: qualityFor(deps.devFlags.quality ?? deps.effectiveSettings.current().quality),",
+  "replace": "    quality: qualityFor(deps.effectiveSettings.current().quality),",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The other half of the same line, and the half a player never sees: `?dev=1&quality=low` silently does nothing, so the on-device sweep issue #113 defers -- the reason the flag exists at all -- reports whatever the machine's saved preference happens to be. The natural edit once a setting exists ('the setting is the source of truth now'), and wrong because a flag that must not write the player's save has no other way to be honoured.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default threads the quality dev flag through to the renderer",
+    "startGameWith: dev flags stay off by default lets ?dev=1&quality= OVERRIDE the stored preset, without writing it"
+  ]
+}

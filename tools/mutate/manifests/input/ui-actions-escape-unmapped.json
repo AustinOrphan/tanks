@@ -1,0 +1,15 @@
+{
+  "id": "ui-actions-escape-unmapped",
+  "file": "src/input/ui-actions.ts",
+  "find": "return 'back';",
+  "replace": "return null;",
+  "expect": "killed",
+  "why": "Escape must map to back: the HUD's key handler pops a layer only through that mapping.",
+  "tests": [
+    "src/input/ui-actions.test.ts"
+  ],
+  "killedBy": [
+    "keyToUiAction is case-insensitive: the upper-case spelling of every mapped key lands on the same action",
+    "keyToUiAction maps \"Escape\" to back"
+  ]
+}

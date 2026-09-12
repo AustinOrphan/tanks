@@ -1,0 +1,14 @@
+{
+  "id": "new-campaign-inherits-the-old-runs-tally",
+  "file": "src/game/stats.ts",
+  "find": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) runTally[key] = 0;\n      writeRaw(RUN_STATS_KEY, runTally);",
+  "replace": "      writeRaw(RUN_STATS_KEY, runTally);",
+  "expect": "killed",
+  "tests": [
+    "src/game/stats.test.ts"
+  ],
+  "killedBy": [
+    "createStatsStore: the CAMPAIGN RUN scope startRun zeroes the run tally and ONLY the run tally"
+  ],
+  "why": "`startRun` stops zeroing, so every campaign after the first reports the sum of all of them. The write stays, which is what makes this worth its own entry rather than folding into a deleted-body mutation: the store still looks busy and still persists, it just persists the wrong number."
+}

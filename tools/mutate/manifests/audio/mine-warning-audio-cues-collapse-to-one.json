@@ -1,0 +1,15 @@
+{
+  "id": "mine-warning-audio-cues-collapse-to-one",
+  "file": "src/audio/director.ts",
+  "find": "        engine.play('mine-fuse-warn');",
+  "replace": "        engine.play('mine-trip');",
+  "expect": "killed",
+  "tests": [
+    "src/audio/director.test.ts"
+  ],
+  "why": "Both events would still make a sound, so 'the warnings are audible' stays true while the ONE thing issue #276 is about -- that a player can tell 'you tripped this' from 'time is running out' -- is destroyed. Pins the distinction rather than the presence.",
+  "killedBy": [
+    "mine warning cues (issue #276) emits one cue per event, so simultaneous warnings stay bounded",
+    "mine warning cues (issue #276) plays DISTINCT sounds for the fuse warning and the proximity trip"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "compare-label-truncation-eats-the-sha",
+  "file": "tools/compare/compose.mjs",
+  "find": "  const prefix = `${side}  ${sha.slice(0, 7)}  `;",
+  "replace": "  const prefix = `${side}  `;",
+  "expect": "killed",
+  "tests": [
+    "tools/compare/compose.test.ts"
+  ],
+  "why": "Puts the ref before the SHA again, so a long branch name pushes the commit identity off the right edge of the panel while the caption still looks plausible. Found by looking at a rendered frame rather than by reasoning about the code, which is why it is pinned rather than trusted to review.",
+  "killedBy": [
+    "fitLabel NEVER lets truncation reach the SHA",
+    "fitLabel degrades to just the side and SHA when the panel cannot fit a ref",
+    "fitLabel keeps a short caption intact"
+  ]
+}

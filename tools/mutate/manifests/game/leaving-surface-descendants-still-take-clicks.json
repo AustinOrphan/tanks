@@ -1,0 +1,14 @@
+{
+  "id": "leaving-surface-descendants-still-take-clicks",
+  "file": "src/game/hud.css",
+  "find": ".ui-surface--leaving * {\n  pointer-events: none;\n}",
+  "replace": ".ui-surface--leaving {\n  pointer-events: none;\n}",
+  "expect": "killed",
+  "why": "The descendant half of the leaving surface's hit-testing rule, collapsed back onto the surface itself -- which is what shipped, and what read as correct because `pointer-events` is inherited. It is not enough: this file gives more than a dozen controls an explicit `pointer-events: auto`, and an explicit value on a child beats an inherited one on its parent. The mutation keeps a syntactically whole rule that still names the right property and the right value, so the brace-balance check, the no-block-inside-a-plain-rule check and the presence sweep all still pass, and `getComputedStyle` on the SURFACE still reports `none` -- only a descendant reports `auto`. Nothing about the animation, the duration or the destination moves. `takes its DESCENDANTS out of hit testing, not only itself` is the case that measures it, and it carries a negative control in the same test: the same descendant must compute `auto` while the surface is NOT leaving, so a stylesheet that disabled it unconditionally fails rather than passes. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "a leaving surface stops eating clicks meant for the one arriving takes its DESCENDANTS out of hit testing, not only itself"
+  ]
+}

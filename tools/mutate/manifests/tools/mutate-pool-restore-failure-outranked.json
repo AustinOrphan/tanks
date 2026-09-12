@@ -1,0 +1,14 @@
+{
+  "id": "mutate-pool-restore-failure-outranked",
+  "file": "tools/mutate/run.mjs",
+  "find": "  const severity = [3, 130, 4, 2, 1];",
+  "replace": "  const severity = [130, 4, 2, 1, 3];",
+  "why": "A worker that could not restore its file (exit 3, a worktree left mutated and kept for inspection) must be the run's verdict even when another worker was interrupted; ranking it last hides the one outcome that needs a human.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "aggregateExitCodes folds worker exit codes worst-first: restore failure, interruption, mid-run error, refusal, mismatch, clean"
+  ]
+}

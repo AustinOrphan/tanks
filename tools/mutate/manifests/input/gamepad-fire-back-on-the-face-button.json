@@ -1,0 +1,16 @@
+{
+  "id": "gamepad-fire-back-on-the-face-button",
+  "file": "src/input/gamepad.ts",
+  "find": "export const GAMEPAD_FIRE_BUTTON = 7;",
+  "replace": "export const GAMEPAD_FIRE_BUTTON = 0;",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad.test.ts",
+    "src/input/gamepad-menu.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadReader: fire and mine are edges, never held state reads the TRIGGERS, not the face buttons -- the twin-stick fix",
+    "createGamepadMenuPoller: button indices confirm and back are DISJOINT from fire and mine, so a menu press cannot leak a shot, and pause is Start (9)"
+  ],
+  "why": "Puts fire back on button 0, A/Cross. That is under the same right thumb that has to hold the aim stick, so a twin-stick player can aim or fire but not both -- the ergonomic defect this binding was moved to fix. It also re-collides with MENU_CONFIRM_BUTTON, restoring the leaked-shell class issue #494 was filed for: confirming Resume with A, still held on the first simulated tick, reads as a fresh fire press. TWO tests catch it and they catch different halves, which is why both are named: one pins the index as the trigger, the other pins menu and gameplay buttons as disjoint sets. The behavioural edge tests deliberately do NOT catch it -- they press through the constant, so they measure edge semantics rather than binding, and a binding change should not disturb them."
+}

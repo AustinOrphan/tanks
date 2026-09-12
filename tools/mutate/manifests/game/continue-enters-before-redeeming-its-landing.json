@@ -1,0 +1,15 @@
+{
+  "id": "continue-enters-before-redeeming-its-landing",
+  "file": "src/game/loop.ts",
+  "find": "      if (pendingLanding) landOnCampaignBoard(false);\n      sm.enterGameplay(currentSession);",
+  "replace": "      sm.enterGameplay(currentSession);\n      if (pendingLanding) landOnCampaignBoard(false);",
+  "expect": "killed",
+  "why": "Swaps build-then-reveal for reveal-then-build. Both statements still run, so a test that only counts worlds and seeds cannot see it -- what changes is that `enterGameplay` is handed the STALE `currentSession`, the one resolved against the world the player abandoned, and the state change that hides the application ground reaches the screen before the landing board exists. The visible half is a frame of the abandoned board; the recorded half is a resolved session that does not describe the world underneath it. Ordering is the property the comment at this site claims, so it gets an entry rather than a promise.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy a Levels pick reports PRACTICE, and leaving restores CAMPAIGN before the board is built",
+    "startGameWith: canonical session identity at the production boundary Practice Quit from a paused Practice session also returns Campaign identity"
+  ]
+}

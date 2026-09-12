@@ -1,0 +1,16 @@
+{
+  "id": "muzzle-flash-collapses-onto-the-shell",
+  "file": "src/sim/bullets.ts",
+  "find": "  return { spawn, flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)) }",
+  "replace": "  return { spawn, flash: spawn }",
+  "expect": "killed",
+  "tests": [
+    "src/sim/bullets.test.ts",
+    "src/sim/step-contract.test.ts"
+  ],
+  "why": "Drags the muzzle flash inward with the shell, so the gun visibly discharges from inside itself -- particles.ts bursts on the fire event's pos and is the only consumer that reads it. Pinned because the event still carries a plausible point on the firing line, which no shape or type check can distinguish from the right one.",
+  "killedBy": [
+    "spawnBullet + ownerShellCount spawns a bullet with config speed/bounces and emits a fire event",
+    "step() hands its events back to the caller the player's own fire event reaches the caller, with its position"
+  ]
+}

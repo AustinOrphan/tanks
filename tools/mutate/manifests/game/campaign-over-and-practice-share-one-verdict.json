@@ -1,0 +1,15 @@
+{
+  "id": "campaign-over-and-practice-share-one-verdict",
+  "file": "src/game/hud.ts",
+  "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  'campaign-complete'",
+  "replace": "    subtitle: 'Out of lives.',\n    action: 'Retry',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  'campaign-complete'",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Puts the pre-#323 wording back on one table entry. This is the exact screen issue #323 opened about: `Game Over` / `Out of lives.` over a button reading `Retry` was what a campaign that ran out of lives AND a practice level that ran out of lives both showed, and the word `Retry` was doubly untrue on the campaign one -- the click ends that run and begins a new campaign at level 1 (pinned in loop.test.ts). The panel still renders, still routes and still offers the Main Menu beside it, so only copy assertions can see this. RE-ANCHORED after the owner ruled the subtitle off this screen: the find string embedded the sentence that no longer exists, so it now anchors on the empty subtitle plus the action and the next table key, which is the smallest span that is still unique. The mutation is unchanged in substance -- it restores the pre-#323 verdict wording and the shared `Retry` button. RE-ANCHORED for issue #323, which added a `practiceThisLevel` term to every OUTCOME_PANEL entry: this entry's find string ran through the changed lines and stopped matching, so it reported FAILED-TO-APPLY -- a guard that had quietly stopped guarding.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action",
+    "hud: every ending gets its own screen (issue #323) replaces the opening copy when the ending lands AFTER the panel is already up"
+  ]
+}

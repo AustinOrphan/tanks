@@ -1,0 +1,14 @@
+{
+  "id": "quality-low-quietens-the-smoke-instead-of-dropping-it",
+  "file": "src/render/quality.ts",
+  "find": "    muzzleSmoke: null,",
+  "replace": "    muzzleSmoke: CHEAP_MUZZLE_SMOKE,",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts"
+  ],
+  "why": "Turns the owner's `low` ruling from 'dropped' into 'cheapened twice', which is the reading a maintainer tidying this table would find natural -- three tiers, three budgets, no special case. It is wrong for a reason that is not visible in the table: renderer.ts reads `null` to decide whether to CONSTRUCT the system, so a very small budget still pays `spawn` and `update` on every frame and still holds pooled sprites in the scene. The rendered difference is small and the structural difference is the whole point of the tier, so only an assertion that insists on null rather than on 'less' catches it.",
+  "killedBy": [
+    "medium and low are real steps down, not copies of high low DROPS the smoke rather than quietening it, and medium keeps a cheaper version"
+  ]
+}

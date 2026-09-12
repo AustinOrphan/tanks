@@ -1,0 +1,14 @@
+{
+  "id": "campaign-ending-keeps-the-run-wording",
+  "file": "src/game/hud.ts",
+  "find": "    tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'Level attempt', outcomeData.attempt);",
+  "replace": "    tallyLineEl(\n      attemptSummaryEl,\n      'hud-attempt-summary--hidden',\n      outcomeData.typedOutcome?.kind === 'practice-result' ? 'Level attempt' : 'This run',\n      outcomeData.attempt,\n    );",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "The HALF-fix: practice endings corrected, campaign endings left saying \"run\". This is the code that actually shipped between issues #323 and #322, so it is the state a revert lands on rather than an invented defect -- and it is the one a reader is most likely to restore, because the conditional looks like it is being careful. The tally is per-ATTEMPT for a campaign ending too; the kind of session it came from changes nothing about what was counted. Pinned separately from `ending-tally-calls-a-per-attempt-count-a-run` because a test that only checked the practice screens kills that one and survives this. Re-anchored for the same move into `tallyLineEl`.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) heads the tally \"Level attempt\" on EVERY ending, because that is what it counts"
+  ]
+}

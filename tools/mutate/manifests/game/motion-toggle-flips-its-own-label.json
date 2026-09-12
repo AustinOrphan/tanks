@@ -1,0 +1,14 @@
+{
+  "id": "motion-toggle-flips-its-own-label",
+  "file": "src/game/hud.ts",
+  "find": "  const handleMotionToggle = (): void => {\n    for (const cb of motionChangeCbs) cb(NEXT_MOTION[currentMotion]);\n  };",
+  "replace": "  const handleMotionToggle = (): void => {\n    for (const cb of motionChangeCbs) cb(NEXT_MOTION[currentMotion]);\n    currentMotion = NEXT_MOTION[currentMotion];\n    renderMotionToggle();\n  };",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The control drawing itself from the CLICK instead of from the value the store accepted -- the same convention the aim-scheme, fire-mode and haptics toggles follow, and the one `settings.ts` can actually refuse: `setMotion` drops an id outside MOTION_PREFERENCES, so a self-flipping label would show a preference that was never stored and would keep showing it until something else repainted. It also looks correct in the ordinary case, which is exactly why it needs a test rather than a reviewer.",
+  "killedBy": [
+    "hud: the motion toggle (issue #289) taps the toggle and reports the NEXT preference in the cycle, from a real click at the button"
+  ]
+}

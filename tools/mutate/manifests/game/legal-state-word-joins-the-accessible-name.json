@@ -1,0 +1,14 @@
+{
+  "id": "legal-state-word-joins-the-accessible-name",
+  "file": "src/game/legal.ts",
+  "find": "  state.setAttribute('aria-hidden', 'true');",
+  "replace": "  state.setAttribute('aria-hidden', 'false');",
+  "expect": "killed",
+  "tests": [
+    "src/game/legal.test.ts"
+  ],
+  "killedBy": [
+    "the legal document disclosures names each toggle by its document alone, with the state word out of the name"
+  ],
+  "why": "Renames every disclosure from \"Privacy\" to \"Privacy Show\", and makes a screen reader announce the collapsed/expanded state twice -- once from the name, once from `aria-expanded`. The same two-announcements-of-one-fact collision issue #629 called out between the achievement rows' visible marker and their `ui-sr-only` span, arrived at from the other direction. Nothing else can see it: hud.a11y.test.ts's sweep asks whether a control has a NON-EMPTY name and whether that name is a bare digit, and \"Privacy Show\" passes both."
+}

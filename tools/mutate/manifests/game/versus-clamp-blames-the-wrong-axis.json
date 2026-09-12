@@ -1,0 +1,13 @@
+{
+  "id": "versus-clamp-blames-the-wrong-axis",
+  "file": "src/game/versus-config.ts",
+  "find": "    entry === undefined ? 'gone' : entry.players.includes(players) ? 'mode' : 'players';",
+  "replace": "    entry === undefined ? 'gone' : entry.players.includes(players) ? 'players' : 'mode';",
+  "expect": "killed",
+  "expectFailures": 4,
+  "tests": [
+    "src/game/versus-config.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Swaps the two axis reasons, so the notice sends the player to the control that did NOT drop their board -- 'not available with 3 players' about an entry that declares three players, and vice versa. The replacement still clamps and still shows a notice, so it is invisible to any test asserting only that the choice was replaced or that some text appeared; it is caught only because the reason is asserted by name in the unit cases and because the hud case asserts the notice CONTENT ('3 players') rather than its presence. That is the whole reason the hud assertion is written on content. Killed by 4, MEASURED: the players case, the mode case, the BOTH-predicates case (which pins the tie-break to 'players' and so swaps with them), and the hud notice-content case."
+}

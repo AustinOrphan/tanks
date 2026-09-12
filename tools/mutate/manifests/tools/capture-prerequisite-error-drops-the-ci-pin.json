@@ -1,0 +1,14 @@
+{
+  "id": "capture-prerequisite-error-drops-the-ci-pin",
+  "file": "tools/capture/prerequisites.mjs",
+  "find": "      + `  npm i --no-save playwright@${CI_PLAYWRIGHT_VERSION}\\n`",
+  "replace": "      + '  npm i --no-save playwright\\n'",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/prerequisites.test.ts"
+  ],
+  "why": "The change issue #353's third acceptance criterion asks to be named: `loadPlaywright` stops naming the pinned version in its remediation. The message then tells a contributor to run `npm i --no-save playwright` unpinned, npm resolves whatever is latest, and the next capture run trips loadPlaywright's OWN version check a few lines up (`Playwright <x> is installed, but CI and capture require <CI_PLAYWRIGHT_VERSION>`) -- guidance that sends the reader in a circle instead of to the install CI uses. Killed by the rejection assertion in `ties capture documentation and errors to the canonical CI Playwright pin`, 1 of the file's 4 cases: that case's earlier assertions read ci.yml and README.md and still pass, and the other 3 cases never inspect the remediation text. The `\\n` in `find`/`replace` is two literal bytes inside a template literal, not a newline. First two manifest entries outside `src/`: the harness's own `vitest related` preflight relates tools/capture/prerequisites.test.ts to this file, so a tools/ target is measured exactly like a src/ one. Measured in both worlds this repo actually runs in, because Playwright is deliberately not a declared dependency: with node_modules/playwright{,-core} present (the documented local capture setup) and with them absent (CI's `verify` job, which installs Playwright only in the separate `visual` job). `playwright@<version>` appears nowhere else in the aggregate message in either world, so deleting it here is what makes the case fail rather than an environment fact -- which is the whole point of #353, where the same case passed or failed on whether Playwright happened to resolve.",
+  "killedBy": [
+    "capture prerequisites ties capture documentation and errors to the canonical CI Playwright pin"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "framing-frame-margin-doubled",
+  "file": "src/render/framing.ts",
+  "find": "export const FRAME_MARGIN = 0.03;",
+  "replace": "export const FRAME_MARGIN = 0.06;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "HISTORY, not the current story: when this entry was first written (against an earlier commit, FRAME_MARGIN 0.06), it was a documented SURVIVING gap -- framing.test.ts imported FRAME_MARGIN and used the same constant on both sides of its own assertion (to drive fitCameraToArea AND to compute the test's expected screen-space bound), so doubling it moved both sides together and passed regardless of value. PR #103 ('give the board the screen back') independently added a coverage-ratio floor (`covers at least 48% of the frame...`) that does NOT reference FRAME_MARGIN at all -- it measures the framed rect's actual projected area against a hardcoded 0.48 threshold. Re-verifying this entry against current main (as this manifest's own re-verification process requires) found the gap CLOSED: doubling FRAME_MARGIN now fails that coverage floor (46.5% < 48% at 'phone landscape' on 3 of 4 arenas), one test, moved from SURVIVES to KILLED by a change that never touched this mutation. Left in the manifest as a killed entry rather than dropped, specifically because the reversal is itself the lesson: a stale 'known gap' claim in a comment or a PR body would have been WRONG here had it not been re-run.",
+  "tests": [
+    "src/render/framing.test.ts"
+  ]
+}

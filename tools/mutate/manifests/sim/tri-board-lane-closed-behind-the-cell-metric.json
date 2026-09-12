@@ -1,0 +1,14 @@
+{
+  "id": "tri-board-lane-closed-behind-the-cell-metric",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "\"...........................\",\n        \"###...#.#...###...#.#...###\"",
+  "replace": "\".........#########.........\",\n        \"###...#.#...###...#.#...###\"",
+  "expect": "killed",
+  "why": "Bars vs-tri-01's row 11 across columns 9-17, closing the middle of the lower lateral lane. The point is NOT that a narrow gap appears -- narrow gaps are ordinary arena furniture and this board has them deliberately. The point is that closing a ROUTE is invisible to the cell metric and visible only to the tank one. MEASURED on this board: with the bar in place the authored cell distances stay at 26/26/26 and every cell-based claim -- mirror symmetry, the maximin spawn triangle, connectivity, spawn clearance, room, concealment and all ten seeded variants -- stays clean, while the distance a tank must actually drive changes. Exactly one assertion in the scoped file fails, and it is the tank-footprint lattice one. That gap between the two metrics is the defect issue #423 was opened for, and this entry is the proof the newer assertion is what closes it. RENAMED from `tri-board-passage-narrowed-to-one-cell`: the old name described the gap width, which is not the property being pinned. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/sim/versus-catalog-rules.test.ts"
+  ],
+  "killedBy": [
+    "vs-tri-01: mirrored for two players, measured for the third ...and equidistant on the TANK-FOOTPRINT lattice too, not just on the cell grid"
+  ]
+}

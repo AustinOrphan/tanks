@@ -1,0 +1,20 @@
+{
+  "id": "modality-never-switches-after-the-threshold",
+  "file": "src/game/modality.ts",
+  "find": "      return now - candidateSince >= switchAfterMs ? settle(modality) : false;",
+  "replace": "      return false;",
+  "occurrence": 1,
+  "why": "A prompt that never follows a deliberate change of device is the other half of the failure: a player who picks up a pad keeps reading key names.",
+  "tests": [
+    "src/game/modality.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: prompts follow the input the player is using (issue #496) a gamepad naming its own button takes over from the keyboard, and the mouse is not touch",
+    "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+    "modality tracker: a switch needs the threshold (issue #496) switches once the candidate has held the field for the whole threshold, and not before",
+    "modality tracker: a switch needs the threshold (issue #496) the threshold is injected: a tracker built with a different one switches on that one",
+    "modality tracker: a switch needs the threshold (issue #496) two challengers interleaving never switch: each restarts the other's clock, however long it goes on"
+  ]
+}

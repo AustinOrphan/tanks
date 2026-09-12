@@ -1,0 +1,16 @@
+{
+  "id": "transition-runs-on-gameplay-entry",
+  "file": "src/game/hud.ts",
+  "find": "      ],\n      undefined,\n      s === 'playing',\n    );",
+  "replace": "      ],\n      undefined,\n      false,\n    );",
+  "expect": "killed",
+  "why": "setState's gameplay-entry exemption, deleted. Issue #364 is explicit that no transition may run during gameplay entry or exit in a way that delays the countdown or the first input; this is the single argument that enforces it, and `false` is what the line would say if that rule had never been read. The failure is silent in every other check: the menu still ends up hidden, the ground still ends up covering the board, and every settled-state assertion in this suite still passes -- only the frames BETWEEN the click and the countdown differ, with the panel painted over the live game for the whole duration and `--leaving` still on it. `never runs a transition on gameplay entry` is the case that measures it, and it measures the timer DELTA rather than an absolute count, so the HUD's unrelated toast and armed-reset timers cannot satisfy it. Scoped to hud.test.ts; expectFailures counts that scoped run only. The killer's NAME changed in issue #323, not its subject: the case still sweeps the non-paused states for this button, but the Main Menu is now the only one that withholds it, so the title says that instead.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract never runs a transition on gameplay entry",
+    "createHud panel setBackdrop switches the treatment class both ways, and changes nothing about WHEN the ground shows",
+    "hud: pause panel keeps Quit off the MAIN MENU, offers it on every end screen, and settings off both"
+  ]
+}

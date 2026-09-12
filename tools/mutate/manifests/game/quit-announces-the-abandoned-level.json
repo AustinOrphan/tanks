@@ -1,0 +1,14 @@
+{
+  "id": "quit-announces-the-abandoned-level",
+  "file": "src/game/loop.ts",
+  "find": "      ordinalOf(landing),\n    );",
+  "replace": "      ordinalOf(level),\n    );",
+  "expect": "killed",
+  "why": "The other half of the quit's presentation claim, and the half that is visibly wrong. The topbar level chip is on screen at the Main Menu -- `setState` hides the topbar for `launch` alone -- so reading the ABANDONED `level` instead of the `landing` makes the menu announce the level the player just left while Continue resumes onto `deps.levels.start`. The slip is one word: `level` is module-scoped and in scope at this line, `landing` is the local this handler introduced, and the readout is exactly what the eager `landOnCampaignBoard(false)` rebuild used to get right for free -- which is what makes it the thing a deferral is most likely to drop. No world, seed or run moves, so none of the navigation-only counting assertions can see it; neither can the level-chip assertion in `Quit to Title returns to the title having built NOTHING`, whose fixture gives the abandoned level and the landing the SAME ordinal. Scoped to loop.test.ts; expectFailures counts that scoped run only. RE-ANCHORED for issue #324's step S6: the level ordinal is an argument of the quit handler's one `pushStatus` call rather than its own `hud.setLevel`. The slip is the same one word, and it is now one line below the session-kind argument the sibling entry guards -- two arguments of one call, each with its own stale-variable temptation in scope.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Navigation-only actions enter no gameplay session, and now build no world either THE STATED RESIDUAL: the menu keeps the abandoned world's enemy count until a board is built"
+  ]
+}

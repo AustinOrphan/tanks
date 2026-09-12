@@ -1,0 +1,12 @@
+{
+  "id": "route-host-painter-outlives-the-page",
+  "file": "src/game/route-host.ts",
+  "find": "      stopPainting();\n      stopPaintingSettings();\n      hud.dispose();",
+  "replace": "      void stopPainting;\n      stopPaintingSettings();\n      hud.dispose();",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "Page teardown leaves the route host's painter subscribed to the machine it built. The two die together in production, so nothing visible breaks -- which is exactly why the symmetry with a session's own unsubscribe is pinned rather than trusted: a reference kept past `pagehide` would keep painting a disposed HUD. 1 of 38 in route-host.test.ts: the disposal case that changes the route after `dispose()` and expects no paint."
+}

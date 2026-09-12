@@ -1,0 +1,14 @@
+{
+  "id": "quality-toggle-flips-its-own-label",
+  "file": "src/game/hud.ts",
+  "find": "  const handleQualityToggle = (): void => {\n    for (const cb of qualityChangeCbs) cb(NEXT_QUALITY[currentQuality]);\n  };",
+  "replace": "  const handleQualityToggle = (): void => {\n    for (const cb of qualityChangeCbs) cb(NEXT_QUALITY[currentQuality]);\n    currentQuality = NEXT_QUALITY[currentQuality];\n    renderQualityToggle();\n  };",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The control drawing itself from the CLICK instead of from the value the store accepted -- the same convention every Settings toggle beside it follows, and one `settings.ts` can genuinely refuse: `setQuality` drops an id outside QUALITY_PRESET_IDS, so a self-flipping label would advertise a preset that was never stored and keep advertising it until something else repainted. It looks correct in the ordinary case, which is exactly why it needs a test rather than a reviewer.",
+  "killedBy": [
+    "hud: the quality toggle (issue #540) taps the toggle and reports the NEXT preset in the cycle, from a real click at the button"
+  ]
+}

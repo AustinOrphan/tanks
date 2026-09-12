@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-muzzle-flashes-at-the-tank-instead-of-the-barrel",
+  "file": "src/render/blocked-fire-muzzle.ts",
+  "find": "      f.mesh.position.set(\n        owner.pos.x + Math.cos(owner.turretAngle) * SHELL_MUZZLE_FORWARD,\n        BULLET_Y,\n        owner.pos.y + Math.sin(owner.turretAngle) * SHELL_MUZZLE_FORWARD,\n      );",
+  "replace": "      f.mesh.position.set(owner.pos.x, BULLET_Y, owner.pos.y);",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-muzzle.test.ts"
+  ],
+  "why": "Drops the muzzle offset, so the flash goes off inside the tank rather than at the barrel opening. That is not a cosmetic slip: it turns issue #356's WEAPON-LOCAL candidate into a second tank-local one, which is the treatment `ring` already occupies, and the comparison would then be run on two arms that are the same idea. The position is the same point bullets.ts hands a real `fire` event as its flash (SHELL_MUZZLE_FORWARD along the turret), so this also breaks the arm's whole premise -- the shot's own visual, in the shot's own place.",
+  "killedBy": [
+    "blocked-fire muzzle flash (issue #516, parent #356) sits at the MUZZLE, on the barrel centreline -- not on the tank"
+  ]
+}

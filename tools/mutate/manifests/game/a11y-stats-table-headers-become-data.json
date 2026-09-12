@@ -1,0 +1,13 @@
+{
+  "id": "a11y-stats-table-headers-become-data",
+  "file": "src/game/hud.ts",
+  "find": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Level attempt</th></tr></thead>'",
+  "replace": "      + '<thead><tr><td></td><td>Lifetime</td><td>Level attempt</td></tr></thead>'",
+  "expect": "killed",
+  "expectFailures": 2,
+  "tests": [
+    "src/game/hud.a11y.test.ts",
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Rebuilds the column headers out of DATA cells, exactly as they shipped: 'Lifetime' and 'Level attempt' head nothing and every figure beneath them is announced bare. The table still renders identically -- <td> and <th> differ in default weight and alignment, which this table's own CSS already overrides -- so no visual guard can see it. Killed by 2: the scoped-header assertion here, and the stats-page wording test in hud.controls.test.ts, which reads those two names THROUGH `thead th[scope=col]` for precisely this reason. The wording it pins is only worth something while it is still attached to a column."
+}

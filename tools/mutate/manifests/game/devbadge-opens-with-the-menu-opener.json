@@ -1,0 +1,14 @@
+{
+  "id": "devbadge-opens-with-the-menu-opener",
+  "file": "src/game/hud.ts",
+  "find": "    openLayer('developer-tools', devBadge);",
+  "replace": "    openLayer('developer-tools', devToolsOpenBtn);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "developer mode: entry, indicator and exit (issue #243) reopens the tools from the persistent indicator, and Back returns to where it was pressed"
+  ],
+  "why": "Records the MENU entry as the control that opened the pane even when the badge did, so Back restores focus to a button that is not on screen -- the badge exists precisely so the tools are reachable mid-match, where the Main Menu footer is hidden. The pane still opens and still closes, so only an assertion about WHERE Back lands can see it; issue #318's origin/focus contract is the thing being broken, not the layer stack itself."
+}

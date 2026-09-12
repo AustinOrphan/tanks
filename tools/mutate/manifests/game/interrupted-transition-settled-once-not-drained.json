@@ -1,0 +1,14 @@
+{
+  "id": "interrupted-transition-settled-once-not-drained",
+  "file": "src/game/transitions.ts",
+  "find": "      // spin the loop; one level is what a chained navigation actually produces.\n      for (let drain = 0; drain < 8 && (outstanding !== null || handle !== null); drain++) {\n        settleNow();\n      }\n      begin();",
+  "replace": "      // spin the loop; one level is what a chained navigation actually produces.\n      settleNow();\n      begin();",
+  "expect": "killed",
+  "why": "The subtler half, and a bug this branch actually measured before fixing: settling ONCE rather than draining. A settle may itself start a transition -- a screen that navigates on arrival -- and that chained one is already superseded by the call in progress; settling once leaves its timer live, then `handle` is overwritten below and the timer is orphaned. Measured at 2 live timers while `pending` reported 1, with the chained transition's end state never applied: both of issue #364's failure modes at once, in the very field its leak criterion is asserted on. The single-settle shape is what a careful reader would write, and `interrupted-transition-not-settled-at-all` above cannot distinguish it from the drain. `a transition started from an INTERRUPTED settle is settled, not orphaned` is the case that measures it. Scoped to transitions.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/transitions.test.ts"
+  ],
+  "killedBy": [
+    "createTransitionRunner: interruption a transition started from an INTERRUPTED settle is settled, not orphaned"
+  ]
+}

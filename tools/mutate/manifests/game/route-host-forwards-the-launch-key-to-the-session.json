@@ -1,0 +1,12 @@
+{
+  "id": "route-host-forwards-the-launch-key-to-the-session",
+  "file": "src/game/route-host.ts",
+  "find": "    if (sm.atLaunch) {\n      onLaunchGesture();\n      return;\n    }\n    /*\n     * M IS THE PAGE'S KEY NOW (issue #226).",
+  "replace": "    if (sm.atLaunch) onLaunchGesture();\n    /*\n     * M IS THE PAGE'S KEY NOW (issue #226).",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "Drops the early return, so the key that dismisses the splash ALSO reaches the session's hotkeys. 'Press any key or tap to begin' then includes M, which mutes: the one key most likely to be pressed by someone checking whether the game has sound silences the menu bed the screen exists to make audible, with only the Mute button's label left to explain why. This is why the page owns ONE keydown listener and trampolines it rather than adding a second beside the session's -- two listeners would race, whichever ran first moving the route out from under the other's guard. 1 of 412 -- 'the key that dismisses it does nothing else'. The find names the KEY path explicitly since issue #226: the gamepad poller's own `atLaunch` return is written identically a few lines below, and either would match a shorter pattern."
+}

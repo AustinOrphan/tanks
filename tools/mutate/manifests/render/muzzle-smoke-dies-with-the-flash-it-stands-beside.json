@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-dies-with-the-flash-it-stands-beside",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "const LIFETIME_SECONDS = 0.75;",
+  "replace": "const LIFETIME_SECONDS = 0.07;",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Cuts the cloud to blocked-fire-muzzle.ts's own 0.07s. Duration is the property the owner's original request turns on -- smoke lingers, a flash does not -- so a puff gone in a frame and a half is a grey flash whatever its texture says. It matters more since #536 than it did as an arm: a refusal is now told apart by how its smoke looks, and there is no looking at something that has already gone. Pinned as a BOUND rather than an exact value, since the number is feel: the tests ask only that the puff outlive the flash several times over and still end.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) drifts off the barrel and rises, and outlives the flash several times over"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "start-boundary-practice-keeps-the-campaign-identity",
+  "file": "src/game/loop.ts",
+  "find": "      sessionIdentity = identityForLevelPick(bootContext.identity);\n      level = deps.levels.levels[picked];",
+  "replace": "      level = deps.levels.levels[picked];",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "A Practice pick that keeps the CAMPAIGN identity. `campaignActive()` reads that identity and is what stops practice consuming, restoring, advancing or ending the run -- so an isolated look at level 2 starts writing the player's real campaign progress. Exactly the class the project's game rules name ('Practice/level-select state must not create or mutate a campaign run'), reintroduced at the new boundary rather than at the in-session handler that already had it. 1 of 412 -- 'practice lands on the picked level and leaves the run untouched', which is the only case that reads the run store after a pick."
+}

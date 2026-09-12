@@ -1,0 +1,14 @@
+{
+  "id": "campaign-complete-says-its-own-headline-twice",
+  "file": "src/game/hud.ts",
+  "find": "    subtitle: '',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  /*",
+  "replace": "    subtitle: 'Every level cleared. This run is finished.',\n    action: 'Start New Campaign',\n    chooseLevel: false,\n    practiceThisLevel: false,\n  },\n  /*",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Restores a subtitle sitting directly under the headline that already says it. The owner floated \"Campaign run complete\" instead of deleting; that is the same restatement in fewer words, so the line went rather than shrank. Anchored on the `action`/`chooseLevel` tail plus the comment delimiter that follows this entry, because `subtitle: ''` is the value of all five entries and `action: 'Start New Campaign'` is shared with `campaign-over` -- only the trailing `/*` separates them. An earlier version of this entry INSERTED a second `subtitle` key above the existing one and survived: a duplicate key is legal here and the LATER one wins, so the empty string was still what shipped. Recorded because the mutation looked obviously fatal and was not. RE-ANCHORED for issue #323, which added a `practiceThisLevel` term to every OUTCOME_PANEL entry: this entry's find string ran through the changed lines and stopped matching, so it reported FAILED-TO-APPLY -- a guard that had quietly stopped guarding.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
+  ]
+}

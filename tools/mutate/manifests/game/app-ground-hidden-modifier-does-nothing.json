@@ -1,0 +1,14 @@
+{
+  "id": "app-ground-hidden-modifier-does-nothing",
+  "file": "src/game/hud.css",
+  "find": ".ui-app-ground--hidden {\n  display: none;\n}",
+  "replace": ".ui-app-ground--hidden {\n}",
+  "expect": "killed",
+  "why": "The modifier reduced to a class that does nothing -- the failure `.hud-splash--hidden` carries its own comment about (\"the class does nothing on its own\"). Same OUTCOME as this file's two historical losses, by a different mechanism: those were rules SWALLOWED by an unbalanced brace in a merge -- the losing-a-life vignette, then the round banner -- which the brace-balance check above now catches; this is a rule that is still syntactically whole and styles nothing, which that check cannot see. `.ui-app-ground` is `position: absolute; inset: 0` with an OPAQUE background inside a `position: fixed; inset: 0` HUD, so with nothing to hide it the ground covers the whole viewport from page load and never leaves: the arena is never visible again in any state, which is strictly worse than the scrim `app-ground-becomes-a-scrim` above catches. Nothing else in the suite can see it -- the presence sweep asserts `css` CONTAINS `.ui-app-ground--hidden`, which an empty rule satisfies; the brace-balance and no-block-inside-a-plain-rule checks both still pass on it; and hud.test.ts asserts only that the CLASS is toggled, which it still is. `hides the ground with display, not with a colour` is the one case that measures it, and it re-measures the same element with the modifier removed as its own control, so a stylesheet that hid the ground unconditionally would fail there too. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole hides the ground with display, not with a colour -- the dead-CSS half"
+  ]
+}

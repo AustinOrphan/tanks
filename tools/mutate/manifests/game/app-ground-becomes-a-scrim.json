@@ -1,0 +1,14 @@
+{
+  "id": "app-ground-becomes-a-scrim",
+  "file": "src/game/hud.css",
+  "find": "  --hud-app-ground: #181c24;",
+  "replace": "  --hud-app-ground: rgba(24, 28, 36, 0.55);",
+  "expect": "killed",
+  "why": "Turns the application ground into a scrim, which is the failure the rest of issue #317 depends on not happening: the quit no longer rebuilds the board, so whatever world the player abandoned is still behind this layer -- a paused explosion under the New Game button if it is translucent. CSS is typechecked by nothing and read by no other test, the same silent-loss class the topbar safe-area entry above exists for, and the value is a token, so the loss would be one character in one line. hud.css.test.ts asserts opacity FIRST and the tuned value second for exactly this ordering of what matters.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole paints the application ground OPAQUE, and at the tuned value -- both measured, not read"
+  ]
+}

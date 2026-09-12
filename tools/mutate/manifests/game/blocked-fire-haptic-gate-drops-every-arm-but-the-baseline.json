@@ -1,0 +1,17 @@
+{
+  "id": "blocked-fire-haptic-gate-drops-every-arm-but-the-baseline",
+  "file": "src/game/haptics.ts",
+  "find": "if (cue != null && cueDrives(cue, 'haptic') && e.ownerId === playerId) {",
+  "replace": "if (cue === 'haptic' && e.ownerId === playerId) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/haptics.test.ts"
+  ],
+  "why": "The haptic half of the gate audio/director.ts already got wrong once: an enumeration written arm by arm falls a cue behind the vocabulary, and the cue then advertises a channel it never reaches. Narrowing this one to the shipped arm silences the multimodal `haptic-audio` and all four of issue #516's new haptic arms, while the flag still parses, the audio arms still sound and every other pulse in this file is untouched -- a column of five haptic values that is really one.",
+  "killedBy": [
+    "blocked-fire cue: the arms are separable (issue #356) the multimodal arm vibrates AND (see director.test.ts) sounds",
+    "blocked-fire cue: the arms are separable (issue #356) vibrates for EVERY cue carrying `haptic`, and for no other -- one row per cue",
+    "blocked-fire cue: the arms are separable (issue #356) gives each haptic arm its OWN pattern -- one row per arm (issue #516)",
+    "blocked-fire cue: the arms are separable (issue #356) stays silent on a device with no vibration, and behind the haptics preference"
+  ]
+}

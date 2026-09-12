@@ -1,0 +1,12 @@
+{
+  "id": "versus-relax-rounds-one",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "export const VERSUS_RELAX_ROUNDS = 8;",
+  "replace": "export const VERSUS_RELAX_ROUNDS = 1;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The coordinate-ascent pass must be allowed to run to convergence. Greedy farthest-point sampling alone is anchor-sensitive and, measured over all 5 shipped arenas x counts 2/3/4, is WORSE than the pre-ruling placement on 2 of those 15 pairs; the relaxation is what turns that into 15 of 15 improved with no regressions. A cap of 1 stops it after a single sweep. This mutation also SURVIVED when first run, which is why the arena-04 N=3 exact-set pin exists at all. Caught by 1 of 17 in versus-spawns.test.ts: arena-04 at N=3 returns (0,30) (32,44) (23,0) instead of (0,26) (32,44) (24,0). Three further pairs move under the same mutation -- arena-01 and arena-03 at N=3, arena-05 at N=4 -- but only the arena-04 one is pinned, so the numerator is 1, not 4.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ]
+}

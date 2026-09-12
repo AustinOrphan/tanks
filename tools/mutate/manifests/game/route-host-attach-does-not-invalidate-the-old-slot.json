@@ -1,0 +1,12 @@
+{
+  "id": "route-host-attach-does-not-invalidate-the-old-slot",
+  "file": "src/game/route-host.ts",
+  "find": "      const mine = ++generation;",
+  "replace": "      const mine = generation;",
+  "expect": "killed",
+  "expectFailures": 4,
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "`attach` stops being the authority on who is live. The generation stays put, so an outgoing session's LATE `detach()` -- a teardown deferred past the replacement, which `boot.ts`'s stop-then-start ordering makes possible -- unhooks the incoming session instead of doing nothing. That is the same stale-capture failure `session-host.ts`'s two 'stale-capture control' tests exist to catch, one layer up, and it is invisible to a count: both sessions are wired, both look correct, and the live one silently goes dead at an unrelated moment. 1 of 18 -- 'a late detach from a retired session does not unhook the live one', which is the only case that detaches OUT OF ORDER. Its sibling 'a retired session cannot register a handler over the live one' survives this mutation and falls to the `live = live ?? state` shape instead; the two guards are separate and neither stands in for the other. Re-measured at 2 of 37 in route-host.test.ts: the second case is \"a stale detach does not reshape the menu under the session that replaced it\", which the detach reset made observable -- with the generation stuck, the outgoing session's late detach reshapes the incoming one's menu. Re-measured at 4 of 62 for issue #324's step S5: the slot gained two reporting methods -- the controller assignment and the Versus Setup reopen -- and each has its own stale-capture case, both of which a stuck generation lets an outgoing session satisfy. Re-measured at 5 of 75 for step S8, which gave the slot its guarded gameplay HUD: the added case is \"drops EVERY push from a session that has already been replaced\", the exhaustive stale-capture control for that facade. The previous four still fail, so the failing SET was compared, not the number renumbered. Re-measured at 4 for issue #279 (-1): `reopens the Versus Setup pane prefilled with the config the PAGE retains` was deleted with `slot.openVersusSetup()` itself, and that case reached this seam. One fewer observer because the capability it observed is gone, not because coverage was lost."
+}

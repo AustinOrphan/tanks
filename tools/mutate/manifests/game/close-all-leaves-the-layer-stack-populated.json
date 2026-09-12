@@ -1,0 +1,14 @@
+{
+  "id": "close-all-leaves-the-layer-stack-populated",
+  "file": "src/game/hud.ts",
+  "find": "    disarmReset();\n    // ...and the layer stack with them (issue #318): a surface change is never a Back,\n    // so every layer is dropped rather than popped, and the history mirror retires its\n    // entry. After this line the stack is empty on every path through this function.\n    resetLayers();",
+  "replace": "    disarmReset();\n    // (mutation) the stack outlives the surface it opened over",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A surface change closes every pane on screen but leaves the layer stack populated. The next Escape during play is claimed by the HUD for a pane that is no longer there, `hud.back()` re-renders a surface the state machine has left, and a later browser Back reopens nothing while consuming a history entry the page thinks it still owns. hud.navigation.test.ts (244): \"entering gameplay from an open pane empties the stack\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) entering gameplay from an open pane empties the stack: hud.back() then has nothing to pop"
+  ]
+}

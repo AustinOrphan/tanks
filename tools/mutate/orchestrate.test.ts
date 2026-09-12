@@ -307,14 +307,22 @@ describe('validateManifest', () => {
     expect(() => validateManifest([])).toThrow(/non-empty/);
   });
 
-  it('the shipped manifests directory is itself well-formed, one file per area (issue #505)', async () => {
+  it('the shipped manifests directory is itself well-formed, one entry per file (issue #653)', async () => {
     const files = readManifestFiles(join(ROOT, 'tools/mutate/manifests'));
-    expect(files.map((f) => f.path.split('/').pop()), 'one file per area, read in name order').toEqual(
-      ['app.json', 'audio.json', 'game.json', 'input.json', 'presentation.json', 'render.json', 'sim.json', 'tools.json'],
+    // ONE ENTRY PER FILE, under `manifests/<area>/<id>.json`. Issue #505's one-file-per-area
+    // layout stopped two PRs in DIFFERENT areas conflicting and could not stop two in the
+    // same one, because every new entry appended to the same closing lines; with game at
+    // 429 entries that was most of them. This is the shape that removes it by construction.
+    const areas = [...new Set(files.map((f) => f.path.split('/').at(-2)))].sort();
+    expect(areas, 'one directory per area').toEqual(
+      ['app', 'audio', 'game', 'input', 'presentation', 'render', 'sim', 'tools'],
     );
+    expect(files.every((f) => f.single), 'a shipped manifest file holds more than one entry').toBe(true);
+    expect(files.length, 'every entry has its own file').toBe(mergeManifestFiles(files).length);
+
     const entries = mergeManifestFiles(files);
     expect(() => validateManifest(entries)).not.toThrow();
-    // Every entry lives in the file of the area its mutated file belongs to.
+    // Every entry lives in the directory of the area its mutated file belongs to...
     const areaOf = (file: string): string => {
       for (const [prefix, name] of [['src/sim/', 'sim'], ['src/game/', 'game'], ['src/render/', 'render'], ['src/input/', 'input'], ['src/presentation/', 'presentation'], ['src/audio/', 'audio'], ['tools/', 'tools']] as const) {
         if (file.startsWith(prefix)) return name;
@@ -322,8 +330,14 @@ describe('validateManifest', () => {
       return 'app';
     };
     for (const f of files) {
+      const dir = f.path.split('/').at(-2);
       for (const entry of f.entries) {
-        expect(`${areaOf(entry.file)}.json`, `${entry.id} (${entry.file}) is filed under ${f.path}`).toBe(f.path.split('/').pop());
+        expect(areaOf(entry.file), `${entry.id} (${entry.file}) is filed under ${dir}/`).toBe(dir);
+        // ...and is NAMED for itself, so the file a reader opens is the entry they wanted
+        // and two branches adding entries can never pick the same path. `basename` with the
+        // extension stripped, not a split on '.', because `framing-fit-bracket-4.5` exists.
+        const stem = (f.path.split('/').pop() as string).replace(/\.json$/, '');
+        expect(stem, `${entry.id} lives in a file named ${stem}.json`).toBe(entry.id);
       }
     }
     // Every path a real run would spawn vitest against must actually exist, or
@@ -1255,14 +1269,35 @@ describe('readManifestFiles / readManifest', () => {
       writeFileSync(join(dir, 'sim.json'), JSON.stringify([{ id: 's1' }]));
       writeFileSync(join(dir, 'app.json'), JSON.stringify([{ id: 'a1' }, { id: 'a2' }]));
       writeFileSync(join(dir, 'notes.md'), '# not a manifest');
-      writeFileSync(join(dir, 'object.json'), JSON.stringify({ id: 'not-an-array' }));
-      // Named, not a TypeError from some later `.map`: every reader comes through here,
-      // including migrate-killed-by.mjs, which rewrites each file and never merges.
-      expect(() => readManifestFiles(dir)).toThrow(/manifest .*object\.json: must be a JSON array/);
+      // A BARE OBJECT IS NOW A VALID FILE -- it is the shape every shipped manifest file
+      // takes since issue #653 (one entry per file). It reads as a one-entry file and is
+      // flagged `single`, which is what lets a rewriter put it back as an object rather
+      // than promoting it to an array and undoing the layout a file at a time.
+      writeFileSync(join(dir, 'object.json'), JSON.stringify({ id: 'lone' }));
+      const withObject = readManifestFiles(dir);
+      expect(withObject.find((f) => f.path.endsWith('object.json'))).toMatchObject({
+        entries: [{ id: 'lone' }], single: true,
+      });
+      expect(withObject.find((f) => f.path.endsWith('app.json'))?.single, 'an array file is not single').toBe(false);
+      // Still named, not a TypeError from some later `.map`: every reader comes through
+      // here, including migrate-killed-by.mjs, which rewrites each file and never merges.
+      writeFileSync(join(dir, 'scalar.json'), '42');
+      expect(() => readManifestFiles(dir)).toThrow(/manifest .*scalar\.json: must be a JSON entry object/);
+      rmSync(join(dir, 'scalar.json'));
       rmSync(join(dir, 'object.json'));
       expect(readManifestFiles(dir).map((f) => [f.path.split('/').pop(), f.entries.length])).toEqual([['app.json', 2], ['sim.json', 1]]);
       expect(readManifest(dir).map((x) => x.id)).toEqual(['a1', 'a2', 's1']);
       expect(readManifest(join(dir, 'sim.json')).map((x) => x.id), 'a single file').toEqual(['s1']);
+
+      // ONE LEVEL OF NESTING, which is the layout issue #653 introduces: an area directory
+      // contributes its files in name order, interleaved with loose files by the outer sort.
+      mkdirSync(join(dir, 'game'));
+      writeFileSync(join(dir, 'game', 'g2.json'), JSON.stringify({ id: 'g2' }));
+      writeFileSync(join(dir, 'game', 'g1.json'), JSON.stringify({ id: 'g1' }));
+      expect(readManifest(dir).map((x) => x.id), 'nested entries, both levels sorted')
+        .toEqual(['a1', 'a2', 'g1', 'g2', 's1']);
+      rmSync(join(dir, 'game'), { recursive: true });
+
       mkdirSync(join(dir, 'empty'));
       expect(() => readManifestFiles(join(dir, 'empty'))).toThrow(/holds no \*\.json file/);
     } finally {
@@ -1324,7 +1359,7 @@ describe('selectAffected', () => {
     // The three things under tools/mutate/ that cannot change an outcome. The README case
     // is not hypothetical: replaying this rule over PR #508 selected all 376 entries on a
     // docs-only line before the pattern was narrowed to harness code.
-    for (const path of ['tools/mutate/manifests/sim.json', 'tools/mutate/README.md', 'tools/mutate/scope-costs.json']) {
+    for (const path of ['tools/mutate/manifests/sim', 'tools/mutate/README.md', 'tools/mutate/scope-costs.json']) {
       const sel = run([path]);
       expect(sel.all, path).toBe(false);
       expect(ids(sel), path).toEqual([]);

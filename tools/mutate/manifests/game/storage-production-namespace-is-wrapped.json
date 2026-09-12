@@ -1,0 +1,12 @@
+{
+  "id": "storage-production-namespace-is-wrapped",
+  "file": "src/game/storage.ts",
+  "find": "  if (namespace === 'production') return base;",
+  "replace": "  if (false as boolean) return base;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "Drops the production short-circuit, so an ordinary URL gets a WRAPPER instead of the browser's own Storage object. Every key-addressed method still behaves identically (namespacedKey is the identity in production), so round-trip assertions stay green -- but `length`, `key(i)` and `clear()` would then filter on the developer prefix and report a production session as empty, and '#245: ordinary URLs retain current key names and behavior' stops being provable by identity and becomes an argument about wrapper equivalence. Killed only by the identity assertion 'hands back the SAME object', 1 of 40, which is the assertion that entry exists to keep load-bearing. `false as boolean` (the device storage-resolver-ignores-the-host already uses) keeps the mutation type-valid instead of a comparison tsc would reject; measured at `tsc --noEmit` exit 0 under the mutation, so the verdict is about test coverage rather than the compiler."
+}

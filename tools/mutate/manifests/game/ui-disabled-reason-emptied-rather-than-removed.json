@@ -1,0 +1,19 @@
+{
+  "id": "ui-disabled-reason-emptied-rather-than-removed",
+  "file": "src/game/ui.ts",
+  "find": "  if (reasonId === null) el.removeAttribute('aria-describedby');",
+  "replace": "  if (reasonId === null) el.setAttribute('aria-describedby', '');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/ui.test.ts"
+  ],
+  "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all. Issue #260 raised this from 3 to 5: the versus pane's Start button now carries its refusal through the same helper, so two more assertions -- the pane's own aria-describedby checks -- fail when it is broken.",
+  "killedBy": [
+    "describeDisabledReason: the reason is associated, not merely nearby REMOVES the reference rather than emptying it, so nothing points at nothing",
+    "describeDisabledReason: the reason is associated, not merely nearby never leaves a stale reason on a control that has since been enabled",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) keyboard-only first launch is playable by default: no refusal, and exactly one human",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one",
+    "the UI kit contracts, swept across every control that uses them (issue #321) associates a refused Start with the reason, and describes the Controllers panel's real rows with nothing"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "presentation-skin-scroll-never-animates",
+  "file": "src/presentation/customization.ts",
+  "find": "  return SKINS.find((s) => s.id === id)?.scroll ?? null;",
+  "replace": "  return null;",
+  "tests": [
+    "src/render/entities.test.ts",
+    "src/render/preview.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "skinScroll is THE place \"is this skin animated?\" is answered (its own doc comment), and issue #473 moved it from game/customization.ts to presentation/customization.ts. Returning null for every skin freezes flow's texture drift. 1 of 105 across entities.test.ts and preview.test.ts: entities.test.ts's flow-drift case (0.08 repeats/s over 0.5 s of dt) is the kill, which is the proof that the renderer reads the MOVED definition rather than a copy. Stated remainder: preview.ts's second consumer, `controls.setAnimating(skinScroll(skin) !== null)`, is not pinned by preview.test.ts and survives here."
+}

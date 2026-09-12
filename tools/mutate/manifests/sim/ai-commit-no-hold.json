@@ -1,0 +1,16 @@
+{
+  "id": "ai-commit-no-hold",
+  "file": "src/sim/ai/commitment.ts",
+  "find": "    return { move: held, nextIntent: held, nextIntentTicks: ticks - 1 };",
+  "replace": "    return { move: candidate, nextIntent: held, nextIntentTicks: ticks - 1 };",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/commitment.test.ts"
+  ],
+  "why": "The hold IS issue #222's mechanism: while a commitment is live and no emergency has broken it, the tank moves on its committed heading and ignores the fresh candidate. Letting the candidate through restores exactly the per-tick re-decision the issue reports -- measured before the layer existed, grey's movement intent reversed by more than 90 degrees on 13.93% of adjacent live ticks under a shooting player (8712/62529 pairs, arena3), with a 95th-percentile turn of 180.0 degrees against a MEDIAN of 0.0.",
+  "killedBy": [
+    "commitMove does NOT break a BULLET dodge merely because the named perpendicular flipped sides",
+    "commitMove does NOT break the hold for an escape only mildly off the committed heading",
+    "commitMove holds the committed direction against an opposing candidate, and counts down by one"
+  ]
+}

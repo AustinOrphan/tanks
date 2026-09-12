@@ -1,0 +1,14 @@
+{
+  "id": "menu-transition-rise-moves-nothing",
+  "file": "src/game/hud.css",
+  "find": "@keyframes ui-surface-rise-content {\n  from {\n    transform: translateY(16px);\n  }",
+  "replace": "@keyframes ui-surface-rise-content {\n  from {\n    transform: translateY(0px);\n  }",
+  "expect": "killed",
+  "why": "The SHIPPED movement wired end to end and moving by nothing: the rule applies unconditionally, the animation is named, the duration and easing come from the tokens, and the content sits exactly where it will end up. That is issue #542 undone in one number, back to the crossfade the owner said they had never seen in action -- and back with no flag to reveal it, since this is the default now rather than an arm nobody selects. Invisible to every other check here: jsdom computes no animated value, so only the DECLARATION can be read, which is why the case that measures it matches the `from` step's transform against every identity spelling and carries those spellings as its own negative control. 16px was chosen off rendered frames precisely because a distance that is too small stops reading as travel; zero is that failure taken to its limit.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menu transitions in hud.css gives each movement its keyframes, moving for real and ending at no transform at all"
+  ]
+}

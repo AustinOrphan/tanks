@@ -1,0 +1,12 @@
+{
+  "id": "route-host-action-button-is-not-an-exit",
+  "file": "src/game/route-host.ts",
+  "find": "      leavingGameplay(() => live?.startRestart?.());",
+  "replace": "      live?.startRestart?.();",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "Unwraps the action button, leaving only Quit as an exit. The branch this loses is a finished versus match's 'Versus Setup', which returns to the retained pane (`loop.ts`'s `relaunchTarget`) -- so a player who finishes a match and goes back to change the map leaves a whole session running behind the setup screen, and the next Start adds a second. Invisible: the pane opens correctly and the match is over. 1 of 32 -- 'an action-button branch that returns to a route disposes too'. The Quit cases keep passing, which is what shows the two exits are covered separately rather than one standing in for the other. Re-measured at 2 for issue #279, and the entry's own subject is what changed: the action button used to BE an exit for a finished versus match (it returned to the setup pane), and Rematch reboots into gameplay instead. The new `only stops a session whose action actually LEFT gameplay` case pins that distinction and fails here too."
+}

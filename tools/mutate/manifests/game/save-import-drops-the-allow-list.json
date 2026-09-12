@@ -1,0 +1,14 @@
+{
+  "id": "save-import-drops-the-allow-list",
+  "file": "src/game/save.ts",
+  "find": "    if (!SAVE_IMPORT_KEYS.includes(key) || typeof value !== 'string') {",
+  "replace": "    if (typeof value !== 'string') {",
+  "expect": "killed",
+  "why": "importSave writes only keys on SAVE_KEYS. That is a security property, not tidiness: austinorphan.com's localStorage namespace is shared with every other project page on the origin (CLAUDE.md), so a blob a player was talked into pasting must not be able to set a neighbour's key. Dropping the allow-list leaves every round-trip test green -- the keys a real export carries are all on the list -- and is caught only by the case that imports a blob carrying a foreign key. Verified through this harness at the commit that added the entry. RE-POINTED in the #320 settings PR: the import allow-list is now `SAVE_IMPORT_KEYS` (SAVE_KEYS plus the legacy `tanks.touch.v1` compatibility key) rather than `SAVE_KEYS`, so the original find string no longer existed and the harness reported FAILED-TO-APPLY. The security property being mutated is identical -- the list is still an allow-list, and dropping it still lets a pasted blob set a neighbour's key.",
+  "tests": [
+    "src/game/save.test.ts"
+  ],
+  "killedBy": [
+    "importSave never writes a key outside the allow-list"
+  ]
+}

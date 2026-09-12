@@ -1,0 +1,15 @@
+{
+  "id": "escape-back-leaks-to-the-session",
+  "file": "src/game/hud.ts",
+  "find": "      disarm();\n      e.preventDefault();\n      e.stopPropagation();\n      back();\n      return;",
+  "replace": "      disarm();\n      e.preventDefault();\n      back();\n      return;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The Escape that closed a pane keeps propagating to the page's bubble-phase listener, which forwards it to the session's pause hotkey: Escape on Controllers over Pause closes the panel AND resumes the round underneath it in the same keystroke. hud.navigation.test.ts (244): both Escape cases, each asserting the bubble-phase listener saw nothing for the Escape that closed a pane. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+    "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed"
+  ]
+}

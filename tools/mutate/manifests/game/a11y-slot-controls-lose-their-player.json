@@ -1,0 +1,12 @@
+{
+  "id": "a11y-slot-controls-lose-their-player",
+  "file": "src/game/hud.ts",
+  "find": "        btn.setAttribute('aria-label', `Player ${slot + 1} ${opt.label}`);",
+  "replace": "        btn.setAttribute('aria-label', opt.label);",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Drops the slot context from the who's-playing role buttons, so four slots announce four identical runs of Human/Bot/Off and the only thing tying a control to its player is screen position -- the one cue a non-visual reader does not get. Note the replacement still SETS a name: an emptiness sweep and a bare-digit sweep both pass. It is caught only by the uniqueness rule, which is why that rule is written as 'no two of these share a name' rather than as a spot-check on one label."
+}

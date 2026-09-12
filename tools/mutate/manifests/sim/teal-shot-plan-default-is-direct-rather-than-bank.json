@@ -1,0 +1,14 @@
+{
+  "id": "teal-shot-plan-default-is-direct-rather-than-bank",
+  "file": "src/sim/ai/teal.ts",
+  "find": "  const preferBank = heldPlan === null ? true : heldPlan === 'bank';",
+  "replace": "  const preferBank = heldPlan === null ? false : heldPlan === 'bank';",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/teal.test.ts"
+  ],
+  "why": "The never-held default is invisible on most geometry: where only one shot type solves, both defaults fall through to the same angle and the same stored plan, so an assertion taken on open ground passes under either value. It is only observable where BOTH types solve -- which is the fixture this entry forces to exist, and the reason that fixture does not reuse the open-field helper the neighbouring tests use.",
+  "killedBy": [
+    "teal shot-plan span (issue #332) a tank that has never held a plan starts on BANK, and arms a full span"
+  ]
+}

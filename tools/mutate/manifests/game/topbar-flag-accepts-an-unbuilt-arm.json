@@ -1,0 +1,14 @@
+{
+  "id": "topbar-flag-accepts-an-unbuilt-arm",
+  "file": "src/game/devflags.ts",
+  "find": "  return isTopbarTreatment(raw) ? raw : null;",
+  "replace": "  return raw as TopbarTreatment;",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "Reject-to-null dropped, so `?dev=1&topbar=sparse` becomes a `TopbarTreatment` the HUD then looks up in its departures table and finds nothing for -- `topbarDepartures` returns undefined and the first `topbar.exceptionChip` read throws, taking the whole bar down on a typo. The same guard `menuTransition`, `mineWarn`, `blockedFire` and `backdrop` each carry, and the same reason: `spare-labelled` is a real arm name from this issue's first draft that was never built, so the near-miss is one the owner can actually type. MEASURED on this branch: killed, 1 of the 12 cases in the arm suite.",
+  "killedBy": [
+    "topbar: the flag that names an arm accepts every name in the vocabulary and nothing else -- population: the 6 registered arms"
+  ]
+}

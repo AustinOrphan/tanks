@@ -1,0 +1,14 @@
+{
+  "id": "quit-announces-the-abandoned-session-kind",
+  "file": "src/game/loop.ts",
+  "find": "      descriptorFor(sessionIdentity, ordinalOf(landing)).kind,",
+  "replace": "      currentDescriptor.kind,",
+  "expect": "killed",
+  "why": "The THIRD `hud.setSessionKind` push, added by issue #317 when Quit stopped riding a world build to get its identity onto the menu -- and the mistake that site invites, because `currentDescriptor` is in scope and reads correct. It is precisely what the handler's own comment marks as DELIBERATELY STALE: after a quit, `currentDescriptor` still describes the world the player abandoned, so reusing it tells the HUD PRACTICE for a session whose Continue lands on the campaign board. WHAT THIS NOW PINS, and it changed with issue #324's step S6: hud.ts no longer renders practice and campaign identically -- a Practice status raises a chip that says so -- so telling the HUD PRACTICE for a session whose Continue lands on the campaign board is a visible lie on the way to the menu, not only a contract violation at loop.ts's composition boundary. RE-ANCHORED onto the kind argument of the quit handler's `pushStatus` call; the mistake the site invites is unchanged, because `currentDescriptor` is still in scope and still reads correct. It is a contract violation at loop.ts's composition boundary -- the same contract `session-dev-flag-versus-reported-as-campaign` and `session-title-policy-reused-as-identity` pin from the OTHER two push sites, neither of which can reach this one -- and the one #324's contextual HUD would start reading. Nothing about the world, the seed or the run moves either, so none of the navigation-only counting assertions can see it. `a Levels pick reports PRACTICE, and leaving restores CAMPAIGN before the board is built` is the case that measures it, at its post-quit `lastKind` assertion. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy a Levels pick reports PRACTICE, and leaving restores CAMPAIGN before the board is built"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "settings-owner-rebuilt-per-session",
+  "file": "src/game/session-host.ts",
+  "find": "      requestVersusSession,\n      requestCampaignSession,\n      deps.shell,\n      deps.routeHost,\n    );",
+  "replace": "      requestVersusSession,\n      requestCampaignSession,\n      { ...deps.shell },\n      deps.routeHost,\n    );",
+  "expect": "killed",
+  "why": "Hands every session its own copy of the page's shell instead of the one object boot.ts built. This is the pre-#320 defect in its structural form, and since issue #317 the shell carries the audio engine and the Launch gate as well as the settings owner: a fresh one means a fresh store, a fresh in-memory storage shim, a persistence notice that can fire once per navigation, a suspended audio context, and a splash the player already dismissed. It is invisible to every session-level test, because each session in isolation looks perfectly healthy. A SPREAD rather than a rebuild deliberately: it keeps every field's value identical, so only an IDENTITY assertion can see it. Killed by boot.test.ts's 'hands every session the SAME instance across both reboot paths'. Re-cut when the reboot closures moved out of boot.ts into session-host.ts; the previous find string named boot.ts's own `deps.startGame(...)` call, which no longer exists. RE-ANCHORED by issue #468: `startGame` gained a seventh argument (the page's route UI), so the call this entry mutates gained a line. The defect and the count are unchanged -- only the surrounding text moved.",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "killedBy": [
+    "boot: the page-scoped settings owner hands every session the SAME instance across both reboot paths"
+  ]
+}

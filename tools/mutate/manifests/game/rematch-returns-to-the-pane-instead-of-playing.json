@@ -1,0 +1,14 @@
+{
+  "id": "rematch-returns-to-the-pane-instead-of-playing",
+  "file": "src/game/loop.ts",
+  "find": "        deps.requestVersusSession(deps.initialVersusConfig);",
+  "replace": "        sm.toMainMenu();\n        slot.openVersusSetup();",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's Rematch: the same configuration, a fresh match (issue #279) win: reboots through the start seam with the retained config, and builds no world itself"
+  ],
+  "why": "The pre-#279 behaviour restored: the finished match's primary action returns to the SETUP PANE instead of playing again. That was correct while the button read `Versus Setup`; issue #279's ruling is that the primary action plays the match again and the pane moves to `Change Setup` beside it, so this makes a player who wants another round detour through a configuration screen to ask for the configuration they already had. Killed on the reboot seam rather than on the label, so a revert that kept the word `Rematch` over the old behaviour fails too."
+}

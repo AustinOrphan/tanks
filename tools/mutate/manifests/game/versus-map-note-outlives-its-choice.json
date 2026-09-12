@@ -1,0 +1,12 @@
+{
+  "id": "versus-map-note-outlives-its-choice",
+  "file": "src/game/hud.ts",
+  "find": "        renderVersusMapNote(null); // the note described the choice this click replaces",
+  "replace": "        void 0; // the note described the choice this click replaces",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Leaves the dropped-map notice up after the player picks a new map, so a sentence explaining that a PREVIOUS choice was unavailable sits under the choice now selected and reads as a warning about it. Nothing about the clamp itself changes, so every assertion on replacement and on the launch gate still passes; caught only by the dedicated clears-the-notice case. Filed as its own entry rather than folded into the clamp entries because the defect is the note's LIFETIME, which no assertion about the moment of the drop can reach."
+}

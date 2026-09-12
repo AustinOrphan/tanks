@@ -1,0 +1,21 @@
+{
+  "id": "empty-session-host-reports-a-session",
+  "file": "src/game/session-host.ts",
+  "find": "    hasSession: () => handle !== null,",
+  "replace": "    hasSession: () => true,",
+  "expect": "killed",
+  "why": "The host claims a gameplay session whether or not one exists -- so the EMPTY state, which is the entire point of issue #427, becomes unobservable. A shell asking 'should I offer Resume' gets yes on a page that has never started a match, and every criterion of the form 'X still works while the host has no active session' loses its second half: the assertions still run, they just stop distinguishing anything. Chosen over `() => false` deliberately, though both are killed: a stuck-false accessor is caught by the two positive cases and reads as an obvious omission, while stuck-TRUE passes the naive 'it reports a session after start()' check and fails only where the emptiness is the claim -- which is the harder shape to notice in review. Four failures across two files, MEASURED: the empty-host cases in session-host.test.ts and the combined route case in route-ui.test.ts, which asserts that driving every application route leaves the host empty. Scoped to those two files; expectFailures counts that scoped run only. COUNT RE-MEASURED for issue #428: 4 -> 7, because the empty host is the page's NORMAL state since #428 rather than a window between sessions, so three more cases assert `hasSession()` is false. The failing SET was compared, not the number renumbered.",
+  "tests": [
+    "src/game/session-host.test.ts",
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "createGameSessionHost: the empty host (issue #427) never leaves a session running through a replacement -- exactly one at a time",
+    "createGameSessionHost: the empty host (issue #427) owns no gameplay at all until something explicitly starts one",
+    "createGameSessionHost: the empty host (issue #427) reports a session once one is started, and not before",
+    "createGameSessionHost: the empty host (issue #427) returns to empty on stop, and stays empty after dispose",
+    "createGameSessionHost: the reboot seams a campaign request stops the versus session and starts nothing",
+    "createGameSessionHost: the reboot seams leaves NO canvas in the root after repeated switches ending on campaign",
+    "the application routes work with no gameplay session behind them drives every route while a real GameSessionHost stays EMPTY (issue #427)"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mutate-select-ignores-entry-text",
+  "file": "tools/mutate/select.mjs",
+  "find": "    else if (entryText(base) !== entryText(entry)) reasons.push('entry text changed');",
+  "replace": "    else if (false) reasons.push('entry text changed');",
+  "why": "An entry whose find, replace, tests or contract changed in the pull request must run: its declared outcome is the thing being claimed, and nothing else in the diff need touch its files.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "selectAffected rule 2: an entry whose text changed, or that is new, is selected; key order alone is not a change"
+  ]
+}

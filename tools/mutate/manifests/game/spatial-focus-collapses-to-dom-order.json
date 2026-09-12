@@ -1,0 +1,22 @@
+{
+  "id": "spatial-focus-collapses-to-dom-order",
+  "file": "src/game/spatial-focus.ts",
+  "find": "    if (row && centreY(r) >= row.top && centreY(r) <= row.bottom) {",
+  "replace": "    if (row) {",
+  "why": "Every candidate joins the first row, so geometry collapses to document order: Right walks off the end of a segmented row and Down never reaches the next card. This is the mutation issue #495's acceptance names -- a model that is really DOM order must be killed.",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/spatial-focus.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
+    "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
+    "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card",
+    "spatial-focus: every move lands somewhere Left and Right walk the row and wrap within it, never leaving it",
+    "spatial-focus: every move lands somewhere Up and Down move to the adjacent row, on the control whose centre is nearest",
+    "spatial-focus: every move lands somewhere Up from the first row wraps to the last, Down from the last wraps to the first",
+    "spatial-focus: rows are derived from geometry, not from DOM order a control whose centre is off the row but whose edge overlaps it starts a new row -- the wrap case",
+    "spatial-focus: rows are derived from geometry, not from DOM order groups by vertical overlap and orders each row left to right, whatever order the candidates arrived in"
+  ]
+}

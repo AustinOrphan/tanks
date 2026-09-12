@@ -1,0 +1,14 @@
+{
+  "id": "levels-note-never-says-the-grid-has-stopped-growing",
+  "file": "src/game/hud.ts",
+  "find": "        unlocked >= total ? 'Every level cleared.' : 'Clear a level to add it here.';",
+  "replace": "        'Clear a level to add it here.';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Removes the completion signal, which is the thing issue #555 had to REPLACE rather than merely delete. A grid of locked buttons told a player implicitly that the campaign had an end and where it was; a grid that only grows says nothing, so a player who has cleared everything cannot tell that from a player whose next level has not arrived -- and this line promising another one is then a lie for the rest of the campaign, which under the cleared-only rule means for a player who has actually finished the game. Survives every population assertion in the file, because it changes no button.",
+  "killedBy": [
+    "hud: level select panel says whether the grid will keep growing, without saying how far it has to go"
+  ]
+}

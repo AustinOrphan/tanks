@@ -1,0 +1,15 @@
+{
+  "id": "interrupted-transition-not-settled-at-all",
+  "file": "src/game/transitions.ts",
+  "find": "      // spin the loop; one level is what a chained navigation actually produces.\n      for (let drain = 0; drain < 8 && (outstanding !== null || handle !== null); drain++) {\n        settleNow();\n      }\n      begin();",
+  "replace": "      // spin the loop; one level is what a chained navigation actually produces.\n      begin();",
+  "expect": "killed",
+  "why": "The interrupt rule removed outright: a second navigation begins without settling the first, so the outgoing screen keeps its `--leaving` class and stays painted underneath the arriving one -- issue #364's third criterion (\"no intermediate screen left visible\") failing in exactly the shape the criterion names. The superseded timer also still fires later and applies its end state on top of a screen that has moved on. Note what CANNOT see this: every settled-state assertion in hud.test.ts advances its timers, and the orphaned settle eventually hides the same element, so the tree converges to the right place a beat late. `a second transition settles the first IMMEDIATELY, leaving nothing intermediate` is the case that measures it, at the frame before any timer runs. Scoped to transitions.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/transitions.test.ts"
+  ],
+  "killedBy": [
+    "createTransitionRunner: interruption a second transition settles the first IMMEDIATELY, leaving nothing intermediate",
+    "createTransitionRunner: interruption a transition started from an INTERRUPTED settle is settled, not orphaned"
+  ]
+}

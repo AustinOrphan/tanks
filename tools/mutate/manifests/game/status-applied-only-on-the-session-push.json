@@ -1,0 +1,14 @@
+{
+  "id": "status-applied-only-on-the-session-push",
+  "file": "src/game/hud.ts",
+  "find": "    applyStatus();\n    // Launch and playing both want the menu panel gone.",
+  "replace": "    // the status is applied when the session next pushes one\n    // Launch and playing both want the menu panel gone.",
+  "expect": "killed",
+  "why": "Half of the merged projection, in the direction a reader is most likely to call tidy: `setStatus` applies the projection, so why should `setState` apply it again? Because the two carry half of the answer each -- the strip's visibility is `kind` AND `surface` -- and either can move last. This mutation leaves the surface half stranded: a status that arrives while the surface is still the menu is rendered hidden and never revisited when play starts. MEASURED on this branch by making the edit and running the scoped file: 6 of 35 cases fail, and the ordering case that catches it is the DATA-FIRST one -- production's own state-then-data order still passes, which is why the pair of ordering cases exists rather than one.",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) the reverse order -- status first, THEN setState(playing) -- lands on the same strip"
+  ]
+}

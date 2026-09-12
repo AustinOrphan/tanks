@@ -1,0 +1,14 @@
+{
+  "id": "outcome-projection-missing-at-boot",
+  "file": "src/game/loop.ts",
+  "find": "  // outcome, because a session that has just been constructed has not ended.\n  pushOutcome(world, null);",
+  "replace": "  // outcome, because a session that has just been constructed has not ended.",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Drops the opening projection. Invisible to every outcome assertion that reads `outcomePushes.at(-1)` after driving a frame, because the frame's own push overwrites the boot one -- which is exactly why this was uncovered when the projection was introduced, and why the test that kills it counts pushes BEFORE any frame runs. A session disposed before it produces a single event otherwise leaves the HUD describing the previous session's board.",
+  "killedBy": [
+    "startGameWith: the active campaign run (issues #153/#152) coop kill attribution, end to end (coop semantics plan) pushes an outcome projection AT BOOT, before any frame has run"
+  ]
+}

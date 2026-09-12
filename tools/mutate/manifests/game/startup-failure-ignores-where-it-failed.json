@@ -1,0 +1,15 @@
+{
+  "id": "startup-failure-ignores-where-it-failed",
+  "file": "src/game/startup-failure.ts",
+  "find": "  if (at === 'match') return STARTUP_FAILURES['match-failed'];",
+  "replace": "  void at;",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "Collapses the two boundaries back into one. The same thrown object means different things depending on where it was caught: during boot the game never came up, while from a match start the player has already watched a Main Menu work and clicked a button on it. Under this mutation a failed match tells them \"Tanks! could not start\" over a menu they can see running, which reads as the message being broken rather than the match. `boot.ts` recorded this case as a hole when issue #428 created it.",
+  "killedBy": [
+    "boot: the message itself classifies each cause into its own state, and guesses at nothing",
+    "boot: the shell capability probe (issue #470) still catches a session that fails for a reason the probe cannot see"
+  ]
+}

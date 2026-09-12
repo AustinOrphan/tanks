@@ -1,0 +1,14 @@
+{
+  "id": "vs-limits-line-reads-the-wrong-config-field",
+  "file": "src/game/hud.ts",
+  "find": "    const mines = cfg.mineCapacity;",
+  "replace": "    const mines = cfg.weapon.maxActiveProjectiles;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Issue #268 requires each displayed limit to come from the field the simulation actually enforces -- dropMine gates on cfg.mineCapacity, spawnBullet on cfg.weapon.maxActiveProjectiles -- so a line that read one field twice would be right about shells and silently wrong about mines. Note the OTHER drift this issue names, a hardcoded literal, cannot be pinned here: 5 and 2 are today's shipped values, so a literal agrees with config and SURVIVES. That half is proven instead by editing tank-defs.json to 3/1, where the derived line follows and a hardcoded one fails; the run is recorded on the PR.",
+  "killedBy": [
+    "standard VS ordnance limits (issue #268) states the shell and mine limits the simulation actually enforces"
+  ]
+}

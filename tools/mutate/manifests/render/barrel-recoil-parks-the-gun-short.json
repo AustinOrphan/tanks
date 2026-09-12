@@ -1,0 +1,15 @@
+{
+  "id": "barrel-recoil-parks-the-gun-short",
+  "file": "src/render/barrel-recoil.ts",
+  "find": "        rest(tankId);\n        active.delete(tankId);",
+  "replace": "        active.delete(tankId);",
+  "expect": "killed",
+  "tests": [
+    "src/render/barrel-recoil.test.ts"
+  ],
+  "why": "Drops the return-to-rest at the end of the recoil. This writes onto an object another system owns (entities.ts's barrel mesh), on an axis `sync` never reassigns, so the last frame's offset is PERMANENT: the tank fights on with its gun sitting short in its ring, a little further back after every shot. As a dev-flagged refusal arm this leaked only for whoever set the flag; since #526 it would reach every player on every shot, which is what moves it from a blemish to a defect.",
+  "killedBy": [
+    "barrel recoil (issue #526, parent #356) puts the gun back at EXACTLY rest when the recoil ends",
+    "barrel recoil (issue #526, parent #356) reduced motion holds ONE static offset instead of oscillating"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "route-host-start-request-fires-with-a-session-running",
+  "file": "src/game/route-host.ts",
+  "find": "  hud.onNewGame(() => {\n    if (live) {\n      live.newGame?.();\n      return;\n    }\n    requests.requestStart({ kind: 'campaign-new' });\n  });",
+  "replace": "  hud.onNewGame(() => {\n    live?.newGame?.();\n    requests.requestStart({ kind: 'campaign-new' });\n  });",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "Removes the empty-slot guard, so New Game asks for a whole new session WHILE one is running -- on top of the in-session New Game the slot also receives. Two runs from one click, and the second discards the first's world mid-frame. Silent in a browser: the screen ends up on a level-one board either way, which is what the click asked for. 1 of 25 -- 'none of the three asks for a session while one is attached', the only case that asserts the request seam stays EMPTY with a session live. Its siblings all drive an empty host and keep passing, which is what makes this a real two-way discrimination rather than a restatement of them."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "new-campaign-wipes-the-lifetime-tally",
+  "file": "src/game/stats.ts",
+  "find": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) runTally[key] = 0;\n      writeRaw(RUN_STATS_KEY, runTally);",
+  "replace": "      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) {\n        runTally[key] = 0;\n        life[key] = 0;\n      }\n      writeRaw(RUN_STATS_KEY, runTally);\n      writeRaw(STATS_KEY, life);",
+  "expect": "killed",
+  "tests": [
+    "src/game/stats.test.ts"
+  ],
+  "killedBy": [
+    "createStatsStore: the CAMPAIGN RUN scope startRun zeroes the run tally and ONLY the run tally"
+  ],
+  "why": "The opposite error, and the more destructive one: pressing New Game erases the player's whole history. Plausible precisely because the two scopes now sit next to each other in this file and `resetStats` legitimately clears both -- copying its body into `startRun` is a one-paste mistake. The `ONLY the run tally` half of the test is what stands between that and a shipped data-loss bug."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "versus-variants-guard-drops-mode-check",
+  "file": "src/sim/arena.ts",
+  "find": "  if ((mode === 'ffa' || mode === 'teams') && seed !== undefined) {",
+  "replace": "  if (seed !== undefined) {",
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "loadArena must only ever pick a versus variant for mode 'ffa'/'teams' -- dropping the mode half of the guard means ANY call that passes a real seed gets a variant, including every campaign-coop load (which always passes a seed in real play and in the golden trace). Caught by 2 of 32 across the two scoped files: versus-variants.test.ts's own 'campaign-coop is BYTE-IDENTICAL... even when a real seed is passed' test, and tools/baseline/trace.test.ts's BASELINE_HASH, which moved from a5458ede... to 70dd6777... under this mutation -- verified by hand before this entry was written, then restored and re-verified clean.",
+  "tests": [
+    "src/sim/versus-variants.test.ts",
+    "tools/baseline/trace.test.ts"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "route-host-back-at-pause-does-not-resume",
+  "file": "src/game/route-host.ts",
+  "find": "    if (action === 'back' && sm.isPaused) sm.resume();\n  };",
+  "replace": "  };",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Back with nothing open at Pause is Resume, the same meaning Escape has there.",
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused"
+  ]
+}

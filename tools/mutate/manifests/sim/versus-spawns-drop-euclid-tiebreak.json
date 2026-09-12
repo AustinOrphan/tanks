@@ -1,0 +1,12 @@
+{
+  "id": "versus-spawns-drop-euclid-tiebreak",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else if (euclid !== bestEuclid) wins = euclid > bestEuclid;\n    else wins = isEarlier(cand, best);",
+  "replace": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else wins = isEarlier(cand, best);",
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "Geodesic distance saturates at Infinity for every cell in a component the avoid set cannot reach, so on a partitioned board EVERY unreachable candidate ties and, without the Euclidean key, (row, col) order decides -- which picks the cell hard against the far side of the dividing wall. This mutation SURVIVED when first run (the gap was proved before the test was written, per this repo's rule); the dedicated tie-break fixture and the pickVersusSpawnSet pin were added because of it. Caught by 2 of 17 in versus-spawns.test.ts: the partitioned-board fixture returns {row:0,col:6} instead of {row:0,col:11}, and arena-04's 3-player set moves to (0,0) (32,44) (13,25).",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ]
+}

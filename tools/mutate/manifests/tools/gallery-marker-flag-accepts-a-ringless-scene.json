@@ -1,0 +1,12 @@
+{
+  "id": "gallery-marker-flag-accepts-a-ringless-scene",
+  "file": "tools/gallery/args.mjs",
+  "find": "    if (!chosen.some((e) => withRings.includes(e))) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "Drops the refusal, so `--elements tank --identityMarker shape` runs, exits 0, and produces a frame with NO marker in it -- the identity ring exists only where `identityApplies` is true (two or more player tanks). That is the same silent no-op this whole change exists to end: `--mineWarn` behaved exactly this way in the posed scene for its entire life, and nothing in the tool or the output said so. Modelled on the --blocked-fire guard, which carries the same reasoning in its own comment."
+}

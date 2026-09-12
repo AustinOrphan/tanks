@@ -1,0 +1,19 @@
+{
+  "id": "versus-setup-never-persisted",
+  "file": "src/game/hud.ts",
+  "find": "    opts.versusSetup?.set({ ...next });",
+  "replace": "    void next;",
+  "expect": "killed",
+  "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) does not intercept arrow keys while playing, so input.ts still drives the tank",
+    "createHud roving-tabindex focus navigation (issue #115) leaves ArrowLeft/ArrowRight on the preview canvas for its own rotation scheme",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back fires no start, pick, reset, quit, pause, setup or open callback, leaves no reset armed, and writes nothing to the retained VS store",
+    "hud: the versus pane reads and writes the RETAINED setup (issue #260) never writes a device to storage -- only the role pattern survives",
+    "hud: the versus pane reads and writes the RETAINED setup (issue #260) persists a role choice to the RAW key, so a second HUD on the same storage opens with it",
+    "hud: the versus pane reads and writes the RETAINED setup (issue #260) persists the match rules too, not only the slots -- every write goes through one funnel"
+  ]
+}

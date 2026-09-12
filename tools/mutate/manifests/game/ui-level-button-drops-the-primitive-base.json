@@ -1,0 +1,15 @@
+{
+  "id": "ui-level-button-drops-the-primitive-base",
+  "file": "src/game/hud.ts",
+  "find": "btn.className = 'ui-btn hud-level-btn';",
+  "replace": "btn.className = 'hud-level-btn';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "A button built without the primitive -- the shape of the defect #321 exists to remove, where `.hud-achievements-open` shipped with no base rule and rendered as a stock grey browser button beside three themed siblings. Two cases catch it and they catch DIFFERENT things: `never lets a button fall through to browser default styling` sees the rendering (the level buttons keep their own size rule, so they lose only fill, text colour and cursor), and `groups every button under a primitive` sees the omission itself, which is the property that still holds for a control whose own rule happens to cover everything. The second is what replaces `a new button joins by adding its selector to the group` now that the group is gone.",
+  "killedBy": [
+    "hud.css is syntactically whole groups every button under a primitive, or names it as a deliberate exception",
+    "hud.css is syntactically whole never lets a button fall through to browser default styling"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "storage-resolver-ignores-the-host",
+  "file": "src/game/storage.ts",
+  "find": "    if (host.localStorage) return { storage: host.localStorage, availability: 'persistent' };",
+  "replace": "    if (false as boolean) return { storage: host.localStorage!, availability: 'persistent' };",
+  "expect": "killed",
+  "why": "resolveStorage must hand back the host's REAL localStorage when there is one; returning the in-memory shim instead means the shipped game silently persists nothing, and every round-trip assertion still passes on the shim. Only an IDENTITY assertion can see it, which is what storage.test.ts's 'returns the host storage ITSELF' case is. Verified through this harness at the commit that added the entry. RE-POINTED in the #320 settings PR: the resolver body moved into `resolveStorageWithStatus`, which returns `{ storage, availability }` instead of a bare `Storage` (`resolveStorage` is now a one-line wrapper over it), so the original find string no longer existed and the harness reported FAILED-TO-APPLY. The MUTATION is unchanged in substance -- it still makes the host's real localStorage unreachable -- and the identity assertion that kills it is the same one.",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "killedBy": [
+    "resolveStorage returns the host storage ITSELF when there is one"
+  ]
+}

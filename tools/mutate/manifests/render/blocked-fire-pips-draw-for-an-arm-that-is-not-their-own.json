@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-pips-draw-for-an-arm-that-is-not-their-own",
+  "file": "src/render/blocked-fire-pips.ts",
+  "find": "    if (!cueDrives(cue, 'visual') || cue !== 'pips') return;",
+  "replace": "    if (!cueDrives(cue, 'visual') || (cue !== 'pips' && cue !== 'ring')) return;",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-pips.test.ts"
+  ],
+  "why": "This arm's own cue gate, widened so the strip also lights under `ring`. Same defect class and same rationale as blocked-fire-muzzle-flashes-for-an-arm-that-is-not-its-own. MEASURED with the table's `it` deleted from the file: 0 of 10 remaining tests failed (survived). With it: killed.",
+  "killedBy": [
+    "blocked-fire capacity pips (issue #516, parent #356) draws for EVERY cue carrying `pips`, and for no other -- one row per cue"
+  ]
+}

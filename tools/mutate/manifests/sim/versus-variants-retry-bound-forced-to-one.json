@@ -1,0 +1,12 @@
+{
+  "id": "versus-variants-retry-bound-forced-to-one",
+  "file": "src/sim/versus-variants.ts",
+  "find": "  for (let attempt = 0; attempt < VARIANT_RETRY_BOUND; attempt++) {",
+  "replace": "  for (let attempt = 0; attempt < 1; attempt++) {",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "pickVersusVariantGrid must actually RETRY, not just fall back on the first unsuitable draw -- forcing a single attempt removes the retry entirely. A first, weaker version of this entry's test (asserting only that the picked grid differs from the failed first draw, and is itself suitable) SURVIVED this mutation: arena-03's own authored board is suitable at N=4, so an immediate fallback to it satisfies both assertions for the wrong reason, which is exactly the kind of accidental pass this file's testing conventions warn about. The test was strengthened to also assert the picked grid is neither reference-equal to the authored grid nor free of removed cells, which is what a genuine second-attempt success looks like and a same-arena fallback does not. Caught by 1 of 25 in versus-variants.test.ts under the strengthened version.",
+  "tests": [
+    "src/sim/versus-variants.test.ts"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "bot-difficulty-leaves-awareness-delay-unscaled",
+  "file": "src/sim/ai/bot-difficulty.ts",
+  "find": "      awarenessDelay: Math.max(\n        cfg.ai.awarenessDelay * scale.awarenessDelay,\n        MIN_COMPETENCE_AWARENESS_DELAY,\n      ),",
+  "replace": "      awarenessDelay: Math.max(cfg.ai.awarenessDelay, MIN_COMPETENCE_AWARENESS_DELAY),",
+  "expect": "killed",
+  "why": "The composition drops one axis: every preset inherits the authored delay, so `easy` is no slower to notice a hazard than `hard` is. Issue #223's monotonicity criterion fails on the axis that carries most of its behaviour, while the resolved config still LOOKS right -- the field is present, finite, and within its bounds, so every shape assertion in bot-difficulty.test.ts passes. The floor is kept in the replacement on purpose, so this tests the SCALING and not the clamp; the clamp has its own entry. Killed by the ordering test, which asserts strict inequalities across all three of #223's axes rather than mere difference.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts",
+    "src/sim/ai/bot-difficulty.test.ts"
+  ],
+  "killedBy": [
+    "difficulty moves the whole hazard picture, monotonically orders every one of the three axes #223 added, easy -> normal -> hard"
+  ]
+}

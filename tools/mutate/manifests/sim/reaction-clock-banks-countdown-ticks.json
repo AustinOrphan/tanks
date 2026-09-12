@@ -1,0 +1,20 @@
+{
+  "id": "reaction-clock-banks-countdown-ticks",
+  "file": "src/sim/ai/index.ts",
+  "find": "    tank.aimTicks = phase === 'live' && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;",
+  "replace": "    tank.aimTicks = decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;",
+  "expect": "killed",
+  "why": "The shipped behaviour issue #367 reverses, restored exactly: countdown ticks bank toward the profile's reaction delay, so an enemy that watched the player through the announced fire-free phase fires on the first live tick. Measured over the golden trace's population under this mutation: in 12 of the 30 traced runs an enemy stood at or past its full authored span the moment the countdown ended. Not a subtle regression to leave to a reviewer's eye -- it is the difference between a telegraphed first shot and an instant one, and the player has no counterplay to the second.",
+  "tests": [
+    "src/sim/ai/reaction.test.ts",
+    "src/sim/arena.test.ts",
+    "tools/baseline/trace.test.ts"
+  ],
+  "killedBy": [
+    "baseline fingerprint",
+    "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) applies again after a full-arena restart, not only at the first round",
+    "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) holds the clock at zero through the whole countdown, with an unbroken solution",
+    "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) the first live tick is not a legal shot: the earliest one is reactionTicks into live",
+    "the reaction clock starts at LIVE acquisition, not at countdown acquisition (#367) the same holds for a DIRECT shooter, not only the bank-shot profile"
+  ]
+}

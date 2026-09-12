@@ -1,0 +1,13 @@
+{
+  "id": "settings-rumble-conflated-with-vibration",
+  "file": "src/game/effective-settings.ts",
+  "find": "    controllerRumble: settings.input.controllerRumble && capabilities.controllerRumble,",
+  "replace": "    controllerRumble: settings.input.controllerRumble && capabilities.deviceVibration,",
+  "expect": "killed",
+  "expectFailures": 7,
+  "why": "The exact conflation issue #320 forbids: resolving controller rumble from the DEVICE vibration capability. A phone with `navigator.vibrate` and no pad would report rumble available; a desktop pad with an actuator and no `navigator.vibrate` would report none. Killed by effective-settings.test.ts's 'gates each on its OWN capability' and loop.test.ts's 'keeps controller rumble on its OWN capability', both of which set exactly one capability in each direction so a resolver reading the wrong one has to get a row wrong. 7 of 385 across the two declared files.",
+  "tests": [
+    "src/game/effective-settings.test.ts",
+    "src/game/loop.test.ts"
+  ]
+}

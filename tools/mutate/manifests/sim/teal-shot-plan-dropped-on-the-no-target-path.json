@@ -1,0 +1,15 @@
+{
+  "id": "teal-shot-plan-dropped-on-the-no-target-path",
+  "file": "src/sim/ai/teal.ts",
+  "find": "nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan: holdPlan, nextShotPlanTicks };",
+  "replace": "nextAimHeld: null, nextAimHeldTicks: 0 };",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/teal.test.ts"
+  ],
+  "why": "This is the defect found while shipping the issue, kept as a guard. stepAi writes the pair back only when the decision CARRIES one, so a return path that omits it does not error -- it silently freezes the countdown for every tick the arena has no live player, i.e. every countdown and every player death, making the real span longer than shotCommitmentTime authorises. The prototype shipped this bug and every measurement taken on it described a span the profile did not control.",
+  "killedBy": [
+    "teal shot-plan span (issue #332) carries the plan on the NO-TARGET path, so the countdown cannot freeze",
+    "teal shot-plan span (issue #332) holds the plan across a lapse with no target, rather than flipping on the clock alone"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "grey-solves-its-dodge-from-the-real-world",
+  "file": "src/sim/ai/grey.ts",
+  "find": "  const avoid = dangerAvoidMove(seen, tank, fleeRadius, dangerCorridor);",
+  "replace": "  const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);",
+  "expect": "killed",
+  "why": "The perceived world is built, the radii are perceived, and the dodge is solved against the REAL shells anyway -- so grey's escape has oracle knowledge of where every shell actually is, which is the exact defect issue #223 opens against, wearing the new module's name. It survives everything in this file's older neighbours: the radii it passes are still perturbed, so profile.test.ts's under/over-estimation fixtures still behave, and it was MEASURED to survive the whole of hazard-perception.test.ts as first written -- the test that kills it was added because this entry survived. That fixture isolates the axis rather than the radius: a shell dead-centre on the tank has perpendicular distance 0, so no corridor width can drop it, and only the lookahead horizon -- i.e. where the shell is BELIEVED to be -- can. Killed by that one test, whose crossover is arithmetic (4 ticks) and asserted per draw rather than statistically.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "the decision functions solve from the PERCEIVED world, not the real one grey ignores a real, incoming shell its stale picture has not caught up with"
+  ]
+}

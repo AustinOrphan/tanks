@@ -1,0 +1,14 @@
+{
+  "id": "versus-accuracy-mode-guard-names-a-mode-that-does-not-exist",
+  "file": "src/game/loop.ts",
+  "find": "  if (world.rules.mode !== 'ffa' && world.rules.mode !== 'teams') return;",
+  "replace": "  if ((world.rules.mode as string) === 'campaign') return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) ignores a NON-PLAYER tank, and does nothing at all outside a versus mode"
+  ],
+  "why": "Guards on a mode string that is not in `GameMode` (exactly 'campaign-coop' | 'ffa' | 'teams'), so every REAL campaign world falls straight through and fills the versus table. This mutation survived until the test stopped feeding the guard a made-up 'campaign' cast through `as never` and used the shipped 'campaign-coop' instead: a placeholder mode made the fixture agree with the mutant."
+}

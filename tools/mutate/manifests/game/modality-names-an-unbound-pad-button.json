@@ -1,0 +1,16 @@
+{
+  "id": "modality-names-an-unbound-pad-button",
+  "file": "src/game/modality.ts",
+  "find": "  if (modality === 'gamepad') return button === null ? '' : ` (${button})`;",
+  "replace": "  if (modality === 'gamepad') return ` (${button})`;",
+  "why": "A control with no pad binding must not name a button: mute is bound to M and its own on-screen button and nothing else, so a hint naming a pad button instructs the player to press something inert (caught in review of issue #496, where the hint claimed `Y`). A pad reaches the control through focus like any other.",
+  "tests": [
+    "src/game/modality.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: prompts follow the input the player is using (issue #496) a gamepad naming its own button takes over from the keyboard, and the mouse is not touch",
+    "keyHint: one policy for static hints across the HUD (issue #496) names the key for a keyboard, a pad's button only when one is bound, nothing for touch, and keeps the key for a mouse"
+  ]
+}

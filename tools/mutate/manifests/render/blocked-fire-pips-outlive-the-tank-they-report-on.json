@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-pips-outlive-the-tank-they-report-on",
+  "file": "src/render/blocked-fire-pips.ts",
+  "find": "      if (!follow(row, world)) {\n        retire(row);\n        continue;\n      }",
+  "replace": "      follow(row, world);",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-pips.test.ts"
+  ],
+  "why": "Restores the shape review found on this PR: `follow` merely declines to reposition a strip whose owner is gone, instead of ending it. The strip then freezes where the tank died and stays lit for the rest of its 0.55s -- a capacity readout for a tank that no longer exists and can hold no shells, which reads as a rendering fault rather than as a cue. Reachable in ordinary play: half a second is long enough to be shot in, and #356's arms are judged in live matches. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 11 tests failed) against the file as it stood, because every other case keeps its tank alive for the whole effect. With `RETIRES the strip when its tank dies, or leaves the arena, mid-effect` present: killed.",
+  "killedBy": [
+    "blocked-fire capacity pips (issue #516, parent #356) RETIRES the strip when its tank dies, or leaves the arena, mid-effect"
+  ]
+}

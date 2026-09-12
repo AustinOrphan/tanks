@@ -1,0 +1,14 @@
+{
+  "id": "outcome-summary-falls-back-to-the-records-payload",
+  "file": "src/game/hud.ts",
+  "find": "  function renderAttemptSummary(): void {\n    if (!outcomeData) {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+  "replace": "  function renderAttemptSummary(): void {\n    if (!outcomeData) {\n      if (statsData) {\n        tallyLineEl(attemptSummaryEl, 'hud-attempt-summary--hidden', 'Level attempt', statsData.attempt);\n        return;\n      }\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+  "expect": "killed",
+  "why": "The migration issue #324's step S4 performs, written as the shortcut that would have made it invisible: keep the old source working beside the new one. Both payloads carry `attempt` counts, so a fallback still renders a plausible summary line -- built from the Records table's numbers, pushed by an application route, onto a panel a gameplay session owns. Every test that pushes an outcome passes under it, which is why the split needs an assertion of its own: the discriminating case is a HUD told ONLY the Records numbers, and that HUD must show no summary at all. Re-anchored when the line's body moved into the shared `tallyLineEl` helper: the mutation now adds the Records-payload fallback as a branch rather than swapping the source expression, which is the same defect through the shape the code has today.",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "killedBy": [
+    "hud: the stats page the attempt summary reads the outcome projection, NOT the Records table it used to ride"
+  ]
+}

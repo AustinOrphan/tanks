@@ -1,0 +1,14 @@
+{
+  "id": "bot-difficulty-lets-hard-reach-a-current-hazard-picture",
+  "file": "src/sim/ai/bot-difficulty.ts",
+  "find": "      awarenessDelay: Math.max(\n        cfg.ai.awarenessDelay * scale.awarenessDelay,\n        MIN_COMPETENCE_AWARENESS_DELAY,\n      ),",
+  "replace": "      awarenessDelay: cfg.ai.awarenessDelay * scale.awarenessDelay,",
+  "expect": "killed",
+  "why": "The other half of the same line: the scaling stays and the floor goes, so a profile authored with a short enough delay resolves at `hard` to a picture current to the tick -- the oracle both #223 and #267 forbid by name (\"never oracle-perfect\"). It cannot be caught with the shipped profiles, whose 0.1s is nowhere near MIN_COMPETENCE_AWARENESS_DELAY at any preset, which is why the test probes a synthetic profile already at the bound -- the same argument bot-difficulty.test.ts's own oracle test makes for the accuracy ceiling. Killed by the one test that carries that fixture, which also checks the shipped profile still reaches a nonzero delay so the clamp is not passing by making everything slow.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "difficulty moves the whole hazard picture, monotonically never lets HARD reach a current picture, however extreme the profile"
+  ]
+}

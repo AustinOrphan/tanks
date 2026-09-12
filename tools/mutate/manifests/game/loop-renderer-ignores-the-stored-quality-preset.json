@@ -1,0 +1,15 @@
+{
+  "id": "loop-renderer-ignores-the-stored-quality-preset",
+  "file": "src/game/loop.ts",
+  "find": "    quality: qualityFor(deps.devFlags.quality ?? deps.effectiveSettings.current().quality),",
+  "replace": "    quality: qualityFor(deps.devFlags.quality),",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Restores the pre-#540 line, which is the defect the issue was filed on rather than a hypothetical: the presets exist, the Settings control writes one, the store persists it, the page paints it back -- and the renderer still resolves `null` to `high` and draws everything. A player on a struggling device can now find the lever, pull it, watch the button agree with them, and see no change ever. Nothing fails, nothing looks broken, and the only witness is what the renderer was constructed with.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default builds the renderer with the STORED quality preset when no flag is set (issue #540)",
+    "startGameWith: dev flags stay off by default lets ?dev=1&quality= OVERRIDE the stored preset, without writing it"
+  ]
+}

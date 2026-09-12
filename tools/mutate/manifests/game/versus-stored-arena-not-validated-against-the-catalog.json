@@ -1,0 +1,17 @@
+{
+  "id": "versus-stored-arena-not-validated-against-the-catalog",
+  "file": "src/game/versus-setup.ts",
+  "find": "      : storedArena === RANDOM_ARENA || isArenaAllowed(storedArena, players, mode)",
+  "replace": "      : true",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-setup.test.ts",
+    "src/game/versus-setup-store.test.ts"
+  ],
+  "why": "The highest-risk surface in this change, and the failure is a LAUNCH one rather than a wrong pixel: resolveVersusConfig THROWS both for an id naming no catalog entry and for a real id whose entry does not support the (players, mode) being started. Both are reachable from stored data alone -- an arena retired between builds, or a two-player map stored before four players were chosen -- so an unvalidated read turns a stale save into a game that will not start.",
+  "killedBy": [
+    "arena ids out of storage cannot crash the launch path replaces a retired arena id with random",
+    "sanitizeSetup: arena ids are checked against what is offerable falls back to random for an arena the predicate refuses",
+    "sanitizeSetup: arena ids are checked against what is offerable refuses on the (players, mode) actually stored, not on the fallback pair"
+  ]
+}

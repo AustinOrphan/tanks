@@ -1,0 +1,15 @@
+{
+  "id": "target-commitment-not-wired-into-stepai",
+  "file": "src/sim/ai/index.ts",
+  "find": "    commitTarget(world, tank);",
+  "replace": "    // commitTarget(world, tank);",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-selection.test.ts"
+  ],
+  "why": "Pins the WIRING of issue #359's commitment, not the policy. target-selection.test.ts drives commitTarget directly and passes in full while stepAi never calls it, which would leave every AI on the pure fallback -- re-selecting from scratch every tick, with the stickiness the issue asks for present in the module and absent from the game. The golden trace is what notices, because five of its runs' timing depends on the commitment holding. Re-pointed 2026-08-31: the golden trace used to kill this (five runs's timing depended on the commitment holding), but the owner's full-awareness ruling made the commitment behaviourally invisible in single-player -- the trace reverted to its pre-#359 value and this entry started SURVIVING. Its value was always multi-player, so it is now pinned by a two-player stepAi case instead. Remeasured 2026-09-01 at 2 of the 16 tests now in target-selection.test.ts, up from a declared 1 -- the population changed, the contract did not. The file gained 'under the dev flag, the bound survives a REAL TICK -- the clone has to carry it' alongside the cloneWorld aiTargetPerception fix, and that test drives a real stepInputs tick, so an unwired commitTarget leaves its two acquired-target assertions unwritten as well. The pre-existing two-player 'stepAi writes and HOLDS a committed target across ticks' case is still the other failure.",
+  "killedBy": [
+    "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it",
+    "the commitment reaches the game, not just this file stepAi writes and HOLDS a committed target across ticks, with two players on the board"
+  ]
+}

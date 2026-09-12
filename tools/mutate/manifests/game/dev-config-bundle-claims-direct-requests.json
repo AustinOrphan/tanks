@@ -1,0 +1,14 @@
+{
+  "id": "dev-config-bundle-claims-direct-requests",
+  "file": "src/game/dev-config.ts",
+  "find": "        if (params.has(p)) continue;",
+  "replace": "        if (false) continue;",
+  "expect": "killed",
+  "why": "The playtest bundle reports itself as having FORCED a flag the URL asked for directly. A UI reading these notes would tell the player 'turned on by playtest, not requested directly' about a control they set themselves, and offer to remove a parameter that is doing real work. The mutation is invisible to any assertion that only checks the bundle's members are on -- they are, either way -- which is why the test compares the forced SET against `expandsTo` minus the directly-requested flag rather than counting. Scoped to dev-config.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/dev-config.test.ts"
+  ],
+  "killedBy": [
+    "explainDevConfig names each bundle member it forced, and does not claim one the URL asked for"
+  ]
+}

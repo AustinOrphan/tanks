@@ -1,0 +1,14 @@
+{
+  "id": "run-tally-shadow-never-resynced",
+  "file": "src/game/stats.ts",
+  "find": "    runTally = read(storage, RUN_STATS_KEY);\n  }",
+  "replace": "  }",
+  "expect": "killed",
+  "tests": [
+    "src/game/stats.test.ts"
+  ],
+  "killedBy": [
+    "createStatsStore: the CAMPAIGN RUN scope adopts another tab's New Game rather than outranking it with a stale shadow"
+  ],
+  "why": "Leaves the run tally out of the resync, so this instance's shadow outranks disk forever -- PR #62's defect class, on the second persisted scope. A New Game or a Reset stats performed in another tab is undone by the next frame this tab records. Caught by the reload case because a second store instance reads disk at construction and then accumulates on top of a shadow the first instance's writes are still overwriting. Pinned by the cross-tab case rather than the reload one: a second store instance reads disk at construction either way, so only a tab that keeps RECORDING after another has reset can see a shadow outrank disk."
+}

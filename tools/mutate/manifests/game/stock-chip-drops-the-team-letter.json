@@ -1,0 +1,14 @@
+{
+  "id": "stock-chip-drops-the-team-letter",
+  "file": "src/game/hud.ts",
+  "find": "      const teamMark = entry.team !== undefined ? ` ${TEAM_LABELS[entry.team] ?? '?'}` : '';",
+  "replace": "      const teamMark = '';",
+  "expect": "killed",
+  "why": "The stock readout goes back to carrying its side in COLOUR ALONE. Issue #281 requires the team choice to be reinforced \"with label/marker in addition to color\", and this is the readout where that matters most: it is the only place a player checks mid-match to see who is left. Three readers lose the information and get no warning -- a colour-blind player (red and green are the shipped team A and C, the worst pair for a deuteranope, which is stated in TEAM_COLORS' own comment as the reason the letter is not optional), anyone on a forced-colours palette (issue #368 replaces authored hues outright, so every chip becomes one system colour), and anyone reading a greyscale screenshot. Nothing else fails: the chips still render, still count down, and still carry their hue, so no layout or visibility assertion can see it. Killed by the case that pins the chip TEXT for all three teams, whose control is the FFA case asserting no letter appears where a slot has no side. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: in-match stock readout (spec \u00a73a, owner addition 2026-08-21) carries the TEAM as a letter beside the colour, all three teams (issue #281)"
+  ]
+}

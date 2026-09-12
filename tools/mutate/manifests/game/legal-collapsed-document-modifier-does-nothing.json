@@ -1,0 +1,14 @@
+{
+  "id": "legal-collapsed-document-modifier-does-nothing",
+  "file": "src/game/hud.css",
+  "find": ".hud-legal-body--hidden {\n  display: none;\n}",
+  "replace": ".hud-legal-body--hidden {\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole hides a collapsed legal document with display, not with a class that does nothing"
+  ],
+  "why": "The modifier reduced to a class that styles nothing -- the same shape as `app-ground-hidden-modifier-does-nothing` and `.hud-splash--hidden`, one pane further in. EVERY OTHER ASSERTION ABOUT A COLLAPSED DOCUMENT READS THE CLASS, not the resolved display: legal.test.ts checks `classList.contains`, hud.surfaces.test.ts filters on the same class, and hud.css.test.ts's presence sweep uses `toContain('.hud-legal-body--hidden')`, which an empty rule satisfies. So without this entry's case the About pane would open with all five documents expanded -- roughly 25 KB of licence text between the intro prose and the Back button -- and nothing in the suite would be red. Killed only by the case that measures the SAME element with the modifier removed as its own control, so a stylesheet that hid documents unconditionally fails there too."
+}

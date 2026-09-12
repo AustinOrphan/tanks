@@ -1,0 +1,12 @@
+{
+  "id": "versus-catalog-rules-variant-sweep-drops-concealment",
+  "file": "src/sim/versus-catalog-rules.ts",
+  "find": "        } else if (!v.allPairsConcealed) {",
+  "replace": "        } else if (false) {",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The seeded variant sweep must check BOTH criteria destructible removal can regress -- distinct spawn cells and opening concealment (the map-variants plan's proof covers why room cannot regress). Dropping the concealment arm lets a seeded draw that removes the one block hiding two spawns from each other validate clean, so a catalog entry could advertise seeded-destructible variants whose actual draws reopen opening sightlines. Invisible on the shipped catalog either way: its full sweep (75 draws: 5 entries x N in {2,3,4} x 5 pinned seeds) already measures 0 failures, so only a fixture whose sight blocker is itself destructible can discriminate. Caught by 1 of 13 in versus-catalog-rules.test.ts: the corridor fixture built for exactly this (two destructible cells, every removal of the corridor blocker reopens the P-to-spawn line) expects >= 1 variant-coverage failure naming a seed and gets 0 under this mutation.",
+  "tests": [
+    "src/sim/versus-catalog-rules.test.ts"
+  ]
+}

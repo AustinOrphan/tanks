@@ -1,0 +1,12 @@
+{
+  "id": "route-host-disposal-leaves-the-preview-context-alive",
+  "file": "src/game/route-host.ts",
+  "find": "      routeUi.disposePreview();\n      // The page's own subscription, released for the same reason a session releases its\n      // own: the machine and this host die together, but a reference kept past teardown\n      // must not keep painting a disposed HUD.\n      stopPainting();\n      stopPaintingSettings();\n      hud.dispose();",
+  "replace": "      stopPainting();\n      stopPaintingSettings();\n      hud.dispose();",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The page teardown disposes the HUD but not the Customize panel's live preview -- a SECOND WebGL context, hanging off an element the HUD owns. `route-ui.ts` documents this page's ceiling as 'peak is two live contexts, never three', and the panel can genuinely still be open at teardown because `boot.ts`'s `pagehide` can fire at any time. Invisible to everything except a disposal count: nothing about the answer, the screen or any later session changes. 1 of 18, 'disposes the HUD and the live preview, and only from here' -- whose other half (that a SESSION teardown disposes neither) is what moved in this issue."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "bot-difficulty-normal-is-not-a-no-op",
+  "file": "src/sim/ai/bot-difficulty.ts",
+  "find": "  if (difficulty === 'normal') return cfg;",
+  "replace": "  if (difficulty === 'normal') return { ...cfg, ai: { ...cfg.ai } };",
+  "expect": "killed",
+  "why": "`normal` stops returning its INPUT and starts returning an equal copy. Both issues #267 and #223 require normal to be the exact no-op -- #223's criterion says 'Normal produces byte-identical/no-op profile resolution' -- and this mutation is the shape that quietly breaks it: every value is still identical, so any `toEqual` assertion passes, and a reader of the diff sees a harmless-looking spread. What it costs is the guarantee that a `normal` bot cannot differ from a pre-#267 bot even by object shape, which is what makes the whole feature additive over a config saved before difficulty existed. Killed by the identity case, which asserts `toBe` across every shipped tank kind AND for an omitted argument -- the form every existing `decidePlayerInput` caller uses. Scoped to bot-difficulty.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/sim/ai/bot-difficulty.test.ts"
+  ],
+  "killedBy": [
+    "bot difficulty presets normal is the SAME object, not merely an equal one"
+  ]
+}

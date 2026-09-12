@@ -1,0 +1,15 @@
+{
+  "id": "devflags-developer-mode-gate-always-off",
+  "file": "src/game/devflags.ts",
+  "find": "  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);\n  return isOn(params, 'dev');",
+  "replace": "  return false;",
+  "expect": "killed",
+  "why": "parseDeveloperMode is the real ?dev=1 boot gate and is production-only wiring: every session-intent and loop test injects an already-decided developerMode boolean, so before devflags.test.ts's own parseDeveloperMode block this mutation left the whole suite green while DeveloperMetadata.active went permanently false for the actual browser. Scoped to devflags.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "killedBy": [
+    "parseDeveloperMode a BARE developer gate with no other enabled flag is still active",
+    "parseDeveloperMode is active for the documented enabled forms"
+  ]
+}

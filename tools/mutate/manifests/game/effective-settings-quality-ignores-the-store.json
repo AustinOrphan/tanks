@@ -1,0 +1,18 @@
+{
+  "id": "effective-settings-quality-ignores-the-store",
+  "file": "src/game/effective-settings.ts",
+  "find": "    quality: settings.presentation.quality,",
+  "replace": "    quality: 'high',",
+  "expect": "killed",
+  "tests": [
+    "src/game/effective-settings.test.ts",
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Resolves the one setting that has nothing to resolve to a constant -- and picks the constant that makes it invisible to anyone testing on a machine that never needed a cheaper preset. Every layer downstream reads the effective value (the Settings control paints from it, `loop.ts` builds the renderer from it), so the store keeps the player's choice, the toggle keeps writing it, and nothing anywhere ever draws at anything but `high`. The three suites named here are the three consumers, which is why it takes all three to say where the value stopped.",
+  "killedBy": [
+    "resolveEffectiveSettings: audio, UI scale and quality pass through ungated passes the render-quality preset straight through, on any capability set",
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED render-quality preset on a page with no session",
+    "startGameWith: dev flags stay off by default builds the renderer with the STORED quality preset when no flag is set (issue #540)"
+  ]
+}

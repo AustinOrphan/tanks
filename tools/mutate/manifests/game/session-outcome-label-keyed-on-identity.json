@@ -1,0 +1,16 @@
+{
+  "id": "session-outcome-label-keyed-on-identity",
+  "file": "src/game/hud.ts",
+  "find": "    if ((outcomeData?.action ?? 'campaign-levels') === 'versus-setup') return 'Rematch';",
+  "replace": "    if (statusData?.kind === 'versus') return 'Rematch';",
+  "expect": "killed",
+  "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Re-anchored for issue #324's step S4: the label used to be written inline in setState from the boot-time `relaunchTarget`, and it now comes off `GameplayOutcome.action` in `outcomeActionLabel`, so the anchor moved with the code. The mutation is unchanged in substance -- both forms swap the click's destination for the session's identity. Scoped to hud.navigation.test.ts. Re-expressed for issue #324's step S6: the identity it wrongly reaches for is the status projection's own `kind` now that `sessionKind` is not a variable of its own. The mutation is the same mistake -- reading WHAT IS BEING PLAYED to decide what a BUTTON says -- and it still has to compile to be worth running. Re-anchored for issue #279, which renamed the label from `Versus Setup` to `Rematch`; the defect -- keying the label on WHAT IS BEING PLAYED rather than on the outcome's own stated destination -- is unchanged.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "hud: relaunch target -- the title/outcome affordance policy a versus STATUS alone leaves the outcome action button reading 'Play Again'/'Retry'",
+    "hud: relaunch target -- the title/outcome affordance policy the win/lose action button reads 'Rematch' for a versus session's FINAL win and its lose -- what the click now does",
+    "hud: relaunch target -- the title/outcome affordance policy the outcome label follows a projection that lands AFTER the panel opened"
+  ]
+}

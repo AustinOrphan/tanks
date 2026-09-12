@@ -1,0 +1,17 @@
+{
+  "id": "gamepad-menu-repeat-never-arms",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "held.set(action, repeats ? now + MENU_REPEAT_DELAY_MS : Infinity);",
+  "replace": "held.set(action, Infinity);",
+  "expect": "killed",
+  "why": "Directions must repeat while held after the initial delay; without the arm a held D-pad moves focus once.",
+  "tests": [
+    "src/input/gamepad-menu.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadMenuPoller: direction repeat a release resets the schedule: the next press starts over with the full delay, not the interval",
+    "createGamepadMenuPoller: direction repeat a repeat that is due is emitted once per poll, not once per elapsed interval",
+    "createGamepadMenuPoller: direction repeat nothing before MENU_REPEAT_DELAY_MS, one at the delay, then one every MENU_REPEAT_INTERVAL_MS",
+    "createGamepadMenuPoller: left stick a held stick is an edge like the D-pad, repeating on the same schedule and releasing on recentre"
+  ]
+}

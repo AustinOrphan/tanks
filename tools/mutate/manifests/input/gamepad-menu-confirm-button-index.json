@@ -1,0 +1,14 @@
+{
+  "id": "gamepad-menu-confirm-button-index",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "export const MENU_CONFIRM_BUTTON = 0;",
+  "replace": "export const MENU_CONFIRM_BUTTON = 2;",
+  "expect": "killed",
+  "why": "Confirm must be the bottom face button (A/Cross), the same index the gameplay reader calls fire; on another index a pad's A does nothing in menus. KILLED-BY RETITLED: that test used to assert menu confirm/back were the SAME buttons as fire/mine. Fire and mine moved to the triggers so a twin-stick player need not leave the aim stick, so the assertion inverted to disjointness and the name moved with it.",
+  "tests": [
+    "src/input/gamepad-menu.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadMenuPoller: button indices confirm and back are DISJOINT from fire and mine, so a menu press cannot leak a shot, and pause is Start (9)"
+  ]
+}

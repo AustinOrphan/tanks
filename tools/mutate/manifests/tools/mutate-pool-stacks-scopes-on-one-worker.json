@@ -1,0 +1,15 @@
+{
+  "id": "mutate-pool-stacks-scopes-on-one-worker",
+  "file": "tools/mutate/run.mjs",
+  "find": "    for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;",
+  "replace": "    for (const slice of slices) if (slice.cost > lightest.cost) lightest = slice;",
+  "why": "Placing each scope on the HEAVIEST worker serialises the whole manifest onto one worker while the others idle -- the pool then costs worktrees and saves nothing. The balance assertion (hud on one worker, loop and both on the other) is the case.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "partitionByScope balances by entry count, largest scope first onto the lightest worker, and keeps manifest order within a worker",
+    "partitionByScope drops empty workers when there are fewer scopes than jobs, and --jobs 1 is one slice in manifest order"
+  ]
+}

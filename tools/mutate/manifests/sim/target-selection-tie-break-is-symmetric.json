@@ -1,0 +1,17 @@
+{
+  "id": "target-selection-tie-break-is-symmetric",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  return tieBreak(world, subject, a) > tieBreak(world, subject, b);",
+  "replace": "  return a.id < b.id;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-selection.test.ts",
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "Rule 3 by name: equivalent candidates must be separated by a seeded PER-AI draw, never by slot or array order. Falling back to id order is precisely the bias issue #359 exists to remove, and with one player -- the campaign and the whole golden trace -- it is invisible, so only the symmetric multi-player fixtures catch it. Replaces ai-opponent-selection-reverses-slot-order, removed with issue #359: that entry mutated first-alive-in-array-order selection, which no longer exists, so its find string could only ever report failed-to-apply.",
+  "killedBy": [
+    "committed opponent selection breaks a symmetric tie per-AI, rather than by slot order or in unison",
+    "committed opponent selection gives the same AI the same tie result every time it is asked",
+    "resolveOpponent: the one place an AI decides who it is fighting (issue #359) two AIs at the same spot no longer converge on one player by construction"
+  ]
+}

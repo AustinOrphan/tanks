@@ -1,0 +1,14 @@
+{
+  "id": "shell-cap-ignores-the-tanks-own-budget",
+  "file": "src/sim/bullets.ts",
+  "find": "  return ownerShellCount(world, ownerId) >= (owner.shellCap ?? configFor(owner.kind).weapon.maxActiveProjectiles)",
+  "replace": "  return ownerShellCount(world, ownerId) >= configFor(owner.kind).weapon.maxActiveProjectiles",
+  "expect": "killed",
+  "tests": [
+    "src/sim/bullets.test.ts"
+  ],
+  "killedBy": [
+    "spawnBullet + ownerShellCount honours a tank's own shellCap over the roster's, and only when one is stamped (issue #358)"
+  ],
+  "why": "Reads the roster's cap and ignores the tank's own, so issue #358's role-first arm stamps a number nothing consumes -- the flag changes a value and not the game, which is the failure mode a menu-label feature has. Shipped behaviour is unaffected either way (no tank carries a cap without the flag), so only a fixture that stamps one can tell the difference, which is why the scoped test builds one below the roster cap and asserts the refusal fires there."
+}

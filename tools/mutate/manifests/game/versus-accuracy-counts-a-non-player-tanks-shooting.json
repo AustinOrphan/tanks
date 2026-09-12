@@ -1,0 +1,14 @@
+{
+  "id": "versus-accuracy-counts-a-non-player-tanks-shooting",
+  "file": "src/game/loop.ts",
+  "find": "    const tank = world.tanks.find((t) => t.id === tankId);\n    return tank?.kind === 'player' ? tank.controlledBy ?? 0 : null;",
+  "replace": "    const tank = world.tanks.find((t) => t.id === tankId);\n    return tank ? tank.controlledBy ?? 0 : null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "tallyVersusAccuracy: the versus result table's accuracy column (issue #279) ignores a NON-PLAYER tank, and does nothing at all outside a versus mode"
+  ],
+  "why": "Drops the player-kind guard, so any non-player tank's shots land in a slot -- and with `controlledBy` absent on every non-player tank, all of it falls to `?? 0` and silently inflates Player 1. NOT about bots: a bot DRIVING a versus slot is a player-kind tank with a real `controlledBy` and is counted deliberately. The guard is structural rather than live, because ffa/teams strip every non-player spawn (arena.ts), so this is the known-bad control the guard needs -- it keeps the contract independent of which spawn letters a future arena admits, which is the same reason `tallyCoopKills` carries the rule."
+}

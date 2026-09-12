@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-refusal-is-no-denser-than-a-shot",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "  refused: { color: 0x08090a, peakOpacity: 0.96, fadePower: 1 },",
+  "replace": "  refused: { color: 0x08090a, peakOpacity: 0.72, fadePower: 1 },",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Drops the refusal to the ordinary puff's density, leaving value doing most of the work. This is the configuration issue #536 predicted would fail and the GL harness MEASURED failing: with the refusal carrying only the darker colour and the shot's own thinning, the refusal departs from the empty arena by 9.20 levels against the shot's 11.13, so the exceptional event is the quieter one. The Vitest suite cannot see levels on a felt, but it can pin the property the measurement chose, which is what this entry exists for.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) a REFUSAL is darker, and denser, than a shot"
+  ]
+}

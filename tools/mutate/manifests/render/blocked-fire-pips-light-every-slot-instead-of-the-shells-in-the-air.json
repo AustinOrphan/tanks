@@ -1,0 +1,15 @@
+{
+  "id": "blocked-fire-pips-light-every-slot-instead-of-the-shells-in-the-air",
+  "file": "src/render/blocked-fire-pips.ts",
+  "find": "      const spent = ownerShellCount(world, owner.id);",
+  "replace": "      const spent = cap;",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-pips.test.ts"
+  ],
+  "why": "Replaces the authoritative count with the capacity. In a real match the two are equal at a refusal -- being at the cap is what refused the shot -- so this is invisible in play and passes every scenario written from memory. It matters because the strip's whole job is to say WHY (issue #356: the player must infer capacity full rather than cooldown or lost input), and a readout that always lights every pip is asserting that, not measuring it: the moment the ordnance experiment retunes a cap, or a refusal arrives for a reason that is not 'full', it reports a number that is not true. `ownerShellCount` is half of `shellCapReached` itself, which is what makes the strip agree with the gate it explains.",
+  "killedBy": [
+    "blocked-fire capacity pips (issue #516, parent #356) counts the OWNER's live shells, not the arena's traffic",
+    "blocked-fire capacity pips (issue #516, parent #356) only the LIT pips pop"
+  ]
+}

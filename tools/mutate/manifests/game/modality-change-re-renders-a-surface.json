@@ -1,0 +1,15 @@
+{
+  "id": "modality-change-re-renders-a-surface",
+  "file": "src/game/hud.ts",
+  "find": "    setMuted(currentMuted); // repaint the hints, nothing else: no surface is re-rendered",
+  "replace": "    setMuted(currentMuted);\n    setState(currentSurface);",
+  "why": "Issue #496's ruling that a modality change never reflows Settings: repainting a surface on every switch is exactly the reflow it forbids, and the contrast test against the HUD's setState count is what sees it.",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused",
+    "createRouteHost: the gamepad menu poller (issue #494) a held A across a Resume does not confirm again, so the pad that resumed the round is silent at the next Pause"
+  ]
+}

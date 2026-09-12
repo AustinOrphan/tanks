@@ -1,0 +1,14 @@
+{
+  "id": "ai-turret-accel-velocity-survives-respawn",
+  "file": "src/sim/world.ts",
+  "find": "    t.turretVel = undefined; // round restart (issue #347)",
+  "replace": "    t.turretVel = t.turretVel; // round restart (issue #347)",
+  "expect": "killed",
+  "tests": [
+    "src/sim/coop-attempts.test.ts"
+  ],
+  "why": "resetArena snaps every turret to its spawn angle; leaving the angular velocity behind opens the new round with a gun already swinging for no reason, which accelSlew then has to brake before it can track anything. The self-assignment keeps the field read so this is a behaviour change rather than a type error.",
+  "killedBy": [
+    "resolveStatusCoop: ATTEMPTS mode (world.coopAttempts, the default) a round reset clears the AI turret angular velocity (issue #347)"
+  ]
+}

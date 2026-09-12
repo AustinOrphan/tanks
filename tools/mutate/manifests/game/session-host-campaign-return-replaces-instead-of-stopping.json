@@ -1,0 +1,13 @@
+{
+  "id": "session-host-campaign-return-replaces-instead-of-stopping",
+  "file": "src/game/session-host.ts",
+  "find": "  const requestCampaignSession = (): void => {\n    stopSession();\n  };",
+  "replace": "  const requestCampaignSession = (): void => {\n    replace({ kind: 'campaign-continue' });\n  };",
+  "tests": [
+    "src/game/session-host.test.ts",
+    "src/boot.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 14,
+  "why": "Puts back the pre-#428 Campaign button: returning to the campaign title builds a whole session -- canvas, renderer, world, seed -- for the sole purpose of showing a title screen the page has owned since #468. That is eager creation wearing a different hat, and it is the one path that would have kept it after the eager boot was removed. 14 of 79 across both scoped files, because the session ledger, the canvas count and the empty-host state all move together on this path. The narrow case is session-host.test.ts's 'a campaign request stops the versus session and starts nothing', which asserts `hasSession()` is false and the root holds no canvas. RE-ANCHORED by issue #429: the inline body this mutated became a call to the one session-stop boundary (`stopSession`), so the find string moved with it. The defect and the mutation are identical -- the Campaign button building a session to show a title screen -- and the count was re-measured on the post-move tree."
+}

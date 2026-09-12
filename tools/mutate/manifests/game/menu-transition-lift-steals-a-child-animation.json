@@ -1,0 +1,16 @@
+{
+  "id": "menu-transition-lift-steals-a-child-animation",
+  "file": "src/game/hud.css",
+  "find": "\n.ui-surface--entering:not(.hud-splash) > * {",
+  "replace": "\n.ui-surface--entering > * {",
+  "expect": "killed",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "why": "Drops the splash exclusion from the SHIPPED content lift, which is how the rule was first written. `animation` is one property per element and this selector at (0,2,0) beats `.hud-splash-hint`'s (0,1,0), so on an entering splash surface the lift REPLACES that hint's infinite `hud-splash-pulse` rather than joining it -- 'Press any key or tap to begin' stops pulsing for the 150ms the splash is entering, then restarts from its first keyframe, so the hint holds full opacity while it lifts with the title and then pops down to 0.55. Measured on the mounted HUD rather than reasoned: removing the exclusion does not silence the pulse permanently, and the entry is worth keeping anyway because the window it spoils is the boot path. `createHud` ends with `setState('launch')`, which enters the splash on every page load, and the hint really is a direct child of it. Adoption is what makes this entry serious rather than tidy: while the lift was an arm nobody selected, the defect needed a flag to reach; it is now the first screen of every session, and it is invisible from the navigation the lift was designed on, which never touches the launch screen. The leading newline anchors the find to the unconditional rule -- the same selector text is the tail of all three alternatives' rules, so an unanchored find would be ambiguous and the harness would refuse it.",
+  "killedBy": [
+    "the content lift must not steal a child's own animation leaves the splash hint pulsing while the splash enters -- shipped path and every treatment",
+    "the content lift must not steal a child's own animation carries the exclusion on EVERY rule reaching an entering surface's children",
+    "menu transitions in hud.css states the shipped content motion unconditionally, with no treatment class at all"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "settings-renders-a-section-with-no-controls",
+  "file": "src/game/hud.ts",
+  "find": "      const populated = controls !== null && focusableControls(controls).length > 0;",
+  "replace": "      const populated = true;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Issue #226: 'only sections with relevant controls should render'. Accessibility shipped declared and EMPTY, which is where the rule came from; issue #289's motion toggle filled it, so every declared section has a control today and the rule is measured on a section emptied at runtime instead -- a control hidden by `display: none`, which is what a `--hidden` class resolves to and what #227's capability hiding will do. Without the rule that section opens as a heading over nothing, the 'permanently disabled settings players have to decode' the UI direction rules out.",
+  "killedBy": [
+    "hud: the Settings sections (issue #226) collapses a section whose last control is hidden, and brings it back -- the rule reads the DOM, not a list"
+  ]
+}

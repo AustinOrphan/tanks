@@ -1,0 +1,12 @@
+{
+  "id": "roundtrip-probe-crashes-on-a-malformed-url",
+  "file": "tools/visual/serve-path.mjs",
+  "find": "  let path;\n  try {\n    path = decodeURIComponent((url ?? '/').split('?')[0]);\n  } catch {\n    return null;\n  }\n",
+  "replace": "  const path = decodeURIComponent((url ?? '/').split('?')[0]);\n",
+  "tests": [
+    "tools/visual/serve-path.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "Puts the decode back outside a try, which is how the probe's handler shipped. decodeURIComponent throws URIError on malformed percent-encoding, and GET /% was measured killing the process with exit 1: nothing awaits an async request handler, so the rejection is unhandled rather than answered with a 500. The cost is not a security one -- it is a probe that answers a canvas census with a bare stack, at the moment someone is debugging a disposal leak. Exactly 1 of 9 fails, the malformed-encoding case; the traversal assertions are indifferent to this mutation, which is why they are separate entries."
+}

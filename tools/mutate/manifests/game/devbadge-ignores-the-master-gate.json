@@ -1,0 +1,14 @@
+{
+  "id": "devbadge-ignores-the-master-gate",
+  "file": "src/game/hud.ts",
+  "find": "  devBadge.classList.toggle('hud-devbadge--hidden', !developerMode);",
+  "replace": "  devBadge.classList.toggle('hud-devbadge--hidden', false);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "developer mode: entry, indicator and exit (issue #243) shows neither the entry nor the indicator without the gate"
+  ],
+  "why": "Paints the DEV indicator on an ORDINARY page. The gate is issue #243's whole subject and this is the failure with the widest blast radius: every player sees a developer badge on the shipped game, and no existing test would have said so, because ~200 of them build `createHud(root)` and simply never look for developer UI. The control that catches it has to assert the ABSENCE explicitly, which is what the named test does."
+}

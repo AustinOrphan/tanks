@@ -1,0 +1,14 @@
+{
+  "id": "levels-offered-on-campaign-length-not-progress",
+  "file": "src/game/hud.ts",
+  "find": "      levelChoice = unlocked > 1;",
+  "replace": "      levelChoice = total > 1;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "The other half of issue #555, and the half that survives the grid being fixed: with the population correct but the OFFER still keyed on campaign length, a fresh five-level campaign shows a Levels button leading to a pane holding no buttons at all (`unlocked` counts CLEARED levels, so it is 0 before the first win). That is both a choice of one -- which the sandbox case has always refused on identical reasoning -- and a standing hint that there is more, on the first screen a new player sees. Pinned separately from the grid entries because the two are independent: either can be reverted without the other.",
+  "killedBy": [
+    "hud: level select panel offers the Levels button on what is UNLOCKED, not on what the campaign holds"
+  ]
+}

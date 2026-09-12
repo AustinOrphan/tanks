@@ -1,0 +1,14 @@
+{
+  "id": "menu-confirmation-does-not-start-the-campaign",
+  "file": "src/game/hud.ts",
+  "find": "  const handleConfirmAccept = (): void => {\n    back();\n    startNewCampaign();\n  };",
+  "replace": "  const handleConfirmAccept = (): void => {\n    back();\n  };",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The confirmed answer becomes a second Cancel: the player says yes and lands back on the Main Menu with the old run intact and no explanation. Distinct from the two gate mutations above, which are about WHETHER the question is asked -- this is about the answer being honoured, and a test that only opened and cancelled the pane would never see it.",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) Cancel starts nothing and returns to the menu; Confirm starts exactly one campaign"
+  ]
+}

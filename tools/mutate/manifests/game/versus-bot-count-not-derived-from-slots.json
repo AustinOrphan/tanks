@@ -1,0 +1,16 @@
+{
+  "id": "versus-bot-count-not-derived-from-slots",
+  "file": "src/game/loop.ts",
+  "find": "      bots: botSlotsOf(config.slots).size,",
+  "replace": "      bots: deps.devFlags.bots,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Pins 'developer flags and player setup cannot create competing assignment sources'. Left un-derived, a ?bots=3 in the URL and a pane showing one bot are two live answers to one question, and which one a consumer believes depends on whether it reads the count or the roles. Deriving the count from the roles makes them agree by construction rather than by convention.",
+  "killedBy": [
+    "applyVersusToDeps / versusAwareDeps: the reboot seam DERIVES devFlags.bots from the config slots, so count and roles cannot disagree",
+    "applyVersusToDeps / versusAwareDeps: the reboot seam OVERRIDES a URL-supplied bots count with the pane's roles",
+    "applyVersusToDeps / versusAwareDeps: the reboot seam reports ZERO bots for an all-human VS setup, rather than leaving the flag alone"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "skins-ensure-contrast-iteration-budget-1",
+  "file": "src/render/skins.ts",
+  "find": "for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < delta; i++) {",
+  "replace": "for (let i = 0; i < 1 && Math.abs(luma(base) - luma(t)) < delta; i++) {",
+  "occurrence": 1,
+  "expect": "killed",
+  "why": "ensureContrast steps lightness toward whichever pole increases the luma gap, up to 20 times, until it clears its delta parameter (MIN_ACCENT_DELTA by default). Capping the budget at 1 step leaves most pairs under-separated -- caught by the 33,696-pair sweep that asserts every pair reaches the required separation. `delta` was `MIN_ACCENT_DELTA` directly until PR #101 parameterised it (autoAccent/stepLightness now share the same loop shape) -- this same loop text now occurs TWICE in skins.ts (ensureContrast and stepLightness), so `occurrence: 1` picks ensureContrast specifically, which is the one the sweep above measures.",
+  "tests": [
+    "src/render/skins.test.ts"
+  ],
+  "killedBy": [
+    "createSkinTexture accent (the pattern's second tone) is selectable explicit accents clear a real contrast floor, not just \"not flat\"",
+    "ensureContrast never trades the chosen hue away for contrast always reaches the required separation, over a 33,696-pair sweep"
+  ]
+}

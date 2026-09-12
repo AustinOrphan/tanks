@@ -1,0 +1,17 @@
+{
+  "id": "menu-transition-long-fade-keeps-the-shipped-timing",
+  "file": "src/game/hud.css",
+  "find": ".hud--menu-transition-fade-long {\n  --ui-transition-duration: 300ms;\n}",
+  "replace": ".hud--menu-transition-fade-long {\n  --ui-transition-duration: 150ms;\n}",
+  "expect": "killed",
+  "why": "The long fade left at the shipped duration -- a second `fade` under another name. It is the treatment that carried issue #542's discriminating power: without it a movement that reads better cannot be told apart from one that is simply slower, and the issue's own framing said a one-token change with no new keyframes was a possible answer. It stays selectable so that comparison can be RE-RUN rather than re-argued, which is worth nothing if it silently runs at the shipped duration. The mutation keeps the rule, the selector and the property, so every structural check in menu-transition.test.ts (which treatments own rules, nothing inside the reduced-motion block, tokens rather than literals) still passes; only the TIMING moves, which is why the case that measures it advances fake timers to 299ms and asserts the outgoing surface is still displayed.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag",
+    "menuTransition: the SHIPPED transition is the no-flag path itself settles on exactly the same tick as an absent flag",
+    "menuTransition: the duration treatment goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
+    "menuTransition: the duration treatment goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the shipped timing"
+  ]
+}

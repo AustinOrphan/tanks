@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-hud-flashes-for-an-arm-that-is-not-its-own",
+  "file": "src/game/blocked-fire-hud.ts",
+  "find": "      if (!cueDrives(options.blockedFire, 'visual') || options.blockedFire !== 'hud') return;",
+  "replace": "      if (!cueDrives(options.blockedFire, 'visual') || (options.blockedFire !== 'hud' && options.blockedFire !== 'ring')) return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/blocked-fire-hud.test.ts"
+  ],
+  "why": "The HUD arm's own cue gate, widened so the capacity line also flashes under `ring`. Same defect class as the three render arms' gates: a cue no assertion names cannot fail anything written per remembered case, and issue #516's comparison is between a cue on the tank and a cue off it -- an arm that fires under another arm's flag makes the owner judge a combination nobody built. MEASURED with the one-row-per-cue table's `it` deleted from the file: 0 of 8 remaining tests failed (survived). With it: killed.",
+  "killedBy": [
+    "blocked-fire HUD cue (issue #516, parent #356) flashes for EVERY cue carrying `hud`, and for no other -- one row per cue"
+  ]
+}

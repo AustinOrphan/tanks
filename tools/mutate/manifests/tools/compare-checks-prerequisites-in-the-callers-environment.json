@@ -1,0 +1,14 @@
+{
+  "id": "compare-checks-prerequisites-in-the-callers-environment",
+  "file": "tools/compare/orchestrate.mjs",
+  "find": "await io.inspectPrerequisites(deps.env ?? process.env, { signal: deps.signal })",
+  "replace": "await io.inspectPrerequisites(process.env, { signal: deps.signal })",
+  "expect": "killed",
+  "why": "Compare must check prerequisites in the environment it was HANDED, not the ambient one. In production those are the same object, which is exactly why dropping `deps.env ??` reads as a harmless simplification -- and why every test that injects a fake `inspectPrerequisites` is blind to it, since a fake ignores the argument. MEASURED: 1 of the 28 tests in orchestrate.test.ts fails, 'spends nothing when a real prerequisite check meets a genuinely missing FFmpeg'. That case stubs the AMBIENT PATH with working shims and passes a short-an-FFmpeg PATH through `deps.env`, so the two disagree deliberately: the mutant reads the working one, gets past the check, and reaches `resolveRef`. Stubbing the ambient PATH rather than trusting the real one is what makes this a measurement -- on a machine with no FFmpeg installed the mutant would refuse for the right reason by accident and survive. Against the pre-existing tests for this file it SURVIVES.",
+  "tests": [
+    "tools/compare/orchestrate.test.ts"
+  ],
+  "killedBy": [
+    "compareRefs against a really broken toolchain spends nothing when a real prerequisite check meets a genuinely missing FFmpeg"
+  ]
+}

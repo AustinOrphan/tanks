@@ -1,0 +1,12 @@
+{
+  "id": "versus-spawns-chain-drops-accumulation",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize)), opts));",
+  "replace": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [cellCentre(cells[cells.length - 1], cellSize)], opts));",
+  "expect": "killed",
+  "expectFailures": 7,
+  "why": "Greedy farthest-point sampling must place each spawn against EVERY spawn already chosen, not just the most recent one. Avoiding only the last one lets the chain walk back and forth between two ends of the board, putting spawn 3 on top of spawn 1. This entry replaces `versus-spawns-wiring-drops-accumulation`, which targeted a `chosen.push(pos)` accumulator in arena.ts's versus branch; that variable became dead when pickVersusSpawnSet took over the picking, and the old entry silently degraded to SURVIVES because it was mutating code nothing read -- which is how the dead variable was found at all. The accumulation now lives here. Caught by 5 of 17 in versus-spawns.test.ts.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ]
+}

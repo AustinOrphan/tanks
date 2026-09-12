@@ -1,0 +1,14 @@
+{
+  "id": "loop-gamepad-resync-arms-on-exit-instead",
+  "file": "src/game/loop.ts",
+  "find": "    if (nowPlaying) for (const src of realSources.values()) src.resyncGamepad?.();",
+  "replace": "    if (!nowPlaying) for (const src of realSources.values()) src.resyncGamepad?.();",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The resync belongs to ENTRIES into play, beside the exit-side clear; arming on exits leaves the resume unprotected.",
+  "expect": "killed",
+  "killedBy": [
+    "startGameWith: the gamepad edge resync on entry into play (issue #494) resyncs slot 0 and every co-player source on EACH entry into play, and on no exit"
+  ]
+}

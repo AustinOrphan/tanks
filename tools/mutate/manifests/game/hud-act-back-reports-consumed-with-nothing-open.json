@@ -1,0 +1,16 @@
+{
+  "id": "hud-act-back-reports-consumed-with-nothing-open",
+  "file": "src/game/hud.ts",
+  "find": "    if (action === 'back') return back();\n    if (action === 'pause') return false;",
+  "replace": "    if (action === 'back') {\n      back();\n      return true;\n    }\n    if (action === 'pause') return false;",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Back with nothing open must report unconsumed so the page can make it Resume at Pause; a Back that always claims strands a paused round.",
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused",
+    "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+  ]
+}
