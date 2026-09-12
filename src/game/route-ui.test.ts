@@ -101,6 +101,13 @@ interface Fixture {
   setCapabilities: (c: PlatformCapabilities) => void;
   /** Dispatch a host event by name to whatever route-ui registered for it. */
   hostFire: (name: string) => void;
+  /** How many times `deps.readPadDiagnostics` has been called -- the self-test poll's ticks. */
+  padDiagnosticReads: () => number;
+  /** Frame callbacks requested and not yet fired or cancelled. */
+  pendingFrames: () => number;
+  /** Fire every pending frame callback once, as a browser would on the next paint. */
+  runFrame: () => void;
+  cancelledFrames: number[];
 }
 
 function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
@@ -251,11 +258,21 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
     hostFire: (name) => {
       for (const cb of hostListeners.get(name) ?? []) cb();
     },
+    padDiagnosticReads: () => box.padDiagnosticReads,
+    pendingFrames: () => box.frames.size,
+    runFrame: () => {
+      // Snapshot first: a callback that re-requests a frame must not be run again in the
+      // same pass, which is the difference between one frame and an infinite loop.
+      const due = [...box.frames.values()];
+      box.frames.clear();
+      for (const cb of due) cb();
+    },
+    cancelledFrames: box.cancelledFrames,
   };
 }
 
 /**
- * The 24 registrations this module owns, and the boundary of the claim.
+ * The 26 registrations this module owns, and the boundary of the claim.
  *
  * Pinned as a SET rather than a count so that a handler quietly leaving for the session,
  * or a session handler quietly arriving here, names itself in the diff. The seven absent
@@ -267,6 +284,9 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
 // Issue #227's three are the newest: `onControllerRumbleChange` writes the stored key that
 // had no writer, and the `onSettingsOpen`/`Close` pair scopes a capability re-probe to
 // exactly while the pane that shows its result is open.
+// Issue #599's self-test pair are the newest: they scope a per-frame hardware poll to
+// exactly while the pane is open, the same shape `onControllersOpen`/`Close` use for the
+// assignment panel's hotplug listeners.
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllerRumbleChange', 'onControllerSelfTestClose',
   'onControllerSelfTestOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
@@ -645,5 +665,66 @@ describe('the application routes work with no gameplay session behind them', () 
     const after = f.deps.settings.snapshot().input;
     expect(after.controllerRumble).toBe(false);
     expect(after.deviceHaptics, 'device haptics must not have moved').toBe(before.deviceHaptics);
+  });
+});
+
+describe('the controller self-test poll is scoped to the pane (issue #599)', () => {
+  it('reads once on open and once per frame after that, without waiting for a hotplug', () => {
+    // The Gamepad API fires NO event when a stick moves, so the only way to show live axis
+    // values is to poll. A self-test wired to `gamepadconnected` like the assignment panel
+    // next door would show a pad that never moves -- indistinguishable from a dead pad,
+    // which is the exact thing the tester is trying to rule out.
+    const f = fixture();
+    expect(f.padDiagnosticReads(), 'nothing is polled before the pane opens').toBe(0);
+    f.fire('onControllerSelfTestOpen');
+    // Immediately, not a frame later: the pane is on screen before the first callback
+    // lands, and an empty list for one frame reads as "no controller".
+    expect(f.padDiagnosticReads()).toBe(1);
+    expect(f.argsOf('setPadDiagnostics')).toHaveLength(1);
+    f.runFrame();
+    f.runFrame();
+    expect(f.padDiagnosticReads()).toBe(3);
+    expect(f.argsOf('setPadDiagnostics')).toHaveLength(3);
+  });
+
+  it('stops on close, and stops for good rather than for one frame', () => {
+    // TWO stops, both needed. Cancelling the pending handle cannot reach a callback that is
+    // already running; clearing the flag alone leaves one frame already queued. Either half
+    // missing leaves a poll reading the hardware for the life of the page over a pane that
+    // is gone -- and the driver does not tick while a pane is up, so nothing else would
+    // ever notice.
+    const f = fixture();
+    f.fire('onControllerSelfTestOpen');
+    f.runFrame();
+    const atClose = f.padDiagnosticReads();
+    expect(f.pendingFrames(), 'a frame is queued while the pane is open').toBe(1);
+    f.fire('onControllerSelfTestClose');
+    expect(f.cancelledFrames, 'the queued frame is cancelled').toHaveLength(1);
+    expect(f.pendingFrames()).toBe(0);
+    f.runFrame(); // nothing left to run
+    f.runFrame();
+    expect(f.padDiagnosticReads(), 'no read survives the close').toBe(atClose);
+  });
+
+  it('negative control: without the close it keeps polling, so the stop above is measuring something', () => {
+    const f = fixture();
+    f.fire('onControllerSelfTestOpen');
+    f.runFrame();
+    const before = f.padDiagnosticReads();
+    f.runFrame();
+    expect(f.padDiagnosticReads()).toBe(before + 1);
+  });
+
+  it('restarts cleanly on a second visit, with one poll running rather than two', () => {
+    // A close that left the flag set would start a SECOND self-rescheduling loop on the
+    // next open, and from then on every frame would read the hardware twice with only one
+    // handle to cancel.
+    const f = fixture();
+    f.fire('onControllerSelfTestOpen');
+    f.fire('onControllerSelfTestClose');
+    f.fire('onControllerSelfTestOpen');
+    const afterOpen = f.padDiagnosticReads();
+    f.runFrame();
+    expect(f.padDiagnosticReads(), 'one frame must be one read').toBe(afterOpen + 1);
   });
 });

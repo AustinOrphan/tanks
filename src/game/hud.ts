@@ -2962,6 +2962,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     VERSUS_SETUP_SURFACE,
     SETTINGS_SURFACE,
     ABOUT_SURFACE,
+    /*
+     * THE DEVELOPER SHELL IS A PANEL TOO (issue #599). It was left out when issue #243
+     * added it, and that was invisible for as long as Back was the only way out of it:
+     * `openSurface()` is the SOURCE of every transition, so a pane opened from a surface
+     * missing here swaps from the Main Menu panel instead and leaves the real origin
+     * displayed underneath. The self-test is the first pane reachable FROM the shell, so
+     * it is the first navigation that could observe it -- measured as two surfaces
+     * displayed at once, and `hud.surfaces.test.ts`'s one-surface invariant is what states
+     * why that is wrong.
+     */
+    DEVTOOLS_SURFACE,
+    SELFTEST_SURFACE,
     CONFIRM_SURFACE,
   ];
 
