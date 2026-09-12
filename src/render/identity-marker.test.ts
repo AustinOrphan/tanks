@@ -9,6 +9,7 @@ import {
   ringMarkerFor,
 } from '../presentation/identity-marker';
 import { IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R } from './entities';
+import { TANK_RADIUS } from '../sim/constants';
 
 // ---------------------------------------------------------------------------
 // Issue #630. Two candidate second channels for player identity, both selectable and
@@ -265,19 +266,42 @@ describe('identity marker: every shape reads at one weight (issue #660)', () => 
     expect(spread, 'the shared band was already even').toBeGreaterThan(0.4);
   });
 
-  it('gives every shape the same outer extent, so they are one family at one size', () => {
-    const reach = (g: THREE.BufferGeometry): number => {
+  it('normalises SIZE on the mean radius, not the circumradius', () => {
+    // The same correction as the weight, on the other axis. A shared circumradius gives
+    // four shapes one number and four apparent sizes, because a polygon's edges cut inward
+    // to `R * cos(PI / n)`: at a shared 0.88 the triangle's edges land at 0.44, INSIDE
+    // TANK_RADIUS, so the hull hid them and only its corners showed. It read small however
+    // wide its ink was -- which is what the owner saw.
+    const meanRadius = (g: THREE.BufferGeometry, sides: number): number => {
       const pos = g.getAttribute('position');
-      let r = 0;
-      for (let i = 0; i < pos.count; i++) r = Math.max(r, Math.hypot(pos.getX(i), pos.getY(i)));
-      return r;
+      let corner = 0;
+      for (let i = 0; i < pos.count; i += 2) corner = Math.max(corner, Math.hypot(pos.getX(i), pos.getY(i)));
+      return (corner + corner * Math.cos(Math.PI / sides)) / 2;
     };
-    const all = [0, 1, 2, 3].map((sl) => reach(build('shape', sl)));
-    expect(Math.max(...all) - Math.min(...all), `reaches ${all.map((v) => v.toFixed(3))}`)
-      .toBeLessThan(1e-6);
-    // ...and that extent is larger than the ring they replaced, which is the other half of
-    // the owner's note. The solid ring itself must NOT have moved.
-    expect(Math.max(...all)).toBeGreaterThan(IDENTITY_RING_OUTER_R);
+    const means = [
+      meanRadius(build('shape', 0), SEGMENTS),
+      meanRadius(build('shape', 1), 3),
+      meanRadius(build('shape', 2), 4),
+    ];
+    const spread = (Math.max(...means) - Math.min(...means)) / Math.max(...means);
+    expect(spread, `means ${means.map((v) => v.toFixed(3)).join(', ')}`).toBeLessThan(0.02);
+
+    // The triangle's EDGES must now clear the tank, which is the whole point.
+    const triCorner = Math.max(...[...Array(build('shape', 1).getAttribute('position').count)]
+      .map((_, i) => {
+        const p = build('shape', 1).getAttribute('position');
+        return i % 2 === 0 ? Math.hypot(p.getX(i), p.getY(i)) : 0;
+      }));
+    expect(triCorner * Math.cos(Math.PI / 3), 'the triangle still hides behind the hull')
+      .toBeGreaterThan(TANK_RADIUS);
+
+    // ...and every shape still reaches past the ring it replaced.
+    for (const sl of [0, 1, 2, 3]) {
+      const p = build('shape', sl).getAttribute('position');
+      let r = 0;
+      for (let i = 0; i < p.count; i++) r = Math.max(r, Math.hypot(p.getX(i), p.getY(i)));
+      expect(r, `slot ${sl + 1}`).toBeGreaterThan(IDENTITY_RING_OUTER_R);
+    }
   });
 });
 

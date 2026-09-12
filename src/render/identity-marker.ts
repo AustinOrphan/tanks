@@ -104,24 +104,43 @@ function bandGeometry(runs: readonly (readonly number[])[], inner: number, outer
 const MARKER_WEIGHT = 0.11;
 
 /**
- * The outer extent every `shape` marker shares, larger than the solid ring's 0.80 (issue
- * #660: "they probably could stand to be a bit bigger across the board").
+ * How big every `shape` marker reads, larger than the solid ring's 0.80 (issue #660: "they
+ * probably could stand to be a bit bigger across the board").
  *
- * ONE OUTER RADIUS FOR ALL FOUR, with the weight taken inward, so the shapes read as one
- * family at one size rather than four marks of differing extent. The default solid ring is
- * deliberately NOT moved: it is the control these are compared against, and a control that
- * grows with them measures nothing.
+ * NOT A SHARED CIRCUMRADIUS, and the first build of this got that wrong in exactly the way
+ * the weight was wrong. Giving every shape the same circumradius gives them the same number
+ * and four different apparent sizes, because a polygon's EDGES cut inward to its apothem,
+ * `R * cos(PI / n)`:
+ *
+ *   circle    edge at 0.88
+ *   square    edge at 0.62
+ *   triangle  edge at 0.44   <- inside TANK_RADIUS (0.5), so the hull hides it
+ *
+ * Only the triangle's three corners cleared the tank at all, which is why it read small
+ * however wide its ink was.
+ *
+ * So the size a shape is normalised on is its MEAN radius, halfway between corner and edge.
+ * Matching apothems instead would put every edge at 0.88 and be the most literally equal --
+ * but it throws the triangle's corners out to 1.76, more than three times the tank's radius,
+ * which is a different shape of wrong. The mean puts the triangle's edges just outside the
+ * hull (0.59) and its corners at 1.17.
  *
  * Two tanks at their closest legal approach have centres `TANK_RADIUS * 2` = 1.0 apart, so
- * markers already overlap at 0.80 and this does not introduce that -- it is a pre-existing
- * property of drawing an identity ring wider than the tank. What it does change is how much,
- * which is a judgement for a capture rather than for arithmetic.
+ * markers already overlapped at 0.80; this does not introduce overlap, it changes how much.
+ * That is a judgement for a capture rather than for arithmetic.
  */
-const SHAPE_OUTER_R = 0.88;
+const SHAPE_MEAN_R = 0.88;
 
-/** The band for an `n`-sided outline that renders at `MARKER_WEIGHT` perpendicular ink. */
+/**
+ * The band for an `n`-sided outline: sized so its mean radius is `SHAPE_MEAN_R` and its
+ * perpendicular ink is `MARKER_WEIGHT`. Both corrections are the same idea applied to the
+ * two axes -- a polygon differs from a circle by `cos(PI / n)` in both, and using the raw
+ * number in either place produces something that measures equal and does not look it.
+ */
 function bandForSides(sides: number): { inner: number; outer: number } {
-  return { inner: SHAPE_OUTER_R - MARKER_WEIGHT / Math.cos(Math.PI / sides), outer: SHAPE_OUTER_R };
+  const k = Math.cos(Math.PI / sides);
+  const outer = (2 * SHAPE_MEAN_R) / (1 + k); // mean of corner (outer) and edge (outer * k)
+  return { inner: outer - MARKER_WEIGHT / k, outer };
 }
 
 /**
@@ -213,8 +232,10 @@ export function identityMarkerGeometry(
     // tangential band at all and `cos(PI / n)` does not describe them; its weight is the
     // WIDTH OF A TOOTH, which is set by the point count. It takes the shared outer radius
     // so it matches the family's size, and keeps its own taper.
-    inner = SHAPE_OUTER_R - MARKER_WEIGHT * 2.2;
-    outer = SHAPE_OUTER_R;
+    // The starburst alternates corner and valley by design, so its mean radius is
+    // already the midpoint of its own extremes -- it takes SHAPE_MEAN_R directly.
+    outer = SHAPE_MEAN_R * 1.18;
+    inner = outer - MARKER_WEIGHT * 2.2;
     // Outer edge alternates between the band's full radius and just above its inner edge,
     // so the star lives entirely inside the annulus the other three occupy -- a literal
     // 5-point star would need concave vertices at ~0.3 of the radius, which is under the
