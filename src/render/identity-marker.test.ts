@@ -266,36 +266,43 @@ describe('identity marker: every shape reads at one weight (issue #660)', () => 
     expect(spread, 'the shared band was already even').toBeGreaterThan(0.4);
   });
 
-  it('normalises SIZE on the mean radius, not the circumradius', () => {
-    // The same correction as the weight, on the other axis. A shared circumradius gives
-    // four shapes one number and four apparent sizes, because a polygon's edges cut inward
-    // to `R * cos(PI / n)`: at a shared 0.88 the triangle's edges land at 0.44, INSIDE
-    // TANK_RADIUS, so the hull hid them and only its corners showed. It read small however
-    // wide its ink was -- which is what the owner saw.
-    const meanRadius = (g: THREE.BufferGeometry, sides: number): number => {
-      const pos = g.getAttribute('position');
-      let corner = 0;
-      for (let i = 0; i < pos.count; i += 2) corner = Math.max(corner, Math.hypot(pos.getX(i), pos.getY(i)));
-      return (corner + corner * Math.cos(Math.PI / sides)) / 2;
-    };
-    const means = [
-      meanRadius(build('shape', 0), SEGMENTS),
-      meanRadius(build('shape', 1), 3),
-      meanRadius(build('shape', 2), 4),
-    ];
-    const spread = (Math.max(...means) - Math.min(...means)) / Math.max(...means);
-    expect(spread, `means ${means.map((v) => v.toFixed(3)).join(', ')}`).toBeLessThan(0.02);
+  it('sizes each shape so its EDGES clear the tank, without any corner running away', () => {
+    /*
+     * TUNED PER SHAPE, NOT DERIVED, and the two formulas that were tried say why.
+     *
+     *  - Shared CIRCUMRADIUS levels the corners and sends a triangle's edges to
+     *    `R * cos(60)` = 0.44, inside TANK_RADIUS, so the hull ate them and the shape read
+     *    as three orphaned corners.
+     *  - Shared MEAN radius fixes the edges (0.59) and overshoots: corners at 1.17, and the
+     *    triangle visibly dominates the set, because perceived size follows the extremes.
+     *
+     * A triangle cannot match a circle on both axes at once. So the contract is a
+     * CONSTRAINT rather than an equality, which is what this asserts.
+     */
+    const SIDES = [SEGMENTS, 3, 4];
+    const corners = [0, 1, 2].map((sl) => {
+      const p = build('shape', sl).getAttribute('position');
+      let r = 0;
+      for (let i = 0; i < p.count; i += 2) r = Math.max(r, Math.hypot(p.getX(i), p.getY(i)));
+      return r;
+    });
+    const edges = corners.map((r, i) => r * Math.cos(Math.PI / SIDES[i]));
 
-    // The triangle's EDGES must now clear the tank, which is the whole point.
-    const triCorner = Math.max(...[...Array(build('shape', 1).getAttribute('position').count)]
-      .map((_, i) => {
-        const p = build('shape', 1).getAttribute('position');
-        return i % 2 === 0 ? Math.hypot(p.getX(i), p.getY(i)) : 0;
-      }));
-    expect(triCorner * Math.cos(Math.PI / 3), 'the triangle still hides behind the hull')
-      .toBeGreaterThan(TANK_RADIUS);
+    // 1. Every edge clears the hull by a visible margin. This is the one that the
+    //    circumradius build failed, and the reason the triangle looked broken.
+    for (const [i, e] of edges.entries()) {
+      expect(e, `shape ${i} edge at ${e.toFixed(3)} is under the hull`)
+        .toBeGreaterThan(TANK_RADIUS + 0.04);
+    }
 
-    // ...and every shape still reaches past the ring it replaced.
+    // 2. No corner runs away from the family. The mean-radius build failed THIS one, at
+    //    1.17 against the circle's 0.88 -- a 33% overshoot that read as "the triangle is
+    //    huge". 30% is the bound this set is tuned inside.
+    expect(Math.max(...corners) / Math.min(...corners),
+      `corners ${corners.map((v) => v.toFixed(3)).join(', ')}`).toBeLessThan(1.30);
+
+    // 3. ...and every shape still reaches past the solid ring it replaces, which must not
+    //    itself have moved -- it is the control the candidates are compared against.
     for (const sl of [0, 1, 2, 3]) {
       const p = build('shape', sl).getAttribute('position');
       let r = 0;

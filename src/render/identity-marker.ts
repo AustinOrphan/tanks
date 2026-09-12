@@ -132,14 +132,38 @@ const MARKER_WEIGHT = 0.11;
 const SHAPE_MEAN_R = 0.88;
 
 /**
- * The band for an `n`-sided outline: sized so its mean radius is `SHAPE_MEAN_R` and its
- * perpendicular ink is `MARKER_WEIGHT`. Both corrections are the same idea applied to the
- * two axes -- a polygon differs from a circle by `cos(PI / n)` in both, and using the raw
- * number in either place produces something that measures equal and does not look it.
+ * The size of each outline, TUNED PER SHAPE rather than derived (issue #660).
+ *
+ * Two formulas were tried and both produce a number that is equal and does not look it:
+ *
+ *  - Shared CIRCUMRADIUS puts every corner on one circle, and a triangle's edges then cut
+ *    inward to `R * cos(60) = 0.44` -- inside `TANK_RADIUS` (0.5), so the hull swallowed
+ *    them and the triangle read as three orphaned corners.
+ *  - Shared MEAN radius fixes that (edges at 0.59) and overshoots the other way: the
+ *    triangle's corners reach 1.17, 2.35x the tank, and it visibly dominates the set.
+ *    Perceived size follows the EXTREMES, not the mean.
+ *
+ * A triangle cannot match a circle on both axes at once; this is the ordinary icon-scaling
+ * problem, and icon sets solve it by hand rather than by formula. So these are chosen
+ * against a constraint instead: every edge clears the tank by at least 0.05, and corners sit
+ * as close to level as that allows.
+ *
+ *   circle     0.880 corner   0.880 edge
+ *   square     0.930          0.658
+ *   triangle   1.100          0.550
+ *   starburst  0.990          0.748 (its valleys, not an apothem)
+ *
+ * `SHAPE_MEAN_R` above is kept as the family's nominal size, the number to move if the whole
+ * set should grow or shrink; the per-shape values are ratios against it.
  */
+const SHAPE_SCALE: Readonly<Record<number, number>> = { 48: 1.0, 4: 1.057, 3: 1.25 };
+
+/** The starburst's own size, in the same nominal units. */
+const STAR_SCALE = 1.125;
+
 function bandForSides(sides: number): { inner: number; outer: number } {
   const k = Math.cos(Math.PI / sides);
-  const outer = (2 * SHAPE_MEAN_R) / (1 + k); // mean of corner (outer) and edge (outer * k)
+  const outer = SHAPE_MEAN_R * (SHAPE_SCALE[sides] ?? 1);
   return { inner: outer - MARKER_WEIGHT / k, outer };
 }
 
@@ -234,7 +258,7 @@ export function identityMarkerGeometry(
     // so it matches the family's size, and keeps its own taper.
     // The starburst alternates corner and valley by design, so its mean radius is
     // already the midpoint of its own extremes -- it takes SHAPE_MEAN_R directly.
-    outer = SHAPE_MEAN_R * 1.18;
+    outer = SHAPE_MEAN_R * STAR_SCALE;
     inner = outer - MARKER_WEIGHT * 2.2;
     // Outer edge alternates between the band's full radius and just above its inner edge,
     // so the star lives entirely inside the annulus the other three occupy -- a literal
