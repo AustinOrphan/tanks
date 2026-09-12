@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import rendererSource from './renderer.ts?raw';
+// A REAL import beside the raw one, and it is load-bearing rather than decorative:
+// `?raw` is not a module edge, so vitest's dependency graph does not relate this file to
+// renderer.ts through it -- and `tools/mutate`'s reachability check refuses an entry whose
+// declared tests cannot reach the file it mutates, which is exactly right and would have
+// let this guard sit next to a mutation it could never be credited with killing. Asserted
+// below rather than left unused, so nothing can treeshake the edge away.
+import { createRenderer } from './renderer';
 
 /**
  * THE FAN-OUT NOTHING WATCHED (issue #651).
@@ -73,6 +80,13 @@ function bindingFor(factory: string): string {
 }
 
 describe('the reduced-motion fan-out (issue #651)', () => {
+  it('is related to renderer.ts by a real module edge, not only by reading its text', () => {
+    // The edge the mutation harness needs. Without it `renderer-drops-a-system-from-the-
+    // motion-fanout` is refused before it runs -- "declared tests do not reach the file they
+    // mutate" -- and a guard nothing can credit is a guard nobody will keep.
+    expect(typeof createRenderer).toBe('function');
+  });
+
   it('finds the population it is about', () => {
     // Non-vacuity, and it is the denominator. A glob that matched nothing, or a declaration
     // string that no longer appears, would make every assertion below pass while measuring
