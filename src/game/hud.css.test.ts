@@ -1904,6 +1904,113 @@ describe('hud.css: the Practice chip reads as an identity, not a fourth stat', (
  * whether the stylesheet says 150ms/cubic-bezier or was never loaded. An assertion on
  * those longhands would have passed against a deleted rule.
  */
+describe('hud.css: every animation answers to the resolved motion policy (issue #631)', () => {
+  /*
+   * THE GUARD THAT LETS THIS ROT, closed.
+   *
+   * Before this, the only assertion about reduced motion in the whole suite was an
+   * EXCLUSION -- menu-transition.test.ts checking that transitions were NOT restated for
+   * the media query. Nothing said what the reduced-motion rules must CONTAIN, so an
+   * animation added tomorrow was outside them by default and no test objected. Three
+   * already were: `hud-aimdot-fire`, `hud-toast-in` and `hud-count-pop` ran at full
+   * strength for every player whatever either preference said, and neither the media query
+   * nor the resolved policy touched them.
+   *
+   * So this sweeps the population instead: every rule that starts an animation must either
+   * be answered under `.hud--reduced-motion` or be named below with a reason. Same shape as
+   * the button-primitive sweep above -- a new member has to be argued for in the exception
+   * list rather than joining by omission.
+   *
+   * IT READS THE STYLESHEET TEXT, NOT COMPUTED STYLE, and that is not laziness. jsdom
+   * applies no `@media` rules to computed style at all and resolves a keyframe name held in
+   * a custom property to the literal `var(...)` string on every element -- both measured
+   * while writing this. A `getComputedStyle` version of this test would have passed on the
+   * broken stylesheet, which is the failure mode it exists to prevent.
+   */
+  const text = stripComments(css);
+
+  /** Selectors that start an animation, paired with the animation they start. */
+  function animationSites(): { selector: string; name: string }[] {
+    const out: { selector: string; name: string }[] = [];
+    for (const m of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = m[1].trim();
+      if (selector.startsWith('@') || selector.includes('%')) continue;
+      // A rule UNDER the motion class is the answer, not another question. Without this
+      // the sweep reports its own fixes as gaps -- which it did on the first run, and is
+      // worth keeping as a comment because the shape recurs: a population scan that also
+      // matches the remedy will always look unfixable.
+      if (selector.includes('hud--reduced-motion')) continue;
+      const decl = /(?:^|;)\s*animation(?:-name)?\s*:\s*([^;]+)/.exec(m[2]);
+      if (!decl) continue;
+      const value = decl[1].trim();
+      if (value === 'none') continue;
+      const name = value.split(/\s+/).find((t) => /^[a-z][\w-]*$/i.test(t) && t !== 'none');
+      if (name) out.push({ selector, name });
+    }
+    return out;
+  }
+
+  it('finds the animation population it is about', () => {
+    // Vacuity guard. Every assertion below is a filter over this list, and all of them pass
+    // trivially on an empty one -- which a regex that stopped matching would quietly give.
+    const sites = animationSites();
+    expect(sites.length, 'no animation sites parsed out of hud.css').toBeGreaterThan(6);
+    expect(sites.some((s) => s.selector.includes('hud-count--pop'))).toBe(true);
+  });
+
+  it('answers every animation under the resolved policy, or names it as an exception', () => {
+    // Handled by DURATION rather than by selector: `transitionMs()` returns 0 under the
+    // resolved policy, and at 0 the entering class is added and removed inside one task, so
+    // these keyframes never run. Their own comments in hud.css set this out at length
+    // (issue #364), and restating them here would be the second place to keep in step.
+    const EXCEPTIONS = [
+      'ui-surface--entering',
+      'ui-surface--leaving',
+      'hud--menu-transition-',
+    ];
+    const answered = new Set(
+      [...text.matchAll(/\.hud--reduced-motion\s+([^{,]+)\{/g)]
+        .map((m) => m[1].trim().replace(/^\./, '').split(/[\s:>]/)[0]),
+    );
+    const unanswered = animationSites()
+      .filter(({ selector }) => !EXCEPTIONS.some((e) => selector.includes(e)))
+      .filter(({ selector }) => {
+        const cls = selector.replace(/^\./, '').split(/[\s:>,]/)[0];
+        return !answered.has(cls);
+      })
+      .map(({ selector, name }) => `${selector} -> ${name}`);
+    expect(unanswered, 'animations no motion preference can reach').toEqual([]);
+  });
+
+  it('never answers an animation by cancelling a cue that rests invisible', () => {
+    // `.hud-capacity` and `.hud-count` sit at `opacity: 0` between plays, so `animation:
+    // none` on them does not calm the cue -- it deletes it. Both are redefined to a
+    // motionless keyframe set instead, keeping the opacity ramp that IS the message. The
+    // shipped stylesheet got this right for the capacity flash and its comment says why;
+    // this makes it a rule rather than a habit.
+    for (const cls of ['hud-capacity--flash', 'hud-count--pop']) {
+      const rule = new RegExp(`\\.hud--reduced-motion\\s+\\.${cls}\\s*\\{([^}]*)\\}`).exec(text);
+      expect(rule, `${cls} has no reduced-motion answer`).not.toBeNull();
+      expect(rule![1], `${cls} is cancelled, so the cue never appears at all`)
+        .not.toMatch(/animation\s*:\s*none/);
+      expect(rule![1], `${cls} does not select a motionless keyframe set`)
+        .toMatch(/animation-name\s*:\s*[\w-]+--still/);
+    }
+  });
+
+  it('defines every --still keyframe set it selects', () => {
+    // The failure this catches is silent: an `animation-name` pointing at a keyframe set
+    // that does not exist leaves the element with NO animation, which for `.hud-capacity`
+    // and `.hud-count` means an invisible cue rather than a still one.
+    const selected = [...text.matchAll(/animation-name\s*:\s*([\w-]+--still)/g)].map((m) => m[1]);
+    expect(selected.length, 'no motionless keyframe sets are selected').toBeGreaterThan(1);
+    for (const name of selected) {
+      expect(text, `@keyframes ${name} is selected but never defined`)
+        .toContain(`@keyframes ${name}`);
+    }
+  });
+});
+
 describe('hud.css: the one application-transition definition (issue #364)', () => {
   const CONTRACT_RULES = ['.ui-surface--entering', '.ui-surface--leaving'];
 

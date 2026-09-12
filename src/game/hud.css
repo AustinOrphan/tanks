@@ -127,11 +127,16 @@
    * second, drifting constant. That is why there is no fallback duration in the
    * TypeScript.
    *
-   * Deliberately NOT added to the `prefers-reduced-motion` block below. Issue #364 is
-   * explicit that transitions follow the RESOLVED policy (`effective-settings.ts`'s
-   * `reducedMotion`), not the raw media query: a player who has chosen `full` motion
-   * against an OS that asks for `reduce` must still get their transitions, and a media
-   * query cannot see that choice. `hud.setReducedMotion` drives the duration to zero. */
+   * Deliberately NOT restated in the reduced-motion block below, and this comment is the
+   * reason the rest of that block was eventually rewritten. Issue #364 was explicit that
+   * transitions follow the RESOLVED policy (`effective-settings.ts`'s `reducedMotion`),
+   * not the raw media query: a player who has chosen `full` motion against an OS that asks
+   * for `reduce` must still get their transitions, and a media query cannot see that
+   * choice. Transitions could honour that from the start because a transition is a
+   * DURATION -- `hud.setReducedMotion` drives it to zero. Keyframe animations could not,
+   * because they need a SELECTOR, and until issue #631 no selector for the resolved policy
+   * existed; they were left on the media query and disagreed with this. They now hang off
+   * `.hud--reduced-motion` and the media query is gone. */
   --ui-transition-duration: 150ms;
   --ui-transition-ease: cubic-bezier(0.2, 0, 0, 1);
 }
@@ -1051,7 +1056,8 @@
 
 /* The hint is the whole interaction, so it pulses rather than sitting still: on a
  * screen whose only instruction is "press something", a static line reads as a
- * caption. Honours prefers-reduced-motion below. */
+ * caption. Honours the resolved reduced-motion policy below (issue #631) -- the in-app
+ * setting as well as the OS one, which this line used to promise and not deliver. */
 .hud-splash-hint {
   margin: 0;
   font-size: 17px;
@@ -2487,29 +2493,103 @@
  * Respect a reduced-motion preference: keep the colour signal, drop the
  * movement and the full-screen flash.
  */
-@media (prefers-reduced-motion: reduce) {
-  .hud-damage--hit {
-    animation: none;
-  }
-  /* The hint stays fully legible rather than stopping mid-pulse at 0.55 opacity:
-   * cancelling the animation must not leave the only instruction on screen dimmed. */
-  .hud-splash-hint {
-    animation: none;
-    opacity: 1;
-  }
-  @keyframes hud-lives-pulse {
-    0%, 100% { color: var(--hud-text); transform: none; }
-    50% { color: #ff6a6a; transform: none; }
-  }
-  /* The capacity flash keeps its whole message -- it IS text -- and loses only the drop
-     it arrives on. Redefined rather than cancelled: `animation: none` would leave the
-     line at its `opacity: 0` base state and the cue would not appear at all. */
-  @keyframes hud-capacity-flash {
-    0% { opacity: 0; transform: none; }
-    12% { opacity: 1; transform: none; }
-    65% { opacity: 1; transform: none; }
-    100% { opacity: 0; transform: none; }
-  }
+/* ---- Reduced motion, keyed off the RESOLVED policy (issue #631) ------------------- */
+
+/*
+ * THIS WAS AN `@media (prefers-reduced-motion: reduce)` BLOCK, and that was the defect.
+ *
+ * The media query reads the OS preference and cannot see the in-app Accessibility setting,
+ * so it disagreed with `effective-settings.ts`'s `reducedMotion` in both directions: a
+ * player who chose `reduced` against an OS saying `full` kept every animation below, and a
+ * player who chose `full` against an OS saying `reduce` lost them against their explicit
+ * choice. The second is the worse one, and it is the case `--ui-transition-duration`'s own
+ * comment at the top of this file already warned about for transitions.
+ *
+ * There is exactly ONE source of truth now. `resolveEffectiveSettings` folds the OS query
+ * in (`motion === 'system' ? systemReducedMotion : ...`), `hud.setReducedMotion` toggles
+ * `.hud--reduced-motion` on the root, and every rule here hangs off that class. Deleting
+ * the media query is the point of the change, not a side effect of it -- a stylesheet that
+ * kept both would keep the disagreement.
+ *
+ * TWO KEYFRAME SETS, NOT A REDEFINED ONE. The old block redefined `@keyframes` inside the
+ * query, which works because a matching media query wins the cascade. `@keyframes` cannot
+ * be nested under a class, so each reduced variant is its own top-level `--still` set and
+ * the class picks it with `animation-name`. A custom property holding the name was the
+ * tempting alternative and was rejected on evidence: jsdom computes it to the literal
+ * `var(...)` string on both the plain and the reduced element, so no test could tell the
+ * two apart and the guard below would measure nothing.
+ */
+
+/* Cancelled outright: the cue is pure movement, so stopping it loses nothing else. */
+.hud--reduced-motion .hud-damage--hit {
+  animation: none;
+}
+
+/* The hint stays fully legible rather than stopping mid-pulse at 0.55 opacity:
+ * cancelling the animation must not leave the only instruction on screen dimmed. */
+.hud--reduced-motion .hud-splash-hint {
+  animation: none;
+  opacity: 1;
+}
+
+/* Movement dropped, message kept. NOT `animation: none`: `.hud-capacity` rests at
+ * `opacity: 0`, so cancelling would mean the refusal never appears at all. */
+@keyframes hud-capacity-flash--still {
+  0% { opacity: 0; transform: none; }
+  12% { opacity: 1; transform: none; }
+  65% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+
+.hud--reduced-motion .hud-capacity--flash {
+  animation-name: hud-capacity-flash--still;
+}
+
+/*
+ * The life-loss pulse keeps its colour and drops the scale.
+ *
+ * KNOWN GAP, and it belongs to issue #630 rather than to this change: with the vignette
+ * cancelled above and the scale removed here, what is left of "you lost a life" under
+ * reduced motion is a hue change on one number -- and `.hud-lives` is not opted out of the
+ * `forced-colors` block, so reduced motion plus forced colours leaves NO cue at all. Two
+ * accessibility settings combining to remove a signal is worse than either alone. #630
+ * owns the non-colour channel; this rule is written so that adding one here later does not
+ * have to unpick the motion decision as well.
+ */
+@keyframes hud-lives-pulse--still {
+  0%, 100% { color: var(--hud-text); transform: none; }
+  50% { color: #ff6a6a; transform: none; }
+}
+
+.hud--reduced-motion .hud-lives--hit {
+  animation-name: hud-lives-pulse--still;
+}
+
+/*
+ * THE THREE THAT WERE IN NEITHER GUARD (issue #631). Not "outside the block" -- outside the
+ * media query AND outside the resolved policy, so they ran at full strength for every
+ * player whatever either preference said. The countdown pop is the largest movement of the
+ * three (a 1.2x scale swing, once per second of every round start).
+ */
+.hud--reduced-motion .hud-aimdot--fired {
+  animation: none;
+}
+
+.hud--reduced-motion .hud-toast {
+  animation: none;
+}
+
+/* Kept, not cancelled, for the same reason as the capacity flash: the countdown IS the
+ * number, and `.hud-count` rests at `opacity: 0`. */
+@keyframes hud-count-pop--still {
+  0% { opacity: 0; transform: none; }
+  15% { opacity: 1; transform: none; }
+  70% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+
+.hud--reduced-motion .hud-count--pop {
+  animation-name: hud-count-pop--still;
 }
 
 /* ---- Controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
@@ -2518,6 +2598,7 @@
 .hud-controllers-open--hidden {
   display: none;
 }
+
 
 /* Same overlay shape as .hud-levelselect/.hud-achievements: without the hidden rule it
  * covers the game from load. Reachable from 'paused' too, unlike its four siblings --
@@ -2978,10 +3059,11 @@
  * pins both halves -- the splash hint's pulse surviving, and the roster of every class in
  * this file that owns an `animation` -- so a second such child cannot be added silently.
  *
- * DELIBERATELY NOT REPEATED IN THE `prefers-reduced-motion` BLOCK, for the reason
- * `--ui-transition-duration`'s own comment gives at length: transitions follow the
- * RESOLVED policy, not the raw media query, and a copy of that decision here would be the
- * second source of truth that comment exists to prevent. Nothing is needed anyway.
+ * DELIBERATELY NOT REPEATED IN THE REDUCED-MOTION BLOCK, and still not, though the reason
+ * has narrowed since issue #631. It used to be that a copy there would be a second source
+ * of truth, because that block keyed off the raw media query; now that it keys off the
+ * resolved policy like everything else, a copy would merely be redundant rather than
+ * wrong. Nothing is needed either way.
  * `hud.ts`'s `transitionMs()` returns 0 under resolved reduced motion, and at 0 the runner
  * settles synchronously inside the same task that began the transition -- the entering
  * class is added and removed before any frame is painted, so the keyframes below never
@@ -3101,12 +3183,12 @@
  * the hint on the shipped path AND on every treatment, so an override added here without
  * the exclusion fails rather than quietly stopping the title screen's pulse.
  *
- * None of this is repeated inside the `prefers-reduced-motion` block, and nothing needs to
- * be: `transitionMs()` returns 0 under the RESOLVED policy and the entering class is added
- * and removed before a frame is painted, so no keyframe here or above ever runs. That is
- * the same reasoning `--ui-transition-duration`'s comment sets out, and stating it a
- * second time in a media query would be the second source of truth it forbids -- and would
- * be wrong for the player who chose `full` motion against an OS asking for `reduce`.
+ * None of this is repeated inside the reduced-motion block, and nothing needs to be:
+ * `transitionMs()` returns 0 under the RESOLVED policy and the entering class is added and
+ * removed before a frame is painted, so no keyframe here or above ever runs. Since issue
+ * #631 that block reads the same resolved policy these rules do, so a restatement would be
+ * redundant rather than contradictory -- but it would still be a second place to keep in
+ * step, which is the reason this stayed out of it when the block was a media query.
  */
 
 /* `fade` and `fade-long`: opacity only, the transition as it was before issue #542.

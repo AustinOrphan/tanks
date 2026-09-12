@@ -6682,6 +6682,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     setReducedMotion(on: boolean): void {
       reducedMotion = on;
+      /*
+       * THE STYLESHEET'S ONLY VIEW OF THE RESOLVED POLICY (issue #631).
+       *
+       * Until this class existed there was no CSS selector for the resolved answer at all,
+       * so `hud.css` had to key its reduced-motion rules off `@media
+       * (prefers-reduced-motion: reduce)` -- the raw OS query, which cannot see the in-app
+       * setting. That made two sources of truth that disagree in BOTH directions: a player
+       * who chose `reduced` against an OS saying `full` kept every animation, and -- the
+       * worse half -- a player who chose `full` against an OS saying `reduce` had them
+       * suppressed against their explicit choice.
+       *
+       * `transitionMs()` never had this problem because a transition is a DURATION and can
+       * be driven to zero from here. A keyframe animation cannot; it needs a selector. This
+       * is that selector, and the media query is gone from `hud.css` because of it.
+       *
+       * Same shape as `hud--menu-transition-*` (menu-transition.ts): a modifier on the HUD
+       * root, so one class decides and the stylesheet holds the treatment.
+       */
+      el.classList.toggle('hud--reduced-motion', on);
       // The Accessibility toggle's 'Match device' state reads this, so the label has to
       // move when the resolved answer does -- which happens with the pane open whenever
       // the OS preference flips, and no click is involved. See renderMotionToggle.
