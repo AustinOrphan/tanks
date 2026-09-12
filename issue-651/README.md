@@ -9,7 +9,7 @@ gallery builds `createEntityViews`/`createParticleSystem` directly rather than t
 | Clip | Command | What changes |
 | --- | --- | --- |
 | `mine-fuse-full.gif` / `mine-fuse-reduced-squared.gif` | `--elements fuse --view close --anim` | An accelerating strobe becomes a monotone brightening. |
-| `kill-particles-full.gif` / `kill-particles-reduced.gif` | `--scene destroyed --anim` | The burst still appears and fades; the debris stops flying and falling. |
+| `kill-particles-full.gif` / `kill-particles-reduced-one.gif` | `--scene destroyed --anim` | ONE particle appears and fades in place; the debris stops flying and falling. |
 | `respawn-spawn-full.gif` / `respawn-spawn-reduced.gif` | `--scene respawn --anim` | The tank fades in without swelling; the invincibility ring holds instead of pulsing. |
 
 **Every pair runs the same length.** Frame counts are identical within each pair — 180,
@@ -18,7 +18,7 @@ visible: a calmed effect is not a shorter effect.
 
 | pair | frames | full | reduced |
 | --- | --- | --- | --- |
-| kill | 180 = 180 | 909 KB | 365 KB |
+| kill | 180 = 180 | 909 KB | 364 KB |
 | respawn | 549 = 549 | 296 KB | 129 KB |
 | mine fuse | 270 = 270 | 333 KB | 348 KB |
 
@@ -73,3 +73,32 @@ the element with a burning fuse in it.
 `fuse-a30-*.png`, `fuse-a60-*.png` and `fuse-a88-reduced.png` are from the first round and
 show the full-motion strobe passing through the same brightness at two different fuse points
 (a30-full and a60-full are byte-identical).
+
+## The reduced burst was a white FLASH, and that is why it draws one particle
+
+The material is additively blended (`THREE.AdditiveBlending`, `particles.ts`). N particles at
+the same point and opacity 1 sum past every channel and clip, so a 24-particle burst held in
+place is not a dimmer explosion -- it is white.
+
+Measured on the kill moment, decoding frames out of `--scene destroyed --anim`. "Orange" is
+`R>150, R-B>60, G<200`; "near-white" is all three channels above 200. The scene's
+pre-explosion orange baseline is 5180 px.
+
+| frame | full motion | reduced, 24 coincident | reduced, one particle |
+| --- | --- | --- | --- |
+| 54 | white 305, orange 260 | white 193, orange 230 | **white 0**, orange 429 |
+| 60 | white 470, orange 7316 | white 182, orange 5180 | **white 0**, orange 5372 |
+| 70 | white 648, orange 11645 | white 165, orange 5180 | **white 0**, orange 5345 |
+| 90 | white 272, orange 18689 | white 134, orange 5180 | **white 0**, orange 5304 |
+
+The 24-stack column sits flat at the baseline for orange and carries a white core that fades.
+The one-particle column has no near-white pixel at all and pushes orange slightly ABOVE the
+baseline -- the burst is contributing its own colour instead of a saturated flash.
+
+`kill-full-f70.png`, `kill-reduced-stack-f70.png` and `kill-reduced-one-f70.png` are frame 70
+from each, the row where the difference is clearest.
+
+**One and not zero.** An event carried by audio and haptics alone is what the accessibility
+direction rules out, and `ricochet` has no second visual cue -- no ring, no disappearing wall,
+nothing but these particles. A kill would survive on the death-pulse ring and a destroyed
+wall on its own disappearance; a ricochet would simply stop existing.
