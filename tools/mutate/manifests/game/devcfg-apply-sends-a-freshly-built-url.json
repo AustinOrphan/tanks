@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-apply-sends-a-freshly-built-url",
+  "file": "src/game/hud.ts",
+  "find": "        opts.applyDeveloperConfig?.(devCfgMenu.search());",
+  "replace": "        opts.applyDeveloperConfig?.(devMenuView(devCfgSelection, '').search);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "Apply and Reload hands the page exactly the URL it was previewing"
+  ],
+  "why": "Rebuilding the URL at press time rather than handing over the one on screen. It drops the page's own non-developer query -- the base is not in this call -- so a deep link or a router's parameters vanish on Apply while the preview above the button said they would survive. Written with `devMenuView` rather than `devSearchFrom`, which hud.ts does not import: a mutation that fails to COMPILE is killed by the type checker and says nothing about whether the behaviour is guarded -- the trap issue #652 recorded when a brace-unbalanced replacement killed 13 tests instead of 2."
+}

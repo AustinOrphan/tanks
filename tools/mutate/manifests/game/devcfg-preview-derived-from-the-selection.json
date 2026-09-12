@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-preview-derived-from-the-selection",
+  "file": "src/game/dev-config-menu.ts",
+  "find": "  const search = devSearchFrom(selection, base);\n  const state = explainDevConfig(search);",
+  "replace": "  const search = devSearchFrom(selection, base);\n  const state = explainDevConfig(devSearchFrom(selection));",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config-menu.test.ts"
+  ],
+  "killedBy": [
+    "devMenuView: the round trip that makes the preview honest reports unknown parameters, which name no control at all"
+  ],
+  "why": "Breaks the round trip that makes the preview honest: the state would be explained from a DIFFERENT string than the one Apply navigates to, so a page's own query is previewed as absent and then carried anyway. Acceptance criterion 4 is exactly that the two cannot diverge, and they can only be guaranteed identical by being the same string. The case that catches it is the unknown-parameter one: with the base dropped from the EXPLAIN side, a parameter the page carried is previewed as absent while the URL still carries it."
+}

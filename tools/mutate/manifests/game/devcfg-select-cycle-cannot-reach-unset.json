@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-select-cycle-cannot-reach-unset",
+  "file": "src/game/dev-config-menu.ts",
+  "find": "  const stops: (string | null)[] = [null, ...(control.values ?? [])];",
+  "replace": "  const stops: (string | null)[] = [...(control.values ?? [])];",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config-menu.test.ts"
+  ],
+  "killedBy": [
+    "cycleSelect walks a select through its own values and back to unset"
+  ],
+  "why": "Every one of these flags defaults to ABSENT, so a cycle over the declared values alone traps the menu on whichever value it first landed on: the control can be set and never cleared, and the URL keeps a parameter the player has no way to remove."
+}

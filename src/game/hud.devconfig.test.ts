@@ -127,11 +127,19 @@ describe('Apply and Reload', () => {
   it('hands the page exactly the URL it was previewing', () => {
     // Acceptance criterion 4. The preview and the navigation are the same string by
     // construction -- there is no second computation to disagree.
+    // Mounted WITH a page query: without one, a rebuilt URL and the previewed one are the
+    // same string and the case proves nothing. Measured -- `devcfg-apply-sends-a-freshly-
+    // built-url` survived this test until the base was added.
     const applied: string[] = [];
-    const { root } = mount({ applyDeveloperConfig: (s) => applied.push(s) });
+    const { root } = mount({
+      applyDeveloperConfig: (s) => applied.push(s),
+      developerSearch: '?dev=1&utm=x',
+    });
     open(root);
     optionIn(root, 'quality', 'high').click();
     const previewed = url(root);
+    expect(previewed, 'the fixture must carry a page query for this to measure anything')
+      .toContain('utm=x');
     q<HTMLButtonElement>(root, '.hud-devcfg-apply').click();
     expect(applied).toEqual([previewed]);
   });
