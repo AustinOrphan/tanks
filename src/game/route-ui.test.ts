@@ -107,6 +107,11 @@ interface Fixture {
   pendingFrames: () => number;
   /** Fire every pending frame callback once, as a browser would on the next paint. */
   runFrame: () => void;
+  /**
+   * Remove one pending frame callback and hand it back WITHOUT running it -- the browser
+   * has dispatched this frame and `cancelAnimationFrame` can no longer reach it.
+   */
+  takeFrame: () => (() => void) | null;
   cancelledFrames: number[];
 }
 
@@ -266,6 +271,12 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
       const due = [...box.frames.values()];
       box.frames.clear();
       for (const cb of due) cb();
+    },
+    takeFrame: () => {
+      const [handle, cb] = [...box.frames.entries()][0] ?? [];
+      if (cb === undefined || handle === undefined) return null;
+      box.frames.delete(handle);
+      return cb;
     },
     cancelledFrames: box.cancelledFrames,
   };
@@ -726,5 +737,23 @@ describe('the controller self-test poll is scoped to the pane (issue #599)', () 
     const afterOpen = f.padDiagnosticReads();
     f.runFrame();
     expect(f.padDiagnosticReads(), 'one frame must be one read').toBe(afterOpen + 1);
+  });
+
+  it('a frame already dispatched when the pane closes does not queue another', () => {
+    // THE HALF `cancel` CANNOT COVER, and the one the flag exists for. Once the browser has
+    // dispatched a frame, `cancelAnimationFrame` can no longer reach it: the callback WILL
+    // run, after the close, and a callback that re-requests unconditionally starts the
+    // chain again from there. Nothing cancels that second request, because the close has
+    // already happened and the handle it cancelled was the first one.
+    //
+    // Measured as a SURVIVOR before this case existed: removing the flag check left every
+    // other test in this block green, because a cancelled frame simply never runs.
+    const f = fixture();
+    f.fire('onControllerSelfTestOpen');
+    const dispatched = f.takeFrame();
+    expect(dispatched, 'the open must have queued a frame to dispatch').not.toBeNull();
+    f.fire('onControllerSelfTestClose');
+    (dispatched as () => void)();
+    expect(f.pendingFrames(), 'the late frame must not start the chain again').toBe(0);
   });
 });
