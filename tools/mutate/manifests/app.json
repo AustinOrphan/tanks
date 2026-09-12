@@ -164,5 +164,19 @@
     "killedBy": [
       "boot: the message itself RETIRES the markup holding screen once the route UI exists"
     ]
+  },
+  {
+    "id": "match-failure-replaces-the-working-shell-again",
+    "file": "src/boot.ts",
+    "find": "    if (state.presentation === 'overlay' && overlayHost !== null) {",
+    "replace": "    if (false && state.presentation === 'overlay' && overlayHost !== null) {",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "killedBy": [
+      "boot: nothing starts until the player asks (issue #428) leaves the shell standing when the cause is transient"
+    ],
+    "why": "Sends every failure back down the page path, which is what shipped before issue #325's ruling: a match that fails for a transient reason wipes a Main Menu that is working perfectly and tells the player to reload. Note what does NOT catch it -- the failure is still announced, the copy is still classified correctly, the error still reaches `reportError`, and every assertion about WHAT is said passes unchanged. The only observable difference is whether the root was emptied, which is why the killing case plants a marker element in the shell and checks it survives rather than asserting on the ledger."
   }
 ]
