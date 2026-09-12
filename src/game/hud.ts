@@ -292,6 +292,7 @@ import {
   devMenuView,
   resetSelection,
   setLiteral,
+  stepMultiset,
   stepNumeric,
   toggleField,
 } from './dev-config-menu';
@@ -4433,6 +4434,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         // at 1. Asked of the model rather than tabulated -- `stepNumeric` refuses a value the
         // parser rejects, so a wrong floor here costs one press, not a wrong URL.
         devCfgSelection = stepNumeric(devCfgSelection, control, step, field === 'bots' ? 0 : 1, devCfgBase);
+        repaintDevConfig();
+      },
+      onStepValue: (field, value, step) => {
+        const control = devCfgControl(field);
+        if (!control) return;
+        devCfgSelection = stepMultiset(devCfgSelection, control, value, step, devCfgBase);
         repaintDevConfig();
       },
       onPreset: (id) => {

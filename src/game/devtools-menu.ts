@@ -1,5 +1,5 @@
 import { setSelected } from './ui';
-import type { DevMenuView, MenuControl } from './dev-config-menu';
+import { isMultiset, multisetCounts, type DevMenuView, type MenuControl } from './dev-config-menu';
 import type { DevConfigNote } from './dev-config';
 
 /**
@@ -32,6 +32,8 @@ export interface DevConfigMenuHandlers {
   onToggle(field: string): void;
   /** A stepper arrow was pressed, `+1` or `-1`. */
   onStep(field: string, step: number): void;
+  /** One of a multiset's per-value arrows was pressed (issue #246's `sandboxTanks`). */
+  onStepValue(field: string, value: string, step: number): void;
   onPreset(id: string): void;
   onApply(): void;
   onReset(): void;
@@ -53,6 +55,8 @@ interface ControlRow {
   /** Value buttons by the value they set; `''` is the Unset button. */
   readonly options: Map<string, HTMLButtonElement>;
   readonly toggle: HTMLButtonElement | null;
+  /** For a multiset, the per-value count readouts. */
+  readonly counts: Map<string, HTMLElement>;
 }
 
 function hint(text: string, cls: string): HTMLElement {
@@ -97,6 +101,7 @@ function buildControl(mc: MenuControl, handlers: DevConfigMenuHandlers): Control
   root.append(name, hint(c.description, 'hud-devcfg-desc'));
 
   const options = new Map<string, HTMLButtonElement>();
+  const counts = new Map<string, HTMLElement>();
   let toggle: HTMLButtonElement | null = null;
   const row = document.createElement('div');
   row.className = 'hud-devcfg-row';
@@ -118,6 +123,30 @@ function buildControl(mc: MenuControl, handlers: DevConfigMenuHandlers): Control
       options.set(v, b);
       row.appendChild(b);
     }
+  } else if (isMultiset(c)) {
+    // A COUNT PER VALUE. The numeric stepper below is meaningless here -- the value is a
+    // comma-separated list with repeats kept, so `Number(...)` is NaN and the control was
+    // inert until this existed. One row per kind, each with its own pair of arrows, which is
+    // what a sandbox is actually chosen by.
+    for (const v of c.values ?? []) {
+      const cell = document.createElement('span');
+      cell.className = 'hud-devcfg-count';
+      const down = button('−', 'hud-devcfg-step');
+      down.setAttribute('aria-label', `One fewer ${v}`);
+      down.addEventListener('click', () => handlers.onStepValue(c.field, v, -1));
+      const readout = document.createElement('span');
+      readout.className = 'hud-devcfg-count-value';
+      const up = button('+', 'hud-devcfg-step');
+      up.setAttribute('aria-label', `One more ${v}`);
+      up.addEventListener('click', () => handlers.onStepValue(c.field, v, 1));
+      cell.append(down, readout, up);
+      counts.set(v, readout);
+      row.appendChild(cell);
+    }
+    const unset = button('Unset', 'ui-selectable hud-devcfg-option');
+    unset.addEventListener('click', () => handlers.onSet(c.field, null));
+    options.set('', unset);
+    row.appendChild(unset);
   } else {
     // A stepper, never a text field: the issue rules out a general-purpose text-entry
     // primitive, and a menu that needs a keyboard is not operable by controller.
@@ -146,7 +175,7 @@ function buildControl(mc: MenuControl, handlers: DevConfigMenuHandlers): Control
   const notes = document.createElement('ul');
   notes.className = 'hud-devcfg-notes hud-devcfg-notes--hidden';
   root.appendChild(notes);
-  return { root, value, notes, options, toggle };
+  return { root, value, notes, options, toggle, counts };
 }
 
 /**
@@ -236,6 +265,10 @@ export function renderDevConfigMenu(
           row.toggle.textContent = on ? 'On' : 'Off';
         }
         for (const [v, b] of row.options) setSelected(b, v === value);
+        if (row.counts.size > 0) {
+          const counted = multisetCounts({ [mc.control.field]: mc.value } as never, mc.control);
+          for (const [v, el] of row.counts) el.textContent = `${v} ×${counted.get(v) ?? 0}`;
+        }
         writeNotes(row.notes, mc.notes);
       }
     }

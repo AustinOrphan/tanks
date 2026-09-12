@@ -6,6 +6,9 @@ import {
   cycleSelect,
   stepNumeric,
   setLiteral,
+  stepMultiset,
+  multisetCounts,
+  isMultiset,
 } from './dev-config-menu';
 import {
   devControls,
@@ -253,5 +256,58 @@ describe('setLiteral', () => {
       'the parser must accept the literal this offers',
     ).toEqual([]);
     expect(setLiteral(sel, level, null)).toEqual({});
+  });
+});
+
+describe('stepMultiset', () => {
+  const tanks = () => controlFor('sandboxTanks');
+
+  it('builds a list with repeats, which is what the parser takes', () => {
+    // The numeric stepper was INERT here -- measured: stepping `sandboxTanks` from unset
+    // returned the same empty selection, because `Number('brown,teal')` is NaN. This is the
+    // control that flag never had.
+    const c = tanks();
+    const kind = (c.values ?? [])[0];
+    let sel = stepMultiset({}, c, kind, 1);
+    expect(sel).toEqual({ sandboxTanks: kind });
+    sel = stepMultiset(sel, c, kind, 1);
+    expect(sel).toEqual({ sandboxTanks: `${kind},${kind}` });
+    expect(
+      devMenuView(sel).state.notes.filter((n) => n.field === 'sandboxTanks' && n.reason === 'rejected'),
+      'the list this builds must be one the parser takes',
+    ).toEqual([]);
+  });
+
+  it('clears the parameter when the last one is removed, rather than emitting empty', () => {
+    const c = tanks();
+    const kind = (c.values ?? [])[0];
+    const one = stepMultiset({}, c, kind, 1);
+    expect(stepMultiset(one, c, kind, -1)).toEqual({});
+  });
+
+  it('never goes below zero for a kind', () => {
+    const c = tanks();
+    const kind = (c.values ?? [])[0];
+    expect(stepMultiset({}, c, kind, -1)).toEqual({});
+  });
+
+  it('counts each kind separately', () => {
+    const c = tanks();
+    const [a, b] = c.values ?? [];
+    let sel = stepMultiset({}, c, a, 1);
+    sel = stepMultiset(sel, c, b, 1);
+    sel = stepMultiset(sel, c, a, 1);
+    const counts = multisetCounts(sel, c);
+    expect(counts.get(a)).toBe(2);
+    expect(counts.get(b)).toBe(1);
+  });
+
+  it('isMultiset is derived from the registry, not from a field name', () => {
+    // A flag carrying BOTH a `type` and a `values` list is one whose value is built out of
+    // those values. The rule is what makes a second such flag work the day it is registered.
+    expect(isMultiset(controlFor('sandboxTanks'))).toBe(true);
+    expect(isMultiset(controlFor('players')), 'a plain numeric input').toBe(false);
+    expect(isMultiset(controlFor('quality')), 'a select').toBe(false);
+    expect(isMultiset(controlFor('aimRay')), 'a toggle').toBe(false);
   });
 });

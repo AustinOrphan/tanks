@@ -217,3 +217,67 @@ export function setLiteral(
   else out[control.field] = literal;
   return out as DevSelection;
 }
+
+/**
+ * Is this valued control a MULTISET -- a comma-separated list of enum values, repeats kept?
+ *
+ * Derived, not a field name: `controlKindFor` calls a flag `input` when it carries a `type`,
+ * and a flag that carries BOTH a `type` and a `values` list is one whose value is built out
+ * of those values rather than chosen from them. `sandboxTanks` is the only one today; the
+ * rule is what makes a second one work the day it is registered.
+ */
+export function isMultiset(control: DevControl): boolean {
+  return control.control === 'input' && (control.values?.length ?? 0) > 0;
+}
+
+/** How many of each value the current selection asks for. */
+export function multisetCounts(
+  selection: DevSelection,
+  control: DevControl,
+): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const v of control.values ?? []) counts.set(v, 0);
+  const raw = selection[control.field as keyof DevSelection];
+  if (typeof raw !== 'string' || raw === '') return counts;
+  for (const part of raw.split(',')) {
+    const key = part.trim();
+    if (counts.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Add or remove one occurrence of a value in a multiset control.
+ *
+ * A COUNT PER VALUE, not a text field: the issue rules out a general-purpose text-entry
+ * primitive, and a comma-separated list is exactly the thing a player would otherwise have
+ * to type. Order is not offered -- the parser keeps it, but a menu that let one be built by
+ * pressing buttons would need a reorder affordance nobody has asked for, and the counts are
+ * what a sandbox is actually chosen by.
+ *
+ * Emptying the multiset CLEARS the parameter rather than emitting an empty string, which the
+ * parser would have to reject.
+ *
+ * Validated by the parser like every other step here, so a count the model refuses is simply
+ * not taken.
+ */
+export function stepMultiset(
+  selection: DevSelection,
+  control: DevControl,
+  value: string,
+  delta: number,
+  base = '',
+): DevSelection {
+  const counts = new Map(multisetCounts(selection, control));
+  const next = (counts.get(value) ?? 0) + delta;
+  if (next < 0) return selection;
+  counts.set(value, next);
+  const parts: string[] = [];
+  for (const v of control.values ?? []) {
+    for (let i = 0; i < (counts.get(v) ?? 0); i++) parts.push(v);
+  }
+  const out = { ...selection } as Record<string, unknown>;
+  if (parts.length === 0) delete out[control.field];
+  else out[control.field] = parts.join(',');
+  return accepted(out as DevSelection, control, base) ? (out as DevSelection) : selection;
+}

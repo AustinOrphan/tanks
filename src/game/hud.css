@@ -1525,6 +1525,21 @@
   min-width: var(--hud-control-min);
 }
 
+/* One kind of sandbox tank and how many of it: arrows either side of a count, so the whole
+   multiset is built by pressing rather than typed as a comma-separated list. */
+.hud-devcfg-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hud-space-1);
+}
+
+.hud-devcfg-count-value {
+  min-width: 9ch;
+  text-align: center;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
 .hud-devcfg-notes {
   list-style: none;
   margin: var(--hud-space-2) 0 0;

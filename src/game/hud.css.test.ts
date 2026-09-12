@@ -10,6 +10,7 @@
 import { afterEach, describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
 import { devControls, DEV_PRESETS } from './dev-config';
+import { isMultiset } from './dev-config-menu';
 import { LITERALS } from './devtools-menu';
 // hud.ts's own text, so the script-read token exemption below can prove the exemption is
 // still true rather than asserting it. A TEST may read a fixture; this is the same shape
@@ -224,6 +225,9 @@ function devMenuButtons(): number {
   for (const c of devControls()) {
     if (c.control === 'toggle') n += 1;
     else if (c.control === 'select') n += 1 + (c.values?.length ?? 0); // Unset + one per value
+    // A MULTISET is a pair of arrows per kind plus Unset -- its value is a list, not a point
+    // on an axis -- where a plain number is one pair, Unset, and any literals beside it.
+    else if (isMultiset(c)) n += (c.values?.length ?? 0) * 2 + 1;
     else n += 3 + (LITERALS[c.field]?.length ?? 0); // minus, plus, Unset, then any literals
   }
   return n;

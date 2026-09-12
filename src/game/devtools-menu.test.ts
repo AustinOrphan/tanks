@@ -5,7 +5,7 @@
 // it must never become (a text field).
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderDevConfigMenu, LITERALS, type DevConfigMenuHandlers } from './devtools-menu';
-import { devMenuView } from './dev-config-menu';
+import { devMenuView, isMultiset } from './dev-config-menu';
 import { devControls, explainDevConfig, devSearchFrom, DEV_PRESETS } from './dev-config';
 
 let container: HTMLElement;
@@ -21,6 +21,7 @@ beforeEach(() => {
     onSet: (f, v) => calls.push(`set:${f}=${v}`),
     onToggle: (f) => calls.push(`toggle:${f}`),
     onStep: (f, s) => calls.push(`step:${f}${s > 0 ? '+' : '-'}`),
+    onStepValue: (f, v, s) => calls.push(`stepValue:${f}.${v}${s > 0 ? '+' : '-'}`),
     onPreset: (id) => calls.push(`preset:${id}`),
     onApply: () => calls.push('apply'),
     onReset: () => calls.push('reset'),
@@ -62,10 +63,14 @@ describe('the menu renders the registry, once each', () => {
     // that fails the moment someone reaches for an `<input>`.
     mount();
     expect(container.querySelectorAll('input, textarea, [contenteditable]')).toHaveLength(0);
-    // ...and every valued control still has a way to move: a stepper pair.
+    // ...and every valued control still has a way to move: one pair of arrows for a plain
+    // number, and one pair PER KIND for a multiset, whose value is a list rather than a
+    // point on an axis.
     for (const c of devControls().filter((x) => x.control === 'input')) {
-      const row = rowFor(c.field);
-      expect(row.querySelectorAll('.hud-devcfg-step'), `${c.field} has no stepper`).toHaveLength(2);
+      const arrows = rowFor(c.field).querySelectorAll('.hud-devcfg-step');
+      const expected = isMultiset(c) ? (c.values?.length ?? 0) * 2 : 2;
+      expect(arrows, `${c.field} has the wrong number of arrows`).toHaveLength(expected);
+      expect(expected, `${c.field} has no way to move at all`).toBeGreaterThan(0);
     }
   });
 
@@ -219,5 +224,52 @@ describe('the buttons report, and do not act themselves', () => {
       DEV_PRESETS.map((p) => p.id),
     );
     for (const b of buttons) expect(b.getAttribute('aria-label')).toContain('.');
+  });
+});
+
+describe('the multiset control (issue #246)', () => {
+  it('offers a count per kind rather than a numeric stepper, which was inert', () => {
+    // `sandboxTanks` is a comma-separated list with repeats kept, so `Number(...)` of it is
+    // NaN and the shared numeric stepper did nothing at all -- measured: stepping from unset
+    // returned the same empty selection. A count per kind is what a sandbox is chosen by.
+    mount();
+    const row = rowFor('sandboxTanks');
+    const kinds = devControls().find((c) => c.field === 'sandboxTanks')?.values ?? [];
+    expect(kinds.length).toBeGreaterThan(1);
+    expect(row.querySelectorAll('.hud-devcfg-count')).toHaveLength(kinds.length);
+    // Two arrows per kind, and still no text entry anywhere.
+    expect(row.querySelectorAll('.hud-devcfg-step')).toHaveLength(kinds.length * 2);
+    expect(row.querySelectorAll('input, textarea')).toHaveLength(0);
+  });
+
+  it('shows each kind and its count, and updates them', () => {
+    const v = mount();
+    const readouts = () =>
+      Array.from(rowFor('sandboxTanks').querySelectorAll('.hud-devcfg-count-value')).map(
+        (n) => n.textContent,
+      );
+    expect(readouts()[0]).toMatch(/×0$/);
+    v.update(devMenuView({ sandboxTanks: 'brown,brown,teal' }));
+    const after = readouts();
+    expect(after).toContain('brown ×2');
+    expect(after).toContain('teal ×1');
+    expect(after).toContain('grey ×0');
+  });
+
+  it('reports which kind and which direction, so one pair cannot drive another kind', () => {
+    mount();
+    const cells = rowFor('sandboxTanks').querySelectorAll('.hud-devcfg-count');
+    (cells[1].querySelectorAll('button')[1] as HTMLButtonElement).click(); // second kind, plus
+    (cells[0].querySelectorAll('button')[0] as HTMLButtonElement).click(); // first kind, minus
+    const kinds = devControls().find((c) => c.field === 'sandboxTanks')?.values ?? [];
+    expect(calls).toEqual([`stepValue:sandboxTanks.${kinds[1]}+`, `stepValue:sandboxTanks.${kinds[0]}-`]);
+  });
+
+  it('names each arrow for a screen reader, since the glyph alone says nothing', () => {
+    mount();
+    const cell = rowFor('sandboxTanks').querySelector('.hud-devcfg-count') as HTMLElement;
+    const [down, up] = Array.from(cell.querySelectorAll('button'));
+    expect(down.getAttribute('aria-label')).toMatch(/^One fewer /);
+    expect(up.getAttribute('aria-label')).toMatch(/^One more /);
   });
 });
