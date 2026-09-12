@@ -46,7 +46,9 @@ export type HudLayerId =
   | 'settings'
   | 'about'
   | 'developer-tools'
-  | 'confirm-new-campaign';
+  | 'confirm-new-campaign'
+  /** A match that failed to start for a transient reason (issue #325). */
+  | 'match-failed';
 
 /**
  * WHAT IS BEING PLAYED -- the actual session kind, projected from the canonical
@@ -686,6 +688,12 @@ export interface Hud {
    */
   onStartRestart(cb: () => void): void;
   /** Fired by the pause panel's Quit to Title button, and by nothing else. */
+  /**
+   * Show a classified startup failure as a blocking overlay over the working shell
+   * (issue #325). Only ever called for a failure whose `presentation` is `'overlay'`;
+   * `boot.ts` replaces the page for the rest, because there is nothing to draw over.
+   */
+  showMatchFailure(failure: { title: string; detail: string; action: string }): void;
   onQuitToTitle(cb: () => void): void;
   /**
    * The touch-only pause button. Separate from the keyboard hotkey because it is an
@@ -1124,6 +1132,10 @@ export type HudFrameKey =
  * would outlive the session that installed it.
  */
 export type RouteHudKey =
+  // `showMatchFailure` is the SHELL's (issue #325): it is drawn over the Main Menu when a
+  // match failed to start, which is a route-level event by definition -- there is no
+  // session to own it, because failing to create one is what happened.
+  | 'showMatchFailure'
   | 'setLevelSelect' | 'onLevelSelect' | 'setContinueAvailable' | 'setCampaignRun'
   | 'onNewGame' | 'onCampaignOpen'
   | 'setMuted' | 'setVolume' | 'onMuteToggle' | 'onVolumeChange'
@@ -1178,8 +1190,8 @@ export type GameplayHud = Pick<Hud, GameplayHudKey>;
  * union non-`never` and the assignment below stops compiling -- which is the point: the
  * failure mode this guards against is not a wrong classification but an UNCLASSIFIED one,
  * silently reachable from everywhere, which is how it grew to the 67 members this
- * classification first had to sort. It reads 67 again today by coincidence rather than by
- * standstill: four Settings members arrived after that count (issue #289's motion pair and
+ * classification first had to sort. It reads 68 since issue #325's `showMatchFailure`; it
+ * had read 67 by coincidence rather than standstill (issue #289's motion pair and
  * issue #540's quality pair), and issue #324's step S6 took five status members away and
  * gave back one. `hud-ownership.test.ts` is where the number is asserted, beside the
  * arithmetic that produced it.
@@ -1961,6 +1973,26 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--slab ui-btn--danger hud-confirm-accept" type="button">Start new campaign</button>
       </div>
     </div>
+    <!-- THE MATCH-FAILURE ALERT (issue #325, owner ruling 2026-09-11). A match that fails
+         to start for a TRANSIENT reason no longer replaces the page: the Main Menu behind
+         this overlay is working, and throwing it away to recover from one match was the
+         wrong trade. A FATAL cause still replaces the page -- see startup-failure.ts's
+         'presentation', which decides that from the cause rather than the call site.
+
+         An 'alertdialog' with ONE action, not a second confirmation. '.hud-confirm' above
+         is a bespoke two-button question with a hardcoded title, and generalising it into
+         a dialog primitive is issue #327's, so this is its own overlay rather than a
+         widening of that one. What it shares is the mechanism: an 'overlay' layer, so
+         'navigation.ts''s rule that a route may never be pushed over one keeps a menu
+         button from opening a pane underneath an error nobody has acknowledged.
+
+         Title and body are written at open time from the 'StartupFailure' the caller
+         classified -- the HUD does not decide what went wrong, and does not know. -->
+    <div class="hud-alert hud-alert--hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="hud-alert-title" aria-describedby="hud-alert-body">
+      <h1 id="hud-alert-title" class="hud-alert-title"></h1>
+      <p class="hud-alert-body" id="hud-alert-body"></p>
+      <button class="ui-btn ui-btn--slab hud-alert-dismiss" type="button"></button>
+    </div>
     <!-- DEVELOPER TOOLS (issue #243), the shell only: entering, recognising, reopening and
          leaving developer mode. Registry-generated controls, presets, the gallery and
          runtime actions are all explicitly out of this issue's scope and land later, which
@@ -2110,6 +2142,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const devToolsBackBtn = el.querySelector('.hud-devtools-back') as HTMLButtonElement;
   const devBadge = el.querySelector('.hud-devbadge') as HTMLButtonElement;
   const confirmView = el.querySelector('.hud-confirm') as HTMLElement;
+  const alertView = el.querySelector('.hud-alert') as HTMLElement;
+  const alertTitleEl = el.querySelector('.hud-alert-title') as HTMLElement;
+  const alertBodyEl = el.querySelector('.hud-alert-body') as HTMLElement;
+  const alertDismissBtn = el.querySelector('.hud-alert-dismiss') as HTMLButtonElement;
   const confirmBodyEl = el.querySelector('.hud-confirm-body') as HTMLElement;
   const confirmAcceptBtn = el.querySelector('.hud-confirm-accept') as HTMLButtonElement;
   const confirmCancelBtn = el.querySelector('.hud-confirm-cancel') as HTMLButtonElement;
@@ -2769,6 +2805,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const ABOUT_SURFACE: Surface = { el: aboutView, hidden: 'hud-about--hidden' };
   const DEVTOOLS_SURFACE: Surface = { el: devToolsView, hidden: 'hud-devtools--hidden' };
   const CONFIRM_SURFACE: Surface = { el: confirmView, hidden: 'hud-confirm--hidden' };
+  const ALERT_SURFACE: Surface = { el: alertView, hidden: 'hud-alert--hidden' };
   /**
    * The two surfaces `setState` moves between that are NOT in the panel family, plus the
    * backdrop underneath them (issue #317's shell-owned ground).
@@ -3192,6 +3229,34 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       });
     } else {
       closeSurface(CONFIRM_SURFACE);
+    }
+  }
+
+  /**
+   * The match-failure alert (issue #325). Its title, body and action label all come from
+   * the `StartupFailure` the caller classified: the HUD renders what it is told and has no
+   * opinion about what went wrong, the same split `startup-failure.ts` keeps between the
+   * classification and the DOM.
+   *
+   * `pending` is written before the surface opens, so the text is in the element BEFORE
+   * `alertdialog` becomes visible -- an assertive dialog that gains its content after it
+   * gains its role is not reliably announced, the same ordering `boot.ts`'s page state
+   * documents for its own live region.
+   */
+  let pendingAlert: { title: string; detail: string; action: string } | null = null;
+
+  function showAlert(show: boolean): void {
+    if (show) {
+      swapSurface(openSurface(), ALERT_SURFACE, () => {
+        if (pendingAlert !== null) {
+          alertTitleEl.textContent = pendingAlert.title;
+          alertBodyEl.textContent = pendingAlert.detail;
+          alertDismissBtn.textContent = pendingAlert.action;
+        }
+        alertView.focus();
+      });
+    } else {
+      closeSurface(ALERT_SURFACE);
     }
   }
 
@@ -3749,6 +3814,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       open: () => showDeveloperTools(true),
       close: () => showDeveloperTools(false),
     },
+    'match-failed': {
+      container: alertView,
+      open: () => showAlert(true),
+      close: () => showAlert(false),
+    },
     'confirm-new-campaign': {
       container: confirmView,
       open: () => showConfirmNewCampaign(true),
@@ -3764,7 +3834,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * A record rather than an `=== 'confirm-new-campaign'` check so a second overlay is one
    * row here and cannot be added by editing a condition that reads like a special case.
    */
-  const OVERLAY_LAYERS: ReadonlySet<HudLayerId> = new Set<HudLayerId>(['confirm-new-campaign']);
+  const OVERLAY_LAYERS: ReadonlySet<HudLayerId> = new Set<HudLayerId>([
+    'confirm-new-campaign',
+    'match-failed',
+  ]);
   const layers = createLayerStack<HudLayerId, HudSurface, HudRestore>();
 
   /**
@@ -4028,6 +4101,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleSettingsAboutOpen = (): void => {
     openLayer('about', settingsAboutBtn);
   };
+  const handleAlertDismiss = (): void => {
+    back();
+  };
+
   const handleAboutBack = (): void => {
     back();
   };
@@ -4095,6 +4172,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   settingsAboutBtn.addEventListener('click', blurIfPointer);
   aboutOpenBtn.addEventListener('click', handleAboutOpen);
   aboutOpenBtn.addEventListener('click', blurIfPointer);
+  alertDismissBtn.addEventListener('click', handleAlertDismiss);
+  alertDismissBtn.addEventListener('click', blurIfPointer);
   aboutBackBtn.addEventListener('click', handleAboutBack);
   aboutBackBtn.addEventListener('click', blurIfPointer);
   devToolsOpenBtn.addEventListener('click', handleDevToolsOpen);
@@ -5877,6 +5956,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     cleanupHide(aboutView, 'hud-about--hidden');
     cleanupHide(devToolsView, 'hud-devtools--hidden');
     cleanupHide(confirmView, 'hud-confirm--hidden');
+    cleanupHide(alertView, 'hud-alert--hidden');
     disarmReset();
     // ...and the layer stack with them (issue #318): a surface change is never a Back,
     // so every layer is dropped rather than popped, and the history mirror retires its
@@ -6420,6 +6500,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onStartRestart(cb: () => void): void {
       startRestartCbs.push(cb);
     },
+    showMatchFailure(failure: { title: string; detail: string; action: string }): void {
+      pendingAlert = failure;
+      // Opened with NO opener element: there is no button that "led here" -- the player
+      // pressed Start and the match failed -- so `restoreFocus` falls through to the
+      // surface's own container focus, which is what `openLayer` already does for a
+      // programmatic open. Passing the Start button would send focus back to a control
+      // that may no longer be shown.
+      openLayer('match-failed', null);
+    },
     onQuitToTitle(cb: () => void): void {
       quitCbs.push(cb);
     },
@@ -6740,6 +6829,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       settingsAboutBtn.removeEventListener('click', blurIfPointer);
       aboutOpenBtn.removeEventListener('click', handleAboutOpen);
       aboutOpenBtn.removeEventListener('click', blurIfPointer);
+      alertDismissBtn.removeEventListener('click', handleAlertDismiss);
+      alertDismissBtn.removeEventListener('click', blurIfPointer);
       aboutBackBtn.removeEventListener('click', handleAboutBack);
       aboutBackBtn.removeEventListener('click', blurIfPointer);
       devToolsOpenBtn.removeEventListener('click', handleDevToolsOpen);

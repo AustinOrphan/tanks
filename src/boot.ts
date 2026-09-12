@@ -7,6 +7,7 @@ import {
   type FailurePoint,
 } from './game/startup-failure';
 import type { RouteHost, SessionRequests } from './game/route-host';
+import type { Hud } from './game/hud';
 
 /**
  * Everything main.ts does, with its collaborators handed in.
@@ -150,8 +151,38 @@ export function boot(deps: BootDeps): void {
    * inside a HUD click handler, long after `boot()` returned, which is a boundary that
    * did not have to exist while the only session was the eager one.
    */
+  /**
+   * The shell's alert surface, once there is one (issue #325).
+   *
+   * A `let` assigned after `createRouteHost` returns, exactly like `sessions` below and for
+   * the same reason: `showFailure` is defined before the host exists and is CALLED after,
+   * and the two failure paths differ in whether a host is there to draw on. `null` is the
+   * honest state during boot -- a failure then has no working shell to overlay, which is
+   * also why every boot state's `presentation` is `page`.
+   */
+  let overlayHost: Pick<Hud, 'showMatchFailure'> | null = null;
+
   const showFailure = (err: unknown, at: FailurePoint = 'boot'): void => {
     const state = classifyStartupFailure(err, at);
+
+    // OVERLAY OR PAGE, decided by the classified state rather than by this call site
+    // (issue #325, owner ruling 2026-09-11). A transient match failure keeps the working
+    // shell and blocks over it; a FATAL one -- the renderer is absent, so every later
+    // match fails identically -- still replaces the page, because handing the player back
+    // a Main Menu would only invite them to prove it again.
+    //
+    // Guarded on the route host EXISTING, not merely on the presentation: a boot failure
+    // can be classified before `createRouteHost` has returned, and `routeHost` is a
+    // `const` assigned further down that this closure reads only when a click runs. The
+    // page path is the safe fallback in both senses -- it needs nothing but the root.
+    if (state.presentation === 'overlay' && overlayHost !== null) {
+      overlayHost.showMatchFailure(state);
+      // Reported on BOTH paths, and last on both, for the same reason: the player-facing
+      // copy says nothing technical, so this is the only place the cause survives.
+      deps.reportError(err);
+      return;
+    }
+
     deps.root.innerHTML = '';
 
     const page = document.createElement('div');
@@ -313,6 +344,12 @@ export function boot(deps: BootDeps): void {
     // reboot suites in boot.test.ts still drive them through `boot()`, deliberately:
     // tests that predate the extraction and still pass are what proves it preserved
     // the stale-capture, fresh-canvas and callback-identity properties they pin.
+    // The shell can now be drawn over, so a transient match failure has somewhere to go
+    // other than the whole page (issue #325). Assigned HERE rather than at construction so
+    // the window before the HUD exists keeps the page fallback: `requestStart` is reachable
+    // during it, and an overlay on a shell that is not up yet would draw on nothing.
+    overlayHost = routeHost.hud;
+
     sessions = createGameSessionHost({
       root: deps.root,
       bootCanvas: deps.bootCanvas,

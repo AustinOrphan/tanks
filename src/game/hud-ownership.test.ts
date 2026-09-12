@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 /**
  * The boundary issue #324 draws, measured against the tree rather than asserted in prose.
  *
- * `hud.ts` classifies all 67 `Hud` members into `HudFrameKey` / `RouteHudKey` /
+ * `hud.ts` classifies all 68 `Hud` members into `HudFrameKey` / `RouteHudKey` /
  * `GameplayHudKey`, and a type-level guard there already fails the build if a member is
  * added without an owner. That guard cannot see CALL SITES, though, and call sites are
  * where the actual violation lives: `loop.ts` -- the gameplay session -- reached straight
@@ -52,7 +52,7 @@ const SESSION_REACHES_ROUTE_UI: Readonly<Record<string, string>> = {};
 /**
  * The `hud.ts` types that carry APPLICATION-ROUTE reach, which `loop.ts` may not name.
  *
- * `Hud` is the whole 67-member interface and `RouteHud` is the route-owned `Pick` of it;
+ * `Hud` is the whole 68-member interface and `RouteHud` is the route-owned `Pick` of it;
  * either one in the session's hands puts the Settings sliders, the Levels grid and the
  * Records tables back within reach. The gameplay vocabulary (`GameplayHud`,
  * `GameplayStatus`, `VersusStock`) and the frame's `HudSurface` are deliberately not
@@ -149,8 +149,11 @@ describe('HUD ownership boundary (issue #324)', () => {
       'showToast',
     ]);
     expect([...route].filter((k) => frame.has(k))).toEqual([]);
-    // Counts stated beside the population they came from: 67 members, of which showToast
-    // is counted twice, so the roles sum to 68. Four FEWER than the 72 that stood before
+    // Counts stated beside the population they came from: 68 members, of which showToast
+    // is counted twice, so the roles sum to 69. Issue #325 added ONE, `showMatchFailure`,
+    // and it is route-owned: it is drawn over the Main Menu when a match FAILED to start,
+    // so there is no session to own it -- failing to create one is the event.
+    // Four FEWER than the 72 that stood before
     // issue #324's step S6, and the arithmetic is the whole of that step: five per-kind
     // status members (`setLives`, `setEnemiesRemaining`, `setLevel`, `setSessionKind`,
     // `setVersusStocks`) left, one discriminated `setStatus` arrived, and every one of
@@ -159,7 +162,7 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Growth here is not automatically a regression and neither is a fall: what these
     // numbers guard is that a member arrived or left through a diff someone read. The
     // assertion below is what pins that a session still cannot reach a route member.
-    expect(frame.size + route.size + gameplay.size).toBe(68);
+    expect(frame.size + route.size + gameplay.size).toBe(69);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 
