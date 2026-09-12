@@ -362,6 +362,37 @@ describe('hud: the motion toggle (issue #289)', () => {
     expect(toggle(root).textContent).toMatch(/reduced/i);
   });
 
+  it('puts the resolved policy on the HUD root, the only view the stylesheet has of it (issue #631)', () => {
+    // THE MECHANISM, not the label. Until issue #631 there was no CSS selector for the
+    // resolved preference at all, so hud.css keyed its reduced-motion rules off
+    // `@media (prefers-reduced-motion: reduce)` -- the raw OS query, which cannot see the
+    // in-app setting and disagreed with it in both directions.
+    //
+    // `transitionMs()` never needed a selector because a transition is a DURATION and can
+    // be driven to zero from TypeScript. A keyframe animation cannot. This class is the
+    // whole bridge, and a mutation that severs it (`reduced-motion-class-never-reaches-the-root`)
+    // SURVIVED until this test existed: every assertion in the suite was about the
+    // stylesheet's text, which stays perfectly correct while nothing ever matches it.
+    // `.hud`, not the container: `createHud` builds its own root inside whatever element it
+    // is handed, and that inner one is what every `.hud--*` selector in the stylesheet
+    // hangs off. Asserting on the container passes an element that never carries any HUD
+    // class at all -- which is how the first draft of this test failed for the wrong
+    // reason and, had the toggle been written against the container, would have PASSED for
+    // the wrong reason.
+    const { hud: h } = mount();
+    const hudEl = document.querySelector('.hud') as HTMLElement;
+    expect(hudEl, 'no .hud root to check').not.toBeNull();
+    expect(hudEl.classList.contains('hud--reduced-motion'), 'set before anyone asked').toBe(false);
+
+    h.setReducedMotion(true);
+    expect(hudEl.classList.contains('hud--reduced-motion'), 'the stylesheet cannot see the policy').toBe(true);
+
+    // Back off again -- a one-way toggle would leave a player who turned motion back on
+    // with a permanently still HUD, and is the likelier bug of the two.
+    h.setReducedMotion(false);
+    expect(hudEl.classList.contains('hud--reduced-motion'), 'the class never comes off').toBe(false);
+  });
+
   it('reports the RESOLVED policy on Match device, which is the state its own name cannot say', () => {
     // The owner's report is the case: with the device asking for reduced motion, a menu
     // that never animates and a control reading "Match device" leave nothing on screen to

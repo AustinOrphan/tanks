@@ -6271,14 +6271,14 @@
   {
     "id": "reduced-motion-block-returns-to-the-media-query",
     "file": "src/game/hud.css",
-    "find": ".hud--reduced-motion .hud-damage--hit {",
-    "replace": "@media (prefers-reduced-motion: reduce) { .hud-damage--hit {",
+    "find": ".hud--reduced-motion .hud-damage--hit {\n  animation: none;\n}",
+    "replace": "@media (prefers-reduced-motion: reduce) {\n  .hud-damage--hit { animation: none; }\n}",
     "expect": "killed",
     "expectFailures": 2,
     "tests": [
       "src/game/hud.css.test.ts",
       "src/game/menu-transition.test.ts"
     ],
-    "why": "Puts one rule back on the raw OS query. That is the whole defect issue #631 removed, reintroduced for a single cue -- and the disagreement runs in both directions: a player who chose `reduced` against an OS saying `full` keeps the full-screen damage flash, and one who chose `full` against an OS saying `reduce` loses it against their explicit choice. The second is the case `--ui-transition-duration`'s comment had warned about for transitions since issue #364. Killed by 2: the no-media-query assertion in menu-transition.test.ts and the population sweep, which stops seeing an answer for that cue."
+    "why": "Puts one rule back on the raw OS query. That is the whole defect issue #631 removed, reintroduced for a single cue -- and the disagreement runs in both directions: a player who chose `reduced` against an OS saying `full` keeps the full-screen damage flash, and one who chose `full` against an OS saying `reduce` loses it against their explicit choice. The second is the case `--ui-transition-duration`'s comment had warned about for transitions since issue #364. The replacement is BRACE-BALANCED on purpose. A first draft opened the media query without closing the rule it wrapped, which broke the whole stylesheet and killed 13 tests -- a kill for a syntax error rather than for the defect, which tells you nothing about whether the contract is guarded. Killed by the no-media-query assertion in menu-transition.test.ts and by the population sweep, which stops seeing an answer for that cue."
   }
 ]
