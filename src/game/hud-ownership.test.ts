@@ -173,7 +173,10 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Growth here is not automatically a regression and neither is a fall: what these
     // numbers guard is that a member arrived or left through a diff someone read. The
     // assertion below is what pins that a session still cannot reach a route member.
-    expect(frame.size + route.size + gameplay.size).toBe(77);
+    // Issue #246 adds TWO, both route-owned: `setDevConfigBase` (the page's own
+    // `location.search`, so the menu can carry a deep link through Apply) and
+    // `onDevConfigApply`. 78 members, showToast counted twice, so the roles sum to 79.
+    expect(frame.size + route.size + gameplay.size).toBe(79);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

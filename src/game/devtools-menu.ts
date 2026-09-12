@@ -226,7 +226,10 @@ export function renderDevConfigMenu(
         const row = rows.get(mc.control.field);
         if (!row) continue;
         const value = mc.value === null ? '' : String(mc.value);
-        row.value.textContent = value === '' ? ' — unset' : ` — ${value}`;
+        // A TOGGLE says its state on its own button, so repeating it beside the name would
+        // print "invincible — unset" over a button reading "Off" -- two words for one bit,
+        // and "unset" is the wrong one of them.
+        row.value.textContent = row.toggle ? '' : value === '' ? ' — unset' : ` — ${value}`;
         if (row.toggle) {
           const on = mc.value === true;
           setSelected(row.toggle, on);

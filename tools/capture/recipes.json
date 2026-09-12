@@ -1050,6 +1050,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.devtools.config",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.devtools.config"
+    },
+    "fixture": {
+      "id": "screen.devtools.config",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Developer Configuration",
+    "description": "The registry-driven developer configuration menu: presets, every parameter, the namespace and the URL.",
+    "altText": "Screenshot of the Tanks! developer configuration menu.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.devtools.controller-selftest",
     "producer": {
       "kind": "screen",

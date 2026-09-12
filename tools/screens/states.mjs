@@ -308,6 +308,27 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-devtools', '.hud-selftest-open', '.hud-devtools-back'],
   }),
   state({
+    id: 'screen.devtools.config',
+    title: 'Developer Configuration',
+    description:
+      'The registry-driven configuration menu: the six presets, every developer parameter ' +
+      'in its own group, the persistence namespace and the URL the selection means.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-devtools-open' },
+      { waitVisible: '.hud-devtools' },
+      { click: '.hud-devcfg-open' },
+      { waitVisible: '.hud-devcfg' },
+    ],
+    // `.hud-devcfg-url` is measured for its TEXT: it is what Apply navigates to and Copy
+    // copies, so a capture that showed the menu without it would not show the thing the
+    // whole pane is for. `.hud-devcfg-namespace` for the same reason -- it is the
+    // consequence that outlives the reload.
+    measure: ['.hud-devcfg', '.hud-devcfg-presets', '.hud-devcfg-group', '.hud-devcfg-namespace', '.hud-devcfg-url'],
+  }),
+  state({
     id: 'screen.devtools.controller-selftest',
     title: 'Controller Self-Test',
     description:

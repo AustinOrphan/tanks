@@ -1430,6 +1430,185 @@
   display: none;
 }
 
+/* ---- The developer configuration menu (issue #246) -------------------------------- */
+
+/* Its own pane, and `flex-start` from the start for the reason `.hud-selftest` is: this one
+   is seven groups of controls over a hundred buttons long, so it overflows on any viewport.
+   `.hud-devtools` still centres the main axis of its own scroll container -- issue #642 owns
+   that -- and a pane that never had the property cannot inherit the clip. */
+.hud-devcfg {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
+  overflow-y: auto;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+.hud-devcfg--hidden {
+  display: none;
+}
+
+.hud-devcfg-line {
+  margin: 0;
+  max-width: 60ch;
+  text-align: center;
+  opacity: 0.9;
+}
+
+/* Presets first: the fastest way to a working configuration is to take one whole. */
+.hud-devcfg-presets,
+.hud-devcfg-actions,
+.hud-devcfg-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--hud-space-2);
+}
+
+.hud-devcfg-groups {
+  width: 100%;
+  max-width: 60rem;
+}
+
+.hud-devcfg-group {
+  margin-block-end: var(--hud-space-6);
+}
+
+.hud-devcfg-controls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hud-devcfg-control {
+  padding: var(--hud-space-2);
+  margin-block-end: var(--hud-space-2);
+  border-radius: var(--hud-radius-md);
+  background: var(--hud-scrim-panel);
+}
+
+/* The parameter name carries the current value beside it, so a scan down the column reads
+   as "what is set" without opening anything. */
+.hud-devcfg-name {
+  margin: 0;
+  font-size: 0.95em;
+  color: var(--hud-text-bright);
+}
+
+.hud-devcfg-value {
+  font-weight: var(--hud-weight-normal);
+  opacity: 0.75;
+}
+
+.hud-devcfg-desc {
+  margin: 0 0 var(--hud-space-2);
+  max-width: 70ch;
+}
+
+/* The row is centred like its siblings; a 16-value row wraps rather than scrolling
+   sideways, which a controller cannot reach. */
+.hud-devcfg-row {
+  justify-content: flex-start;
+}
+
+/* The stepper arrows are square and sit before the value buttons, so a valued control reads
+   left to right as "less, more, clear". */
+.hud-devcfg-step {
+  min-width: var(--hud-control-min);
+}
+
+.hud-devcfg-notes {
+  list-style: none;
+  margin: var(--hud-space-2) 0 0;
+  padding: 0;
+}
+
+.hud-devcfg-notes--hidden {
+  display: none;
+}
+
+/* One line per note, in the model's own words. Coloured by REASON, and never by colour
+   alone -- each carries its own prefix from `DevConfigNote.detail`, so a forced-colours or
+   monochrome reader loses nothing. */
+.hud-devcfg-note {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+.hud-devcfg-note--rejected {
+  color: var(--hud-text-danger);
+}
+
+.hud-devcfg-note--gate-closed {
+  color: var(--hud-text-danger);
+}
+
+.hud-devcfg-note--bundle-forced,
+.hud-devcfg-note--context-inert,
+.hud-devcfg-note--inverted-default {
+  color: var(--hud-gold);
+}
+
+/* The namespace sits with the actions rather than in the body: it is a consequence of
+   pressing Apply, not a property of any one flag. */
+.hud-devcfg-namespace {
+  margin: 0;
+  max-width: 60ch;
+  text-align: center;
+}
+
+.hud-devcfg-unknown {
+  margin: 0;
+  max-width: 60ch;
+  text-align: center;
+  color: var(--hud-gold);
+}
+
+.hud-devcfg-unknown--hidden {
+  display: none;
+}
+
+/* The copy field: same shape and the same reason as the self-test's report field. */
+.hud-devcfg-copyfield {
+  width: 100%;
+  max-width: 60rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75em;
+  color: var(--hud-text);
+  background: var(--hud-scrim-panel);
+  border: 1px solid var(--hud-quiet-fill);
+  border-radius: var(--hud-radius-sm);
+  padding: var(--hud-space-2);
+}
+
+.hud-devcfg-copyfield--hidden {
+  display: none;
+}
+
+.hud-devcfg-copyfield:focus-visible {
+  outline: var(--hud-focus-width) solid var(--hud-focus-color);
+  outline-offset: var(--hud-focus-offset);
+}
+
+/* The URL, monospaced and wrapping: it is the thing Copy Link puts on the clipboard, and a
+   reader has to be able to check it before pressing Apply. */
+.hud-devcfg-url {
+  margin: 0;
+  max-width: 60rem;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75em;
+  opacity: 0.8;
+}
+
 /* THE CONTROLLER SELF-TEST PANE (issue #599). The pane geometry of its siblings with ONE
    deliberate difference: `justify-content: flex-start`, not `center`.
 
