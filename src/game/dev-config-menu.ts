@@ -148,3 +148,72 @@ export function cycleSelect(selection: DevSelection, control: DevControl, step =
   else out[control.field] = next;
   return out as DevSelection;
 }
+
+/**
+ * Step a valued control's number, with the PARSER deciding what is in range.
+ *
+ * The registry states each input's accepted shape as prose for a human -- "an integer 1-4",
+ * "a positive integer", "a 1-based index into the campaign, or the literal `sandbox`" -- and
+ * nothing machine-readable. A stepper needs bounds, and the obvious move is to write them
+ * down here, which duplicates knowledge `parseDevFlags` already owns and puts the menu one
+ * edit away from offering a value the game will refuse.
+ *
+ * So this proposes a candidate and asks the model. `explainDevConfig` reports a `rejected`
+ * note for a value the parser would not take, so a step that lands out of range is simply
+ * not taken. The bounds are therefore always exactly the parser's, and adding a flag or
+ * retuning a range needs no change here at all.
+ *
+ * `null` means unset; stepping up from unset starts at `from`, which is the first value the
+ * flag can hold rather than a guess -- and stepping down THROUGH it clears the control,
+ * because every one of these defaults to absent and an unreachable unset is a control that
+ * can never be put back.
+ */
+export function stepNumeric(
+  selection: DevSelection,
+  control: DevControl,
+  step: number,
+  from = 1,
+  base = '',
+): DevSelection {
+  const current = selection[control.field as keyof DevSelection] ?? null;
+  const out = { ...selection } as Record<string, unknown>;
+  if (current === null) {
+    if (step < 0) return selection;
+    out[control.field] = String(from);
+    return accepted(out as DevSelection, control, base) ? (out as DevSelection) : selection;
+  }
+  const n = Number(current);
+  if (!Number.isFinite(n)) return selection;
+  const next = n + step;
+  if (next < from && step < 0) {
+    delete out[control.field]; // stepping below the first value clears it
+    return out as DevSelection;
+  }
+  out[control.field] = String(next);
+  return accepted(out as DevSelection, control, base) ? (out as DevSelection) : selection;
+}
+
+/** Whether the model takes this selection's value for one field, asked rather than assumed. */
+function accepted(selection: DevSelection, control: DevControl, base: string): boolean {
+  const state = explainDevConfig(devSearchFrom(selection, base));
+  return !state.notes.some((n) => n.field === control.field && n.reason === 'rejected');
+}
+
+/**
+ * Set a valued control to one of the literals its parser accepts beside a number --
+ * `level=sandbox`, `walls=random:8` -- or clear it.
+ *
+ * Kept separate from `stepNumeric` because these are not points on the same axis: `sandbox`
+ * is not a bigger level and `random:8` is not more walls than 8. The menu offers them as
+ * their own control rather than as a stop a stepper walks through.
+ */
+export function setLiteral(
+  selection: DevSelection,
+  control: DevControl,
+  literal: string | null,
+): DevSelection {
+  const out = { ...selection } as Record<string, unknown>;
+  if (literal === null) delete out[control.field];
+  else out[control.field] = literal;
+  return out as DevSelection;
+}

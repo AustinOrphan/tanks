@@ -4,6 +4,8 @@ import {
   resetSelection,
   toggleField,
   cycleSelect,
+  stepNumeric,
+  setLiteral,
 } from './dev-config-menu';
 import {
   devControls,
@@ -181,5 +183,75 @@ describe('the six presets', () => {
 
   it('is exposed in the model order the issue lists', () => {
     expect(devMenuView({}).presets.map((p) => p.id)).toEqual(DEV_PRESETS.map((p) => p.id));
+  });
+});
+
+describe('stepNumeric: the parser owns the bounds, not this module', () => {
+  it('walks `players` up to its ceiling and refuses to pass it', () => {
+    // The registry states "an integer 1-4" as PROSE. Writing 4 down here would duplicate
+    // what `parseDevFlags` already enforces and put the menu one edit away from offering a
+    // value the game refuses. Instead the step is proposed and the model asked, so this
+    // passes for whatever the parser's real ceiling is.
+    const players = controlFor('players');
+    let sel = {};
+    const seen: (string | null)[] = [];
+    for (let i = 0; i < 8; i++) {
+      sel = stepNumeric(sel, players, 1);
+      seen.push((sel as Record<string, string>).players ?? null);
+    }
+    expect(seen[0]).toBe('1');
+    const top = seen[seen.length - 1];
+    expect(Number(top), 'never left the accepted range').toBeGreaterThanOrEqual(1);
+    // It stopped rather than running away: the last few samples are all the same value.
+    expect(seen[seen.length - 1]).toBe(seen[seen.length - 2]);
+    // ...and that value is genuinely accepted.
+    expect(
+      devMenuView(sel).state.notes.filter((n) => n.field === 'players' && n.reason === 'rejected'),
+    ).toEqual([]);
+  });
+
+  it('negative control: the ceiling is the PARSER’s, shown by a flag with a different one', () => {
+    // If the bound were hardcoded here, `bots` and `players` would stop at the same number.
+    // They do not -- bots accepts 0, players does not -- so this measures that the answer
+    // comes from the model.
+    const bots = controlFor('bots');
+    const players = controlFor('players');
+    const botsFromUnset = stepNumeric({}, bots, 1, 0);
+    const playersFromUnset = stepNumeric({}, players, 1, 1);
+    expect((botsFromUnset as Record<string, string>).bots).toBe('0');
+    expect((playersFromUnset as Record<string, string>).players).toBe('1');
+    expect(devMenuView(botsFromUnset).state.effective.bots).toBe(0);
+  });
+
+  it('clears the control when stepped below its first value, so unset stays reachable', () => {
+    const players = controlFor('players');
+    const one = stepNumeric({}, players, 1);
+    expect(one).toEqual({ players: '1' });
+    expect(stepNumeric(one, players, -1), 'must return to unset').toEqual({});
+  });
+
+  it('never mutates the selection it was given, on any path', () => {
+    const players = controlFor('players');
+    for (const before of [{}, { players: '1' }, { players: '4' }]) {
+      const copy = { ...before };
+      stepNumeric(before, players, 1);
+      stepNumeric(before, players, -1);
+      expect(before).toEqual(copy);
+    }
+  });
+});
+
+describe('setLiteral', () => {
+  it('sets the literal a parser takes beside a number, and clears it again', () => {
+    // `sandbox` is not a bigger level and `random:8` is not more walls than 8, so these are
+    // their own control rather than stops a stepper walks through.
+    const level = controlFor('level');
+    const sel = setLiteral({}, level, 'sandbox');
+    expect(sel).toEqual({ level: 'sandbox' });
+    expect(
+      devMenuView(sel).state.notes.filter((n) => n.field === 'level' && n.reason === 'rejected'),
+      'the parser must accept the literal this offers',
+    ).toEqual([]);
+    expect(setLiteral(sel, level, null)).toEqual({});
   });
 });
