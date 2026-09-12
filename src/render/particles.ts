@@ -4,6 +4,19 @@ import type { SimEvent } from '../sim/events';
 export interface ParticleSystem {
   spawn(events: SimEvent[]): void;
   update(dt: number): void;
+  /**
+   * The resolved motion policy (issue #651). `grep reducedMotion` returned nothing in this
+   * file before it: sparks, explosions and debris ignored the preference entirely.
+   *
+   * The reduced treatment is `death-pulse.ts`'s, which is the precedent for this whole
+   * surface: keep the fade, drop the flight. A burst still APPEARS where the event happened,
+   * in the right colour and count, and still fades and shrinks on the same clock -- so "a
+   * shell hit here" survives -- while the debris does not fly outward or fall under gravity.
+   *
+   * Not "spawn nothing": an event with no particles at all deletes the feedback rather than
+   * calming it, which is the trap #652 records for the cues that rest invisible.
+   */
+  setReducedMotion(on: boolean): void;
   dispose(): void;
 }
 
@@ -122,6 +135,8 @@ export function createParticleSystem(scene: THREE.Scene, rng: () => number = Mat
     }
   }
 
+  let reducedMotion = false;
+
   function update(dt: number): void {
     for (let i = active.length - 1; i >= 0; i--) {
       const p = active[i];
@@ -130,15 +145,24 @@ export function createParticleSystem(scene: THREE.Scene, rng: () => number = Mat
         recycle(p, i);
         continue;
       }
-      p.vel.y += GRAVITY * dt;
-      p.mesh.position.x += p.vel.x * dt;
-      p.mesh.position.y += p.vel.y * dt;
-      p.mesh.position.z += p.vel.z * dt;
-      if (p.mesh.position.y < 0.02) p.mesh.position.y = 0.02;
+      // The flight, and only the flight (issue #651). Lifetime, opacity and scale below are
+      // untouched, so a calmed burst recycles on exactly the frame a full one would -- the
+      // same "nothing else about the effect's lifetime changes" death-pulse states.
+      if (!reducedMotion) {
+        p.vel.y += GRAVITY * dt;
+        p.mesh.position.x += p.vel.x * dt;
+        p.mesh.position.y += p.vel.y * dt;
+        p.mesh.position.z += p.vel.z * dt;
+        if (p.mesh.position.y < 0.02) p.mesh.position.y = 0.02;
+      }
       const k = p.life / p.maxLife;
       p.mesh.material.opacity = k;
       p.mesh.scale.setScalar(p.baseScale * (0.4 + 0.6 * k));
     }
+  }
+
+  function setReducedMotion(on: boolean): void {
+    reducedMotion = on;
   }
 
   function dispose(): void {
@@ -155,5 +179,5 @@ export function createParticleSystem(scene: THREE.Scene, rng: () => number = Mat
     geo.dispose();
   }
 
-  return { spawn, update, dispose };
+  return { spawn, update, setReducedMotion, dispose };
 }

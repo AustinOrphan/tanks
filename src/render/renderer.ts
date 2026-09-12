@@ -310,6 +310,13 @@ export function createRenderer(
       barrelRecoil.setReducedMotion(on);
       muzzleSmoke?.setReducedMotion(on);
       blockedFirePips?.setReducedMotion(on);
+      // Issue #651's two: the entity layer (spawn frames, the mine fuse, the animated skin's
+      // drift) and the particle system (the flight of sparks, explosions and debris). Both
+      // were outside the policy entirely until then, and both are unconditional -- unlike
+      // the blocked-fire trio above, which exist only under `?dev=1`, and muzzle smoke,
+      // which is null on the `low` preset.
+      entities.setReducedMotion(on);
+      particles.setReducedMotion(on);
     },
     dispose,
   };
