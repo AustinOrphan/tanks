@@ -269,8 +269,13 @@ export function stepMultiset(
   base = '',
 ): DevSelection {
   const counts = new Map(multisetCounts(selection, control));
+  // NO FLOOR GUARD, and that is deliberate rather than an omission. A count below zero
+  // cannot persist: the counts are re-derived from the parameter STRING on every call, and
+  // the rebuild below emits nothing for a kind whose count is not positive, so the string a
+  // negative would produce is the same one zero produces. A `next < 0` early return was
+  // written here first and removed when its mutation SURVIVED -- it was unobservable, which
+  // is what dead code looks like from the outside.
   const next = (counts.get(value) ?? 0) + delta;
-  if (next < 0) return selection;
   counts.set(value, next);
   const parts: string[] = [];
   for (const v of control.values ?? []) {

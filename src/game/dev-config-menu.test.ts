@@ -285,10 +285,18 @@ describe('stepMultiset', () => {
     expect(stepMultiset(one, c, kind, -1)).toEqual({});
   });
 
-  it('never goes below zero for a kind', () => {
+  it('cannot go below zero for a kind, by construction rather than by a guard', () => {
+    // The counts are re-derived from the parameter STRING each call and the rebuild emits
+    // nothing for a non-positive count, so a negative has nowhere to live. An explicit floor
+    // guard was written here first and removed when its mutation survived -- unobservable
+    // code that reads as a safety check is worse than none, because it invites trust.
     const c = tanks();
     const kind = (c.values ?? [])[0];
     expect(stepMultiset({}, c, kind, -1)).toEqual({});
+    const one = stepMultiset({}, c, kind, 1);
+    expect(stepMultiset(stepMultiset(one, c, kind, -1), c, kind, -1)).toEqual({});
+    // ...and the count reads zero rather than a negative, on the way back up.
+    expect(multisetCounts(stepMultiset({}, c, kind, -1), c).get(kind)).toBe(0);
   });
 
   it('counts each kind separately', () => {
