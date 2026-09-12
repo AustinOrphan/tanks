@@ -1974,10 +1974,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       </div>
     </div>
     <!-- THE MATCH-FAILURE ALERT (issue #325, owner ruling 2026-09-11). A match that fails
-         to start for a TRANSIENT reason no longer replaces the page: the Main Menu behind
-         this overlay is working, and throwing it away to recover from one match was the
+         to start for a TRANSIENT reason no longer replaces the page: the shell behind it
+         survives, and throwing a working one away to recover from a single match was the
          wrong trade. A FATAL cause still replaces the page -- see startup-failure.ts's
          'presentation', which decides that from the cause rather than the call site.
+
+         'Overlay' here means the LAYER STACK, not visual stacking. Like every other layer
+         in this file -- the replace-run confirmation included -- opening this one swaps
+         the surface beneath it out; measured, '.hud-panel' reports a 0x0 box while it is
+         open. What the overlay kind buys is navigation.ts's rule that a route may never
+         be pushed over one, plus a dismiss that returns to the menu in a single press
+         instead of a page reload.
 
          An 'alertdialog' with ONE action, not a second confirmation. '.hud-confirm' above
          is a bespoke two-button question with a hardcoded title, and generalising it into

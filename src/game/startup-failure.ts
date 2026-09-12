@@ -102,6 +102,14 @@ export interface StartupFailure {
    * `overlay` keeps the working shell and blocks over it. Correct only when the shell IS
    * working and the failure might not repeat, which after this change is exactly one state:
    * a match that failed for a reason that is not the renderer being absent.
+   *
+   * A KNOWN RESIDUAL, recorded rather than papered over. `UnsupportedRenderError` is the
+   * only typed cause, so a renderer that gets no context DURING CONSTRUCTION -- as opposed
+   * to failing the probe -- arrives here as a bare `Error` and is classified transient,
+   * even though every later match will fail identically. The copy is written not to vouch
+   * for the rest, so it is not a lie, but the player can dismiss and retry forever. Typing
+   * that failure so the classifier can call it fatal is the fix, and it belongs with
+   * `session-host.ts`/`startGame` rather than here.
    */
   readonly presentation: 'page' | 'overlay';
 }
@@ -159,12 +167,18 @@ export const STARTUP_FAILURES: Readonly<Record<StartupFailureKind, StartupFailur
       // disproves on their next click. Naming the match without vouching for the rest is
       // true in both cases.
       // The copy CHANGED with the presentation (issue #325, 2026-09-11 ruling). It used to
-      // end "Reload to get back to the menu and try again", which was the right advice
-      // while this state replaced the page. Shown over a menu that is still there, telling
-      // the player to reload would throw away a working shell to recover from one match.
+      // end "Reload to get back to the menu and try again", which was right while this
+      // state replaced the page; the shell now survives, so telling the player to reload
+      // would throw away a working one to recover from a single match.
+      //
+      // It does NOT say the menu is visible, and an earlier draft did. The HUD's layer
+      // stack SWAPS surfaces -- every layer hides the one beneath it, the existing
+      // confirmation included -- so what "overlay" buys is `navigation.ts`'s rule that a
+      // route may never be pushed over one, not visual stacking. Measured: with the alert
+      // open, `.hud-panel` reports a 0x0 box. The claim to make is about the button, which
+      // returns to the menu in one press and without a reload.
       detail:
-        'Something went wrong while loading the match. The menu is still here, so you can ' +
-        'try again or change the setup.',
+        'Something went wrong while loading the match. Go back to the menu and try again.',
       action: 'Back to menu',
       // The ONE overlay state. Reached only when the shell is up AND the cause is not the
       // renderer being unavailable -- see `classifyStartupFailure`, which checks the cause
