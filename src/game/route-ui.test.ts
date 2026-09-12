@@ -113,6 +113,8 @@ interface Fixture {
    */
   takeFrame: () => (() => void) | null;
   cancelledFrames: number[];
+  /** Every key and value in the page's storage, so a WRITE anywhere is visible at once. */
+  storageSnapshot: () => Record<string, string>;
 }
 
 function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
@@ -279,6 +281,14 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
       return cb;
     },
     cancelledFrames: box.cancelledFrames,
+    storageSnapshot: () => {
+      const out: Record<string, string> = {};
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (key !== null) out[key] = storage.getItem(key) ?? '';
+      }
+      return out;
+    },
   };
 }
 
@@ -755,5 +765,26 @@ describe('the controller self-test poll is scoped to the pane (issue #599)', () 
     f.fire('onControllerSelfTestClose');
     (dispatched as () => void)();
     expect(f.pendingFrames(), 'the late frame must not start the chain again').toBe(0);
+  });
+
+  it('changes NOTHING by being opened, polled and closed -- no store write, no HUD setter but its own', () => {
+    // The acceptance criterion stated as a measurement: "the diagnostic does not alter
+    // assignments or gameplay configuration by opening it." True by construction -- neither
+    // `gamepad-diagnostics.ts` nor `controller-selftest.ts` holds a reference to a store, an
+    // assignment or a setting -- and construction is exactly the kind of claim that stops
+    // being true the first time someone wires "remember the last pad" through here.
+    //
+    // Both halves matter. The storage snapshot catches a write to any store on the page;
+    // the HUD-call list catches a paint that reaches some OTHER surface, which no store
+    // would record. `setPadDiagnostics` is the one call this feature is allowed to make.
+    const f = fixture();
+    const before = f.storageSnapshot();
+    const callsBefore = f.hudCalls.length;
+    f.fire('onControllerSelfTestOpen');
+    f.runFrame();
+    f.runFrame();
+    f.fire('onControllerSelfTestClose');
+    expect(f.storageSnapshot(), 'opening the self-test wrote to a store').toEqual(before);
+    expect(new Set(f.hudCalls.slice(callsBefore))).toEqual(new Set(['setPadDiagnostics']));
   });
 });
