@@ -510,38 +510,36 @@ describe('menu transitions in hud.css', () => {
     }
   });
 
-  it('states no transition inside a prefers-reduced-motion block', () => {
-    // The constraint `--ui-transition-duration`'s own comment sets out: transitions follow
-    // the RESOLVED policy (`effective-settings.ts`), not the raw media query, because a
-    // player who chose `full` motion against an OS asking for `reduce` must still get
-    // their transitions. Anything restated inside that block would be a second, blind
-    // decision about the same thing -- and would be wrong for that player. It covers the
-    // shipped `ui-surface-*` rules too now, not only the flagged alternatives: the
-    // movement this is really about is what every player gets.
-    const blocks = [...text.matchAll(/@media\s*\(prefers-reduced-motion[^{]*\{/g)];
-    // Vacuity guard: the block this is about really is in the file. With none, "nothing
-    // appears inside one" is trivially true and this test measures nothing.
-    expect(blocks.length, 'no prefers-reduced-motion block to check against').toBeGreaterThan(0);
-    for (const block of blocks) {
-      // Walk to the matching close brace so nested rules inside the query are covered.
-      let depth = 0;
-      let i = block.index + block[0].length - 1;
-      for (; i < text.length; i++) {
-        if (text[i] === '{') depth += 1;
-        else if (text[i] === '}') {
-          depth -= 1;
-          if (depth === 0) break;
-        }
-      }
-      const body = text.slice(block.index, i);
-      expect(body, 'a menu transition was restated for the media query').not.toContain(
+  it('keys reduced motion off the RESOLVED policy, never the raw media query', () => {
+    // This test used to assert "no transition is restated inside the
+    // prefers-reduced-motion block", with a vacuity guard requiring such a block to exist.
+    // Issue #631 removed the block: keyframe animations now hang off `.hud--reduced-motion`
+    // like transitions already hung off `transitionMs()`, so the stylesheet has ONE view of
+    // the preference instead of two that disagreed in both directions.
+    //
+    // The old assertion is kept as the second half, because its reasoning outlived its
+    // subject -- a menu transition restated for a motion selector is still a second place
+    // to keep in step. What changes is that the first half is now the stronger claim: there
+    // is no raw-query block left to restate anything into.
+    expect(text, 'a prefers-reduced-motion media query is back in hud.css').not.toMatch(
+      /@media[^{]*prefers-reduced-motion/,
+    );
+
+    // Vacuity guard, inverted from the old one: with no reduced-motion rules at all, "the
+    // query is absent" would be trivially true and this test would pass on a stylesheet
+    // that had simply dropped the feature.
+    const rules = [...text.matchAll(/\.hud--reduced-motion\b/g)];
+    expect(rules.length, 'no .hud--reduced-motion rules to check against').toBeGreaterThan(3);
+
+    // The surviving half of the original assertion.
+    for (const m of text.matchAll(/\.hud--reduced-motion[^{]*\{/g)) {
+      const selector = m[0];
+      expect(selector, 'a menu transition was restated for the motion selector').not.toContain(
         'hud--menu-transition-',
       );
-      expect(body, 'a surface transition was restated for the media query').not.toContain(
+      expect(selector, 'a surface transition was restated for the motion selector').not.toContain(
         'ui-surface-',
       );
-      // The walk really did capture a body, rather than stopping on the opening brace.
-      expect(body.length).toBeGreaterThan(block[0].length);
     }
   });
 });
