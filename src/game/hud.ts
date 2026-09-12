@@ -1010,14 +1010,6 @@ export interface Hud {
    */
   setPadDiagnostics(pads: readonly PadDiagnostic[]): void;
   /**
-   * The page's own `location.search` (issue #246), so the configuration menu can carry the
-   * NON-developer half of a real URL through Apply -- a deep link, a campaign tag, a
-   * router's query. Pushed rather than read here: `hud.ts` does not touch globals.
-   */
-  setDevConfigBase(search: string): void;
-  /** Apply and Reload was pressed; the argument is the URL the menu was previewing. */
-  onDevConfigApply(cb: (search: string) => void): void;
-  /**
    * The self-test pane just became visible/hidden -- the ONE chokepoint for both
    * transitions, same shape and same reason as `onControllersOpen`/`onControllersClose`:
    * `route-ui.ts` owns a per-frame poll whose lifetime must match the pane's.
@@ -1230,7 +1222,6 @@ export type RouteHudKey =
   | 'onControllersOpen' | 'onControllersClose'
   | 'onSettingsOpen' | 'onSettingsClose'
   | 'setPadDiagnostics' | 'onControllerSelfTestOpen' | 'onControllerSelfTestClose'
-  | 'setDevConfigBase' | 'onDevConfigApply'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
   | 'setRelaunchTarget';
 
@@ -1405,6 +1396,22 @@ export interface HudOptions {
    * than a button that silently does nothing. `createBrowserDeps` binds the real one.
    */
   readonly exitDeveloperMode?: () => void;
+  /**
+   * The page's own `location.search`, so the configuration menu (issue #246) can carry the
+   * NON-developer half of a real URL through Apply -- a deep link, a campaign tag, a
+   * router's query. An option rather than a pushed value because it cannot change without a
+   * reload, and because that is how `exitDeveloperMode` above already takes the same fact.
+   */
+  readonly developerSearch?: string;
+  /**
+   * Navigate to a developer URL the menu built (issue #246). Bound in `createBrowserDeps`
+   * for the reason `exitDeveloperMode` is: the HUD may not touch `location`, and its absence
+   * from every injected HUD in a test is what keeps them off the History/Location APIs.
+   *
+   * Apply and Reload is hidden when this is absent, so a HUD that cannot navigate does not
+   * offer a button that would do nothing.
+   */
+  readonly applyDeveloperConfig?: (search: string) => void;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -4401,12 +4408,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * non-developer half of a real URL (a deep link, a router's query) survives Apply.
    */
   let devCfgSelection: DevSelection = {};
-  let devCfgBase = '';
+  const devCfgBase = opts.developerSearch ?? '';
   const devCfgControl = (field: string) => devControls().find((c) => c.field === field);
   function repaintDevConfig(): void {
     devCfgMenu.update(devMenuView(devCfgSelection, devCfgBase));
   }
-  const devCfgApplyCbs: Array<(search: string) => void> = [];
   const devCfgMenu: DevConfigMenuView = renderDevConfigMenu(
     devCfgBodyEl,
     {
@@ -4439,7 +4445,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         repaintDevConfig();
       },
       onApply: () => {
-        for (const cb of devCfgApplyCbs) cb(devCfgMenu.search());
+        opts.applyDeveloperConfig?.(devCfgMenu.search());
       },
       onReset: () => {
         devCfgSelection = resetSelection();
@@ -4458,7 +4464,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         void clipboard?.writeText(text).catch(() => {});
       },
     },
-    devMenuView({}, ''),
+    // The FIRST view takes the base too. Constructing with an empty one and relying on a
+    // later repaint is how a page's own query silently vanishes from the menu until
+    // something else happens to touch it.
+    devMenuView({}, devCfgBase),
   );
 
   const selfTest: ControllerSelfTestView = renderControllerSelfTest(selfTestListEl);
@@ -4582,6 +4591,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   devBadge.classList.toggle('hud-devbadge--hidden', !developerMode);
   devToolsOpenBtn.classList.toggle('hud-devtools-open--hidden', !developerMode);
   devToolsExitBtn.hidden = !opts.exitDeveloperMode;
+  // Same rule as Exit above: a button that cannot do its job is not offered. Reset and Copy
+  // stay -- they change the menu and the clipboard, neither of which needs `location`.
+  (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =
+    !opts.applyDeveloperConfig;
   settingsMuteBtn.addEventListener('click', handleMute);
   settingsMuteBtn.addEventListener('click', blurIfPointer);
   settingsVolumeEl.addEventListener('input', handleSettingsVolume);
@@ -7106,13 +7119,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     setPadDiagnostics(pads: readonly PadDiagnostic[]): void {
       selfTest.update(pads);
     },
-    setDevConfigBase(search: string): void {
-      devCfgBase = search;
-      repaintDevConfig();
-    },
-    onDevConfigApply(cb: (search: string) => void): void {
-      devCfgApplyCbs.push(cb);
-    },
+
     onControllerSelfTestOpen(cb: () => void): void {
       selfTestOpenCbs.push(cb);
     },

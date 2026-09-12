@@ -1357,8 +1357,6 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onSettingsClose: (cb: () => void) => {
           onSettingsClose = cb;
         },
-        setDevConfigBase: () => {},
-        onDevConfigApply: () => {},
         setPadDiagnostics: (pads: readonly PadDiagnostic[]) => {
           rec.padDiagnosticsPushes.push([...pads]);
         },
