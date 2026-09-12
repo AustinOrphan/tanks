@@ -402,6 +402,68 @@ export async function computeAngleHash(bands?: AngleBandResult[]): Promise<strin
  */
 export const ANGLE_HASH = 'd5d81535dc54cfae47ae7bc6db940544182454f2d5788c59b48ce663697351ec';
 
+/**
+ * The architectures on which `ANGLE_HASH` has been DELIBERATELY VERIFIED (issue #484).
+ *
+ * `ANGLE_HASH` was measured equal, run to run, across three real Node/V8 builds -- 20.19.0,
+ * 22.13.0 and 24.15.0 -- all on x86-64. No arm64 golden has ever been measured, and one is
+ * NOT to be added merely to make a machine green: the owner's ruling on #484 requires a
+ * concrete portability need, repeated verified measurements, and a documented maintenance
+ * story before a second architecture pin exists.
+ *
+ * A VERIFIED ARCHITECTURE PIN and an UNVERIFIED DIAGNOSTIC MEASUREMENT are different
+ * claims, and this list is the line between them. On a verified architecture the hash is a
+ * hard assertion: a difference is a regression in the sweep, the hashing, or V8 itself. On
+ * an unverified one the same probe runs and reports, but a difference from the x86-64
+ * golden is a FINDING about native math, not a defect in this repository -- reported on
+ * arm64 as a stable hash that simply is not this one. Failing there would make
+ * `verify:quick` permanently red on that machine, which is worse than useless: it teaches a
+ * reader to dismiss the run, and a real regression then hides behind the expected failure.
+ *
+ * Values are `process.arch` strings. This module is loaded straight into a BROWSER by
+ * tools/baseline/page.html, so it must never read `process` itself -- the architecture is
+ * passed IN, by the Node-only caller that has one. Same reason this file imports nothing
+ * but web standards.
+ */
+export const VERIFIED_ANGLE_ARCHITECTURES: readonly string[] = ['x64'];
+
+/** What a measured native fingerprint means on a given architecture. */
+export type AngleVerdict =
+  /** A verified architecture produced the pinned hash. */
+  | { readonly kind: 'verified-match' }
+  /** A verified architecture produced something else: a regression, and a hard failure. */
+  | { readonly kind: 'verified-mismatch'; readonly expected: string; readonly actual: string }
+  /** No golden exists for this architecture. Report, do not fail -- whatever the hash is. */
+  | { readonly kind: 'unverified'; readonly arch: string; readonly actual: string };
+
+/**
+ * Classify a measured fingerprint. PURE, and separated from the assertion so the policy
+ * itself is testable: the branch that matters most -- an unverified architecture is not
+ * silently treated as a pass -- cannot be exercised by running the suite on one machine,
+ * because `process.arch` is whatever the box is. Feeding this function synthetic pairs is
+ * the only way to prove all three outcomes.
+ *
+ * Note the deliberate asymmetry: an unverified architecture returns `unverified` whether or
+ * not its hash happens to equal the golden. An accidental match is not evidence of
+ * cross-architecture bit identity -- it is one sample, and the ruling asks for repeated
+ * verified measurements before an architecture joins the list above.
+ */
+export function classifyAngleFingerprint(
+  arch: string,
+  actual: string,
+  pinned: string = ANGLE_HASH,
+): AngleVerdict {
+  if (!VERIFIED_ANGLE_ARCHITECTURES.includes(arch)) return { kind: 'unverified', arch, actual };
+  return actual === pinned
+    ? { kind: 'verified-match' }
+    : { kind: 'verified-mismatch', expected: pinned, actual };
+}
+
+/** Per-band lines for a human, so a divergence is localised to a function and range. */
+export function formatAngleBands(bands: readonly AngleBandResult[]): string {
+  return bands.map((b) => `  ${b.name.padEnd(9)} n=${String(b.count).padStart(4)}  ${b.hash}`).join('\n');
+}
+
 /** The vendored mirror of computeAngleBands: src/sim/math's detSin/detCos/detAtan2/
  *  detHypot over the identical sample sweep, not Math.*. */
 export async function computeVendoredAngleBands(): Promise<AngleBandResult[]> {
