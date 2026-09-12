@@ -68,16 +68,37 @@ export function defaultReportContext(): ReportContext {
   };
 }
 
-/** `-1..1` for an axis and `0..1` for a button both draw as `0..100%` of the bar. */
-function fillPercent(value: number, signed: boolean): number {
-  if (!Number.isFinite(value)) return 0;
-  const unit = signed ? (value + 1) / 2 : value;
-  return Math.max(0, Math.min(1, unit)) * 100;
+/**
+ * Where the fill starts and how wide it is, as percentages of the bar.
+ *
+ * A BUTTON fills from the left: 0 is untouched and 1 is fully travelled, and an empty bar
+ * means an untouched button.
+ *
+ * AN AXIS FILLS FROM THE CENTRE, because its rest position is the middle of its range and
+ * not the bottom of it. Drawing it left-filled maps a CENTRED stick to a half-full bar --
+ * measured in the first capture of this pane, where a resting Axis 2 drew a longer fill
+ * than a trigger genuinely held at 0.35, and the same bar shape meant two different things
+ * on adjacent rows. Centre-out makes a resting stick empty, a push right grow rightward and
+ * a push left grow leftward, so the direction is visible as well as the magnitude.
+ */
+function barGeometry(value: number, signed: boolean): { left: number; width: number } {
+  const v = Number.isFinite(value) ? value : 0;
+  if (!signed) return { left: 0, width: Math.max(0, Math.min(1, v)) * 100 };
+  const clamped = Math.max(-1, Math.min(1, v));
+  const half = Math.abs(clamped) * 50;
+  return { left: clamped < 0 ? 50 - half : 50, width: half };
 }
 
-function channelRow(label: string): ChannelRow {
+/**
+ * `axis` is carried on the ROW, not inferred at paint time, because the centre mark the
+ * stylesheet draws belongs only to a channel that rests in the MIDDLE of its range. Painted
+ * on a button row it is meaningless -- a button fills 0 to 1 from the left -- and worse, it
+ * reads as a partial fill on an untouched button. Measured: the first build drew it on all
+ * 17 button rows of a standard pad.
+ */
+function channelRow(label: string, axis: boolean): ChannelRow {
   const root = document.createElement('li');
-  root.className = 'hud-selftest-channel';
+  root.className = axis ? 'hud-selftest-channel hud-selftest-channel--axis' : 'hud-selftest-channel';
   const name = document.createElement('span');
   name.className = 'hud-selftest-channel-name';
   name.textContent = label;
@@ -109,15 +130,17 @@ function buildPadRow(pad: PadDiagnostic): PadRow {
   meta.textContent = `mapping: ${pad.mapping === '' ? '(none reported)' : pad.mapping} · axes: ${pad.axes.length} · buttons: ${pad.buttons.length}`;
   const channels = document.createElement('ul');
   channels.className = 'hud-selftest-channels';
-  const axes = pad.axes.map((_, i) => channelRow(`Axis ${i}`));
-  const buttons = pad.buttons.map((_, i) => channelRow(`Button ${i}`));
+  const axes = pad.axes.map((_, i) => channelRow(`Axis ${i}`, true));
+  const buttons = pad.buttons.map((_, i) => channelRow(`Button ${i}`, false));
   for (const row of [...axes, ...buttons]) channels.appendChild(row.root);
   root.append(name, meta, channels);
   return { key: padKey(pad), root, axes, buttons };
 }
 
 function writeChannel(row: ChannelRow, value: number, signed: boolean, down: boolean): void {
-  row.fill.style.width = `${fillPercent(value, signed).toFixed(1)}%`;
+  const { left, width } = barGeometry(value, signed);
+  row.fill.style.marginInlineStart = `${left.toFixed(1)}%`;
+  row.fill.style.width = `${width.toFixed(1)}%`;
   row.value.textContent = Number.isFinite(value) ? value.toFixed(2) : '0.00';
   row.root.classList.toggle('hud-selftest-channel--down', down);
 }

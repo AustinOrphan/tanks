@@ -1543,6 +1543,26 @@
   overflow: hidden;
 }
 
+/* THE CENTRE MARK, and only on an AXIS. A stick rests in the middle of its range, so its
+   bar needs an origin to be read against -- without one, "at rest" and "pushed to exactly
+   centre" look the same, and the direction of a push has nothing to be a direction from. A
+   BUTTON fills 0 to 1 from the left and has no centre to mark; drawn there the tick reads
+   as a partial fill on an untouched button, which the first capture of this pane showed on
+   all 17 button rows of a standard pad.
+
+   The shorthand above and the image here, in that order: `background` resets
+   `background-image` to `none`, so a gradient declared before it is erased by it. That is
+   the other thing the capture showed, and neither was visible in jsdom. */
+.hud-selftest-channel--axis .hud-selftest-channel-bar {
+  background-image: linear-gradient(
+    to right,
+    transparent calc(50% - 1px),
+    var(--hud-schematic-solid) calc(50% - 1px),
+    var(--hud-schematic-solid) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+}
+
 .hud-selftest-channel-fill {
   display: block;
   height: 100%;

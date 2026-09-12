@@ -80,6 +80,19 @@ describe('renderControllerSelfTest: structure', () => {
     expect(channels()[0]).not.toBe(before[0]);
   });
 
+  it('marks AXIS rows and not button rows, which is what scopes the bar’s centre tick', () => {
+    // The stylesheet draws a centre mark on `--axis` only. A button fills 0 to 1 from the
+    // left and has no centre to mark; drawn there the tick reads as a partial fill on an
+    // untouched button, which is what the first capture of this pane showed on all 17
+    // button rows of a standard pad. jsdom cannot see the gradient, so the CLASS is what is
+    // assertable here -- and it is the whole of the selector the rule turns on.
+    const view = renderControllerSelfTest(container, () => CONTEXT);
+    view.update([pad({ axes: [0, 0], buttons: [{ pressed: false, value: 0 }] })]);
+    expect(
+      channels().map((c) => c.classList.contains('hud-selftest-channel--axis')),
+    ).toEqual([true, true, false]);
+  });
+
   it('renders each connected pad as its own row, keyed by the index the browser gave it', () => {
     const view = renderControllerSelfTest(container, () => CONTEXT);
     view.update([pad({ padIndex: 1, id: 'A' }), pad({ padIndex: 3, id: 'B' })]);
@@ -100,23 +113,31 @@ describe('renderControllerSelfTest: live values', () => {
     expect(values()).toEqual(['-0.75', '0.25', '1.00', '0.40']);
   });
 
-  it('maps an axis from -1..1 and a button from 0..1 onto the same bar', () => {
-    // Two different ranges on one bar shape. Drawing an axis with the button's mapping
-    // would clamp every leftward push to an empty bar -- the stick would read as dead in
-    // one direction, which is the opposite of what a self-test is for.
+  it('fills an axis from the CENTRE and a button from the left', () => {
+    // Two different rest positions on one bar shape. An axis rests at the MIDDLE of its
+    // range, so drawing it left-filled maps a centred stick to a half-full bar -- measured
+    // in the first capture of this pane, where a resting Axis 2 drew a longer fill than a
+    // trigger genuinely held at 0.35. Direction is carried by which side of centre the fill
+    // grows on, which a left-filled bar cannot express at all.
     const view = renderControllerSelfTest(container, () => CONTEXT);
     view.update([
       pad({
-        axes: [-1, 0, 1],
+        axes: [-1, 0, 1, -0.5],
         buttons: [{ pressed: false, value: 0.5 }],
       }),
     ]);
     const fills = Array.from(container.querySelectorAll<HTMLElement>('.hud-selftest-channel-fill')).map(
-      (n) => n.style.width,
+      (n) => [n.style.marginInlineStart, n.style.width],
     );
-    // jsdom normalises the CSS length, so these are the strings the browser stores rather
+    // jsdom normalises the CSS lengths, so these are the strings the browser stores rather
     // than the ones the code writes.
-    expect(fills).toEqual(['0%', '50%', '100%', '50%']);
+    expect(fills).toEqual([
+      ['0%', '50%'], // axis -1: hard left, filling from centre back to the start
+      ['50%', '0%'], // axis 0: at rest, EMPTY -- the case a left-filled bar got wrong
+      ['50%', '50%'], // axis +1: hard right
+      ['25%', '25%'], // axis -0.5: half left
+      ['0%', '50%'], // button 0.5: from the left edge, half travelled
+    ]);
   });
 
   it('marks a pressed button down and takes the mark off again when it is released', () => {
