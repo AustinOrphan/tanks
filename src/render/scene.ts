@@ -11,6 +11,7 @@
  * in the sim's xy-plane is a clockwise rotation about three's +y axis.
  */
 import * as THREE from 'three';
+import { RenderContextUnavailableError } from '../presentation/render-context';
 import { createTextures, type TextureSet } from './textures';
 import { framedBounds, fitCameraToArea } from './framing';
 import { QUALITY_PRESETS, type RenderQuality } from './quality';
@@ -123,7 +124,23 @@ export function createScene(
    */
   quality: RenderQuality = QUALITY_PRESETS[DEFAULT_QUALITY_PRESET],
 ): SceneContext {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias });
+  // The one construction here that depends on the BROWSER agreeing rather than on our own
+  // arithmetic, so it is the one that gets a typed failure. Three throws a bare
+  // `Error('Error creating WebGL context.')` when the canvas hands back no context; left
+  // untyped it reaches `classifyStartupFailure` as "we do not know" and is reported to the
+  // player as a transient match failure they can retry forever. See
+  // presentation/render-context.ts for why the type lives where it does.
+  //
+  // Scoped to this ONE statement deliberately, not wrapped around `createScene`: everything
+  // below is geometry, materials and lights, and a failure in those is a bug in this file
+  // rather than a browser that cannot render. Calling those fatal would tell a player with a
+  // working GPU to give up.
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias });
+  } catch (err) {
+    throw new RenderContextUnavailableError(err);
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatioCap));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = quality.shadowType;

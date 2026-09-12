@@ -1,0 +1,15 @@
+{
+  "id": "scene-context-failure-swallowed",
+  "file": "src/render/scene.ts",
+  "find": "  } catch (err) {\n    throw new RenderContextUnavailableError(err);\n  }",
+  "replace": "  } catch (err) {\n    renderer = undefined as unknown as THREE.WebGLRenderer;\n  }",
+  "expect": "killed",
+  "tests": [
+    "src/render/scene.test.ts"
+  ],
+  "why": "The `try` used to CONTINUE rather than to classify -- the failure mode wrapping a constructor invites. The scene reports success and returns a context whose renderer is undefined, so the browser that cannot render gets no branded state at all and instead a null dereference in the first frame, far from the boundary that knew what went wrong.",
+  "killedBy": [
+    "createScene when the browser will not give it a context (issue #325) throws the TYPED failure, not a bare Error",
+    "createScene when the browser will not give it a context (issue #325) surfaces as the CONTEXT failure, not as a null dereference further down"
+  ]
+}

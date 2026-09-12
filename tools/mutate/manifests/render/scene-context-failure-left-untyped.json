@@ -1,0 +1,14 @@
+{
+  "id": "scene-context-failure-left-untyped",
+  "file": "src/render/scene.ts",
+  "find": "    throw new RenderContextUnavailableError(err);",
+  "replace": "    throw err;",
+  "expect": "killed",
+  "tests": [
+    "src/render/scene.test.ts"
+  ],
+  "why": "The wrapper removed, so Three's bare `Error('Error creating WebGL context.')` escapes untyped. `classifyStartupFailure` decides FATAL vs TRANSIENT from the cause alone and has no way to recognise it, so it resolves to `match-failed`: a dismissable overlay over a Main Menu whose every Start fails identically. Nothing errors, nothing looks broken in the code, and the player retries forever -- which is exactly the residual startup-failure.ts carried before this change.",
+  "killedBy": [
+    "createScene when the browser will not give it a context (issue #325) throws the TYPED failure, not a bare Error"
+  ]
+}
