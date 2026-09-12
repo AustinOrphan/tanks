@@ -1,0 +1,14 @@
+{
+  "id": "mine-fuse-strobes-under-reduced-motion",
+  "file": "src/render/entities.ts",
+  "find": "        reducedMotion ? fuseCalmAt(e) : fusePulseAt(e);",
+  "replace": "        fusePulseAt(e);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "killedBy": [
+    "mine views under reduced motion states the fuse as a monotone brightness, not a strobe"
+  ],
+  "why": "Restores the accelerating strobe for a player who asked for reduced motion. It is the one cue in this issue whose rate climbs -- 1.67 Hz mean over the strobing phase, peaking at 3.333 Hz at the moment the warning window takes over -- and the brightness that replaces it carries the same fuse progress from a single frame."
+}

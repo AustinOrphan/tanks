@@ -35,6 +35,7 @@ import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
+import { FUSE_WARNING_SECONDS } from './mine-warning';
 import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD, SHELL_MUZZLE_FORWARD, SHELL_NOSE_REACH_RADII } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
@@ -511,6 +512,83 @@ describe('mine views', () => {
     const sideH = domeStart - bottom;
     expect(sideH / totalH).toBeCloseTo(1 / 3, 2);
     expect(rise / totalH).toBeCloseTo(2 / 3, 2);
+    views.dispose();
+  });
+
+  it('under reduced motion states the fuse as a monotone brightness, not a strobe', () => {
+    // The strobe's information was its RATE, which a player had to watch over TIME to read.
+    // As a brightness it is readable from one frame, which is what the preference asks for,
+    // and the mine still says how close it is to going off. Armed-versus-idle is untouched:
+    // it lives in the base colours, not in the pulse.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    views.setReducedMotion(true);
+    const mat = () => (mineMesh(scene).material as THREE.MeshStandardMaterial);
+    const sample = (timer: number): number => {
+      const w = withMine({ timer, armed: true });
+      views.sync(w, w, 0);
+      return mat().emissive.r;
+    };
+
+    // Sampled across the fuse OUTSIDE the warning window, which owns the last 0.5s and has
+    // its own ramp. Monotone means every step up, not merely brighter at the end -- the
+    // strobe is brighter at the end too, several times over.
+    const timers = [3.0, 2.75, 2.5, 2.25, 2.0, 1.5, 1.0, 0.75];
+    const seen = timers.map(sample);
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i], `t=${timers[i]} must be brighter than t=${timers[i - 1]}`).toBeGreaterThan(
+        seen[i - 1],
+      );
+    }
+
+    // Still a projection of world state and never of a clock -- the rule mine-warning.ts
+    // pins for this whole surface. A "freeze the pulse where it is" treatment would fail
+    // exactly here.
+    expect(sample(2.0)).toBeCloseTo(sample(2.0), 12);
+    views.dispose();
+  });
+
+  it('ramps the calm fuse NONLINEARLY, and leaves the warning window room of its own', () => {
+    // The failing control for the curve, which the monotone case above cannot be: monotone
+    // is true of any increasing function, so a linear ramp passes it. This asserts the
+    // SHAPE, and linear fails it -- under linear, equal steps of fuse give equal steps of
+    // emissive, so `late` and `early` come out equal rather than ordered.
+    //
+    // Why nonlinear at all is a MEASUREMENT, not a preference: the parameter is a lerp
+    // between two reds that the renderer tone-maps, and that transfer is compressive. A
+    // linear parameter was captured through the gallery at CIE L* 30.2 / 38.6 / 44.4 / 49.2 /
+    // 53.6 / 57.3 across six even steps -- +8.4 in the first sixth against +3.7 in the last,
+    // so it read as decelerating, which is backwards for a fuse.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    views.setReducedMotion(true);
+    const mat = () => (mineMesh(scene).material as THREE.MeshStandardMaterial);
+    const at = (elapsedFraction: number): number => {
+      const w = withMine({ timer: MINE_TIMER * (1 - elapsedFraction), armed: true });
+      views.sync(w, w, 0);
+      return mat().emissive.r;
+    };
+
+    // Thirds of the STROBING phase, which ends where the warning window opens.
+    const end = 1 - FUSE_WARNING_SECONDS / MINE_TIMER;
+    const early = at(end / 3) - at(0);
+    const late = at(end) - at((2 * end) / 3);
+    expect(late, 'the last third must brighten more than the first').toBeGreaterThan(early);
+    // Not merely greater by a rounding margin: squaring makes the last third about five
+    // times the first, and a curve only slightly steeper than linear would not earn the
+    // complexity.
+    expect(late / early).toBeGreaterThan(3);
+
+    // ...and the window still has somewhere to go. The calm ramp stops at the mean of the
+    // strobe it replaces, so the window's own ramp keeps roughly half the range rather than
+    // the sliver a full-range fuse left it.
+    const atWindowOpen = at(end);
+    const atExpiry = at(1);
+    expect(atExpiry, 'the window must still brighten the body').toBeGreaterThan(atWindowOpen);
+    const lo = at(0);
+    const fuseShare = atWindowOpen - lo;
+    const windowShare = atExpiry - atWindowOpen;
+    expect(windowShare, 'the warning cue must not be squashed').toBeGreaterThan(fuseShare * 0.8);
     views.dispose();
   });
 
@@ -1554,6 +1632,34 @@ describe('skins (player texture override)', () => {
     views.sync(w, w, 0, 0.5);
     const camoMap = matOf(scene, 3, 'hull').map as THREE.Texture;
     expect(camoMap.offset.x).toBe(0); // no scroll in the def, no drift
+    views.dispose();
+  });
+
+  it('holds the texture offset under reduced motion, with dt still flowing', () => {
+    // A drift is continuous wall-clock movement carrying nothing: the pattern IS the skin,
+    // and it is still there when it stops sliding (issue #651). The case above is the
+    // control -- same skin, same dt, same 0.08 repeats/s -- so this one only has to show the
+    // policy stops it. Deliberately NOT asserting the full-motion drift again here: that
+    // would also fail under `presentation-skin-scroll-never-animates`, taking a pinned
+    // expectFailures from 1 to 2 for a control that already exists.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+
+    views.setPlayerStyle(null, 'flow', null);
+    views.setReducedMotion(true);
+    views.sync(w, w, 0, 0.5);
+    const flowMap = matOf(scene, 3, 'hull').map as THREE.Texture;
+    expect(flowMap.offset.x, 'a full second of dt must move nothing').toBe(0);
+    views.sync(w, w, 0, 0.5);
+    expect(flowMap.offset.x).toBe(0);
+
+    // ...and it RESUMES, rather than being frozen for the life of the page: the preference
+    // can be turned off with the game already running.
+    views.setReducedMotion(false);
+    views.sync(w, w, 0, 0.5);
+    expect(flowMap.offset.x).toBeCloseTo(0.04, 6);
     views.dispose();
   });
 

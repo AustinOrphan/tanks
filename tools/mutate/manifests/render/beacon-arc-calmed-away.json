@@ -1,0 +1,14 @@
+{
+  "id": "beacon-arc-calmed-away",
+  "file": "src/render/spawn-anim.ts",
+  "find": "    ring: { radius: 1, opacity: 0.9, arc: 1 - p },",
+  "replace": "    ring: { radius: 1, opacity: 0.9, arc: reducedMotion ? 1 : 1 - p },",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "killedBy": [
+    "the spawn animators under reduced motion (issue #651) leaves beacon's depleting arc alone, because it is a timer rather than motion"
+  ],
+  "why": "The boundary of the whole issue, as a plausible over-correction rather than an omission: beacon's arc DEPLETES, so it looks like motion, but it is a timer saying how much shield is left. Calming it leaves a full ring that never moves and a player with no countdown at all -- information deleted in the name of a motion preference."
+}

@@ -68,6 +68,20 @@ export const DEFAULTS = {
   mineWarn: null,
   identityMarker: null,
   /**
+   * Which resolved motion policy the scene renders under (issue #651): 'full' or 'reduced'.
+   *
+   * The gallery builds `createEntityViews`/`createParticleSystem` DIRECTLY rather than
+   * through `renderer.ts`, so it never saw `setReducedMotion` and had no way to photograph
+   * the preference at all. Without this the reduced treatments are reviewable only by
+   * booting the real game and changing a setting, which is exactly the gap the mineWarn
+   * forwarding note above was written about.
+   *
+   * The mine fuse is the one worth capturing: it is a pure function of MINE STATE, so a
+   * fixed timer under each policy is a deterministic A/B rather than a race against an
+   * animation.
+   */
+  motion: 'full',
+  /**
    * Which of issue #356's candidate blocked-fire cues to render, matching the game's own
    * `?dev=1&blockedFire=<cue>`. Only meaningful with `--scene blocked-fire`, whose
    * timeline is the one that actually refuses shots. 'hud' is intentionally absent: it

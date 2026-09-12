@@ -1,0 +1,14 @@
+{
+  "id": "spawn-entrance-still-swells-under-reduced-motion",
+  "file": "src/render/spawn-anim.ts",
+  "find": "      tankScale: reducedMotion ? 1 : 0.6 + 0.4 * p,",
+  "replace": "      tankScale: 0.6 + 0.4 * p,",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "killedBy": [
+    "the spawn animators under reduced motion (issue #651) holds every scale and radius at rest, across all three animators and both phases"
+  ],
+  "why": "The warp entrance swells the tank from 0.6 to full size. Under reduced motion the fade alone says a tank is arriving, which is death-pulse.ts's precedent for this whole surface -- keep the fade, drop the growth."
+}

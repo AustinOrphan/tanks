@@ -59,6 +59,22 @@ export interface EntityViews {
   /** `dt` drives animated skins; omitting it freezes them, which is what tests want. */
   sync(prev: World, curr: World, alpha: number, dt?: number): void;
   /**
+   * The resolved motion policy (issue #651), routed here by `renderer.ts` like every other
+   * system that owns a reduced treatment.
+   *
+   * Three things in this module answer to it, and each answers differently, because they are
+   * different kinds of movement:
+   *
+   *  - the SPAWN frames hold their scales and radii and keep their fades (`spawn-anim.ts`);
+   *  - the MINE fuse stops strobing and states its progress as a monotone brightness;
+   *  - the ANIMATED SKIN stops drifting its texture, which carries nothing at all.
+   *
+   * Nothing here changes what the simulation says or what a frame MEANS -- a mine still
+   * brightens toward expiry, a spawning tank still fades in, an animated skin still has its
+   * pattern. What goes is the movement on top.
+   */
+  setReducedMotion(on: boolean): void;
+  /**
    * The game layer announcing that the world it renders from was REPLACED wholesale --
    * a level switch -- rather than stepped. Consumed by the very next `sync`, which then
    * treats every tank's pose as a teleport instead of motion (issue #531).
@@ -241,6 +257,54 @@ const MINE_PULSE_TURNS = 6;
  */
 function fusePulseAt(elapsed: number): number {
   return 0.5 - 0.5 * Math.cos(2 * Math.PI * MINE_PULSE_TURNS * elapsed * elapsed);
+}
+/**
+ * Where the calm fuse ramp ENDS, handing over to the warning window.
+ *
+ * 0.5 because that is the MEAN of the strobe it replaces: `fusePulseAt` is
+ * `0.5 - 0.5 cos(...)`, which oscillates about 0.5 over its life. So the calm ramp finishes
+ * at the brightness the strobing fuse averaged, and the window then does exactly what it
+ * always did -- ramp from there to full.
+ *
+ * Derived rather than picked, and deliberately NOT `fusePulseAt(FUSE_CALM_END)`, which
+ * happens to be 0.25: that value is where `MINE_PULSE_TURNS = 6` and a 3.0s fuse leave the
+ * cosine, 60 degrees past a trough. Retune either constant and it silently becomes 0.9 or
+ * 0.05, and a ceiling chosen from it would move for no reason a reader could reconstruct.
+ */
+const CALM_FUSE_CEILING = 0.5;
+/** Elapsed fraction at which the fuse-warning window opens and owns the rest of the ramp. */
+const FUSE_CALM_END = 1 - FUSE_WARNING_SECONDS / MINE_TIMER;
+
+/**
+ * What a mine's fuse brightness says under REDUCED MOTION (issue #651): a monotone ramp
+ * instead of a strobe, so the body brightens steadily from drop to expiry.
+ *
+ * The information survives intact. "How far along is this fuse" was carried by the pulse's
+ * RATE, which a player had to watch over time to read; as a brightness it is readable from a
+ * single frame, which is what a reduced-motion setting is asking for. Armed-versus-idle is
+ * untouched -- it lives in the `lo`/`hi` base colours, not in the pulse.
+ *
+ * SQUARED, not linear, and MEASURED rather than reasoned. The parameter is a lerp between
+ * two reds that the renderer then tone-maps, and that whole transfer is compressive: a
+ * linear parameter was captured through the gallery at CIE L* 30.2, 38.6, 44.4, 49.2, 53.6,
+ * 57.3 across six even steps of the fuse -- +8.4 in the first sixth and +3.7 in the last, so
+ * it read as DECELERATING, which is backwards for a fuse. The measured transfer goes roughly
+ * as p^0.45, so squaring the input linearises perceived lightness and the brightening reads
+ * even.
+ *
+ * CAPPED at `CALM_FUSE_CEILING`, which is the other half of the same measurement. Running the
+ * ramp over the full 0..1 left the warning window -- the distinct "about to blow" cue -- only
+ * L* 57.3 to about 60, roughly two just-noticeable differences, because the fuse had already
+ * spent ~90% of the available perceptual range before the window opened.
+ *
+ * Still a pure function of MINE STATE and never of a wall clock, which `mine-warning.ts`
+ * pins as a rule for this whole surface: two machines replaying the same world draw the same
+ * frame, and a paused game holds its mine instead of animating on. A "freeze the pulse where
+ * it is" treatment would have broken that by introducing frame-dependent state.
+ */
+function fuseCalmAt(elapsed: number): number {
+  const ramp = clamp01(elapsed) / FUSE_CALM_END;
+  return CALM_FUSE_CEILING * clamp01(ramp) ** 2;
 }
 /** The mine body's radius. Exported because the #276 warning geometry is sized against it. */
 export const MINE_R = 0.28;
@@ -1220,10 +1284,15 @@ export function createEntityViews(
           const shieldLeft = (t.shieldUntilTick ?? 0) - curr.tick;
           let frame;
           if (spawn.elapsed < ENTRANCE_SECONDS) {
-            frame = SPAWN_ANIMATORS[spawn.variant]('entrance', spawn.elapsed / ENTRANCE_SECONDS, 0);
+            frame = SPAWN_ANIMATORS[spawn.variant](
+              'entrance',
+              spawn.elapsed / ENTRANCE_SECONDS,
+              0,
+              reducedMotion,
+            );
           } else if (shieldLeft > 0) {
             const p = 1 - shieldLeft / RESPAWN_SHIELD_TICKS; // 0 fresh -> 1 ending
-            frame = SPAWN_ANIMATORS[spawn.variant]('invincible', p, 0);
+            frame = SPAWN_ANIMATORS[spawn.variant]('invincible', p, 0, reducedMotion);
           } else {
             // Done: restore solid, drop the ring, clear state.
             setTankOpacity(view, 1);
@@ -1390,9 +1459,14 @@ export function createEntityViews(
        * not itself a visible jump. Outside the window the accelerating pulse is untouched --
        * that is the mine's pre-existing "armed and counting" language, not this issue's.
        */
+      // One helper for both branches, so the handover into the warning window stays
+      // continuous under either policy -- the window ramps FROM whatever the fuse was
+      // showing when it opened, and that is as true of the calm brightness as of the pulse.
+      const fuseBrightnessAt = (e: number): number =>
+        reducedMotion ? fuseCalmAt(e) : fusePulseAt(e);
       const pulse = warn.fuse
-        ? 1 - (1 - fusePulseAt(1 - FUSE_WARNING_SECONDS / MINE_TIMER)) * (1 - warn.fuse.growth)
-        : fusePulseAt(elapsed);
+        ? 1 - (1 - fuseBrightnessAt(1 - FUSE_WARNING_SECONDS / MINE_TIMER)) * (1 - warn.fuse.growth)
+        : fuseBrightnessAt(elapsed);
       const mat = mesh.material as THREE.MeshStandardMaterial;
       // Armed stays the loud one. An unarmed mine still burns its fuse -- it detonates on
       // expiry whether or not it ever armed -- so it pulses too, but dimly, and the
@@ -1568,12 +1642,18 @@ export function createEntityViews(
     }
   }
 
+  let reducedMotion = false;
+
   function sync(prev: World, curr: World, alpha: number, dt = 0): void {
     // Animated skins drift their texture offset; speed is per-skin DATA in the skin
     // defs. RepeatWrapping makes the offset cyclic, so no clamping is needed. Every
     // STYLED slot animates independently -- an unstyled slot (styleFor's synthetic
     // default) never has a skinMap, so this loop is a no-op for it.
-    if (dt > 0) {
+    // ...and not at all under reduced motion (issue #651). A texture drift is continuous
+    // wall-clock movement carrying no information: the pattern is the skin, and it is still
+    // there when it stops sliding. Frozen rather than slowed, because a slower permanent
+    // drift is still permanent motion.
+    if (dt > 0 && !reducedMotion) {
       for (const style of playerStyles.values()) {
         if (style.skinMap && style.scroll) {
           style.skinMap.offset.x = (style.skinMap.offset.x + style.scroll.u * dt) % 1;
@@ -1640,6 +1720,9 @@ export function createEntityViews(
 
   return {
     sync,
+    setReducedMotion(on: boolean): void {
+      reducedMotion = on;
+    },
     worldReplaced(): void {
       worldWasReplaced = true;
     },

@@ -1,0 +1,14 @@
+{
+  "id": "particles-fly-under-reduced-motion",
+  "file": "src/render/particles.ts",
+  "find": "      if (!reducedMotion) {",
+  "replace": "      if (true) {",
+  "expect": "killed",
+  "tests": [
+    "src/render/particles.test.ts"
+  ],
+  "killedBy": [
+    "particles under reduced motion (issue #651) holds every particle at the event position instead of flying it outward"
+  ],
+  "why": "Sparks, explosions and debris ignored the policy entirely before this issue. The burst still appears, fades and recycles on the same frame under either policy -- what the preference removes is two dozen objects flying outward and falling under gravity, which is the largest single source of movement a frame has."
+}

@@ -81,6 +81,11 @@ export interface MomentSceneOptions {
    * the muzzle, because that IS the refusal. A cue here adds an arm on top of that.
    */
   blockedFire?: BlockedFireCue | null;
+  /**
+   * The resolved motion policy (issue #651). A moment is the one gallery surface with
+   * PARTICLES in it, so it is where the calmed burst is photographable at all.
+   */
+  motion?: 'full' | 'reduced';
 }
 
 export interface MomentProducerReport {
@@ -186,6 +191,14 @@ export function buildMomentScene(
   }
   const particles = createParticleSystem(scene, mulberry32(PARTICLE_SEED));
   const deathPulse = createDeathPulseSystem(scene);
+  // The three systems in this scene that own a reduced treatment, pushed the policy the
+  // same way `renderer.ts` pushes it to the game's own. Death pulse is included because it
+  // has had one since issue #289 and a moment clip is the first place it could be SEEN
+  // under the preference rather than only asserted.
+  const calm = opts.motion === 'reduced';
+  views.setReducedMotion(calm);
+  particles.setReducedMotion(calm);
+  deathPulse.setReducedMotion(calm);
   // No RNG seam needed (unlike particles): emission is purely a function of world
   // position/orientation, so two renders of the same moment are already
   // byte-identical without one -- see tread-trails.ts's own doc comment.

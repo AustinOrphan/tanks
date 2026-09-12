@@ -84,3 +84,74 @@ it.each(['warp', 'rise', 'beacon'] as const)('%s is a live animator, not a const
   const b = SPAWN_ANIMATORS[id]('entrance', 1, 0);
   expect(a).not.toEqual(b);
 });
+
+describe('the spawn animators under reduced motion (issue #651)', () => {
+  const PHASES = [0, 0.25, 0.5, 0.75, 1];
+
+  it('holds every scale and radius at rest, across all three animators and both phases', () => {
+    // `death-pulse.ts`'s rule applied here: the growth goes, the fade stays. A spawning tank
+    // still arrives -- it fades in, and its ring still fades -- but nothing swells, shrinks
+    // or expands outward.
+    for (const [id, animate] of Object.entries(SPAWN_ANIMATORS)) {
+      for (const phase of ['entrance', 'invincible'] as const) {
+        for (const p of PHASES) {
+          const f = animate(phase, p, 0, true);
+          expect(f.tankScale, `${id}/${phase}@${p} tank scale`).toBe(1);
+          expect(f.ring.radius, `${id}/${phase}@${p} ring radius`).toBe(1);
+        }
+      }
+    }
+  });
+
+  it('negative control: the same frames DO move at full motion', () => {
+    // Without this the case above would pass on an animator that had simply been flattened
+    // for everyone, which is the opposite of a preference.
+    const moved = Object.entries(SPAWN_ANIMATORS).flatMap(([id, animate]) =>
+      PHASES.filter((p) => {
+        const f = animate('entrance', p, 0, false);
+        return f.tankScale !== 1 || f.ring.radius !== 1;
+      }).map((p) => `${id}@${p}`),
+    );
+    expect(moved.length, 'no animator moves anything at full motion').toBeGreaterThan(5);
+  });
+
+  it('keeps the fades, which are what say a tank is arriving at all', () => {
+    // The half that must NOT be calmed. An entrance with no opacity ramp is a tank that
+    // simply appears, and the preference is about motion, not about deleting the cue.
+    for (const [id, animate] of Object.entries(SPAWN_ANIMATORS)) {
+      const early = animate('entrance', 0.1, 0, true);
+      const late = animate('entrance', 0.9, 0, true);
+      expect(late.tankOpacity, `${id} must still fade in`).toBeGreaterThan(early.tankOpacity);
+    }
+  });
+
+  it("holds rise's invincible ring at the value it oscillates about, rather than at zero", () => {
+    // THE CASE THE SEAM EXISTS FOR. This ring's opacity oscillates at a rising frequency --
+    // five cycles over the phase by the end -- and a `SpawnFrame` carries only the value the
+    // oscillation reached, so no correction applied downstream could tell it from a fade.
+    // Held at the mean, not at zero: an invisible ring deletes "you are still protected".
+    const held = PHASES.map((p) => SPAWN_ANIMATORS.rise('invincible', p, 0, true).ring.opacity);
+    for (const o of held) expect(o).toBeCloseTo(0.15, 12); // 0.3 * the 0.5 mean
+    expect(new Set(held).size, 'a held value must not vary with progress').toBe(1);
+    // ...and it really does oscillate otherwise, or the assertion above measures nothing.
+    const free = PHASES.map((p) => SPAWN_ANIMATORS.rise('invincible', p, 0, false).ring.opacity);
+    expect(new Set(free).size, 'the free ring must vary').toBeGreaterThan(1);
+  });
+
+  it("leaves beacon's depleting arc alone, because it is a timer rather than motion", () => {
+    // The boundary. `arc` says how much shield is left; calming it would delete information
+    // rather than movement, and a player would lose the countdown entirely.
+    for (const p of PHASES) {
+      const calm = SPAWN_ANIMATORS.beacon('invincible', p, 0, true);
+      const free = SPAWN_ANIMATORS.beacon('invincible', p, 0, false);
+      expect(calm.ring.arc).toBe(free.ring.arc);
+      expect(calm.ring.arc).toBeCloseTo(1 - p, 12);
+    }
+  });
+
+  it('defaults to full motion, so every existing call site is unchanged', () => {
+    for (const [id, animate] of Object.entries(SPAWN_ANIMATORS)) {
+      expect(animate('entrance', 0.5, 0), `${id} default`).toEqual(animate('entrance', 0.5, 0, false));
+    }
+  });
+});

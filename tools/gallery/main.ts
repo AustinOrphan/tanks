@@ -21,6 +21,12 @@ const hull = params.get('hull');
 const accent = params.get('accent');
 const spawnAnimParam = params.get('spawn-anim') as SpawnAnimId | null;
 const mineWarnParam = params.get('mineWarn') as import('../../src/render/mine-warning').MineWarnStyle | null;
+/**
+ * The resolved motion policy (issue #651). Read here rather than inferred, and forwarded to
+ * BOTH branches below -- the posed gallery and the moment scene -- because the bug the
+ * `mineWarn` note records is precisely a variant reaching one of them and not the other.
+ */
+const motionParam = params.get('motion') === 'reduced' ? 'reduced' : 'full';
 const identityMarkerParam = params.get('identityMarker') as import('../../src/presentation/identity-marker').IdentityMarkerStyle | null;
 const blockedFireParam = params.get('blockedFire') as import('../../src/presentation/blocked-fire').BlockedFireCue | null;
 
@@ -47,6 +53,7 @@ const g = moment
       spawnAnim: spawnAnimParam ?? DEFAULT_SPAWN_ANIM,
       mineWarn: mineWarnParam,
       blockedFire: blockedFireParam,
+      motion: motionParam,
     })
   : buildGallery(canvas, W, H, {
       elements: (params.get('elements') ?? 'mine').split(',').map((x) => x.trim()).filter(Boolean),
@@ -69,6 +76,7 @@ const g = moment
       // nothing depending on a `--scene` the user may never have set.
       mineWarn: mineWarnParam,
       identityMarker: identityMarkerParam,
+      motion: motionParam,
     });
 
 // The runner calls this per frame and screenshots between calls, so no pixels ever cross
