@@ -10,7 +10,7 @@ gallery builds `createEntityViews`/`createParticleSystem` directly rather than t
 | --- | --- | --- |
 | `mine-fuse-full.gif` / `mine-fuse-reduced-squared.gif` | `--elements fuse --view close --anim` | An accelerating strobe becomes a monotone brightening. |
 | `kill-particles-full.gif` / `kill-particles-reduced-one.gif` | `--scene destroyed --anim` | ONE particle appears and fades in place; the debris stops flying and falling. |
-| `respawn-spawn-full.gif` / `respawn-spawn-reduced.gif` | `--scene respawn --anim` | The tank fades in without swelling; the invincibility ring holds instead of pulsing. |
+| `respawn-spawn-full.gif` / `respawn-spawn-reduced-one.gif` | `--scene respawn --anim` | The tank fades in without swelling; the invincibility ring holds instead of pulsing. This clip opens with a KILL, so it also carries the one-particle burst. |
 
 **Every pair runs the same length.** Frame counts are identical within each pair — 180,
 549 and 270 — which is the "keeps the fade and the lifetime, drops the movement" rule made
@@ -70,9 +70,29 @@ every frame of it is identical under either policy, and so is `--mineWarn lance`
 Two byte-identical captures there are evidence about the pose, not about the flag. `fuse` is
 the element with a burning fuse in it.
 
-`fuse-a30-*.png`, `fuse-a60-*.png` and `fuse-a88-reduced.png` are from the first round and
-show the full-motion strobe passing through the same brightness at two different fuse points
-(a30-full and a60-full are byte-identical).
+`fuse-a30-full.png` and `fuse-a60-full.png` are from the first round and are byte-identical
+to each other -- the full-motion strobe passing through the same brightness at two different
+fuse points, which is why one frame of it cannot say how far along the fuse is. The matching
+REDUCED stills from that round were deleted rather than kept: they were captured against the
+linear ramp and superseded by `ramp-squared-a*.png`, and a superseded frame sitting beside a
+current one is read as current.
+
+## Every asset here is current, and that was checked rather than assumed
+
+Every change in this PR is gated on the reduced-motion flag, so full-motion captures should
+be stable across all of them. Verified: re-running `--scene destroyed --anim` at the final
+commit reproduces `kill-particles-full.gif` BYTE-IDENTICALLY
+(`c130f555f62857e3854604040d5fb63c8d0432c73a34c5dccf616e809783a1cf`), several code changes
+after it was taken.
+
+The reduced captures were re-taken whenever the treatment under them moved:
+
+| asset | captured against |
+| --- | --- |
+| `mine-fuse-reduced-squared.gif`, `ramp-squared-a*.png` | the squared ramp (posed gallery -- no particle system, so the particle change cannot touch it) |
+| `kill-particles-reduced-one.gif`, `kill-reduced-one-f70.png` | the one-particle burst |
+| `respawn-spawn-reduced-one.gif` | the one-particle burst -- this one was RE-TAKEN, because the first capture predated it and the clip opens with a kill |
+| `ramp-linear-a*.png`, `kill-reduced-stack-f70.png` | deliberately the superseded state, as the left column of an A/B |
 
 ## The reduced burst was a white FLASH, and that is why it draws one particle
 
