@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-capacity-flash-cannot-replay-for-a-second-refusal",
+  "file": "src/game/hud.ts",
+  "find": "      capacityEl.classList.remove('hud-capacity--flash');\n      void capacityEl.offsetWidth;\n",
+  "replace": "      void capacityEl;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Drops the remove-and-reflow, so re-adding a class the element already carries does NOT restart the CSS animation. The second refusal inside the animation window would then be invisible -- and against a full cap with a held trigger, refusals arrive in a row, which is exactly when the player most needs telling. Same mechanism and same failure mode as signalPlayerDeath's replay, pinned the same way.",
+  "killedBy": [
+    "hud: blocked-fire capacity flash (issue #516, parent #356) replays for a second refusal, so two refusals read as two"
+  ]
+}

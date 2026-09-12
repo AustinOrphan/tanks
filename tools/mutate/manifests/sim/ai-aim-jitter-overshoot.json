@@ -1,0 +1,16 @@
+{
+  "id": "ai-aim-jitter-overshoot",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  const eased = t * t * (3 - 2 * t);",
+  "replace": "  const eased = t * 3;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "The negative control for the smoothing: an easing curve that leaves [0, 1] sends the interpolated offset outside the interval spanned by the two bucket draws, so the aim error exceeds the +/-spread envelope its profile's aimAccuracy is tuned for -- a silent difficulty change wearing a smoothing fix's clothes. Killed by the no-overshoot case, which without this mutation is the one assertion in that block the stepping implementation also satisfied.",
+  "killedBy": [
+    "aimJitter drift across a bucket (issue #222) never moves the aim offset by half a spread in one tick, across two whole buckets",
+    "aimJitter drift across a bucket (issue #222) travels between the two adjacent bucket draws without overshooting either",
+    "aimJitter drifts within a bucket, arriving near the next bucket's draw by its last tick"
+  ]
+}

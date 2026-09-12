@@ -1,0 +1,15 @@
+{
+  "id": "hud-nav-keys-ignore-the-consume-rule",
+  "file": "src/game/hud.ts",
+  "find": "    if (consumesKey(e.target, e.key)) return;\n    const action = keyToUiAction(e.key);",
+  "replace": "    const action = keyToUiAction(e.key);",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Without the consume rule the roving focus takes ArrowDown away from a focused volume slider, which is the key the slider exists to consume.",
+  "expect": "killed",
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) leaves the volume slider in full control of its own arrow keys",
+    "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mutate-select-never-runs-everything",
+  "file": "tools/mutate/select.mjs",
+  "find": "    if (hit) return { all: true, reason: `${path} changed (${hit.source}), which can affect every entry` };",
+  "replace": "    if (hit) continue;",
+  "why": "A change to the harness, the runner config, the dependency set or a workflow can affect every entry's outcome; selecting by file names there would run almost nothing on exactly the changes that need everything.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "selectAffected the always-run list: harness, runner config, dependencies and workflows select everything, and the manifest directory is not on it"
+  ]
+}

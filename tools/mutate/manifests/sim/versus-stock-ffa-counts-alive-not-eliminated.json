@@ -1,0 +1,15 @@
+{
+  "id": "versus-stock-ffa-counts-alive-not-eliminated",
+  "file": "src/sim/world.ts",
+  "find": "  const remaining = players.filter((t) => !isVersusEliminated(t));",
+  "replace": "  const remaining = players.filter((t) => t.alive);",
+  "expect": "killed",
+  "why": "resolveStatusFfa's win/lose decision must count players who are NOT ELIMINATED (dead AND out of stock), not players who are merely alive -- a player awaiting a scheduled respawn is dead this instant but still in the match. Reverting to a bare `alive` filter is exactly the pre-stock rule the FFA branch shipped with, and is the specific regression the task brief asked to be reviewed hardest for: it ends a stock match on the very first death. Caught by 2 of the 25 cases in versus-modes.test.ts: the N=2 regression test built specifically to discriminate the two rules (a 3+-player death leaves 2+ ALIVE tanks either way, so a larger N cannot tell them apart -- verified directly, an earlier N=3 draft of this same test passed under this mutation) and the mutual-kill-with-stock-remaining test, which this mutation reads as an immediate 'lose' instead of 'playing'.",
+  "tests": [
+    "src/sim/versus-modes.test.ts"
+  ],
+  "killedBy": [
+    "versus stock: a mid-stock death does not end the match the specific regression this feature is reviewed hardest for: a naive alive-count check ends the match on the FIRST death even with stock left -- ours must not",
+    "versus stock: elimination at zero stock a mutual kill where BOTH still have stock left is not a wipeout -- both respawn, still playing"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "route-host-attach-never-shapes-the-menu-for-its-session",
+  "file": "src/game/route-host.ts",
+  "find": "      hud.setRelaunchTarget(session.relaunchTarget);\n",
+  "replace": "      void session;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The page stops writing the title/outcome affordance policy, which since issue #324's step S7 makes it unwritten by anyone: `loop.ts` no longer pushes `setRelaunchTarget` at all, so a setup-pane versus match runs under whatever the last detach left -- `'campaign-levels'` -- and its title keeps offering Continue and Levels into a one-arena versus level system, the corpse-world resume `HudRelaunchTarget`'s own doc comment describes. The detach reset above survives this, so the empty-host half of the coverage stays green and only the attach half dies. Pinned with killedBy: the claim is that a specific declaration reaches the HUD, not a population.",
+  "killedBy": [
+    "createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7) pushes the incoming session's relaunch target, so the page is the only writer",
+    "createRouteHost: taking the slot shapes the menu around the session (issue #324, step S7) pushes it BEFORE the route reset, so the menu never paints in the outgoing shape",
+    "createRouteHost: releasing the slot gives the menu back its page shape resets the relaunch target and clears the gameplay status when the live session detaches",
+    "startGameWith: campaign return from a versus session (Task 5b) a setup-pane versus session's construction pushes BOTH 'versus' identity and the 'versus-setup' relaunch target, exactly once each",
+    "quitting a versus match leaves a campaign-shaped Main Menu behind the empty host offers Continue/New Game/Levels/Versus, not the versus session's \"Start Match\""
+  ]
+}

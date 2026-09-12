@@ -1,0 +1,13 @@
+{
+  "id": "route-host-registers-the-gameplay-handlers-per-session",
+  "file": "src/game/route-host.ts",
+  "find": "      const mine = ++generation;",
+  "replace": "      const mine = ++generation;\n      hud.onMineTap(() => state.mineTap?.());",
+  "expect": "killed",
+  "expectFailures": 4,
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The defect issue #468 exists to prevent, reintroduced one line lower down: a gameplay handler registered on every `attach()` rather than once at construction. `hud.ts` APPENDS every `on*` callback and has no unregister anywhere -- all 25 of its registration methods are `push(cb)` returning `void` -- so this is additive and silent: after one stop-and-start a single Mine tap presses the mine twice, and a New Game click on the same shape would start two campaign runs. Nothing before this issue could see it, because nothing could stop a session and start another on one HUD. 4 of 423 in the scoped run, and WHICH four is the point: three in route-host.test.ts, whose Proxy HUD APPENDS exactly as the real one does, plus 'a tap after the LAST session reaches nobody' in loop.test.ts. loop.test.ts's own HUD fake REPLACES (`onMineTap = cb`), so it cannot count registrations at all -- which is precisely why route-host.test.ts's fake was written to append. Mutates the Mine handler only; the other six are the same shape and are covered by the one-registration-per-name loop in 'builds exactly one HUD'."
+}

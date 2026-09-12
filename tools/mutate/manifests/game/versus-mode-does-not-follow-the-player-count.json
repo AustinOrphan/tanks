@@ -1,0 +1,14 @@
+{
+  "id": "versus-mode-does-not-follow-the-player-count",
+  "file": "src/game/hud.ts",
+  "find": "      const mode = teamsOfferedAt(players) ? versusConfigState.mode : 'ffa';",
+  "replace": "      const mode = versusConfigState.mode;",
+  "expect": "killed",
+  "why": "Dropping from three players to two while Teams is selected LEAVES the pane in Teams -- a mode it no longer offers. The disabled button cannot prevent this state, because the player never touches the mode row to reach it; they touch the player count. The result is a pane whose mode control shows a refused option as chosen, whose Teams-only friendly-fire row is still on screen, and whose Start may be refused by the one-team gate with no visible way to fix it, since the team controls are the thing that would let a player split the sides. Exactly ONE test fails, which is the point of the entry: the offer rule and this consistency rule are separate claims, and a build could satisfy the first while breaking the second -- the disabled button and the forced fallback are not the same guarantee. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) drops out of Teams when the player count falls to two"
+  ]
+}

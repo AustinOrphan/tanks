@@ -1,0 +1,14 @@
+{
+  "id": "screen-capture-output-escapes-the-workspace",
+  "file": "tools/capture/screen-adapter.mjs",
+  "find": "  if (!/^tmp\\/[A-Za-z0-9._/-]+$/.test(outputRelative) || outputRelative.includes('..')) {\n    throw new Error('screen adapter output must be an isolated relative tmp/ path');\n  }",
+  "replace": "  void outputRelative;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "the screen capture adapter refuses an output path that could escape the capture workspace"
+  ],
+  "why": "Drops the containment guard on a string that reaches a child process's argv. The gallery adapter carries the identical check and `paths.mjs` has two manifest entries of its own for the workspace version -- a SECOND producer is a second way to lose the same property, which is exactly why it is asserted per adapter rather than once."
+}

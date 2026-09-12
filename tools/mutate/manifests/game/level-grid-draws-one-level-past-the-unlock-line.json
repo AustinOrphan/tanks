@@ -1,0 +1,16 @@
+{
+  "id": "level-grid-draws-one-level-past-the-unlock-line",
+  "file": "src/game/hud.ts",
+  "find": "      for (let i = 0; i < unlocked; i++) {",
+  "replace": "      for (let i = 0; i <= unlocked; i++) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The off-by-one on a freshly written loop bound, and the reason the grid test asserts an exact label list rather than `length <= total`. It leaks less than the entry above -- one level, not the campaign -- but it leaks something worse: the extra button is enabled, so it starts a level the player has not unlocked, and on the last one it indexes past the level system entirely. Distinct from `level-grid-draws-the-whole-campaign` because the fix is different (a bound, not a variable) and because a test that merely counted 'fewer than total' would kill that one and survive this.",
+  "killedBy": [
+    "hud: level select panel renders one button per UNLOCKED level, and none at all for the rest (issue #555)",
+    "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert"
+  ]
+}

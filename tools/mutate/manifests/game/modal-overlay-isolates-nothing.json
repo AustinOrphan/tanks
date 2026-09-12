@@ -1,0 +1,16 @@
+{
+  "id": "modal-overlay-isolates-nothing",
+  "file": "src/game/hud.ts",
+  "find": "      const isolate = overlay !== null && !child.contains(overlay) && child !== toastsEl;",
+  "replace": "      const isolate = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "modal isolation: a blocking overlay is really modal (issue #327) isolates everything outside the dialog, including the DEV badge",
+    "modal isolation: a blocking overlay is really modal (issue #327) releases the isolation when the dialog is dismissed",
+    "modal isolation: a blocking overlay is really modal (issue #327) releases it when a surface change empties the stack, not only on Back"
+  ],
+  "why": "Restores the shipped state this issue fixes, and it is a FALSE CLAIM rather than a missing feature: the confirmation carries `role=alertdialog aria-modal=true`, which tells assistive technology that everything outside it is unavailable, and measured before this landed `src/` contained no Tab handler, no focus containment and no `inert` at all. Focus left the dialog into the panes behind it, the on-screen driving controls and the DEV badge -- every one a sibling of every pane on the HUD root. The dialog still opens, still closes and still answers its buttons under this mutation, so only an assertion about what is reachable OUTSIDE it can see the difference."
+}

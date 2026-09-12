@@ -1,0 +1,14 @@
+{
+  "id": "pp1-arm-skips-the-co-players",
+  "file": "src/sim/arena.ts",
+  "find": "  if (pp1Roles) {\n    for (const tank of tanks) {",
+  "replace": "  if (pp1Roles) {\n    for (const tank of tanks.slice(0, 1)) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/pp1-roles.test.ts"
+  ],
+  "killedBy": [
+    "stamping the arm at spawn stamps CO-PLAYERS too, not just the tanks one spawn pass builds"
+  ],
+  "why": "Stamps only the first tank, which is the shape the bug would really take: this file has THREE spawn sites -- the grid loop, the campaign co-op placer and the versus branch -- and stamping at each rather than over the finished list is how one gets missed. A co-player carrying the roster's 5 while P1 carries the arm's 4 is an experiment measuring two different rosters at once, and every single-player fixture would pass over it."
+}

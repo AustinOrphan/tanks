@@ -1,0 +1,14 @@
+{
+  "id": "identity-ring-goes-back-to-additive",
+  "file": "src/render/entities.ts",
+  "find": "      // NOT additive -- see this function's doc comment. Pinned by entities.test.ts.\n      blending: THREE.NormalBlending,",
+  "replace": "      blending: THREE.AdditiveBlending,",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "killedBy": [
+    "player identity: ring and shell tint alpha-blends the identity ring, so a slot's hue survives compositing (issue #580)"
+  ],
+  "why": "Restores the additive blending this carried until #580, which destroys the hue that identifies a slot: adding a bright colour to the felt #2f6d4f clips channels, and the shipped palette's slot 1 and slot 2 both composite to warm gold. The two existing 'distinct colours' tests pass under BOTH blend modes -- verified by applying this mutation and watching them stay green -- because authored colours stay distinct either way. Only the blend-mode assertion catches it."
+}

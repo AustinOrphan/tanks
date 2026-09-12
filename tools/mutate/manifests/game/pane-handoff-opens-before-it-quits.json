@@ -1,0 +1,15 @@
+{
+  "id": "pane-handoff-opens-before-it-quits",
+  "file": "src/game/hud.ts",
+  "find": "    try {\n      handleQuit();\n    } finally {\n      handingOffTo = null;\n    }\n    return openLayer(id, opener);",
+  "replace": "    const opened = openLayer(id, opener);\n    try {\n      handleQuit();\n    } finally {\n      handingOffTo = null;\n    }\n    return opened;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) leaves the match before opening the setup pane, through the paths that already exist",
+    "hud: every ending gets its own screen (issue #323) leaves the finished session and opens the Levels pane, in that order"
+  ],
+  "why": "Opens the pane BEFORE leaving the match, so it is opened over a live session and `setState`'s unconditional close-all then takes it straight back down -- the pane the player asked for never appears. \n\nCONSOLIDATED from two entries (issue #566). The order used to be written out at both call sites, `handleChooseLevel` and `handleChangeSetup`, so each needed its own entry and each could be fixed without the other. `quitInto` puts the order in ONE place, so this single mutation breaks both callers and both their tests -- named above. That is a stronger guard than the pair it replaces, not a smaller one: a half-applied fix is no longer expressible. \n\nThe retired sibling was `choose-level-opens-the-pane-over-the-finished-session`, whose scoped test is the second `killedBy` here."
+}

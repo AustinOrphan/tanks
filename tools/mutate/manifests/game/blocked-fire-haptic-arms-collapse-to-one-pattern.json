@@ -1,0 +1,15 @@
+{
+  "id": "blocked-fire-haptic-arms-collapse-to-one-pattern",
+  "file": "src/game/haptics.ts",
+  "find": "          vibrate(BLOCKED_FIRE_ARMS[cue] ?? BLOCKED_FIRE_PATTERN_MS);",
+  "replace": "          vibrate(BLOCKED_FIRE_PATTERN_MS);",
+  "expect": "killed",
+  "tests": [
+    "src/game/haptics.test.ts"
+  ],
+  "why": "Every haptic arm buzzes the shipped 8/24/8 double tap again, so issue #516's haptic column becomes five flag values for one feeling -- a hand asked to compare five identical buzzes. The channel gate is untouched and the one-row-per-cue membership table still passes, because each arm DOES buzz, which is why that table alone could not catch it: MEASURED, this mutation left all 30 of haptics.test.ts's tests green before the per-arm pattern table was added.",
+  "killedBy": [
+    "blocked-fire cue: the arms are separable (issue #356) gives each haptic arm its OWN pattern -- one row per arm (issue #516)",
+    "blocked-fire cue: the arms are separable (issue #356) stays silent on a device with no vibration, and behind the haptics preference"
+  ]
+}

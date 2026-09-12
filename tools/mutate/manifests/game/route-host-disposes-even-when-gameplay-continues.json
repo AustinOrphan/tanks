@@ -1,0 +1,12 @@
+{
+  "id": "route-host-disposes-even-when-gameplay-continues",
+  "file": "src/game/route-host.ts",
+  "find": "    if (wasInGameplay && !sm.inGameplay) requests.requestStop();",
+  "replace": "    if (wasInGameplay) requests.requestStop();",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "The opposite half, and the more destructive one: keeps `wasInGameplay` and drops the `!sm.inGameplay` test, so a click that STAYED in gameplay disposes anyway. Resume, Retry, Play Again and Next Level all run the same handler -- so pausing and resuming would tear down the match the player is in the middle of. 1 of 32 -- 'a handler that stays in gameplay disposes nothing', which is the only case that fires a gameplay handler with a gameplay outcome. Paired with the entry above: one per direction, because a single test cannot fail both ways. Re-measured at 2 for issue #279: `only stops a session whose action actually LEFT gameplay` is a new route-host.test.ts case reading the same disposal seam, so it fails here with the rest. One case, not a population shift."
+}

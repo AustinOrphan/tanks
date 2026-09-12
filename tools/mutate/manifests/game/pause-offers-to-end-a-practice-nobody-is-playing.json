@@ -1,0 +1,15 @@
+{
+  "id": "pause-offers-to-end-a-practice-nobody-is-playing",
+  "file": "src/game/hud.ts",
+  "find": "      : s === 'paused' && statusData?.kind === 'practice'",
+  "replace": "      : s === 'paused'",
+  "expect": "killed",
+  "why": "Drops the SESSION half of the contextual pause exit, so every paused session -- a campaign run mid-level, a versus match, a session that has not stated its kind yet -- offers to \"End Practice\". This is the mutation the practice assertion alone cannot see: it satisfies the new label test and is wrong everywhere else, which is exactly why that test ships with a control that pauses a campaign, a versus match and a null status through the same driver. Campaign is the case the generic word is TRUE for, and versus is issue #279's screen, so both are copy the player would act on.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) names the destination at Pause wherever one can be named, and keeps the generic word where it cannot",
+    "hud: the level-cleared panel offers the main menu still says Quit to Title when paused"
+  ]
+}

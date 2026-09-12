@@ -1,0 +1,12 @@
+{
+  "id": "dependency-direction-render-may-import-game",
+  "file": "src/dependency-direction.test.ts",
+  "find": "  render: new Set<Layer>(['render', 'presentation', 'sim']),",
+  "replace": "  render: new Set<Layer>(['render', 'presentation', 'sim', 'game']),",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 6,
+  "why": "The layer table loses one direction: render is allowed to import game again, which is exactly the pre-#473 state (five render modules imported game/customization.ts). The sweep over the real tree stays green under it, because the tree is clean -- which is why the guard carries hand-written fixtures that are NOT derived from MAY_IMPORT. 6 of 84 in dependency-direction.test.ts: `flags render -> game`, `flags side-effect import`, `flags CommonJS require`, `flags import.meta.glob reaching another layer` and `flags a directory-index import of game` (all five plant a render -> game import, in a different syntax each, and are now reported clean) and `has a hand-written fixture on both sides of every layer pair` (a 16th allowed pair with no clean fixture and a forbidden one). The other 20 forbidden-pair fixtures pass, as they must -- the mutation opens one direction, not all of them."
+}

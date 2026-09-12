@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-recycles-a-cloud-wearing-the-wrong-tint",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      sprite.material.color.setHex(look.color);\n      sprite.material.opacity = look.peakOpacity;",
+  "replace": "      sprite.material.opacity = look.peakOpacity;",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Drops the tint reset from the pool's acquire path. One pool now serves both looks, so the sprites a refusal retired are handed straight to the next ordinary shot -- and every shot after that one, on that tank, comes out black. It is invisible until a refusal happens, which is what makes it a defect rather than a mistake anyone would notice while developing: a match that never hits the shell cap renders correctly all the way through.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) gives a recycled cloud the look of the event that reused it, not the one that retired it"
+  ]
+}

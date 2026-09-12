@@ -1,0 +1,14 @@
+{
+  "id": "run-tally-never-persisted",
+  "file": "src/game/stats.ts",
+  "find": "      writeRaw(RUN_STATS_KEY, runTally);\n    },\n  };",
+  "replace": "    },\n  };",
+  "expect": "killed",
+  "tests": [
+    "src/game/stats.test.ts"
+  ],
+  "killedBy": [
+    "createStatsStore: the CAMPAIGN RUN scope SURVIVES the tab closing, which is the entire reason it is persisted"
+  ],
+  "why": "Accumulates the run tally in memory and never writes it, which is the whole design decision reversed in one line. Everything passes within a single browser session -- which is how a campaign is usually played while testing -- and a campaign spread over two sittings silently reports only the second one, on the screen built to report it. Anchored on the tail of `record` plus the closing brace, because `writeRaw(RUN_STATS_KEY, runTally)` also appears in `startRun` and `resetStats` and those writes are a different claim."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "about-pane-keeps-a-document-open-across-a-visit",
+  "file": "src/game/hud.ts",
+  "find": "      collapseLegalDocuments(legalDisclosures);",
+  "replace": "      void legalDisclosures;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "the About & Legal pane in the assembled HUD (issue #117) collapses every document when the pane closes, so a second visit opens on the index"
+  ],
+  "why": "Leaves whatever was open still open, so re-entering About & Legal drops the player into the middle of the PolyForm licence rather than onto the index -- and since the pane scrolls from the top, the five toggles are then separated by a document the player did not ask for again. Deliberately hung off `showAbout(false)` rather than off the Back handler, so it covers every route out of the pane; the case that kills this leaves by Back and then re-opens, which is what distinguishes the two placements."
+}

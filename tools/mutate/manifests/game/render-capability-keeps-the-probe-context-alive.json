@@ -1,0 +1,15 @@
+{
+  "id": "render-capability-keeps-the-probe-context-alive",
+  "file": "src/game/render-capability.ts",
+  "find": "    if (isLoseContext(ext)) ext.loseContext();",
+  "replace": "    void isLoseContext(ext);",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/render-capability.test.ts"
+  ],
+  "why": "Takes a WebGL 2 context and never hands it back. The answer is unchanged, so every capability assertion in the file stays green -- what leaks is a live context held for as long as the detached canvas is reachable, against a browser ceiling in the low teens and route-ui.ts's documented claim that this page's 'peak is two live contexts, never three'. A probe that quietly added a permanent third would break that claim with nothing failing, which is why the acceptance bullet 'a successful probe leaves no persistent renderer, canvas, GL resource owner, or listener behind' is checked as a COUNT rather than trusted because the call returned. The mutation keeps the `getExtension` call and the `isLoseContext` read, so the extension is still requested and only the RELEASE is dropped: the entry pins the release specifically, not the lookup. 1 of 14 in the scoped run -- 'hands the context back through WEBGL_lose_context', the only case asserting `loseContextCalls` is 1. 'still reports supported when the release extension is missing' asserts it is 0 and is unaffected, which is what keeps this from being satisfied by a probe that never asks. expectFailures counts that scoped run only.",
+  "reads": [
+    "package.json"
+  ]
+}

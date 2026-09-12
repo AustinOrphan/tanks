@@ -1,0 +1,14 @@
+{
+  "id": "mutate-pool-ignores-scope-cost",
+  "file": "tools/mutate/run.mjs",
+  "find": "  const costOfGroup = (/** @type {T[]} */ group) => group.length * costOf(group[0].tests);",
+  "replace": "  const costOfGroup = (/** @type {T[]} */ group) => group.length;",
+  "why": "Dealing by entry count alone is what left the hud scope's worker running five minutes after the others had finished (issue #507); the cost-weighted partition test is the case that sees it.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "partitionByScope balances by COST when a cost is supplied: one expensive scope outweighs several cheap ones (issue #507)"
+  ]
+}

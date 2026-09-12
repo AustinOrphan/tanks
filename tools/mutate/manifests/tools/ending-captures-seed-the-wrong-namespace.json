@@ -1,0 +1,14 @@
+{
+  "id": "ending-captures-seed-the-wrong-namespace",
+  "file": "tools/screens/states.mjs",
+  "find": "    storage: MID_CAMPAIGN_DEV,\n    query: '?dev=1&outcome=mission-clear',",
+  "replace": "    storage: MID_CAMPAIGN,\n    query: '?dev=1&outcome=mission-clear',",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "the screen-state catalogue seeds the DEVELOPER key namespace on every state whose URL carries the dev gate"
+  ],
+  "why": "Seeds a PRODUCTION save on a state whose URL carries the dev gate. Issue #245 selects the storage namespace from `location.search` at boot, so a `?dev=1` page persists behind `tanks.dev.` and cannot see those keys at all -- the capture boots a first-time player, and its own recipe then times out clicking a Continue that is not offered. MEASURED: this is exactly what the five ending states did on their first run, and it presents as a broken recipe rather than as a namespace rule, which is why the catalogue now asserts the pairing in both directions."
+}

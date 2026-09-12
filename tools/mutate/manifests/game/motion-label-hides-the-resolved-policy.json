@@ -1,0 +1,14 @@
+{
+  "id": "motion-label-hides-the-resolved-policy",
+  "file": "src/game/hud.ts",
+  "find": "    const resolved = currentMotion === 'system' ? ` (${reducedMotion ? 'reduced' : 'full'})` : '';",
+  "replace": "    const resolved = '';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Issue #289's own report: 'Transitions between menus seem to not work? Or at least I haven't seen them in action?'. With the OS asking for reduced motion, a menu that never animates and a control reading only 'Match device' leave nothing on screen connecting the two -- which is the state that made the missing control hard to even diagnose. 'Full' and 'Reduced' name their own answers; 'Match device' is the one state that cannot, so it is the one that reports the resolved policy.",
+  "killedBy": [
+    "hud: the motion toggle (issue #289) reports the RESOLVED policy on Match device, which is the state its own name cannot say"
+  ]
+}

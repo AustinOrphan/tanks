@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-collapses-like-the-flash-it-must-not-resemble",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      const size = (BIRTH_SIZE + (GROWN_SIZE - BIRTH_SIZE) * grow) * b.size;",
+  "replace": "      const size = (GROWN_SIZE - (GROWN_SIZE - BIRTH_SIZE) * grow) * b.size;",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Inverts the growth, so the cloud shrinks as it fades. That is precisely blocked-fire-muzzle.ts's gesture (collapse plus fade toward SHRINK_TO) in grey, and `muzzle` is still a selectable refusal arm -- so under this the two would play together at the same barrel as two sizes of one collapse, which is the failure #356's comparison cannot survive. The scale still changes every frame, so nothing that merely watched for movement would notice.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) reads as SMOKE, not as the flash: it EXPANDS and thins where the flash collapsed"
+  ]
+}

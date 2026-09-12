@@ -1,0 +1,19 @@
+{
+  "id": "route-host-frame-loop-never-continues",
+  "file": "src/game/route-host.ts",
+  "find": "    menuPoller.poll(now);\n    if (polling) cancelFrame = deps.requestFrame(pollFrame);",
+  "replace": "    menuPoller.poll(now);",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Each frame must queue its successor; a poller that reads once at construction never sees a pad.",
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused",
+    "createRouteHost: the gamepad menu poller (issue #494) Start pauses a simulating session and resumes a paused one; every other action is dropped mid-play",
+    "createRouteHost: the gamepad menu poller (issue #494) a direction walks the real HUD and Back pops its layer",
+    "createRouteHost: the gamepad menu poller (issue #494) a held A across a Resume does not confirm again, so the pad that resumed the round is silent at the next Pause",
+    "createRouteHost: the gamepad menu poller (issue #494) disposal cancels the queued frame, and a frame that fires anyway emits nothing",
+    "createRouteHost: the gamepad menu poller (issue #494) polls on a page frame loop from construction: one frame queued, and each frame queues the next"
+  ]
+}

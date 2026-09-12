@@ -1,0 +1,12 @@
+{
+  "id": "blocked-fire-ring-drops-its-paired-audio-arm",
+  "file": "src/render/blocked-fire-ring.ts",
+  "find": "    if (cue !== 'ring' && cue !== 'ring-audio') return;",
+  "replace": "    if (cue !== 'ring') return;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/render/blocked-fire-ring.test.ts"
+  ],
+  "why": "blocked-fire-ring.ts's own cue gate, narrowed to the single `ring` arm so the paired `ring-audio` draws nothing. MEASURED as a real gap before the assertion that closes it: this exact mutation SURVIVED (0 of 8 test(s) failed) against the tests this file had at the time, because `ring-audio` appeared nowhere in it -- not as a drawing case, not in the negative list. Same shape as the silent `ring-audio` the audio side shipped (see blocked-fire-audio-drops-the-ring-pairing), and pinned for the same reason: not a wrong branch but a MISSING one, which no assertion written per remembered case can fail on. Nothing else notices -- the flag still parses, renderer.ts still constructs the system for the paired cue, and every `ring` case still draws. #356's ruling is made by comparing arms, so a paired arm that silently drops half its channels produces a wrong ruling rather than a cosmetic defect. `draws for EVERY cue carrying `ring`, and for no other -- one row per cue` is the case that catches it; scoped to blocked-fire-ring.test.ts, and expectFailures counts that scoped run only."
+}

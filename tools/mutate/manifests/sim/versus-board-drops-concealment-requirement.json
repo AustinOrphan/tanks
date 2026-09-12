@@ -1,0 +1,14 @@
+{
+  "id": "versus-board-drops-concealment-requirement",
+  "file": "src/sim/versus-board.ts",
+  "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+  "replace": "    suitable: distinctSpawns && roomOk && egressOk,",
+  "expect": "killed",
+  "why": "suitable must require every spawn pair to lack mutual line of sight, not just distinct cells and enough floor -- dropping allPairsConcealed from the conjunction leaves a fully-visible board reading as suitable. Caught by 1 of the 12 cases in versus-board.test.ts: the 10x10-open-room fixture built specifically to isolate concealment (no interior walls, so separation and room both measure true while every spawn pair stays mutually visible at every N in {2,3,4}) asserts suitable=false at N=2 and fails immediately once the mutation makes it true. The 15-shipped-arena sweep does not catch this: every shipped arena already measures 0 of its pairs visible (pickVersusSpawnCell's own hard LOS filter succeeds on all of them), so allPairsConcealed is true regardless of whether the mutation is applied, and suitable's value is unchanged for every shipped (arena, N) combination.",
+  "tests": [
+    "src/sim/versus-board.test.ts"
+  ],
+  "killedBy": [
+    "evaluateVersusBoard: mutual concealment can fail, isolated from the other two measured: separation and room hold, concealment does not, at every N in {2, 3, 4}"
+  ]
+}

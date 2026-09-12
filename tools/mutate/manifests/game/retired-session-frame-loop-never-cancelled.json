@@ -1,0 +1,12 @@
+{
+  "id": "retired-session-frame-loop-never-cancelled",
+  "file": "src/game/driver.ts",
+  "find": "    stop(): void {\n      running = false;\n      deps.raf.cancel(handle);\n    },",
+  "replace": "    stop(): void {\n      running = false;\n      if (running) deps.raf.cancel(handle);\n    },",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "`stop()` clears its running flag but never cancels the frame it has already queued -- the guard is inverted so it can never fire. Strictly milder than `retired-session-keeps-advancing-the-world`: `frame`'s own `if (!running) return;` still makes the leaked callback inert, so the world does NOT advance twice and only the registration leaks. 1 of 397, at 'leaves exactly one outstanding frame registration' -- and NOT at 'leaves exactly one frame loop still ADVANCING the world', which is the whole reason both entries exist. This one is genuinely new coverage: run against origin/main's loop.test.ts the same mutation passes all 388 tests, because that rAF fake held a single `pending` callback slot and a no-op `cancel`, so one live frame loop and two were indistinguishable.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ]
+}

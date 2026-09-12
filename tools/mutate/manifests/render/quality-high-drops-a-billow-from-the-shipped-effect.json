@@ -1,0 +1,14 @@
+{
+  "id": "quality-high-drops-a-billow-from-the-shipped-effect",
+  "file": "src/render/quality.ts",
+  "find": "export const FULL_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 3, maxClouds: 32 };",
+  "replace": "export const FULL_MUZZLE_SMOKE: MuzzleSmokeQuality = { billowsPerCloud: 2, maxClouds: 32 };",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts"
+  ],
+  "why": "The whole risk the smoke's quality budget carries. `high` is the preset an absent `quality` flag resolves to, so it has to draw exactly what the tree drew before there was a preset at all -- and the cheapest way to break that is to take the cheapening one billow too far and apply it to the default as well. Nothing about the effect stops working under this: smoke still puffs, still darkens on a refusal, still expands and thins, and every other muzzle-smoke assertion stays green. Only an assertion that compares this number against muzzle-smoke.ts's OWN table length can see that the default has quietly stopped being the shipped look.",
+  "killedBy": [
+    "QUALITY_PRESETS.high matches scene.ts literals exactly muzzleSmoke draws EVERY billow the effect has -- pinned to the table, not to a copy of its length"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "app-settings-namespace-ignores-the-url",
+  "file": "src/game/app-settings.ts",
+  "find": "  const namespace = selectStorageNamespace(globalThis.location?.search ?? '');",
+  "replace": "  const namespace = selectStorageNamespace('');",
+  "expect": "killed",
+  "tests": [
+    "src/game/app-settings.test.ts"
+  ],
+  "why": "The one unpinned line issue #245 adds. `createNamespacedStorage` and `selectStorageNamespace` can both be correct and fully covered while this line never asks for the developer namespace, in which case `?dev=1` persists into the real player's keys exactly as before. Killed by `takes the storage namespace from the URL`, which stubs globalThis.location rather than trusting the node environment's absence of one.",
+  "killedBy": [
+    "createBrowserAppSettings takes the storage namespace from the URL"
+  ]
+}

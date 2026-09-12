@@ -1,0 +1,14 @@
+{
+  "id": "fire-gate-ignores-barrel-arrival",
+  "file": "src/sim/ai/index.ts",
+  "find": "    const onTarget = Math.abs(angleDelta(tank.turretAngle, decision.turretAngle)) <= AI_AIM_BREAK;",
+  "replace": "    const onTarget = true;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/dispatch.test.ts"
+  ],
+  "why": "aimTicks measures how long a solution has EXISTED, never whether the gun got there, and the shot deliberately leaves along the barrel -- so without this gate a tank fires mid-slew into whatever is in front of it. Latent until idle search shipped: measured over pacifist.test.ts's 60 seeds, dropping this takes AI-on-AI shell kills from 43 to 51 on an unchanged shot count.",
+  "killedBy": [
+    "stepAi friendly-fire gate at the trigger does NOT fire while the barrel is still traversing to its solution (issue #371)"
+  ]
+}

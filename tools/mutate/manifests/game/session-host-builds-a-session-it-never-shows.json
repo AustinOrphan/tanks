@@ -1,0 +1,15 @@
+{
+  "id": "session-host-builds-a-session-it-never-shows",
+  "file": "src/game/session-host.ts",
+  "find": "    handle.enterGameplay();",
+  "replace": "    void handle;",
+  "expect": "killed",
+  "tests": [
+    "src/game/session-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "createGameSessionHost: start SHOWS the session it built, and shows the replacement rather than the one it retired"
+  ],
+  "why": "The host builds a session and never shows it -- construction and routing are deliberately separate acts here, so dropping the second leaves a world built behind a menu. Already caught by composition (four `loop.test.ts` cases red), which is why this entry is scoped to BOTH files: what was missing was the claim at the layer that owns it. `session-host.test.ts` recorded `enteredIds` -- documented as \"which session was SHOWN, in order\" -- and asserted it zero times, so the failure surfaced as a stale campaign run or a silent Main Menu rather than as \"the host never showed what it built\". The killer also pins the ORDER, which distinguishes showing the replacement from re-showing the session just retired."
+}

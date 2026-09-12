@@ -1,0 +1,14 @@
+{
+  "id": "estimation-error-ignores-the-profile-refresh-cadence",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  const bucket = Math.floor(world.tick / Math.max(1, refreshTicks));",
+  "replace": "  const bucket = Math.floor(world.tick / WANDER_TICKS);",
+  "expect": "killed",
+  "why": "`hazardRefreshTime` becomes a dead field: the cadence argument is accepted and discarded, and every profile buckets on the old hardcoded WANDER_TICKS again. This is the specific regression that makes issue #223's sixth competence axis decorative -- `easy` and `hard` still resolve different windows, and both live with a bad read for exactly as long as `normal` does. Invisible to hazard-competence.test.ts, which samples on the WANDER_TICKS cadence itself, and invisible at `normal`, whose authored 0.5s IS 30 ticks. Killed by the one test built to separate them: a 60-tick profile and a 12-tick profile compared at ticks 0 and 45, where the slow profile must still hold its read and the quick one must not.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "perceiveHazards: one belief, every hazard type reads the estimation error on the PROFILE cadence, not on a fixed one"
+  ]
+}

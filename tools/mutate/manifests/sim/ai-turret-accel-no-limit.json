@@ -1,0 +1,26 @@
+{
+  "id": "ai-turret-accel-no-limit",
+  "file": "src/sim/ai/turret-accel.ts",
+  "find": "  const nv = vel + Math.max(-aMax, Math.min(aMax, vDes - vel));",
+  "replace": "  const nv = vDes;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/turret-accel.test.ts",
+    "src/sim/ai/dispatch.test.ts",
+    "tools/gallery/moments.test.ts"
+  ],
+  "why": "This IS the change. Letting the velocity jump straight to vDes restores the bang-bang slew: the turret is stopped or at the rate cap with nothing in between, which measured an abrupt speed change on 0.84% (brown) / 1.84% (grey) / 2.85% (teal) of ticks over 60 seeds x 2 arenas, against 0.06/0.24/0.44% with the limit in place. expectFailures moved 9 -> 11 when tools/gallery/moments.test.ts (in this entry's declared scope) gained the ai-commitment block for issue #359; re-measured, not guessed.",
+  "killedBy": [
+    "accelSlew decelerates on approach so it can stop ON the target, not past it",
+    "accelSlew ramps in from rest: the first tick moves by the acceleration budget, not the speed cap",
+    "accelSlew reverses through zero rather than flipping direction in one tick",
+    "accelSlew takes the short way round the +/-pi seam",
+    "ai-commitment moment specifics nobody dies inside the clip, so no respawn moves a tank mid-measurement",
+    "ai-tracking moment specifics the stationary AI holds position and bodyAngle exactly still while its turret sweeps then reverses",
+    "every moment pins its events to exact ticks ai-commitment: each expected event fires on its declared tick \u2014 and on no other",
+    "stepAi round phases countdown: no AI tank moves or fires, even with a clear kill shot",
+    "stepAi turret slew SEARCHES rather than holding the last angle when it has no line of sight (issue #371)",
+    "stepAi turret slew an AI cannot instantly face a target that appears behind it: one tick advances by one acceleration budget",
+    "turret acceleration (issue #347) stepAi ramps the turret from rest instead of jumping straight to the rate cap"
+  ]
+}

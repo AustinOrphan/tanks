@@ -1,0 +1,14 @@
+{
+  "id": "mutate-only-flag-ignores-a-comma-list",
+  "file": "tools/mutate/run.mjs",
+  "find": "  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);",
+  "replace": "  const ids = [raw].map((s) => s.trim()).filter(Boolean);",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Takes one --only value whole instead of splitting it, so `--only a,b,c` becomes the single id \"a,b,c\". That id matches nothing, so this particular regression stops the run rather than under-running it -- but it still turns a working spelling into a hard refusal. The test pins the comma list as a real multi-id spelling, not a name.",
+  "killedBy": [
+    "parseArgs splits one --only on commas, and mixes commas with repeats"
+  ]
+}

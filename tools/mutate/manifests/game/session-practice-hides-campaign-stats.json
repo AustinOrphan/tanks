@@ -1,0 +1,14 @@
+{
+  "id": "session-practice-hides-campaign-stats",
+  "file": "src/game/hud.ts",
+  "find": "      statEl.classList.toggle('hud-campaign-stat--hidden', kind === 'versus');",
+  "replace": "      statEl.classList.toggle('hud-campaign-stat--hidden', kind !== 'campaign');",
+  "expect": "killed",
+  "why": "The tempting widening, now that the projection's own discriminant takes three kinds. Practice is a campaign board played in isolation and its Lives/Enemies are as real there as in a run, so hiding them is a shipped-behaviour regression on the non-developer Level-Select path -- and it would also surface the versus stock strip for practice. Kept as a permanent entry because nothing about the code's shape argues against the wider predicate; only the test does. RE-ANCHORED for issue #324's step S6: the predicate moved out of `applySessionKindSurfaces` (deleted) into `applyStatus`, and reads the status projection's `kind` instead of a `sessionKind` variable. The property is unchanged and so is the mutation's shape. Rescoped from hud.navigation.test.ts to hud.match.test.ts, where the case that measures it now lives beside the Practice chip it shares a decision with. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: campaign Lives/Enemies stats hidden during versus (issue #282) PRACTICE shows the campaign stats, exactly as campaign does, and wears its own word"
+  ]
+}

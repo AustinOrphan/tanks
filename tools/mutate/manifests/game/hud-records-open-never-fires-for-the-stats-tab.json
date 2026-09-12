@@ -1,0 +1,14 @@
+{
+  "id": "hud-records-open-never-fires-for-the-stats-tab",
+  "file": "src/game/hud.ts",
+  "find": "      swapSurface(openSurface(), STATS_SURFACE, () => {\n        paintRecords();\n",
+  "replace": "      swapSurface(openSurface(), STATS_SURFACE, () => {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The Stats tab opens without asking anyone for its numbers. This is one of the two call sites the hook has -- the Achievements tab's is the sibling entry -- and they are pinned separately because either can rot alone: Records is one menu entry with two panes, and a hook wired to only one of them leaves that tab showing whatever was last pushed for the other. Invisible to every fake-HUD test, which never runs a transition; only the real HUD can see it.",
+  "killedBy": [
+    "hud: the stats page fires onRecordsOpen on an open of either tab, never on a close, and in time for the render"
+  ]
+}

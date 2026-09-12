@@ -1,0 +1,14 @@
+{
+  "id": "pp1-arm-skips-the-mine-directions",
+  "file": "src/sim/arena.ts",
+  "find": "      const mines = PP1_ROLE_MINE_CAPS[tank.kind];\n      if (mines !== undefined) tank.mineCap = mines;\n",
+  "replace": "      void PP1_ROLE_MINE_CAPS[tank.kind];\n",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/pp1-roles.test.ts"
+  ],
+  "killedBy": [
+    "the arm's mine directions, as capacities (issue #358's second axis) stamps mine capacities at spawn, alongside the shell caps and only with the arm on"
+  ],
+  "why": "Applies HALF the approved matrix: shell caps stamped, mine directions silently skipped, so `?dev=1&pp1Roles=1` claims the PP1 role arm while Brown/Teal/Green still carry the two mines the matrix removes. A half-applied arm is worse than none, because a playtest under it produces evidence attributed to a roster nobody approved. The two tables are consulted in one pass but independently -- their memberships differ, since grey takes the shell arm only -- and that independence is exactly what makes dropping one of them invisible to the other axis's tests. Replaced with a `void` read rather than a deletion so the import stays used and the mutation is the missing STAMP, not a compile error."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-hud-flashes-for-any-tank-that-was-refused",
+  "file": "src/game/blocked-fire-hud.ts",
+  "find": "        if (e.type !== 'fire-blocked' || e.ownerId !== playerId) continue;",
+  "replace": "        if (e.type !== 'fire-blocked') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/game/blocked-fire-hud.test.ts"
+  ],
+  "why": "Drops the controlling-player filter, the presence-only mistake CLAUDE.md names on a shared event stream: `fire-blocked` is emitted for whoever was refused, AI tanks and other players included, so the local HUD would announce an enemy's capacity as though it were the player's own. #356 requires the cue to appear only for the controlling player and only for the capacity condition; this breaks the first half while leaving every single-tank test green.",
+  "killedBy": [
+    "blocked-fire HUD cue (issue #516, parent #356) ignores a refusal that is not the CONTROLLING player's"
+  ]
+}

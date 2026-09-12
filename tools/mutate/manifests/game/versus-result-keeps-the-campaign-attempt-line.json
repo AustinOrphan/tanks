@@ -1,0 +1,14 @@
+{
+  "id": "versus-result-keeps-the-campaign-attempt-line",
+  "file": "src/game/hud.ts",
+  "find": "    if (outcomeData.tally === 'ffa' || outcomeData.tally === 'teams') {\n      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');\n      return;\n    }",
+  "replace": "    void 0;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) drops the campaign attempt line, because the table below already says it per player"
+  ],
+  "why": "Puts the campaign attempt line back on a versus result, above a table that already reports the same ground per player. Two wrongs at once: \"Level attempt\" names a level a versus match does not have, and the numbers openly DISAGREE with the row beneath -- `attempt` counts the tracked seat's shell and mine kills against its own shots, the table is per-slot, so the line reads 7 kills / 29% over a Player 1 row reading 6 and 36%. Neither figure is incorrect, which is what makes showing both worse than showing either."
+}

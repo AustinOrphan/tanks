@@ -1,0 +1,14 @@
+{
+  "id": "map-card-random-counts-itself-among-the-boards",
+  "file": "src/game/hud.ts",
+  "find": "        const eligible = choices.length - 1;",
+  "replace": "        const eligible = choices.length;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "the versus map cards (issue #274) tells Random how many boards it will draw from, counting the row and not the catalog"
+  ],
+  "why": "Random counts ITSELF among the boards it will draw from -- the off-by-one available at this exact line, since `choices` is the eligible boards plus Random and the `- 1` is the only thing separating them. The card then claims seven boards where six are offered, which is issue #274's \"Random never selects outside the displayed eligible set\" broken as a STATEMENT rather than as behaviour: `pickVersusArena` still draws correctly from `versusMapChoices`, so nothing about the match is wrong and nothing else in the suite can see it. Spelled as this slip rather than as `VERSUS_CATALOG.length`, which hud.ts does not import and would therefore be killed by a ReferenceError -- a crash proves nothing about the assertion. Note what this entry cannot prove: every shipped (players, mode) combination yields exactly six eligible boards, so a hardcoded `6` would survive it; the case that kills this pins that population so the day a catalog edit breaks the tie it asks for a better fixture rather than staying quietly vacuous."
+}

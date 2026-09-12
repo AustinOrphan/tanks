@@ -1,0 +1,14 @@
+{
+  "id": "route-host-mutes-without-saying-so",
+  "file": "src/game/route-host.ts",
+  "find": "      hud.showToast(deps.settings.snapshot().audio.muted ? 'Muted' : 'Sound on');",
+  "replace": "      void deps;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The issue's 'retain applicable shortcuts with brief status feedback'. The always-visible topbar label was the only thing that told a player whether the game was muted or merely silent -- no music ships, so silence is the normal condition either way -- and removing it without a replacement makes a mis-typed M indistinguishable from a broken build. The mute still happens, which is why nothing but the toast can see this.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page claims M for the page and reports the result, on a page with no session"
+  ]
+}

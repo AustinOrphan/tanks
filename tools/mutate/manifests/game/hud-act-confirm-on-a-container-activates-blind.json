@@ -1,0 +1,14 @@
+{
+  "id": "hud-act-confirm-on-a-container-activates-blind",
+  "file": "src/game/hud.ts",
+  "find": "    if (controls.length > 0) controls[0].focus();\n    return true;",
+  "replace": "    if (controls.length > 0) controls[0].click();\n    return true;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Confirm the instant a panel arrives must land focus on the first control, not activate it: a gamepad Confirm at a Main Menu with no run would otherwise start a New Game blind.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the semantic action dispatcher (issue #494) confirm on a fresh panel lands on the first control instead of activating it; confirm on a focused control activates it once"
+  ]
+}

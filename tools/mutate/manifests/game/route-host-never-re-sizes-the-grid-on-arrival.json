@@ -1,0 +1,16 @@
+{
+  "id": "route-host-never-re-sizes-the-grid-on-arrival",
+  "file": "src/game/route-host.ts",
+  "find": "      paintLevelSelect();\n",
+  "replace": "      void 0;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The page sizes the Levels grid once, at construction, and never again -- so a level cleared during a match is never offered. The grid is unreachable between the clear and the arrival (hud.ts shows the Levels button at the Main Menu alone), which is exactly why the arrival is the moment that has to repaint it and why nothing else can: the session's own win-time push was removed by issue #324's step S5, and with this line gone there is no writer left for the change. Pinned with killedBy rather than a count: the claim is a specific arrival, not a population.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page re-sizes the Levels grid on every arrival at the Main Menu, and only there",
+    "startGameWith: the main menu records the cleared level AT the win, and the page re-sizes the grid on the way back"
+  ]
+}

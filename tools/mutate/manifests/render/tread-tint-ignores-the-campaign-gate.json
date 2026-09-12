@@ -1,0 +1,14 @@
+{
+  "id": "tread-tint-ignores-the-campaign-gate",
+  "file": "src/render/tread-trails.ts",
+  "find": "  if (world.rules.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
+  "replace": "  if (!identityApplies(world)) return TREAD_COLOR;",
+  "expect": "killed",
+  "why": "The trail tint stops excluding `campaign-coop`, so a FOUR-PLAYER CO-OP campaign board prints identity-tinted trails. This is the exact defect the first implementation shipped and a screenshot caught: co-op clears the player-count gate -- four player tanks, four identity rings -- so `identityApplies` alone is not enough, and issue #284's scope says campaign trails stay neutral in the initial implementation. Single-player campaign is NOT the discriminating case here (it fails the player-count gate either way), which is why the test uses four co-op tanks and asserts the same four ARE tinted in ffa -- otherwise the case would pass against a build that tinted nothing. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/render/tread-trails.test.ts"
+  ],
+  "killedBy": [
+    "tread trails carry their owner identity in VS (issue #284) leaves campaign trails neutral -- and for the same reason rings are"
+  ]
+}

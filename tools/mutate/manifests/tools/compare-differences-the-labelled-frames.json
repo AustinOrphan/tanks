@@ -1,0 +1,14 @@
+{
+  "id": "compare-differences-the-labelled-frames",
+  "file": "tools/compare/compose.mjs",
+  "find": "  await ffmpeg(['-i', basePng, '-i', headPng, '-filter_complex', '[0:v][1:v]blend=all_mode=difference', difference], deps);",
+  "replace": "  await ffmpeg(['-i', labelledBase, '-i', labelledHead, '-filter_complex', '[0:v][1:v]blend=all_mode=difference', difference], deps);",
+  "expect": "killed",
+  "tests": [
+    "tools/compare/compose.test.ts"
+  ],
+  "why": "Differences the captioned frames instead of the originals. The two captions always differ -- they name different refs -- so the brightest region of every difference image becomes the label text, burying whatever actually changed in the render.",
+  "killedBy": [
+    "composeStill stacks the LABELLED pair but differences the UNLABELLED originals"
+  ]
+}

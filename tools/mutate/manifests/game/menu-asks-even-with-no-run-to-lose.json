@@ -1,0 +1,17 @@
+{
+  "id": "menu-asks-even-with-no-run-to-lose",
+  "file": "src/game/hud.ts",
+  "find": "  const confirmsNewCampaign = (): boolean =>\n    hasProgress && relaunchTarget !== 'versus-setup';",
+  "replace": "  const confirmsNewCampaign = (): boolean => relaunchTarget !== 'versus-setup';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "The OTHER half of the same criterion -- 'only when an active run would be lost'. A confirmation on a first-ever Start Campaign is friction protecting nothing, and it puts a destructive-sounding question in front of the one action a new player is meant to take without hesitating. Asserted separately from the gate above because a mutation that always asks passes any test that only checks the pane can appear.",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) is asked only when an active run would be lost",
+    "createHud panel does not eat a click after a drag dismissal followed by ARROW-KEY navigation",
+    "hud: continue vs new game Start Campaign fires its OWN callback, distinct from onLevelSelect"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "legal-link-hands-the-new-tab-a-live-opener",
+  "file": "src/game/legal.ts",
+  "find": "    a.rel = 'noopener noreferrer';",
+  "replace": "    a.rel = '';",
+  "expect": "killed",
+  "tests": [
+    "src/game/legal.test.ts"
+  ],
+  "killedBy": [
+    "the outbound legal links is a link, opens safely, and says so in its name"
+  ],
+  "why": "`target=\"_blank\"` without `rel=\"noopener\"` gives the opened page a live `window.opener` back into the game, and without `noreferrer` it sends the game's URL along. The only two outbound links in the application are these, so this is the whole of the app's external-link posture. Nothing observable changes: the link still opens the right page in a new tab, so no behavioural assertion anywhere else can distinguish it."
+}

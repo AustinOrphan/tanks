@@ -1,0 +1,19 @@
+{
+  "id": "last-seen-memory-tracks-the-live-target",
+  "file": "src/sim/ai/target-memory.ts",
+  "find": "  if (lineOfSight(tank.pos, target.pos, world.walls)) {",
+  "replace": "  if (true) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-memory.test.ts"
+  ],
+  "why": "The omniscience mutation, and the one thing issue #372 forbids outright: refreshing the remembered point without checking line of sight turns a memory of where the target WAS into a live read of where it IS. Invisible in any fixture where the target stands still, which is why the cases here move it while hidden.",
+  "killedBy": [
+    "last-seen contact memory EXPIRED: the contact is dropped after exactly its span, not before",
+    "last-seen contact memory NO CONTACT: a tank that has never seen anything remembers nothing",
+    "last-seen contact memory REACQUIRED: fresh sight replaces the remembered point outright and re-arms the span",
+    "last-seen contact memory REMEMBERED: the point FREEZES when sight breaks, and does not follow the target",
+    "last-seen contact memory the aim it produces points at the REMEMBERED place, not the target",
+    "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+  ]
+}

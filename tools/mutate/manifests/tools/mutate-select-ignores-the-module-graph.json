@@ -1,0 +1,14 @@
+{
+  "id": "mutate-select-ignores-the-module-graph",
+  "file": "tools/mutate/select.mjs",
+  "find": "      else if (input.relatedTests.has(t)) reasons.push(`scoped test ${t} imports a changed module`);",
+  "replace": "      else if (false) reasons.push(`scoped test ${t} imports a changed module`);",
+  "why": "Rule 3 is the one that makes the pull-request selection exact rather than name-matching: a change to hud.ts must select the loop entries whose tests import it. Dropping it leaves every entry that names neither the changed file nor a changed test unrun.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "selectAffected rule 3: a scoped test that imports a changed module selects the entry, even when the entry names neither file"
+  ]
+}

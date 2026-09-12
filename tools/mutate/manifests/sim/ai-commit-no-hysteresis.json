@@ -1,0 +1,15 @@
+{
+  "id": "ai-commit-no-hysteresis",
+  "file": "src/sim/ai/commitment.ts",
+  "find": "    && (avoidKind === 'bullet' ? Math.abs(alignment) : alignment) >= AI_COMMIT_HYSTERESIS_DOT;",
+  "replace": "    && false;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/commitment.test.ts"
+  ],
+  "why": "Hysteresis is the half of the fix aimed at the largest measured bucket: 40.6% of reversals under a shooting player (48.2% on arena3) were `bullet->bullet`, dangerAvoidMove's dodge perpendicular swapping sides as the tank crossed the shell's axis -- two equally good dodges 180 degrees apart. Without the cone the AI re-adopts the flipped candidate at every window expiry. Killed by the pair of cone tests, which assert both that an inside-cone candidate is refused AND that an outside-cone one is adopted.",
+  "killedBy": [
+    "commitMove does not let an expiring span adopt the flipped perpendicular either",
+    "commitMove keeps the held vector when an expiring span offers a near-equivalent candidate"
+  ]
+}

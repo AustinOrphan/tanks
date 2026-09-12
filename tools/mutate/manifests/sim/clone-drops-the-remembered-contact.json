@@ -1,0 +1,14 @@
+{
+  "id": "clone-drops-the-remembered-contact",
+  "file": "src/sim/world.ts",
+  "find": "    ...(t.aiLastSeenPos ? { aiLastSeenPos: { ...t.aiLastSeenPos } } : {}),",
+  "replace": "    aiLastSeenPos: undefined,",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-memory.test.ts"
+  ],
+  "why": "step() clones the world every tick, so a field the clone drops is a field that cannot outlive one tick. Subtle because updateTargetMemory re-records immediately: a dropped memory looks present at any single instant, and only a tick count that has AGED below the full span proves it survived a tick without refresh.",
+  "killedBy": [
+    "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+  ]
+}

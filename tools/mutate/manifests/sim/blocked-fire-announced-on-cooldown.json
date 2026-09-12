@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-announced-on-cooldown",
+  "file": "src/sim/world.ts",
+  "find": "  if (canAct && input.fire && player.fireCooldown <= 0) {",
+  "replace": "  if (canAct && input.fire) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/fire-refusal-paths.test.ts"
+  ],
+  "why": "The other way the cue can start lying. With the cooldown out of the gate, every tick of a reload reaches spawnBullet, and a tank at its cap reports a capacity refusal 60 times a second for a shot the cooldown was holding anyway -- which is both the wrong reason and the unbounded output #356 forbids.",
+  "killedBy": [
+    "what a refused shot says, per refusal path (issue #356) COOLDOWN: silent -- a shot still reloading is not a capacity problem"
+  ]
+}

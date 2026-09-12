@@ -1,0 +1,16 @@
+{
+  "id": "egress-not-gated-only-reported",
+  "file": "src/sim/versus-board.ts",
+  "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+  "replace": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
+  "expect": "killed",
+  "why": "Drops the tank-egress rule out of the verdict while still computing and reporting it -- exactly the shape the defect took before issue #423. Keystone and Quarters passed clearance, connectivity, symmetry, path distance and scripted playtests and shipped unplayable: players could not leave their spawns. Every cell-based criterion stays green under this mutation, which is the point; only an assertion that a board with no tank-sized exit is UNSUITABLE catches it. KILLED-BY MOVED (issue #425): this used to be caught by the shipped-arena sweep asserting the withdrawn vs-quad-01 was `suitable: false`. That board was rebuilt and no shipped board fails egress any longer, so the assertion went with it -- and this entry is what caught the loss. It is now pinned on the synthetic `twoRooms(1)` fixture, which asserts `suitable === false` as well as `egressOk === false`; the distinction is the entire point, since this mutation leaves egressOk computed and merely drops it from the verdict.",
+  "tests": [
+    "src/sim/versus-board.test.ts"
+  ],
+  "killedBy": [
+    "spawn egress: a tank, not a cell (issue #423) a ONE-cell passage is impassable and a TWO-cell passage is not -- the minimum width, measured",
+    "spawn egress: a tank, not a cell (issue #423) folds into `suitable`, which is what makes it a gate rather than a report",
+    "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
+  ]
+}

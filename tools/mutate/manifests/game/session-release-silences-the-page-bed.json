@@ -1,0 +1,14 @@
+{
+  "id": "session-release-silences-the-page-bed",
+  "file": "src/game/loop.ts",
+  "find": "    releaseAudio: () => {},",
+  "replace": "    releaseAudio: (engine) => engine.stopMusic(),",
+  "expect": "killed",
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "why": "Restores exactly the line issue #485 removed, and with it the defect the issue was filed for. The PAGE owns the music bed since #485 (route-host.ts's followMusic), and it moves the bed to the menu suite on the location change that precedes a session's disposal -- so a session that stops the music on release silences the Main Menu one call after the page started it. Measured sequence before the fix: start, context:menu, duck:false, stop, on every Quit and every Change Setup. Nothing at the session level fails, because the session being torn down is not the thing left silent. Distinct from the dispose() mutation on the same line: that one latches the engine shut for every LATER session, this one leaves the engine healthy and the page mute.",
+  "killedBy": [
+    "createBrowserDeps: the page-owned audio wiring (issue #317) hands every session the SAME engine, and releases it by touching NOTHING"
+  ]
+}

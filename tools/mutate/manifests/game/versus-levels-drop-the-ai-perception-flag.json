@@ -1,0 +1,14 @@
+{
+  "id": "versus-levels-drop-the-ai-perception-flag",
+  "file": "src/game/levels.ts",
+  "find": "            aiTargetPerception: flags.aiPerception ?? undefined,\n          },\n        },\n      ),",
+  "replace": "          },\n        },\n      ),",
+  "expect": "killed",
+  "tests": [
+    "src/game/levels.test.ts"
+  ],
+  "why": "The versus sibling of levels-drop-the-ai-perception-flag: createVersusLevelSystem threads the session's real dev flags' `aiPerception` into createWorldFor's trailing positional (issue #472), the same route its corpseBlock/muzzleInside already take through the DEV_FLAGS_OFF-defaulted third parameter. The find anchors on the close of the argument list plus the `bounds` comment that follows only in this builder, because the `flags.aiPerception ?? undefined,` line itself appears once per builder. Caught by 1 of the 56 cases in levels.test.ts: 'aiPerception reaches a versus world too', whose omitted-flags control (`full`) survives the mutation by design. Asked for by the PR #491 review alongside the sandbox entry.\n\nRE-ANCHORED at issue #493, which replaced this builder's positional argument list with one `WorldForInit` object: the old `find` quoted the positional run and would now report failed-to-apply, which is the silent form of an entry that has stopped measuring anything. The MUTATION is unchanged -- the flag still stops reaching the world -- and so is the case that kills it.",
+  "killedBy": [
+    "createVersusLevelSystem corpseBlock/muzzleInside dev flags reach the built world (composition, not unit) aiPerception reaches a versus world too (issue #472), with the omitted-flags default as its control"
+  ]
+}

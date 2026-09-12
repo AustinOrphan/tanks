@@ -1,0 +1,12 @@
+{
+  "id": "a11y-panes-stop-being-landmarks",
+  "file": "src/game/hud.ts",
+  "find": "    <div class=\"hud-customize hud-customize--hidden\" role=\"region\" tabindex=\"-1\" aria-labelledby=\"hud-customize-title\">",
+  "replace": "    <div class=\"hud-customize hud-customize--hidden\" tabindex=\"-1\" aria-labelledby=\"hud-customize-title\">",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Takes the landmark role off ONE pane. Chosen over removing all ten deliberately: a sweep that only checked 'some pane has role=region' would survive this, and a partial rollout is the realistic regression -- a pane added later that copies an older sibling's markup. The named-region sweep iterates every focus target and names the offender, so it fails on the first one that drifts rather than on the last."
+}

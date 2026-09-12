@@ -1,0 +1,14 @@
+{
+  "id": "hud-count-live-shows",
+  "file": "src/game/hud.ts",
+  "find": "      if (!info || info.phase === 'live') {",
+  "replace": "      if (!info) {",
+  "expect": "killed",
+  "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by hud.surfaces.test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead. Pinned by name since the hud suite was split (issue #511); its killers live in hud.surfaces.test.ts.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: round-start countdown hides on null and on live"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "back-focuses-the-container-not-the-opener",
+  "file": "src/game/hud.ts",
+  "find": "    if (isHiddenWithin(opener, el)) return;\n    opener.focus();",
+  "replace": "    if (isHiddenWithin(opener, el)) return;\n    void opener;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. hud.navigation.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+    "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+    "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) a pointer-initiated Back click still lands focus on the opener",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) hud.back() pops one layer and reports true; with nothing open it reports false and changes no class",
+    "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+    "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+    "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+  ]
+}

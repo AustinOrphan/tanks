@@ -1,0 +1,14 @@
+{
+  "id": "practice-retry-lands-on-the-campaign-board",
+  "file": "src/game/loop.ts",
+  "find": "      if (sm.outcome?.kind === 'practice-result') {\n        switchTo(level);\n        sm.enterGameplay(currentSession);\n        return;\n      }",
+  "replace": "      // a practice result falls through to the shared restart branch",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Puts a practice result back through the shared restart branch, which is where issue #323 found it lying in two directions at once: on a loss it fell to `landOnCampaignBoard` and built `deps.levels.start` -- the RUN's current level, as a campaign session -- so a button labelled Retry moved the player to a different level in a different kind of session; on a win with a level after it, the `next !== null` arm advanced practice through the campaign sequence instead. Both survive every assertion about the run, because neither writes it.",
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Practice a practice RETRY rebuilds the level it was on, still as practice"
+  ]
+}

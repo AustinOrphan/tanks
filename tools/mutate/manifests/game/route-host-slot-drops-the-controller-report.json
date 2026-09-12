@@ -1,0 +1,17 @@
+{
+  "id": "route-host-slot-drops-the-controller-report",
+  "file": "src/game/route-host.ts",
+  "find": "          hud.setBotAssignmentAllowed(botsMayDrivePlayers);\n          hud.setControllers(assignment);\n",
+  "replace": "          void assignment;\n          void botsMayDrivePlayers;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "What a session reports about its controller assignment reaches nothing. The Controllers panel shows no rows at all -- `currentAssignment` (hud.ts) defaults to the empty array and no other caller fills it -- so a co-op player has no way to see or change who is driving which slot, and `botAssignmentAllowedNow` stays at its fail-closed false for a versus match that legitimately allows bots. Since issue #324's step S5 this method is the only writer of either member: the session reports through the slot rather than writing the HUD, because an `Assignment` is the one thing on the panel that cannot be read off a page-owned store.",
+  "killedBy": [
+    "createRouteHost: what a session REPORTS through the slot (issue #324, step S5) paints the Controllers panel from what the session reports -- both halves, one call",
+    "startGameWith: the controller assignment panel's wiring (docs/superpowers/plans/2026-08-17-controller-assignment.md) pushes hud.setControllers with the boot-derived assignment",
+    "startGameWith: bots may not drive a player tank in the campaign (boundary enforcement) tells the hud whether to offer the candidate, matching the same rule"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "barrel-recoil-pushes-once-instead-of-stuttering",
+  "file": "src/render/barrel-recoil.ts",
+  "find": "const CYCLES = 1;",
+  "replace": "const CYCLES = 0.5;",
+  "expect": "killed",
+  "tests": [
+    "src/render/barrel-recoil.test.ts"
+  ],
+  "why": "Halves the oscillation, leaving one smooth hump: the gun eases back and returns, which reads as a nudge or as the tank being bumped rather than as a mechanism cycling. Two decaying bumps are what make it legible as the gun working, which is the whole basis on which a refusal is read as that same work delivering nothing.",
+  "killedBy": [
+    "barrel recoil (issue #526, parent #356) STUTTERS -- two decaying bumps, not one push"
+  ]
+}

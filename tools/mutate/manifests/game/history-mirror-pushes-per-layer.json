@@ -1,0 +1,12 @@
+{
+  "id": "history-mirror-pushes-per-layer",
+  "file": "src/game/navigation.ts",
+  "find": "      if (phase === 'absent') {",
+  "replace": "      if (phase === 'absent' || phase === 'present') {",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "`sync(d>0)` pushes the sentinel from `present` as well as from `absent`, which turns the single-entry design into an entry per layer AND a further entry per in-app pop that leaves layers open. The player then presses the browser's Back once per pushed entry to leave, and the traversals the design bounds to one at a time pile up. Fails 3 of 15 in navigation.test.ts: `the first layer pushes exactly one sentinel and a second layer pushes none`, `an in-app pop with a layer remaining touches history not at all; emptying the stack retires the sentinel with one back()`, and `a browser Back at depth 2 pops one layer and re-pushes the sentinel through the re-entrant sync; at depth 1 pops one and pushes nothing`, each at an exact `host.calls` list."
+}

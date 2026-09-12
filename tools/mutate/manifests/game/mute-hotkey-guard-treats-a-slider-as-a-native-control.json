@@ -1,0 +1,14 @@
+{
+  "id": "mute-hotkey-guard-treats-a-slider-as-a-native-control",
+  "file": "src/game/loop.ts",
+  "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+  "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) return false;",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "M with the volume slider focused must mute: the consume rule keeps only the keys the slider operates on, and this is the pre-#494 `input,select,textarea` guard.",
+  "expect": "killed",
+  "killedBy": [
+    "isMuteHotkey accepts M aimed at a focused button, slider or select, and still refuses it aimed at a textarea (issue #494)"
+  ]
+}

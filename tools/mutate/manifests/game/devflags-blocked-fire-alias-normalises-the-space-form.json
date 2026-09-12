@@ -1,0 +1,14 @@
+{
+  "id": "devflags-blocked-fire-alias-normalises-the-space-form",
+  "file": "src/game/devflags.ts",
+  "find": "  ['haptic+audio', 'haptic-audio'],\n  ['ring+audio', 'ring-audio'],\n]);",
+  "replace": "  ['haptic+audio', 'haptic-audio'],\n  ['ring+audio', 'ring-audio'],\n  ['haptic audio', 'haptic-audio'],\n  ['ring audio', 'ring-audio'],\n]);",
+  "why": "Mapping the space form back to a cue is the 'broadly normalise spaces to +' the issue forbids: an unescaped `ring+audio` would then silently become a valid value, which is exactly the historical trap, and a genuinely space-encoded value would be indistinguishable from it.",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "parseDevFlags: blockedFire values are safe to paste into a query string (issue #497) the historical trap: a raw ring+audio decodes to a space and is rejected to null, never silently another cue"
+  ]
+}

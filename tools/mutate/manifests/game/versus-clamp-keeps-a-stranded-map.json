@@ -1,0 +1,13 @@
+{
+  "id": "versus-clamp-keeps-a-stranded-map",
+  "file": "src/game/versus-config.ts",
+  "find": "  if (versusMapChoices(players, mode, entries).includes(arenaId)) {",
+  "replace": "  if (true) {",
+  "expect": "killed",
+  "expectFailures": 6,
+  "tests": [
+    "src/game/versus-config.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Forces the retained map to be kept at EVERY (players, mode), which is the exact pre-#274 behaviour: the pane's Players and Mode handlers rebuild the Map row without the stranded choice but keep carrying it in `versusConfigState`, and `resolveVersusConfig` -- the launch gate -- then THROWS `map 'vs-duel-01' does not support N=3 mode=ffa` out of the Start click handler, which nothing catches, so Start silently does nothing. Invisible to any assertion about what the Map ROW draws, which is why the hud case asserts what Start EMITS and then runs the emitted config through the real gate rather than restating the rule. Killed by 6, MEASURED rather than derived -- the derivation was 5 and was wrong. Four retainArenaChoice unit cases (players, mode, gone, both-predicates), the hud pane case, and the clears-the-notice case, whose PRECONDITION (`not.toBe('')`) is that a drop happened at all: with nothing ever dropped there is no notice to clear, so a test about the note's lifetime fails on the clamp being gone. That is a coverage overlap worth leaving rather than trimming -- it is the one assertion that would still fail if the notice were removed entirely. The 'random' and still-offered cases are NOT among them and must not be -- they are the negative controls, and they pass under this mutation precisely because it only ever keeps, which is what makes them controls."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "render-capability-context-id-drifts-from-three",
+  "file": "src/game/render-capability.ts",
+  "find": "export const WEBGL2_CONTEXT_ID = 'webgl2';",
+  "replace": "export const WEBGL2_CONTEXT_ID = 'webgl';",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/render-capability.test.ts"
+  ],
+  "why": "The claim the whole module rests on: `webgl2` is the ONLY context id three will accept, so probing for `'webgl'` would report SUPPORTED on a browser where `new THREE.WebGLRenderer` still throws -- the exact false negative the probe exists to prevent. What makes this entry worth its slot is WHICH assertion catches it. The probe's behavioural cases compare what the canvas was asked for against this same exported constant, so they move with it and stay green; the only thing that fails is the case that reads `const contextName = '...'` out of the SHIPPED three build (r169) and pins it against the constant. That is the module's own stated design -- the id is exported 'so the probe's own test can pin it against the string read out of the dependency, rather than the probe and its test agreeing on a typo' -- and this mutation is the production defect proving that unusual dependency-reading assertion can fail at all. 1 of 14 in the scoped run; `require.resolve('three')` appears exactly once in render-capability.test.ts, so the failing case is necessarily that one. NOTE the mutation is also a tsc error independently, because `ProbeCanvasLike.getContext` takes the literal `'webgl2'` -- vitest/esbuild transpiles without checking, so the entry measures what it says it measures, but read this as pinning THREE DRIFTING (a future version regaining a WebGL 1 fallback or moving the id) rather than as the only defence against a bare typo. expectFailures counts that scoped run only.",
+  "reads": [
+    "package.json"
+  ]
+}

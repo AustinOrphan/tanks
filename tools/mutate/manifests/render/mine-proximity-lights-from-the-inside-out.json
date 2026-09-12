@@ -1,0 +1,18 @@
+{
+  "id": "mine-proximity-lights-from-the-inside-out",
+  "file": "src/render/mine-warning.ts",
+  "find": "  return 1 - clamp01(lit);",
+  "replace": "  return clamp01(lit);",
+  "expect": "killed",
+  "tests": [
+    "src/render/mine-warning.test.ts",
+    "src/render/mine-warning.sync.test.ts"
+  ],
+  "why": "THE DIRECTION IS THE RULING. Inverting this reproduces the previous revision exactly -- a lit region growing from the centre outward instead of closing in from the rim -- using the same numbers read the other way round. Every timing assertion (starts empty, full on the blast frame, monotone) passes under both, so only an assertion about which EDGE moves can tell them apart.",
+  "killedBy": [
+    "mine warning cues through createEntityViews (issue #276) the illumination CLOSES IN as the countdown runs, ending as a full disc",
+    "proximity trip: the mine lights from the OUTSIDE in closes INWARD, not outward -- the direction is the whole ruling",
+    "proximity trip: the mine lights from the OUTSIDE in is FULLY lit on the last frame before the blast",
+    "proximity trip: the mine lights from the OUTSIDE in starts as a rim hairline on the tick it is tripped"
+  ]
+}

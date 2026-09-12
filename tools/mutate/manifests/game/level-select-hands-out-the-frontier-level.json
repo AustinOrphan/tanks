@@ -1,0 +1,18 @@
+{
+  "id": "level-select-hands-out-the-frontier-level",
+  "file": "src/game/route-ui.ts",
+  "find": "    Math.min(deps.progress.highestCleared(), deps.levels.levels.length);",
+  "replace": "    Math.min(deps.progress.highestCleared() + 1, deps.levels.levels.length);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Restores the cleared-PLUS-ONE rule, which is not a cosmetic off-by-one: it makes the Levels pane a second campaign ladder. A practice win records permanent progress -- `loop.ts` gates `recordCleared` on `tracksProgress` alone and its own comment says practice is deliberately NOT excluded -- so with the frontier level on offer a player can rehearse it with independent lives, bank the unlock, and repeat, climbing the whole campaign without ever spending a campaign life or touching the run. Counting clears alone seals that structurally rather than with a second guard, because `recordCleared` keeps the maximum: a pane that can only offer already-counted levels cannot advance progress at all. Three suites catch it at three different distances from the change -- the resolver itself, the page's paint, and the session boot -- which is what a rule this cheap to revert needs.",
+  "killedBy": [
+    "the application routes work with no gameplay session behind them unlockedLevels answers from progress alone, and counts CLEARED levels only",
+    "createRouteHost: the Main Menu is painted from the stores by the page paints no Continue when there is no run -- the negative control",
+    "startGameWith: the main menu tells the HUD the unlock state at boot: CLEARED levels pickable, capped at the count"
+  ]
+}

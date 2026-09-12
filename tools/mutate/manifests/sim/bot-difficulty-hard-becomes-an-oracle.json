@@ -1,0 +1,14 @@
+{
+  "id": "bot-difficulty-hard-becomes-an-oracle",
+  "file": "src/sim/ai/bot-difficulty.ts",
+  "find": "export const MAX_COMPETENCE_ACCURACY = 0.95;",
+  "replace": "export const MAX_COMPETENCE_ACCURACY = 100;",
+  "expect": "killed",
+  "why": "The accuracy ceiling raised until it cannot bind, which is how `hard` becomes the oracle both issues forbid by name ('No preset may create oracle-perfect awareness or aim'). It is a SILENT defect on the shipped data: the player profile is STATIC_BASIC at aimAccuracy 0.55, so `hard` lands at 0.6875 and the clamp never fires -- every difficulty still behaves plausibly and no shipped configuration looks wrong. The clamp only matters for a profile near the bound, which is why the test exercises a synthetic one at 0.99 rather than only the shipped one; testing the shipped profile alone would leave the clamp itself unexercised and this mutation alive. Both spreads are an anchor DIVIDED by accuracy, so an unbounded accuracy drives the seeded error to nothing. Scoped to bot-difficulty.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/sim/ai/bot-difficulty.test.ts"
+  ],
+  "killedBy": [
+    "bot difficulty presets never makes a bot an oracle, however hard the preset is applied"
+  ]
+}

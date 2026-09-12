@@ -1,0 +1,14 @@
+{
+  "id": "one-team-start-gate-never-fires",
+  "file": "src/game/versus-setup.ts",
+  "find": "  if (mode === 'teams' && representedTeams(slots).size < 2) return { kind: 'one-team' };",
+  "replace": "  if (false && representedTeams(slots).size < 2) return { kind: 'one-team' };",
+  "expect": "killed",
+  "why": "Start accepts a Teams match with everybody on one team. The match then runs to an immediate, unlosable conclusion -- the issue's binding rule is 'Start requires at least two represented teams', and this is the state that rule exists to refuse. It survives every OTHER gate: the slots are assigned, the devices are present, a human is playing, so `versusSetupProblem` returns null and the button enables. The `false &&` form is chosen over deleting the line because it leaves `representedTeams` referenced, so the mutation cannot be mistaken for dead-code removal by a reader of the diff. Killed by the case asserting the refusal in `'teams'` AND its own control -- the identical slots must still be startable in `'ffa'`, without which the test could pass against a build that simply refused Teams outright. Scoped to versus-setup.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/versus-setup.test.ts"
+  ],
+  "killedBy": [
+    "versusSetupProblem: the Start gate refuses Teams when every playing slot is on ONE team (issue #281)"
+  ]
+}

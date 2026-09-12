@@ -1,0 +1,15 @@
+{
+  "id": "route-host-quality-control-loses-the-stored-preset",
+  "file": "src/game/route-host.ts",
+  "find": "    hud.setQuality(effective.quality);",
+  "replace": "    hud.setQuality('high');",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "`paintSettingsControls` has been the single writer of the settings display since issue #532, so a constant here is the whole display: a returning player who chose `Low` opens Settings on `High` while their matches correctly run low, and the next tap moves them to `Medium` rather than to what the button claims. The render obeys the store throughout, which is what makes it silent -- the lie is only in the control that edits it.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED render-quality preset on a page with no session",
+    "createRouteHost: the Main Menu is painted from the stores by the page repaints the quality control from the value the STORE accepted, with no session"
+  ]
+}

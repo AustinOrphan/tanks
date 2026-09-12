@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-hud-reports-the-cap-instead-of-counting-the-shells",
+  "file": "src/game/blocked-fire-hud.ts",
+  "find": "          inFlight: ownerShellCount(world, owner.id),",
+  "replace": "          inFlight: configFor(owner.kind).weapon.maxActiveProjectiles,",
+  "expect": "killed",
+  "tests": [
+    "src/game/blocked-fire-hud.test.ts"
+  ],
+  "why": "Reports the capacity twice instead of reading the live count. Indistinguishable in play -- at a capacity refusal the player is by definition holding every shell allowed -- and wrong in the way #356 cares about: the displayed capacity must DERIVE from the same resolved configuration spawnBullet enforces, and `ownerShellCount` is the half that makes the line a measurement rather than a caption. The doctored-world case is what separates the two.",
+  "killedBy": [
+    "blocked-fire HUD cue (issue #516, parent #356) COUNTS the shells rather than assuming the cap"
+  ]
+}

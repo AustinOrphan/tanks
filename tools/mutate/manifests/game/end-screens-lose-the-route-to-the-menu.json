@@ -1,0 +1,16 @@
+{
+  "id": "end-screens-lose-the-route-to-the-menu",
+  "file": "src/game/hud.ts",
+  "find": "    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !atOutcome);",
+  "replace": "    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Restores the shipped rule issue #323 replaced, in its most complete form: the Main Menu button reachable only from Pause. The measured consequence is a player who runs out of campaign lives having exactly ONE control on screen, and that control restarts the level (`landOnCampaignBoard`, loop.ts) rather than leaving it -- so the menu is reachable only by playing again, pausing, and quitting from there. `back` is no help: route-host.ts's menu-action handler acts on `back` only while `sm.isPaused`. The panel still renders correctly under this mutation, which is why it needs a case that enumerates the REACHABLE controls rather than one that checks the panel appeared.",
+  "killedBy": [
+    "hud: the level-cleared panel offers the main menu THE GAP (issue #323): a lost campaign has a route to the Main Menu",
+    "hud: the level-cleared panel offers the main menu shows it on lose, which is where its absence actually stranded people",
+    "hud: the level-cleared panel offers the main menu shows it on the FINAL win too, where the run has already ended"
+  ]
+}

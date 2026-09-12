@@ -1,0 +1,14 @@
+{
+  "id": "practice-this-level-practises-the-wrong-one",
+  "file": "src/game/hud.ts",
+  "find": "    for (const cb of levelSelectCbs) cb(mission - 1);",
+  "replace": "    for (const cb of levelSelectCbs) cb(mission);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) Practice This Level leaves the run, then reports the level just cleared (issue #323)"
+  ],
+  "why": "Reports the 1-based ordinal the screen shows instead of the 0-based index the callback takes, so clearing level 3 practises level FOUR -- silently, from a screen that names level three. The plausible wrong answer, not a random one: `statusData.mission` is what the headline reads and `levelSelectCbs` indexes `deps.levels.levels`. An assertion that a pick merely happened passes on this, which is why the scoped test pins the exact array."
+}

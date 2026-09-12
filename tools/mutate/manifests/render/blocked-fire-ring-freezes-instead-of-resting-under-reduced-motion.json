@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-ring-freezes-instead-of-resting-under-reduced-motion",
+  "file": "src/render/blocked-fire-ring.ts",
+  "find": "      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + OVERSHOOT * (1 - k));",
+  "replace": "      if (!reducedMotion) r.mesh.scale.setScalar(1 + OVERSHOOT * (1 - k));",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-ring.test.ts"
+  ],
+  "why": "Restores the guard the current shape deliberately replaced -- skipping the scale term under reduced motion instead of writing a rest scale -- which blocked-fire-ring.test.ts names as its negative control in prose; this entry is what makes that prose executable. The defect is only reachable when the preference flips MID-FLIGHT: the ring freezes at whatever scale it had reached and sits visibly oversized for the rest of its life instead of closing onto the hull. `reduced motion keeps the cue but removes the travel` sets the preference BEFORE spawning and so stays green under it, which is precisely why one case is not enough here; only `snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight` fails. Same policy as death-ring-ignores-the-reduced-motion-policy, pinning the live toggle that entry's effect does not have. Scoped to blocked-fire-ring.test.ts; expectFailures counts that scoped run only.",
+  "killedBy": [
+    "blocked-fire ring (issue #356) snaps an ALREADY-AIRBORNE ring to rest when reduced motion turns on mid-flight"
+  ]
+}

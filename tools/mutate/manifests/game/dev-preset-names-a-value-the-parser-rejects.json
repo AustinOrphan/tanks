@@ -1,0 +1,14 @@
+{
+  "id": "dev-preset-names-a-value-the-parser-rejects",
+  "file": "src/game/dev-config.ts",
+  "find": "    selection: { players: 2, mode: 'ffa' },",
+  "replace": "    selection: { players: 2, mode: 'deathmatch' },",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config.test.ts"
+  ],
+  "killedBy": [
+    "DEV_PRESETS (issue #623) no preset silently loses a value to a rejecting parser"
+  ],
+  "why": "A preset naming a versus mode that does not exist. The parser REJECTS an unrecognised value to the flag's default rather than throwing, so the preset still builds a URL, still loads, and simply lands on the shipped mode -- a button labelled '2-player VS' that quietly does something else. Hand-named assertions cannot catch this in general, which is why the killing test is a SWEEP over every preset asserting no `rejected` note, rather than a case per preset."
+}

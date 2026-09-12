@@ -1,0 +1,14 @@
+{
+  "id": "gamepad-menu-dispose-keeps-polling",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "disposed = true;",
+  "replace": "disposed = false;",
+  "expect": "killed",
+  "why": "A disposed poller must emit nothing; a late frame after page teardown would otherwise still dispatch actions.",
+  "tests": [
+    "src/input/gamepad-menu.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadMenuPoller: dispose after dispose(), poll() emits nothing and connected() is false, even with a pad still held"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "compare-compatibility-ignores-the-recipe-hash",
+  "file": "tools/compare/compatibility.mjs",
+  "find": "    compatible: base.hash === head.hash,",
+  "replace": "    compatible: differing.length === 0,",
+  "expect": "killed",
+  "tests": [
+    "tools/compare/refs.test.ts"
+  ],
+  "why": "Decides compatibility from the field table instead of the content hash, so a recipe differing only outside that table -- its title, budget, timeout, or any field added since the table was written -- is accepted as the same measuring instrument. The hash is what identifies the reviewed configuration; this is the plausible-looking implementation that silently compares against an unreviewed recipe.",
+  "killedBy": [
+    "checkRecipeCompatibility still refuses when the hash differs but every compared field matches"
+  ]
+}

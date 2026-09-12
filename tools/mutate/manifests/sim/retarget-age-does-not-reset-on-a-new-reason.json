@@ -1,0 +1,14 @@
+{
+  "id": "retarget-age-does-not-reset-on-a-new-reason",
+  "file": "src/sim/ai/target-selection.ts",
+  "find": "    tank.aiRetargetReason = reason;\n    tank.aiRetargetAgeTicks = 0;",
+  "replace": "    tank.aiRetargetReason = reason;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-selection.test.ts"
+  ],
+  "killedBy": [
+    "the retarget REASON is recorded, not just returned (issue #359) records TARGET-LOST when the committed opponent dies, and resets the age"
+  ],
+  "why": "Writes the new reason but leaves the age running, so a switch that happened this tick reports the age of the PREVIOUS one. The reason would still be right and the label would still show a glyph -- it is only the staleness cutoff downstream that goes wrong, hiding a fresh switch or showing a stale one. A test asserting only that the reason changed passes on this."
+}

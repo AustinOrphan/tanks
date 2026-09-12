@@ -1,0 +1,14 @@
+{
+  "id": "page-music-ignores-the-location-suite",
+  "file": "src/game/route-host.ts",
+  "find": "    audio.setMusicContext(musicContextFor(location));",
+  "replace": "    audio.setMusicContext('menu');",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Keeps the page following the game but collapses every suite onto the menu one, so a match is played to menu music and the arena bed is never heard. Separate from the two removal mutations above because it survives any assertion that only counts calls or checks that music is playing: the calls all happen, in order, with the wrong argument.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
+  ]
+}

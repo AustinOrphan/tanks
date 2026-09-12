@@ -1,0 +1,12 @@
+{
+  "id": "identity-arcs-lose-their-gap-at-one",
+  "file": "src/render/identity-marker.ts",
+  "find": "    const gap = step * 0.28;",
+  "replace": "    const gap = count === 1 ? 0 : step * 0.28;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/render/identity-marker.test.ts"
+  ],
+  "why": "Closes slot 1's arc into a full ring. Tempting, and wrong twice over: a solid ring is indistinguishable from the SHIPPED default, so the one slot a player is most likely to be would give them no marker at all; and 'the unbroken one is player 1' is a rule that has to be explained rather than seen, which is the failure the whole issue is about. Slots 2-4 are untouched, so every count assertion still passes -- caught only by the leaves-a-gap-even-at-one case, which measures the angular span of the single run."
+}

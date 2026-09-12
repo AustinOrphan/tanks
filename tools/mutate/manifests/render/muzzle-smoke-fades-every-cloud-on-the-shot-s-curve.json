@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-fades-every-cloud-on-the-shot-s-curve",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      const fade = Math.pow(1 - k, cl.fadePower);",
+  "replace": "      const fade = Math.pow(1 - k, SMOKE.fired.fadePower);",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "The same defect on the other field, and the one that survives more assertions: the refusal keeps its higher peak, so it is still visibly denser than a shot at every instant, and only the fraction of its own birth density that it has left betrays it. Reading a per-cloud property off a shared table is the natural edit for someone tidying this loop, and half the separation the GL harness measured goes with it.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) thins a refusal SLOWER, not merely from a higher start"
+  ]
+}

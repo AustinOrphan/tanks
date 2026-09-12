@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-billow-table-reordered-smallest-first",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "  { along: 0.0, across: 0.0, lift: 0.0, size: 1.0, drift: 1.0, spin: 0.0 },\n  { along: 0.13, across: 0.07, lift: 0.04, size: 0.78, drift: 1.25, spin: 2.2 },\n  { along: 0.08, across: -0.09, lift: -0.02, size: 0.64, drift: 0.8, spin: 4.1 },",
+  "replace": "  { along: 0.08, across: -0.09, lift: -0.02, size: 0.64, drift: 0.8, spin: 4.1 },\n  { along: 0.13, across: 0.07, lift: 0.04, size: 0.78, drift: 1.25, spin: 2.2 },\n  { along: 0.0, across: 0.0, lift: 0.0, size: 1.0, drift: 1.0, spin: 0.0 },",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Reorders the billow table smallest-first. Before the smoke gained a quality budget this was FREE -- every cloud drew all three rows, so their order changed nothing anyone could see, and a maintainer sorting them by size or by offset would have been right that it did not matter. It matters now: a cloud draws a PREFIX, so the first row is the billow `medium` is left with, and this leaves a cheapened puff two thirds the width of a full one instead of the same cloud with less shear. `high` is genuinely unaffected, which is what makes it dangerous -- the default preset renders identically and only the cheapened tier degrades. Chosen over the alternative mutation of slicing from the other end of the table, which was MEASURED to survive this whole file: `place` pairs sprite i with BILLOWS[i], so a suffix slice re-imposes the prefix's own geometry and produces the same picture. The order is the only thing here that can actually be wrong.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) a cheapened cloud is left with the BIGGEST billow, which is what the table's order decides"
+  ]
+}

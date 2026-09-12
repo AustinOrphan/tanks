@@ -1,0 +1,12 @@
+{
+  "id": "route-host-level-pick-drops-the-level",
+  "file": "src/game/route-host.ts",
+  "find": "    requests.requestStart({ kind: 'practice', level });",
+  "replace": "    requests.requestStart({ kind: 'practice', level: 0 });",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "Every Levels pick starts level one. The index is carried through three layers -- HUD callback, start request, start boundary -- and this is the join where losing it produces a working game on the wrong board rather than an error. 1 of 25 -- 'a Levels pick asks for that level, carrying the index', which drives index 3 specifically. A fixture that happened to pick level 0 could not see this, which is why that case does not."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "barrel-recoil-only-on-a-refusal",
+  "file": "src/render/barrel-recoil.ts",
+  "find": "      if (e.type !== 'fire' && e.type !== 'fire-blocked') continue;",
+  "replace": "      if (e.type !== 'fire-blocked') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/render/barrel-recoil.test.ts"
+  ],
+  "why": "Reverts issue #526's inversion, leaving the recoil as the refusal-only cue it was as #516's `turret` arm. That is the SHAPE A READER EXPECTS from the file's history, which is what makes it worth pinning: the refusal reads only because the kick is something the player has already seen on every ordinary shot, so a recoil that appears exclusively when a shot is refused is a cue to be learned rather than an absence to be noticed -- the exact design the owner ruled against.",
+  "killedBy": [
+    "barrel recoil (issue #526, parent #356) kicks on a SHOT and on a REFUSAL alike -- that is the whole ruling"
+  ]
+}

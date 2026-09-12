@@ -1,0 +1,14 @@
+{
+  "id": "map-card-intent-joins-the-accessible-name",
+  "file": "src/game/hud.ts",
+  "find": "      intent.setAttribute('aria-hidden', 'true');",
+  "replace": "      intent.setAttribute('aria-hidden', 'false');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "the versus map cards (issue #274) keeps the picture and the sentence out of the card's name, and the sentence in its description"
+  ],
+  "why": "Folds a whole sentence into each card's accessible name, so a screen reader walking the map row reads seven paragraphs before reaching the eighth control -- and reads each one TWICE, since `aria-describedby` still points at the same node. Nothing visible moves and the sweeps in hud.a11y.test.ts pass: the name is non-empty and is not a bare digit. The same two-announcements-of-one-fact collision issue #629 called out on the achievement rows."
+}

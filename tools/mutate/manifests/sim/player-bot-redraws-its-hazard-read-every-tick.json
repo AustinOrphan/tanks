@@ -1,0 +1,14 @@
+{
+  "id": "player-bot-redraws-its-hazard-read-every-tick",
+  "file": "src/sim/ai/player-profile.ts",
+  "find": "  if (state.hazardTicksLeft <= 0) {",
+  "replace": "  if (state.hazardTicksLeft <= 0 || true) {",
+  "expect": "killed",
+  "why": "The versus bot goes back to drawing a fresh hazard belief every tick, which is the pre-#223 behaviour and the frame-to-frame noise the issue names: a misjudgement that averages itself away over the frames of a single dodge instead of being lived with, so no mistake a player could read or exploit ever forms. It is invisible to the golden trace -- that drives its one player through `stepInputs`, never `decidePlayerInput` -- and invisible to every outcome-level pin in player-profile.test.ts, whose win-rate bars are far wider than this moves them. The mutation is written as `|| true` rather than by deleting the guard because the harness needs a non-empty replacement and the field must still be maintained for the counter assertions to have anything to read. Killed by the one test that walks a whole window tick by tick and pins the held offset, the held delay, and the turnover at the boundary.",
+  "tests": [
+    "src/sim/ai/player-profile.hazard.test.ts"
+  ],
+  "killedBy": [
+    "the versus bot holds a difficulty-scaled hazard read HOLDS one hazard read for the profile refresh span instead of re-drawing per tick (#223)"
+  ]
+}

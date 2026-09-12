@@ -1,0 +1,15 @@
+{
+  "id": "settings-serializer-writes-the-default-quality-preset",
+  "file": "src/game/settings.ts",
+  "find": "      quality: settings.presentation.quality,",
+  "replace": "      quality: DEFAULT_QUALITY_PRESET,",
+  "expect": "killed",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "why": "The preset is accepted, applied and published, and what reaches storage is always the shipped default -- so the choice survives exactly as long as the tab does. Issue #540's first acceptance criterion is that it survives a RELOAD, and this is the way to fail it that leaves the whole feature looking correct in a session: the toggle moves, the store notifies, the next match honours it, and the player finds `High` again the following day. Written as the default rather than as a dropped field because a dropped field is the same bug wearing a shape the parser silently repairs.",
+  "killedBy": [
+    "createPlayerSettingsStore: defaults and persistence round-trips EVERY field through a fresh construction",
+    "parseSettingsPayload: stored data round-trips its own serialiser exactly"
+  ]
+}

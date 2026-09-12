@@ -1,0 +1,13 @@
+{
+  "id": "skins-ensure-contrast-pole-clamp",
+  "file": "src/render/skins.ts",
+  "find": "l = towardBlack ? Math.max(0, l - STEP) : Math.min(1, l + STEP);",
+  "replace": "l = towardBlack ? l - STEP : Math.min(1, l + STEP);",
+  "expect": "survives",
+  "expectFailures": 0,
+  "equivalent": true,
+  "why": "EQUIVALENT, not a coverage gap: skins.ts's own comment on the loop states this branch is measured unreachable at the shipped MIN_ACCENT_DELTA (43) -- an instrumented 909,792-pair probe hit the l===0 clamp 0 times (vs 34,835 times at MIN_ACCENT_DELTA 127), so dropping the redundant Math.max(0, ...) floor changes no output any test can observe. Included so a future retune of MIN_ACCENT_DELTA that makes the branch reachable is the thing that flips this from survives to killed, not a silent behaviour change.",
+  "tests": [
+    "src/render/skins.test.ts"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "route-ui-requires-a-gameplay-renderer",
+  "file": "src/game/route-ui.ts",
+  "find": "    styleSink?.(hex, skin, accentHex);",
+  "replace": "    (styleSink as StyleSink)(hex, skin, accentHex);",
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "The optional call made mandatory -- the paint shop demanding a gameplay renderer again, which is the exact coupling issue #427 removed. This is the one line that decides whether Customize is an APPLICATION route or a gameplay one: `restyle` runs on every hull, skin and accent pick, and with no session there is no sink, so a non-optional call throws on a page whose only crime is having no match running. WHY IT NEEDS ITS OWN ENTRY, measured rather than assumed: with this mutation applied, `loop.test.ts` still passes 397 of 397. It cannot see the defect, because every route it reaches goes through `startGameWith`, which always attaches a sink -- so the whole existing suite agrees a session is present and the missing case is the one nobody was testing. `route-ui.test.ts` fails 2 of its 14: `the paint shop records a pick and drives the preview with NO renderer attached`, and `a detached sink stops the pushes without stopping the pick`, which is that case's own negative control (it re-runs the same pick after clearing the sink, so a build that pushed a triple regardless of the sink would fail there too). Two failures, MEASURED by applying this edit and running the file, not predicted. Scoped to route-ui.test.ts; expectFailures counts that scoped run only. COUNT MOVED 2 -> 3 for issue #427: the combined case that drives every route handler against a real empty `GameSessionHost` fires `onPickSkin`, so a mandatory style sink throws there as well as in the two paint-shop cases. Re-measured on the tree, not predicted.",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ]
+}

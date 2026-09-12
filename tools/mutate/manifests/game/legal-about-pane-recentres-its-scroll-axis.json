@@ -1,0 +1,14 @@
+{
+  "id": "legal-about-pane-recentres-its-scroll-axis",
+  "file": "src/game/hud.css",
+  "find": "  justify-content: flex-start;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;",
+  "replace": "  justify-content: center;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ],
+  "why": "Restores what the About pane actually shipped before issue #117. `justify-content: center` on an `overflow-y: auto` flex column puts the overflow ABOVE the scrollable area, where no scrollbar reaches it, so an open licence loses its first screenful with no way to scroll back up to it. Invisible to everything else: the pane still opens, every document still expands, every control is still reachable by the roving walk, and jsdom lays nothing out -- the defect is a real browser's scroll geometry. The case that kills this sweeps every `overflow-y: auto` element the fixture builds and PINS the three siblings that still carry the same shape (Versus Setup, Settings, Developer Tools), so it fails both when the About pane regresses and when a fourth pane joins them."
+}

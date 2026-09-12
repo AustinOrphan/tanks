@@ -1,0 +1,17 @@
+{
+  "id": "vs-clearance-wall-requirement-drops-radius",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);\n  const wallRequired = TANK_RADIUS + margin;",
+  "replace": "  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);\n  const wallRequired = margin;",
+  "expect": "killed",
+  "why": "versusSpawnClearanceFailures must require TANK_RADIUS + margin (0.65) of wall and boundary clearance, not the bare margin (0.15): a hull is 0.5 wide before any safety margin exists. Dropping the radius lets a centre 0.5 from a wall face -- a hull TOUCHING the wall -- validate clean. Killed by the clearance suite's wall fixture, whose position sits at exactly 0.5 and must fail with the 0.650 requirement named.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ],
+  "killedBy": [
+    "clearance-filtered candidate pools (issue #225) cramped corridor at cellSize 2/3: pool empties, picker degrades to the unfiltered pick, diagnostics stay loud",
+    "versusSpawnClearanceFailures a centre 0.5 from the arena edge fails as boundary; 0.65 or more in passes",
+    "versusSpawnClearanceFailures a position 0.5 from a wall AABB fails naming the wall distance; without the wall it passes",
+    "versusSpawnClearanceFailures an intact destructible fails a hull beside it; the match-start variant grid with it removed passes"
+  ]
+}

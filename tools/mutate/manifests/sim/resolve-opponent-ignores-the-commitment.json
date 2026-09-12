@@ -1,0 +1,14 @@
+{
+  "id": "resolve-opponent-ignores-the-commitment",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "    if (held && isTargetable(world, tank, held)) return held;",
+  "replace": "    if (false && held && isTargetable(world, tank, held)) return held;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "The committed id must be READ BACK, not merely written. Skipping straight to the pure fallback leaves commitTarget writing state nothing consumes, so an AI would re-select every tick and 'movement and firing use the same committed opponent' would hold only by the fallback's determinism -- until the first selection input a decision can mutate.",
+  "killedBy": [
+    "resolveOpponent: the one place an AI decides who it is fighting (issue #359) prefers the COMMITTED target over anything the fallback would pick"
+  ]
+}

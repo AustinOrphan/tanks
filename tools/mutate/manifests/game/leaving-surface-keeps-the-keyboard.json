@@ -1,0 +1,21 @@
+{
+  "id": "leaving-surface-keeps-the-keyboard",
+  "file": "src/game/hud.ts",
+  "find": "      if (c.classList.contains(LEAVING)) continue;\n      if (getComputedStyle(c).display !== 'none') return c;",
+  "replace": "      if (getComputedStyle(c).display !== 'none') return c;",
+  "expect": "killed",
+  "why": "The roving keyboard order following a surface the player has already left. Before this contract exactly one panel-family element was ever displayed, so `activePanelContainer` could return the first one it found; a crossfade deliberately paints two at once for its duration, and the outgoing one is listed FIRST (`panel`), so without this line the arrow keys walked the screen the player just left for the whole 150ms. Nothing about the visible result changes -- both surfaces are painted either way, the destination still arrives, and every settled-state assertion still passes -- which is why this needs a mutation rather than a screenshot. It is the KEYBOARD half of a rule the stylesheet only covers for the mouse (`.ui-surface--leaving` sets `pointer-events: none`), and it is the reachable half of that rule: `isHiddenWithin`'s sibling check is not, because `--leaving` lands only on the seven surface elements, which are exactly the containers that walk excludes. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+    "createHud roving-tabindex focus navigation (issue #115) steps through every button the Levels panel draws, because none of them is inert",
+    "hud: spatial focus follows the drawn layout (issue #495) a row that wraps behaves as the grid it has become: the Levels grid at three per row",
+    "hud: spatial focus follows the drawn layout (issue #495) a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row",
+    "hud: spatial focus follows the drawn layout (issue #495) negative control: with jsdom's empty rects the same Right leaves the segment in document order",
+    "hud: spatial focus follows the drawn layout (issue #495) the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated",
+    "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly"
+  ]
+}

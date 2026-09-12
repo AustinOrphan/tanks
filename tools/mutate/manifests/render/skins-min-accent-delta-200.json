@@ -1,0 +1,17 @@
+{
+  "id": "skins-min-accent-delta-200",
+  "file": "src/render/skins.ts",
+  "find": "export const MIN_ACCENT_DELTA = 43;",
+  "replace": "export const MIN_ACCENT_DELTA = 200;",
+  "expect": "killed",
+  "why": "MIN_ACCENT_DELTA is the luma gap an explicit accent is nudged to keep from the hull colour (skins.ts's own comment above the constant). Raising it to 200 pushes the nudge past what a single HSL pole (pure black/white) can deliver, so accents lose their hue and slide toward grey -- exactly the defect skins.test.ts's hue-preservation tests exist to catch. expectFailures pins the count itself, not just the killed/survives outcome: a test added later that also breaks under this mutation should move this number, and a stale number here is what the harness's exit code exists to catch. Re-verified via the harness itself against skins.test.ts as it stands after PR #101 (which added Clouds and grew the file to 19 tests): 4 failures, down from 5 at this entry's original count.",
+  "tests": [
+    "src/render/skins.test.ts"
+  ],
+  "killedBy": [
+    "createSkinTexture accent (the pattern's second tone) is selectable an explicit accent keeps its saturation and hue: gold stays gold, not olive",
+    "ensureContrast never trades the chosen hue away for contrast always reaches the required separation, over a 33,696-pair sweep",
+    "ensureContrast never trades the chosen hue away for contrast keeps a chromatic accent chromatic -- the pole is never reached",
+    "ensureContrast never trades the chosen hue away for contrast nudges exactly the three white-hull pairings, which is what pins the luma weights"
+  ]
+}

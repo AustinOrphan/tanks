@@ -1,0 +1,14 @@
+{
+  "id": "motion-label-reports-the-policy-on-every-state",
+  "file": "src/game/hud.ts",
+  "find": "    const resolved = currentMotion === 'system' ? ` (${reducedMotion ? 'reduced' : 'full'})` : '';",
+  "replace": "    const resolved = ` (${reducedMotion ? 'reduced' : 'full'})`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The negative control for the entry above, as a production defect rather than an assertion: appending the resolved policy everywhere still makes 'Match device' report it, so a suite that only checked that half would stay green while the pane rendered 'Motion: Full (reduced)' -- a label that contradicts itself on the two states a player chose deliberately.",
+  "killedBy": [
+    "hud: the motion toggle (issue #289) reports the RESOLVED policy on Match device, which is the state its own name cannot say"
+  ]
+}

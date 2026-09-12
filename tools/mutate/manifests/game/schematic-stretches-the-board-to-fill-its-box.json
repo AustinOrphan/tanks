@@ -1,0 +1,14 @@
+{
+  "id": "schematic-stretches-the-board-to-fill-its-box",
+  "file": "src/game/arena-schematic.ts",
+  "find": "  const scale = Math.min(width / schematic.width, height / schematic.height);\n  const offsetX = (width - schematic.width * scale) / 2;\n  const offsetY = (height - schematic.height * scale) / 2;",
+  "replace": "  const scale = width / schematic.width;\n  const offsetX = 0;\n  const offsetY = 0;",
+  "expect": "killed",
+  "tests": [
+    "src/game/arena-schematic.test.ts"
+  ],
+  "killedBy": [
+    "drawArenaSchematic draws through a fake context, in the order and geometry a board needs"
+  ],
+  "why": "Fits the board to the box's width and anchors it at the corner, which is what a first draft of any fit-to-box routine does. A card comparing eight boards is then comparing eight differently-distorted pictures, and the distortion is largest on exactly the boards whose shape is the reason to pick them. Invisible to every other assertion in the repository: the call still returns true, the same number of rectangles is still painted, and the aspect check cannot be done in jsdom at all -- which is why the case that kills this runs a hand-rolled 2D context and measures the painted floor's ratio and margins rather than the scale factor."
+}

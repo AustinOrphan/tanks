@@ -1,0 +1,14 @@
+{
+  "id": "quality-toggle-label-frozen-at-the-default",
+  "file": "src/game/hud.ts",
+  "find": "    qualityToggleBtn.textContent = QUALITY_LABEL[currentQuality];",
+  "replace": "    qualityToggleBtn.textContent = QUALITY_LABEL.high;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The button reads `Quality: High` whatever is stored, so a player who chose `low` opens Settings on `High` and one tap takes them to `Medium` -- away from what they wanted, in the direction they were trying to leave. Everything else keeps working: the preset is stored, the renderer honours it, the aria-label still changes. Only an assertion that the three states produce three different TEXTS catches a label pinned to one of them.",
+  "killedBy": [
+    "hud: the quality toggle (issue #540) shows the current preset, labelled so all three read as different"
+  ]
+}

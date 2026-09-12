@@ -1,0 +1,12 @@
+{
+  "id": "history-mirror-treats-its-own-landing-as-a-back",
+  "file": "src/game/navigation.ts",
+  "find": "    if (previous === 'leaving') return; // our own retirement landed",
+  "replace": "    // (mutation) our own retirement is treated as a browser Back",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The early return for `leaving` is deleted, so the landing of the mirror's own retirement is handled as a browser Back and pops whatever layer is open at that moment. With an owner that syncs synchronously after every stack change the stack is empty when its own retirement lands and the fallthrough is invisible, so the case that measures it opens a layer during the pending traversal whose `sync` has not yet run -- the 'pops a layer the player just opened' failure the per-layer design was rejected for -- and asserts the landing leaves it alone. Fails 1 of 15 in navigation.test.ts: `the popstate caused by our own retirement pops nothing; a base arrival while present pops one`, at its second `h.pops()` assertion."
+}

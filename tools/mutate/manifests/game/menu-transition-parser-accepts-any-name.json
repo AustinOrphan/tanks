@@ -1,0 +1,14 @@
+{
+  "id": "menu-transition-parser-accepts-any-name",
+  "file": "src/game/devflags.ts",
+  "find": "  return isMenuTransition(raw) ? raw : null;",
+  "replace": "  return raw as MenuTransition;",
+  "expect": "killed",
+  "why": "Reject-to-null dropped, so `?menuTransition=swoosh` becomes a `MenuTransition` the HUD then turns into `.hud--menu-transition-swoosh` -- a class matching no rule, which renders as the SHIPPED transition while the flag reports the treatment as active. That is the failure mode the whole registry's reject-to-null idiom exists for (`backdrop`, `mineWarn` and `blockedFire` all state it), and adoption sharpened it: the silent fallback used to be the old crossfade and is now the new default, so a mistyped `fade` observes exactly the behaviour it was typed to rule out. Scoped to menu-transition.test.ts, whose parser case sweeps the four registered names and then five rejected spellings including a case variant and a space form.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menuTransition: the flag that names a transition accepts every name in the vocabulary and nothing else -- population: the 4 registered names"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "ai-turret-accel-no-arrival-clamp",
+  "file": "src/sim/ai/turret-accel.ts",
+  "find": "  if (Math.abs(nv) >= Math.abs(err)) return { angle: target, vel: 0 };",
+  "replace": "  if (Math.abs(nv) >= Math.abs(err) && false) return { angle: target, vel: 0 };",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/turret-accel.test.ts"
+  ],
+  "why": "Without the clamp the final tick of a sweep lands PAST the target and the turret has to come back, which reads as a wobble on every arrival rather than a stop. The `&& false` keeps both operands evaluated so a tsc error cannot stand in for a real test failure.",
+  "killedBy": [
+    "accelSlew a target that jumps BEHIND a fast-moving turret is arrived at, not overshot -- and the discarded velocity is bounded by the speed cap, not the acceleration budget",
+    "accelSlew arrives ON the target instead of sailing past it, and stops there",
+    "accelSlew reaches the speed cap on a long sweep and never exceeds it"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "versus-variants-includes-solid-cells",
+  "file": "src/sim/versus-variants.ts",
+  "find": "      if (legend[grid[r][c]] === 'destructible') cells.push({ row: r, col: c });",
+  "replace": "      if (legend[grid[r][c]] === 'destructible' || legend[grid[r][c]] === 'solid') cells.push({ row: r, col: c });",
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "buildVariantGrid must only ever draw from DESTRUCTIBLE cells -- solid geometry defines the arena's shape and must never vary between playthroughs of the same board. Including solid cells in the draw pool means a variant can turn a load-bearing wall into open floor, changing the board's identity rather than varying it. Caught by 3 of 25 in versus-variants.test.ts: the 'every character that differs... was a destructible cell' invariant (a changed cell's authored legend entry is now 'solid', not 'destructible'), the 'removes exactly round(destructibleCount * fraction)' count (47 removed on arena-01 instead of 7, since the pool nearly quadruples), and the seed-7920/arena-03 retry test's own premise check (the much larger removal pool changes what that specific seed draws). Solid-versus geometry is otherwise unreachable from any test in this file at the ungated buildVariantGrid layer, which is why the wired-through-loadArena describe block exists separately.",
+  "tests": [
+    "src/sim/versus-variants.test.ts"
+  ]
+}

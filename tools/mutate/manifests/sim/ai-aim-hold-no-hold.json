@@ -1,0 +1,18 @@
+{
+  "id": "ai-aim-hold-no-hold",
+  "file": "src/sim/ai/aim-hold.ts",
+  "find": "    return { angle: held, nextHeld: held, nextHeldTicks: ticks - 1 };",
+  "replace": "    return { angle: solution, nextHeld: held, nextHeldTicks: ticks - 1 };",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/aim-hold.test.ts",
+    "src/sim/ai/dispatch.test.ts"
+  ],
+  "why": "The hold IS issue #344's mechanism: while a span is live and the fresh solution has not drifted past AI_AIM_BREAK, the turret is sent to the angle the tank already committed to. Letting the fresh solution through restores exactly the per-tick re-solve the issue reports -- measured before the layer existed, the turret was perfectly still on only 42.53% of live ticks for teal and 72.93% for brown (arena1/pacifist, 60 seeds x 2 arenas x 2 player policies), micro-correcting on the rest at 60Hz.",
+  "killedBy": [
+    "aim hold (issue #344) a held aim does NOT suppress the firing solution: hasSolution still reads the fresh solve",
+    "aim hold (issue #344) decideAi returns the HELD aim angle, not the fresh solution, while the span is live",
+    "holdAim keeps the held angle and counts down while the span is live and the fresh solution is close",
+    "holdAim measures the break across the shortest arc, so a hold survives the +/-pi seam"
+  ]
+}

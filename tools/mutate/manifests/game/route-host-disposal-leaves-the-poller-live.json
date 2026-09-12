@@ -1,0 +1,14 @@
+{
+  "id": "route-host-disposal-leaves-the-poller-live",
+  "file": "src/game/route-host.ts",
+  "find": "      polling = false;\n      cancelFrame?.();\n      cancelFrame = null;\n      menuPoller.dispose();",
+  "replace": "      polling = false;\n      cancelFrame?.();\n      cancelFrame = null;",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "A frame that fires after disposal must find the poller disposed; otherwise a stray frame still dispatches into the machine.",
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) disposal cancels the queued frame, and a frame that fires anyway emits nothing"
+  ]
+}

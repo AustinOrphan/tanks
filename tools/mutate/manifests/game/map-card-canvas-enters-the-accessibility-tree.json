@@ -1,0 +1,14 @@
+{
+  "id": "map-card-canvas-enters-the-accessibility-tree",
+  "file": "src/game/hud.ts",
+  "find": "      canvas.setAttribute('aria-hidden', 'true');",
+  "replace": "      canvas.setAttribute('aria-hidden', 'false');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "the versus map cards (issue #274) keeps the picture and the sentence out of the card's name, and the sentence in its description"
+  ],
+  "why": "Puts an unlabelled `<canvas>` into the accessibility tree inside every map card. It has no text and no accessible name of its own, so it contributes nothing to the name and announces as an empty graphic -- an object a screen reader stops on for no reason, seven times in a row. The picture says nothing the two lines beside it do not already say in words, which is the whole reason it is hidden. Invisible on screen and invisible to every name sweep, because an empty node changes no name."
+}

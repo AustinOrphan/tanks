@@ -1,0 +1,12 @@
+{
+  "id": "screens-frame-defaults-to-the-repo-root",
+  "file": "tools/screens/paths.mjs",
+  "find": "export const DEFAULT_OUT = 'tmp/screen.png';",
+  "replace": "export const DEFAULT_OUT = 'screen.png';",
+  "expect": "killed",
+  "expectFailures": 2,
+  "tests": [
+    "tools/screens/paths.test.ts"
+  ],
+  "why": "The other half of issue #637, and the half the filed issue did not name: --out defaulted to a bare basename too, so a bare `npm run screens` left screen.png in the repository root alongside producer.json -- a binary artifact, and the worse of the two to commit. Killed by 2: the repo-root invariant (which catches BOTH artifacts, since an omitted --report then follows the frame into the root) and the pins-the-destination case. Those two are deliberately separate assertions rather than one: the invariant states what must never happen and survives a future move to another ignored directory, while the destination pin makes such a move a deliberate edit instead of a silent one."
+}

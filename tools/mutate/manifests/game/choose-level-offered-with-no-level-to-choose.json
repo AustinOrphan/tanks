@@ -1,0 +1,14 @@
+{
+  "id": "choose-level-offered-with-no-level-to-choose",
+  "file": "src/game/hud.ts",
+  "find": "      !(copy?.chooseLevel ?? false) || !levelChoice,",
+  "replace": "      !(copy?.chooseLevel ?? false),",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Drops the half of the gate that is about the SESSION rather than the ending. The sandbox ends as a `practice-result` (it is a practice-kind session) and runs one synthetic level, which is exactly the case for which `setLevelSelect`'s `unlocked > 1` already hides the Main Menu's own entry into the same pane (it was `total > 1` until issue #555) -- so this offers a button whose click leaves the session and lands on a menu with nothing behind it. It also silently drops the live half: `setLevelSelect` is pushed while the panel is up, and with the term gone there is nothing for that push to change.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) withholds Choose Level from a session with no level to choose"
+  ]
+}

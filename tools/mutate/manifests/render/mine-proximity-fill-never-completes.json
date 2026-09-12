@@ -1,0 +1,14 @@
+{
+  "id": "mine-proximity-fill-never-completes",
+  "file": "src/render/mine-warning.ts",
+  "find": "    const span = MINE_PROXIMITY_DELAY_TICKS - 1;",
+  "replace": "    const span = MINE_PROXIMITY_DELAY_TICKS;",
+  "expect": "killed",
+  "tests": [
+    "src/render/mine-warning.test.ts"
+  ],
+  "why": "stepMines decrements BEFORE it checks expiry, so the rendered countdown runs DELAY down to 1 and never 0. Dividing by DELAY tops the fill out at 29/30: the cue visibly never completes, and the acceptance criterion 'the final proximity-warning frame agrees with the blast-start tick' is violated by one tick in a way no screenshot review would reliably catch.",
+  "killedBy": [
+    "proximity trip: the mine lights from the OUTSIDE in is FULLY lit on the last frame before the blast"
+  ]
+}

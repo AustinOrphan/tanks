@@ -1,0 +1,14 @@
+{
+  "id": "mutate-merge-allows-an-id-in-two-files",
+  "file": "tools/mutate/lib.mjs",
+  "find": "      if (typeof id === 'string' && seen.has(id) && seen.get(id) !== file.path) {",
+  "replace": "      if (false) {",
+  "why": "With the manifest split across area files (issue #505), the same id in two files would run twice and let `--only` pick either silently; the merge is the one place that sees both files.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "mergeManifestFiles refuses an id present in two files, naming both -- a duplicate within ONE file is validateManifest's, the negative control"
+  ]
+}

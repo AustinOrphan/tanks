@@ -1,0 +1,14 @@
+{
+  "id": "developer-exit-keeps-the-whole-url",
+  "file": "src/game/loop.ts",
+  "find": "developerExitSearch(search)",
+  "replace": "search",
+  "expect": "killed",
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "killedBy": [
+    "createBrowserDeps: leaving developer mode (issue #243) turns the gate on from the URL and binds an Exit that strips every developer parameter"
+  ],
+  "why": "Exit navigates to the URL it was already on, so the page reloads straight back into developer mode. This is the seam NEITHER unit test can see: `developerExitSearch` is proven correct in dev-config.test.ts and the HUD is proven to call its injected seam exactly once in hud.navigation.test.ts, and both stay green here -- only the wiring decides what the seam is actually bound to. Measured with the same mutation shaped as the likelier real mistake (binding `canonicalDevSearch(search, {keepGate:false})`, which looks like it means 'leave developer mode' and keeps every flag): 1 of 14 in app-shell.test.ts failed and the other two files stayed green."
+}

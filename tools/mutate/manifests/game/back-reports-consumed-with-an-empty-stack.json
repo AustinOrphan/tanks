@@ -1,0 +1,19 @@
+{
+  "id": "back-reports-consumed-with-an-empty-stack",
+  "file": "src/game/hud.ts",
+  "find": "    const popped = layers.pop();\n    if (popped === null) return false;",
+  "replace": "    const popped = layers.pop();\n    if (popped === null) return true;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "`back()` claims to have consumed a Back when nothing was open. Every caller that falls through on `false` -- Escape to the session's pause hotkey, issue #319's gamepad Back to its own pause action -- would stop at the Main Menu and do nothing. hud.navigation.test.ts (244): the `hud.back()` and gameplay-entry cases, the first Escape case and both mirror cases, each of which asserts `back()` is false once nothing is open. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) entering gameplay from an open pane empties the stack: hud.back() then has nothing to pop",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) hud.back() pops one layer and reports true; with nothing open it reports false and changes no class",
+    "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+    "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+    "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+  ]
+}

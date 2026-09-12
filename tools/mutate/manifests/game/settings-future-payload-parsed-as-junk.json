@@ -1,0 +1,13 @@
+{
+  "id": "settings-future-payload-parsed-as-junk",
+  "file": "src/game/settings.ts",
+  "find": "  if (version > SETTINGS_SCHEMA_VERSION) return { kind: 'future', version };",
+  "replace": "  if (version > SETTINGS_SCHEMA_VERSION) return { kind: 'malformed' };",
+  "expect": "killed",
+  "expectFailures": 4,
+  "why": "The BOOT half of the future-schema contract, one layer above `settings-future-payload-overwritten`: that entry mutates a later write, this one makes the PARSER classify a version-2 payload as junk. Under it the store reports `schema: 'recovered'` rather than `'future'`, stops reporting `storedVersion`, drops the `locked-future` persistence state -- so the notice becomes the wrong one -- and becomes eligible for legacy migration, which would adopt older values over a newer build's payload. Killed by settings.test.ts's future-payload status assertions and the 'never migrates the legacy key over a future payload' case, plus app-settings.test.ts's future-schema notice. 4 of 55 across the two declared files.",
+  "tests": [
+    "src/game/settings.test.ts",
+    "src/game/app-settings.test.ts"
+  ]
+}

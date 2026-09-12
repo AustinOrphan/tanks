@@ -1,0 +1,14 @@
+{
+  "id": "run-tally-counts-practice-and-versus",
+  "file": "src/game/stats.ts",
+  "find": "      if (!countsTowardRun) return;",
+  "replace": "      if (false) return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/stats.test.ts"
+  ],
+  "killedBy": [
+    "createStatsStore: the CAMPAIGN RUN scope accumulates only when the caller says this session counts toward the run"
+  ],
+  "why": "Drops the ONE gate that keeps practice, the sandbox, a dev-flag jump and versus out of the CAMPAIGN run's total, so the number stops being reconcilable with the campaign the player just played. An earlier version of this entry removed a second, redundant guard inside `bump` and SURVIVED -- with two guards for one rule neither is load-bearing, and the production code was simplified to a single gate rather than the entry weakened. Recorded because the redundancy read as defence in depth and was the opposite."
+}

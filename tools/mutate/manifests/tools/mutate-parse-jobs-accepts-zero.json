@@ -1,0 +1,14 @@
+{
+  "id": "mutate-parse-jobs-accepts-zero",
+  "file": "tools/mutate/run.mjs",
+  "find": "  if (!Number.isInteger(n) || n < 1) throw new Error(",
+  "replace": "  if (!Number.isInteger(n) || n < 0) throw new Error(",
+  "why": "`--jobs 0` would parse and fall through to the serial path (pool mode is gated on `jobs > 1`, and the partitioner never yields zero slices), so a CI lane configured with 0 would look like the pool while running serially; the parser is the one place that refuses it.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "parseJobs reads a positive integer and \"auto\" (one core kept back), and refuses anything else"
+  ]
+}

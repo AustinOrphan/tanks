@@ -1,0 +1,12 @@
+{
+  "id": "a11y-achievement-state-back-to-a-class",
+  "file": "src/game/hud.ts",
+  "find": "      state.textContent = got ? 'Earned. ' : 'Locked. ';",
+  "replace": "      state.textContent = '';",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Returns earned state to living only in the `--earned` class, so an earned row and a locked row are announced identically and the single fact the Records pane exists to report is the one thing a screen reader cannot get. The span survives, so a structural check for `.ui-sr-only` still passes -- the assertion has to read its CONTENT, and does."
+}

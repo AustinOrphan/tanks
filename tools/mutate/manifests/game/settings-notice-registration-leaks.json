@@ -1,0 +1,12 @@
+{
+  "id": "settings-notice-registration-leaks",
+  "file": "src/game/loop.ts",
+  "find": "      stopSettingsNotice();",
+  "replace": "      void stopSettingsNotice;",
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "Leaves this session's persistence-notice registration attached at teardown. The callback closes over the session's HUD, which is destroyed on every campaign/versus reboot, so a notice arriving later would call `showToast` on a torn-down HUD. Killed by loop.test.ts's 'unregisters on teardown, so a notice cannot reach a dead HUD', which counts the live registrations and then fires a notice after disposal. 1 of 366. Widened by issue #317's session-host work: the repeated-session route now fails here too, at 'leaves exactly one settings-notice subscriber'. 2 of 397; the pre-existing case ('unregisters on teardown, so a notice cannot reach a dead HUD') still fails, so this is coverage added, not moved -- checked by naming the failing set on both sides, not by renumbering.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ]
+}

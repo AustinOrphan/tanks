@@ -1,0 +1,16 @@
+{
+  "id": "topbar-leaks-gameplay-status-onto-the-main-menu",
+  "file": "src/game/hud.ts",
+  "find": "    topbarEl.classList.toggle('hud-topbar--hidden', atLaunch || atMainMenu);",
+  "replace": "    topbarEl.classList.toggle('hud-topbar--hidden', atLaunch);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "The gap issue #226 names in its own words: 'the persistent top bar can leak gameplay status into application screens'. Everything left in that bar is in-match status now that the audio pair moved to Settings, so restoring the old rule puts the abandoned session's Lives, Enemies and Level chip above a menu offering to start a different match -- numbers about a world nobody is playing.",
+  "killedBy": [
+    "hud: the topbar carries gameplay status only (issue #226) hides the whole bar at Launch and at the Main Menu, and shows it over the board",
+    "createHud panel shows the title panel once the splash screen is dismissed"
+  ]
+}

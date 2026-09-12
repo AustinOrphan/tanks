@@ -1,0 +1,12 @@
+{
+  "id": "roundtrip-probe-containment-drops-the-separator",
+  "file": "tools/visual/serve-path.mjs",
+  "find": "if (file !== root && !file.startsWith(root + sep)) return null;",
+  "replace": "if (file !== root && !file.startsWith(root)) return null;",
+  "tests": [
+    "tools/visual/serve-path.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The containment check kept but weakened to a bare prefix, which is the shape it is easiest to write by accident. A sibling directory whose name merely begins with the root's -- dist-evil next to dist -- then passes. This entry proves the SHAPE of the guard rather than its presence: measured, it fails exactly 1 of 9, and every other assertion in the file, including all three .. escapes, still passes under it. Without that one case the two forms are indistinguishable and the weaker one would survive."
+}

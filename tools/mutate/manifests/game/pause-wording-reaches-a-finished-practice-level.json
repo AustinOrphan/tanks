@@ -1,0 +1,14 @@
+{
+  "id": "pause-wording-reaches-a-finished-practice-level",
+  "file": "src/game/hud.ts",
+  "find": "    quitBtn.textContent = atOutcome\n      ? 'Main Menu'\n      : s === 'paused' && statusData?.kind === 'practice'\n        ? 'End Practice'\n        : s === 'paused' && statusData?.kind === 'versus'\n          ? 'Main Menu'\n          : 'Quit to Title';",
+  "replace": "    quitBtn.textContent = statusData?.kind === 'practice'\n      ? 'End Practice'\n      : atOutcome\n        ? 'Main Menu'\n        : s === 'paused' && statusData?.kind === 'versus'\n          ? 'Main Menu'\n          : 'Quit to Title';",
+  "expect": "killed",
+  "why": "Reorders the arms so the session kind outranks the surface, which relabels the two practice END screens \"End Practice\". Both arms survive and every campaign and versus reading is unchanged, so this is the plausible version of the change rather than a typo. It is wrong because there is nothing left to end on an ending: issue #323's action set for a finished practice level names Main Menu, and PR #563 put that route on every end screen. Only an assertion that drives a practice STATUS all the way to an outcome surface can tell the two orderings apart. Re-anchored for issue #261, keeping the versus arm in the reordered form so the mutation changes ONLY the practice arm's position -- otherwise it would delete the versus contract as a side effect and be killed by the wrong test.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) leaves every practice END screen reading Main Menu, not End Practice"
+  ]
+}

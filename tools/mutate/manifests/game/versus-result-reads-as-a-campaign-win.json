@@ -1,0 +1,14 @@
+{
+  "id": "versus-result-reads-as-a-campaign-win",
+  "file": "src/game/hud.ts",
+  "find": "    const versusTitle = versusOutcomeTitle();\n    if (versusTitle !== null) {",
+  "replace": "    const versusTitle: string | null = null;\n    if (versusTitle !== null) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) keeps the VERSUS result screen OUT of the copy table, and gives it the #279 action set"
+  ],
+  "why": "Falls a local versus result back to the campaign wording -- \"You Win!\" over \"Arena cleared.\" -- which is what shipped before the owner's ruling. Both halves are wrong on that screen and wrong in different ways: there is no arena to clear, and the \"you\" addresses one player on a couch where the other may have just lost. The typed outcome already carries WHO won, so saying so costs nothing and is the only version that is true for every seat at the screen."
+}

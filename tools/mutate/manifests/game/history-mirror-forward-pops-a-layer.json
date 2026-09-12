@@ -1,0 +1,12 @@
+{
+  "id": "history-mirror-forward-pops-a-layer",
+  "file": "src/game/navigation.ts",
+  "find": "    if (isLayerSentinel(state)) {",
+  "replace": "    if ((false as boolean) && isLayerSentinel(state)) {",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The sentinel-arrival branch of `onPop` is short-circuited (`false && isLayerSentinel(state)` rather than a bare `false`, so `state` stays referenced under `noUnusedParameters`), and a Forward onto the mirror's own entry is handled as a base arrival. With no layer open the entry keeps its sentinel state instead of being re-stamped, so the next boot mistakes it for a reload-with-layer; with a layer open the arrival pops a layer the player did not ask to close. Fails 1 of 15 in navigation.test.ts: `Forward onto our sentinel with no layer re-stamps it; with a layer it becomes present`, at its first `empty.calls` assertion."
+}

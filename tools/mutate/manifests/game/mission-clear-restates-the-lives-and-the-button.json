@@ -1,0 +1,14 @@
+{
+  "id": "mission-clear-restates-the-lives-and-the-button",
+  "file": "src/game/hud.ts",
+  "find": "    subtitle: '',\n    action: 'Next Level',",
+  "replace": "    subtitle: 'Your run carries on, with the lives you have left.',\n    action: 'Next Level',",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Puts back the subtitle the owner cut. It restated two things already on the same screen -- the topbar shows the lives, the action button says \"Next Level\" -- and it put the word \"run\" on a panel whose numbers are per-attempt. Anchored on the following `action` line because `subtitle: ''` is now the value of all five entries and is not unique on its own; the action is what identifies WHICH ending this is.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) gives each campaign and practice ending its own copy and its own action"
+  ]
+}

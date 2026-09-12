@@ -1,0 +1,14 @@
+{
+  "id": "session-feeds-every-frame-to-the-run-tally",
+  "file": "src/game/loop.ts",
+  "find": "      deps.stats.record(events, playerId ?? -1, campaignActive());",
+  "replace": "      deps.stats.record(events, playerId ?? -1, true);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: stats wiring tells the store whether the frame counts toward the campaign run"
+  ],
+  "why": "The session stops asking whether this world is campaign play. The store's own gate is intact and correct; the caller just always says yes, so practice and the sandbox reach the campaign total anyway. This is the half a store-level test cannot see, which is why the gate is pinned on both sides of the seam."
+}

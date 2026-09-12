@@ -1,0 +1,15 @@
+{
+  "id": "ai-sidestep-drops-mine-guard",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;\n    if (mines.some((m) => vdot(cand, vsub(m.pos, tank.pos)) > 0)) continue;\n    const score = 1 - Math.abs(vdot(cand, bulletDir));",
+  "replace": "    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;\n    if (false) continue;\n    const score = 1 - Math.abs(vdot(cand, bulletDir));",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/danger.test.ts",
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "Drops sidestepAroundBlockage's own mine-refusal guard, the constraint its doc comment claims mirrors dangerAvoidMove's two-perpendicular passes -- a dodge that solves the shell by walking onto a mine. No existing test reached this specific line before this PR's re-pin work: the two-perpendicular tests (danger.test.ts's 'picks the dodge side that does not step toward a nearby armed mine') never reach sidestepAroundBlockage at all (a wall-clear perpendicular returns before it is called), and the pre-existing 'sidesteps onto a navigable heading' fixture carries no mine. Closed here by 'refuses a sidestep candidate that steps toward an armed mine': a corridor where the wheel's only two navigable candidates (due east/west) tie at the worst possible lateral-clearance score, with an armed mine placed on the tie-winning (east) side. Measured directly by disambiguating this line's two occurrences with the full three-line context above (the guard also appears verbatim in dangerAvoidMove's own two-perpendicular loop) -- the `find` string is unique to this function because only here is it immediately followed by the lateral-clearance score line.",
+  "killedBy": [
+    "dodging near walls (issue #224) refuses a sidestep candidate that steps toward an armed mine"
+  ]
+}

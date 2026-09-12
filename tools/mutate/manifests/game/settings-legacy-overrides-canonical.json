@@ -1,0 +1,13 @@
+{
+  "id": "settings-legacy-overrides-canonical",
+  "file": "src/game/settings.ts",
+  "find": "    const legacy = readLegacyTouchSettings(storage);\n    if (legacy.present) removeLegacy();",
+  "replace": "    const legacy = readLegacyTouchSettings(storage);\n    if (legacy.scheme !== null) {\n      shadow = freezeSettings({ ...shadow, input: { ...shadow.input, touchScheme: legacy.scheme } });\n    }\n    if (legacy.present) removeLegacy();",
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "Migration rule 1: a valid canonical payload wins outright. This mutation makes the legacy `tanks.touch.v1` scheme overwrite it, which is the shape a naive 'always merge legacy' migration takes -- and it is silent for any player whose two keys happen to agree. Killed by settings.test.ts's 'lets a VALID canonical payload win outright' and save.test.ts's 'lets CANONICAL settings win when a blob carries both keys', whose fixtures deliberately DISAGREE on every shared field. 2 of 62 across the two declared files.",
+  "tests": [
+    "src/game/settings.test.ts",
+    "src/game/save.test.ts"
+  ]
+}

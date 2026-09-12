@@ -1,0 +1,14 @@
+{
+  "id": "failure-screen-offers-no-way-out",
+  "file": "src/boot.ts",
+  "find": "    page.append(title, detail, action);",
+  "replace": "    page.append(title, detail);",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "Drops the recovery action, leaving a page that explains the problem and offers nothing to do about it -- issue #325's second criterion is that every blocking state provides at least one valid action. The copy is untouched, so every assertion about WHAT the page says still passes; only the case that presses the button can see it.",
+  "killedBy": [
+    "boot: the message itself OFFERS A WAY OUT, and the way out works"
+  ]
+}

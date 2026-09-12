@@ -1,0 +1,14 @@
+{
+  "id": "transition-duration-mirrored-in-typescript",
+  "file": "src/game/hud.ts",
+  "find": "    const raw = getComputedStyle(el).getPropertyValue('--ui-transition-duration').trim();",
+  "replace": "    const raw = '150ms';",
+  "expect": "killed",
+  "why": "Issue #364's FIRST acceptance criterion, inverted into the exact shape it forbids: a second copy of the duration living in the TypeScript, agreeing with the stylesheet today and free to drift from it tomorrow. Everything else stays green -- the transition still runs, still lasts 150ms, and hud.css.test.ts's textual checks still find one declaration of the token in the stylesheet, because this copy is not IN the stylesheet. That is the point: \"one place defines the duration\" is only testable as a BEHAVIOUR, by moving that one place and watching the timer move with it. `reads its duration from the stylesheet rather than mirroring it` is the case that measures it, by setting the token to 400ms and asserting the outgoing surface is still displayed at 399ms. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract reads its duration from the stylesheet rather than mirroring it"
+  ]
+}

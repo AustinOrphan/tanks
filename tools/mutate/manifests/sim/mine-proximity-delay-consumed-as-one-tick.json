@@ -1,0 +1,15 @@
+{
+  "id": "mine-proximity-delay-consumed-as-one-tick",
+  "file": "src/sim/mines.ts",
+  "find": "  mine.proximityDelayLeft = MINE_PROXIMITY_DELAY_TICKS",
+  "replace": "  mine.proximityDelayLeft = 1",
+  "expect": "killed",
+  "tests": [
+    "src/sim/mines.test.ts"
+  ],
+  "why": "The proximity reaction window must last the named MINE_PROXIMITY_DELAY_TICKS -- the small opportunity to react IS the feature (owner direction on PR #311). Stamping 1 collapses trip-to-blast to one stepMines call. Killed by the exact tick-boundary pin (no detonation through call 29, detonation on call 30) and the drain-length fixtures.",
+  "killedBy": [
+    "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity entry emits mine-triggered on that call and defers mine-detonate by exactly MINE_PROXIMITY_DELAY_TICKS calls",
+    "source-specific mine warnings (issue #275, owner-revised on PR #311) proximity re-entry during the delay is idempotent: one mine-triggered, no countdown reset"
+  ]
+}

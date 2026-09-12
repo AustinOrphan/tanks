@@ -1,0 +1,15 @@
+{
+  "id": "versus-slot-device-ignores-live-pads",
+  "file": "src/game/hud.ts",
+  "find": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));",
+  "replace": "    const sources = resolveSources(slots, []);",
+  "expect": "killed",
+  "why": "Derives every slot's device as if no controller were connected. A second human slot would read 'Unassigned' and refuse Start with a controller plugged in, and -- worse in kind -- the gate would stop reacting to a hotplug at all, which is the criterion about a disconnect disabling Start with an actionable reason.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) a Human slot left without a device refuses Start with the device-missing reason, not the off one",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) derives the device column from the live pads rather than storing one, and never honours a stale index"
+  ]
+}

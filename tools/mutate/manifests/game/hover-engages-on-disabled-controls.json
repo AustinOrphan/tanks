@@ -1,0 +1,14 @@
+{
+  "id": "hover-engages-on-disabled-controls",
+  "file": "src/game/hud.css",
+  "find": "  .ui-btn:hover:not(:disabled) {",
+  "replace": "  .ui-btn:hover {",
+  "expect": "killed",
+  "why": "One hover selector loses `:not(:disabled)` (issue #392's second acceptance criterion). An unofferable versus mode or an unavailable controller source -- `hud.ts` sets the real `disabled` attribute on both -- would brighten under the pointer, telling the player a control they cannot activate is available. Worse than no hover at all, and the sort of thing that survives review because the rule LOOKS right; the selector is checked per-rule rather than by eye. Only the base `.ui-btn` selector is mutated: one is enough to prove the assertion sweeps every rule in the block rather than a named list. Scoped to hud.css.test.ts; expectFailures counts that scoped run only. (the example was a locked level button until issue #555 stopped the grid drawing them; the selector this mutates is unchanged).",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hover treatment on the UI kit primitives (issue #392) never engages on a disabled control"
+  ]
+}

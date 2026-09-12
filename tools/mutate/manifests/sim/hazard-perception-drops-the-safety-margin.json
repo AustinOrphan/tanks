@@ -1,0 +1,15 @@
+{
+  "id": "hazard-perception-drops-the-safety-margin",
+  "file": "src/sim/ai/hazard-perception.ts",
+  "find": "  const offset = radiusError + safetyMargin;",
+  "replace": "  const offset = radiusError;",
+  "expect": "killed",
+  "why": "`safetyMargin` resolves correctly and reaches no distance: the axis becomes a number `withBotDifficulty` computes and nothing reads. Every assertion in bot-difficulty.test.ts still passes, because they are all about the resolved config. Authored at 0 for every shipped profile, the field's ONLY live consumer is difficulty, which is exactly why it needs a pin of its own -- at `normal` the mutation is a genuine no-op and the tree looks healthy. Killed by two, deliberately at two different levels: the unit assertion that a margin moves all three radii by exactly its own value, and the decision-level fixture where a mine sitting just outside the TRUE flee radius is fled more often at `hard` than at `easy` -- which is the margin's whole purpose and collapses to a tie without it.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "perceiveHazards: one belief, every hazard type carries the profile safety margin into every radius",
+    "difficulty moves the whole hazard picture, monotonically makes an EASY bot walk past a mine a HARD bot flees, THROUGH a decision"
+  ]
+}

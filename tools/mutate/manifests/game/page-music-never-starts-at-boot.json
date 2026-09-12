@@ -1,0 +1,14 @@
+{
+  "id": "page-music-never-starts-at-boot",
+  "file": "src/game/route-host.ts",
+  "find": "  followMusic(sm.location);",
+  "replace": "  void sm;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Drops the eager call that covers the screen the page OPENS on, which no location change ever announces -- the same reason `hud.setState(locationToHudSurface(sm.location))` sits beside it. loop.ts carried the identical eager call for the session that used to own this, with a comment recording that a browser probe caught the silent title screen after the unit tests passed. Without it the first screen a player sees is the one screen with no music.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page PLAYS THE MENU BED with no session in the slot, in order (issue #485)"
+  ]
+}

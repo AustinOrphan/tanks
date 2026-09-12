@@ -1,0 +1,14 @@
+{
+  "id": "mutate-select-ignores-declared-reads",
+  "file": "tools/mutate/select.mjs",
+  "find": "      if (changed.has(read)) reasons.push(`declared read ${read} changed`);",
+  "replace": "      if (false) reasons.push(`declared read ${read} changed`);",
+  "why": "`reads` exists for the one input the module graph cannot see -- a file a test reads through fs -- and the selection must honour the declaration or the declaration is decoration.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "selectAffected rule 4: a change to a file an entry declares it reads selects it; an undeclared non-module file does not"
+  ]
+}

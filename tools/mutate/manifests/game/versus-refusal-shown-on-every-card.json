@@ -1,0 +1,14 @@
+{
+  "id": "versus-refusal-shown-on-every-card",
+  "file": "src/game/hud.ts",
+  "find": "        problem !== null && problem.kind !== 'no-human' && problem.kind !== 'one-team' && problem.slot === slot;",
+  "replace": "        problem !== null && problem.kind !== 'no-human' && problem.kind !== 'one-team';",
+  "expect": "killed",
+  "why": "Drops the slot check, so the FIRST problem's sentence is stamped on every card at once -- 'Player 2 is off' would appear under Player 3 as well. The pane deliberately shows one actionable reason at a time (versusSetupProblem returns the first problem, not a list); this pins that the other cards stay silent, which a test asserting only the offending card would not. RE-ANCHORED for issue #281: the guard gained a `problem.kind !== 'one-team'` clause when the team-count refusal joined `no-human` as the second PANE-level problem, so the previous find string no longer occurs -- which the harness reports as `failed-to-apply`, and which CI caught here rather than the local sweep, because the local selection was filtered to the files the change was ABOUT (`arena.ts`, `versus-setup.ts`) and this entry lives in `hud.ts`. The mutation, its meaning and its killing test are unchanged; only the anchor moved, and the count below was re-measured on the new text rather than carried over.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one"
+  ]
+}

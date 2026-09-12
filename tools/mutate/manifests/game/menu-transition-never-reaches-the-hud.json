@@ -1,0 +1,19 @@
+{
+  "id": "menu-transition-never-reaches-the-hud",
+  "file": "src/game/hud.ts",
+  "find": "  if (treatmentClass !== null) el.classList.add(treatmentClass);",
+  "replace": "  void treatmentClass;",
+  "expect": "killed",
+  "why": "The flag parses, the registry documents it, the stylesheet carries every alternative -- and nothing applies it, so every one of them renders as the shipped transition. The failure is entirely silent: `parseDevFlags` still returns the value, `devControls()` still offers it, the generated doc still lists it, and anyone selecting `fade` to check whether the new default caused a report sees the new default and concludes it did not. That is the same class of defect #497 records for `ring+audio`, where a cue reached the parser as a different string and was read as a broken cue. Scoped to menu-transition.test.ts, where every alternative is read off the mounted stylesheet rather than off the option.",
+  "tests": [
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "menuTransition: the SHIPPED transition is the no-flag path itself mounts the same DOM as an absent flag, with no modifier class anywhere",
+    "menuTransition: the SHIPPED transition is the no-flag path itself resolves the same duration and animates the same keyframes as an absent flag",
+    "menuTransition: the SHIPPED transition is the no-flag path itself settles on exactly the same tick as an absent flag",
+    "menuTransition: `fade` still reproduces the pre-#542 transition crossfades at the shipped duration and moves no content at all",
+    "menuTransition: the duration treatment goes through the ONE token lengthens the transition by moving the stylesheet token, with nothing mirrored in TypeScript",
+    "menuTransition: the duration treatment goes through the ONE token overrides that token per HUD, so a second HUD on the page keeps the shipped timing"
+  ]
+}

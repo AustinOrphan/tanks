@@ -1,0 +1,14 @@
+{
+  "id": "gallery-blocked-fire-moment-magazine-not-full",
+  "file": "tools/gallery/moments.ts",
+  "find": "      for (let i = 0; i < cap; i++) {",
+  "replace": "      for (let i = 0; i < cap - 1; i++) {",
+  "expect": "killed",
+  "tests": [
+    "tools/gallery/moments.test.ts"
+  ],
+  "why": "Seeds one shell short of the cap. The moment then opens with a real shot rather than a refusal, so the pinned refusal ticks move and the clip's first gesture is a muzzle flash the reviewer would read as the cue. A magazine that is merely nearly full is the natural wrong version of this fixture.",
+  "killedBy": [
+    "every moment pins its events to exact ticks blocked-fire: each expected event fires on its declared tick \u2014 and on no other"
+  ]
+}

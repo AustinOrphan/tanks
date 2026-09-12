@@ -1,0 +1,15 @@
+{
+  "id": "route-host-motion-control-loses-the-stored-preference",
+  "file": "src/game/route-host.ts",
+  "find": "    hud.setMotion(deps.settings.snapshot().presentation.motion);",
+  "replace": "    hud.setMotion('system');",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "`paintSettingsControls` has been the single writer of the settings display since issue #532, so a constant here is the whole display: a returning player who chose 'Reduced' opens Settings on 'Match device' while the game correctly runs reduced, and one more tap moves them to 'Full' rather than to what the button claims. The transitions keep obeying the store throughout, which is what makes this silent.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED motion preference, and the resolved policy beside it",
+    "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session"
+  ]
+}

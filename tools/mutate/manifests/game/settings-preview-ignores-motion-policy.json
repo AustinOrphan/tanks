@@ -1,0 +1,12 @@
+{
+  "id": "settings-preview-ignores-motion-policy",
+  "file": "src/game/route-ui.ts",
+  "find": "      deps.effectiveSettings.current().reducedMotion,",
+  "replace": "      false,",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "Hardcodes the Customize preview's reduced-motion flag, which is what the module did before issue #320 in a different form -- it read `window.matchMedia` itself, so the OS was the only input and a player who wanted full effects anyway had no say. Killed by loop.test.ts's four-row motion sweep, which drives all three player-facing states against an OS preference set opposite to the expected answer wherever the override applies. 1 of 366. RE-ANCHORED for issue #427: the Customize preview's construction moved from `startGameWith` to `route-ui.ts` with the rest of the application-route handlers, so the find string named a file that no longer contains it -- which the harness reports as `failed-to-apply`, but only to whoever runs it. The line, the mutation and the killing test are unchanged; only `file` moved. The count below was re-measured on the new location rather than carried over.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "practice-this-level-reports-before-it-quits",
+  "file": "src/game/hud.ts",
+  "find": "    handleQuit();\n    for (const cb of levelSelectCbs) cb(mission - 1);",
+  "replace": "    for (const cb of levelSelectCbs) cb(mission - 1);\n    handleQuit();",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) Practice This Level leaves the run, then reports the level just cleared (issue #323)"
+  ],
+  "why": "Reports the pick before leaving the run. `loop.ts` guards its level-select handler on `sm.atMainMenu`, so the report arrives while the machine is still at an outcome and is dropped on the floor: the button does nothing at all. Same ordering constraint `handleChooseLevel` obeys, and the same one issue #566's `quitInto` exists to hold for panes -- this path opens no pane, so it keeps the two calls and the test pins their order."
+}

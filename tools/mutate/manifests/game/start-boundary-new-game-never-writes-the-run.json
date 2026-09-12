@@ -1,0 +1,12 @@
+{
+  "id": "start-boundary-new-game-never-writes-the-run",
+  "file": "src/game/loop.ts",
+  "find": "    if (startsCampaignRun) {\n      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+  "replace": "    if (false) {\n      newRunLives = deps.run.startNewRun(level.id).livesRemaining;",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "The opposite half: New Game lands on level one and never touches the run, so the board is right and the campaign the player thinks they restarted is still sitting at level 8 with its old lives. Invisible until they quit and press Continue. Paired with the entry above so both halves of the one write this issue makes are pinned separately -- neither can stand in for the other. `void startsCampaignRun;` rather than a deletion so the guard is still read and a tsc failure cannot be mistaken for coverage. 1 of 412. Re-measured at 2 of 421 in loop.test.ts: the second case is \"a retired campaign session does not advance the run a second time from stale state\", whose New Game must create the fresh run the live session's mission-clear then advances. Re-anchored for the same block change, and expressed as a dead condition rather than a deleted statement so the paired `deps.stats.startRun()` inside the block goes with it -- which is what a New Game that writes nothing really means now."
+}

@@ -241,8 +241,8 @@ of real play cannot.
 See `tools/gallery/`.
 
 `npm run mutate` (`tools/mutate/`) is the "prove the gap before writing the test" rule,
-made checkable: for each hand-picked entry in `tools/mutate/manifests/*.json` (one file per
-area, read as one set; an exact
+made checkable: for each hand-picked entry in `tools/mutate/manifests/<area>/<id>.json` (one
+file per entry since issue #653, read as one set; an exact
 find/replace against a `src/` or `tools/` file, a declared `killed`/`survives`, the
 `killedBy` test names or an `expectFailures` count, a `why`, and scoped `tests`) it verifies the find/replace
 actually changed the file's bytes (refusing an ambiguous find rather than guessing),

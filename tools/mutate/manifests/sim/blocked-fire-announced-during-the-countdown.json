@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-announced-during-the-countdown",
+  "file": "src/sim/world.ts",
+  "find": "  if (canAct && input.fire && player.fireCooldown <= 0) {",
+  "replace": "  if (input.fire && player.fireCooldown <= 0) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/fire-refusal-paths.test.ts"
+  ],
+  "why": "Issue #356's cue must explain the active-shell cap and nothing else. Dropping the phase gate lets a tank that is already at its cap reach spawnBullet during the pre-round countdown, so the game announces a full magazine at a moment when firing was never on offer. The capacity check itself is untouched by this mutation -- only the order in which the two are consulted.",
+  "killedBy": [
+    "what a refused shot says, per refusal path (issue #356) COUNTDOWN: silent, even with every shell already in the air"
+  ]
+}

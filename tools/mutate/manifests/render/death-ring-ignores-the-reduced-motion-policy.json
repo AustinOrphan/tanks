@@ -1,0 +1,15 @@
+{
+  "id": "death-ring-ignores-the-reduced-motion-policy",
+  "file": "src/render/death-pulse.ts",
+  "find": "      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);",
+  "replace": "      r.mesh.scale.setScalar(1 + GROWTH * k);",
+  "expect": "killed",
+  "tests": [
+    "src/render/death-pulse.test.ts"
+  ],
+  "why": "Issue #289's whole point at this effect: the shockwave keeps its opacity fade and drops its growth under reduced motion. Ignoring the flag restores full expansion for a player who asked for less movement, and does so silently -- the ring still appears, still fades, and still recycles on the same frame, so nothing but the scale distinguishes the two builds.",
+  "killedBy": [
+    "death pulse under the reduced-motion policy (issue #289) stops the ring EXPANDING, and keeps it fading",
+    "death pulse under the reduced-motion policy (issue #289) takes the policy MID-FLIGHT, not only at the next death"
+  ]
+}

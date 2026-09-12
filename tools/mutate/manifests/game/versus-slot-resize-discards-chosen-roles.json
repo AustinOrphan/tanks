@@ -1,0 +1,18 @@
+{
+  "id": "versus-slot-resize-discards-chosen-roles",
+  "file": "src/game/versus-setup.ts",
+  "find": "  for (let i = 0; i < players; i++) out.push(slots[i] ? { ...slots[i] } : defaults[i]);",
+  "replace": "  for (let i = 0; i < players; i++) out.push(defaults[i]);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/versus-setup.test.ts"
+  ],
+  "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing. Issue #260 raised this from 3 to 4, and the extra failure is the point: until the pane had role CONTROLS, nothing in the UI could show a discarded role. The fourth test drives the player-count buttons and reads the role back off the rendered card, so this is now pinned end to end rather than at the model alone.",
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) Players change REPLACES the slot rows across two successive re-renders, and keeps the roles already chosen",
+    "resizeSlots: the player-count buttons KEEPS chosen roles when the count grows",
+    "resizeSlots: the player-count buttons keeps the surviving roles when the count shrinks",
+    "resizeSlots: the player-count buttons round-trips 2 -> 4 -> 2 back to the original choices"
+  ]
+}

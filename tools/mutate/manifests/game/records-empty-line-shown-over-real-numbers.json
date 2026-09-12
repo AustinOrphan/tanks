@@ -1,0 +1,14 @@
+{
+  "id": "records-empty-line-shown-over-real-numbers",
+  "file": "src/game/hud.ts",
+  "find": "    statsEmptyEl.classList.toggle(\n      'hud-stats-empty--hidden',\n      Object.values(lifetime).some((v) => v !== 0),\n    );",
+  "replace": "    statsEmptyEl.classList.remove('hud-stats-empty--hidden');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Never hides the line, so \"No matches played yet.\" stands above a table of real totals and contradicts the numbers under it. Distinct from the entry above: that one picks the wrong SOURCE and this one drops the decision entirely, and a test asserting only the empty case would survive both.",
+  "killedBy": [
+    "hud: the stats page says so when nothing has been played, and gets out of the way once something has"
+  ]
+}

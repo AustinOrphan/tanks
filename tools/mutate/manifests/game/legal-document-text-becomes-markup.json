@@ -1,0 +1,14 @@
+{
+  "id": "legal-document-text-becomes-markup",
+  "file": "src/game/legal.ts",
+  "find": "  el.textContent = content;",
+  "replace": "  el.innerHTML = content;",
+  "expect": "killed",
+  "tests": [
+    "src/game/legal.test.ts"
+  ],
+  "killedBy": [
+    "the legal block renderer puts document text in as text, so a document cannot inject markup"
+  ],
+  "why": "Turns the one promise legal.ts's header makes into its opposite: every heading, paragraph, note, list item and table cell in five legal documents would be parsed as HTML. Today no committed document contains markup -- the generator's `assertSupported` rejects inline HTML and `inlineText` flattens the rest -- so EVERY assertion driven from `LEGAL_DOCUMENTS` passes on this mutation, byte for byte, and the pane looks identical. The case that kills it uses a hostile fixture (`<img src=x onerror=...>`) precisely because the shipped data cannot expose the difference, and it checks the child count as well as the text, since `innerHTML` of a string with no valid tags still round-trips through `textContent`."
+}

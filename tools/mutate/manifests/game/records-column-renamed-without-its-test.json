@@ -1,0 +1,14 @@
+{
+  "id": "records-column-renamed-without-its-test",
+  "file": "src/game/hud.ts",
+  "find": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Level attempt</th></tr></thead>'",
+  "replace": "      + '<thead><tr><td></td><th scope=\"col\">Lifetime</th><th scope=\"col\">Attempt</th></tr></thead>'",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Renames the column to something plausible-but-unpinned. This entry used to assert the OPPOSITE -- that Records must NOT borrow the ending screens' \"This level\" -- and the owner then ruled the two should share one label after all, which made that claim false rather than merely stale. What survives is the part that was always the point: the heading is exact copy and a test names it, so a drive-by shortening cannot slip through. Kept rather than deleted because deleting it would leave the column's wording pinned by one entry instead of two. RE-ANCHORED for issue #629, which rebuilt this header row out of <th scope=\"col\"> instead of <td> -- the column names moved but this entry's question did not, so the anchor follows them rather than the entry being retired.",
+  "killedBy": [
+    "hud: the stats page names the two scopes for what they ARE: Lifetime and the current attempt"
+  ]
+}

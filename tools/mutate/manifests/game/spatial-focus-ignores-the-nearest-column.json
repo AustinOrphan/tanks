@@ -1,0 +1,17 @@
+{
+  "id": "spatial-focus-ignores-the-nearest-column",
+  "file": "src/game/spatial-focus.ts",
+  "find": "    if (d < bestDist) {\n      best = cand;\n      bestDist = d;\n    }",
+  "replace": "    if (false) {\n      best = cand;\n      bestDist = d;\n    }",
+  "why": "Up and Down must land on the control whose centre is nearest, not the row's first: a bot card's difficulty column reached by Down from the card above is the case.",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/spatial-focus.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card",
+    "spatial-focus: every move lands somewhere Up and Down move to the adjacent row, on the control whose centre is nearest",
+    "spatial-focus: every move lands somewhere Up from the first row wraps to the last, Down from the last wraps to the first"
+  ]
+}

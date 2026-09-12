@@ -1,0 +1,14 @@
+{
+  "id": "gallery-blocked-fire-accepts-any-scene",
+  "file": "tools/gallery/args.mjs",
+  "find": "    if (out.scene !== 'blocked-fire') {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "Drops the scene pairing, which is the whole reason the flag is guarded. Every other moment renders a tank that never refuses a shot, so --blocked-fire on one produces a clip with no cue in it -- indistinguishable from an arm that does nothing, and exactly the failure this tooling exists to end (the arena captures that showed nothing were what prompted it).",
+  "killedBy": [
+    "gallery args takes a blocked-fire cue only for the moment that stages a refusal"
+  ]
+}

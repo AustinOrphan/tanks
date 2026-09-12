@@ -1,0 +1,15 @@
+{
+  "id": "dev-url-canonicalises-to-the-wrong-duplicate",
+  "file": "src/game/dev-config.ts",
+  "find": "    out.append(name, params.get(name) as string); // first-wins, as the parser reads it",
+  "replace": "    out.append(name, params.getAll(name)[params.getAll(name).length - 1] as string);",
+  "expect": "killed",
+  "why": "The canonical URL resolves a duplicated developer parameter to the LAST value while every reader in devflags.ts resolves it to the first (`isOn`, `asSeed` and the rest all go through `URLSearchParams.get`, which returns the first). The result is the one thing this function must never produce: a canonical URL that PARSES DIFFERENTLY from the one the player supplied -- `?dev=1&quality=low&quality=high` would canonicalise to `quality=high` and silently change the render preset. Nothing about the output LOOKS wrong; both values came from the URL. It is caught by the first-wins case and by the round-trip sweep, which compares `parseDevFlags(canonical)` against `parseDevFlags(original)` rather than comparing the model to itself. Scoped to dev-config.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/dev-config.test.ts"
+  ],
+  "killedBy": [
+    "canonicalDevSearch collapses a duplicated known parameter to the FIRST value -- what the parser reads",
+    "canonicalDevSearch round trips: the canonical form reproduces the previewed effective flags"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "mine-fuse-glow-blinks-again",
+  "file": "src/render/mine-warning.ts",
+  "find": "    fuse = { growth: clamp01(1 - mine.timer / FUSE_WARNING_SECONDS) };",
+  "replace": "    { const g = clamp01(1 - mine.timer / FUSE_WARNING_SECONDS); fuse = { growth: Math.floor(g * 12) % 2 === 0 ? g : g * 0.4 }; }",
+  "expect": "killed",
+  "tests": [
+    "src/render/mine-warning.test.ts",
+    "src/render/mine-warning.sync.test.ts"
+  ],
+  "why": "The blink was removed for a reason that outlives the aesthetic preference: sustained flashing above ~3 Hz is a photosensitivity hazard, and the previous revision could only BOUND it at 6 Hz rather than remove it. This entry reintroduces an oscillation and must fail, so the monotone guarantee is enforced rather than merely intended.",
+  "killedBy": [
+    "fuse urgency: a glow from underneath GROWS monotonically as the fuse runs out, and is largest at expiry",
+    "fuse urgency: a glow from underneath NEVER oscillates: no frame is dimmer or smaller than the frame before it"
+  ]
+}

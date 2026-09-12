@@ -1,0 +1,14 @@
+{
+  "id": "records-tab-memory-latches-on-the-first-switch",
+  "file": "src/game/hud.ts",
+  "find": "  const handleRecordsTabStats = (): void => {\n    lastRecordsTab = 'stats';",
+  "replace": "  const handleRecordsTabStats = (): void => {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "killedBy": [
+    "hud: the stats page reopens on the tab you last used, and starts a fresh document on Stats"
+  ],
+  "why": "Records the move TO Achievements but not the move back, so the memory becomes a one-way latch: once a player has looked at achievements, Records reopens there forever even after they switch back to Stats and leave from it. The half of the round trip that catches this is the reason that test switches in both directions instead of stopping at the first remembered tab."
+}

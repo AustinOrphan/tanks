@@ -1,0 +1,15 @@
+{
+  "id": "bot-slot-preset-never-reaches-the-bot",
+  "file": "src/game/loop.ts",
+  "find": "    const preset = difficulty?.get(slot) ?? DEFAULT_BOT_DIFFICULTY;",
+  "replace": "    const preset = DEFAULT_BOT_DIFFICULTY;",
+  "expect": "killed",
+  "why": "Every bot plays at Normal whatever the player picked -- the selector still renders, still shows a selection, still writes the descriptor, and the setup still persists; only the match ignores it. WHY THIS ENTRY EXISTS AT THIS SITE: an earlier shape passed the preset as `decidePlayerInput`'s fifth argument at the frame-loop call, and replacing THAT with the default was measured to leave 1801 tests green -- nothing in the tree drives a bot far enough for its aim spread to be observable, so the whole feature could have shipped dead with a full suite behind it. The preset is now closed over inside `createBotSources`, which removes the argument a caller could drop and leaves exactly one place it can still be lost: this line. Killed by the two cases that read the returned source's `difficulty` per slot, including the un-configured slot that must resolve Normal through ABSENCE rather than through this fallback being the only path. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "createBotSources binds each slot its configured competence (issue #267) binds the preset into `decide`, so no caller can drop it",
+    "createBotSources binds each slot its configured competence (issue #267) carries the descriptor preset per slot, and Normal where none was chosen"
+  ]
+}

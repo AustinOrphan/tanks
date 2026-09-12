@@ -1,0 +1,12 @@
+{
+  "id": "versus-p1-not-relocated",
+  "file": "src/sim/arena.ts",
+  "find": "      for (let i = 0; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
+  "replace": "      for (let i = 1; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee. COUNT REMEASURED, 5 -> 3 (issue #425). `versus-spawns.test.ts` was NOT edited by that change; the drop is behavioural. vs-quad-01 went from 27x17 to 33x27, and on the roomier board P1 left on the authored `P` cell still clears two thresholds it used to violate, so two of the five detectors stop tripping. What still catches it: the mutual-line-of-sight sweep, the minimum-pairwise-distance floor, and the campaign-coop untouched check. Recorded rather than silently renumbered, because a board getting more forgiving is exactly how a symmetry rule quietly loses its guards.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ]
+}

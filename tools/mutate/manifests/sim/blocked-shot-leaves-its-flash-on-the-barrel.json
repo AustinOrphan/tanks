@@ -1,0 +1,14 @@
+{
+  "id": "blocked-shot-leaves-its-flash-on-the-barrel",
+  "file": "src/sim/bullets.ts",
+  "find": "    flash: { x: owner.pos.x, y: owner.pos.y },",
+  "replace": "    flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)),",
+  "expect": "killed",
+  "tests": [
+    "src/sim/bullets.test.ts"
+  ],
+  "why": "When the shell cannot be born at the barrel and retreats to the tank centre, this leaves the flash out on the opening -- bursting inside the wall that caused the retreat, off a gun that produced nothing there this tick. The retreat still happens and the shell still spawns safely, so only an assertion on the event's position sees it.",
+  "killedBy": [
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) drags the muzzle flash back to the tank when the shell could not be born at the barrel"
+  ]
+}

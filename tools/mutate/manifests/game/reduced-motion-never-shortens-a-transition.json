@@ -1,0 +1,16 @@
+{
+  "id": "reduced-motion-never-shortens-a-transition",
+  "file": "src/game/hud.ts",
+  "find": "  function transitionMs(): number {\n    if (reducedMotion) return 0;",
+  "replace": "  function transitionMs(): number {",
+  "expect": "killed",
+  "why": "The resolved reduced-motion policy reaching the HUD but never reaching the clock. `hud.setReducedMotion` still exists, loop.ts still pushes it on every `effectiveSettings` change, and the field is still assigned -- so the wiring entries in loop.test.ts (`pushes the same resolved policy to the HUD, and again when it changes`) all still pass; only the effect is gone. Issue #364's fifth criterion asks that a player who resolved reduced motion gets instant transitions, and this is the one line that makes the duration zero rather than merely recorded. `makes every transition instant under the RESOLVED reduced-motion policy` is the case that measures it, and it carries its own negative control in the same test: the motion-ON branch asserts the outgoing surface is still displayed and one extra timer is armed, so a suite that had been accidentally synchronous would fail there rather than pass here. Widened for issue #542: menu-transition.test.ts joins the scope because that issue's four transitions rest on this same line and on nothing else. Two of them MOVE -- one of those two is now the SHIPPED transition, so this is no longer about a flag but about what every player who resolved reduced motion gets -- and there is deliberately no `prefers-reduced-motion` rule for them, because the resolved policy is a player setting a media query cannot see. This zero is the entire mechanism by which the movement collapses. Measured after the adoption: with this line removed, the per-treatment case is the one of that file's 18 that fails. Its sweep now leads with the no-flag path rather than with `rise`, so the transition every player gets is the first thing this line is asked about.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts",
+    "src/game/menu-transition.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract makes every transition instant under the RESOLVED reduced-motion policy",
+    "menuTransition: every treatment collapses to instant under RESOLVED reduced motion leaves no transition timer and no animation class, on the no-flag path and all four"
+  ]
+}

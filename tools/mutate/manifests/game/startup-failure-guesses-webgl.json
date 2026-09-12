@@ -1,0 +1,15 @@
+{
+  "id": "startup-failure-guesses-webgl",
+  "file": "src/game/startup-failure.ts",
+  "find": "  return STARTUP_FAILURES['startup-failed'];",
+  "replace": "  return STARTUP_FAILURES['unsupported-render'];",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "Restores the exact behaviour issue #325 was filed to remove: one message for every way startup can fail. Before this change `showFailure` printed NO_WEBGL_MESSAGE -- \"this game needs WebGL, try another browser\" -- for the capability gate, for `createAppShell` failing to resolve storage, for a renderer that got its context and then failed initialising, and for a match that failed from a HUD click. It was true for the first and a GUESS for the rest, and the guess was actionable: a player whose storage was blocked was told to go and change browsers over a graphics feature that was working. Nothing throws under this mutation and the screen still looks correct, which is why it needs a test that reads which state was chosen rather than that a state was.",
+  "killedBy": [
+    "boot: the page-scoped settings owner shows the error page when building it throws, rather than failing silently",
+    "boot: the message itself classifies each cause into its own state, and guesses at nothing"
+  ]
+}

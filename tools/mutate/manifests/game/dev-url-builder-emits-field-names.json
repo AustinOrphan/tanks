@@ -1,0 +1,14 @@
+{
+  "id": "dev-url-builder-emits-field-names",
+  "file": "src/game/dev-config.ts",
+  "find": "    emit(FLAG_REGISTRY[field].param ?? field, selection[field]);",
+  "replace": "    emit(field, selection[field]);",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config.test.ts"
+  ],
+  "killedBy": [
+    "devSearchFrom: BUILDING a developer URL (issue #623) translates field names to parameter names, which is why it is keyed by field"
+  ],
+  "why": "Emits the registry FIELD where the query parameter differs, producing `?sandboxTanks=brown` instead of `?tanks=brown`. The parser does not know that spelling, so it is a silent no-op: the URL is well-formed, Copy Link hands out something that looks right, and the flag simply never applies. Three fields rename (the sandbox trio) and 29 do not, so every assertion that happens to use a non-renamed flag stays green -- which is the reason this function is keyed by field and translates ONCE here rather than making every caller remember."
+}

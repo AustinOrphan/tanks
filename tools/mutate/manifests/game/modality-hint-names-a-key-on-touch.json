@@ -1,0 +1,17 @@
+{
+  "id": "modality-hint-names-a-key-on-touch",
+  "file": "src/game/modality.ts",
+  "find": "  if (modality === 'touch') return '';",
+  "replace": "  if (false) return '';",
+  "why": "A touch-only device has no key to press, so a key hint there is an instruction the player cannot follow -- the acceptance criterion 'touch-only devices show no key hints'.",
+  "tests": [
+    "src/game/modality.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+    "createRouteHost: prompts follow the input the player is using (issue #496) the first input of the page sets the hint with no threshold: a touch tap drops the key hint",
+    "keyHint: one policy for static hints across the HUD (issue #496) names the key for a keyboard, a pad's button only when one is bound, nothing for touch, and keeps the key for a mouse"
+  ]
+}

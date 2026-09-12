@@ -1,0 +1,15 @@
+{
+  "id": "audit-threshold-drops-critical",
+  "file": "tools/audit/classify.mjs",
+  "find": "export const BLOCKING_SEVERITIES = ['high', 'critical'];",
+  "replace": "export const BLOCKING_SEVERITIES = ['high'];",
+  "expect": "killed",
+  "tests": [
+    "tools/audit/classify.test.ts"
+  ],
+  "why": "Drops `critical` from the blocking set. npm's own `--audit-level=high` INCLUDES critical, and re-expressing that flag as a hand-written list is where the inclusion gets lost -- the result reads as a stricter setting than `moderate` while letting the single worst class of advisory straight through. Nothing about the list's appearance would give it away.",
+  "killedBy": [
+    "audit classification (issue #538) includes CRITICAL, not just high",
+    "audit classification (issue #538) the summary line is what a reader sees first says VULNERABLE with the counts and the packages"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "blocked-fire-pips-strand-the-strip-where-the-refusal-happened",
+  "file": "src/render/blocked-fire-pips.ts",
+  "find": "    row.group.position.set(owner.pos.x, PIP_Y, owner.pos.y + ROW_FORWARD);\n    return true;",
+  "replace": "    return owner.alive;",
+  "expect": "killed",
+  "tests": [
+    "src/render/blocked-fire-pips.test.ts"
+  ],
+  "why": "Stops the strip following its tank while leaving every other behaviour intact -- the owner is still resolved, a dead one still retires the cue, only the reposition is gone. This arm lives 0.55s -- three times the ring's life, because it is READ rather than merely noticed -- and a tank at speed leaves a latched strip behind it well inside that window, so the readout detaches from the tank whose capacity it reports. The ring can be latched and is; this cannot, and the difference is exactly why `update` here takes the world at all. Deliberately targeted at the reposition alone: blocked-fire-pips-outlive-the-tank-they-report-on covers the other half of `follow`.",
+  "killedBy": [
+    "blocked-fire capacity pips (issue #516, parent #356) FOLLOWS its tank, rather than being stranded where the refusal happened"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "session-dev-flag-versus-reported-as-campaign",
+  "file": "src/game/loop.ts",
+  "find": "    pushStatus(world, currentDescriptor.kind, ordinalOf(level));\n    // Reseeded here too",
+  "replace": "    pushStatus(world, 'campaign', ordinalOf(level));\n    // Reseeded here too",
+  "expect": "killed",
+  "why": "The gameplay HUD's identity must come from the canonical descriptor, not from a boot-time guess. RE-ANCHORED for issue #324's step S6, which folded `setSessionKind` into the one status projection at this same site. Pinning switchTo's push to 'campaign' is the shape issue #316's review found shipped: a developer-flag versus session (?dev=1&mode=ffa) built a genuine FFA world while telling the HUD it was Campaign, which hid the versus stock strip and left the campaign Lives/Enemies stats on screen. It also reintroduces the Practice/Campaign divergence on the menu Level-Select path. Scoped to loop.test.ts, whose 'Gameplay HUD identity comes from the descriptor' block asserts the kind at the production composition boundary; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=ffa reports VERSUS to the gameplay HUD while keeping campaign-shaped buttons",
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy New Game from Practice restores CAMPAIGN identity before campaignActive() creates the run",
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy a Levels pick on a developer-flag VS session stays VERSUS -- it is another FFA match, not practice",
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy a Levels pick on the SANDBOX stays practice-sandbox -- no fabricated ordinal",
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy a Levels pick reports PRACTICE, and leaving restores CAMPAIGN before the board is built"
+  ]
+}

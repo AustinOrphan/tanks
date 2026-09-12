@@ -1,0 +1,14 @@
+{
+  "id": "failure-screen-strands-the-keyboard",
+  "file": "src/boot.ts",
+  "find": "    action.focus();",
+  "replace": "    void action;",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "The element that had focus was just removed from the document, which leaves focus on <body> and a keyboard or controller player with nowhere to go but Tab from the top of a page whose only control is the one they need. The button is still reachable, so this is a degradation rather than a dead end -- which is exactly why nothing but an explicit activeElement assertion catches it.",
+  "killedBy": [
+    "boot: the message itself is ANNOUNCED and focused, not merely drawn"
+  ]
+}

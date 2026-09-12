@@ -1,0 +1,12 @@
+{
+  "id": "gallery-marker-flag-skips-its-vocabulary-check",
+  "file": "tools/gallery/args.mjs",
+  "find": "    if (!styles.includes(out.identityMarker)) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "Lets an unrecognised style through to the URL, where the render layer's own reject-to-null parse quietly resolves it to the shipped default -- so a typo'd `--identityMarker shapes` captures the DEFAULT rendering while the operator believes they captured a candidate. Worse than an unstyled frame, because the frame looks like a legitimate comparison. Killed by the two-way pin against IDENTITY_MARKER_STYLES, which also fails if a style is added to the renderer without being added here."
+}

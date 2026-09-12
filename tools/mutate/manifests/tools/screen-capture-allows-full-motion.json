@@ -1,0 +1,14 @@
+{
+  "id": "screen-capture-allows-full-motion",
+  "file": "tools/capture/screen-adapter.mjs",
+  "find": "  if (!profile.reducedMotion) {\n    throw new Error('screen captures are taken under reduced motion; set profile.reducedMotion');\n  }",
+  "replace": "  void profile;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "the screen capture adapter refuses a recipe this producer cannot honour, rather than capturing something else"
+  ],
+  "why": "Accepts a recipe asking for full motion while the runner emulates reduced motion regardless -- so the recipe would DOCUMENT one thing and the capture do another, which is worse than either alone. It is also the flake this whole producer is built to avoid: a crossfade caught mid-flight on a slow machine and settled on a fast one is a screenshot that does not reproduce."
+}

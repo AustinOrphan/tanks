@@ -1,0 +1,17 @@
+{
+  "id": "vs-clearance-set-anchor-unfiltered",
+  "file": "src/sim/versus-spawns.ts",
+  "find": "    if (clear.length > 0) anchorCands = clear;",
+  "replace": "    // mutation: anchor ignores clearance",
+  "expect": "killed",
+  "why": "pickVersusSpawnSet's ANCHOR must honour the same wall/boundary clearance as every later pick -- it is the first spawn placed and the greedy chain never revisits it. Leaving the anchor unfiltered puts P1 back on arena-01's corner cell, 0.333 from two boundaries at cellSize 2/3, a hull overlapping the wall by 0.167 -- exactly the shipped clipping issue #225 exists to close. Killed by the shipped clearance sweep (0-violations pin) and the relax-convergence pin.",
+  "tests": [
+    "src/sim/versus-spawns.test.ts"
+  ],
+  "killedBy": [
+    "clearance-filtered candidate pools (issue #225) shipped sweep: every spawn on all 24 (arena, N) combinations is hull-clear -- 0 violations measured",
+    "clearance-filtered candidate pools (issue #225) variant sweep: the gated match-start draw measures 0 violations over 25 (arena, seed) draws at N=4",
+    "pickVersusSpawnCell wired through loadArena: before/after on every shipped arena AFTER: minimum pairwise Euclidean spawn distance clears 5 world units everywhere in the sweep -- comfortably above the pre-fix constant of 1.3333, with the actual floor pinned below",
+    "pickVersusSpawnSet: the relaxation pass runs to convergence, not one round arena-04 at 3 players lands on the set only multi-round coordinate ascent reaches"
+  ]
+}

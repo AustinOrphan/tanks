@@ -1,0 +1,22 @@
+{
+  "id": "rules-boundary-skips-the-coop-attempts-default",
+  "file": "src/sim/rules.ts",
+  "find": "    coopAttempts: init.coopAttempts ?? true,",
+  "replace": "    coopAttempts: init.coopAttempts,",
+  "expect": "killed",
+  "tests": [
+    "src/sim/rules.test.ts",
+    "src/sim/world.test.ts",
+    "src/sim/coop-attempts.test.ts",
+    "src/game/levels.test.ts"
+  ],
+  "why": "resolveWorldRules (rules.ts) is the ONE place a rule's default is chosen (issue #472). Skipping a single `??` leaves every caller that does not state the rule -- which is every shipped call site -- with `undefined` in a required slot: the harness does not typecheck, no consumer has a fallback left to hide behind, and `!undefined` reads as POOL mode in resolveStatusCoop, so a whole win/lose model flips with nothing thrown. Caught by 6 of the 97 cases across the four files (97 since rules.test.ts gained its spread-derivation case; the six killers are unchanged): rules.test.ts's key-by-key default pin (the direct guard, and the one that catches the same omission on ANY key), coop-attempts.test.ts's 'defaults coopAttempts to true when omitted' and its N=4 survivor-carries case (attempts mode became pool mode: a single death now decrements), world.test.ts contributes 0 (its fixtures state every rule explicitly, so the skipped default is never reached -- which is the point of stating them), and levels.test.ts's 'builds level i ... the same walls, tanks and seed' (createLevelSystem passes `!flags.coopPool` explicitly while the bare createWorldFor it is compared against does not, so the two worlds stop being equal), its 'sandbox does NOT wire coopPool' default pin, and its issue-#154 reordered-campaign deep-equality for the same reason as the first.",
+  "killedBy": [
+    "World.coopAttempts: defaults to true createWorld defaults coopAttempts to true when omitted, cloneWorld carries it",
+    "createLevelSystem: resolves through campaign data, not ARENAS position (issue #154) a reordered campaign builds the level at position 0 from ITS OWN arenaId, not ARENAS[0]",
+    "createLevelSystem: the sandbox the sandbox branch does NOT wire coopPool -- always single-player, so createSandboxWorld never sees it and the world keeps the default",
+    "createLevelSystem: the shipped sequence builds level i from its own arenaId -- the same walls, tanks and seed",
+    "resolveStatusCoop: ATTEMPTS mode -- review insurance cases N=4: three dead, one survivor carries -- no decrement, no reset, corpses persist",
+    "resolveWorldRules: the shipped defaults with nothing stated resolves to the shipped rule set, key by key"
+  ]
+}

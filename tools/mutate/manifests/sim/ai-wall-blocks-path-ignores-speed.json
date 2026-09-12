@@ -1,0 +1,15 @@
+{
+  "id": "ai-wall-blocks-path-ignores-speed",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  const perTick = speed * DT;",
+  "replace": "  const perTick = 3 * DT;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/danger.test.ts",
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "Hardcodes the base movement speed (3 units/s) in place of the `speed` parameter, so a slower tank's probe over-states how far it actually travels in `ticks` ticks -- the exact silent-difficulty-change shape a dropped parameter takes. Killed by targeting.test.ts's 'scales its reach with the speed it is handed, not with a hardcoded one', whose slow-tank (0.2 units/s) case is built specifically so the hardcoded fast-tank reach (3 units/s) reports a wall in reach that the real, slower tank could never touch within the same tick count.",
+  "killedBy": [
+    "wallBlocksPath (issue #224) scales its reach with the speed it is handed, not with a hardcoded one"
+  ]
+}

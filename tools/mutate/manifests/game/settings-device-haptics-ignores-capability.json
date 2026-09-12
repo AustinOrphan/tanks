@@ -1,0 +1,13 @@
+{
+  "id": "settings-device-haptics-ignores-capability",
+  "file": "src/game/effective-settings.ts",
+  "find": "    deviceHaptics: settings.input.deviceHaptics && capabilities.deviceVibration,",
+  "replace": "    deviceHaptics: settings.input.deviceHaptics,",
+  "expect": "killed",
+  "expectFailures": 7,
+  "why": "The device-vibration gate. Without it a stored `deviceHaptics: true` reaches haptics.ts on a browser with no `navigator.vibrate` at all -- which per haptics.ts's own support note is every Safari and Firefox user, on any OS. Killed by effective-settings.test.ts's 2x2 stored-x-capability sweep and by loop.test.ts's 'gates the haptics director on device VIBRATION', which enters through startGameWith. 7 of 385 across the two declared files.",
+  "tests": [
+    "src/game/effective-settings.test.ts",
+    "src/game/loop.test.ts"
+  ]
+}

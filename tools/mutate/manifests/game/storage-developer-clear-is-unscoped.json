@@ -1,0 +1,12 @@
+{
+  "id": "storage-developer-clear-is-unscoped",
+  "file": "src/game/storage.ts",
+  "find": "      for (const name of names()) base.removeItem(underlying(name));",
+  "replace": "      base.clear();",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "The single most damaging thing this adapter could do wrong, and the reason clear() is scoped at all rather than delegated: an unscoped clear() on a developer session wipes the player's real save AND every neighbouring key on the origin this game shares with the rest of austinorphan.com (see save.ts). Killed by exactly one case, 'clears only its own namespace', 1 of 40 -- and only by its assertion on the surviving BASE keys: names() iterates the base, so an emptied base makes the adapter's own `length` read 0 either way and the length assertion alone would still pass."
+}

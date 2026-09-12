@@ -1,0 +1,17 @@
+{
+  "id": "route-ui-quality-toggle-echoes-the-click-instead-of-the-store",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onQualityChange((next) => {\n    deps.settings.setQuality(next);\n  });",
+  "replace": "  hud.onQualityChange((next) => {\n    hud.setQuality(next);\n  });",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The handler that paints instead of persisting. The label moves under the finger so it looks like it worked, and nothing else happens at all: the preset is not saved, so it dies with the tab, and no session ever reads it -- which for this setting means the muzzle smoke the player is trying to switch off keeps drawing, match after match. The store is the only thing a settings handler is allowed to touch, and this is the mutation that says why.",
+  "killedBy": [
+    "the application routes work with no gameplay session behind them the settings routes write their stores",
+    "the application routes work with no gameplay session behind them drives every route while a real GameSessionHost stays EMPTY (issue #427)",
+    "createRouteHost: the Main Menu is painted from the stores by the page repaints the quality control from the value the STORE accepted, with no session"
+  ]
+}

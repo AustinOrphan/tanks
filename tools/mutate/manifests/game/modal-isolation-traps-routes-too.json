@@ -1,0 +1,15 @@
+{
+  "id": "modal-isolation-traps-routes-too",
+  "file": "src/game/hud.ts",
+  "find": "    if (top === null || top.kind !== 'overlay') return null;",
+  "replace": "    if (top === null) return null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "modal isolation: a blocking overlay is really modal (issue #327) does NOT trap a route, because a full-screen destination is not a dialog",
+    "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)"
+  ],
+  "why": "Traps every layer rather than the blocking kind, so opening Settings or Records isolates the rest of the HUD. That strands a player in a full-screen destination whose only exit is a Back button the trap keeps them from reaching -- strictly worse than the defect this feature fixes. `navigation.ts` already draws the line (an overlay is the blocking kind, and a route may not be pushed over one), which is why this reads the stack's own answer instead of inventing a second notion of \"is a dialog\". Notably it also breaks an EXISTING issue-#494 test about Escape with the volume slider focused, which is independent confirmation that routes must stay reachable."
+}

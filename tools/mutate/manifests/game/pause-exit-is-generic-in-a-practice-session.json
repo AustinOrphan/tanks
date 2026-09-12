@@ -1,0 +1,15 @@
+{
+  "id": "pause-exit-is-generic-in-a-practice-session",
+  "file": "src/game/hud.ts",
+  "find": "        ? 'End Practice'\n        : s === 'paused' && statusData?.kind === 'versus'",
+  "replace": "        ? 'Quit to Title'\n        : s === 'paused' && statusData?.kind === 'versus'",
+  "expect": "killed",
+  "why": "Restores the shipped wording for a paused PRACTICE session, keeping the arm and its condition so nothing about the structure reads as wrong. That is the whole defect issue #323's contextual pause exit removes: \"Quit to Title\" describes suspending a run, and a practice board is not one -- loop.ts's session identity keeps it from reading or writing the campaign run at all. The button is visible and does exactly the same thing either way, so only a copy assertion driven by a practice STATUS can see this; every campaign and versus assertion in the file stays green. Re-anchored for issue #261: the practice arm's tail is now the versus arm rather than the generic fallback, so the find string carries the following condition to stay unique.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) reads End Practice at Pause, where \"quit to title\" would overstate the cost",
+    "hud: the pause exit is contextual (issue #323) names the destination at Pause wherever one can be named, and keeps the generic word where it cannot"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "legal-content-hand-edited-away-from-its-source",
+  "file": "src/game/legal-content.ts",
+  "find": "    title: 'Privacy Policy',",
+  "replace": "    title: 'Privacy Notice',",
+  "expect": "killed",
+  "tests": [
+    "tools/legal/generate.test.ts"
+  ],
+  "killedBy": [
+    "src/game/legal-content.ts is generated, not hand-edited matches what renderLegalModule() produces right now -- run `npm run legal` to fix"
+  ],
+  "why": "A hand edit to the generated module -- one word of one document's title, the smallest plausible one. This is the exact defect class issue #117's \"no legal content is duplicated into a hand-maintained list that can drift from repository sources\" criterion names, and the reason the content is generated at all rather than written into hud.ts's markup. It has to be caught by byte-comparison against a fresh `renderLegalModule()`, because a rendered title is just a string: the pane displays it, the disclosure still opens, and every structural assertion in legal.test.ts passes. Same regenerate-and-diff idiom as `notices-hand-edited` and the devflags/tanks doc entries."
+}

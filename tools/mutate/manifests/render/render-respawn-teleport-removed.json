@@ -1,0 +1,22 @@
+{
+  "id": "render-respawn-teleport-removed",
+  "file": "src/render/entities.ts",
+  "find": "      const p = snap || revived ? undefined : prevT;",
+  "replace": "      const p = snap ? undefined : prevT;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Restores the defect #239 fixed: with only the world-wide `snap` left, a VS stock respawn -- which keeps the tank's id and does NOT restart the round -- interpolates the revived tank from the position it died at to the spawn point selected for it, and drags the spawn ring parented to its group along with it. Nothing else in the file notices: the tank is at the right place again one tick later, so every assertion about what a respawn LOOKS like a frame after the edge stays green, which is why the alpha sweep reads the first frame at four alphas rather than at one.",
+  "killedBy": [
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) anchors the spawn ring at the respawn point too, in WORLD space",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) holds in ffa mode, tank and ring alike",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) holds in teams mode, tank and ring alike",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) leaves the death pulse at the death point while the spawn effect begins at the respawn",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0, never between the two",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.25, never between the two",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.5, never between the two",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) puts the revived tank at its respawn point at alpha 0.99, never between the two",
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) snaps the revived tank's FACING as well as its position"
+  ]
+}

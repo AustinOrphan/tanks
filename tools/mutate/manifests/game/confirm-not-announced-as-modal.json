@@ -1,0 +1,14 @@
+{
+  "id": "confirm-not-announced-as-modal",
+  "file": "src/game/hud.ts",
+  "find": "<div class=\"hud-confirm hud-confirm--hidden\" tabindex=\"-1\" role=\"alertdialog\" aria-modal=\"true\"",
+  "replace": "<div class=\"hud-confirm hud-confirm--hidden\" tabindex=\"-1\" role=\"alertdialog\"",
+  "why": "The replace-run confirmation keeps the menu on screen behind a scrim, which is what a modal is; without `aria-modal` a screen reader is free to wander into that menu while an unanswered destructive question is open. Focus containment already holds (the roving walk stays inside the confirmation), so this attribute is the part that tells assistive technology the same thing. Raised in review of PR #523.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) is announced as a modal, and earns that claim: focus cannot rove out of it into the menu behind"
+  ]
+}

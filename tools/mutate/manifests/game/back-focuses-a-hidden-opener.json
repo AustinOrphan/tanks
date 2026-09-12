@@ -1,0 +1,14 @@
+{
+  "id": "back-focuses-a-hidden-opener",
+  "file": "src/game/hud.ts",
+  "find": "    if (opener instanceof HTMLButtonElement && opener.disabled) return;\n    if (isHiddenWithin(opener, el)) return;",
+  "replace": "    if (opener instanceof HTMLButtonElement && opener.disabled) return;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "Back focuses an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up, or any title-only opener after a detach reshaped the menu. A hidden focused element strands a keyboard player with no visible position, which is the case the container fallback exists for. hud.navigation.test.ts (244): \"Back falls back to the panel container when the opener was hidden while the pane was up\". Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back falls back to the panel container when the opener was hidden while the pane was up"
+  ]
+}

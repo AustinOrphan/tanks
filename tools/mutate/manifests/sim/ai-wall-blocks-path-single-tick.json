@@ -1,0 +1,13 @@
+{
+  "id": "ai-wall-blocks-path-single-tick",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  for (let i = 1; i <= ticks; i++) {",
+  "replace": "  for (let i = 1; i <= 1; i++) {",
+  "expect": "killed",
+  "expectFailures": 4,
+  "tests": [
+    "src/sim/ai/danger.test.ts",
+    "src/sim/ai/targeting.test.ts"
+  ],
+  "why": "Collapses wallBlocksPath's horizon loop to a single iteration REGARDLESS of the `ticks` argument any caller passes -- the actual pre-#224 defect (the probe establishes only that the very next step is legal), and a stricter target than mutating the AI_PATH_HORIZON_TICKS constant, which a caller passing an explicit tick count (targeting.test.ts's speed-scaling case) would launder. Measured at 4 of 107 scoped tests failing: targeting.test.ts's 'rejects a heading that is clear for one tick but walled a few ticks later' (the tick-8 hull position is never probed once i is capped at 1) and 'scales its reach with the speed it is handed, not with a hardcoded one' (its wall sits at the tick-10 position, unreachable once the loop stops after tick 1, regardless of speed), plus danger.test.ts's 'rejects a preferred side that is clear for one tick but walled within the horizon' and 'refuses a sidestep candidate that steps toward an armed mine' (both call wallBlocksPath directly in their own assertions, so the collapse also corrupts what those tests use to check the production result)."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mutate-scope-cost-unknown-scope-costs-nothing",
+  "file": "tools/mutate/run.mjs",
+  "find": "    return Number.isFinite(v) && v > 0 ? v : fallback;",
+  "replace": "    return Number.isFinite(v) && v > 0 ? v : 0;",
+  "why": "A scope the cost file does not know (a brand-new test file) must cost the median, not nothing: at zero the pool would stack every new scope onto one worker as if free.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "scope costs (issue #507) scopeCostLookup returns the measured seconds for a known scope and the median of the known ones otherwise"
+  ]
+}

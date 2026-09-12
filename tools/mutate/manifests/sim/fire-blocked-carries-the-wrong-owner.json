@@ -1,0 +1,17 @@
+{
+  "id": "fire-blocked-carries-the-wrong-owner",
+  "file": "src/sim/bullets.ts",
+  "find": "    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
+  "replace": "    events.push({ type: 'fire-blocked', ownerId: 0, reason: 'shell-cap' })",
+  "expect": "killed",
+  "tests": [
+    "src/sim/fire-refusal-paths.test.ts",
+    "src/sim/bullets.test.ts"
+  ],
+  "why": "ownerId is what lets a consumer show the cue to the CONTROLLING player only, which is one of #356's acceptance criteria. The event is emitted for enemy owners too, so a treatment reading a wrong or constant owner would flash on every enemy's blocked shot -- visible only in a multi-tank fixture, never in a one-tank unit test.",
+  "killedBy": [
+    "spawnBullet + ownerShellCount emits fire-blocked for a NON-player owner too, since the cap applies to every owner",
+    "spawnBullet + ownerShellCount rejects the player's 6th concurrent shell while 5 are live",
+    "what a refused shot says, per refusal path (issue #356) CAPACITY: at the cap, the refusal is announced, with the owner and the reason"
+  ]
+}

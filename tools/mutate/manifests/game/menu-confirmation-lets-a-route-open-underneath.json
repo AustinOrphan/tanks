@@ -1,0 +1,14 @@
+{
+  "id": "menu-confirmation-lets-a-route-open-underneath",
+  "file": "src/game/hud.ts",
+  "find": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) return false;",
+  "replace": "      if (top.kind === 'overlay' && !OVERLAY_LAYERS.has(id)) void 0;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The one structural difference between an overlay and a route (`navigation.ts`): a route may never be pushed over an overlay. Dropping the check lets `openLayer`'s replace rule pop the unanswered confirmation and open a pane over the surface it was blocking -- which is the outcome `push` would have refused, except that the pop happens first. The player's Back then lands on a screen they never asked for, with the destructive question silently withdrawn.",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) is a BLOCKING layer: no route opens under an unanswered question"
+  ]
+}

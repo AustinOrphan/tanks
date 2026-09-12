@@ -1,0 +1,24 @@
+{
+  "id": "modality-first-input-waits-for-the-threshold",
+  "file": "src/game/modality.ts",
+  "find": "      if (current === null) return settle(modality); // the first input of the page",
+  "replace": "      if (current === null) { candidate = modality; candidateSince = now; return false; }",
+  "why": "The first input on a fresh page is accepted with no history (issue #496's ruling): the splash's own 'press any key or tap' is answered by whatever the player reaches for, and the visual job's first Space must not wait out a threshold.",
+  "tests": [
+    "src/game/modality.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: prompts follow the input the player is using (issue #496) a gamepad naming its own button takes over from the keyboard, and the mouse is not touch",
+    "createRouteHost: prompts follow the input the player is using (issue #496) a single stray event of another modality does not switch the hint; a sustained one does",
+    "createRouteHost: prompts follow the input the player is using (issue #496) the first input of the page sets the hint with no threshold: a touch tap drops the key hint",
+    "modality tracker: a switch needs the threshold (issue #496) a single stray event of another modality does not switch, and the incumbent resets the challenge",
+    "modality tracker: a switch needs the threshold (issue #496) switches once the candidate has held the field for the whole threshold, and not before",
+    "modality tracker: a switch needs the threshold (issue #496) the incumbent repeating is never a change, however long it goes on",
+    "modality tracker: a switch needs the threshold (issue #496) the threshold is injected: a tracker built with a different one switches on that one",
+    "modality tracker: a switch needs the threshold (issue #496) two challengers interleaving never switch: each restarts the other's clock, however long it goes on",
+    "modality tracker: the first input wins immediately (issue #496) accepts the very first input of the page with no history, whatever it is",
+    "modality tracker: the first input wins immediately (issue #496) notifies subscribers on that first input, and the unsubscribe stops it"
+  ]
+}

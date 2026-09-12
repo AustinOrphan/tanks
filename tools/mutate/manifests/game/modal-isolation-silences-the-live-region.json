@@ -1,0 +1,14 @@
+{
+  "id": "modal-isolation-silences-the-live-region",
+  "file": "src/game/hud.ts",
+  "find": " && child !== toastsEl;",
+  "replace": ";",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "modal isolation: a blocking overlay is really modal (issue #327) leaves the live region announceable, which is why it is exempt"
+  ],
+  "why": "Isolates the toast region along with everything else. `inert` removes a subtree from the ACCESSIBILITY TREE as well as the tab order, so this silences the page's one `aria-live` region for as long as a dialog is open -- and a confirmation is exactly when a player is most likely to be told something. The region holds nothing focusable, so exempting it costs no containment at all, which is the trade this line records. Invisible to every containment assertion, because containment is unaffected."
+}

@@ -1,0 +1,12 @@
+{
+  "id": "rematch-drops-a-type-guard-over-an-unreachable-null",
+  "file": "src/game/loop.ts",
+  "find": "      } else if (relaunchTarget === 'versus-setup' && deps.requestVersusSession && deps.initialVersusConfig) {",
+  "replace": "      } else if (relaunchTarget === 'versus-setup' && deps.requestVersusSession) {",
+  "expect": "survives",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "EQUIVALENT, not a coverage gap, and measured rather than assumed: it was declared `killed` first and SURVIVED. `relaunchTarget === 'versus-setup'` already means a pane-originated versus session (`relaunchTargetFor`: versus identity plus a `sessionOrigin` other than `'versus-flags'`), and the start boundary never creates one without a config -- so `deps.initialVersusConfig` cannot be null when this branch is reached. The field is optional only because `GameDeps` makes it optional for the campaign path, which is why the guard exists at all: TypeScript needs it to call through. A `?dev=1&mode=ffa` world takes the campaign branch because its relaunch target differs, not because of this guard. Kept so that a future change making a config-less `'versus-setup'` session reachable is what flips this to killed, rather than a silent fabrication of a configuration the player never chose.",
+  "equivalent": true
+}

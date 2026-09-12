@@ -1,0 +1,16 @@
+{
+  "id": "session-pushes-settings-display-to-the-hud",
+  "file": "src/game/loop.ts",
+  "find": "    renderer.setReducedMotion(effective.reducedMotion);",
+  "replace": "    hud.setMuted(effective.muted);\n    renderer.setReducedMotion(effective.reducedMotion);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts",
+    "src/game/hud-ownership.test.ts"
+  ],
+  "why": "Puts back ONE of the six HUD pushes issue #324 removed from `applySettings`. This is the regression the whole ownership boundary exists to stop, and it is worth pinning because it USED to be invisible by inspection -- a second writer of a control read as ordinary wiring next to the runtime pushes around it. Since step S8 it is not invisible at all, and that change is the point: `loop.ts`'s `hud` is the slot's ten-member `GameplayHud`, so this line does not typecheck and, run through esbuild by the harness, throws where it stands. The kill is therefore three-deep -- hud-ownership.test.ts still reports `setMuted` as a session reaching an application route, loop.test.ts's mute case still reads the boot pushes, and the loop suite at large now dies on the call itself. The wide blast radius is the evidence, not noise: the regression this entry pins can no longer be written.",
+  "killedBy": [
+    "HUD ownership boundary (issue #324) the gameplay session reaches ONLY gameplay members: the debt list is empty",
+    "startGameWith: HUD wiring routes the mute button through the STORE, to the engine, and back to the button"
+  ]
+}

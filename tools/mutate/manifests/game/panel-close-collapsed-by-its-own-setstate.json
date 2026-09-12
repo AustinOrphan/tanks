@@ -1,0 +1,21 @@
+{
+  "id": "panel-close-collapsed-by-its-own-setstate",
+  "file": "src/game/hud.ts",
+  "find": "    if (!desired.some(([surface, want]) => want !== isSurfaceOpen(surface))) {\n      onBegin?.();\n      return;\n    }\n    let leaving: Surface[] = [];",
+  "replace": "    let leaving: Surface[] = [];",
+  "expect": "killed",
+  "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the `hud.back()`, first Escape and both mirror cases read the pane's LEAVING class right after a Back, which this mutation slams shut. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts, hud.surfaces.test.ts.",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract crossfades a panel CLOSE, not only its open",
+    "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) hud.back() pops one layer and reports true; with nothing open it reports false and changes no class",
+    "hud: the browser-history mirror (issue #318) a real jsdom history: the browser's Back closes the open pane and restores its opener, and location.search survives",
+    "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
+    "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
+    "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
+  ]
+}

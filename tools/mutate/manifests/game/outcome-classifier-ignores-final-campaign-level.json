@@ -1,0 +1,17 @@
+{
+  "id": "outcome-classifier-ignores-final-campaign-level",
+  "file": "src/game/state.ts",
+  "find": "      return context.isFinalCampaignLevel() ? campaignCompleteOutcome() : missionClearOutcome();",
+  "replace": "      return missionClearOutcome();",
+  "expect": "killed",
+  "why": "Issue #316's finding 1: production used to construct its state machine with no completion context at all, so a campaign's FINAL win reported Mission Clear exactly like an intermediate one and Campaign Complete was unreachable in the shipped game. Scoped to both the unit suite (state.test.ts) and the production composition suite (loop.test.ts), because the callback being correct and the callback being WIRED are different claims. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+  "tests": [
+    "src/game/state.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "onEvents -- typed outcome classification campaign: Mission Clear vs Campaign Complete the FINAL level clear is campaign-complete, not mission-clear",
+    "startGameWith: canonical session identity at the production boundary Typed outcomes through the production classifier an intermediate campaign win is mission-clear, the final win campaign-complete",
+    "startGameWith: the active campaign run (issues #153/#152) game over and campaign completion -- explicit run-ending transitions campaign completion ends the run without automatically creating a replacement"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "screen-capture-ignores-page-errors",
+  "file": "tools/capture/screen-adapter.mjs",
+  "find": "    passed: pageErrors.length === 0,",
+  "replace": "    passed: true,",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "the screen capture adapter reports an uncaught page error as a FAILED capture, not a saved picture of a broken screen"
+  ],
+  "why": "Reports an uncaught page error as a passing capture. Every state here is a screen a player can sit on -- the branded failure screens REPORT a failure, they do not suffer one -- so an exception means the picture is of a page still falling over. Turning that into a saved artifact instead of a failed capture is the quiet-success failure mode the assertion channel exists for. Pinned by a case that drives the real adapter with the child process stubbed through its own `deps.runProcess` seam -- an earlier version named a catalogue test that could not possibly see this and SURVIVED, which is how the gap showed up."
+}

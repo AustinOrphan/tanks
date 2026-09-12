@@ -1,0 +1,12 @@
+{
+  "id": "a11y-swatch-named-by-tooltip-only",
+  "file": "src/game/hud.ts",
+  "find": "    b.setAttribute('aria-label', `Hull: ${swatch.label}`);",
+  "replace": "    b.removeAttribute('aria-label');",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Restores the shipped defect: the hull swatches carry no text -- the colour IS the content -- so their only accessible name came from `title`, a tooltip that some screen readers ignore and none promise. The button still LOOKS identical and still has a title, so nothing about the rendered pane changes; only the name goes. Caught by the gives-every-rendered-control-a-non-empty-accessible-name sweep, whose helper deliberately does NOT fall back to `title` -- that shortfall is the assertion, not a limitation of it."
+}

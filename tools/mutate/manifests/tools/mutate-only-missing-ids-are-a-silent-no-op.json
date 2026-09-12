@@ -1,0 +1,14 @@
+{
+  "id": "mutate-only-missing-ids-are-a-silent-no-op",
+  "file": "tools/mutate/run.mjs",
+  "find": "  if (missing.length === 0) return null;",
+  "replace": "  if (missing.length >= 0) return null;",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Drops the refusal, so an --only id matching no entry runs whatever else was named and reports a clean sweep of it. This is the pre-#529 hazard in its worst form: one typo among four ids costs three quarters of the work with nothing on screen saying so. A run either honours everything asked of it or stops.",
+  "killedBy": [
+    "selectOnly / missingOnlyReport still refuses a SINGLE unmatched id, naming it -- the pre-#529 property the multi-id case must not lose"
+  ]
+}

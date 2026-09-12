@@ -1,0 +1,16 @@
+{
+  "id": "gamepad-menu-union-first-pad-only",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "for (let i = 0; i < pads.length; i++) {",
+  "replace": "for (let i = 0; i < Math.min(pads.length, 1); i++) {",
+  "expect": "killed",
+  "why": "The union of every connected pad drives menus; reading only pad 0 leaves a second player's pad dead at Versus Setup.",
+  "tests": [
+    "src/input/gamepad-menu.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadMenuPoller: the union of every pad a null slot is skipped, not treated as \"no pads\": the pad beside it still drives and connected() is true",
+    "createGamepadMenuPoller: the union of every pad a pad at index 1 alone drives the menu -- index 0 is not special, whichever pad is in a hand counts",
+    "createGamepadMenuPoller: the union of every pad different pads holding different actions merge into one ordered emission"
+  ]
+}

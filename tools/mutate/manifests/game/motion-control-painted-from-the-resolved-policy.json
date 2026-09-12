@@ -1,0 +1,15 @@
+{
+  "id": "motion-control-painted-from-the-resolved-policy",
+  "file": "src/game/route-host.ts",
+  "find": "    hud.setMotion(deps.settings.snapshot().presentation.motion);",
+  "replace": "    hud.setMotion(effective.reducedMotion ? 'reduced' : 'full');",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Paints the motion control from the RESOLVED policy instead of the stored preference -- the tempting edit, since every other line in `paintSettingsControls` but the haptics one reads `effective`. The control has three states and the policy has two, so this erases 'system' with no way back to it: a player on the default sees 'Full' or 'Reduced', and choosing either leaves them unable to return to following their device. Sharper than the haptics case, because 'system' is what everyone starts on.",
+  "killedBy": [
+    "startGameWith: reduced motion reaches the preview through the effective seam the motion control is painted with the STORED preference, not the resolved policy"
+  ]
+}

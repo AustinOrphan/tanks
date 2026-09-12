@@ -1,0 +1,14 @@
+{
+  "id": "audit-reads-silence-as-a-clean-tree",
+  "file": "tools/audit/classify.mjs",
+  "find": "    return { kind: 'unreachable', detail: 'npm audit produced no output' };",
+  "replace": "    return { kind: 'clean' };",
+  "expect": "killed",
+  "tests": [
+    "tools/audit/classify.test.ts"
+  ],
+  "why": "Reads empty stdout as a clean tree. This is the dangerous direction and the plausible mistake: npm writes its endpoint errors to STDERR and leaves stdout empty when the request never completed, so \"no findings printed\" and \"no audit happened\" are identical from stdout alone. Under this the gate goes green during exactly the outage it cannot see -- worse than the red build issue #538 is about, because nobody investigates a pass.",
+  "killedBy": [
+    "audit classification (issue #538) an unreachable registry is NOT a vulnerability, and not a pass either reads EMPTY output as unreachable rather than clean"
+  ]
+}

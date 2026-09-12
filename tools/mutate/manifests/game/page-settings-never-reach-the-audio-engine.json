@@ -1,0 +1,15 @@
+{
+  "id": "page-settings-never-reach-the-audio-engine",
+  "file": "src/game/route-host.ts",
+  "find": "    paintSettingsControls();\n    applyAudioSettings();",
+  "replace": "    paintSettingsControls();",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Reverts the page to painting the mute button and volume slider without telling the engine (issue #485). The display half alone is what issue #324 shipped, and it was survivable only while a page with no session made no sound; the menu bed in the same change removes that, so this mutation plays music to a player who muted the game and returned. The controls still read correctly, which is what makes it silent -- or rather, audible, in the one case where silence was asked for.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)",
+    "createRouteHost: the Main Menu is painted from the stores by the page negative control: an UNMUTED save mutes nothing"
+  ]
+}

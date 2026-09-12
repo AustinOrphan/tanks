@@ -1,0 +1,14 @@
+{
+  "id": "legal-table-column-header-heads-its-row-instead",
+  "file": "src/game/legal.ts",
+  "find": "        th.setAttribute('scope', 'col');",
+  "replace": "        th.setAttribute('scope', 'row');",
+  "expect": "killed",
+  "tests": [
+    "src/game/legal.test.ts"
+  ],
+  "killedBy": [
+    "the legal block renderer heads a table by column with scope, and names it"
+  ],
+  "why": "The wrong half of issue #629's finding, applied to the five generated tables: `scope=\"row\"` on a header in `<thead>` tells a screen reader that \"Key\" heads the cells beside it rather than the column beneath it, so every storage key in the privacy policy's table is announced under the heading of the row above it. Still a `<th>`, still inside `<thead>`, still captioned -- so a structural check for headers, or for a named table, passes. Only the `scope` value distinguishes it, which is why that assertion is per-cell rather than a count."
+}

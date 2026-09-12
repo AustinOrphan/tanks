@@ -1,0 +1,12 @@
+{
+  "id": "retired-session-keeps-advancing-the-world",
+  "file": "src/game/loop.ts",
+  "find": "    dispose(): void {\n      driver.stop();",
+  "replace": "    dispose(): void {",
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "A session teardown that never stops its driver. The retired session's frame loop stays registered AND keeps stepping its own disposed world every frame, alongside the live session's -- two simulations advancing on one page after a single Campaign<->Versus switch. NOT new coverage: measured on origin/main, this mutation already failed 1 of 388, at 'stops the frame loop, so a queued callback cannot advance the world'. What issue #317 adds is the repeated-route view of the same defect -- 3 of 397 now, the pre-existing case plus 'leaves exactly one outstanding frame registration' and 'leaves exactly one frame loop still ADVANCING the world'. Failing BOTH of those is what separates this from `retired-session-frame-loop-never-cancelled`, which fails only the first; that contrast is measured, not assumed.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ]
+}

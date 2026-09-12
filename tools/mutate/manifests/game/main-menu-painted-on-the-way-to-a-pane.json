@@ -1,0 +1,14 @@
+{
+  "id": "main-menu-painted-on-the-way-to-a-pane",
+  "file": "src/game/hud.ts",
+  "find": "        [PANEL_SURFACE, !(s === 'playing' || atLaunch) && handingOffTo === null],",
+  "replace": "        [PANEL_SURFACE, !(s === 'playing' || atLaunch)],",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) never paints the Main Menu on the way to the setup pane (issue #566)"
+  ],
+  "why": "Drops the handoff from the panel's visibility decision, restoring issue #566: leaving gameplay for Level Select or Versus Setup switches the Main Menu on and the pane's own transition then fades it away, so TANKS! and all six buttons paint for one crossfade on the way somewhere the player asked for directly. SETTLED STATE IS IDENTICAL either way -- the pane ends open and the panel hidden -- which is why 235 HUD tests passed over this. Only a midpoint read catches it, so the scoped test asserts before any transition settles."
+}

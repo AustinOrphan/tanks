@@ -1,0 +1,14 @@
+{
+  "id": "compare-worktree-cleanup-loses-its-ownership-guard",
+  "file": "tools/compare/worktrees.mjs",
+  "find": "        if (!inside(workspace, path)) {",
+  "replace": "        if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/compare/worktrees.test.ts"
+  ],
+  "why": "Removes the backstop behind 'never delete or reuse an existing user worktree': any path in the owned set is force-removed, wherever it points. With fifteen live worktrees on a development box, a poisoned or stale entry then destroys another session's work rather than being reported.",
+  "killedBy": [
+    "createWorktreeManager: cleanup refuses to remove a tracked path that is not inside the run workspace"
+  ]
+}

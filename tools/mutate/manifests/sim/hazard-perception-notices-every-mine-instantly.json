@@ -1,0 +1,14 @@
+{
+  "id": "hazard-perception-notices-every-mine-instantly",
+  "file": "src/sim/ai/hazard-perception.ts",
+  "find": "  const mines: Mine[] = world.mines.filter((m) => MINE_TIMER - m.timer >= lag);",
+  "replace": "  const mines: Mine[] = world.mines.filter((m) => MINE_TIMER - m.timer >= 0);",
+  "expect": "killed",
+  "why": "The FUSE-STATE half of the perceived picture goes, leaving the shell back-dating behind: every mine is noticed the instant it is dropped, however stale the tank's picture of everything else is. That is the one-dimensional error issue #223 names as the defect (\"not only a fresh radius offset\") reintroduced on the mine side alone, and it survives every shell-based fixture in the file by construction. The replacement keeps the same filter shape with a zero threshold rather than deleting the predicate, so it is a threshold regression rather than an obviously-dead line. Killed by the single test that owns the claim, which asserts both directions -- a mine younger than the delay is absent, one older is present -- plus the inclusive boundary at exactly the delay.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "backdateHazards: the stale picture itself hides a mine younger than the delay and keeps an older one -- perceived FUSE STATE"
+  ]
+}

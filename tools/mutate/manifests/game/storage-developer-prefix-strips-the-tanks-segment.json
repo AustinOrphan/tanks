@@ -1,0 +1,12 @@
+{
+  "id": "storage-developer-prefix-strips-the-tanks-segment",
+  "file": "src/game/storage.ts",
+  "find": "  return namespace === 'developer' ? `${DEVELOPER_KEY_PREFIX}${key}` : key;",
+  "replace": "  return namespace === 'developer' ? `${DEVELOPER_KEY_PREFIX}${key.replace(/^tanks\\./, '')}` : key;",
+  "expect": "killed",
+  "expectFailures": 3,
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "Applies the tidier `tanks.dev.progress.v1` mapping that the doc comment above DEVELOPER_KEY_PREFIX rejects, instead of prefixing the whole key. It is self-consistent -- read, write, remove and clear all agree on it -- so no single store's round trip breaks, and that self-consistency is exactly why it needs pinning: what it costs is the INVERSE, because names() strips only the prefix and hands back `progress.v1` where the store wrote `tanks.progress.v1`, and two store keys differing only by a leading `tanks.` would collapse onto one underlying key. 3 of 40 in storage.test.ts: the write-lands-under-the-prefix case, the scoped-enumeration case, and the injectivity/inverse case."
+}

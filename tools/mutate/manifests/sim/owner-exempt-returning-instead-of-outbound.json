@@ -1,0 +1,15 @@
+{
+  "id": "owner-exempt-returning-instead-of-outbound",
+  "file": "src/sim/bullets.ts",
+  "find": "        if (vdot(b.vel, toOwner) <= 0) continue",
+  "replace": "        if (vdot(b.vel, toOwner) > 0) continue",
+  "expect": "killed",
+  "tests": [
+    "src/sim/bullets.test.ts"
+  ],
+  "why": "Inverts resolveBulletHits' outbound exemption, so a tank is immune to its own returning ricochet and vulnerable to the shell it is currently firing. Load-bearing since issue #237: the spawn circle now overlaps the firer's own hull, and this guard is the only thing stopping a tank killing itself on the trigger pull.",
+  "killedBy": [
+    "resolveBulletHits does not self-destruct in the muzzle but can self-hit on a ricochet return",
+    "spawnBullet: the muzzle plane vs the shell centre (issue #237) does not let a tank shoot itself on the way out with a ricochet shell, born inside its own hull"
+  ]
+}

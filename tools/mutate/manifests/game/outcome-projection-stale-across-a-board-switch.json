@@ -1,0 +1,14 @@
+{
+  "id": "outcome-projection-stale-across-a-board-switch",
+  "file": "src/game/loop.ts",
+  "find": "    // of the board being left, and the board being built has not ended.\n    pushOutcome(world, null);",
+  "replace": "    // of the board being left, and the board being built has not ended.",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Leaves the finished attempt's projection in place across a board switch. A Levels pick can land a coop session on a one-player board, so which tally the panel would show changes with the board -- the stale projection then describes a board that is no longer on screen. Same blind spot as the boot entry: only a test that counts pushes across the switch, rather than reading the last one after a frame, can see it.",
+  "killedBy": [
+    "startGameWith: the active campaign run (issues #153/#152) coop kill attribution, end to end (coop semantics plan) re-derives the outcome projection on a BOARD SWITCH, before the new board runs"
+  ]
+}

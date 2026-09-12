@@ -1,0 +1,17 @@
+{
+  "id": "route-host-drops-the-mute-shortcut",
+  "file": "src/game/route-host.ts",
+  "find": "    if (isMuteHotkey(e)) {\n      routeUi.toggleMute();\n      hud.showToast(deps.settings.snapshot().audio.muted ? 'Muted' : 'Sound on');\n      return;\n    }",
+  "replace": "    void isMuteHotkey;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "M moved onto the page with issue #226 because the Mute BUTTON it used to mirror stopped appearing on every surface: with the topbar chip retired, a session-scoped shortcut is dead on exactly the screen that no longer shows one -- the Main Menu of a page that has not started a match, which is the normal boot state since #428. Removing it leaves the shortcut working nowhere at all, since `loop.ts` no longer carries a copy.",
+  "killedBy": [
+    "startGameWith: leaving the title screen still mutes on M once the game is past the title screen",
+    "startGameWith: listeners and teardown toggles mute on M through the PAGE listener, not this session (issue #226)",
+    "createRouteHost: the Main Menu is painted from the stores by the page claims M for the page and reports the result, on a page with no session"
+  ]
+}

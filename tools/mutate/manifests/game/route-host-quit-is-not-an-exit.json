@@ -1,0 +1,13 @@
+{
+  "id": "route-host-quit-is-not-an-exit",
+  "file": "src/game/route-host.ts",
+  "find": "  hud.onQuitToTitle(() => leavingGameplay(() => live?.quitToTitle?.()));",
+  "replace": "  hud.onQuitToTitle(() => live?.quitToTitle?.());",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/boot.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "The same unwrapping on the other handler: Quit stops disposing. The most-travelled exit in the game -- pause, Quit, back to the menu -- leaves the session running. 2 of 95 across both scoped files, which is the pair worth having: route-host.test.ts sees the missing REQUEST and boot.test.ts sees the missing DISPOSAL, and only the second says the session actually outlived the transition."
+}

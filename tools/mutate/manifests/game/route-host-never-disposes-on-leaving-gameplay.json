@@ -1,0 +1,13 @@
+{
+  "id": "route-host-never-disposes-on-leaving-gameplay",
+  "file": "src/game/route-host.ts",
+  "find": "    if (wasInGameplay && !sm.inGameplay) requests.requestStop();",
+  "replace": "    void wasInGameplay;",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/boot.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 4,
+  "why": "The whole of issue #429, deleted: a Quit or a Change Setup returns to the menu and the session keeps running behind it -- its frame loop advancing, its renderer holding a GL context, its input poller reading, its audio bed borrowed. Nothing on screen says so, because the page has owned the menu since #468 and paints it over the top. The next Start then runs a SECOND session beside the first. 3 of 95 across both scoped files: route-host.test.ts's Quit and action-button exits, and boot.test.ts's round-trip ledger, which is the one that reads it as a disposal COUNT at the production boundary rather than as a request. `void wasInGameplay;` rather than a deletion, so the variable is still read and a tsc failure cannot be mistaken for coverage. Re-measured at 4 for issue #279: the new `only stops a session whose action actually LEFT gameplay` case asserts the disposal that this mutation removes."
+}

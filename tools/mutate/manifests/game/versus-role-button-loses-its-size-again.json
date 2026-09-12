@@ -1,0 +1,14 @@
+{
+  "id": "versus-role-button-loses-its-size-again",
+  "file": "src/game/hud.ts",
+  "find": "        btn.className = 'ui-btn ui-btn--sm ui-selectable hud-versus-role-btn';",
+  "replace": "        btn.className = 'ui-btn ui-selectable hud-versus-role-btn';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole gives every control in the kit a size: a modifier, or a rule of its own"
+  ],
+  "why": "Restores the SHIPPED defect, not an invented one: the per-slot Human/Bot/Off buttons carried `.ui-btn` with no size modifier and no rule of their own, so they took the primitive's deliberately sizeless base and rendered with zero padding -- a hit area the height of their own text, in a row whose team and difficulty buttons are `--sm`. THREE existing sweeps pass on it, which is why it shipped: the fall-through guard measures the RESOLVED style against a bare `<button>` and `.ui-btn` supplies colour, border, radius and font, so the control looks themed and is merely the wrong size; the primitive-grouping guard checks for `.ui-btn`, which is present; and both shape-group cases walk hand-maintained lists this control was never added to. The case that kills it derives its population from the DOM instead -- every `.ui-btn` must carry a size modifier or have a rule of its own -- so the next control added without one fails without anyone remembering to list it."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "session-title-policy-reused-as-identity",
+  "file": "src/game/loop.ts",
+  "find": "\n  pushStatus(world, currentDescriptor.kind, ordinalOf(level));\n",
+  "replace": "\n  pushStatus(world, relaunchTarget === 'versus-setup' ? 'versus' : 'campaign', ordinalOf(level));\n",
+  "expect": "killed",
+  "why": "The other direction of the same collapse: deriving the gameplay HUD's identity from the title/outcome affordance POLICY instead of from the descriptor. Structurally this is the pre-fix code, re-expressed through the new type, and it is exactly what makes a developer-flag versus session report Campaign to gameplay while a Levels pick stops reporting Practice at all. Scoped to loop.test.ts; expectFailures counts that scoped run only. Re-anchored 2026-08-28: the original find ran to the NEXT statement's comment (`// The stock strip's DATA`), so inserting the hud.setBackdrop projection between the two turned this entry into FAILED-TO-APPLY and `npm run mutate` into exit 1 while nothing about the behaviour changed. The anchor is now the call line delimited by its own newlines -- indentation-scoped, which is what distinguishes this boot-time push from the identically-worded one inside `switchTo` (indented one level deeper, re-derived on every world build), and it carries no neighbouring text for a later insertion to break. Re-anchored again for issue #324's step S6: the boot push is now the status projection rather than `setSessionKind`, and the anchor stays what it was -- the call line delimited by its own newlines, indentation-scoped so it cannot match switchTo's identically-worded push one level deeper.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=ffa reports VERSUS to the gameplay HUD while keeping campaign-shaped buttons",
+    "startGameWith: canonical session identity at the production boundary Gameplay HUD identity comes from the descriptor, the buttons from the relaunch policy ?dev=1&mode=teams likewise, and its stock strip comes from the WORLD, not from provenance"
+  ]
+}

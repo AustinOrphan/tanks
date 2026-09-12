@@ -1,0 +1,14 @@
+{
+  "id": "teal-shot-plan-turns-over-without-a-lapsed-span",
+  "file": "src/sim/ai/teal.ts",
+  "find": "  const switching = lapsed && preferred === null;",
+  "replace": "  const switching = preferred === null;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/teal.test.ts"
+  ],
+  "why": "The SPAN is half the rule and the easiest half to drop, because dropping it leaves a tree that still holds a plan, still falls back, and still passes any test that only checks which angle came out. What it removes is the commitment: the plan would turn over on EVERY tick its preferred type has no solution, which is the churn issue #332 exists to stop -- teal would flip back and forth for as long as the player stayed behind cover. Deleting the `lapsed &&` term must fail a test, or the profile field is decorative.",
+  "killedBy": [
+    "teal shot-plan span (issue #332) an UNSOLVABLE plan inside a live span does NOT turn over -- the countdown is what gates it"
+  ]
+}

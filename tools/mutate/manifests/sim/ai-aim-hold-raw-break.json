@@ -1,0 +1,14 @@
+{
+  "id": "ai-aim-hold-raw-break",
+  "file": "src/sim/ai/aim-hold.ts",
+  "find": "Math.abs(angleDelta(held, solution)) < breakRad",
+  "replace": "Math.abs(held - solution) < breakRad",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/aim-hold.test.ts"
+  ],
+  "why": "The break test must measure the SHORTEST arc. A raw subtraction reads an angle a hair under +pi and one a hair over -pi as most of a full turn rather than 0.06 rad apart, so every tank tracking through due west would break its hold every tick and the layer would silently stop working in exactly one bearing. angleDelta is the same helper slewAngle uses, so the two cannot disagree about what 'close' means.",
+  "killedBy": [
+    "holdAim measures the break across the shortest arc, so a hold survives the +/-pi seam"
+  ]
+}

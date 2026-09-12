@@ -1,0 +1,14 @@
+{
+  "id": "reset-stats-leaves-the-run-tally-behind",
+  "file": "src/game/stats.ts",
+  "find": "      writeRaw(STATS_KEY, life);\n      writeRaw(RUN_STATS_KEY, runTally);\n    },\n    record(",
+  "replace": "      writeRaw(STATS_KEY, life);\n    },\n    record(",
+  "expect": "killed",
+  "tests": [
+    "src/game/stats.test.ts"
+  ],
+  "killedBy": [
+    "createStatsStore: the CAMPAIGN RUN scope resetStats clears BOTH persisted scopes, so erased history cannot come back"
+  ],
+  "why": "Reset stats zeroes the run tally in memory but never persists that, so the erased numbers come back on the next reload and appear on the next end screen. The in-memory clear is what hides it: everything looks right until the page is reloaded, which is exactly when a player checks that a reset worked."
+}

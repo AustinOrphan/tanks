@@ -1,0 +1,12 @@
+{
+  "id": "history-mirror-listener-outlives-the-hud",
+  "file": "src/game/navigation.ts",
+  "find": "      unsubscribe?.();\n      unsubscribe = null;",
+  "replace": "      unsubscribe = null;",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "`dispose` no longer unsubscribes from popstate, so a mirror the HUD has torn down keeps handling the browser's Back on behalf of an owner that no longer exists -- popping layers on a dead stack and re-pushing the sentinel through a `back` callback whose HUD is gone. Fails 1 of 15 in navigation.test.ts: `dispose unsubscribes popstate and never traverses; with no host every call is inert and active is false`, at its `host.listeners` length assertion."
+}

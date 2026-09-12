@@ -1,0 +1,15 @@
+{
+  "id": "versus-random-arena-resolved-on-read",
+  "file": "src/game/versus-setup.ts",
+  "find": "      : storedArena === RANDOM_ARENA || isArenaAllowed(storedArena, players, mode)",
+  "replace": "      : isArenaAllowed(storedArena, players, mode)",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-setup.test.ts",
+    "src/game/versus-setup-store.test.ts"
+  ],
+  "why": "'random' names no catalog entry, so a catalog-backed predicate refuses it. Without the explicit allowance every read converts the draw-for-me sentinel into a concrete board -- permanently, and silently. VersusConfig.arenaId's own doc comment is emphatic that the UNRESOLVED config is what the pane reopens with; this entry is that contract's guard at the persistence boundary.",
+  "killedBy": [
+    "sanitizeSetup: arena ids are checked against what is offerable never asks the predicate about 'random', which is always allowed"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "target-selection-drops-the-perception-bound",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  return cfg.ai.bankShotWeight > 0;",
+  "replace": "  return true;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-selection.test.ts"
+  ],
+  "why": "Rule 1: an AI may select only from opponents it perceives. The shipped predicate is line of sight, widened to 'anything a banking profile could bank at' because indirect fire is that role's identity. Returning true outright restores full omniscience for every profile, including the non-banking ones the bound actually constrains. Remeasured 2026-09-01 at 2 of the 16 tests now in target-selection.test.ts, up from a declared 1, for the same reason and in the same file: 'the bound survives a REAL TICK -- the clone has to carry it' asserts this rule one tick deep, through stepInputs, where the pre-existing 'acquires only what it can SEE, for a profile that does not bank' asserts it at the direct call. Two depths of one rule, not a widened contract.",
+  "killedBy": [
+    "committed opponent selection under the dev flag, acquires only what it can SEE, for a profile that does not bank",
+    "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it"
+  ]
+}

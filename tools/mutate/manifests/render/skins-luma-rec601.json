@@ -1,0 +1,15 @@
+{
+  "id": "skins-luma-rec601",
+  "file": "src/render/skins.ts",
+  "find": "return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];",
+  "replace": "return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];",
+  "expect": "killed",
+  "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. expectFailures is verified against the SCOPED run (src/render/skins.test.ts) only -- not re-verified repo-wide here. Re-verified via the harness itself after PR #101 (which added Clouds and reworked the auto-accent derivation): now 2 failures against skins.test.ts, up from 1 at this entry's original count -- the count moved because the suite gained coverage, not because this stayed stale. Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
+  "tests": [
+    "src/render/skins.test.ts"
+  ],
+  "killedBy": [
+    "createSkinTexture accent (the pattern's second tone) is selectable the auto derivation is pinned: changing it is deliberate, never incidental",
+    "ensureContrast never trades the chosen hue away for contrast nudges exactly the three white-hull pairings, which is what pins the luma weights"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "page-music-never-ducks-on-pause",
+  "file": "src/game/route-host.ts",
+  "find": "    audio.duckMusic(location.kind === 'gameplay' && location.phase.kind === 'paused');",
+  "replace": "    audio.duckMusic(false);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Pause stops ducking, so the arena bed plays at full gain over the pause panel. The condition is the whole behaviour here -- duckMusic is still called on every change, with the right shape and the wrong answer -- and ducking rather than stopping is a decision engine.ts's own comment defends, because stopping discards the playlist's committed decisions and leaves the scheduler mid-phrase.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page FOLLOWS the game: gameplay takes the arena suite, pause ducks, the menu takes it back"
+  ]
+}

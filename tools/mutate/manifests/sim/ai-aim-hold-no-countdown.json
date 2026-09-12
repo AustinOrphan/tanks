@@ -1,0 +1,15 @@
+{
+  "id": "ai-aim-hold-no-countdown",
+  "file": "src/sim/ai/aim-hold.ts",
+  "find": "nextHeldTicks: ticks - 1 };",
+  "replace": "nextHeldTicks: ticks };",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/aim-hold.test.ts"
+  ],
+  "why": "Without the decrement the span never expires: a hold armed once is held for the rest of the round, so the tank stops re-solving entirely rather than dwelling and re-aiming. That is a far larger behaviour change than the one measured, and it would read as an AI that has stopped tracking rather than one that has stopped twitching.",
+  "killedBy": [
+    "holdAim keeps the held angle and counts down while the span is live and the fresh solution is close",
+    "holdAim measures the break across the shortest arc, so a hold survives the +/-pi seam"
+  ]
+}

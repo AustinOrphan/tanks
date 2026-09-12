@@ -1,0 +1,20 @@
+{
+  "id": "hazard-perception-never-back-dates",
+  "file": "src/sim/ai/hazard-perception.ts",
+  "find": "  if (delayTicks <= 0) return world;",
+  "replace": "  if (delayTicks >= 0) return world;",
+  "expect": "killed",
+  "why": "The whole of issue #223's awareness delay dies silently: `backdateHazards` returns the real world for every delay, so a tank's hazard picture is current to the tick again and the escape solve is the oracle the issue opens against. Nothing else can see it. `bot-difficulty.test.ts` still resolves the preset correctly, `hazard-competence.test.ts` still measures the radius error (untouched by this), and the golden trace CANNOT catch it either -- a build with a zero delay is exactly the neutrality point tools/baseline/trace.ts's re-pin was demonstrated at, so this mutation just moves BASELINE_HASH back to a value that was green three commits ago. The mutation is written as `>= 0` rather than by deleting the guard because the harness needs a non-empty replacement and an always-true guard is the more realistic shape of the regression -- someone loosening a condition, not removing a line. Killed by seven of the 22 tests in hazard-perception.test.ts, spanning three distinct claims: the four `backdateHazards` unit assertions, the pair that enters through greyDecision/tealDecision (so it is a DECISION change, not merely a data one), and the developer trace's own zero-divergence control.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "backdateHazards: the stale picture itself returns the SAME world object at a zero delay, not an equal copy",
+    "backdateHazards: the stale picture itself moves a shell BACK along its own velocity by exactly the delay",
+    "backdateHazards: the stale picture itself mutates nothing, and shares by reference exactly what it does not rewrite",
+    "backdateHazards: the stale picture itself hides a mine younger than the delay and keeps an older one -- perceived FUSE STATE",
+    "the decision functions solve from the PERCEIVED world, not the real one grey ignores a real, incoming shell its stale picture has not caught up with",
+    "the decision functions solve from the PERCEIVED world, not the real one teal does the same, through its own wiring rather than a copy that could rot",
+    "the developer trace compares actual against perceived reports the divergence a stale picture creates, and zero when there is none"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "state-onchange-unsubscribe-is-inert",
+  "file": "src/game/state.ts",
+  "find": "        const i = subscribers.indexOf(cb);\n        if (i >= 0) subscribers.splice(i, 1);",
+  "replace": "        void cb;",
+  "tests": [
+    "src/game/state.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 4,
+  "why": "`onChange` returns a function that removes nothing. loop.ts calls it at disposal and would believe the session had stopped observing, so this is the mutation that reintroduces the retired-subscriber defect while leaving every call site looking correct. 4 of 460 across both scoped files (state.test.ts 39 + loop.test.ts 421): the two unsubscribe cases in state.test.ts and the two retired-session cases in loop.test.ts."
+}

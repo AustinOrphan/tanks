@@ -1,0 +1,13 @@
+{
+  "id": "session-stop-leaves-the-dead-canvas-under-the-menu",
+  "file": "src/game/session-host.ts",
+  "find": "  const stopSession = (): void => {\n    if (spent) return;\n    stop();\n    canvas?.remove();\n    canvas = null;\n  };",
+  "replace": "  const stopSession = (): void => {\n    if (spent) return;\n    stop();\n  };",
+  "tests": [
+    "src/game/session-host.test.ts",
+    "src/boot.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 6,
+  "why": "Disposes the session but leaves its canvas in the DOM. `startGameWith`'s teardown calls `renderer.forceContextLoss()` (`render/scene.ts`) and a WebGL context does not come back from that -- so the dead element sits under the menu forever, and every later match stacks another behind it. Nothing throws and nothing looks wrong until enough have accumulated to exhaust the browser's context budget. This is the same failure `session-host-keeps-the-dead-canvas` pins for the REPLACE path; #429 adds a second path that has to remove it, and `stop()` -- the page teardown's -- deliberately does not, which is why `stopSession` is a separate function rather than a call to it. 6 of 90 across both scoped files."
+}

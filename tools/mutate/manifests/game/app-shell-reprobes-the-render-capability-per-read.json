@@ -1,0 +1,12 @@
+{
+  "id": "app-shell-reprobes-the-render-capability-per-read",
+  "file": "src/game/app-shell.ts",
+  "find": "    render: deps.render,",
+  "replace": "    get render(): RenderCapability { return probeRenderCapability(); },",
+  "expect": "killed",
+  "expectFailures": 3,
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "why": "Turns the retained answer into a getter that re-probes on every read. The shell is supposed to RETAIN what it was handed -- WebGL 2 support does not arrive mid-document, unlike the pad capabilities in capabilities.ts that need a live source with `refresh()` -- so a getter means a fresh detached canvas and a fresh GL context per read, which is the very leak render-capability.ts's `loseContext` release exists to avoid, and means boot.ts can decide on a different answer from the one a later error screen reports. 3 of 12 in the scoped run, all in 'createAppShell: the retained render capability (issue #470)'. Worth separating: 'answers with the same object every time it is asked' (`expect(shell.render).toBe(shell.render)`) fails on IDENTITY ALONE -- both reads return equal values under this mutation, so only `toBe` can see it, which is exactly what that case's own comment claims. The other two ('exposes exactly what it was handed, unchanged' and 'is still readable after the page teardown') compare against the INJECTED object, so under jsdom -- where a fresh probe answers `no-webgl2` rather than the injected supported value -- they would have failed on value too; do not read those two as identity coverage. DECLARED SCOPE IS app-shell.test.ts ONLY and the count is that run; the blast radius is wider, because loop.test.ts's `bootPageOn` builds a shell with `RENDER_CAPABILITY_SUPPORTED` and would take boot's unsupported branch under this mutation."
+}

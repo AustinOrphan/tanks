@@ -1,0 +1,14 @@
+{
+  "id": "capture-playwright-module-becomes-an-override",
+  "file": "tools/capture/prerequisites.mjs",
+  "find": "  const candidates = [...new Set([env.PLAYWRIGHT_MODULE, 'playwright'].filter(Boolean))];",
+  "replace": "  const candidates = env.PLAYWRIGHT_MODULE ? [env.PLAYWRIGHT_MODULE] : ['playwright'];",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/prerequisites.test.ts"
+  ],
+  "why": "The obvious \"make PLAYWRIGHT_MODULE an override\" edit, which prerequisites.test.ts already names in prose as this case's negative control. PLAYWRIGHT_MODULE is a PREFERENCE, not an override: a stale or mistyped value must not stop capture from finding a working install, and the aggregate failure must list every specifier it tried. Under the mutation a contributor whose PLAYWRIGHT_MODULE points at a moved install is told \"Playwright with Chromium is required\" with only that one dead path under `Tried:`, while a perfectly good ambient `playwright` is never attempted. Killed by `treats PLAYWRIGHT_MODULE as the first candidate and still tries the bare specifier` (#353), the only case that reads the second `Tried:` line -- 1 of the file's 4 cases; the other 3 pass under it, which is what expectFailures pins. First two manifest entries outside `src/`: the harness's own `vitest related` preflight relates tools/capture/prerequisites.test.ts to this file, so a tools/ target is measured exactly like a src/ one. Measured in both worlds this repo actually runs in, because Playwright is deliberately not a declared dependency: with node_modules/playwright{,-core} present (the documented local capture setup) and with them absent (CI's `verify` job, which installs Playwright only in the separate `visual` job). The second `Tried:` line's TEXT differs between them (`Chromium executable is missing at /missing/chromium` where playwright resolves, `ERR_MODULE_NOT_FOUND` where it does not); the line is PRESENT either way, which is why the assertion -- and this entry -- read the same in both.",
+  "killedBy": [
+    "capture prerequisites treats PLAYWRIGHT_MODULE as the first candidate and still tries the bare specifier"
+  ]
+}

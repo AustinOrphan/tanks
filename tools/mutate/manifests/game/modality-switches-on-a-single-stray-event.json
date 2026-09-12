@@ -1,0 +1,16 @@
+{
+  "id": "modality-switches-on-a-single-stray-event",
+  "file": "src/game/modality.ts",
+  "find": "      return now - candidateSince >= switchAfterMs ? settle(modality) : false;",
+  "replace": "      return settle(modality);",
+  "why": "Without the threshold a palm on a trackpad or a pad's idle drift rewrites the prompts mid-read, which is the flicker issue #496 exists to prevent; the stray-event case is what sees it.",
+  "tests": [
+    "src/game/modality.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "modality tracker: a switch needs the threshold (issue #496) switches once the candidate has held the field for the whole threshold, and not before",
+    "modality tracker: a switch needs the threshold (issue #496) the threshold is injected: a tracker built with a different one switches on that one"
+  ]
+}

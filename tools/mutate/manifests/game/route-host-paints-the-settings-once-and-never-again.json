@@ -1,0 +1,17 @@
+{
+  "id": "route-host-paints-the-settings-once-and-never-again",
+  "file": "src/game/route-host.ts",
+  "find": "  const stopPaintingSettings = deps.effectiveSettings.subscribe(applyPageSettings);",
+  "replace": "  const stopPaintingSettings = (): void => {};",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The construction-time paint survives and every control still opens showing the stored value, so Settings looks right until the player touches it -- and then the control they just pressed never redraws, because this subscription is the only thing that answers the store. Issue #364's fifth criterion is specifically about the change landing WITH THE PANE OPEN, which is this line and not the call above it, and issue #289's motion toggle is the control where the consequence is visible rather than merely stale: the resolved policy stops reaching `hud.setReducedMotion`, so the transitions the player is trying to change carry on until a reload. The subscribed function became `applyPageSettings` in issue #485, which drives the display and the audio engine from this ONE registration; killing the subscription therefore strands both halves, and the audio cases fail beside the display ones.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the stored audio and input settings, which no session-less page did before",
+    "createRouteHost: the Main Menu is painted from the stores by the page lets the motion control change the policy IMMEDIATELY, with the menu open and no session",
+    "createRouteHost: the Main Menu is painted from the stores by the page keeps painting settings while a session holds the slot",
+    "createRouteHost: the Main Menu is painted from the stores by the page MUTES THE ENGINE on a page with no session, not just the button (issue #485)"
+  ]
+}

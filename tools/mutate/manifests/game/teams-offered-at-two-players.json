@@ -1,0 +1,17 @@
+{
+  "id": "teams-offered-at-two-players",
+  "file": "src/game/hud.ts",
+  "find": "  const teamsOfferedAt = (players: number): boolean => players > 2;",
+  "replace": "  const teamsOfferedAt = (players: number): boolean => players > 0;",
+  "expect": "killed",
+  "why": "Teams becomes selectable at two players, which issue #281's first binding rule forbids by name: 'Teams mode is not a distinct option for two players because it is equivalent to FFA.' Two players on two teams IS free-for-all, and two on one team is a match nobody can win -- which the one-team Start gate then refuses, so the offer becomes a trap rather than a choice. It is a SILENT defect on the shipped pane: the button simply enables, every downstream mode-dependent row renders correctly, and the match starts and plays; what it costs is a mode that means nothing and a refusal the player cannot see the cause of. Killed by the three cases that drive the pane with a real `.click()` -- chosen over `dispatchEvent` deliberately, because a disabled button IGNORES a real click and HONOURS a dispatched one, so only the former measures what a player can actually do. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+    "hud: spatial focus follows the drawn layout (issue #495) the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) does not offer Teams at two players, and does at three (issue #281)",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) drops out of Teams when the player count falls to two"
+  ]
+}

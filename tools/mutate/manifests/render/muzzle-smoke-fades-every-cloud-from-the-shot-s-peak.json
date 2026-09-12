@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-fades-every-cloud-from-the-shot-s-peak",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      for (const sprite of cl.billows) sprite.material.opacity = cl.peak * fade;",
+  "replace": "      for (const sprite of cl.billows) sprite.material.opacity = SMOKE.fired.peakOpacity * fade;",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Fades from a shared constant instead of the cloud's own peak. The refusal is still born nearly solid, so anything reading the material at spawn passes; one frame later the soot has been pulled back to the ordinary puff's weight and stays there for the rest of its life. A defect visible for one sixtieth of a second and then permanently is the shape a birth-time assertion cannot catch, which is why the suite also samples mid-life.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) keeps a refusal DENSE for its whole life, not just at birth"
+  ]
+}

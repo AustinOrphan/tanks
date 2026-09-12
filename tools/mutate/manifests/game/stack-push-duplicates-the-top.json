@@ -1,0 +1,12 @@
+{
+  "id": "stack-push-duplicates-the-top",
+  "file": "src/game/navigation.ts",
+  "find": "      if (top !== null && top.id === entry.id) return 'already-top';",
+  "replace": "      void top;",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The already-top check is deleted, so re-opening the layer already on screen falls through to the open-lower-down scan and is reported `refused` instead of `already-top`. The owner branches on that result -- `already-top` re-renders the current layer in place, `refused` is a failed open -- so a second press of the control that opened the Records page would do nothing rather than refresh it. The stack is unchanged under either code, which is why only the result code can see this. Fails 1 of 15 in navigation.test.ts: `pushing the id already on top reports already-top and pushes nothing; an id open lower down is refused`."
+}

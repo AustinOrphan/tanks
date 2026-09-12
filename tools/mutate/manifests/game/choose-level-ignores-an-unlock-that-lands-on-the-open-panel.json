@@ -1,0 +1,14 @@
+{
+  "id": "choose-level-ignores-an-unlock-that-lands-on-the-open-panel",
+  "file": "src/game/hud.ts",
+  "find": "      // already looking at.\n      applyChooseLevel();",
+  "replace": "      // already looking at.",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Makes the button's visibility a claim recomputed only at a surface change, while the signal it depends on is pushed between them. A win records an unlock and the page repaints the Levels grid from it, so a session that reaches its first multi-level offer at the moment it ends leaves the button hidden on the very screen the player is looking at, until some later `setState` -- by which time they have left. The same reasoning is already written on `setLevelSelect`'s `applyTitleAffordances` call for the Main Menu's own copy of this button.",
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) withholds Choose Level from a session with no level to choose"
+  ]
+}

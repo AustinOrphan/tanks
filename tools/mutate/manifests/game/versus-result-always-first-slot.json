@@ -1,0 +1,20 @@
+{
+  "id": "versus-result-always-first-slot",
+  "file": "src/game/loop.ts",
+  "find": "export function versusResultFromWorld(world: World): VersusResult {",
+  "replace": "export function versusResultFromWorld(world: World): VersusResult {\n  if (world.tanks.length > 0) return versusWinnerSlot(0);",
+  "expect": "killed",
+  "why": "The retired localPlayerWon payload, reconstructed: every decided couch match reported as a P1 victory, and every simultaneous-elimination draw as one too. The sim's win event in ffa/teams means 'exactly one player (or team) is not eliminated' and says nothing about WHICH seat, so this is the defect the typed VersusResult exists to make unrepresentable. Scoped to loop.test.ts, whose versusResultFromWorld block drives real FFA/teams worlds into each terminal shape. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "versusResultFromWorld FFA simultaneous elimination is a DRAW, not a win for anyone",
+    "versusResultFromWorld FFA won by P2 reports SLOT 1, not slot 0",
+    "versusResultFromWorld FFA won by the last of four slots reports SLOT 3",
+    "versusResultFromWorld Teams double wipeout is a DRAW",
+    "versusResultFromWorld Teams won by team +0 reports that team",
+    "versusResultFromWorld Teams won by team 1 reports that team",
+    "versusResultFromWorld a teams world reports a TEAM, never a slot"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "versus-config-resolve-drops-support-check",
+  "file": "src/game/versus-config.ts",
+  "find": "  if (!entry.players.includes(config.players) || !entry.modes.includes(config.mode)) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "resolveVersusConfig is #270's launch gate at the Start boundary: the resolved id must name a catalog entry whose DECLARED support covers the config's (players, mode), or the session must fail loudly rather than launch an unsupported combination. The gate is deliberately unreachable from the shipped pane (its offer list is filtered by the same declarations and every shipped entry declares all Ns and both modes), so no shipped-path test can see this mutation -- it exists for a future narrower entry (#271-#273) meeting a stale retained selection. Caught by 1 of 13 in versus-config.test.ts: the rejection test hands a synthetic ffa-only, N=2-only entry a teams config and an N=3 config and expects both to throw the exact support message; under this mutation both resolve silently. The entry-exists check above the mutated line is untouched, so the names-no-entry rejection test still passes and cannot mask this kill.",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ]
+}

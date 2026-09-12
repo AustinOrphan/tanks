@@ -1,0 +1,14 @@
+{
+  "id": "angle-pin-accepts-a-coincidental-match-as-verified",
+  "file": "tools/baseline/angles.ts",
+  "find": "  if (!VERIFIED_ANGLE_ARCHITECTURES.includes(arch)) return { kind: 'unverified', arch, actual };\n  return actual === pinned",
+  "replace": "  if (!VERIFIED_ANGLE_ARCHITECTURES.includes(arch) && actual !== pinned) return { kind: 'unverified', arch, actual };\n  return actual === pinned",
+  "expect": "killed",
+  "tests": [
+    "tools/baseline/angles.test.ts"
+  ],
+  "killedBy": [
+    "angle probe does not treat an unverified architecture as a verified pass"
+  ],
+  "why": "The plausible-looking loosening: an unverified architecture whose hash HAPPENS to equal the x86-64 golden is reported as `verified-match`. It reads like a harmless optimisation -- the hash matched, so what is the harm -- and it quietly manufactures the cross-architecture bit-identity claim the owner's ruling on #484 refuses to make without repeated verified measurements and a maintenance story. One coincidental sample is not a verification. Invisible on x86-64, where the branch is never taken, which is why the killing case asserts the arm64-with-matching-hash pair explicitly rather than only the arm64-with-wrong-hash one."
+}

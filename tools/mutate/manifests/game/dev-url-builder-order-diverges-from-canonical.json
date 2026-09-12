@@ -1,0 +1,14 @@
+{
+  "id": "dev-url-builder-order-diverges-from-canonical",
+  "file": "src/game/dev-config.ts",
+  "find": "  emit(PLAYTEST_BUNDLE.param, selection.playtest);\n  for (const field of Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[]) {\n    emit(FLAG_REGISTRY[field].param ?? field, selection[field]);\n  }",
+  "replace": "  for (const field of Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[]) {\n    emit(FLAG_REGISTRY[field].param ?? field, selection[field]);\n  }\n  emit(PLAYTEST_BUNDLE.param, selection.playtest);",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config.test.ts"
+  ],
+  "killedBy": [
+    "devSearchFrom: BUILDING a developer URL (issue #623) is a FIXED POINT of the canonicaliser, so the two cannot disagree about a selection"
+  ],
+  "why": "Moves the bundle after the registry fields, so a built URL is no longer what `canonicalDevSearch` would produce for the same selection. Every flag still parses identically -- order is meaningless to `URLSearchParams` -- so nothing about BEHAVIOUR changes and only the fixed-point property notices. It matters because Copy Link and Apply and Reload would then emit different strings for the same choices, and a URL a developer shares would not match the one the menu shows."
+}

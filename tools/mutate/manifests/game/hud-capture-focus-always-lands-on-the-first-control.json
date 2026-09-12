@@ -1,0 +1,15 @@
+{
+  "id": "hud-capture-focus-always-lands-on-the-first-control",
+  "file": "src/game/hud.ts",
+  "find": "      (same ?? sameRow ?? controls[0])?.focus();",
+  "replace": "      controls[0]?.focus();",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "A re-render must put focus back on the SAME candidate on the SAME row; landing on the pane's first control loses the player's place on every hotplug.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the semantic action dispatcher (issue #494) focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not",
+    "hud: the semantic action dispatcher (issue #494) focus survives a Versus Setup re-render on the same role button of the same row"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "session-dispose-keeps-observing-the-page-machine",
+  "file": "src/game/loop.ts",
+  "find": "      stopObserving();\n      deps.releaseAudio(audio);",
+  "replace": "      deps.releaseAudio(audio);",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "A disposed session keeps its subscriber on the page-scoped state machine (issue #468 made the machine outlive the session), so it runs on every later change with the retired session's closures. Measured before the unsubscribe existed: a retired Practice session on level 3 recorded level 3 as cleared when the live campaign session cleared level 1, and a retired campaign session advanced the shared run with a stale life count before the live one wrote the real value. 2 of 421 in loop.test.ts: the retired-Practice and retired-campaign cases under \"a retired session stops observing the page state machine\", both driven through the page harness with a real machine."
+}

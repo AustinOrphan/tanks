@@ -1,0 +1,13 @@
+{
+  "id": "session-host-keeps-the-dead-canvas",
+  "file": "src/game/session-host.ts",
+  "find": "    stop();\n    canvas?.remove();\n    create(intent);",
+  "replace": "    stop();\n    create(intent);",
+  "expect": "killed",
+  "expectFailures": 7,
+  "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`. COUNT MOVED 5 -> 6 for issue #427: the empty-host cases added to session-host.test.ts include one that walks start -> replace -> replace asserting exactly one canvas is alive throughout, so a host that leaves the dead element behind fails there as well. Re-measured on the tree, not predicted. RE-ANCHORED by issue #428: `replace` takes a `StartIntent` rather than a versus config, so the parameter name in the find string changed. The mutation and the defect are identical. COUNT RE-MEASURED for issue #428: 6 -> 7, because the suite gained the Campaign-return cases, which assert the root holds no canvas after a stop and so also fail when a dead one is left behind. The failing SET was compared, not the number renumbered.",
+  "tests": [
+    "src/game/session-host.test.ts",
+    "src/boot.test.ts"
+  ]
+}

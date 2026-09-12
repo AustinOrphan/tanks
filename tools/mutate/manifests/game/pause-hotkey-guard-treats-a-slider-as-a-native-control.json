@@ -1,0 +1,14 @@
+{
+  "id": "pause-hotkey-guard-treats-a-slider-as-a-native-control",
+  "file": "src/game/loop.ts",
+  "find": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+  "replace": "export function isPauseHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,select,textarea')) return false;",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Escape and P with the volume slider focused must pause: the slider consumes only its arrows and Home/End, and this is the pre-#494 `input,select,textarea` guard.",
+  "expect": "killed",
+  "killedBy": [
+    "isPauseHotkey accepts Escape and P aimed at a focused SLIDER, which consumes only the keys that move it (issue #494)"
+  ]
+}

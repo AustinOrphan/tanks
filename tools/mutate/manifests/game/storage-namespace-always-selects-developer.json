@@ -1,0 +1,17 @@
+{
+  "id": "storage-namespace-always-selects-developer",
+  "file": "src/game/storage.ts",
+  "find": "  return parseDeveloperMode(search) ? 'developer' : 'production';",
+  "replace": "  return parseDeveloperMode(search) ? 'developer' : 'developer';",
+  "expect": "killed",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "The OVER-triggering half of the selector, which `storage-namespace-never-selects-developer` deliberately cannot see. This is the more damaging direction of the two: an ordinary URL would start persisting into `tanks.dev.*`, so the player's campaign, stats and achievements would still be on disk but invisible to the game -- indistinguishable from a wiped save, and silent. Killed by the production rows of selectStorageNamespace's table and by the `dev` GATE case, none of which the under-triggering entry reaches.",
+  "killedBy": [
+    "selectStorageNamespace is the `dev` GATE, not any individual flag",
+    "selectStorageNamespace reads '' as the production namespace",
+    "selectStorageNamespace reads '?dev=0' as the production namespace",
+    "selectStorageNamespace reads '?level=2' as the production namespace"
+  ]
+}

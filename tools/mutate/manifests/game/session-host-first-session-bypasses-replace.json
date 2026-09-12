@@ -1,0 +1,17 @@
+{
+  "id": "session-host-first-session-bypasses-replace",
+  "file": "src/game/session-host.ts",
+  "find": "      replace(intent);\n    },\n    requestVersusSession,",
+  "replace": "      create(intent);\n    },\n    requestVersusSession,",
+  "expect": "killed",
+  "why": "Starts the first session by calling `create` directly instead of routing it through `replace`, which is the shape this module had first. On the ONE call boot.ts makes the two are identical -- there is no handle to stop and no canvas to remove -- so the production path is unchanged and every route-level test stays green. What it drops is both of `replace`'s guards: a second `start()` orphans the first session's frame loop, renderer and GL context with nothing left holding its handle, and a `start()` after `dispose()` builds a whole session onto a document already on its way out. Killed by session-host.test.ts's 'a SECOND start() replaces the first session rather than orphaning it' and 'start() after dispose() starts nothing'. RE-ANCHORED by issue #428, and the defect got MORE reachable rather than less: `start()` is no longer a single call from `boot()` but a HUD button, so a player who presses New Game twice takes exactly the path this bypasses -- the second start orphaning the first session's loop, renderer and GL context. Count re-measured. COUNT RE-MEASURED for issue #428: 2 -> 3, because `start()` is a HUD button since #428 rather than one call from `boot()`, so a second start is now an ordinary player action and one more case reaches it. The failing SET was compared, not the number renumbered.",
+  "tests": [
+    "src/game/session-host.test.ts",
+    "src/boot.test.ts"
+  ],
+  "killedBy": [
+    "boot: nothing starts until the player asks (issue #428) passes each of the four intents through, one session each",
+    "createGameSessionHost: start a SECOND start() replaces the first session rather than orphaning it",
+    "createGameSessionHost: start start() after dispose() starts nothing -- the latch covers the first session too"
+  ]
+}

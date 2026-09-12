@@ -1,0 +1,12 @@
+{
+  "id": "versus-board-distinct-count-ignores-duplicates",
+  "file": "src/sim/versus-board.ts",
+  "find": "  const spawnCount = new Set(positions.map((p) => `${p.x},${p.y}`)).size;",
+  "replace": "  const spawnCount = positions.length;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "spawnCount must count DISTINCT positions, not merely how many players were placed -- using positions.length instead of a Set's size makes every co-located spawn look like a unique one. This mutates the field's own computation, deliberately not its participation in the suitable conjunction: dropping distinctSpawns from suitable is EQUIVALENT (not in this manifest -- see docs/superpowers/plans/2026-08-17-versus-board-rules.md for the analytic argument and the by-hand verification that all 12 cases in versus-board.test.ts stay green under that specific mutation), because MIN_OPEN_FLOOR_PER_PLAYER >= 1 already forces roomOk false on every fixture where distinctSpawns is false. This entry is caught instead by the pathological zero-open-floor fixture's DIRECT assertion on the spawnCount field (expected 1, the co-located fallback cell, at every N): the mutation reports spawnCount = playerCount regardless of the collision, so the field assertion fails 1 of 12 cases before suitable is ever consulted.",
+  "tests": [
+    "src/sim/versus-board.test.ts"
+  ]
+}

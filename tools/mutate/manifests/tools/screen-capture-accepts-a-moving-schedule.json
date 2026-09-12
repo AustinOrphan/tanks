@@ -1,0 +1,14 @@
+{
+  "id": "screen-capture-accepts-a-moving-schedule",
+  "file": "tools/capture/screen-adapter.mjs",
+  "find": "  if (recipe.schedule.kind !== 'still') {\n    throw new Error('screen captures are stills; a moving application surface is issue #326');\n  }",
+  "replace": "  void recipe;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "the screen capture adapter refuses a recipe this producer cannot honour, rather than capturing something else"
+  ],
+  "why": "Lets a clip recipe through a producer that writes exactly one frame. The shared pipeline would then look for the frames a `frames` schedule promises and find one, failing far from the recipe that asked for it -- or, worse, publish a single-frame 'clip'. Refusing at the adapter is what keeps the error next to its cause."
+}

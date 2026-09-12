@@ -1,0 +1,16 @@
+{
+  "id": "legal-disclosure-never-reports-that-it-opened",
+  "file": "src/game/legal.ts",
+  "find": "  disclosure.toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');",
+  "replace": "  disclosure.toggle.setAttribute('aria-expanded', 'false');",
+  "expect": "killed",
+  "tests": [
+    "src/game/legal.test.ts",
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "the legal document disclosures moves the attribute, the word and the class together when a document opens",
+    "the About & Legal pane in the assembled HUD (issue #117) opens a document when its toggle is clicked, and closes it on a second click"
+  ],
+  "why": "One of three carriers of one fact goes stale: the document is revealed and the state word says Hide, but the button keeps telling a screen reader the region is collapsed. Visually perfect and silently wrong, which is why the case that kills it asserts all three carriers in BOTH directions rather than asserting the body is visible. Note the second-order effect this entry also pins: `isLegalExpanded` reads the attribute, so the HUD's click handler -- which toggles on `!isLegalExpanded(...)` -- can never close a document again either, and the composition case is what catches that half."
+}

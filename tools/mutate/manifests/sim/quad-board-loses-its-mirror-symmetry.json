@@ -1,0 +1,14 @@
+{
+  "id": "quad-board-loses-its-mirror-symmetry",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "\"###.............P.............###\"",
+  "replace": "\"###.............P.............##.\"",
+  "expect": "killed",
+  "why": "One cell of vs-quad-01's right-hand edge mass turned from solid to open floor, breaking the column mirror the board's notes claim. Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still connects, and still passes every count-based check -- symmetry is the only thing that notices, which is why it needs a mutation rather than trust.\n\nRE-ANCHORED for issue #425. The old find string was a row of the 27x17 grid ('####.####...###...####.####') and the rebuild replaced it, so this entry silently became FAILED-TO-APPLY -- a dead guard that no test would have reported. Caught by the sweep, not by the suite. It now anchors on row 7, one of only two rows unique in arenas.json (the P and B rows), so it cannot match another board or another row of this one, and needs no `occurrence`. Column 32 mirrors to column 0, which stays solid, so flipping it is a genuine asymmetry rather than a cosmetic edit.",
+  "tests": [
+    "src/sim/versus-catalog-rules.test.ts"
+  ],
+  "killedBy": [
+    "vs-quad-01: four corners, one orbit every cell has the same wall kind as its partner under BOTH mirrors"
+  ]
+}

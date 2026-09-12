@@ -1,0 +1,14 @@
+{
+  "id": "hud-act-every-direction-walks-forward",
+  "file": "src/game/hud.ts",
+  "find": "    if (isDirection(action)) {\n      moveFocus(container, action);\n      return true;\n    }",
+  "replace": "    if (isDirection(action)) {\n      moveFocus(container, 'down');\n      return true;\n    }",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Up and Left must walk backwards (and, with geometry, Left/Right must stay in the row): a dispatcher that drops the direction turns every D-pad press into Down.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the semantic action dispatcher (issue #494) a direction walks the active panel like the arrows do, and reports unconsumed with nothing shown"
+  ]
+}

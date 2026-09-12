@@ -1,0 +1,14 @@
+{
+  "id": "level-switch-snap-latch-never-spent",
+  "file": "src/render/entities.ts",
+  "find": "    const replaced = worldWasReplaced;\n    worldWasReplaced = false;",
+  "replace": "    const replaced = worldWasReplaced;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The announcement latch is read but never spent, so one level switch freezes interpolation for the rest of the session: every tank is drawn on its current-tick pose forever after and motion becomes a 60 Hz stutter. This is the same failure `render-respawn-teleport-applied-to-every-tank` describes from the per-tank side, reached from the world side instead, and no single-sync assertion anywhere in the file can see it -- it takes a sync that consumes the announcement followed by an ordinary one that must still interpolate.",
+  "killedBy": [
+    "entity views \u2014 interpolation discontinuities spends the level-switch announcement on one sync, then interpolates again"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "topbar-arm-cannot-restore-the-exception-chip",
+  "file": "src/game/hud.ts",
+  "find": "    if (topbar.exceptionChip) {\n      practiceChip.classList.toggle('hud-practice--hidden', kind !== 'practice');\n      practiceChip.textContent = modeChipLabels.practice;\n    }\n    for (const statEl of campaignStatEls) {",
+  "replace": "    for (const statEl of campaignStatEls) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "Every arm becomes a mode-chip arm, so `full` shows CAMPAIGN and VS chips the pre-ruling bar never had and `spare` stops being the arm that isolates the content removals from the chip question. The two statements are one mutation because they are one decision: dropping only the text write would leave a chip that says the right nothing while showing, and dropping only the toggle would leave the word PRACTICE hidden under a bar that has already shown CAMPAIGN. MEASURED on this branch: killed, 4 of the 12 cases in the arm suite.",
+  "killedBy": [
+    "topbar: `full` is the pre-ruling bar reproduces the bar `origin/main` renders, at every session, class for class",
+    "topbar: the SHIPPED arm is the no-flag bar itself mounts the same topbar as an absent flag, at every session, with no class of its own",
+    "topbar: the two versus shapes, which question 5 conflated showed no level chip on a setup-pane match BEFORE the ruling either",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

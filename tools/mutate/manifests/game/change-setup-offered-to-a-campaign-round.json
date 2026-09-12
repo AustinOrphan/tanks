@@ -1,0 +1,14 @@
+{
+  "id": "change-setup-offered-to-a-campaign-round",
+  "file": "src/game/hud.ts",
+  "find": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || versusPause));",
+  "replace": "    changeSetupBtn.classList.toggle('hud-change-setup--hidden', !(versusEnding || shownState === 'paused'));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) offers Change Setup at Pause in a versus match, and on no other panel (issue #261)"
+  ],
+  "why": "Keeps the SURFACE half of the gate and drops the KIND half, which is the half-fix a reader is most likely to write: Pause is obviously the right surface, and the session kind is the easier condition to forget. A paused campaign or practice round then offers a versus configuration pane. Distinct from the entry above because a test that only checked the end screens kills that one and survives this. Re-anchored for issue #279: the half-fix is now keeping the ENDING arm intact while dropping the kind check from the pause arm, which is the same mistake in the shape the code has today."
+}

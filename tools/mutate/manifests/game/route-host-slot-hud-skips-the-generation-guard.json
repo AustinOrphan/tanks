@@ -1,0 +1,15 @@
+{
+  "id": "route-host-slot-hud-skips-the-generation-guard",
+  "file": "src/game/route-host.ts",
+  "find": "        setStatus: (status) => {\n          if (current()) hud.setStatus(status);\n        },",
+  "replace": "        setStatus: (status) => {\n          hud.setStatus(status);\n        },",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "One member of the gameplay HUD facade forwards without checking whether its session still holds the slot -- the state `loop.ts` was in before issue #324's step S8, when it held the page's raw `Hud` and no push was guarded at all. `session-host.ts` replaces a session by stopping the old one and starting the new one, and a frame already in flight when that happens then repaints the incoming match's topbar with the outgoing match's lives, enemy count or stock strip. `setStatus` is the member chosen because it is pushed on every simulated frame, so it is the one with a real window; the exhaustive case named below covers the other nine by driving each in turn from a retired slot. Pinned with killedBy: the claim is that a retired session paints nothing, not a population.",
+  "killedBy": [
+    "createRouteHost: the slot's gameplay HUD drops EVERY push from a session that has already been replaced",
+    "createRouteHost: the slot's gameplay HUD drops a push from a session that has detached, with nothing holding the slot"
+  ]
+}

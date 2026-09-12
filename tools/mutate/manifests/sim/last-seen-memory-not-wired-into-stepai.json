@@ -1,0 +1,14 @@
+{
+  "id": "last-seen-memory-not-wired-into-stepai",
+  "file": "src/sim/ai/index.ts",
+  "find": "    updateTargetMemory(world, tank, resolveOpponent(world, tank, configFor(tank.kind)));",
+  "replace": "    void updateTargetMemory;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-memory.test.ts"
+  ],
+  "why": "Pins the WIRING, not the module. Every unit case in target-memory.test.ts drives updateTargetMemory directly and passes in full while stepAi never calls it, leaving the shipped game with no memory at all and every blind tank falling straight through to search.",
+  "killedBy": [
+    "memory through the pipeline survives from one tick to the next, and expires on schedule inside step()"
+  ]
+}

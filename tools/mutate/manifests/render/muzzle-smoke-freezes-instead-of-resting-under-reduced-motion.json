@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-freezes-instead-of-resting-under-reduced-motion",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      place(cl, k);",
+  "replace": "      if (!reducedMotion) place(cl, k);",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "The landmine blocked-fire-ring.ts records, reproduced here: honouring reduced motion by not animating, instead of by writing a rest placement every frame. `prefers-reduced-motion` is a live media query, so the defect is only reachable MID-FLIGHT -- a cloud already drifting away from the barrel freezes where it had got to and hangs there for the rest of its life. The test that sets the preference BEFORE spawning stays green under this, because that cloud is placed once at spawn and never needs moving again, which is exactly why one reduced-motion case is not enough.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) snaps an ALREADY-DRIFTING cloud back to rest when reduced motion turns on mid-flight"
+  ]
+}

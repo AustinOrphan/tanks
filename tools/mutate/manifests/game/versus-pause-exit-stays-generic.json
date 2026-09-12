@@ -1,0 +1,14 @@
+{
+  "id": "versus-pause-exit-stays-generic",
+  "file": "src/game/hud.ts",
+  "find": "        : s === 'paused' && statusData?.kind === 'versus'\n          ? 'Main Menu'\n          : 'Quit to Title';",
+  "replace": "        : 'Quit to Title';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: the pause exit is contextual (issue #323) names the destination at Pause wherever one can be named, and keeps the generic word where it cannot"
+  ],
+  "why": "Puts the generic word back on a paused versus match. Issue #261's contract is \"do not expose a generic Quit action when a specific destination can be named\", and here one can: a versus match shares the campaign run store but writes nothing to it, so `Quit to Title` described a cost that is not being paid -- on the one surface where the player is asking what leaving costs. The campaign and null-status arms are untouched, which is what makes the label a disagreement this panel can express rather than a constant."
+}

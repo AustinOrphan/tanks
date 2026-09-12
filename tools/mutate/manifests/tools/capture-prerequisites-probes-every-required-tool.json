@@ -1,0 +1,15 @@
+{
+  "id": "capture-prerequisites-probes-every-required-tool",
+  "file": "tools/capture/prerequisites.mjs",
+  "find": "  const [playwright, ffmpeg, ffprobe] = await Promise.all([\n    loadPlaywright(env, options),\n    toolVersion('ffmpeg', env, options),\n    toolVersion('ffprobe', env, options),\n  ]);\n  return { playwright, ffmpeg, ffprobe };",
+  "replace": "  const [playwright, ffmpeg] = await Promise.all([\n    loadPlaywright(env, options),\n    toolVersion('ffmpeg', env, options),\n  ]);\n  return { playwright, ffmpeg, ffprobe: ffmpeg };",
+  "expect": "killed",
+  "why": "`inspectPrerequisites` is the function capture and compare actually call, and until the broken-toolchain cases it had no test of its own: `prerequisites.test.ts` exercised `toolVersion` and `loadPlaywright` directly, while `orchestrate.test.ts` and `runner.test.ts` both replace `inspectPrerequisites` with a fake. The composition -- which tools get probed at all -- was the seam every caller stubs, so nothing covered it. Dropping the ffprobe probe and reporting FFmpeg's version in its place is what that hole looks like from the outside: the command claims to have verified an encoder it never ran. MEASURED: 2 of the 8 tests in prerequisites.test.ts fail -- 'names ffprobe specifically when that one is genuinely absent from PATH' (the mutant probes only ffmpeg, which the fixture PATH does supply, so nothing is rejected) and 'accepts the same toolchain once both encoders are on PATH, and reports what it found' (ffprobe comes back reading 'ffmpeg version 0.0-fixture'). Against the pre-existing tests for this file the same mutation SURVIVES.",
+  "tests": [
+    "tools/capture/prerequisites.test.ts"
+  ],
+  "killedBy": [
+    "capture prerequisites against a really broken toolchain accepts the same toolchain once both encoders are on PATH, and reports what it found",
+    "capture prerequisites against a really broken toolchain names ffprobe specifically when that one is genuinely absent from PATH"
+  ]
+}

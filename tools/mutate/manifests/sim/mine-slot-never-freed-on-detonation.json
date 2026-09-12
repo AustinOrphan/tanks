@@ -1,0 +1,16 @@
+{
+  "id": "mine-slot-never-freed-on-detonation",
+  "file": "src/sim/mines.ts",
+  "find": "  if (owner) owner.activeMineIds = owner.activeMineIds.filter((id) => id !== mine.id)",
+  "replace": "  void owner",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ordnance-capacity.test.ts",
+    "src/sim/mines.test.ts"
+  ],
+  "why": "Mine capacity release has ONE mechanism, unlike shells: activeMineIds is an explicit array detonateMine has to prune, where a retired shell simply stops being counted. Drop the prune and a player silently loses a mine slot for the rest of the round -- until a death resets it, which is why the tick-boundary test has to stop at the first round reset to see this at all.",
+  "killedBy": [
+    "detonateMine frees a mine slot when a mine detonates so the player can drop again",
+    "standard ordnance limits, driven through step() never exceeds the mine limit, and reuses slots as mines detonate"
+  ]
+}

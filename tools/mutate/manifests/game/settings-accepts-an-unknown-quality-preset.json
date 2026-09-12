@@ -1,0 +1,15 @@
+{
+  "id": "settings-accepts-an-unknown-quality-preset",
+  "file": "src/game/settings.ts",
+  "find": "      if (!QUALITY_IDS.has(q)) return;",
+  "replace": "      if (typeof q !== 'string') return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "why": "Validates the TYPE instead of the domain, which is the plausible way to write this guard and stores whatever string it is handed. That is worse here than for its siblings: the accepted value is carried to `qualityFor` when the next match builds its renderer, and that indexes `QUALITY_PRESETS` by the stored id -- so an off-list preset reaches the renderer as `undefined` rather than as a cheaper picture. It also breaks the refusal contract the whole store rests on: a refused value publishes nothing, which is what leaves a control showing what was actually accepted.",
+  "killedBy": [
+    "createPlayerSettingsStore: validation refuses an off-domain SETTER argument and keeps the accepted value",
+    "createPlayerSettingsStore: defaults and persistence does NOT publish a refused value"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "tread-trail-level-switch-inferred-from-round-tick",
+  "file": "src/render/tread-trails.ts",
+  "find": "    if (replaced || prev.roundStartTick !== curr.roundStartTick) {",
+  "replace": "    if (prev.roundStartTick !== curr.roundStartTick) {",
+  "expect": "killed",
+  "tests": [
+    "src/render/tread-trails.test.ts"
+  ],
+  "why": "Issue #531 itself, restored: the level switch stops being an announced fact and goes back to being inferred from `roundStartTick`, which cannot see it. `createWorld` stamps every world it builds with `roundStartTick: 1` and only `resetArena` ever moves it, so a level cleared on the FIRST attempt hands `sync` an incoming world whose 1 matches the outgoing world's 1, the guard stays silent, the tank's anchor survives at the previous board's coordinates, and the emit loop walks the gap in EMIT_SPACING steps printing the whole way. Measured on this module with the announcement ignored: two decals from a short drive became 158 in a straight line to the new spawn. Every pre-existing test in this file stayed green under exactly this mutation -- the round-boundary case drives the same switch with the two numbers UNEQUAL, so only a switch between two first-round worlds discriminates.",
+  "killedBy": [
+    "tread trails: round boundary and level switch clears on an announced level switch whose two worlds share roundStartTick (#531)"
+  ]
+}

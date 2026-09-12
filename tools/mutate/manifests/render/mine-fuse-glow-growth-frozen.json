@@ -1,0 +1,16 @@
+{
+  "id": "mine-fuse-glow-growth-frozen",
+  "file": "src/render/mine-warning.ts",
+  "find": "  return mineRadius * (GLOW_START_SCALE + (GLOW_END_SCALE - GLOW_START_SCALE) * clamp01(growth));",
+  "replace": "  return mineRadius * GLOW_START_SCALE;",
+  "expect": "killed",
+  "tests": [
+    "src/render/mine-warning.test.ts",
+    "src/render/mine-warning.sync.test.ts"
+  ],
+  "why": "Growth IS the fuse cue now that the blink is gone (owner ruling on PR #396): with the radius frozen the glow still appears, still brightens, and still ends exactly at the blast, so every timing assertion stays green while the thing that communicates urgency has stopped moving. Replaces the retired mine-fuse-ring-thickness-frozen, which anchored on a ring that no longer exists.",
+  "killedBy": [
+    "fuse urgency: a glow from underneath GROWS monotonically as the fuse runs out, and is largest at expiry",
+    "fuse urgency: a glow from underneath clamps at peak rather than overshooting when the fuse is driven past zero"
+  ]
+}

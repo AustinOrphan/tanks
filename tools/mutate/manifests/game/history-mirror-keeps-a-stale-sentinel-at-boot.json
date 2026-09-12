@@ -1,0 +1,12 @@
+{
+  "id": "history-mirror-keeps-a-stale-sentinel-at-boot",
+  "file": "src/game/navigation.ts",
+  "find": "    if (isLayerSentinel(host.state)) safe(() => host.replaceState(null));",
+  "replace": "    // (mutation) a stale sentinel on the loaded entry is left in place",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The constructor's re-stamp of a loaded sentinel entry is deleted. After a reload with a layer open the loaded entry keeps `{tanks:'layer'}` while the stack is empty; the first layer pushes a second sentinel above it, and when that one is retired the browser's Back lands on the stale sentinel -- a popstate the mirror reads as Forward-onto-our-entry and re-stamps -- so the player's Back press does nothing once before it leaves. Fails 1 of 15 in navigation.test.ts: `a stale sentinel on the loaded entry is re-stamped as base at construction; a null base is left alone`, at its first `stale.calls` assertion."
+}

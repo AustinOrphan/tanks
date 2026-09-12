@@ -1,0 +1,14 @@
+{
+  "id": "app-settings-stores-skip-the-namespace",
+  "file": "src/game/app-settings.ts",
+  "find": "    stores: createStores(storage, availability),",
+  "replace": "    stores: createStores(resolved.storage, availability),",
+  "expect": "killed",
+  "tests": [
+    "src/game/app-settings.test.ts"
+  ],
+  "why": "Splits the session across two namespaces: the six stores land on the base keys while `AppSettings.storage` -- what save.ts and the `__tanks` dev console get -- stays namespaced. Every storage.ts adapter test still passes, because the adapter is untouched; only the wiring is wrong. Killed by `gives the stores and storage the SAME namespaced object`, where a store write becomes unreadable through AppSettings.storage.",
+  "killedBy": [
+    "createBrowserAppSettings gives the stores and `storage` the SAME namespaced object"
+  ]
+}

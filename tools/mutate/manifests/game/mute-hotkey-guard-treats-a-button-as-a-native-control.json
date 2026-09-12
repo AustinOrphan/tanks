@@ -1,0 +1,16 @@
+{
+  "id": "mute-hotkey-guard-treats-a-button-as-a-native-control",
+  "file": "src/game/loop.ts",
+  "find": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (consumesKey(e.target, e.key)) return false;",
+  "replace": "export function isMuteHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;\n  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) return false;",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "`isMuteHotkey` treats a focused button as a control that consumes M, which is the pre-#318 guard. Back returns focus to the control that opened a layer, so after every Back the focused element IS a button, and this mutation makes M dead exactly there.",
+  "expect": "killed",
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
+    "isMuteHotkey accepts M aimed at a focused button, slider or select, and still refuses it aimed at a textarea (issue #494)"
+  ]
+}

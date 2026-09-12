@@ -1,0 +1,15 @@
+{
+  "id": "drawn-shell-retuned-without-the-sim-following",
+  "file": "src/render/entities.ts",
+  "find": "  const SHELL_BODY_LEN = BULLET_RADIUS * 4.5;",
+  "replace": "  const SHELL_BODY_LEN = BULLET_RADIUS * 3.0;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The failure mode SHELL_NOSE_REACH_RADII exists to catch: src/sim may not import src/render, so a renderer retune can silently desynchronise the spawn depth from the drawn geometry. Stands in for the next person shortening the shell without knowing the sim keyed an inset to its length.",
+  "killedBy": [
+    "tank geometry agrees with the sim about how far a drawn shell reaches ahead of its position",
+    "tank geometry starts the shell nose flush with the drawn muzzle opening, not past it"
+  ]
+}

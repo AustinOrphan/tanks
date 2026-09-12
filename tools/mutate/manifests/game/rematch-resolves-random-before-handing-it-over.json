@@ -1,0 +1,14 @@
+{
+  "id": "rematch-resolves-random-before-handing-it-over",
+  "file": "src/game/loop.ts",
+  "find": "        deps.requestVersusSession(deps.initialVersusConfig);",
+  "replace": "        deps.requestVersusSession({ ...deps.initialVersusConfig, arenaId: deps.levels.start.arenaId });",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's Rematch: the same configuration, a fresh match (issue #279) hands over the UNRESOLVED config, so each rematch rolls its own arena and seed"
+  ],
+  "why": "Helpfully resolves the arena before handing the config over, which pins THIS match's arena onto every rematch after it -- the defect issue #278 fixed one layer down, reintroduced from above. It looks like an improvement (the config is now concrete) and is the reason the killer asserts on the `arenaId` FIELD rather than merely that a config was passed: every other assertion about the rematch survives this unchanged. `ResolvedSession` exists precisely so a retained `'random'` descriptor can produce distinct instances without being mutated into a mixture of player choice and launch result."
+}

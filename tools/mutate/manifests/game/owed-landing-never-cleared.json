@@ -1,0 +1,14 @@
+{
+  "id": "owed-landing-never-cleared",
+  "file": "src/game/loop.ts",
+  "find": "\n    pendingLanding = false;\n",
+  "replace": "\n    void pendingLanding;\n",
+  "expect": "killed",
+  "why": "Leaves the landing a quit owes outstanding forever. `switchTo` is the ONE site that can settle the debt, because it is the one site that builds a world; without the clear, a Levels pick after a quit builds the picked board and the debt survives it, so the next Continue silently builds the campaign board over the level the player chose -- one extra world and one extra gameplay seed, on a gesture whose whole guarantee is that it enters what is already there. The alternative shape, clearing the flag at each of the three call sites that could satisfy it, is what `switchTo`'s own comment says did not hold by hand.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Navigation-only actions enter no gameplay session, and now build no world either a Levels pick after a quit satisfies the owed landing rather than leaving it owed"
+  ]
+}

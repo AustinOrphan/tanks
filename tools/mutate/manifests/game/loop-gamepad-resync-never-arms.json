@@ -1,0 +1,14 @@
+{
+  "id": "loop-gamepad-resync-never-arms",
+  "file": "src/game/loop.ts",
+  "find": "    if (nowPlaying) for (const src of realSources.values()) src.resyncGamepad?.();",
+  "replace": "    if (nowPlaying) for (const src of realSources.values()) void src;",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Every entry into play must resync slot 0 and each co-player source: the A that confirmed Resume, still held on the first tick, would otherwise read as a fresh fire edge.",
+  "expect": "killed",
+  "killedBy": [
+    "startGameWith: the gamepad edge resync on entry into play (issue #494) resyncs slot 0 and every co-player source on EACH entry into play, and on no exit"
+  ]
+}

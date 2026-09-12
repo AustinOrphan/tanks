@@ -1,0 +1,14 @@
+{
+  "id": "teal-solves-its-dodge-from-the-real-world",
+  "file": "src/sim/ai/teal.ts",
+  "find": "  const avoid = dangerAvoidMove(seen, tank, fleeRadius, dangerCorridor);",
+  "replace": "  const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);",
+  "expect": "killed",
+  "why": "grey's entry at the other decision function, and a separate entry rather than a wider one because the two wire the perceived world independently -- teal has no `underFire` of its own to reuse and reaches `incomingThreats` by a second path. profile.test.ts already keeps a paired grey/teal fixture for the estimation-error wiring on the same reasoning (\"not a copy that could rot separately\"); this is that pairing for the awareness delay. Killed by the teal half of the shared crossover fixture.",
+  "tests": [
+    "src/sim/ai/hazard-perception.test.ts"
+  ],
+  "killedBy": [
+    "the decision functions solve from the PERCEIVED world, not the real one teal does the same, through its own wiring rather than a copy that could rot"
+  ]
+}

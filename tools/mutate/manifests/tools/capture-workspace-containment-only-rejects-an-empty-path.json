@@ -1,0 +1,15 @@
+{
+  "id": "capture-workspace-containment-only-rejects-an-empty-path",
+  "file": "tools/capture/paths.mjs",
+  "find": "  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {",
+  "replace": "  if (!rel) {",
+  "tests": [
+    "tools/capture/args.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The adversarial question canonicalising both sides invites: did comparing real locations weaken the check? This keeps the realpath calls and drops the parent-directory and absolute-path rejections, so any existing target is accepted. Fails exactly 2 of args.test.ts's 10: `rejects a workspace that only looks inside the checkout` (a `tmp` symlinked out of the root, which only the canonical comparison can see) and `rejects a workspace outside the checkout` (a plain sibling directory). The symlinked-root accept case and the other 7 pass under it, which is what makes the two rejection cases the guard's negative controls rather than decoration.",
+  "killedBy": [
+    "capture workspace containment rejects a workspace outside the checkout",
+    "capture workspace containment rejects a workspace that only looks inside the checkout"
+  ]
+}

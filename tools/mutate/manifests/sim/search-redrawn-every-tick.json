@@ -1,0 +1,14 @@
+{
+  "id": "search-redrawn-every-tick",
+  "file": "src/sim/ai/search.ts",
+  "find": "  const span = Math.floor(world.tick / AI_SEARCH_HOLD_TICKS);",
+  "replace": "  const span = world.tick;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/search.test.ts"
+  ],
+  "why": "The hold is the difference between a search and jitter. Issue #371 asks for headings held for a decision span; a fresh draw every tick satisfies every bound in search.test.ts except the hold itself, and produces a barrel that shivers rather than looks.",
+  "killedBy": [
+    "idle turret search heading holds ONE heading for a whole span, and does not hold it forever"
+  ]
+}

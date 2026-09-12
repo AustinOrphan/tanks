@@ -1,0 +1,15 @@
+{
+  "id": "level-switch-snap-inferred-from-round-tick",
+  "file": "src/render/entities.ts",
+  "find": "    const snap = replaced || prev.roundStartTick !== curr.roundStartTick;",
+  "replace": "    const snap = prev.roundStartTick !== curr.roundStartTick;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The sibling half of issue #531, in the signal `snap` and `enteredRound` now share. Reverting to the inference leaves `snap` blind to a level switch between two worlds that both still carry `createWorld`'s `roundStartTick: 1`, so the tank is lerped from the previous board's coordinates to the new spawn for a frame -- the exact streak the comment above the lerp claims to have covered -- and the player's entrance ring, keyed to the same flag, is skipped entirely on that transition while playing on every other level switch. Both consequences are pinned, because a fix to only one of them would look complete.",
+  "killedBy": [
+    "entity views \u2014 interpolation discontinuities snaps across an announced level switch, whose worlds agree on roundStartTick (#531)",
+    "spawn animation (#199) starts the entrance on an announced level switch, whose worlds agree on roundStartTick (#531)"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "escape-back-fires-with-no-layer",
+  "file": "src/game/hud.ts",
+  "find": "      if (e.repeat || layers.depth === 0) return;",
+  "replace": "      if (e.repeat) return;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "expect": "killed",
+  "why": "Escape is claimed by the HUD with nothing open. `back()` finds no layer, and the key never reaches the session: Escape stops pausing during play and stops resuming at Pause, everywhere, forever. hud.navigation.test.ts (244): both Escape cases, each pressing Escape once more with nothing open and expecting the session to see it. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "killedBy": [
+    "hud: Escape is Back while a layer is open (issue #318) Escape closes the top pane, restores the opener, and never reaches a bubble-phase window listener; with no pane it reaches it and changes no surface",
+    "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed"
+  ]
+}

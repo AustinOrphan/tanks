@@ -1,0 +1,12 @@
+{
+  "id": "identity-marker-flag-ignored-by-the-renderer",
+  "file": "src/game/loop.ts",
+  "find": "    identityMarker: deps.devFlags.identityMarker,",
+  "replace": "    identityMarker: null,",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Severs the dev flag from the renderer, so `?dev=1&identityMarker=shape` parses, validates, reports as ACCEPTED in the developer pane, and changes nothing on screen. That is the worst shape of failure for a feature whose entire purpose is to be turned on and compared -- the owner would conclude the candidate looks identical to the default rather than that it never ran. Invisible to every test of the marker geometry itself, which never goes through loop.ts. Killed by the threads-the-identityMarker-dev-flag case, which asserts BOTH arms: a wiring that hardcoded one style would pass a single-arm test."
+}

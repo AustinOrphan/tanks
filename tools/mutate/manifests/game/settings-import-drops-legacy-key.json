@@ -1,0 +1,12 @@
+{
+  "id": "settings-import-drops-legacy-key",
+  "file": "src/game/save.ts",
+  "find": "export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS, TOUCH_SETTINGS_KEY]);",
+  "replace": "export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS]);",
+  "expect": "killed",
+  "expectFailures": 3,
+  "why": "Narrows the IMPORT allow-list back to the export list, which is what makes an old save's touch preferences disappear on restore. This is the half that motivates two lists instead of one: the export list must NOT carry the legacy key and the import list MUST accept it. Killed by save.test.ts's set-equality assertion on SAVE_IMPORT_KEYS and by 'accepts an OLD export that still carries tanks.touch.v1'. 2 of 21. Re-measured 2026-08-29 for issue #250: a third test now kills it -- save.test.ts's 'the legacy touch key still migrates, in BOTH namespaces', which imports the key through a real namespaced adapter on each side. Growing a test file drifts this count even when the mutated file is untouched, which is why the entry is re-run whenever save.test.ts changes.",
+  "tests": [
+    "src/game/save.test.ts"
+  ]
+}

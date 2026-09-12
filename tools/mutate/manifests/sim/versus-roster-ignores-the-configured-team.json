@@ -1,0 +1,15 @@
+{
+  "id": "versus-roster-ignores-the-configured-team",
+  "file": "src/sim/arena.ts",
+  "find": "        if (mode === 'teams') tank.team = teams?.[i] ?? teamOf(i);",
+  "replace": "        if (mode === 'teams') tank.team = teamOf(i);",
+  "expect": "killed",
+  "why": "The versus roster falls back to the `slot % 2` derivation and ignores what the player chose -- which is issue #281's whole defect restored, and it goes SILENTLY: the board still loads, every tank still carries a team, and a 2v2 still looks like a 2v2. What breaks is that it is not the 2v2 the setup pane displayed. The mutation is invisible to any assertion that only checks `team` is defined, or that two teams exist, because the derivation produces exactly that. Killed by the pair in `arena.test.ts` that configures `[0, 0, 1, 2]` -- a THREE-team split the alternating derivation cannot produce at all, so agreement cannot be coincidental -- and by the sparse case, which pins that an unset slot still derives. Deliberately does NOT touch the campaign co-op stamp or the FFA path: FFA never stamps `Tank.team` (types.ts), which is why threading configured teams cannot move `BASELINE_HASH`, and a mutation that blurred that boundary would be testing a different claim. Scoped to arena.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/sim/arena.test.ts"
+  ],
+  "killedBy": [
+    "loadArena: mode-aware (n-player arc PR 4 -- FFA + teams) a CONFIGURED team overrides the slot % 2 derivation, per slot (issue #281)",
+    "loadArena: mode-aware (n-player arc PR 4 -- FFA + teams) falls back to the derivation for any slot with no configured team"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "route-host-release-leaves-the-slot-live",
+  "file": "src/game/route-host.ts",
+  "find": "          generation += 1;\n",
+  "replace": "          void 0;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Releasing the slot clears `live` but leaves the generation counter where it is, so `current()` still answers true for the session that just left. Only the seven click trampolines go quiet (they read `live` directly); everything guarded on the generation stays live on a session that no longer exists -- a late `setControllers` repaints the Controllers panel for a finished match, a late `openVersusSetup` opens the pane over the Main Menu, a second `detach()` re-runs the resets, and since step S8 the whole gameplay HUD facade keeps painting, so a frame arriving after a quit restores the dead match's topbar over the empty host's cleared one. Pinned with killedBy: the claim is that release retires the slot, not a population.",
+  "killedBy": [
+    "createRouteHost: releasing the slot gives the menu back its page shape goes inert on release: a second detach, and every late report, does nothing",
+    "createRouteHost: the slot's gameplay HUD drops a push from a session that has detached, with nothing holding the slot"
+  ]
+}

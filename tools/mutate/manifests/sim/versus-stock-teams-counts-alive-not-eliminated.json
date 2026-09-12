@@ -1,0 +1,12 @@
+{
+  "id": "versus-stock-teams-counts-alive-not-eliminated",
+  "file": "src/sim/world.ts",
+  "find": "  const teamsRemaining = new Set(players.filter((t) => !isVersusEliminated(t)).map((t) => t.team));",
+  "replace": "  const teamsRemaining = new Set(players.filter((t) => t.alive).map((t) => t.team));",
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "The teams analogue of versus-stock-ffa-counts-alive-not-eliminated, and a SEPARATE function with its own filter -- resolveStatusFfa's own fix does not cover this one, which is why it is a second entry rather than folded into the first. A 4-player teams fixture with one death per team does not discriminate the two rules either (2+ ALIVE members remain on the losing side's team regardless), which is why this is caught by only 1 of 25: the one-player-per-team (N=2) regression test built to force the same first-death-ends-it failure the FFA entry names.",
+  "tests": [
+    "src/sim/versus-modes.test.ts"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "practice-retry-carries-the-exhausted-lives",
+  "file": "src/game/loop.ts",
+  "find": "      if (sm.outcome?.kind === 'practice-result') {\n        switchTo(level);",
+  "replace": "      if (sm.outcome?.kind === 'practice-result') {\n        switchTo(level, driver.world.lives);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Rebuilds the right board with the wrong lives. `switchTo`'s `lives` argument is what a level ADVANCE carries -- the count that survived the level before it -- and on a retry after a loss that count is zero, so the rebuilt board is unplayable and the next death re-ends it. Practice builds with an independent full pool (`onLevelSelect`'s own \"independent fresh lives\"), and this is the only other site that builds a practice board. The descriptor, the identity and the run are all correct under this mutation, so only an assertion on the built lives can see it.",
+  "killedBy": [
+    "startGameWith: canonical session identity at the production boundary Practice a practice RETRY rebuilds the level it was on, still as practice"
+  ]
+}

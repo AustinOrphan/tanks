@@ -1,0 +1,14 @@
+{
+  "id": "menu-run-summary-leaks-off-the-main-menu",
+  "file": "src/game/hud.ts",
+  "find": "    const show =\n      shownState === 'main-menu' && campaignRun !== null && relaunchTarget !== 'versus-setup';",
+  "replace": "    const show = campaignRun !== null && relaunchTarget !== 'versus-setup';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "The run summary is context for the Main Menu's primary action and nothing else. On Pause and the outcome screens the same `.hud-panel` already says where the SESSION stands, and during practice the two legitimately disagree -- so this puts a campaign mission line over a board the run did not choose, contradicting the panel it is printed on.",
+  "killedBy": [
+    "hud: the Main Menu hierarchy (issue #226) summarises the active run above the action it describes, and only there"
+  ]
+}

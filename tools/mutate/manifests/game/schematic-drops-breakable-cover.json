@@ -1,0 +1,15 @@
+{
+  "id": "schematic-drops-breakable-cover",
+  "file": "src/game/arena-schematic.ts",
+  "find": "    rects: walls.map((wall) => ({",
+  "replace": "    rects: walls.filter((wall) => wall.kind === 'solid').map((wall) => ({",
+  "expect": "killed",
+  "tests": [
+    "src/game/arena-schematic.test.ts"
+  ],
+  "killedBy": [
+    "arenaSchematic draws the same cover the simulation builds, not a second grid walk",
+    "arenaSchematic gives every board both kinds of cover, so a card can tell them apart"
+  ],
+  "why": "Draws permanent cover only. Every card still shows a plausible board -- solid walls are the structure a player reads first -- while the one distinction the intent phrases talk about (\"destructible-heavy centre\", \"cover is mostly permanent\", \"few breakables\") is missing from the picture that is supposed to show it. This is the defect a card-shaped guard cannot catch: the canvas exists, has a box, and is drawn into."
+}

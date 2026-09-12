@@ -1,0 +1,15 @@
+{
+  "id": "difficulty-never-reaches-hazard-judgment",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  return AI_HAZARD_SPREAD / cfg.ai.estimationAccuracy;",
+  "replace": "  void cfg; return AI_HAZARD_SPREAD;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/hazard-competence.test.ts"
+  ],
+  "why": "Issue #223 criteria 4 and 5 live at the DECISION, not the profile. bot-difficulty.test.ts pins that the presets scale estimationAccuracy monotonically and stays entirely green against a build that then ignores it here -- every difficulty would judge mines identically while the preset table still looked correct. Measured at the time of writing: an easy bot believes it is safe inside the real kill radius on 18.79% of draws, normal 2.94%, hard 0.00%.",
+  "killedBy": [
+    "difficulty reaches hazard judgment makes an EASY bot misjudge a mine fatally more often than a HARD one",
+    "difficulty reaches hazard judgment narrows the band monotonically as difficulty rises"
+  ]
+}

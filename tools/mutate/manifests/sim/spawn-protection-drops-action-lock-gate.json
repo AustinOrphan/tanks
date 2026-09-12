@@ -1,0 +1,18 @@
+{
+  "id": "spawn-protection-drops-action-lock-gate",
+  "file": "src/sim/world.ts",
+  "find": "  const canAct = phase === 'live' && !isActionLocked(player, world.tick);",
+  "replace": "  const canAct = phase === 'live';",
+  "expect": "killed",
+  "why": "driveTank is the ONE site every kind==='player' tank's fire/mine input is consumed, human or bot (a bot-claimed slot's InputState, from ai/player-profile.ts's decidePlayerInput, is fed through this exact same applyPlayerInputs path in game/loop.ts) -- so dropping the isActionLocked half of canAct here reopens fire/mine for every shielded tank regardless of input source. Caught by 5 of the 12 cases in spawn-protection.test.ts: both human-path refusal tests (fire, mine), both bot-path refusal tests (fire, mine -- each paired with its own 'control' test proving the SAME decision fires when unshielded, so the fixture is not merely inert), and the coop-POOL-mode reachability test, which shows the gate was never mode-specific to begin with. The movement/aim/invincible/no-shield/shield-expired tests all survive unchanged, which is the point: this mutation should touch fire/mine only.",
+  "tests": [
+    "src/sim/spawn-protection.test.ts"
+  ],
+  "killedBy": [
+    "spawn protection reaches coop POOL mode too, an existing per-tank respawn path the revived tank cannot fire on the very tick it revives",
+    "the bot input path: the sim gate blocks a shielded bot exactly as it blocks a human, at the same choke point shielded: mine-laying is refused the same way when the bot is inclined to lay one",
+    "the bot input path: the sim gate blocks a shielded bot exactly as it blocks a human, at the same choke point shielded: the SAME bot decision still wants to fire, but the sim refuses it",
+    "the human input path: a shielded tank cannot fire or lay a mine fire is refused while shielded: no bullet, no fire event, cooldown NOT spent",
+    "the human input path: a shielded tank cannot fire or lay a mine mine-laying is refused while shielded: no mine, no mine-dropped event, cooldown NOT spent"
+  ]
+}

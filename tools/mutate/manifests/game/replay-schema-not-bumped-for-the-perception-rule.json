@@ -1,0 +1,14 @@
+{
+  "id": "replay-schema-not-bumped-for-the-perception-rule",
+  "file": "src/game/replay.ts",
+  "find": "export const REPLAY_SCHEMA = 4;",
+  "replace": "export const REPLAY_SCHEMA = 3;",
+  "why": "The other half of issue #492: adding a required ReplayMeta field WITHOUT bumping the schema, so a schema-3 trace recorded before the field existed is still accepted and replayed with the rule missing -- the exact silent divergence the field was added to stop, and the case the replay layer's no-migration policy answers by rejecting rather than defaulting. Invisible to every other assertion in the file, because `checkTrace` compares a trace's stamp against this same constant and the recorder writes it: the round-trip cases and the existing `REPLAY_SCHEMA + 1` rejection case all still pass at 3, measured at 0 of the 32 cases replay.test.ts held before the regression coverage. Killed only by the case that names the old version as a literal.",
+  "tests": [
+    "src/game/replay.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "checkTrace rejects a schema-3 trace, which predates the recorded perception rule (issue #492)"
+  ]
+}

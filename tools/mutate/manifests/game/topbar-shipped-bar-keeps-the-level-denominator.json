@@ -1,0 +1,16 @@
+{
+  "id": "topbar-shipped-bar-keeps-the-level-denominator",
+  "file": "src/game/hud.ts",
+  "find": "      levelNum.textContent = topbar.restoreDenominator\n        ? `${sequence.mission}/${sequence.missions}`\n        : String(sequence.mission);",
+  "replace": "      levelNum.textContent = `${sequence.mission}/${sequence.missions}`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "The ruling's second content decision undone for every player, and the plausible edit precisely because the result is the line this ternary replaced -- a reviewer tidying it back reads as a simplification and destroys three arms. The motive matters here: the denominator went so the bar does not reveal how long the campaign is, so this is not a cosmetic regression but the concealment reversed. MEASURED on this branch: killed, 3 of the 12 cases in the arm suite.",
+  "killedBy": [
+    "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+    "topbar: what each arm says carries no chip and no enemy count before a session lands -- the cascade this suite reads is live",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

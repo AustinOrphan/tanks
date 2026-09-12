@@ -12,19 +12,35 @@ by reading them back, not by a zero exit code. See the doc comment at the top of
 exists to catch.
 
 This package carries no manifest of its own: the manifest is project data, not part of
-the tool, and lives in the project that uses it (in this repo, one file per area under
-`tools/mutate/manifests/` -- `sim.json`, `game.json`, `render.json`, `input.json`,
-`presentation.json`, `audio.json`, `app.json` for `src/` root files, `tools.json` -- read
-as one set in filename order, wired up by the root `mutate` npm script; issue #505). An
-entry lives in the file of the area its mutated `file` belongs to, so a PR appends to
-its own area's file and two PRs in different areas never conflict; an id present in two
-files is refused with both paths named.
+the tool, and lives in the project that uses it. In this repo that is ONE FILE PER ENTRY,
+at `tools/mutate/manifests/<area>/<id>.json` -- `sim`, `game`, `render`, `input`,
+`presentation`, `audio`, `app` for `src/` root files, and `tools` -- read as one set, each
+level in filename order, wired up by the root `mutate` npm script.
+
+WHY ONE FILE PER ENTRY (issue #653). Issue #505 split the manifest into one file per AREA,
+which stopped two PRs in different areas conflicting. It could not stop two PRs in the SAME
+area conflicting, because every new entry appends to the same closing lines of the same
+file -- and with `game` at 429 entries and 557 KB, that was most of them. Five merge
+conflicts in a single session were all this shape, and none was a disagreement: both sides
+had appended.
+
+Being mechanical is what made it dangerous rather than harmless. Resolving it meant hand
+editing a half-megabyte file, often, where taking one side wholesale drops the other's
+entries and NOTHING FAILS -- the file stays valid JSON, the ids stay unique, and the only
+symptom is coverage that quietly went missing. One entry per file removes that by
+construction: two branches adding entries touch two different files. Two branches changing
+the SAME entry still conflict, loudly, which is the half worth keeping.
+
+An entry lives in the directory of the area its mutated `file` belongs to, and is named for
+its own id; an id present in two files is refused with both paths named. A file may hold a
+single entry object (what this repo ships) or an array of them -- the array form is kept so
+`--manifest` pointed at a scratch file outside the repo still works.
 
 ## Usage
 
 ```
-mutate                                    # tools/mutate/manifests/*.json under --root, all entries
-mutate --manifest path/to/manifest.json   # a different manifest: one file, or a directory of *.json files
+mutate                                    # tools/mutate/manifests/<area>/<id>.json under --root, all entries
+mutate --manifest path/to/manifest.json   # a different manifest: one file, or a directory (one level of area dirs)
 mutate --only some-id                     # named entries: repeatable, and `--only a,b` is the same
 mutate --jobs auto                        # the worktree pool: N serial harnesses, one per detached worktree
 mutate --report out.json                  # per-entry outcomes and failed test names, for tooling

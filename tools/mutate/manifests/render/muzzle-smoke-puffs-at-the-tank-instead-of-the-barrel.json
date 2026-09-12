@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-puffs-at-the-tank-instead-of-the-barrel",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      cl.origin.set(\n        owner.pos.x + cos * SHELL_MUZZLE_FORWARD,\n        BULLET_Y,\n        owner.pos.y + sin * SHELL_MUZZLE_FORWARD,\n      );",
+  "replace": "      cl.origin.set(owner.pos.x, BULLET_Y, owner.pos.y);",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Drops the muzzle offset, so the smoke rises out of the hull rather than out of the barrel. That is not cosmetic: the whole claim is that the GUN cycled, and a cloud centred on the tank says nothing about the weapon. The position is the same point bullets.ts hands a real `fire` event as its flash, so the sim's own muzzle plane is what is being discarded -- and since #536 this is on screen for every shot every tank fires, not only for a flagged player's refusal.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) leaves the MUZZLE, on the barrel centreline -- not the tank"
+  ]
+}

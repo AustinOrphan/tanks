@@ -1,0 +1,14 @@
+{
+  "id": "hud-versus-rows-drop-focus-on-re-render",
+  "file": "src/game/hud.ts",
+  "find": "      versusSlotRowsEl.appendChild(row);\n    }\n    restoreFocus();",
+  "replace": "      versusSlotRowsEl.appendChild(row);\n    }",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "A hotplug repaints every Versus Setup row; without the restore the focused role button is gone and focus falls to body.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the semantic action dispatcher (issue #494) focus survives a Versus Setup re-render on the same role button of the same row"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "ai-commit-any-threat-breaks",
+  "file": "src/sim/ai/commitment.ts",
+  "find": "  return vdot(held, avoid) < AI_COMMIT_EMERGENCY_DOT;",
+  "replace": "  return true;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/commitment.test.ts"
+  ],
+  "why": "Issue #222 asks that emergencies interrupt a held decision 'without making every shell or wall contact an immediate full reversal'. Treating ANY required escape as an emergency is the plausible-looking version of the rule that silently reinstates per-tick re-deciding for the whole time a tank is near a hazard -- which is where most reversals were measured. This mutates the MINE branch (the one that keeps a signed test); it is killed by the mine-shaped 'mildly off' fixture, which is deliberately not a bullet fixture, because the bullet branch returns exact opposite perpendiculars whose dot is only ever ~+1 or ~-1 and could never exercise that middle band.",
+  "killedBy": [
+    "commitMove does NOT break the hold for an escape only mildly off the committed heading"
+  ]
+}

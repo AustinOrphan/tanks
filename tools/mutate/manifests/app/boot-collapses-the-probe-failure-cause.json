@@ -1,0 +1,12 @@
+{
+  "id": "boot-collapses-the-probe-failure-cause",
+  "file": "src/boot.ts",
+  "find": "throw new UnsupportedRenderError(shell.render.failure ?? 'no-webgl2');",
+  "replace": "throw new UnsupportedRenderError('no-webgl2');",
+  "expect": "killed",
+  "expectFailures": 2,
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "Throws the right TYPE with the wrong CAUSE: every unsupported boot reports `no-webgl2`, including the `probe-failed` case where the probe could not even ask -- a locked-down or non-DOM host. This is the distinction issue #470 asks for, and issue #325's branded screen is the consumer that would read it, so collapsing it here tells that screen to blame the GPU for a document that never let the question be asked. Invisible to every count- and screen-level assertion around it: the same error class still reaches `reportError`, the same message still paints, and only a case that drives a NON-default failure and reads `.failure` back off the thrown error can see it. 1 of 43 in the scoped run -- 'reports a typed error carrying which probe branch answered', which is the only case in boot.test.ts that drives `{ webgl2: false, failure: 'probe-failed' }`. Its sibling 'distinguishes the two failures rather than collapsing them' keeps passing by construction, because it drives the `no-webgl2` side that this mutation hardcodes; the pair is what makes the assertion a real 2-way discrimination rather than a single-value echo. expectFailures counts that scoped run only. COUNT REMEASURED at 2 of 73 by issue #325. It was 1 while the probe's two failure branches differed only in the typed error reaching `reportError`; #325 gave them DIFFERENT PLAYER COPY, so the new 'tells a BLOCKED probe apart' case fails alongside the original one. See startup-failure-collapses-the-blocked-probe, which mutates the same distinction one layer up."
+}

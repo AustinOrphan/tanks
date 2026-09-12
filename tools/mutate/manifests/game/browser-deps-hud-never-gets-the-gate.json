@@ -1,0 +1,14 @@
+{
+  "id": "browser-deps-hud-never-gets-the-gate",
+  "file": "src/game/loop.ts",
+  "find": "        developerMode,\n",
+  "replace": "        developerMode: false,\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "killedBy": [
+    "createBrowserDeps: leaving developer mode (issue #243) turns the gate on from the URL and binds an Exit that strips every developer parameter"
+  ],
+  "why": "The gate reaches `GameDeps` (the entry above pins that) but never reaches the HUD, so `?dev=1` produces a page with no developer UI at all -- no indicator, no menu entry -- while every non-UI consumer still believes developer mode is on. The two bindings are separate lines and the sibling entry cannot see this one. Measured while landing this: the exit half of the scoped test passes under this mutation, because Exit's visibility depends on the seam being BOUND and not on the gate, so the assertion that catches it has to be about the indicator being on screen."
+}

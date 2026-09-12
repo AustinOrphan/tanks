@@ -1,0 +1,15 @@
+{
+  "id": "next-level-resets-the-run-lives",
+  "file": "src/game/loop.ts",
+  "find": "        switchTo(next, driver.world.lives);",
+  "replace": "        switchTo(next);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: level progression advances one level on an intermediate win, carrying the surviving lives",
+    "one run, from Launch to the next mission (issue #323) carries one campaign run through every phase without losing its place"
+  ],
+  "why": "Drops the lives argument, so `switchTo` falls back to a full pool and every mission boundary silently refills the run -- a campaign that cannot be lost. Two tests catch it and they catch it differently, which is the point of naming both: the first drives the win directly and reads the next board's lives; the second is issue #323's chained scenario, where the life was spent by a REAL death several hops earlier and has to survive a pause, a resume, an ending and a navigation to be missing here. Neither is redundant -- one pins the arithmetic at the boundary, the other pins that the run is the same run across the whole sequence."
+}

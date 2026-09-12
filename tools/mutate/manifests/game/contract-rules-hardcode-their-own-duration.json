@@ -1,0 +1,15 @@
+{
+  "id": "contract-rules-hardcode-their-own-duration",
+  "file": "src/game/hud.css",
+  "find": "  animation: ui-surface-in var(--ui-transition-duration) var(--ui-transition-ease);",
+  "replace": "  animation: ui-surface-in 150ms cubic-bezier(0.2, 0, 0, 1);",
+  "expect": "killed",
+  "why": "The stylesheet half of criterion 1: the entering rule stops reading the tokens and writes the numbers itself. Nothing about the animation changes on screen -- same 150ms, same curve -- which is precisely why a screenshot, a frame capture and every behavioural timing assertion in hud.test.ts stay green: hud.ts reads the TOKEN for its timer, and the token is still declared. What breaks is the criterion, silently: the leaving rule and the entering rule now have separate definitions, and moving `--ui-transition-duration` moves only one of them. `declares the duration and the easing in named places only, and nowhere as a literal` is the case that measures it, matching a literal duration and a literal `cubic-bezier` inside each contract rule's own body, with a preceding null-check so a renamed rule fails rather than vacuously passes. That case was renamed for issue #542: it used to COUNT declarations of the token and now names the selectors allowed to carry one, because `fade-long` has to declare a duration and counting would have forced that number into TypeScript -- the very drift criterion 1 forbids. The half this entry rests on is unchanged. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the one application-transition definition (issue #364) declares the duration and the easing in named places only, and nowhere as a literal",
+    "hud.css: the one application-transition definition (issue #364) gives both contract rules their duration and easing from the tokens, live"
+  ]
+}

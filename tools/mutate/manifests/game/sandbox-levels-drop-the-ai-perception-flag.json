@@ -1,0 +1,14 @@
+{
+  "id": "sandbox-levels-drop-the-ai-perception-flag",
+  "file": "src/game/levels.ts",
+  "find": "            muzzleClearsTanks: !flags.muzzleInside,\n            aiTargetPerception: flags.aiPerception ?? undefined,\n",
+  "replace": "            muzzleClearsTanks: !flags.muzzleInside,\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/levels.test.ts"
+  ],
+  "why": "The sandbox sibling of levels-drop-the-ai-perception-flag: createLevelSystem's sandbox branch threads `?dev=1&aiPerception=los` into createSandboxWorld's trailing positional (issue #472), the same composition the campaign entry pins for createWorldFor. One entry per builder because each is its own closure with its own argument list -- the campaign entry's mutation leaves this branch untouched and vice versa (measured: each kills exactly its own branch's cases and nothing else). Caught by 1 of the 56 cases in levels.test.ts: 'the sandbox branch wires aiPerception too', whose in-test unset control (`full`) survives the mutation by design. Asked for by the PR #491 review, which wanted the forward pinned per builder rather than for the campaign branch alone.\n\nRE-ANCHORED at issue #493, which replaced this builder's positional argument list with one `WorldForInit` object: the old `find` quoted the positional run and would now report failed-to-apply, which is the silent form of an entry that has stopped measuring anything. The MUTATION is unchanged -- the flag still stops reaching the world -- and so is the case that kills it.",
+  "killedBy": [
+    "createLevelSystem: the sandbox the sandbox branch wires aiPerception too (issue #472): the dev experiment used to reach the sandbox through loop.ts, so it still must"
+  ]
+}

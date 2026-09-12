@@ -1,0 +1,24 @@
+{
+  "id": "clone-re-resolves-the-rules",
+  "file": "src/sim/world.ts",
+  "find": "    rules: world.rules,\n",
+  "replace": "    rules: resolveWorldRules(),\n",
+  "expect": "killed",
+  "tests": [
+    "src/sim/world.test.ts",
+    "src/sim/ai/target-selection.test.ts",
+    "src/sim/versus-respawn.test.ts",
+    "src/sim/versus-modes.test.ts",
+    "src/sim/coop-attempts.test.ts",
+    "src/sim/coop-respawn.test.ts"
+  ],
+  "why": "cloneWorld carries World.rules as ONE frozen reference (issue #472) -- never re-resolved, never enumerated. Dropping the line outright is loud (`draft.rules.mode` throws on the first read in stepInputs), so the SILENT form is modelled instead: a clone that re-resolves the rules from the shipped defaults every tick, which is exactly what #471's per-field omission looked like from outside -- a rule quietly back at its default from tick 1, with nothing thrown. Subsumes the two per-field clone entries it replaces, clone-drops-the-ai-target-perception and versus-respawn-clone-drops-arena-geometry: with one atomic reference there is no per-field line left to drop. Caught by 6 of the 103 cases across the six files: world.test.ts's reference-identity clone case and its 5-tick WORLD_RULE_KEYS sweep (the sweep is the one that grows on its own when a rule is added), target-selection.test.ts's 'the bound survives a REAL TICK' (aiTargetPerception back to 'full', so a wall-blind brown acquires through the wall), versus-modes.test.ts's 'cloneWorld carries both' (mode/friendlyFire back to campaign-coop/false), coop-attempts.test.ts's explicit-false pool-mode case (coopAttempts back to true) and versus-respawn.test.ts's end-to-end stepInputs respawn (arenaGeometry back to null, so the revived tank lands on its authored spawn). coop-respawn.test.ts contributes 0 of its cases by design -- its pool fixtures enter through resolveStatus/stepRespawns directly and never touch the clone, the same blind spot versus-respawn-always-falls-back-to-authored-spawn's own why names.",
+  "killedBy": [
+    "World.coopAttempts: defaults to true createWorld honors an explicit false (pool mode)",
+    "World.mode: defaults to campaign-coop, cloneWorld carries it createWorld honors an explicit mode/friendlyFire, cloneWorld carries both",
+    "cloneWorld carries the rules as ONE object: the same reference, every rule intact (population: all WORLD_RULE_KEYS)",
+    "committed opponent selection under the dev flag, the bound survives a REAL TICK -- the clone has to carry it",
+    "step (skeleton) preserves every resolved rule exactly across repeated real stepInputs ticks (population: all WORLD_RULE_KEYS, 5 ticks)",
+    "versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present end to end through the full pipeline (stepInputs): the revived tank is alive and off its authored spawn"
+  ]
+}

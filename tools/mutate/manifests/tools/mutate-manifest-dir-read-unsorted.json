@@ -1,0 +1,14 @@
+{
+  "id": "mutate-manifest-dir-read-unsorted",
+  "file": "tools/mutate/run.mjs",
+  "find": "  for (const name of readdirSync(path).sort()) {",
+  "replace": "  for (const name of readdirSync(path).reverse()) {",
+  "why": "Directory order is filesystem order, which differs between machines; the set must be read by name so the pool's partition, `--report` files and the log are the same everywhere. RE-ANCHORED for issue #653, which nested the layout one level deeper (`manifests/<area>/<id>.json`) and rewrote the reader as a walk. The outer sort is the one this mutates; the inner sort over an area's entries is covered by the same test, which asserts the flattened id order across both levels.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "readManifestFiles / readManifest reads every *.json in a directory sorted by name, ignores other files, and reads a single file as itself"
+  ]
+}

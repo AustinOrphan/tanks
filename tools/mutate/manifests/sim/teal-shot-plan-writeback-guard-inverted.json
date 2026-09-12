@@ -1,0 +1,15 @@
+{
+  "id": "teal-shot-plan-writeback-guard-inverted",
+  "file": "src/sim/ai/index.ts",
+  "find": "    if (decision.nextShotPlan !== undefined) {",
+  "replace": "    if (decision.nextShotPlan === undefined) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/dispatch.test.ts"
+  ],
+  "why": "Pins the WIRING and the polarity of 'no opinion' in one mutation, the way the aim-hold entry pins its own. Inverted, teal's plan is never persisted (the countdown never advances, so the span never elapses) while brown's and grey's decisions -- which never evaluate a plan -- would clear a plan the tank still holds. teal.test.ts probes tealDecision directly and stays entirely green either way, so only a dispatcher-level test can catch this.",
+  "killedBy": [
+    "shot-plan write-back (issue #332) a decision with NO shot plan leaves an existing one untouched",
+    "shot-plan write-back (issue #332) stepAi persists the shot plan and its countdown onto the tank"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "barrel-recoil-lunges-forward-instead-of-recoiling",
+  "file": "src/render/barrel-recoil.ts",
+  "find": "    return KICK * (1 - k) * Math.abs(Math.sin(k * Math.PI * 2 * CYCLES));",
+  "replace": "    return KICK * (1 - k) * Math.sin(k * Math.PI * 2 * CYCLES);",
+  "expect": "killed",
+  "tests": [
+    "src/render/barrel-recoil.test.ts"
+  ],
+  "why": "Drops the `abs`, so the second half of every cycle drives the barrel FORWARD along the bore -- the gun lunging at its target. Recoil is a backward motion by definition; a gun that thrusts out reads as something else entirely, and since #526 this plays on every shot, so the wrong sign would be on screen constantly rather than only on a refusal.",
+  "killedBy": [
+    "barrel recoil (issue #526, parent #356) recoils BACKWARD along the bore, never forward",
+    "barrel recoil (issue #526, parent #356) STUTTERS -- two decaying bumps, not one push"
+  ]
+}

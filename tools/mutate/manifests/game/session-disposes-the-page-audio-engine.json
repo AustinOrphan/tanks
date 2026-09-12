@@ -1,0 +1,14 @@
+{
+  "id": "session-disposes-the-page-audio-engine",
+  "file": "src/game/loop.ts",
+  "find": "    releaseAudio: () => {},",
+  "replace": "    releaseAudio: (engine) => engine.dispose(),",
+  "expect": "killed",
+  "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. The find string is the EMPTY release issue #485 left behind: the page owns the bed now, so the correct browser answer is to touch the engine at all, and both wrong answers -- disposing it, and the pre-#485 stopMusic that is its own entry -- are mutations of the same line.",
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "killedBy": [
+    "createBrowserDeps: the page-owned audio wiring (issue #317) hands every session the SAME engine, and releases it by touching NOTHING"
+  ]
+}

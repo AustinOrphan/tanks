@@ -1,0 +1,14 @@
+{
+  "id": "duel-board-loses-its-rotational-symmetry",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "\"...#.........##....##xx....\"",
+  "replace": "\"...#.........##....###x....\"",
+  "expect": "killed",
+  "why": "One cell of vs-duel-01's flank turned from destructible to solid, breaking the 180-degree rotation its notes claim (issue #271). A single cell is the point: the board still loads, still validates, still has distinct and concealed spawns at N=2, still passes clearance and connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and a screenshot of a 27x21 board would not show one flipped cell. What breaks is the FAIRNESS claim, which before this branch was carried only by prose in arenas.json: one player now has a wall where the other has a breachable, so the two halves are no longer the same board turned around. `every cell has the same wall kind as its partner through the centre` is the case that measures it, comparing wall KIND rather than raw characters so the P/B spawn pair (partners by position, different letters by schema) does not have to be excluded by hand. Its sibling `is NOT symmetric under a plain mirror` is the negative control keeping the rotation claim from being satisfied by a board that is merely mirrored. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+  "tests": [
+    "src/sim/versus-catalog-rules.test.ts"
+  ],
+  "killedBy": [
+    "vs-duel-01: the duel board is its own 180-degree rotation every cell has the same wall kind as its partner through the centre"
+  ]
+}

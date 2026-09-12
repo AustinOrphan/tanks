@@ -1,0 +1,15 @@
+{
+  "id": "render-capability-no-canvas-reads-as-no-webgl2",
+  "file": "src/game/render-capability.ts",
+  "find": "    if (canvas == null) return Object.freeze({ webgl2: false, failure: 'probe-failed' });",
+  "replace": "    if (canvas == null) return Object.freeze({ webgl2: false, failure: 'no-webgl2' });",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/game/render-capability.test.ts"
+  ],
+  "why": "The OTHER site that answers `probe-failed`, and the sibling of `render-capability-could-not-ask-reads-as-no-webgl2`. A host that produced no canvas has said nothing about WebGL, so it is the same 'could not ask' case as a throw -- reporting `no-webgl2` here blames the GPU for a host that never handed over an element to ask with. The two sites are one line apart and return byte-identical text, which is why the sibling entry has to anchor on its leading newline and indentation to stay unambiguous, and why neither entry can stand in for the other: this pair exists so that BOTH classification sites carry coverage rather than one being assumed from the other. 1 of 14 in the scoped run -- 'reports probe-failed when the host produces no canvas at all'. The other two `probe-failed` cases keep passing: 'reports probe-failed when createElement itself throws' and 'reports probe-failed, not no-webgl2, when getContext throws' both route to the catch site this entry does not touch. expectFailures counts that scoped run only.",
+  "reads": [
+    "package.json"
+  ]
+}

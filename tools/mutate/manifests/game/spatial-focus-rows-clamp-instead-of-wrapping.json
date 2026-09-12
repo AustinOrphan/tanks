@@ -1,0 +1,14 @@
+{
+  "id": "spatial-focus-rows-clamp-instead-of-wrapping",
+  "file": "src/game/spatial-focus.ts",
+  "find": "  const target = rows[(rowIdx + (forward ? 1 : -1) + rows.length) % rows.length];",
+  "replace": "  const target = rows[Math.min(Math.max(rowIdx + (forward ? 1 : -1), 0), rows.length - 1)];",
+  "why": "Up from the first row must reach the last and Down from the last the first; clamping makes the top and bottom rows dead ends.",
+  "tests": [
+    "src/game/spatial-focus.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "spatial-focus: every move lands somewhere Up from the first row wraps to the last, Down from the last wraps to the first"
+  ]
+}

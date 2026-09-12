@@ -1,0 +1,14 @@
+{
+  "id": "practice-this-level-offered-on-every-ending",
+  "file": "src/game/hud.ts",
+  "find": "      !(copy?.practiceThisLevel ?? false) || !levelChoice || statusData === null,",
+  "replace": "      !levelChoice || statusData === null,",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) offers Practice This Level on NO other ending, and not without a level to name"
+  ],
+  "why": "Drops the table term, so every outcome screen offers Practice This Level -- including the two practice endings, where it duplicates Retry under a second name, and Campaign Over, where the level was not cleared at all. The other two terms stay, so the button still hides without a level to name: a mutation that removed the whole gate would be caught by more tests and prove less."
+}

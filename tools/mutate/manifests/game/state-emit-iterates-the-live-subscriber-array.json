@@ -1,0 +1,12 @@
+{
+  "id": "state-emit-iterates-the-live-subscriber-array",
+  "file": "src/game/state.ts",
+  "find": "    for (const cb of [...subscribers]) cb(current);",
+  "replace": "    for (const cb of subscribers) cb(current);",
+  "tests": [
+    "src/game/state.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 1,
+  "why": "`emit` walks the live array, so a subscriber that unsubscribes a sibling mid-emit -- a session disposing inside a state change -- shifts the array under the loop and the subscriber after the removed one is skipped for that change. 1 of 39 in state.test.ts: the mid-emit case, whose third subscriber is skipped under the live-array walk."
+}

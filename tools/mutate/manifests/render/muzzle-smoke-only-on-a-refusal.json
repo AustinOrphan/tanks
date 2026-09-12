@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-only-on-a-refusal",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "      if (e.type !== 'fire' && e.type !== 'fire-blocked') continue;",
+  "replace": "      if (e.type !== 'fire-blocked') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Reverts issue #536's inversion, leaving the puff as the refusal-only cue it was as #356's `smoke` arm. That is the SHAPE A READER EXPECTS from the file's history, which is what makes it worth pinning: a refusal reads as smoke coming out WRONG only because smoke is what every ordinary shot already produces, so a puff that appears exclusively when a shot is refused is a cue to be learned rather than a spoiled version of something familiar -- the exact design the owner ruled against, and the same reversion barrel-recoil-only-on-a-refusal guards for the recoil.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) puffs on a SHOT and on a REFUSAL alike -- that is the whole ruling"
+  ]
+}

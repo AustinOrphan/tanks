@@ -1,0 +1,14 @@
+{
+  "id": "ai-turret-accel-raw-angle-difference",
+  "file": "src/sim/ai/turret-accel.ts",
+  "find": "  const err = angleDelta(current, target);",
+  "replace": "  const err = target - current;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/turret-accel.test.ts"
+  ],
+  "why": "The error must be the SHORTEST arc. A raw subtraction sends a turret tracking through due west most of a full turn the wrong way, because an angle a hair under +pi and one a hair over -pi read as 6.26 radians apart rather than 0.02.",
+  "killedBy": [
+    "accelSlew takes the short way round the +/-pi seam"
+  ]
+}

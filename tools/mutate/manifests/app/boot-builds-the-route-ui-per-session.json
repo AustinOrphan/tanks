@@ -1,0 +1,12 @@
+{
+  "id": "boot-builds-the-route-ui-per-session",
+  "file": "src/boot.ts",
+  "find": "      routeHost.dispose();",
+  "replace": "      void routeHost;",
+  "expect": "killed",
+  "expectFailures": 4,
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "The page teardown stops disposing the route UI, so the HUD's listeners and the Customize preview's WebGL context outlive the document. The same class as the teardown hole `boot.ts`'s own `pagehide` comment was written for -- and the same reason it is worth an entry: nothing observable changes for the player, and the leak only shows up as a page that will not let go. 1 of 50 in the scoped run, 'disposes it exactly once when the PAGE goes away, after the session'. The bfcache case asserts ZERO disposals and so keeps passing, which is what makes the pair a two-way check rather than a one-directional one. COUNT RE-MEASURED for issue #428: 1 -> 3, because the #428 suite asserts the route UI is built exactly once on an empty boot and after a failed start, both of which also fail when it is never disposed. The failing SET was compared, not the number renumbered. COUNT RE-MEASURED for issue #429: 3 -> 4, because boot.test.ts gained the round-trip suite, one of whose cases asserts the page route UI is disposed exactly once by the teardown after a return. The failing SET was compared, not the number renumbered."
+}

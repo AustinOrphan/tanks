@@ -1,0 +1,15 @@
+{
+  "id": "topbar-arm-cannot-restore-the-enemy-count",
+  "file": "src/game/hud.ts",
+  "find": "    if (topbar.restoreEnemies && kind !== 'versus') {\n      enemyStatEl.classList.remove('hud-campaign-stat--hidden');\n    }\n    if (statusData && statusData.kind !== 'versus') {",
+  "replace": "    if (statusData && statusData.kind !== 'versus') {",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "The other direction, and the one the ruling made load-bearing: `full` stops being the pre-ruling bar. Three arms -- `full`, `mode-chips` and `denominator-only` -- silently lose the enemy count, so the way back to what shipped before #552 no longer exists and a report of \"the old bar was better\" cannot be checked against anything. Nothing outside the arm suite notices, because every other HUD case now runs on the shipped bar where the count is gone by design. MEASURED on this branch: killed, 2 of the 12 cases in the arm suite -- and by only two, which is the point: no case outside it looks at a bar this mutation changes.",
+  "killedBy": [
+    "topbar: `full` is the pre-ruling bar reproduces the bar `origin/main` renders, at every session, class for class",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

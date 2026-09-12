@@ -1,0 +1,14 @@
+{
+  "id": "status-pushed-again-for-an-unchanged-projection",
+  "file": "src/game/loop.ts",
+  "find": "    const key = JSON.stringify(status);\n    if (key === lastStatusKey) return;\n    lastStatusKey = key;",
+  "replace": "    const key = JSON.stringify(status);\n    lastStatusKey = key;",
+  "expect": "killed",
+  "why": "Drops the topbar's no-thrash guard. `refreshTopbar` runs from `onSimulated`, which fires on EVERY 'playing' frame unconditionally at up to 60/s, and the projection it pushes carries a stock strip whose render rebuilds one DOM element per slot -- so without this guard a live versus match repaints the strip sixty times a second for numbers that move a handful of times a round. Nothing about the rendered result changes, which is exactly why it needs an entry: every visibility, content and tint assertion in the suite passes under it. The guard generalises the per-stocks one that issue #324's step S6 replaced, and the case that measures it drives REAL shots through the sim across several frames rather than fabricating quiet ones.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the active campaign run (issues #153/#152) the in-match stock readout (Task 6, spec \u00a73a) firing (an event, but no stock change) across several frames does not re-push the status beyond the one triggering call"
+  ]
+}

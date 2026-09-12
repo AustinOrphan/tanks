@@ -1,0 +1,17 @@
+{
+  "id": "render-respawn-teleport-applied-to-every-tank",
+  "file": "src/render/entities.ts",
+  "find": "      const revived = !!prevT && !prevT.alive;",
+  "replace": "      const revived = true;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The over-correction, and the reason the teleport is read per tank rather than raised into the world-level `snap` beside `roundStartTick`: snapping unconditionally freezes every tank in the arena onto its current-tick pose, so nothing in the game interpolates at all and motion becomes a 60 Hz stutter. It is invisible to any test that renders a single alpha or a single tank, which is what `snaps only the revived tank: the other player keeps interpolating on the same sync` exists for -- and `interpolates normally within a round` catches the same thing from the pre-#239 side of the file.",
+  "killedBy": [
+    "entity views \u2014 a stock respawn snaps to the selected spawn point (#239) snaps only the revived tank: the other player keeps interpolating on the same sync",
+    "entity views \u2014 interpolation discontinuities interpolates normally within a round",
+    "shell geometry flies at the height of the barrel that fires it",
+    "tank geometry seats the turret ON the hull rather than sinking it in"
+  ]
+}

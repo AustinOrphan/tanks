@@ -1,0 +1,19 @@
+{
+  "id": "menu-replaces-a-run-without-asking",
+  "file": "src/game/hud.ts",
+  "find": "    if (!confirmsNewCampaign()) {\n      startNewCampaign();\n      return;\n    }\n    openLayer('confirm-new-campaign', newGameBtn);",
+  "replace": "    startNewCampaign();",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Issue #226's acceptance criterion: 'starting a replacement campaign requires confirmation only when an active run would be lost'. Without the gate the tertiary 'Start New Campaign' deletes the run on one click, from a button sitting directly under the Continue that describes it -- the single most destructive thing the Main Menu can do, and silent from every other angle, since the run store write happens inside the session the click creates.",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) is asked only when an active run would be lost",
+    "hud: the replace-run confirmation (issue #226) names the run it would replace",
+    "hud: the replace-run confirmation (issue #226) Cancel starts nothing and returns to the menu; Confirm starts exactly one campaign",
+    "hud: the replace-run confirmation (issue #226) is a BLOCKING layer: no route opens under an unanswered question",
+    "hud: the replace-run confirmation (issue #226) Back cancels it, and a surface change dismisses it rather than letting it outlive the menu",
+    "hud: the replace-run confirmation (issue #226) puts the safe answer first, so a blind Confirm cannot delete a run"
+  ]
+}

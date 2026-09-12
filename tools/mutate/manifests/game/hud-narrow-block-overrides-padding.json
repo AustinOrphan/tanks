@@ -1,0 +1,14 @@
+{
+  "id": "hud-narrow-block-overrides-padding",
+  "file": "src/game/hud.css",
+  "find": "    --hud-topbar-pad-y: 6px;\n    --hud-topbar-pad-x: 8px;",
+  "replace": "    padding: 6px 8px;",
+  "expect": "killed",
+  "why": "The trap the custom properties exist to remove, and the one a presence-only assertion cannot see: the base rule still carries every env(safe-area-inset-*) it ever did, so 'the topbar insets itself' still reads as true -- but a padding SHORTHAND in a later @media wins outright, and this one matches at 360px, which is a phone. Exactly one test fails, and it is the one written for this: 'lets no later rule quietly override the safe-area insets'.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole lets no later rule quietly override the safe-area insets"
+  ]
+}

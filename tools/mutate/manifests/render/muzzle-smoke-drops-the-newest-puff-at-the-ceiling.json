@@ -1,0 +1,14 @@
+{
+  "id": "muzzle-smoke-drops-the-newest-puff-at-the-ceiling",
+  "file": "src/render/muzzle-smoke.ts",
+  "find": "        const oldest = active.shift();\n        if (!oldest) return null;\n        for (const sprite of oldest.billows) sprite.visible = false;\n        cl = oldest;",
+  "replace": "        return null;",
+  "expect": "killed",
+  "tests": [
+    "src/render/muzzle-smoke.test.ts"
+  ],
+  "why": "Refuses the new puff at the cloud ceiling instead of recycling the oldest -- the obvious way to write the bound, and the way this was written until review. It drops smoke from the shot the player just fired and is watching, while a nearly-faded cloud from half a second ago keeps its slot. Only an assertion that identifies the NEWEST cloud can see it: nothing in that test calls `update`, so every cloud still sits at its birth opacity and a peak-opacity check would pass either way. The refusal's near-black tint against the shot's grey is what makes the newest identifiable.",
+  "killedBy": [
+    "muzzle smoke (issue #536, parent #356) recycles the OLDEST cloud at budget, so the newest puff always survives"
+  ]
+}

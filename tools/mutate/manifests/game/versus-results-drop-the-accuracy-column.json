@@ -1,0 +1,14 @@
+{
+  "id": "versus-results-drop-the-accuracy-column",
+  "file": "src/game/hud.ts",
+  "find": "      .map(([label, k, d, acc]) =>\n        `<tr><th scope=\"row\">${label}</th><td>${k}</td><td>${d}</td><td>${acc}</td></tr>`)",
+  "replace": "      .map(([label, k, d]) =>\n        `<tr><th scope=\"row\">${label}</th><td>${k}</td><td>${d}</td></tr>`)",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the ffa results line, per-slot kills/deaths"
+  ],
+  "why": "Drops the per-player accuracy the owner asked for, leaving the header row promising a column the body does not fill -- a table whose heading and rows disagree, which reads as a rendering bug rather than a missing feature. The killers assert rows of CELLS, so a body row short of a cell fails; a `textContent` comparison would not have noticed. RE-ANCHORED for issue #629, which added scope=\"row\" and wrapped the arrow body onto its own line; the row shape this entry removes is unchanged."
+}

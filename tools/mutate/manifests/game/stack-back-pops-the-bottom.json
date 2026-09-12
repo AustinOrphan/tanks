@@ -1,0 +1,12 @@
+{
+  "id": "stack-back-pops-the-bottom",
+  "file": "src/game/navigation.ts",
+  "find": "      return entries.pop() ?? null;",
+  "replace": "      return entries.shift() ?? null;",
+  "tests": [
+    "src/game/navigation.test.ts"
+  ],
+  "expect": "killed",
+  "expectFailures": 2,
+  "why": "`pop()` reads from the bottom of the stack with `shift()`, so Back closes the layer UNDER the one on screen: with Records open over Settings the player's Back dismisses Settings while Records stays, and a confirmation's Back removes the route it was raised over while the confirmation stays up. A plain LIFO pop is the entire mechanism behind the issue's \"Back removes one overlay before one route\", so this is the mutation that breaks that guarantee directly. Fails 2 of 15 in navigation.test.ts: `back pops the topmost layer, LIFO: [route a, route b] pops b then a` and `an overlay above a route is removed before the route, and each pop carries its own recorded origin and restore`, each at its first `pop()` assertion."
+}

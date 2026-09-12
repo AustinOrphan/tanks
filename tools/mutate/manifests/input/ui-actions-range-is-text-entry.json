@@ -1,0 +1,17 @@
+{
+  "id": "ui-actions-range-is-text-entry",
+  "file": "src/input/ui-actions.ts",
+  "find": "return TEXT_INPUT_TYPES.has(field.type.toLowerCase());",
+  "replace": "return TEXT_INPUT_TYPES.has(field.type.toLowerCase()) || field.type === 'range';",
+  "expect": "killed",
+  "why": "A range slider is not text entry; treating it as one swallows Escape and the hotkeys while the volume slider is focused.",
+  "tests": [
+    "src/input/ui-actions.test.ts",
+    "src/input/input.test.ts"
+  ],
+  "killedBy": [
+    "consumesKey a range input (the volume slider) keeps only the keys that operate it",
+    "createInputController \u2014 focus does not steal the tank still drives after the player has used a HUD control",
+    "isTextEntry is false for a range, checkbox or button-typed input, a button, a select, and a plain div"
+  ]
+}

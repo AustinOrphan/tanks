@@ -1,0 +1,20 @@
+{
+  "id": "topbar-shipped-bar-never-names-the-kind",
+  "file": "src/game/hud.ts",
+  "find": "    if (kind !== null) practiceChip.textContent = modeChipLabels[kind];",
+  "replace": "    if (kind !== null) practiceChip.textContent = modeChipLabels.practice;",
+  "expect": "killed",
+  "tests": [
+    "src/game/topbar-treatment.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The chip stops being a FIELD and goes back to a fixed word, while still showing on every kind -- so a campaign run and a versus match both announce PRACTICE. Worse than the pre-ruling bar, which at least only said it where it was true, and exactly the failure the owner's \"I like the chips\" cannot survive: the chip that names the board names the wrong one. It also removes the one write that makes a Levels pick change the chip mid-session. MEASURED on this branch: killed, 6 of the 47 cases in the two scoped files.",
+  "killedBy": [
+    "hud: campaign Lives/Enemies stats hidden during versus (issue #282) the chip names whichever kind is live, and is DOWN with no session -- the control that stops it being decoration",
+    "topbar: the two versus shapes, which question 5 conflated drops it on the shipped bar, where the VS chip takes that slot",
+    "topbar: what each arm says carries no chip and no enemy count before a session lands -- the cascade this suite reads is live",
+    "topbar: what each arm says gives Practice the chip it already had, and exactly one of it",
+    "topbar: what each arm says labels the kind it is actually showing, and labels nothing when no session is live",
+    "topbar: what each arm says reads exactly the comparison table, for every arm at every session"
+  ]
+}

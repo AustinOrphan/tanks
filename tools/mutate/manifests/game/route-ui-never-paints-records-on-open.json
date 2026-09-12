@@ -1,0 +1,16 @@
+{
+  "id": "route-ui-never-paints-records-on-open",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onRecordsOpen(paintRecords);\n",
+  "replace": "  void paintRecords;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The page stops painting Records when the page is opened, which since issue #324's step S5 is the ONLY time anything paints it: the gameplay session's per-frame push is gone, and the two tables re-render from the HUD's own retained copy. The visible result is a Records page frozen at whatever the reset buttons last wrote -- zeros on a fresh page, however much has been played since. Silent otherwise: the stores keep counting, `onResetStats`/`onResetProgress` still repaint, and the panel still opens.",
+  "killedBy": [
+    "the application routes work with no gameplay session behind them paints Records from the page stores when the page opens -- both tables, from no session",
+    "startGameWith: achievements wiring toasts newly earned achievements and pushes the fresh set to the HUD"
+  ]
+}

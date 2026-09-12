@@ -1,0 +1,14 @@
+{
+  "id": "mutate-pool-dead-worker-passes",
+  "file": "tools/mutate/run.mjs",
+  "find": "  const seen = new Set(codes.map((c) => (c === null ? 4 : severity.includes(c) || c === 0 ? c : 4)));",
+  "replace": "  const seen = new Set(codes.map((c) => (c === null ? 0 : severity.includes(c) || c === 0 ? c : 0)));",
+  "why": "A worker that died without an exit code, or with one the harness never emits (an OOM kill's 137), ran an unknown number of its entries; folding that into a pass would let a silent crash green the gate.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "aggregateExitCodes a worker that died without a code, or with an unknown one, is a mid-run error -- never a pass"
+  ]
+}
