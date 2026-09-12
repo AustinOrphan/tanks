@@ -1,0 +1,14 @@
+{
+  "id": "map-card-intent-height-not-reserved",
+  "file": "src/game/hud.css",
+  "find": "  overflow: hidden;\n  min-height: calc(1.35em * 4);",
+  "replace": "  overflow: hidden;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The floor removed, leaving the clamp alone. A clamp sets a MAXIMUM, so this still caps a long intent while letting a short one (Arena 3, three lines where the rest take four) leave its card shorter than the cards beside it. Half a fix that reads like a whole one: the resize-on-switch goes away, the uneven row does not.",
+  "killedBy": [
+    "hud.css is syntactically whole holds every map card to one height, with the clamp and the reserved space agreeing at both widths"
+  ]
+}

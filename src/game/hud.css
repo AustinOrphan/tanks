@@ -3231,16 +3231,59 @@
 
 /* Which counts and modes the board supports, and what it plays like. Both are quieter than
    the name; the intent is quieter still and wraps to as many lines as it needs. */
+/* NO reserved height here, deliberately -- the intent below has one and this does not.
+ *
+ * A draft of the map-card fix gave this line a two-line min-height as well, to raise Random
+ * ("6 eligible boards", one line in the 138px desktop column) to meet the boards
+ * ("2/3/4 players . FFA and Teams", two). It was removed after looking at it: the grid is
+ * capped at 46rem and resolves to three columns, so seven cards always lay out 3 + 3 + 1 and
+ * Random is always ALONE in the last row. Grid rows are already equal-height, so cards that
+ * sit beside each other always match whatever this rule does; all the reservation bought was
+ * a cross-row difference nobody can see, and it cost a blank line inside Random's card that
+ * read as missing copy. Below 760px both forms fit one line anyway.
+ *
+ * The intent is the opposite case and that is why it keeps its min-height: it varies card to
+ * card WITHIN a row, which is the difference the owner actually reported. */
 .hud-versus-map-config {
   font-size: 11px;
   opacity: 0.75;
 }
 
+/* ONE HEIGHT FOR EVERY CARD, whatever boards the row is offering (owner report: "the
+ * teams unavailable copy changes the size of the map selection previews when it
+ * shouldn't").
+ *
+ * The note was not the cause -- MEASURED, toggling it alone moves nothing. Grid rows are
+ * equal-height, and a card's height follows how far its INTENT wraps, so swapping which
+ * boards the row offers resizes the cards beside them. At 1280x800 the second row measured
+ * 122.4px at two players (Pinwheel) and 140.1px at three (Keystone), because Keystone's
+ * intent ran one line longer. The canvas itself is a fixed 74px and never moved.
+ *
+ * Both halves are needed and they do different jobs: the CLAMP caps a long intent, and the
+ * `min-height` stops a short one (Arena 3, three lines) leaving its card shorter than its
+ * neighbours. A clamp alone sets a maximum, which is only half of "uniform".
+ *
+ * The line count is per-breakpoint because the text column is, and by a factor of two:
+ * MEASURED at 138px wide beside the canvas in a 240px desktop grid column, and 288px in the
+ * single full-width column below 760px. Four lines there is two lines here, and forcing four
+ * on a phone would add ~30px of whitespace per card on the narrowest screen -- the screen
+ * issue #658 was already about.
+ *
+ * Shipped copy is held under the clamp rather than truncated by it (every catalog intent is
+ * <= 88 characters, pinned in versus-catalog.test.ts with this derivation), so nothing
+ * ellipsises today. The clamp is the guarantee that a future board cannot reintroduce the
+ * resize, not a licence to write past it. */
 .hud-versus-map-intent {
   font-size: 11px;
   line-height: 1.35;
   opacity: 0.65;
   white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  min-height: calc(1.35em * 4);
 }
 
 /* The who's-playing note. Since issue #260 it is unconditional -- devices really are
@@ -3407,6 +3450,18 @@
     flex: 0 1 40vw;
     min-width: 0;
     box-sizing: border-box;
+  }
+
+  /* Two lines, not the base rule's four -- see .hud-versus-map-intent. The map row is a
+   * single full-width column here, so the text beside the canvas measured 288px rather
+   * than 138px and every shipped intent fits in two. Kept in step with the base rule by
+   * hud.css.test.ts, which asserts the clamp and the min-height agree at both widths: a
+   * clamp of 4 against a min-height of 2 lines would reintroduce exactly the uneven card
+   * this rule exists to remove. */
+  .hud-versus-map-intent {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    min-height: calc(1.35em * 2);
   }
 }
 
