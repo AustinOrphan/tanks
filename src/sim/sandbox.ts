@@ -1,8 +1,9 @@
-import type { TankKind, UnarmedTrigger, AiTargetPerception } from './types';
+import type { TankKind } from './types';
 import { nextRng } from './types';
 import type { Arena } from './arena';
 import { ARENA_01, loadArena } from './arena';
 import { createWorld, type World } from './world';
+import type { WorldRulesInit } from './rules';
 import { LIVES } from './constants';
 
 /**
@@ -209,16 +210,13 @@ export function sandboxArena(opts: SandboxOptions): Arena {
   return { cols, rows, cellSize, legend, grid: cells.map((row) => row.join('')) };
 }
 
-export function createSandboxWorld(
-  opts: SandboxOptions,
-  unarmedTrigger?: UnarmedTrigger,
-  corpseBlocksShells?: boolean,
-  muzzleClearsTanks?: boolean,
-  // Same trailing-and-optional shape as the three above (issue #472): the sandbox used
-  // to receive `?dev=1&aiPerception=los` as a post-build write from game/loop.ts, and
-  // `World.rules` is frozen now, so the rule arrives here before the world exists.
-  aiTargetPerception?: AiTargetPerception,
-): World {
+/**
+ * `rules` replaces the four trailing rule positionals this took (issue #493). Every one was
+ * added as "trailing and optional, same precedent", and the precedent was the problem: a
+ * caller naming the last of them carried three `undefined`s to reach it. A rule added to
+ * `WorldRules` now grows `WorldRulesInit` and no signature here.
+ */
+export function createSandboxWorld(opts: SandboxOptions, rules: WorldRulesInit = {}): World {
   const loaded = loadArena(sandboxArena(opts));
   const disarmed = opts.disarmed ?? true;
   if (disarmed) {
@@ -226,7 +224,10 @@ export function createSandboxWorld(
       if (t.kind !== 'player') t.disarmed = true;
     }
   }
-  return createWorld({
-    ...loaded, lives: LIVES, seed: opts.seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, aiTargetPerception,
-  });
+  // `arenaGeometry` off `rules` for the same reason `createWorldFor` takes it off: it is a
+  // `WorldRulesInit` key that `loadArena` DERIVES, so a caller deriving rules from an
+  // existing world would otherwise stamp that world's geometry onto this one.
+  const worldRules: WorldRulesInit = { ...rules };
+  delete worldRules.arenaGeometry;
+  return createWorld({ ...loaded, ...worldRules, lives: LIVES, seed: opts.seed });
 }

@@ -100,7 +100,7 @@ interface Crowding {
 
 function playFor(arenaId: string, n: number, seed: number): Crowding {
   const arena = arenaById(arenaId);
-  let w = createWorldFor(arena, seed, undefined, 3, undefined, undefined, n, undefined, MODE) as World;
+  let w = createWorldFor(arena, seed, { lives: 3, playerCount: n, rules: { mode: MODE } }) as World;
   const ids = w.tanks.filter((t) => t.kind === 'player').map((t) => t.id);
   const rnd = ids.map((_, i) => mulberry32(seed * 31 + i + 1));
   const ai = rnd.map((r) => createPlayerAiState(r));

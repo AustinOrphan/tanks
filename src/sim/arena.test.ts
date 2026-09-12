@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createArenaWorld, createWorldFor } from './arena';
+// The module's own text, for the signature assertion in `createWorldFor's init object`
+// below: a parameter list is a property of the source, and `Function.length` cannot see a
+// positional appended after a defaulted one.
+import arenaSource from './arena.ts?raw';
 import { raySegmentVsAABB } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
 import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS, TICK_HZ } from './constants';
@@ -654,7 +658,7 @@ describe('createWorldFor: mode/friendlyFire threading (n-player arc PR 4)', () =
   });
 
   it('threads an explicit mode and friendlyFire onto the built world, and strips enemies to match', () => {
-    const w = createWorldFor(ARENAS[0], 1, undefined, undefined, undefined, undefined, 4, undefined, 'teams', true);
+    const w = createWorldFor(ARENAS[0], 1, { playerCount: 4, rules: { mode: 'teams', friendlyFire: true } });
     expect(w.rules.mode).toBe('teams');
     expect(w.rules.friendlyFire).toBe(true);
     expect(w.tanks.every((t) => t.kind === 'player')).toBe(true);
@@ -730,5 +734,111 @@ describe('createArenaWorld', () => {
     expect(world.status).toBe('playing');
     expect(world.tick).toBe(startTick + stepCount);
     expect(tealShotAppeared).toBe(true);
+  });
+});
+
+describe("createWorldFor's init object (issue #493)", () => {
+  it('builds the arena it was given, not the one a caller derived its rules from', () => {
+    // THE HAZARD THE INIT OBJECT INTRODUCED, closed before it shipped. `arenaGeometry` is a
+    // `WorldRulesInit` key AND the one rule `loadArena` derives, so spreading `init.rules`
+    // over `loadArena`'s result lets a caller overwrite the new board's geometry with the old
+    // board's. Deriving rules from an existing world -- `resolveWorldRules({ ...world.rules,
+    // mode: 'ffa' })` -- is the documented way to make a variant (rules.ts), so this is a
+    // shape a caller is actively invited to use.
+    //
+    // Nothing else can see it: `World.rules` is otherwise correct, every tank and wall is the
+    // new arena's, and `arenaGeometry` is read by presentation rather than by `step`, so no
+    // simulation assertion and no golden trace moves. What breaks is a camera framing the
+    // wrong board.
+    const first = createWorldFor(ARENAS[0], 1);
+    const second = createWorldFor(ARENAS[1], 1, { rules: { ...first.rules } });
+
+    // The control is the GRID, not the dimensions: measured, the first two shipped arenas are
+    // both 33 columns wide, so a cols/rows comparison would pass on a world carrying the
+    // wrong board entirely. The grids are what differ.
+    expect(ARENAS[0].grid, 'the two fixture arenas must differ').not.toEqual(ARENAS[1].grid);
+    expect(second.rules.arenaGeometry?.grid).toEqual(ARENAS[1].grid);
+    expect(second.rules.arenaGeometry?.grid).not.toEqual(ARENAS[0].grid);
+    // ...and the rest of the derived rules DID carry, or this would pass by ignoring `rules`
+    // altogether, which is the opposite failure.
+    const third = createWorldFor(ARENAS[1], 1, {
+      rules: { ...first.rules, mode: 'ffa', friendlyFire: true },
+    });
+    expect(third.rules.mode).toBe('ffa');
+    expect(third.rules.friendlyFire).toBe(true);
+    // Compared against the SAME call without the derived rules, not against the authored
+    // grid: under 'ffa' `loadArena` picks a seeded versus VARIANT of the board, so the
+    // geometry legitimately differs from `ARENAS[1].grid`. Asserting the authored grid here
+    // fails on correct code -- measured, and the reason this control is written this way.
+    const sameModeFresh = createWorldFor(ARENAS[1], 1, {
+      rules: { mode: 'ffa', friendlyFire: true },
+    });
+    expect(third.rules.arenaGeometry?.grid).toEqual(sameModeFresh.rules.arenaGeometry?.grid);
+    expect(third.rules.arenaGeometry?.grid).not.toEqual(first.rules.arenaGeometry?.grid);
+  });
+
+  it('takes every knob by name, so a new rule cannot grow its signature', () => {
+    // The outcome #493 asks for, asserted against the SIGNATURE TEXT rather than against
+    // `createWorldFor.length`. Measured: `Function.prototype.length` counts parameters before
+    // the first defaulted one, so `(arena, seed?, init = {})` reports 2 -- and so does
+    // `(arena, seed?, init = {}, extra?)`, which is exactly the "trailing and optional, same
+    // precedent" move that produced the thirteen positionals this issue exists to remove.
+    // `((a, b, c = {}, d) => 0).length === 2`, run rather than reasoned. The length check
+    // could therefore only have caught an insertion BEFORE `init`, which is not where one
+    // would go.
+    expect(arenaSource, 'createWorldFor grew a positional again').toContain(
+      'export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit = {}): World {',
+    );
+
+    // Every knob reaches the world it names. One call, each value distinct from its default,
+    // so a key silently dropped from the destructure fails here rather than in whichever
+    // suite happened to depend on it.
+    const w = createWorldFor(ARENAS[0], 5, {
+      lives: 2,
+      playerCount: 3,
+      rules: {
+        mode: 'teams',
+        friendlyFire: true,
+        unarmedTrigger: 'both',
+        corpseBlocksShells: true,
+        muzzleClearsTanks: false,
+        coopAttempts: false,
+        aiTargetPerception: 'line-of-sight',
+      },
+    });
+    expect(w.lives).toBe(2);
+    expect(w.tanks.filter((t) => t.kind === 'player').length).toBe(3);
+    expect(w.rules.mode).toBe('teams');
+    expect(w.rules.friendlyFire).toBe(true);
+    expect(w.rules.unarmedTrigger).toBe('both');
+    expect(w.rules.corpseBlocksShells).toBe(true);
+    expect(w.rules.muzzleClearsTanks).toBe(false);
+    expect(w.rules.coopAttempts).toBe(false);
+    expect(w.rules.aiTargetPerception).toBe('line-of-sight');
+    // Non-vacuity: each of the above differs from the shipped default, so a `createWorldFor`
+    // that ignored `init.rules` entirely would fail every line rather than none.
+    const shipped = createWorldFor(ARENAS[0], 5);
+    for (const key of ['mode', 'friendlyFire', 'unarmedTrigger', 'corpseBlocksShells',
+      'muzzleClearsTanks', 'coopAttempts', 'aiTargetPerception'] as const) {
+      expect(w.rules[key], `${key} was not moved off its default by this fixture`).not.toBe(
+        shipped.rules[key],
+      );
+    }
+  });
+
+  it('omits a key rather than passing undefined, and gets the shipped default either way', () => {
+    // `{ rules: { mode: undefined } }` and `{}` must build the same world. An explicit
+    // `undefined` wins a spread, so this is the difference between `resolveWorldRules`'s
+    // `??` chain doing its job and a caller silently stamping `undefined` over a default --
+    // and it is exactly the shape every converted call site now has, since the sweep dropped
+    // the positional `undefined`s rather than translating them into keys.
+    const implicit = createWorldFor(ARENAS[0], 3);
+    const explicit = createWorldFor(ARENAS[0], 3, {
+      lives: undefined,
+      playerCount: undefined,
+      rules: { mode: undefined, friendlyFire: undefined, aiTargetPerception: undefined },
+    });
+    expect(explicit.rules).toEqual(implicit.rules);
+    expect(explicit.lives).toBe(implicit.lives);
   });
 });

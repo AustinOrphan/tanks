@@ -10,7 +10,7 @@ const SECONDS = 90;
 
 function playMatch(mode: GameMode, seed: number) {
   const arena = arenaById('vs-duel-01');
-  const world = createWorldFor(arena, seed, undefined, 3, undefined, undefined, 2, undefined, mode);
+  const world = createWorldFor(arena, seed, { lives: 3, playerCount: 2, rules: { mode: mode } });
   let w = world;
   const players = w.tanks.filter((t) => t.kind === 'player').map((t) => t.id);
   const rnd = players.map((_, i) => mulberry32(seed * 31 + i + 1));

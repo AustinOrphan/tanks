@@ -116,7 +116,7 @@ function run(arenaIdx: number, playerCount: number): string {
   };
 
   for (let seed = 1; seed <= SEEDS; seed++) {
-    let w: World = createWorldFor(ARENAS[arenaIdx], seed, undefined, 3, undefined, undefined, playerCount);
+    let w: World = createWorldFor(ARENAS[arenaIdx], seed, { lives: 3, playerCount: playerCount });
     const rnd = mulberry(seed * 7919 + 13);
     let heading = rnd() * Math.PI * 2;
     /** Per-tank carry-over, so a change can be attributed and a hold can be measured. */

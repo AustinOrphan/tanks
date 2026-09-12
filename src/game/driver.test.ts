@@ -365,7 +365,7 @@ describe('driver: list-shaped input (couch co-op)', () => {
   // which is the composition-blindness gap CLAUDE.md names for step-pipeline.test.ts.
 
   it('pairs slot i with the i-th controlledBy tank in a REAL 2-player world -- the driver-layer twin of step-inputs.test.ts\'s "pairs by position" test', () => {
-    const base = createWorldFor(arenaById('arena-01'), 1, 'none', 3, false, true, 2);
+    const base = createWorldFor(arenaById('arena-01'), 1, { lives: 3, playerCount: 2, rules: { unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true } });
     // Past countdown+grace, so input is live -- same convention firedByPlayer() above
     // uses, for the same reason (a fresh world cannot act on tick 1).
     const world = { ...base, roundStartTick: -1000 };
