@@ -460,8 +460,11 @@ export const SCREEN_STATES = Object.freeze([
       // same role, and a selector that could match either would pass on the wrong dialog.
       { waitVisible: '.hud-alert' },
     ],
-    // The overlay AND the menu behind it: the claim this state exists to show is that the
-    // shell survived, so measuring only the alert would photograph half the point.
+    // `.hud-panel` is measured EXPECTING it to be hidden, which is why this state reports
+    // 3 of 4 visible rather than 4 of 4. The layer stack swaps surfaces, so the menu is not
+    // drawn behind the alert; its 0x0 box is the record of that, and an earlier draft of
+    // this feature claimed the opposite in player-facing copy. Remove it here and the next
+    // reader has to rediscover the fact by hand.
     measure: ['.hud-alert', '.hud-alert-body', '.hud-alert-dismiss', '.hud-panel'],
   }),
   state({
