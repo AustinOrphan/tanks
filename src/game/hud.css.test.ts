@@ -9,6 +9,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
+// hud.ts's own text, so the script-read token exemption below can prove the exemption is
+// still true rather than asserting it. A TEST may read a fixture; this is the same shape
+// `index-html.test.ts` uses for index.html.
+import hudSource from './hud.ts?raw';
 import { createHud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
 
@@ -378,8 +382,43 @@ describe('hud.css is syntactically whole', () => {
     // Vacuity guard: a regex that stopped matching would make the loop below trivially true.
     expect(declared.length).toBeGreaterThan(20);
 
-    const unused = declared.filter((name) => !css.includes(`var(${name})`));
+    // READ BY SCRIPT, not by a rule (issue #274). A `<canvas>` cannot take a class, so the
+    // board schematic's three colours are pulled out of this block by `getComputedStyle` in
+    // hud.ts and handed to `drawArenaSchematic`. They are the only tokens in the file with
+    // no `var()` reference and are exempted BY NAME rather than by a pattern, so a fourth
+    // dead token cannot arrive under the exemption -- and each is asserted to be read from
+    // hud.ts below, which is what stops this list outliving its reason.
+    const READ_BY_SCRIPT = ['--hud-schematic-floor', '--hud-schematic-solid', '--hud-schematic-destructible'];
+    for (const name of READ_BY_SCRIPT) {
+      expect(declared, `${name} is exempted here but not declared`).toContain(name);
+      expect(hudSource, `${name} is exempted as script-read but hud.ts never reads it`).toContain(
+        `'${name}'`,
+      );
+    }
+
+    const unused = declared.filter(
+      (name) => !css.includes(`var(${name})`) && !READ_BY_SCRIPT.includes(name),
+    );
     expect(unused, 'declared but never referenced').toEqual([]);
+  });
+
+  it('resolves every token the board schematic is painted from', () => {
+    // The fallbacks in `schematicPaint` exist for a stylesheet that failed to load, not for
+    // a token that was renamed: `fillStyle = ''` is a silent no-op that keeps the previous
+    // colour, so a missing token would draw a board of one flat tone rather than throwing.
+    // This is the assertion that says the shipped path never reaches a fallback.
+    const probe = document.createElement('div');
+    document.body.appendChild(probe);
+    const style = getComputedStyle(probe);
+    for (const name of ['--hud-schematic-floor', '--hud-schematic-solid', '--hud-schematic-destructible']) {
+      expect(style.getPropertyValue(name).trim(), name).not.toBe('');
+    }
+    // Non-vacuity AND the thing the card is for: the two cover kinds must not resolve to the
+    // same paint, or a schematic cannot tell permanent cover from breakable.
+    expect(style.getPropertyValue('--hud-schematic-solid').trim()).not.toBe(
+      style.getPropertyValue('--hud-schematic-destructible').trim(),
+    );
+    document.body.innerHTML = '';
   });
 
   it('still carries the rules the features depend on', () => {
@@ -661,25 +700,27 @@ describe('hud.css is syntactically whole', () => {
       .filter((el) => getComputedStyle(el).justifyContent === 'center')
       .map((el) => (el.className.split(' ')[0]));
     // THE POPULATION IS PINNED, NOT EMPTIED, and the residual is stated rather than swept
-    // under a narrower selector. Measured: three sibling panes carry the same shape today --
-    // Versus Setup, Settings and Developer Tools are each `overflow-y: auto` with
-    // `justify-content: center`. They are NOT fixed here. Each is a visible vertical-alignment
-    // change on a pane issue #117 does not own, owing its own before/after evidence, and this
-    // change's subject is the About pane, whose documents make the clip reachable in ordinary
-    // use rather than only on a short viewport. MEASURED through tools/screens at 900x500
-    // with the Privacy document open, the two values differing and nothing else: with
-    // `center` the open document's top box sits at y = -454, above the scroll origin and
-    // unreachable; with `flex-start` it sits at y = +388.
+    // under a narrower selector. TWO panes still carry the shape -- Settings and Developer
+    // Tools -- and they are not fixed here: each is a visible vertical-alignment change on a
+    // pane owing its own before/after evidence. Issue #642 owns them, with the measurement.
     //
-    // What this asserts is therefore two things, and both can fail:
-    //  - `.hud-about` is NOT in the list, so the pane regressing to `center` is caught;
-    //  - no FOURTH pane joins it, so a new scroller inherits the decision rather than the bug.
-    // Filed as issue #642 with the measurement above, so the residual has a home outside a
-    // test comment. Fixing it makes THIS line fail, which is the prompt to narrow the set.
-    expect(centred.sort()).toEqual(['hud-devtools', 'hud-settings', 'hud-versus-setup']);
-    expect(centred, 'the About pane centres its main axis and clips its own documents').not.toContain(
-      'hud-about',
-    );
+    // The two that have come off this list each did so because their own change made the
+    // clip reachable in ordinary use rather than only on a short viewport, and each was
+    // measured through tools/screens with only `justify-content` differing:
+    //  - `.hud-about` (issue #117), at 900x500 with a legal document open: the document's
+    //    top box at y = -454 under `center`, y = +388 under `flex-start`.
+    //  - `.hud-versus-setup` (issue #274), at 1280x800: seven map cards pushed the Mode and
+    //    Players rows above the scroll origin, unreachable.
+    //
+    // So this asserts two things, and both can fail:
+    //  - neither fixed pane is in the list, so either regressing to `center` is caught;
+    //  - no THIRD pane joins the two, so a new scroller inherits the decision, not the bug.
+    expect(centred.sort()).toEqual(['hud-devtools', 'hud-settings']);
+    for (const fixed of ['hud-about', 'hud-versus-setup']) {
+      expect(centred, `${fixed} centres its main axis and clips its own overflow`).not.toContain(
+        fixed,
+      );
+    }
 
     dispose();
   });

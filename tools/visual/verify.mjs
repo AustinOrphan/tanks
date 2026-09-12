@@ -20,6 +20,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 
 /**
  * Playwright is NOT a dependency of this repo: the package downloads browsers
@@ -58,6 +59,24 @@ async function loadChromium() {
 
 /** scene.ts: renderer.setClearColor(0x14161c, 1) */
 export const CLEAR = { r: 0x14, g: 0x16, b: 0x1c };
+
+/**
+ * The gameplay canvas. ONE definition, in tools/gallery/enter-gameplay.mjs, re-exported
+ * here because three sites in this file ask the same question of the same page.
+ *
+ * It used to be spelled as a bare `canvas` with the Customize preview excluded, in both
+ * tools, and that denylist failed twice. First with the bare selector alone (issue #468):
+ * the route UI is built before the gameplay canvas exists, so the HUD's Customize preview
+ * won it and this probe reported a 300x150 buffer. The preview was then excluded by class,
+ * and the same shape came back the moment
+ * issue #274 gave each versus map card a `<canvas>` for its board schematic -- measured,
+ * not inferred: CI and a local run both reported `bufferWidth: 132, bufferHeight: 108` with
+ * `hasContext: false`, which is a schematic canvas, while every screenshot-based check on
+ * the same run passed (board 71.3% painted, 96.7% of width). A gate that measures "some
+ * canvas" fails whenever the page grows one, and a copy of the rule per tool is why both
+ * copies were wrong at once.
+ */
+export { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 /** Channel distance under which a pixel counts as untouched background. */
 const BG_TOLERANCE = 10;
 
@@ -435,11 +454,11 @@ async function startMatch(page) {
     await page.click(sel);
     try {
       await page.waitForFunction(
-        () => {
-          const c = document.querySelector('canvas:not(.hud-preview)');
+        (sel) => {
+          const c = document.querySelector(sel);
           return !!c && c.width > 0 && c.height > 0;
         },
-        undefined,
+        GAME_CANVAS,
         { timeout: 20000 },
       );
     } catch {
@@ -486,22 +505,17 @@ async function dismissSplash(page) {
 async function settle(page) {
   try {
     await page.waitForFunction(
-      () => {
-        // `:not(.hud-preview)` since issue #468: the route UI is built BEFORE the gameplay
-        // canvas, so the HUD's Customize preview canvas is first in the document. A bare
-        // `canvas` selector reported that one's context instead -- measured, not inferred:
-        // this check read a 300x150 buffer after the hoist and a full-viewport one before
-        // it, while every screenshot-based check was unaffected. Since issue #428 it also
-        // has to be `:not`, for a second reason: on a page that has not started a match
-        // there is no gameplay canvas at all, and the preview would report a live context
-        // for one.
-        const c = document.querySelector('canvas:not(.hud-preview)');
+      (sel) => {
+        // `GAME_CANVAS` rather than a selector spelled here: three sites in this file and
+        // one in tools/gallery asked the same question, and the two times this rule was
+        // wrong it was wrong in every copy at once. See its doc comment above.
+        const c = document.querySelector(sel);
         if (!c || !c.width || !c.height) return false;
         if (!document.querySelector('.hud-topbar')) return false;
         const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
         return !!ctx && !ctx.isContextLost();
       },
-      undefined,
+      GAME_CANVAS,
       { timeout: 20000 },
     );
     await page.evaluate(
@@ -511,8 +525,8 @@ async function settle(page) {
     // Report whatever state the page is in; the caller decides whether to
     // retry, and the checks decide whether it is a failure.
   }
-  return page.evaluate(() => {
-    const c = document.querySelector('canvas:not(.hud-preview)');
+  return page.evaluate((sel) => {
+    const c = document.querySelector(sel);
     if (!c) return { canvas: false, hasContext: false, contextLost: null };
     const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
     return {
@@ -522,7 +536,7 @@ async function settle(page) {
       hasContext: !!ctx,
       contextLost: ctx ? ctx.isContextLost() : null,
     };
-  });
+  }, GAME_CANVAS);
 }
 
 async function main() {

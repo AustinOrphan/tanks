@@ -6,7 +6,7 @@ import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { resolveVersusConfig, versusMapChoices, type VersusConfig } from './versus-config';
 import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
-import { versusCatalogEntryById } from '../sim/config/versus-catalog';
+import { versusCatalogEntryById, VERSUS_CATALOG } from '../sim/config/versus-catalog';
 import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
 import type { TypedOutcome } from './app-state';
@@ -3174,5 +3174,168 @@ describe('modal isolation: a blocking overlay is really modal (issue #327)', () 
     expect(root.querySelector('[inert]')).not.toBeNull();
     h.setState('playing');
     expect(root.querySelector('[inert]'), 'a surface change must release the isolation').toBeNull();
+  });
+});
+
+describe('the versus map cards (issue #274)', () => {
+  const open = (root: HTMLElement, h: Hud): void => {
+    h.setState('main-menu');
+    (root.querySelector('.hud-versus-open') as HTMLButtonElement).click();
+  };
+  const cards = (root: HTMLElement): HTMLButtonElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-map-row button'));
+  const part = (card: HTMLElement, cls: string): HTMLElement =>
+    card.querySelector(`.${cls}`) as HTMLElement;
+  /** The accessible name, for the name-from-content case these cards use. */
+  const name = (el: HTMLElement): string =>
+    Array.from(el.childNodes)
+      .filter((n) => !(n instanceof HTMLElement) || n.getAttribute('aria-hidden') !== 'true')
+      .map((n) => n.textContent ?? '')
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  it('gives every eligible board a card, and Random last', () => {
+    // The population is the filter's, not a literal: `versusMapChoices` is what decides
+    // eligibility and the row must not add or lose one. Random is asserted to be LAST
+    // because it is the only choice that is not a board, and a row that offered it first
+    // would put the least specific option where the eye lands.
+    const { hud: h, root } = mount();
+    open(root, h);
+    const expected = [...versusMapChoices(2, 'ffa'), 'random'];
+    expect(expected.length).toBeGreaterThan(2);
+    expect(cards(root).map((c) => c.dataset.map)).toEqual(expected);
+  });
+
+  it('names each board, says what it supports, and says what it plays like', () => {
+    // Three separate claims on one card. The middle one is the easiest to get subtly wrong
+    // and is checked against the CATALOG rather than against the current selection -- see
+    // the next case for why that distinction is the point.
+    const { hud: h, root } = mount();
+    open(root, h);
+    for (const card of cards(root)) {
+      const id = card.dataset.map as string;
+      expect(part(card, 'hud-versus-map-name').textContent, id).not.toBe('');
+      expect(part(card, 'hud-versus-map-config').textContent, id).not.toBe('');
+      expect(part(card, 'hud-versus-map-intent').textContent, id).not.toBe('');
+      if (id === 'random') continue;
+      const entry = versusCatalogEntryById(id);
+      expect(part(card, 'hud-versus-map-name').textContent, id).toBe(entry.displayName);
+      // The intent is the catalog's own sentence, not a rewrite: #274 asks for the board's
+      // match intent, and a second copy in the HUD would drift from the one the catalog
+      // validates.
+      expect(part(card, 'hud-versus-map-intent').textContent, id).toBe(entry.intent);
+    }
+  });
+
+  it('says what a board supports, not what is currently selected', () => {
+    // The whole reason the line exists. At two players the row shows Pinwheel, which is
+    // two-only, beside Arena 1, which is 2/3/4 -- and a card that echoed the selection
+    // would say "2 players" on both, which is true of the moment and useless for the
+    // choice. Two boards with DIFFERENT support, compared in the same fixture, so a
+    // config line built from `versusConfigState` fails here rather than reading fine.
+    const { hud: h, root } = mount();
+    open(root, h);
+    const line = (id: string): string =>
+      part(cards(root).find((c) => c.dataset.map === id) as HTMLElement, 'hud-versus-map-config')
+        .textContent ?? '';
+    expect(versusCatalogEntryById('vs-duel-01').players).toEqual([2]);
+    expect(versusCatalogEntryById('arena-01').players).toEqual([2, 3, 4]);
+    expect(line('vs-duel-01')).toContain('2 players');
+    expect(line('arena-01')).toContain('2/3/4 players');
+    expect(line('vs-duel-01')).not.toBe(line('arena-01'));
+    // ...and the modes are the catalog's, spelled with the Mode row's own words.
+    expect(line('arena-01')).toContain('FFA and Teams');
+  });
+
+  it('tells Random how many boards it will draw from, counting the row and not the catalog', () => {
+    // WHAT THIS CAN AND CANNOT DISCRIMINATE, stated because the population makes the obvious
+    // assertion vacuous. Every shipped (players, mode) combination yields exactly SIX
+    // eligible boards -- the five campaign arenas plus the one dedicated board for that
+    // count -- so no fixture distinguishes this line from a hardcoded `6`. The sweep below
+    // pins that population, so the day a catalog edit breaks the tie this case starts
+    // failing and asks for a better fixture rather than quietly staying vacuous.
+    //
+    // What IS discriminated is the mistake actually available here: counting the CATALOG,
+    // which has eight entries, instead of the filtered row. That is the number a reader of
+    // `VERSUS_CATALOG.length` would reach for, and Random drawing from eight boards when
+    // six are offered is the criterion "Random never selects outside the displayed eligible
+    // set" restated as a claim on the card.
+    const { hud: h, root } = mount();
+    open(root, h);
+    const randomLine = (): string =>
+      part(cards(root).find((c) => c.dataset.map === 'random') as HTMLElement, 'hud-versus-map-config')
+        .textContent ?? '';
+    const eligible = (): number => cards(root).length - 1;
+
+    const counts = new Set<number>();
+    for (const players of [2, 3, 4] as const) {
+      for (const mode of ['ffa', 'teams'] as const) {
+        if (mode === 'teams' && players === 2) continue; // not offered at two
+        (root.querySelector(`.hud-versus-players-row [data-players="${players}"]`) as HTMLButtonElement).click();
+        (root.querySelector(`.hud-versus-mode-row [data-mode="${mode}"]`) as HTMLButtonElement).click();
+        counts.add(eligible());
+        expect(randomLine(), `${players}p ${mode}`).toBe(`${eligible()} eligible boards`);
+        expect(eligible(), `${players}p ${mode}`).toBeLessThan(VERSUS_CATALOG.length);
+      }
+    }
+    // The population, recorded rather than assumed: one value across all five combinations.
+    expect([...counts]).toEqual([6]);
+    expect(VERSUS_CATALOG.length).toBe(8);
+  });
+
+  it('keeps the picture and the sentence out of the card\'s name, and the sentence in its description', () => {
+    // A card names a board; it does not recite a paragraph. Folding seven intent sentences
+    // into seven accessible names gives a screen reader seven paragraphs to walk before the
+    // eighth control. The canvas is `aria-hidden` for the same reason and a stronger one:
+    // an unlabelled canvas in the accessibility tree announces nothing at all.
+    const { hud: h, root } = mount();
+    open(root, h);
+    for (const card of cards(root)) {
+      const id = card.dataset.map as string;
+      const intent = part(card, 'hud-versus-map-intent');
+      expect(part(card, 'hud-versus-map-canvas').getAttribute('aria-hidden'), id).toBe('true');
+      expect(intent.getAttribute('aria-hidden'), id).toBe('true');
+      // Described by it, which is how the sentence still reaches a screen reader.
+      expect(card.getAttribute('aria-describedby'), id).toBe(intent.id);
+      // `getElementById`, not a `#id` selector: jsdom has no `CSS.escape`, and the ids
+      // here embed an arena id that contains a hyphen.
+      expect(intent.id, id).not.toBe('');
+      expect(root.ownerDocument.getElementById(intent.id), id).toBe(intent);
+      // The name is the board and its support, and NOT the sentence.
+      expect(name(card), id).not.toContain(intent.textContent);
+      expect(name(card), id).toContain(part(card, 'hud-versus-map-name').textContent);
+    }
+  });
+
+  it('draws a board on every card but Random, which has none to draw', () => {
+    // jsdom has no 2D context, so what is observable here is the CALL's own report: a real
+    // board is asked for and Random is not. The pixels are photographed by tools/screens.
+    const { hud: h, root } = mount();
+    open(root, h);
+    for (const card of cards(root)) {
+      const canvas = part(card, 'hud-versus-map-canvas') as HTMLCanvasElement;
+      const isRandom = card.dataset.map === 'random';
+      expect(canvas.classList.contains('hud-versus-map-canvas--random'), card.dataset.map).toBe(
+        isRandom,
+      );
+      // The box is set from attributes, which is what `drawArenaSchematic` scales into.
+      expect(canvas.width, card.dataset.map).toBeGreaterThan(0);
+      expect(canvas.height, card.dataset.map).toBeGreaterThan(0);
+    }
+  });
+
+  it('rebuilds the cards when the filter moves, with no card left behind', () => {
+    // The row is replaced wholesale on every change, so the failure to look for is a card
+    // that SURVIVES a filter it no longer satisfies. Pinwheel is two-only; at three players
+    // it must be gone from the DOM, not merely hidden.
+    const { hud: h, root } = mount();
+    open(root, h);
+    expect(cards(root).map((c) => c.dataset.map)).toContain('vs-duel-01');
+    (root.querySelector('.hud-versus-players-row [data-players="3"]') as HTMLButtonElement).click();
+    expect(cards(root).map((c) => c.dataset.map)).not.toContain('vs-duel-01');
+    expect(root.querySelectorAll('[data-map="vs-duel-01"]').length).toBe(0);
+    // ...and the three-player board that two players could not offer is now here.
+    expect(cards(root).map((c) => c.dataset.map)).toContain('vs-tri-01');
   });
 });

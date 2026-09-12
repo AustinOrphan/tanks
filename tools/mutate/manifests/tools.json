@@ -819,5 +819,20 @@
       "src/game/legal-content.ts is generated, not hand-edited refuses a construct it would otherwise drop on the floor"
     ],
     "why": "Reopens a hole the guard's own negative control found, rather than one written from imagination. `assertSupported` is called on every line the block walk reaches, but a bullet list's continuation-line rule consumes wrapped items BEFORE that walk sees them -- so an indented `- nested` matched the wrap rule and was appended to its parent's text as \"top - nested\", silently, with no throw and nothing red. This second call inside the list loop is what closes it. The failure is quiet by construction: a flattened nested list is still a list of strings, so the pane renders it, and only a fixture containing one can tell."
+  },
+  {
+    "id": "game-canvas-selector-returns-to-a-denylist",
+    "file": "tools/gallery/enter-gameplay.mjs",
+    "find": "export const GAME_CANVAS = '#app > canvas';",
+    "replace": "export const GAME_CANVAS = 'canvas:not(.hud-preview)';",
+    "expect": "killed",
+    "tests": [
+      "tools/gallery/enter-gameplay.test.ts"
+    ],
+    "killedBy": [
+      "the selectors picks the gameplay canvas by structure, so a new HUD canvas cannot win it",
+      "the selectors names an element the shipped page actually has"
+    ],
+    "why": "Restores the exact selector that shipped and failed TWICE. It is a denylist of the HUD canvases known at the time it was written: a bare `canvas` lost to the Customize preview when the route UI began building before a session (issue #468), the preview was excluded by class, and the same shape returned the moment issue #274 gave each versus map card a board schematic. MEASURED both times rather than reasoned -- CI and a local run each reported the visual gate's probe reading `bufferWidth: 132, bufferHeight: 108, hasContext: false`, a schematic canvas, while every screenshot-based check on the same run passed (board 71.3% painted, 96.7% of width). The gate was therefore reporting a renderer failure that had not happened, which is the worst failure a gate has. NOTHING ELSE CATCHES IT: `npm run visual` and `npm run gallery` both need a real browser and neither runs under vitest, so the unit suite's only purchase on this rule is the structural fixture the killing case builds -- a page with the HUD and its two canvases BEFORE the gameplay canvas, which is the document order the real page has and the reason a denylist ever went wrong."
   }
 ]
