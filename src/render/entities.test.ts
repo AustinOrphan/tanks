@@ -35,6 +35,7 @@ import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
+import { FUSE_WARNING_SECONDS } from './mine-warning';
 import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD, SHELL_MUZZLE_FORWARD, SHELL_NOSE_REACH_RADII } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
@@ -544,6 +545,50 @@ describe('mine views', () => {
     // pins for this whole surface. A "freeze the pulse where it is" treatment would fail
     // exactly here.
     expect(sample(2.0)).toBeCloseTo(sample(2.0), 12);
+    views.dispose();
+  });
+
+  it('ramps the calm fuse NONLINEARLY, and leaves the warning window room of its own', () => {
+    // The failing control for the curve, which the monotone case above cannot be: monotone
+    // is true of any increasing function, so a linear ramp passes it. This asserts the
+    // SHAPE, and linear fails it -- under linear, equal steps of fuse give equal steps of
+    // emissive, so `late` and `early` come out equal rather than ordered.
+    //
+    // Why nonlinear at all is a MEASUREMENT, not a preference: the parameter is a lerp
+    // between two reds that the renderer tone-maps, and that transfer is compressive. A
+    // linear parameter was captured through the gallery at CIE L* 30.2 / 38.6 / 44.4 / 49.2 /
+    // 53.6 / 57.3 across six even steps -- +8.4 in the first sixth against +3.7 in the last,
+    // so it read as decelerating, which is backwards for a fuse.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    views.setReducedMotion(true);
+    const mat = () => (mineMesh(scene).material as THREE.MeshStandardMaterial);
+    const at = (elapsedFraction: number): number => {
+      const w = withMine({ timer: MINE_TIMER * (1 - elapsedFraction), armed: true });
+      views.sync(w, w, 0);
+      return mat().emissive.r;
+    };
+
+    // Thirds of the STROBING phase, which ends where the warning window opens.
+    const end = 1 - FUSE_WARNING_SECONDS / MINE_TIMER;
+    const early = at(end / 3) - at(0);
+    const late = at(end) - at((2 * end) / 3);
+    expect(late, 'the last third must brighten more than the first').toBeGreaterThan(early);
+    // Not merely greater by a rounding margin: squaring makes the last third about five
+    // times the first, and a curve only slightly steeper than linear would not earn the
+    // complexity.
+    expect(late / early).toBeGreaterThan(3);
+
+    // ...and the window still has somewhere to go. The calm ramp stops at the mean of the
+    // strobe it replaces, so the window's own ramp keeps roughly half the range rather than
+    // the sliver a full-range fuse left it.
+    const atWindowOpen = at(end);
+    const atExpiry = at(1);
+    expect(atExpiry, 'the window must still brighten the body').toBeGreaterThan(atWindowOpen);
+    const lo = at(0);
+    const fuseShare = atWindowOpen - lo;
+    const windowShare = atExpiry - atWindowOpen;
+    expect(windowShare, 'the warning cue must not be squashed').toBeGreaterThan(fuseShare * 0.8);
     views.dispose();
   });
 

@@ -1,0 +1,14 @@
+{
+  "id": "calm-fuse-ramp-goes-back-to-linear",
+  "file": "src/render/entities.ts",
+  "find": "  const ramp = clamp01(elapsed) / FUSE_CALM_END;\n  return CALM_FUSE_CEILING * clamp01(ramp) ** 2;",
+  "replace": "  return clamp01(elapsed);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "killedBy": [
+    "mine views under reduced motion ramps the calm fuse NONLINEARLY, and leaves the warning window room of its own"
+  ],
+  "why": "The first version of this treatment, and it is what the monotone case CANNOT catch: monotone is true of any increasing function, so a linear ramp passes it. Two measured defects. The parameter is a lerp between two reds the renderer tone-maps, and that transfer is compressive -- captured through the gallery, a linear parameter gives CIE L* 30.2 / 38.6 / 44.4 / 49.2 / 53.6 / 57.3 across six even steps of the fuse, so +8.4 in the first sixth against +3.7 in the last and the brightening reads DECELERATING, backwards for a fuse. And running the ramp over the full 0..1 leaves the fuse-warning window -- the distinct 'about to blow' cue -- about two just-noticeable differences, because the fuse has spent ~90% of the perceptual range before the window opens."
+}

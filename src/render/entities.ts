@@ -259,14 +259,43 @@ function fusePulseAt(elapsed: number): number {
   return 0.5 - 0.5 * Math.cos(2 * Math.PI * MINE_PULSE_TURNS * elapsed * elapsed);
 }
 /**
- * What a mine's fuse brightness says under REDUCED MOTION (issue #651): elapsed progress
- * itself, so the body brightens monotonically from drop to expiry instead of strobing
- * toward it.
+ * Where the calm fuse ramp ENDS, handing over to the warning window.
+ *
+ * 0.5 because that is the MEAN of the strobe it replaces: `fusePulseAt` is
+ * `0.5 - 0.5 cos(...)`, which oscillates about 0.5 over its life. So the calm ramp finishes
+ * at the brightness the strobing fuse averaged, and the window then does exactly what it
+ * always did -- ramp from there to full.
+ *
+ * Derived rather than picked, and deliberately NOT `fusePulseAt(FUSE_CALM_END)`, which
+ * happens to be 0.25: that value is where `MINE_PULSE_TURNS = 6` and a 3.0s fuse leave the
+ * cosine, 60 degrees past a trough. Retune either constant and it silently becomes 0.9 or
+ * 0.05, and a ceiling chosen from it would move for no reason a reader could reconstruct.
+ */
+const CALM_FUSE_CEILING = 0.5;
+/** Elapsed fraction at which the fuse-warning window opens and owns the rest of the ramp. */
+const FUSE_CALM_END = 1 - FUSE_WARNING_SECONDS / MINE_TIMER;
+
+/**
+ * What a mine's fuse brightness says under REDUCED MOTION (issue #651): a monotone ramp
+ * instead of a strobe, so the body brightens steadily from drop to expiry.
  *
  * The information survives intact. "How far along is this fuse" was carried by the pulse's
  * RATE, which a player had to watch over time to read; as a brightness it is readable from a
  * single frame, which is what a reduced-motion setting is asking for. Armed-versus-idle is
  * untouched -- it lives in the `lo`/`hi` base colours, not in the pulse.
+ *
+ * SQUARED, not linear, and MEASURED rather than reasoned. The parameter is a lerp between
+ * two reds that the renderer then tone-maps, and that whole transfer is compressive: a
+ * linear parameter was captured through the gallery at CIE L* 30.2, 38.6, 44.4, 49.2, 53.6,
+ * 57.3 across six even steps of the fuse -- +8.4 in the first sixth and +3.7 in the last, so
+ * it read as DECELERATING, which is backwards for a fuse. The measured transfer goes roughly
+ * as p^0.45, so squaring the input linearises perceived lightness and the brightening reads
+ * even.
+ *
+ * CAPPED at `CALM_FUSE_CEILING`, which is the other half of the same measurement. Running the
+ * ramp over the full 0..1 left the warning window -- the distinct "about to blow" cue -- only
+ * L* 57.3 to about 60, roughly two just-noticeable differences, because the fuse had already
+ * spent ~90% of the available perceptual range before the window opened.
  *
  * Still a pure function of MINE STATE and never of a wall clock, which `mine-warning.ts`
  * pins as a rule for this whole surface: two machines replaying the same world draw the same
@@ -274,7 +303,8 @@ function fusePulseAt(elapsed: number): number {
  * it is" treatment would have broken that by introducing frame-dependent state.
  */
 function fuseCalmAt(elapsed: number): number {
-  return clamp01(elapsed);
+  const ramp = clamp01(elapsed) / FUSE_CALM_END;
+  return CALM_FUSE_CEILING * clamp01(ramp) ** 2;
 }
 /** The mine body's radius. Exported because the #276 warning geometry is sized against it. */
 export const MINE_R = 0.28;
