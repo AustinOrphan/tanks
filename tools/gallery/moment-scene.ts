@@ -48,6 +48,14 @@ export interface MomentSceneOptions {
   /** Experimental mine-warning treatment (issue #276 playtest round); null = default. */
   mineWarn?: import('../../src/render/mine-warning').MineWarnStyle | null;
   /**
+   * Experimental arrival/destruction language (issue #230); null = the shipped pair.
+   * Forwarded to BOTH systems that speak it -- the entrance ring lives in entities.ts and
+   * the death ring in death-pulse.ts -- because the whole point of the language is that
+   * the two events are told apart, and a capture that changed only one of them would be
+   * evidence for a comparison nobody is making.
+   */
+  arrival?: import('../../src/presentation/arrival-language').ArrivalLanguage | null;
+  /**
    * Dressing for the entrance the moment stages -- required here, unlike
    * `GalleryOptions.spawnAnim` (subjects.ts), which is optional and only reaches
    * `setPlayerStyle` behind a "something is being styled" guard. A moment scene always
@@ -163,7 +171,10 @@ export function buildMomentScene(
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  const views = createEntityViews(scene, undefined, opts.mineWarn ?? null);
+  // 4th argument is `identityMarker`, which a moment scene does not yet forward (that
+  // flag reaches the POSED gallery only); passed explicitly as null so the 5th,
+  // `arrival`, is unmistakably the one being set here.
+  const views = createEntityViews(scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null);
   // Same call the game makes (renderer.ts's setPlayerStyle) -- unconditional here,
   // unlike buildGallery's guarded call, because opts.spawnAnim is always meaningful
   // for a moment (see the field doc above). Slot 0 carries the CLI's hull/skin/accent
@@ -190,7 +201,7 @@ export function buildMomentScene(
     views.setPlayerStyle(null, 'solid', null, slot, opts.spawnAnim);
   }
   const particles = createParticleSystem(scene, mulberry32(PARTICLE_SEED));
-  const deathPulse = createDeathPulseSystem(scene);
+  const deathPulse = createDeathPulseSystem(scene, opts.arrival === 'opposed');
   // The three systems in this scene that own a reduced treatment, pushed the policy the
   // same way `renderer.ts` pushes it to the game's own. Death pulse is included because it
   // has had one since issue #289 and a moment clip is the first place it could be SEEN
