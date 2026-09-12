@@ -81,6 +81,50 @@ function bandGeometry(runs: readonly (readonly number[])[], inner: number, outer
 }
 
 /**
+ * THE INK WIDTH every `shape` marker is drawn to, in world units, measured PERPENDICULAR to
+ * its own outline (issue #660).
+ *
+ * The shapes used to share one band in world units -- `IDENTITY_RING_INNER_R` to
+ * `IDENTITY_RING_OUTER_R`, a 0.15 gap -- and that is not one weight. `bandGeometry` places
+ * both edges at the same vertex ANGLES, so a polygon's two edges are chords, and the
+ * perpendicular gap between them is the gap between their apothems: `0.15 * cos(PI / n)`.
+ *
+ *   circle (n=48)   0.1497   100%
+ *   square (n=4)    0.1061    71%
+ *   triangle (n=3)  0.0750    50%
+ *
+ * So the four markers were drawn to one number and read at four weights, the triangle at
+ * half the circle. Under greyscale and at distance that reads as four levels of emphasis
+ * rather than four identities. Dividing by `cos(PI / n)` equalises them.
+ *
+ * 0.11, not the circle's old 0.15: equalising UP to the heaviest would put the triangle's
+ * band at 0.30 -- wider than the gap between the ring and the tank itself -- so the target
+ * sits nearer the middle and the circle thins slightly as the triangle thickens.
+ */
+const MARKER_WEIGHT = 0.11;
+
+/**
+ * The outer extent every `shape` marker shares, larger than the solid ring's 0.80 (issue
+ * #660: "they probably could stand to be a bit bigger across the board").
+ *
+ * ONE OUTER RADIUS FOR ALL FOUR, with the weight taken inward, so the shapes read as one
+ * family at one size rather than four marks of differing extent. The default solid ring is
+ * deliberately NOT moved: it is the control these are compared against, and a control that
+ * grows with them measures nothing.
+ *
+ * Two tanks at their closest legal approach have centres `TANK_RADIUS * 2` = 1.0 apart, so
+ * markers already overlap at 0.80 and this does not introduce that -- it is a pre-existing
+ * property of drawing an identity ring wider than the tank. What it does change is how much,
+ * which is a judgement for a capture rather than for arithmetic.
+ */
+const SHAPE_OUTER_R = 0.88;
+
+/** The band for an `n`-sided outline that renders at `MARKER_WEIGHT` perpendicular ink. */
+function bandForSides(sides: number): { inner: number; outer: number } {
+  return { inner: SHAPE_OUTER_R - MARKER_WEIGHT / Math.cos(Math.PI / sides), outer: SHAPE_OUTER_R };
+}
+
+/**
  * A band whose OUTER edge follows a per-vertex radius while the inner edge stays circular.
  * `bandGeometry` above holds both radii constant, which cannot describe a star.
  */
@@ -111,6 +155,9 @@ function starBand(verts: readonly (readonly [number, number])[], inner: number):
 export function identityMarkerGeometry(
   style: IdentityMarkerStyle | null,
   slot: number,
+  // `let`, because the `shape` arm replaces both: each outline needs its own band to render
+  // at one perpendicular weight (issue #660), and they share an outer radius of their own
+  // rather than the solid ring's. `arcs` uses the radii as given -- it IS the ring.
   inner: number,
   outer: number,
   segments: number,
@@ -161,6 +208,13 @@ export function identityMarkerGeometry(
   // rotation of one, so it survives both problems, and its points project OUTWARD past
   // the hull silhouette, which is exactly the visibility the diamond lacked.
   if (variant === 3) {
+    // The starburst is NOT weight-corrected, and that is deliberate rather than an
+    // oversight. Its edges run radially from a valley to a point, so they are not a
+    // tangential band at all and `cos(PI / n)` does not describe them; its weight is the
+    // WIDTH OF A TOOTH, which is set by the point count. It takes the shared outer radius
+    // so it matches the family's size, and keeps its own taper.
+    inner = SHAPE_OUTER_R - MARKER_WEIGHT * 2.2;
+    outer = SHAPE_OUTER_R;
     // Outer edge alternates between the band's full radius and just above its inner edge,
     // so the star lives entirely inside the annulus the other three occupy -- a literal
     // 5-point star would need concave vertices at ~0.3 of the radius, which is under the
@@ -188,6 +242,7 @@ export function identityMarkerGeometry(
     { sides: 4, rotation: -Math.PI / 4 },
   ];
   const { sides, rotation } = spec[variant];
+  ({ inner, outer } = bandForSides(sides));
   const angles = polygonAngles(sides, rotation);
   // Closed: the first vertex repeated, so the last edge is drawn like every other one.
   return bandGeometry([[...angles, angles[0]]], inner, outer);

@@ -209,9 +209,9 @@ describe('identity marker: shape (issue #630)', () => {
     const spread = (v: number[]): number => Math.max(...v) - Math.min(...v);
     expect(spread(sq), 'a square sits at one radius').toBeLessThan(1e-6);
     expect(spread(st), 'a starburst alternates between two').toBeGreaterThan(0.05);
-    // ...and it still lives inside the band, so it cannot reach under the hull.
-    expect(Math.max(...st)).toBeLessThanOrEqual(IDENTITY_RING_OUTER_R + 1e-6);
-    expect(Math.min(...st)).toBeGreaterThanOrEqual(IDENTITY_RING_INNER_R - 1e-6);
+    // ...and it reaches the family's own outer extent, which since issue #660 is LARGER
+    // than the solid ring's. The ring is deliberately not moved -- it is the control.
+    expect(Math.max(...st)).toBeGreaterThan(IDENTITY_RING_OUTER_R);
   });
 
   it('draws slot 1 as a full circle, matching the shipped ring it replaces', () => {
@@ -220,6 +220,64 @@ describe('identity marker: shape (issue #630)', () => {
     // to compare against the default than it needs to be.
     expect(arcRuns(build('shape', 0))).toBe(1);
     expect(outerAngles(build('shape', 0)).length).toBe(SEGMENTS + 1);
+  });
+});
+
+describe('identity marker: every shape reads at one weight (issue #660)', () => {
+  /*
+   * The shapes shared one band in WORLD units and therefore read at four different
+   * weights. `bandGeometry` places both edges at the same vertex angles, so a polygon's
+   * edges are chords and the perpendicular gap between them is the gap between apothems:
+   * `band * cos(PI / n)`. That put the triangle at HALF the circle's ink.
+   *
+   * Measured perpendicular rather than radially, because radial width is the number that
+   * was already equal and already wrong.
+   */
+  const perpendicular = (geo: THREE.BufferGeometry, sides: number): number => {
+    const pos = geo.getAttribute('position');
+    let outer = 0, inner = Infinity;
+    for (let i = 0; i < pos.count; i += 2) {
+      outer = Math.max(outer, Math.hypot(pos.getX(i), pos.getY(i)));
+      inner = Math.min(inner, Math.hypot(pos.getX(i + 1), pos.getY(i + 1)));
+    }
+    // apothem gap: the perpendicular distance between two concentric n-gon edges
+    return (outer - inner) * Math.cos(Math.PI / sides);
+  };
+
+  it('draws circle, triangle and square to the same perpendicular ink', () => {
+    const w = [
+      perpendicular(build('shape', 0), SEGMENTS),
+      perpendicular(build('shape', 1), 3),
+      perpendicular(build('shape', 2), 4),
+    ];
+    const spread = (Math.max(...w) - Math.min(...w)) / Math.max(...w);
+    expect(spread, `widths ${w.map((v) => v.toFixed(4)).join(', ')}`).toBeLessThan(0.02);
+  });
+
+  it('NEGATIVE CONTROL: the old shared band did not', () => {
+    // Without this the test above passes on any implementation that happens to give every
+    // shape the same band, including the shipped one it was written to replace. These are
+    // the numbers that motivated the change: 0.1497 / 0.0750 / 0.1061.
+    const shared = (sides: number): number =>
+      (IDENTITY_RING_OUTER_R - IDENTITY_RING_INNER_R) * Math.cos(Math.PI / sides);
+    const w = [shared(SEGMENTS), shared(3), shared(4)];
+    const spread = (Math.max(...w) - Math.min(...w)) / Math.max(...w);
+    expect(spread, 'the shared band was already even').toBeGreaterThan(0.4);
+  });
+
+  it('gives every shape the same outer extent, so they are one family at one size', () => {
+    const reach = (g: THREE.BufferGeometry): number => {
+      const pos = g.getAttribute('position');
+      let r = 0;
+      for (let i = 0; i < pos.count; i++) r = Math.max(r, Math.hypot(pos.getX(i), pos.getY(i)));
+      return r;
+    };
+    const all = [0, 1, 2, 3].map((sl) => reach(build('shape', sl)));
+    expect(Math.max(...all) - Math.min(...all), `reaches ${all.map((v) => v.toFixed(3))}`)
+      .toBeLessThan(1e-6);
+    // ...and that extent is larger than the ring they replaced, which is the other half of
+    // the owner's note. The solid ring itself must NOT have moved.
+    expect(Math.max(...all)).toBeGreaterThan(IDENTITY_RING_OUTER_R);
   });
 });
 
