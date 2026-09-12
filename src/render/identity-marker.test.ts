@@ -9,6 +9,7 @@ import {
   ringMarkerFor,
 } from '../presentation/identity-marker';
 import { IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R } from './entities';
+import { TANK_RADIUS } from '../sim/constants';
 
 // ---------------------------------------------------------------------------
 // Issue #630. Two candidate second channels for player identity, both selectable and
@@ -209,9 +210,9 @@ describe('identity marker: shape (issue #630)', () => {
     const spread = (v: number[]): number => Math.max(...v) - Math.min(...v);
     expect(spread(sq), 'a square sits at one radius').toBeLessThan(1e-6);
     expect(spread(st), 'a starburst alternates between two').toBeGreaterThan(0.05);
-    // ...and it still lives inside the band, so it cannot reach under the hull.
-    expect(Math.max(...st)).toBeLessThanOrEqual(IDENTITY_RING_OUTER_R + 1e-6);
-    expect(Math.min(...st)).toBeGreaterThanOrEqual(IDENTITY_RING_INNER_R - 1e-6);
+    // ...and it reaches the family's own outer extent, which since issue #660 is LARGER
+    // than the solid ring's. The ring is deliberately not moved -- it is the control.
+    expect(Math.max(...st)).toBeGreaterThan(IDENTITY_RING_OUTER_R);
   });
 
   it('draws slot 1 as a full circle, matching the shipped ring it replaces', () => {
@@ -220,6 +221,94 @@ describe('identity marker: shape (issue #630)', () => {
     // to compare against the default than it needs to be.
     expect(arcRuns(build('shape', 0))).toBe(1);
     expect(outerAngles(build('shape', 0)).length).toBe(SEGMENTS + 1);
+  });
+});
+
+describe('identity marker: every shape reads at one weight (issue #660)', () => {
+  /*
+   * The shapes shared one band in WORLD units and therefore read at four different
+   * weights. `bandGeometry` places both edges at the same vertex angles, so a polygon's
+   * edges are chords and the perpendicular gap between them is the gap between apothems:
+   * `band * cos(PI / n)`. That put the triangle at HALF the circle's ink.
+   *
+   * Measured perpendicular rather than radially, because radial width is the number that
+   * was already equal and already wrong.
+   */
+  const perpendicular = (geo: THREE.BufferGeometry, sides: number): number => {
+    const pos = geo.getAttribute('position');
+    let outer = 0, inner = Infinity;
+    for (let i = 0; i < pos.count; i += 2) {
+      outer = Math.max(outer, Math.hypot(pos.getX(i), pos.getY(i)));
+      inner = Math.min(inner, Math.hypot(pos.getX(i + 1), pos.getY(i + 1)));
+    }
+    // apothem gap: the perpendicular distance between two concentric n-gon edges
+    return (outer - inner) * Math.cos(Math.PI / sides);
+  };
+
+  it('draws circle, triangle and square to the same perpendicular ink', () => {
+    const w = [
+      perpendicular(build('shape', 0), SEGMENTS),
+      perpendicular(build('shape', 1), 3),
+      perpendicular(build('shape', 2), 4),
+    ];
+    const spread = (Math.max(...w) - Math.min(...w)) / Math.max(...w);
+    expect(spread, `widths ${w.map((v) => v.toFixed(4)).join(', ')}`).toBeLessThan(0.02);
+  });
+
+  it('NEGATIVE CONTROL: the old shared band did not', () => {
+    // Without this the test above passes on any implementation that happens to give every
+    // shape the same band, including the shipped one it was written to replace. These are
+    // the numbers that motivated the change: 0.1497 / 0.0750 / 0.1061.
+    const shared = (sides: number): number =>
+      (IDENTITY_RING_OUTER_R - IDENTITY_RING_INNER_R) * Math.cos(Math.PI / sides);
+    const w = [shared(SEGMENTS), shared(3), shared(4)];
+    const spread = (Math.max(...w) - Math.min(...w)) / Math.max(...w);
+    expect(spread, 'the shared band was already even').toBeGreaterThan(0.4);
+  });
+
+  it('sizes each shape so its EDGES clear the tank, without any corner running away', () => {
+    /*
+     * TUNED PER SHAPE, NOT DERIVED, and the two formulas that were tried say why.
+     *
+     *  - Shared CIRCUMRADIUS levels the corners and sends a triangle's edges to
+     *    `R * cos(60)` = 0.44, inside TANK_RADIUS, so the hull ate them and the shape read
+     *    as three orphaned corners.
+     *  - Shared MEAN radius fixes the edges (0.59) and overshoots: corners at 1.17, and the
+     *    triangle visibly dominates the set, because perceived size follows the extremes.
+     *
+     * A triangle cannot match a circle on both axes at once. So the contract is a
+     * CONSTRAINT rather than an equality, which is what this asserts.
+     */
+    const SIDES = [SEGMENTS, 3, 4];
+    const corners = [0, 1, 2].map((sl) => {
+      const p = build('shape', sl).getAttribute('position');
+      let r = 0;
+      for (let i = 0; i < p.count; i += 2) r = Math.max(r, Math.hypot(p.getX(i), p.getY(i)));
+      return r;
+    });
+    const edges = corners.map((r, i) => r * Math.cos(Math.PI / SIDES[i]));
+
+    // 1. Every edge clears the hull by a visible margin. This is the one that the
+    //    circumradius build failed, and the reason the triangle looked broken.
+    for (const [i, e] of edges.entries()) {
+      expect(e, `shape ${i} edge at ${e.toFixed(3)} is under the hull`)
+        .toBeGreaterThan(TANK_RADIUS + 0.04);
+    }
+
+    // 2. No corner runs away from the family. The mean-radius build failed THIS one, at
+    //    1.17 against the circle's 0.88 -- a 33% overshoot that read as "the triangle is
+    //    huge". 30% is the bound this set is tuned inside.
+    expect(Math.max(...corners) / Math.min(...corners),
+      `corners ${corners.map((v) => v.toFixed(3)).join(', ')}`).toBeLessThan(1.30);
+
+    // 3. ...and every shape still reaches past the solid ring it replaces, which must not
+    //    itself have moved -- it is the control the candidates are compared against.
+    for (const sl of [0, 1, 2, 3]) {
+      const p = build('shape', sl).getAttribute('position');
+      let r = 0;
+      for (let i = 0; i < p.count; i++) r = Math.max(r, Math.hypot(p.getX(i), p.getY(i)));
+      expect(r, `slot ${sl + 1}`).toBeGreaterThan(IDENTITY_RING_OUTER_R);
+    }
   });
 });
 
