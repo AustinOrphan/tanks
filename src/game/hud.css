@@ -2723,10 +2723,28 @@
  * flex-column-plus-heading shape .hud-customize-section already uses -- a separate
  * rule rather than reusing that class, so this pane's layout does not couple to the
  * paint shop's. */
+/*
+ * `align-self: stretch` is load-bearing, not tidying (issue #656).
+ *
+ * The pane is `display: flex; flex-direction: column; align-items: center`, so every row is
+ * shrink-to-fit in the cross axis by default -- and so is every row's own children, since a
+ * row repeats that pattern. That leaves `.hud-versus-map-row`'s `width: 100%` with nothing
+ * definite to resolve against: its containing block is this row, whose width is decided by
+ * its widest child, which is the grid. Circular, so the grid fell back to max-content and
+ * stopped at its own `max-width: 46rem` -- **736px at every viewport**, measured identically
+ * at 1280 and at 390, where it overflowed by 173px on each side and put whole cards off
+ * screen with no way to reach them.
+ *
+ * Stretching the ROW gives the grid a definite containing block without touching how
+ * anything is centred: each row still centres its own children through `align-items`, so
+ * Mode, Players and Stock look exactly as they did. Only the one child that asked for a
+ * percentage width now gets an answer.
+ */
 .hud-versus-row {
   display: flex;
   flex-direction: column;
   align-items: center;
+  align-self: stretch;
   gap: var(--hud-space-2);
 }
 
