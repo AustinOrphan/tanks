@@ -304,6 +304,11 @@ export interface GalleryOptions {
    */
   mineWarn?: MineWarnStyle | null;
   identityMarker?: IdentityMarkerStyle | null;
+  /**
+   * The resolved motion policy (issue #651). Absent means the shipped default, full motion,
+   * on the same contract as the two above.
+   */
+  motion?: 'full' | 'reduced';
   view: string;
   /** Draw the mine dev overlay. */
   reach: boolean;
@@ -371,6 +376,9 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   const views = createEntityViews(
     scene, undefined, opts.mineWarn ?? null, opts.identityMarker ?? null,
   );
+  // Pushed, never inferred -- the same one-way projection `renderer.ts` performs. A gallery
+  // that read the policy itself would be a second source of truth for it.
+  views.setReducedMotion(opts.motion === 'reduced');
   // Same call the game makes (renderer.ts's setPlayerStyle) and the Customize preview
   // makes -- the gallery has no skin machinery of its own to drift from it.
   //
