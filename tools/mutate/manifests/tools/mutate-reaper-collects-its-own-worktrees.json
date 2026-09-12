@@ -1,0 +1,14 @@
+{
+  "id": "mutate-reaper-collects-its-own-worktrees",
+  "file": "tools/mutate/run.mjs",
+  "find": "    if (pid === selfPid || isAlive(pid)) continue;",
+  "replace": "    if (isAlive(pid)) continue;",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "The self guard dropped, leaving only the liveness check. It happens to hold today -- this process is alive, so `isAlive(selfPid)` is true -- which is precisely what makes the mutation worth pinning: the correctness of the reaper would rest on a coincidence between two independent checks rather than on a stated rule, and any change to how liveness is determined (a permission error, a container that hides its own pid, a stubbed predicate in a test) would have it delete the worktrees of the run performing the deletion.",
+  "killedBy": [
+    "staleWorkerWorktrees: collecting a killed run's leftovers (issue #664) never collects its OWN worktrees, whatever the liveness check says"
+  ]
+}

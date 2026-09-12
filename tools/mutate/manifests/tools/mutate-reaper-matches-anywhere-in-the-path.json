@@ -1,0 +1,14 @@
+{
+  "id": "mutate-reaper-matches-anywhere-in-the-path",
+  "file": "tools/mutate/run.mjs",
+  "find": "    const match = /^mutate-worker-(\\d+)-/.exec(basename(dir));",
+  "replace": "    const match = /mutate-worker-(\\d+)-/.exec(dir);",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Anchoring dropped and the test moved from the basename to the whole path, which is the obvious-looking simplification. A checkout living anywhere under a directory whose name contains the prefix -- a previous run's leftovers used as a workspace, a path a developer chose -- then matches, and the reaper deletes a real repository worktree rather than temp residue. The blast radius is the difference between removing scratch and removing someone's working tree.",
+  "killedBy": [
+    "staleWorkerWorktrees: collecting a killed run's leftovers (issue #664) anchors on the BASENAME, not anywhere in the path"
+  ]
+}

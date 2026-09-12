@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
-import { parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, formatRunSummary, formatSelectionEcho, selectOnly, missingOnlyReport, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest } from './run.mjs';
+import { staleWorkerWorktrees, legacyWorkerWorktrees, pidIsAlive, parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, formatRunSummary, formatSelectionEcho, selectOnly, missingOnlyReport, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest } from './run.mjs';
 import { scopeCosts } from './scope-costs.mjs';
 import { selectAffected, entryText } from './select.mjs';
 import type { ManifestEntry } from './lib.mjs';
@@ -294,6 +294,77 @@ describe('validateEntry', () => {
   it('rejects a non-zero expectFailures on a survives entry -- survives already means 0', () => {
     const e = { ...base(), expect: 'survives', expectFailures: 3 };
     expect(() => validateEntry(e, 1)).toThrow(/"expect": "survives" requires "expectFailures": 0/);
+  });
+});
+
+describe('staleWorkerWorktrees: collecting a killed run\'s leftovers (issue #664)', () => {
+  // `runParallel` cleans up in a `finally` and on SIGINT/SIGTERM, so the only escapes are
+  // SIGKILL, a crashed parent, or a killed process group -- each of which leaves one detached
+  // worktree per worker in the temp directory. `git worktree prune` does not collect them
+  // (their directories still exist) and `git status` cannot see them, so they accumulate
+  // one set per killed run until someone runs `git worktree list`.
+  const porcelain = (...dirs: string[]) =>
+    dirs.map((d) => `worktree ${d}\nHEAD abc123\ndetached\n`).join('\n');
+  const dead = () => false;
+  const alive = () => true;
+
+  it('collects a worktree whose recorded process is gone', () => {
+    expect(staleWorkerWorktrees(porcelain('/tmp/mutate-worker-4242-abc'), dead, 1))
+      .toEqual(['/tmp/mutate-worker-4242-abc']);
+  });
+
+  it('LEAVES a live run\'s worktrees alone -- the property that makes this safe to run', () => {
+    // The failure this guards is far worse than the residue: a second sweep running right now
+    // owns worktrees that look exactly like abandoned ones, and deleting one would remove a
+    // running job's working directory mid-mutation. That is why the PID is in the directory
+    // name at all, rather than reaping on the name prefix or on age.
+    expect(staleWorkerWorktrees(porcelain('/tmp/mutate-worker-4242-abc'), alive, 1)).toEqual([]);
+  });
+
+  it('never collects its OWN worktrees, whatever the liveness check says', () => {
+    // Belt and braces: `pidIsAlive(process.pid)` is true, but this must not depend on that.
+    expect(staleWorkerWorktrees(porcelain('/tmp/mutate-worker-99-x'), dead, 99)).toEqual([]);
+  });
+
+  it('ignores worktrees that are not mutate workers', () => {
+    // The repository's own checkout and every hand-made worktree appear in the same listing.
+    expect(staleWorkerWorktrees(
+      porcelain('/Users/me/src/tanks', '/tmp/other-worker-1-x', '/tmp/mutate-worker-7-y'),
+      dead, 1,
+    )).toEqual(['/tmp/mutate-worker-7-y']);
+  });
+
+  it('ignores a pre-PID worker directory rather than guessing about it', () => {
+    // Worktrees from a build before the PID was in the name (`mutate-worker-AbC123`) carry no
+    // pid to check. Left alone deliberately: guessing is how a live run loses its directory.
+    expect(staleWorkerWorktrees(porcelain('/tmp/mutate-worker-AbC123'), dead, 1)).toEqual([]);
+  });
+
+  it('anchors on the BASENAME, not anywhere in the path', () => {
+    // A checkout living under a directory that happens to contain the prefix is not a
+    // candidate. Asserted because `includes()` is the obvious wrong implementation.
+    expect(staleWorkerWorktrees(porcelain('/home/mutate-worker-1-old/tanks'), dead, 9))
+      .toEqual([]);
+  });
+
+  it('NAMES a pre-PID worker worktree instead of silently ignoring it', () => {
+    // The other half of the "ignores a pre-PID directory" case above. Not collecting one is
+    // right -- there is nothing to check a live process against -- but saying nothing is how
+    // these became invisible: `git status` does not show them and `git worktree prune` does
+    // not collect them, so they are only ever found by someone running `git worktree list`.
+    expect(legacyWorkerWorktrees(porcelain('/tmp/mutate-worker-AbC123')))
+      .toEqual(['/tmp/mutate-worker-AbC123']);
+    // ...and it must not name the ones the reaper DOES handle, or every run would print a
+    // manual-cleanup instruction for worktrees it just removed itself.
+    expect(legacyWorkerWorktrees(porcelain('/tmp/mutate-worker-4242-abc'))).toEqual([]);
+    expect(legacyWorkerWorktrees(porcelain('/Users/me/src/tanks'))).toEqual([]);
+  });
+
+  it('pidIsAlive says yes for this process and no for an impossible pid', () => {
+    // The predicate the function above is driven by, proven against the one process we can
+    // be certain about either way.
+    expect(pidIsAlive(process.pid)).toBe(true);
+    expect(pidIsAlive(2 ** 30)).toBe(false);
   });
 });
 

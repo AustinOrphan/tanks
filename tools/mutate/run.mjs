@@ -198,6 +198,99 @@ export function parseJobs(raw, cores = availableParallelism()) {
 }
 
 /**
+ * Worktrees left behind by a mutate run that died before it could clean up.
+ *
+ * `runParallel` removes its own worktrees in a `finally` and on SIGINT/SIGTERM, which covers
+ * every exit it gets to observe. It does NOT cover SIGKILL, a crashed parent, or a harness
+ * that kills the process group -- and those leave a full detached worktree per worker in the
+ * temp directory. `git worktree prune` will not collect them: prune removes administrative
+ * files for worktrees whose DIRECTORY is gone, and these directories are still there.
+ * `git status` cannot see them either, since they are not in the working tree. So they
+ * accumulate silently, one set per killed run, and the only way to find them is
+ * `git worktree list`.
+ *
+ * WHY THAT MATTERS beyond tidiness: issue #664 tracks sweeps reporting baseline-red for tests
+ * that pass in isolation, and the sightings correlate with orphans being present. The
+ * mechanism is not established -- an idle worktree burns no CPU -- so this function is not
+ * claimed as that issue's fix. It removes a known, measurable residue that currently has to
+ * be cleared by hand from outside the repository, which is reason enough.
+ *
+ * SAFE UNDER CONCURRENCY, which is the whole reason the PID is in the directory name rather
+ * than this reaping on a name prefix or an age threshold. A second mutate run happening right
+ * now owns live worktrees that look exactly like abandoned ones; removing those would delete
+ * a running job's working directory mid-mutation, which is far worse than the residue. A
+ * worktree is only collected when its recorded PID names no live process.
+ *
+ * Pure: takes `git worktree list --porcelain` output and a liveness predicate, returns the
+ * directories to remove. The caller does the removing, and a test can drive every branch
+ * without spawning anything.
+ *
+ * @param {string} porcelain Output of `git worktree list --porcelain`.
+ * @param {(pid: number) => boolean} isAlive
+ * @param {number} selfPid The current process, never collected however it answers.
+ * @returns {string[]}
+ */
+export function staleWorkerWorktrees(porcelain, isAlive, selfPid) {
+  /** @type {string[]} */
+  const stale = [];
+  for (const line of porcelain.split('\n')) {
+    if (!line.startsWith('worktree ')) continue;
+    const dir = line.slice('worktree '.length).trim();
+    // Anchored on the BASENAME, so a repository checked out under a path that happens to
+    // contain "mutate-worker-" is not a candidate.
+    const match = /^mutate-worker-(\d+)-/.exec(basename(dir));
+    if (!match) continue;
+    const pid = Number(match[1]);
+    // A worktree from a build before the PID was in the name has no pid to check, so it does
+    // not match above and is left alone. Deliberate: guessing about those is how a live run
+    // gets its directory deleted.
+    if (pid === selfPid || isAlive(pid)) continue;
+    stale.push(dir);
+  }
+  return stale;
+}
+
+/**
+ * Worker worktrees this reaper will not touch, because they were created before the PID was
+ * part of the directory name and so carry nothing to check a process against.
+ *
+ * Reported rather than collected, and that asymmetry is the point. Removing one would mean
+ * guessing that no live run owns it -- on a wrong guess, a running sweep loses its working
+ * directory mid-mutation. Leaving them silent is the status quo that made them invisible in
+ * the first place: `git status` does not show them and `git worktree prune` does not collect
+ * them, so nobody learns they exist until something goes strange and someone thinks to run
+ * `git worktree list`. Naming them costs one line and turns an invisible residue into a
+ * visible one with an obvious manual fix.
+ *
+ * @param {string} porcelain Output of `git worktree list --porcelain`.
+ * @returns {string[]}
+ */
+export function legacyWorkerWorktrees(porcelain) {
+  /** @type {string[]} */
+  const legacy = [];
+  for (const line of porcelain.split('\n')) {
+    if (!line.startsWith('worktree ')) continue;
+    const dir = line.slice('worktree '.length).trim();
+    const name = basename(dir);
+    if (name.startsWith('mutate-worker-') && !/^mutate-worker-\d+-/.test(name)) legacy.push(dir);
+  }
+  return legacy;
+}
+
+/** True when a signal can be delivered to `pid` -- i.e. the process exists. Signal 0 performs
+ * the permission and existence checks without sending anything. EPERM means it exists and is
+ * not ours, which still counts as alive.
+ * @param {number} pid @returns {boolean} */
+export function pidIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return /** @type {NodeJS.ErrnoException} */ (err)?.code === 'EPERM';
+  }
+}
+
+/**
  * Split entries across `jobs` workers WITHOUT splitting an exact test scope: every
  * entry of one scope goes to one worker, so each scope is still baselined exactly
  * once per run (`runManifest` caches baselines per scope inside one process). Scopes
@@ -780,6 +873,29 @@ async function runParallel(entries, jobs, root, reportPath) {
     console.error(`--jobs ${jobs} runs the COMMITTED tree in detached worktrees, and these tracked files are not committed:\n${dirty}\ncommit or stash them first.`);
     return 2;
   }
+  // Collect any previous run's abandoned worktrees BEFORE partitioning, so a killed sweep
+  // does not leave the next one sharing the machine with its own wreckage.
+  const stale = staleWorkerWorktrees(
+    sh('git', ['worktree', 'list', '--porcelain'], root), pidIsAlive, process.pid,
+  );
+  for (const dir of stale) {
+    spawnSync('git', ['worktree', 'remove', '--force', dir], { cwd: root, encoding: 'utf8' });
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(`${dir}.manifest.json`, { force: true });
+    rmSync(`${dir}.report.json`, { force: true });
+  }
+  if (stale.length) {
+    spawnSync('git', ['worktree', 'prune'], { cwd: root, encoding: 'utf8' });
+    console.log(`[pool] removed ${stale.length} worktree(s) abandoned by an earlier run`);
+  }
+  const legacy = legacyWorkerWorktrees(sh('git', ['worktree', 'list', '--porcelain'], root));
+  if (legacy.length) {
+    console.error(
+      `[pool] ${legacy.length} worker worktree(s) from a build before this cleanup existed are `
+      + `still registered, and cannot be collected automatically (no pid to check):\n`
+      + legacy.map((d) => `  git worktree remove --force ${d}`).join('\n'),
+    );
+  }
   const costs = readScopeCosts(join(root, 'tools/mutate/scope-costs.json'), (msg) => console.error(msg));
   const costOf = scopeCostLookup(costs);
   const slices = partitionByScope(entries, jobs, costOf);
@@ -814,7 +930,10 @@ async function runParallel(entries, jobs, root, reportPath) {
       // realpath, not the path mkdtemp hands back: macOS's temp dir is a symlink, and
       // vitest names modules by realpath, so a worktree addressed through the symlink
       // reports NO test file related to any source and the worker refuses to start.
-      const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mutate-worker-')));
+      // The PID goes in the NAME so a later run can tell a dead run's leftovers from a live
+      // run's working directories -- see `staleWorkerWorktrees`. Same convention the report
+      // and related-files temp paths above already use.
+      const dir = realpathSync(mkdtempSync(join(tmpdir(), `mutate-worker-${process.pid}-`)));
       sh('git', ['worktree', 'add', '--detach', dir, 'HEAD'], root);
       symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
       const slicePath = join(dir, '..', `${basename(dir)}.manifest.json`);
