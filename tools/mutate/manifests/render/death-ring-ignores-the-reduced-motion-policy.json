@@ -1,8 +1,8 @@
 {
   "id": "death-ring-ignores-the-reduced-motion-policy",
   "file": "src/render/death-pulse.ts",
-  "find": "      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);",
-  "replace": "      r.mesh.scale.setScalar(1 + GROWTH * k);",
+  "find": "        r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);",
+  "replace": "        r.mesh.scale.setScalar(1 + GROWTH * k);",
   "expect": "killed",
   "tests": [
     "src/render/death-pulse.test.ts"

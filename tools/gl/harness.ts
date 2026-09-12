@@ -1331,6 +1331,59 @@ check('the posed gallery HONOURS a render-variant flag instead of dropping it', 
   return null;
 });
 
+check('a MOMENT scene honours the arrival language, not just the posed gallery', () => {
+  // The counterpart of the check above, for issue #230's flag and the other branch.
+  // `main.ts` forwards a render variant to TWO places -- `buildGallery` and
+  // `buildMomentScene` -- and the regression the previous check records is precisely a
+  // flag reaching one of them and not the other. `arrival` inverts that geometry: the
+  // posed gallery stages no spawn and no death, so the MOMENT branch is the only one
+  // where this language can appear at all, and it is the branch with no coverage.
+  //
+  // Driven through `destroyed`, whose kill lands on tick 18 (moments.ts pins it), and
+  // through the DEATH half specifically -- `createDeathPulseSystem`'s second argument is
+  // a separate forwarding from `createEntityViews`'s fifth, so a check that only watched
+  // the entrance would pass with the death ring still speaking the shipped language.
+  const build = (c: HTMLCanvasElement, arrival: 'opposed' | null) => buildMomentScene(
+    c, c.width, c.height,
+    { moment: 'destroyed', view: 'game', skin: 'solid', hull: null, accent: null, spawnAnim: 'warp', arrival },
+  );
+  // Two draws, exactly as the fire-burst check above: the first clamps dt to 0 (spawning
+  // the ring at rest), the second advances the clock 8 ticks (~0.133s) so the envelope --
+  // ease-out travel and the attack hold -- has actually run. A single draw would compare
+  // two rings at k = 0, where only the band width differs.
+  const render = (arrival: 'opposed' | null) => {
+    const c = galleryCanvas(320, 240);
+    const g = build(c, arrival);
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    g.draw(18, 0);
+    g.draw(18, 8);
+    const pixels = grab(gl, c.width, c.height);
+    g.dispose();
+    c.remove();
+    return pixels;
+  };
+  const shipped = render(null);
+  // The control, and it is not a formality: two independently built scenes with the SAME
+  // flag must be byte-identical before a difference is allowed to mean anything about the
+  // flag. moment-scene.ts seeds its particle rng with a fixed literal, so this holds by
+  // construction -- and fails loudly if that ever stops being true, rather than letting
+  // particle noise masquerade as the language reaching the scene.
+  const controlPixels = render(null);
+  const control = bytesDiffering(shipped, controlPixels);
+  if (control !== 0) {
+    return `control failed: two identical shipped renders differ by ${control} of ${shipped.length} bytes -- the check cannot discriminate`;
+  }
+  const opposed = render('opposed');
+  const moved = bytesDiffering(shipped, opposed);
+  // Same kill on the same tick, same camera, same hue: the only difference is the death
+  // ring's envelope and its band width (3.2x). 0 means neither forwarding fired, which is
+  // exactly what `--mineWarn` did in the posed scene for its entire life, undetectably.
+  if (moved < 200) {
+    return `only ${moved} of ${shipped.length} bytes differ with arrival=opposed -- the language is not reaching the moment scene`;
+  }
+  return null;
+});
+
 check('the gallery paints the chosen skin onto the tank it renders', () => {
   const a = galleryCanvas();
   const b = galleryCanvas();

@@ -9,6 +9,7 @@ import { DEFAULT_QUALITY_PRESET } from '../presentation/quality';
 import { createEntityViews, type EntityViews } from './entities';
 import type { MineWarnStyle } from './mine-warning';
 import type { IdentityMarkerStyle } from '../presentation/identity-marker';
+import type { ArrivalLanguage } from '../presentation/arrival-language';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
@@ -86,6 +87,9 @@ export interface RendererOptions {
   /** Experimental second identity channel (`identityMarker` dev flag, issue #630);
    *  absent = today's solid hue-only ring. */
   readonly identityMarker?: IdentityMarkerStyle | null;
+  /** Experimental arrival/destruction language (`arrival` dev flag, issue #230); absent =
+   *  the shipped pair, which both expand a ring. */
+  readonly arrival?: ArrivalLanguage | null;
   /** The paint shop's saved hull colour, applied from the first frame. */
   readonly playerColor?: string;
   /** The paint shop's saved skin, applied from the first frame. */
@@ -146,6 +150,7 @@ export function createRenderer(
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary, options.quality);
   const entities: EntityViews = createEntityViews(
     ctx.scene, ctx.textures, options.mineWarn ?? null, options.identityMarker ?? null,
+    options.arrival ?? null,
   );
   if (options.playerColor || options.playerSkin || options.playerAccent) {
     entities.setPlayerStyle(
@@ -155,7 +160,7 @@ export function createRenderer(
     );
   }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
-  const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene);
+  const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene, options.arrival === 'opposed');
   const treadTrails: TreadTrailSystem = createTreadTrailSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
   const mineDebug: MineDebug | null =

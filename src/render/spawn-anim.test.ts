@@ -155,3 +155,88 @@ describe('the spawn animators under reduced motion (issue #651)', () => {
     }
   });
 });
+
+describe('converge: an arrival gathers instead of expanding (issue #230)', () => {
+  /*
+   * The issue's first complaint is that spawn and death are "hard to tell apart at normal
+   * speed", and the reason is concrete: every shipped entrance grows its ring outward --
+   * warp 0.4 -> 2.0, beacon 0.5 -> 1.7, rise a bump -- and `death-pulse.ts` grows its ring
+   * outward too. Two events, one vocabulary.
+   *
+   * These assert the OPPOSITION rather than a curve, because the curve is a feel constant
+   * and the opposition is the contract.
+   */
+  const ids = ['warp', 'rise', 'beacon'] as const;
+
+  const sweep = (id: (typeof ids)[number], opposed: boolean) =>
+    Array.from({ length: 41 }, (_, i) =>
+      SPAWN_ANIMATORS[id]('entrance', i / 40, 0, false, opposed).ring.radius,
+    );
+
+  it('shipped: the ring travels OUTWARD, which is why it reads like the death pulse', () => {
+    // The negative control, and the measurement the issue rests on.
+    //
+    // Stated as "widest after the start, never closing onto the tank" rather than
+    // "ends wider", because `rise` is a symmetric bump (0.9 + 0.3 sin(p*pi)) that returns
+    // to its starting radius -- an end-to-end comparison calls rise flat and says nothing
+    // about the outward throw it shares with warp, beacon and the death pulse.
+    for (const id of ids) {
+      const r = sweep(id, false);
+      expect(Math.max(...r), `${id} never travels outward`).toBeGreaterThan(r[0]);
+      expect(r[r.length - 1], `${id} closes onto the tank`).toBeGreaterThanOrEqual(r[0]);
+    }
+  });
+
+  it('opposed: every style converges instead', () => {
+    // ALL THREE, not one. The player picks a spawn STYLE; arrival-versus-destruction is a
+    // property of the EVENT, and a language that held for only one style would leave the
+    // other two still reading like deaths.
+    for (const id of ids) {
+      const r = sweep(id, true);
+      // The exact inverse of the control above: widest AT the start, and it finishes
+      // strictly inside where it began.
+      expect(Math.max(...r), `${id} is not widest at the start`).toBe(r[0]);
+      expect(r[r.length - 1], `${id} does not converge`).toBeLessThan(r[0]);
+    }
+  });
+
+  it('lands on the tank rather than passing through it', () => {
+    // The ring ends at the tank's own footprint (radius 1), so the arrival resolves ON the
+    // thing that arrived. Collapsing past it would read as the tank being swallowed.
+    for (const id of ids) {
+      const end = SPAWN_ANIMATORS[id]('entrance', 1, 0, false, true).ring.radius;
+      expect(end, `${id}`).toBeCloseTo(1, 2);
+    }
+  });
+
+  it('brightens as it closes, so the landing is the brightest frame', () => {
+    for (const id of ids) {
+      const early = SPAWN_ANIMATORS[id]('entrance', 0.1, 0, false, true).ring.opacity;
+      const late = SPAWN_ANIMATORS[id]('entrance', 0.9, 0, false, true).ring.opacity;
+      expect(late, `${id}`).toBeGreaterThan(early);
+    }
+  });
+
+  it('holds still under reduced motion without vanishing', () => {
+    // The rule this file already states, applied to the new arm: scales and radii hold at
+    // their resting value. Not zero opacity -- an invisible ring deletes the cue rather
+    // than calming it, the trap #652 records for `.hud-capacity` and `.hud-count`.
+    for (const id of ids) {
+      for (const p of [0.1, 0.5, 0.9]) {
+        const f = SPAWN_ANIMATORS[id]('entrance', p, 0, true, true);
+        expect(f.ring.radius, `${id} @${p}`).toBe(1);
+        expect(f.ring.opacity, `${id} @${p} vanished`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('leaves the INVINCIBLE phase alone, which is a state and not an event', () => {
+    // Opposing a sustained "you are still protected" against a death would be opposing two
+    // things that never occur together.
+    for (const id of ids) {
+      const shipped = SPAWN_ANIMATORS[id]('invincible', 0.4, 0);
+      const opposed = SPAWN_ANIMATORS[id]('invincible', 0.4, 0, false, true);
+      expect(opposed, id).toEqual(shipped);
+    }
+  });
+});

@@ -8,6 +8,7 @@ import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
 import { identityApplies, resolveOwnerColor } from '../presentation/identity';
 import { identityMarkerGeometry, identityRoofGeometry } from './identity-marker';
+import type { ArrivalLanguage } from '../presentation/arrival-language';
 import {
   identityMarkerSpin,
   marksTurretRoof,
@@ -438,6 +439,12 @@ export function createEntityViews(
    * null/absent = today's solid hue-only ring. See identity-marker.ts.
    */
   identityMarker: IdentityMarkerStyle | null = null,
+  /**
+   * Experimental arrival/destruction language (the `arrival` dev flag, issue #230);
+   * null/absent = the shipped entrance, which expands its ring exactly as the death pulse
+   * does. See presentation/arrival-language.ts.
+   */
+  arrival: ArrivalLanguage | null = null,
 ): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
@@ -1362,6 +1369,10 @@ export function createEntityViews(
               spawn.elapsed / ENTRANCE_SECONDS,
               0,
               reducedMotion,
+              // ENTRANCE ONLY. The invincible arm below is untouched by the arm: it is a
+              // sustained STATE ("you are still protected"), not an event, and opposing it
+              // against a death would be opposing two things that never occur together.
+              arrival === 'opposed',
             );
           } else if (shieldLeft > 0) {
             const p = 1 - shieldLeft / RESPAWN_SHIELD_TICKS; // 0 fresh -> 1 ending

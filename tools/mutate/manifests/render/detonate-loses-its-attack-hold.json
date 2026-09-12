@@ -1,0 +1,14 @@
+{
+  "id": "detonate-loses-its-attack-hold",
+  "file": "src/render/death-pulse.ts",
+  "find": "        r.mesh.material.opacity = k < ATTACK ? 1 : 1 - (k - ATTACK) / (1 - ATTACK);",
+  "replace": "        r.mesh.material.opacity = 1 - k;",
+  "expect": "killed",
+  "tests": [
+    "src/render/death-pulse.test.ts"
+  ],
+  "why": "The hold is the impact: a few frames of solid ring before anything fades is what the eye reads as something breaking rather than something leaving. Without it the opacity curve is the shipped one exactly, and the arm is reduced to a fatter ring on an ease-out -- half the separation gone, silently, in the half that carries at speed.",
+  "killedBy": [
+    "detonate: a destruction blasts instead of swelling (issue #230) HOLDS at full brightness before it fades, which is the impact frame"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "gallery-arrival-flag-skips-its-vocabulary-check",
+  "file": "tools/gallery/args.mjs",
+  "find": "    if (!languages.includes(out.arrival)) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "The vocabulary check dropped, so `--arrival converge` -- the name of one HALF of this language, and exactly what someone who read the issue would type -- is forwarded to the page, fails `isArrivalLanguage` there, resolves to null, and shoots the shipped treatment while reporting success. args.mjs cannot import the TypeScript that owns ARRIVAL_LANGUAGES, so this hardcoded list plus its two-way pin is the only thing keeping the CLI honest.",
+  "killedBy": [
+    "gallery args pins --arrival to the vocabulary the renderer actually owns"
+  ]
+}

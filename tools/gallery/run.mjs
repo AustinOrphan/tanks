@@ -179,6 +179,7 @@ async function run(browser) {
     if (args.mineWarn !== null) p.set('mineWarn', args.mineWarn);
     if (args.motion !== 'full') p.set('motion', args.motion);
     if (args.identityMarker !== null) p.set('identityMarker', args.identityMarker);
+    if (args.arrival !== null) p.set('arrival', args.arrival);
     if (args.blockedFire !== null) p.set('blockedFire', args.blockedFire);
     if (args.hull) p.set('hull', args.hull);
     if (args.accent) p.set('accent', args.accent);

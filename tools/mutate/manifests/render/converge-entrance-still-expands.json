@@ -1,0 +1,14 @@
+{
+  "id": "converge-entrance-still-expands",
+  "file": "src/render/spawn-anim.ts",
+  "find": "  return { radius: reducedMotion ? 1 : 2.4 - 1.4 * p, opacity: p, arc: 1 };",
+  "replace": "  return { radius: reducedMotion ? 1 : 1 + 1.4 * p, opacity: p, arc: 1 };",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "why": "The whole of issue #230's arrival half. With the direction flipped back, `?dev=1&arrival=opposed` still renames the language, still reports as accepted, and still draws a ring that expands exactly like the death pulse it was supposed to be told apart from -- so the owner would play the arm, see no separation, and conclude the language does not work rather than that it never ran. An experiment flag that silently does nothing is worse than one that errors.",
+  "killedBy": [
+    "converge: an arrival gathers instead of expanding (issue #230) opposed: every style converges instead"
+  ]
+}

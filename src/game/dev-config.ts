@@ -73,6 +73,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
 
   quality: 'Rendering',
   identityMarker: 'Rendering',
+  arrival: 'Rendering',
   enemyDeathPulse: 'Rendering',
   backdrop: 'Rendering',
   menuTransition: 'Rendering',

@@ -29,6 +29,7 @@ const mineWarnParam = params.get('mineWarn') as import('../../src/render/mine-wa
 const motionParam = params.get('motion') === 'reduced' ? 'reduced' : 'full';
 const identityMarkerParam = params.get('identityMarker') as import('../../src/presentation/identity-marker').IdentityMarkerStyle | null;
 const blockedFireParam = params.get('blockedFire') as import('../../src/presentation/blocked-fire').BlockedFireCue | null;
+const arrivalParam = params.get('arrival') as import('../../src/presentation/arrival-language').ArrivalLanguage | null;
 
 // `scene` selects one of MOMENTS's scripted timelines over the default posed gallery.
 // Looking the id up directly in MOMENTS (rather than checking against a hardcoded list)
@@ -53,6 +54,7 @@ const g = moment
       spawnAnim: spawnAnimParam ?? DEFAULT_SPAWN_ANIM,
       mineWarn: mineWarnParam,
       blockedFire: blockedFireParam,
+      arrival: arrivalParam,
       motion: motionParam,
     })
   : buildGallery(canvas, W, H, {

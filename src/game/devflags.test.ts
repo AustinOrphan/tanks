@@ -487,6 +487,35 @@ describe('parseDevFlags: backdrop (issue #317 -- the felt treatment kept switcha
   });
 });
 
+describe('parseDevFlags: arrival (issue #230 -- spawn and death told apart)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?arrival=opposed').arrival).toBeNull();
+  });
+
+  it('is null when absent -- the shipped expanding-ring language is the default', () => {
+    expect(parseDevFlags('?dev=1').arrival).toBeNull();
+  });
+
+  it('accepts opposed -- population: the one named language this build carries', () => {
+    expect(parseDevFlags('?dev=1&arrival=opposed').arrival).toBe('opposed');
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 6 forms below', () => {
+    // `converge` and `detonate` are in the set deliberately: they are the names of the two
+    // HALVES of this language, and they are exactly what someone who read the issue would
+    // reach for. Accepting either would select the whole arm under a name that promises
+    // half of it. `default` and `shipped` for backdrop's reason -- naming the default is
+    // not a way to select a language.
+    for (const v of ['', 'OPPOSED', 'converge', 'detonate', 'default', 'shipped']) {
+      expect(parseDevFlags(`?dev=1&arrival=${v}`).arrival).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&arrival=opposed')).toEqual({ ...DEV_FLAGS_OFF, arrival: 'opposed' });
+  });
+});
+
 describe('registryKeyMismatch: proven against synthetic fixtures first', () => {
   // The point of factoring this out: a check written directly against FLAG_REGISTRY can
   // never fail while `Record<keyof DevFlags, FlagSpec>` stands (a missing or extra key is

@@ -1,0 +1,14 @@
+{
+  "id": "converge-ring-dims-as-it-lands",
+  "file": "src/render/spawn-anim.ts",
+  "find": "2.4 - 1.4 * p, opacity: p, arc: 1 };",
+  "replace": "2.4 - 1.4 * p, opacity: 1 - p, arc: 1 };",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "why": "Brightness inverted, so the ring is faintest at the moment it lands -- the frame the entrance ends on and the one the eye actually catches. The shipped entrances all fade OUT as they expand; copying that fade here hands the converge arm the death pulse's envelope back, undoing half the separation the direction change bought.",
+  "killedBy": [
+    "converge: an arrival gathers instead of expanding (issue #230) brightens as it closes, so the landing is the brightest frame"
+  ]
+}
