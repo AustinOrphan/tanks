@@ -315,6 +315,11 @@ import {
 } from '../input/touch';
 import './hud.css';
 import { describeDisabledReason, setSelected } from './ui';
+import {
+  isOffered,
+  type Relevance,
+  type RelevanceSettingId,
+} from './control-relevance';
 import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 
 /*
@@ -865,6 +870,23 @@ export interface Hud {
    * HUD shows what was STORED, not what was clicked.
    */
   setHaptics(on: boolean): void;
+  /** The stored controller-rumble preference, for the toggle's own label (issue #227). */
+  setControllerRumble(on: boolean): void;
+  onControllerRumbleChange(cb: (on: boolean) => void): void;
+  /**
+   * Which control settings this device is worth offering (issue #227), from
+   * `control-relevance.ts`'s verdict over `PlatformCapabilities`.
+   *
+   * Pushed by the page, not read here: the HUD does not detect hardware, and the verdict is
+   * a projection like every other. Applying the WHOLE record each time is deliberate -- a
+   * partial push is how a control gets hidden once and never restored.
+   *
+   * Settings visibility keys off CAPABILITIES and never off modality. The last input touched
+   * oscillates on a hybrid device, and a pane that rearranged itself because someone brushed
+   * a trackpad is the flicker issue #227 exists to prevent; modality drives `keyHint`'s
+   * transient prompts and nothing durable.
+   */
+  setControlRelevance(relevance: Record<RelevanceSettingId, Relevance>): void;
   /** Fired with the FLIPPED value when the player taps the haptics toggle. */
   onHapticsChange(cb: (on: boolean) => void): void;
   /**
@@ -944,6 +966,18 @@ export interface Hud {
    * while the panel that reads them is on screen -- the driver does not tick during
    * title/paused, so nothing else would refresh the panel's live pad list.
    */
+  /**
+   * The Settings pane just became visible/hidden -- the ONE chokepoint for both
+   * transitions, the shape `onControllersOpen`/`onControllersClose` already uses.
+   *
+   * `route-ui.ts` re-probes platform capabilities here and keeps them live with the two
+   * gamepad hotplug listeners for as long as the pane is up (issue #227). It has to: the
+   * only other `refreshCapabilities` call site is `loop.ts`'s per-frame pad sweep, which
+   * runs while a match SIMULATES -- so a player sitting in Settings with no match running
+   * could plug in a rumble pad and watch the control keep saying there is none.
+   */
+  onSettingsOpen(cb: () => void): void;
+  onSettingsClose(cb: () => void): void;
   onControllersOpen(cb: () => void): void;
   onControllersClose(cb: () => void): void;
   /**
@@ -1146,9 +1180,11 @@ export type RouteHudKey =
   | 'previewCanvas' | 'previewRotateButtons' | 'onCustomizeOpen' | 'onCustomizeClose'
   | 'setTouchScheme' | 'onTouchSchemeChange' | 'setFireMode' | 'onFireModeChange'
   | 'setHaptics' | 'onHapticsChange' | 'setMotion' | 'onMotionChange'
+  | 'setControllerRumble' | 'onControllerRumbleChange' | 'setControlRelevance'
   | 'setQuality' | 'onQualityChange'
   | 'onReassignSlot' | 'setControllers' | 'setDetectedPads' | 'setBotAssignmentAllowed'
   | 'onControllersOpen' | 'onControllersClose'
+  | 'onSettingsOpen' | 'onSettingsClose'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
   | 'setRelaunchTarget';
 
@@ -1890,9 +1926,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
                lives under 'input' in the settings model, where Accessibility holds the
                presentation policies -- motion below, and the UI scale #290 adds. -->
           <button class="ui-btn ui-btn--sm hud-haptics-toggle" type="button"></button>
+          <!-- Controller rumble, a SEPARATE setting from device haptics above and not a
+               synonym (capabilities.ts spells out the support split: a phone has
+               navigator.vibrate and no pad; a desktop pad has an actuator and, in
+               Firefox/Safari, no navigator.vibrate at all). It had a stored value and an
+               effective value since #320 and no control anywhere until issue #227, so the
+               preference could not be changed by the player it belongs to. -->
+          <button class="ui-btn ui-btn--sm hud-rumble-toggle" type="button"></button>
           <!-- The durable Controllers entry the Main Menu gave up. -->
           <button class="ui-btn ui-btn--sm hud-settings-controllers" type="button">Controllers</button>
         </div>
+        <!-- Why rumble is refused, when it is. Same shape as the versus pane's mode note
+             (issue #260): a visible sentence that 'describeDisabledReason' also points the
+             refused control's 'aria-describedby' at, so the reason reaches a screen reader
+             through the control rather than only sitting near it. -->
+        <p class="ui-hint hud-rumble-note hud-rumble-note--hidden" id="hud-rumble-note"></p>
       </section>
       <section class="hud-settings-section" data-section="accessibility" aria-labelledby="hud-settings-a11y">
         <h2 id="hud-settings-a11y">Accessibility</h2>
@@ -2136,6 +2184,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const settingsVolumeEl = el.querySelector('.hud-settings-volume') as HTMLInputElement;
   const settingsControllersBtn = el.querySelector('.hud-settings-controllers') as HTMLButtonElement;
   const settingsAboutBtn = el.querySelector('.hud-settings-about') as HTMLButtonElement;
+  const rumbleToggleBtn = el.querySelector('.hud-rumble-toggle') as HTMLButtonElement;
+  const rumbleNoteEl = el.querySelector('.hud-rumble-note') as HTMLElement;
   const resetStatsBtn = el.querySelector('.hud-reset-stats') as HTMLButtonElement;
   const resetProgressBtn = el.querySelector('.hud-reset-progress') as HTMLButtonElement;
   const aboutOpenBtn = el.querySelector('.hud-about-open') as HTMLButtonElement;
@@ -2354,6 +2404,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   let currentAccent: AccentId = ACCENTS[0].id;
   const customizeOpenCbs: Array<() => void> = [];
   const customizeCloseCbs: Array<() => void> = [];
+  const settingsOpenCbs: Array<() => void> = [];
+  const settingsCloseCbs: Array<() => void> = [];
+  /**
+   * Whether the Settings pane is on screen (issue #227).
+   *
+   * Tracked rather than read back off the class because the open/close callbacks must fire
+   * exactly once per transition: `route-ui.ts` hangs window listeners off them, and a
+   * duplicate open would add a second pair nothing removes.
+   */
+  let settingsOpen = false;
+  function closeSettingsSubscribers(): void {
+    if (!settingsOpen) return;
+    settingsOpen = false;
+    for (const cb of settingsCloseCbs) cb();
+  }
   const controllersOpenCbs: Array<() => void> = [];
   const controllersCloseCbs: Array<() => void> = [];
   const recordsOpenCbs: Array<() => void> = [];
@@ -3180,8 +3245,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function refreshSettingsSections(): void {
     for (const section of settingsSections) {
       const controls = section.querySelector('.hud-settings-controls') as HTMLElement | null;
-      const populated = controls !== null && focusableControls(controls).length > 0;
-      section.classList.toggle('hud-settings-section--hidden', !populated);
+      // VISIBLE, not focusable. `focusableControls` discounts a `disabled` button -- rightly,
+      // since the roving walk must not land on one -- and issue #227 introduced the first
+      // settings control that is ever disabled: a refused rumble toggle with the reason it
+      // is refused beside it. Asking the focusable question here collapsed the whole Controls
+      // section around that control and took its explanation with it, on exactly the devices
+      // the explanation exists for. Found by a mutation, not by reading.
+      const visible =
+        controls === null
+          ? []
+          : Array.from(controls.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
+              (el) => !isHiddenWithin(el, controls),
+            );
+      section.classList.toggle('hud-settings-section--hidden', visible.length === 0);
     }
   }
 
@@ -3194,8 +3270,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         refreshSettingsSections();
         settingsView.focus();
       });
+      if (!settingsOpen) {
+        settingsOpen = true;
+        for (const cb of settingsOpenCbs) cb();
+      }
     } else {
       closeSurface(SETTINGS_SURFACE);
+      closeSettingsSubscribers();
     }
   }
 
@@ -4300,6 +4381,61 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   hapticsToggleBtn.addEventListener('click', handleHapticsToggle);
   hapticsToggleBtn.addEventListener('click', blurIfPointer);
+
+  // Controller rumble (issue #227). Its own control, beside device haptics and never
+  // folded into it: the two are detected, stored and resolved independently end to end
+  // (capabilities.ts, effective-settings.ts), and a player with a phone and a pad has a
+  // real reason to want one without the other.
+  const RUMBLE_LABEL: Record<'on' | 'off', string> = { on: 'Rumble: On', off: 'Rumble: Off' };
+  const RUMBLE_HINT: Record<'on' | 'off', string> = {
+    on: 'Firing, losing a life and nearby mine blasts rumble the controller, where supported.',
+    off: 'No controller rumble on firing, losing a life or nearby mine blasts.',
+  };
+  let currentRumble = true;
+  function renderRumbleToggle(): void {
+    const state = currentRumble ? 'on' : 'off';
+    const nextState = currentRumble ? 'off' : 'on';
+    rumbleToggleBtn.textContent = RUMBLE_LABEL[state];
+    rumbleToggleBtn.title = RUMBLE_HINT[state];
+    rumbleToggleBtn.setAttribute(
+      'aria-label',
+      `Controller rumble: ${RUMBLE_LABEL[state]}. ${RUMBLE_HINT[state]} ` +
+        `Tap to switch to ${RUMBLE_LABEL[nextState]}.`,
+    );
+  }
+  renderRumbleToggle();
+  const rumbleChangeCbs: Array<(on: boolean) => void> = [];
+  const handleRumbleToggle = (): void => {
+    for (const cb of rumbleChangeCbs) cb(!currentRumble);
+  };
+  rumbleToggleBtn.addEventListener('click', handleRumbleToggle);
+  rumbleToggleBtn.addEventListener('click', blurIfPointer);
+
+  /**
+   * Apply one relevance verdict to one control (issue #227).
+   *
+   * THREE STATES, and the middle one is the whole reason this is not a boolean. `omitted`
+   * takes the control off the pane; `unavailable` leaves it there, refused, with the reason
+   * both visible and pointed at by `aria-describedby`; `shown` is an ordinary control. A
+   * refused control that had merely been hidden would take its own explanation with it.
+   *
+   * Never touches a stored or effective value -- `control-relevance.ts` states why at
+   * length, and `effective-settings.ts` owns the other half of that contract.
+   */
+  function applyRelevance(
+    btn: HTMLButtonElement,
+    hiddenClass: string,
+    relevance: Relevance,
+    note: { el: HTMLElement; id: string; hiddenClass: string } | null = null,
+  ): void {
+    btn.classList.toggle(hiddenClass, !isOffered(relevance));
+    const refused = relevance.kind === 'unavailable';
+    btn.disabled = refused;
+    if (note === null) return;
+    note.el.textContent = refused ? relevance.reason : '';
+    note.el.classList.toggle(note.hiddenClass, !refused);
+    describeDisabledReason(btn, refused ? note.id : null);
+  }
 
   // The motion toggle: one button, three states, cycling like the fire-mode toggle, and
   // the first control the Accessibility section has ever held (issue #289).
@@ -5960,6 +6096,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // confirmation is included deliberately -- a surface change is never an answer to it,
     // so it must not survive one and leave a question hanging over the next screen.
     cleanupHide(settingsView, 'hud-settings--hidden');
+    // A surface change never runs `showSettings(false)`, so the subscribers are released
+    // here too -- otherwise a match starting under an open Settings pane leaves
+    // `route-ui.ts`'s hotplug listeners attached to a pane that is gone (issue #227).
+    closeSettingsSubscribers();
     cleanupHide(aboutView, 'hud-about--hidden');
     cleanupHide(devToolsView, 'hud-devtools--hidden');
     cleanupHide(confirmView, 'hud-confirm--hidden');
@@ -6650,6 +6790,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onRecordsOpen(cb: () => void): void {
       recordsOpenCbs.push(cb);
     },
+    onSettingsOpen(cb: () => void): void {
+      settingsOpenCbs.push(cb);
+    },
+    onSettingsClose(cb: () => void): void {
+      settingsCloseCbs.push(cb);
+    },
     onControllersOpen(cb: () => void): void {
       controllersOpenCbs.push(cb);
     },
@@ -6727,6 +6873,28 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       currentHaptics = on;
       renderHapticsToggle();
     },
+    setControllerRumble(on: boolean): void {
+      currentRumble = on;
+      renderRumbleToggle();
+    },
+    onControllerRumbleChange(cb: (on: boolean) => void): void {
+      rumbleChangeCbs.push(cb);
+    },
+    setControlRelevance(relevance: Record<RelevanceSettingId, Relevance>): void {
+      applyRelevance(schemeToggleBtn, 'hud-scheme-toggle--hidden', relevance.touchScheme);
+      applyRelevance(firemodeToggleBtn, 'hud-firemode-toggle--hidden', relevance.fireMode);
+      applyRelevance(hapticsToggleBtn, 'hud-haptics-toggle--hidden', relevance.deviceHaptics);
+      applyRelevance(rumbleToggleBtn, 'hud-rumble-toggle--hidden', relevance.controllerRumble, {
+        el: rumbleNoteEl,
+        id: 'hud-rumble-note',
+        hiddenClass: 'hud-rumble-note--hidden',
+      });
+      // A section with no visible control collapses, which is the rule the Settings markup
+      // already carried for the empty Accessibility section -- leaned on here in the other
+      // direction, so a device offered none of these loses the whole Controls heading
+      // rather than showing a heading over one entry.
+      refreshSettingsSections();
+    },
     onHapticsChange(cb: (on: boolean) => void): void {
       hapticsChangeCbs.push(cb);
     },
@@ -6796,6 +6964,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       schemeToggleBtn.removeEventListener('click', blurIfPointer);
       firemodeToggleBtn.removeEventListener('click', handleFireModeToggle);
       firemodeToggleBtn.removeEventListener('click', blurIfPointer);
+      rumbleToggleBtn.removeEventListener('click', handleRumbleToggle);
+      rumbleToggleBtn.removeEventListener('click', blurIfPointer);
       hapticsToggleBtn.removeEventListener('click', handleHapticsToggle);
       hapticsToggleBtn.removeEventListener('click', blurIfPointer);
       motionToggleBtn.removeEventListener('click', handleMotionToggle);

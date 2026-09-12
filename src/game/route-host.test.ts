@@ -1266,6 +1266,23 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     ]);
   });
 
+  it('paints the STORED rumble preference, and the relevance verdict that says it is refused', () => {
+    // Both halves on one push, because either alone misreports the device. The fixture runs
+    // under NO_CAPABILITIES, so no connected pad reports an actuator: the LABEL must still
+    // read the stored `true` (a pad that is merely unplugged has not turned the preference
+    // off), and the VERDICT must say `unavailable` so the control is refused with a reason
+    // rather than silently doing nothing when pressed.
+    const f = fixture({ seed: (stores) => stores.settings.setControllerRumble(true) });
+    expect(f.hud.argsOf('setControllerRumble').at(-1)).toEqual([true]);
+    const verdict = f.hud.argsOf('setControlRelevance').at(-1)?.[0] as Record<string, { kind: string }>;
+    expect(verdict.controllerRumble.kind).toBe('unavailable');
+    // ...and the stable absences are omitted rather than refused, which is the distinction
+    // the whole verdict exists to make.
+    expect(verdict.touchScheme.kind).toBe('omitted');
+    expect(verdict.fireMode.kind).toBe('omitted');
+    expect(verdict.deviceHaptics.kind).toBe('omitted');
+  });
+
   it('paints the STORED motion preference, and the resolved policy beside it', () => {
     // Both halves, because neither can carry the other. `setMotion` takes the three-state
     // preference the control EDITS -- painting it from `effective.reducedMotion` would

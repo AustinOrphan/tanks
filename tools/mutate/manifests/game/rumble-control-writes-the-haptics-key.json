@@ -1,0 +1,14 @@
+{
+  "id": "rumble-control-writes-the-haptics-key",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onControllerRumbleChange((next) => {\n    deps.settings.setControllerRumble(next);",
+  "replace": "  hud.onControllerRumbleChange((next) => {\n    deps.settings.setDeviceHaptics(next);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the application routes work with no gameplay session behind them writes the controller-rumble preference to its own stored key"
+  ],
+  "why": "The two are stored and resolved independently end to end (capabilities.ts, effective-settings.ts). One writer for both keys makes the rumble control silently move device haptics, and leaves the key it is named for unwritable."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "relevance-splits-the-touch-pair",
+  "file": "src/game/control-relevance.ts",
+  "find": "    touchScheme: touch,\n    fireMode: touch,",
+  "replace": "    touchScheme: touch,\n    fireMode: SHOWN,",
+  "expect": "killed",
+  "tests": [
+    "src/game/control-relevance.test.ts"
+  ],
+  "killedBy": [
+    "settingRelevance treats the two touch controls as one question, never one without the other",
+    "the device matrix (issue #227) desktop keyboard and mouse: offers the right controls and the right prompt"
+  ],
+  "why": "Aim scheme and fire mode are both properties of the aim thumb. Offering one without the other presents a fire GESTURE for a thumb the same pane has already said is not there."
+}

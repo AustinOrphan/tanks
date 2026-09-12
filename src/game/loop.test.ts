@@ -400,6 +400,10 @@ interface Recorder {
   botAllowedPushes: boolean[];
   /** Every value passed to hud.setDetectedPads, in order (each a snapshot copy). */
   detectedPadsPushes: DetectedPad[][];
+  /** Every value passed to hud.setControllerRumble, in order. */
+  rumblePushes: boolean[];
+  /** Every value passed to hud.setControlRelevance, in order. */
+  relevancePushes: unknown[];
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; savedQuality?: QualityPreset; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
@@ -466,6 +470,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     reassignSlot(slot: number, source: SlotSource): void;
     openControllers(): void;
     closeControllers(): void;
+    openSettings(): void;
+    closeSettings(): void;
     openVersus(): void;
     startVersus(config: VersusConfig): void;
     openCampaign(): void;
@@ -611,6 +617,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     controllersPushes: [],
     botAllowedPushes: [],
     detectedPadsPushes: [],
+    rumblePushes: [],
+    relevancePushes: [],
   };
 
   let pending: ((now: number) => void) | null = null;
@@ -681,6 +689,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onCustomizeOpen = (): void => {};
   let onCustomizeClose = (): void => {};
   let onReassignSlot = (_slot: number, _source: SlotSource): void => {};
+  let onSettingsOpen = (): void => {};
+  let onSettingsClose = (): void => {};
   let onControllersOpen = (): void => {};
   let onControllersClose = (): void => {};
   let onVersusOpenCb = (): void => {};
@@ -1322,6 +1332,19 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setDetectedPads: (pads: readonly DetectedPad[]) => {
           rec.detectedPadsPushes.push([...pads]);
         },
+        setControllerRumble: (on: boolean) => {
+          rec.rumblePushes.push(on);
+        },
+        onControllerRumbleChange: () => {},
+        setControlRelevance: (r: unknown) => {
+          rec.relevancePushes.push(r);
+        },
+        onSettingsOpen: (cb: () => void) => {
+          onSettingsOpen = cb;
+        },
+        onSettingsClose: (cb: () => void) => {
+          onSettingsClose = cb;
+        },
         onControllersOpen: (cb: () => void) => {
           onControllersOpen = cb;
         },
@@ -1856,6 +1879,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       reassignSlot: (slot: number, source: SlotSource) => onReassignSlot(slot, source),
       openControllers: () => onControllersOpen(),
       closeControllers: () => onControllersClose(),
+      openSettings: () => onSettingsOpen(),
+      closeSettings: () => onSettingsClose(),
       openVersus: () => onVersusOpenCb(),
       startVersus: (config: VersusConfig) => onVersusStartCb(config),
       openCampaign: () => onCampaignOpenCb(),

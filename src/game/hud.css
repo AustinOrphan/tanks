@@ -1294,6 +1294,25 @@
   display: none;
 }
 
+/* PER-CONTROL CAPABILITY HIDING (issue #227). Grouped rather than written out five times
+   because they are one decision, not five: a control the device cannot act on is not shown.
+
+   `refreshSettingsSections` collapses a section whose `.hud-settings-controls` holds no
+   visible control, and `focusableControls` discounts a hidden one -- so on a desktop with
+   no touchscreen, no `navigator.vibrate` and no pad, the Controls section keeps only
+   Controllers and the refused Rumble toggle rather than a heading over four dead entries.
+
+   The rumble NOTE hides on the same terms as the control it explains, and for the opposite
+   reason: it is shown only while rumble is refused, so a working pad does not leave an
+   explanation of a problem the player does not have. */
+.hud-scheme-toggle--hidden,
+.hud-firemode-toggle--hidden,
+.hud-haptics-toggle--hidden,
+.hud-rumble-toggle--hidden,
+.hud-rumble-note--hidden {
+  display: none;
+}
+
 .hud-settings-section h2 {
   margin: 0;
   font-size: 13px;

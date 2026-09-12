@@ -1,0 +1,14 @@
+{
+  "id": "relevance-note-outlives-the-refusal",
+  "file": "src/game/hud.ts",
+  "find": "    note.el.classList.toggle(note.hiddenClass, !refused);",
+  "replace": "    note.el.classList.remove(note.hiddenClass);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.relevance.test.ts"
+  ],
+  "killedBy": [
+    "the refused rumble control (issue #227) clears the refusal and the note when a rumble pad arrives"
+  ],
+  "why": "The note explains a refusal. Left standing after the refusal clears, it tells a player with a working controller to connect one -- worse than saying nothing, because it contradicts the control beside it."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "settings-capability-probe-waits-for-an-event",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onSettingsOpen(() => {\n    onCapabilityHotplug();",
+  "replace": "  hud.onSettingsOpen(() => {",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the application routes work with no gameplay session behind them re-probes capabilities on Settings open, and keeps them live while the pane is up"
+  ],
+  "why": "The browser's `gamepadconnected` events fire only on CHANGE, so a pane opened over an already-connected pad would show the boot snapshot until the player unplugged something. Same reason the Controllers panel reads once on open."
+}

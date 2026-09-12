@@ -1079,7 +1079,13 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // themselves contribute nothing either way: every link inside them is flattened to text
     // by the generator, so an open licence adds no control, and a collapsed one is
     // `display: none` and excluded by `isHiddenWithin` regardless.
-    expect(totalControls, 'recount the panels above if this moves').toBe(85);
+    //
+    // 86 since issue #227's controller-rumble toggle, which sits in the Settings pane's
+    // Controls section beside device haptics. Reachable here because this fixture never
+    // pushes a relevance verdict: per-device hiding is a `--hidden` class the page applies,
+    // so the untouched HUD offers every control and this figure stays a property of the
+    // MARKUP. A fixture that pushed a no-touch, no-vibration verdict would reach 83.
+    expect(totalControls, 'recount the panels above if this moves').toBe(86);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
