@@ -3245,8 +3245,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function refreshSettingsSections(): void {
     for (const section of settingsSections) {
       const controls = section.querySelector('.hud-settings-controls') as HTMLElement | null;
-      const populated = controls !== null && focusableControls(controls).length > 0;
-      section.classList.toggle('hud-settings-section--hidden', !populated);
+      // VISIBLE, not focusable. `focusableControls` discounts a `disabled` button -- rightly,
+      // since the roving walk must not land on one -- and issue #227 introduced the first
+      // settings control that is ever disabled: a refused rumble toggle with the reason it
+      // is refused beside it. Asking the focusable question here collapsed the whole Controls
+      // section around that control and took its explanation with it, on exactly the devices
+      // the explanation exists for. Found by a mutation, not by reading.
+      const visible =
+        controls === null
+          ? []
+          : Array.from(controls.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
+              (el) => !isHiddenWithin(el, controls),
+            );
+      section.classList.toggle('hud-settings-section--hidden', visible.length === 0);
     }
   }
 

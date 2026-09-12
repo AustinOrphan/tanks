@@ -34,6 +34,23 @@ const shown = (el: HTMLElement): boolean => getComputedStyle(el).display !== 'no
 const controlsSection = (root: HTMLElement): HTMLElement =>
   q(root, '.hud-settings-section[data-section="controls"]');
 
+/**
+ * Take the Controllers entry out of the Controls section.
+ *
+ * It is the one member of that section the relevance verdict does not own, so any case
+ * about the section's own emptiness has to remove it explicitly -- otherwise the section
+ * stays alive for a reason unrelated to the claim under test. Done with a stylesheet rather
+ * than by removing the node because `focusableControls` asks about resolved display, which
+ * is the same question the production path asks.
+ */
+function hideControllersEntry(root: HTMLElement): HTMLStyleElement {
+  q(root, '.hud-settings-controllers').classList.add('hud-settings-controllers--test-hidden');
+  const style = document.createElement('style');
+  style.textContent = '.hud-settings-controllers--test-hidden{display:none}';
+  document.head.appendChild(style);
+  return style;
+}
+
 const CONTROL_SELECTORS = {
   touchScheme: '.hud-scheme-toggle',
   fireMode: '.hud-firemode-toggle',
@@ -81,24 +98,37 @@ describe('setControlRelevance (issue #227)', () => {
     // is the only member of that section this verdict does not own -- so this is the
     // section-collapse rule under test rather than the verdict.
     const { hud: h, root } = mount();
-    h.setControlRelevance(settingRelevance(caps()));
-    q(root, '.hud-settings-controllers').classList.add('hud-settings-controllers--test-hidden');
-    const style = document.createElement('style');
-    style.textContent = '.hud-settings-controllers--test-hidden{display:none}';
-    document.head.appendChild(style);
-    h.setControlRelevance(settingRelevance(caps()));
+    const style = hideControllersEntry(root);
+    // ...and the rumble control too: a refused control is still on screen, so the section
+    // only empties once BOTH it and Controllers are gone.
+    h.setControlRelevance({
+      ...settingRelevance(caps()),
+      controllerRumble: { kind: 'omitted' },
+    });
     expect(shown(controlsSection(root)), 'a heading over nothing').toBe(false);
     style.remove();
   });
 
-  it('never collapses a section whose only survivor is a REFUSED control', () => {
+  it('never collapses a section whose ONLY survivor is a refused control', () => {
     // A refused control carries the explanation. If `isOffered` counted it as gone, the
     // section would collapse and take the reason with it -- the player would lose both the
     // setting and the sentence telling them how to get it back.
+    //
+    // The Controllers entry is hidden first, deliberately: it is the one member of this
+    // section the verdict does not own, and while it is visible the section stays alive for
+    // a reason that has nothing to do with the claim. An earlier draft of this case left it
+    // there and passed under the very mutation it names -- found by running that mutation,
+    // not by reading.
     const { hud: h, root } = mount();
+    const style = hideControllersEntry(root);
     h.setControlRelevance(settingRelevance(caps()));
-    expect(q<HTMLButtonElement>(root, CONTROL_SELECTORS.controllerRumble).disabled).toBe(true);
-    expect(shown(controlsSection(root))).toBe(true);
+    const btn = q<HTMLButtonElement>(root, CONTROL_SELECTORS.controllerRumble);
+    expect(btn.disabled, 'refused').toBe(true);
+    expect(shown(btn), 'and still on screen').toBe(true);
+    expect(shown(controlsSection(root)), 'the section must survive on the refused control alone')
+      .toBe(true);
+    expect(shown(q(root, '.hud-rumble-note')), 'and so must its reason').toBe(true);
+    style.remove();
   });
 });
 
