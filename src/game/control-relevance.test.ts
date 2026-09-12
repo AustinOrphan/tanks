@@ -8,6 +8,9 @@ import {
 } from './control-relevance';
 import { NO_CAPABILITIES, type PlatformCapabilities } from './capabilities';
 import { keyHint, type Modality } from './modality';
+import { createStores, createMemoryStorage } from './storage';
+import { createEffectiveSettings } from './effective-settings';
+import { createCapabilitySource, createStaticReducedMotionSource } from './capabilities';
 
 const caps = (over: Partial<PlatformCapabilities> = {}): PlatformCapabilities => ({
   ...NO_CAPABILITIES,
@@ -183,6 +186,42 @@ describe('settingRelevance', () => {
     for (const c of [caps(), caps({ touch: true, deviceVibration: true, controllerRumble: true })]) {
       expect(Object.keys(settingRelevance(c)).sort()).toEqual([...ALL].sort());
     }
+  });
+});
+
+describe('the contract with effective-settings.ts', () => {
+  it('OMITS a touch control without changing what the touch settings resolve to', () => {
+    // The two halves of one contract, stated in the source at both ends: capabilities.ts
+    // says "which controls to SHOW from this is issue #227", and effective-settings.ts says
+    // touch scheme and fire mode are deliberately NOT gated on `capabilities.touch`, because
+    // gating them would silently rewrite a hybrid device's working settings.
+    //
+    // This is the assertion that stops the next reader "simplifying" the two into one gate:
+    // visibility moves and resolution does not.
+    const store = createStores(createMemoryStorage()).settings;
+    store.setTouchScheme('stick');
+    const effective = createEffectiveSettings({
+      store,
+      capabilities: createCapabilitySource(() => caps()),
+      motion: createStaticReducedMotionSource(false),
+    });
+    expect(settingRelevance(caps()).touchScheme).toEqual({ kind: 'omitted' });
+    expect(effective.current().touchScheme, 'the stored scheme must survive the hiding').toBe(
+      'stick',
+    );
+    expect(store.snapshot().input.touchScheme).toBe('stick');
+  });
+
+  it('the same for rumble: refusing the CONTROL is not turning the preference off', () => {
+    // A refused control still edits a live preference. If relevance and resolution were the
+    // same switch, unplugging a pad would read as the player having turned rumble off, and
+    // plugging it back in would not restore it.
+    const store = createStores(createMemoryStorage()).settings;
+    expect(store.snapshot().input.controllerRumble).toBe(true);
+    expect(settingRelevance(caps()).controllerRumble.kind).toBe('unavailable');
+    expect(store.snapshot().input.controllerRumble, 'the stored preference is untouched').toBe(
+      true,
+    );
   });
 });
 

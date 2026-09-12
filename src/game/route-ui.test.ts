@@ -25,6 +25,7 @@ import {
   createCapabilitySource,
   createStaticReducedMotionSource,
   NO_CAPABILITIES,
+  type PlatformCapabilities,
 } from './capabilities';
 import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 import { createLevelSystem } from './levels';
@@ -95,15 +96,29 @@ interface Fixture {
   sunkStyles: Triple[];
   muted: () => boolean;
   volume: () => number;
+  capabilityProbes: () => number;
+  /** Move the platform under the page, as plugging in a rumble pad would. */
+  setCapabilities: (c: PlatformCapabilities) => void;
+  /** Dispatch a host event by name to whatever route-ui registered for it. */
+  hostFire: (name: string) => void;
 }
 
 function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
   const storage = createMemoryStorage();
+  // Declared before `createAppSettings`, which probes once at construction -- `box` below
+  // does not exist yet at that moment.
+  let liveCapabilities: PlatformCapabilities = NO_CAPABILITIES;
+  let capabilityProbes = 0;
   const appSettings = createAppSettings({
     storage,
     namespace: 'production',
     stores: createStores(storage),
-    capabilities: createCapabilitySource(() => NO_CAPABILITIES),
+    // A probe this test MOVES, and counts. The self-test of the capability wiring is
+    // whether a re-probe happens at all and how often, which a fixed source cannot show.
+    capabilities: createCapabilitySource(() => {
+      capabilityProbes += 1;
+      return liveCapabilities;
+    }),
     motion: createStaticReducedMotionSource(false),
   });
   const stores = appSettings.stores;
@@ -130,6 +145,7 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
     sunkStyles: [] as Triple[],
   };
 
+  const hostListeners = new Map<string, Array<() => void>>();
   const deps: RouteUiDeps = {
     settings: stores.settings,
     stats: stores.stats,
@@ -156,9 +172,20 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
       } as unknown as TankPreview;
     },
     readDetectedPads: () => [],
+    // Records the registrations AND keeps the callbacks, so a test can fire a hotplug
+    // rather than only assert that something subscribed to one.
     host: {
-      addEventListener: (name: string) => box.hostEvents.push(`+${name}`),
-      removeEventListener: (name: string) => box.hostEvents.push(`-${name}`),
+      addEventListener: (name: string, cb: () => void) => {
+        box.hostEvents.push(`+${name}`);
+        const list = hostListeners.get(name) ?? [];
+        list.push(cb);
+        hostListeners.set(name, list);
+      },
+      removeEventListener: (name: string, cb: () => void) => {
+        box.hostEvents.push(`-${name}`);
+        const list = (hostListeners.get(name) ?? []).filter((f) => f !== cb);
+        hostListeners.set(name, list);
+      },
     } as unknown as RouteUiDeps['host'],
     requestVersusSession: (config: VersusConfig) => box.versusStarts.push(config),
     requestCampaignSession: () => {
@@ -193,6 +220,13 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
     previewResizes: () => box.previewResizes,
     muted: () => stores.settings.snapshot().audio.muted,
     volume: () => stores.settings.snapshot().audio.volume,
+    capabilityProbes: () => capabilityProbes,
+    setCapabilities: (c) => {
+      liveCapabilities = c;
+    },
+    hostFire: (name) => {
+      for (const cb of hostListeners.get(name) ?? []) cb();
+    },
   };
 }
 
@@ -527,5 +561,65 @@ describe('the application routes work with no gameplay session behind them', () 
     f.deps.progress.recordCleared(CAMPAIGN_LEVELS[0]);
     f.deps.progress.recordCleared(CAMPAIGN_LEVELS[1]);
     expect(f.routeUi.unlockedLevels()).toBe(2);
+  });
+
+  it('re-probes capabilities on Settings open, and keeps them live while the pane is up', () => {
+    // The only other `refreshCapabilities` caller is `loop.ts`'s per-frame pad sweep, which
+    // needs a SIMULATING match. A player sitting in Settings with no match running is the
+    // ordinary case, and the rumble control's refusal names plugging a pad in as the fix --
+    // so a refusal that did not clear on hotplug would instruct the player to do something
+    // that then appears not to work.
+    const f = fixture();
+    const atOpen = f.capabilityProbes();
+    f.fire('onSettingsOpen');
+    // Immediately, not on the next event: the browser's hotplug events fire only on CHANGE,
+    // so opening over an already-connected pad would otherwise show the boot snapshot.
+    expect(f.capabilityProbes()).toBe(atOpen + 1);
+    expect(f.hostEvents).toContain('+gamepadconnected');
+    expect(f.hostEvents).toContain('+gamepaddisconnected');
+    f.hostFire('gamepadconnected');
+    expect(f.capabilityProbes()).toBe(atOpen + 2);
+  });
+
+  it('stops probing when the pane closes, and the listener really is gone', () => {
+    // Asserting the removal call alone would pass for a handler removed by identity mismatch
+    // -- the classic paired-listener bug. Firing the event afterwards is what proves it.
+    const f = fixture();
+    f.fire('onSettingsOpen');
+    f.fire('onSettingsClose');
+    expect(f.hostEvents).toContain('-gamepadconnected');
+    expect(f.hostEvents).toContain('-gamepaddisconnected');
+    const atClose = f.capabilityProbes();
+    f.hostFire('gamepadconnected');
+    expect(f.capabilityProbes(), 'a probe survived the close').toBe(atClose);
+  });
+
+  it('publishes a real capability change, and stays silent on one that changed nothing', () => {
+    // `refreshCapabilities` notifies only on a real change (capabilities.ts), which is what
+    // keeps a pad event from pushing identical settings through every consumer. Both halves
+    // asserted, because the silent half is the one a naive implementation loses.
+    const f = fixture();
+    const seen: PlatformCapabilities[] = [];
+    const stop = f.deps.effectiveSettings.subscribe(() => seen.push(f.deps.effectiveSettings.capabilities()));
+    f.fire('onSettingsOpen');
+    expect(seen, 'nothing changed at open').toHaveLength(0);
+    f.setCapabilities({ touch: false, deviceVibration: false, controllerRumble: true });
+    f.hostFire('gamepadconnected');
+    expect(seen.map((c) => c.controllerRumble)).toEqual([true]);
+    f.hostFire('gamepadconnected');
+    expect(seen, 'a second identical probe must not republish').toHaveLength(1);
+    stop();
+  });
+
+  it('writes the controller-rumble preference to its own stored key', () => {
+    // Its own key, never device haptics: the two are stored and resolved independently, and
+    // a shared writer would make one control silently move the other.
+    const f = fixture();
+    const before = f.deps.settings.snapshot().input;
+    expect(before.controllerRumble).toBe(true);
+    f.fire('onControllerRumbleChange', false);
+    const after = f.deps.settings.snapshot().input;
+    expect(after.controllerRumble).toBe(false);
+    expect(after.deviceHaptics, 'device haptics must not have moved').toBe(before.deviceHaptics);
   });
 });
