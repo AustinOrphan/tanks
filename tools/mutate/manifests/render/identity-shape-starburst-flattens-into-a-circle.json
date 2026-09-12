@@ -1,0 +1,12 @@
+{
+  "id": "identity-shape-starburst-flattens-into-a-circle",
+  "file": "src/render/identity-marker.ts",
+  "find": "    const valley = inner;",
+  "replace": "    const valley = outer;",
+  "expect": "killed",
+  "expectFailures": 1,
+  "tests": [
+    "src/render/identity-marker.test.ts"
+  ],
+  "why": "REPLACES `identity-shape-square-becomes-the-diamond`, which SURVIVED once slot 4 stopped being a rotated square -- and that survival is the point rather than a regression. The old entry turned the square into the diamond to prove two slots could collapse into one outline; with slot 4 a starburst there is no rotation of any other slot that can reach it, so the collision it guarded is gone by construction. Deleting the entry outright would have left the NEW property unguarded, so this pins that instead: flattening the star's valleys out to the full radius turns it into a plain circular band, which is slot 1's marker exactly. Two slots sharing an outline is the same defect the old entry was about, reached the only way that is still possible. Caught by the makes-slot-4-a-STARBURST case, which measures the spread between the outer edge's largest and smallest radius rather than counting vertices -- a vertex count cannot tell a 12-gon from a 6-point star, and the first draft of this shape did render as a smooth hexagon."
+}
