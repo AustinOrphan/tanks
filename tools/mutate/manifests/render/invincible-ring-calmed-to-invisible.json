@@ -1,0 +1,14 @@
+{
+  "id": "invincible-ring-calmed-to-invisible",
+  "file": "src/render/spawn-anim.ts",
+  "find": "  const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(p * Math.PI * (4 + 6 * p));",
+  "replace": "  const pulse = reducedMotion ? 0 : 0.5 + 0.5 * Math.sin(p * Math.PI * (4 + 6 * p));",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "killedBy": [
+    "the spawn animators under reduced motion (issue #651) holds rise's invincible ring at the value it oscillates about, rather than at zero"
+  ],
+  "why": "Calming an oscillation to ZERO deletes the cue instead of stilling it: the ring is what says a respawned tank is still protected, and a player with reduced motion would lose that fact entirely. The same trap issue #652 records for `.hud-capacity` and `.hud-count`, which rest at opacity 0 and are calmed rather than cancelled."
+}
