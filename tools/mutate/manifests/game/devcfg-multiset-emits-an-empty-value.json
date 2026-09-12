@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-multiset-emits-an-empty-value",
+  "file": "src/game/dev-config-menu.ts",
+  "find": "  if (parts.length === 0) delete out[control.field];\n  else out[control.field] = parts.join(',');",
+  "replace": "  out[control.field] = parts.join(',');",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config-menu.test.ts"
+  ],
+  "killedBy": [
+    "stepMultiset clears the parameter when the last one is removed, rather than emitting empty"
+  ],
+  "why": "Removing the last tank has to CLEAR the parameter, not emit `tanks=`. An empty value is a value the parser must then reject, so the menu would build a URL carrying a rejected parameter and show its own rejection note -- for the state that means 'I chose nothing', which every other control expresses by absence."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-multiset-detected-by-kind-alone",
+  "file": "src/game/dev-config-menu.ts",
+  "find": "  return control.control === 'input' && (control.values?.length ?? 0) > 0;",
+  "replace": "  return control.control === 'input';",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config-menu.test.ts"
+  ],
+  "killedBy": [
+    "stepMultiset isMultiset is derived from the registry, not from a field name"
+  ],
+  "why": "A valued flag is a multiset only when the registry also gives it the VALUES its list is built from. Without that half, `players`, `bots`, `level`, `seed` and `walls` all become multisets: each loses its stepper and gains a per-value count row over a `values` list it does not have, which renders as no control at all."
+}
