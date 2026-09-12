@@ -511,6 +511,10 @@ describe('hud.css is syntactically whole', () => {
       '.hud-legal-table', '.hud-legal-th', '.hud-legal-td',
       // The replace-run confirmation (issue #226): the file's one blocking layer.
       '.hud-confirm', '.hud-confirm--hidden', '.hud-confirm-body', '.hud-confirm-actions',
+      // The match-failure alert (issue #325): the overlay, its hidden rule, and the prose
+      // measure. `.hud-alert-title` is deliberately absent -- it is an `<h1>` with no rule
+      // of its own, styled by the same heading defaults every pane title uses.
+      '.hud-alert', '.hud-alert--hidden', '.hud-alert-body',
       // Records is one Main Menu entry with two tabs (issue #226): the tab row's layout,
       // and the hidden rule that keeps the entry off the pause panel.
       '.hud-records-tabs', '.hud-records-open--hidden',
@@ -660,6 +664,42 @@ describe('hud.css is syntactically whole', () => {
     el.className = 'ui-app-ground';
     expect(getComputedStyle(el).display, 'the ground is hidden even unmodified').not.toBe('none');
     document.body.innerHTML = '';
+  });
+
+  it('gives every --hidden modifier something that actually hides', () => {
+    // THE SWEEP THAT SHOULD HAVE EXISTED FOUR TIMES AGO. `.hud-shells--hidden`,
+    // `.hud-splash--hidden`, `.ui-app-ground--hidden` and `.hud-legal-body--hidden` each
+    // carry their own note about the same failure -- the class goes on, the element stays
+    // painted -- and each was pinned one at a time, by whoever was bitten. A mutation
+    // emptying `.hud-alert--hidden` SURVIVED against those four cases, because a list of
+    // four cannot cover a file with dozens.
+    //
+    // Derived from the stylesheet's own text so a modifier added tomorrow is swept without
+    // anyone remembering to list it. Measured through the cascade, not by parsing: a rule
+    // that is empty, that sets only a margin, or that lives in an `@media` that never
+    // matches all resolve to a visible element and all fail here.
+    const declared = [...new Set(
+      [...stripComments(css).matchAll(/^\.([a-z0-9-]+--hidden)\s*[,{]/gm)].map((m) => m[1]),
+    )];
+    // Non-vacuity, and the denominator: 56 modifiers in the file today. A regex that
+    // stopped matching would make the loop below trivially true.
+    expect(declared.length).toBeGreaterThan(40);
+
+    const visible: string[] = [];
+    for (const cls of declared) {
+      const base = cls.replace(/--hidden$/, '');
+      const el = document.createElement('div');
+      // BOTH classes, in the order the HUD writes them: the modifier only has to beat its
+      // own base rule, and testing it alone would pass for a modifier that is simply never
+      // stronger than the thing it modifies.
+      el.className = `${base} ${cls}`;
+      document.body.appendChild(el);
+      const hidden =
+        getComputedStyle(el).display === 'none' || getComputedStyle(el).visibility === 'hidden';
+      if (!hidden) visible.push(cls);
+      el.remove();
+    }
+    expect(visible, 'a --hidden modifier that leaves its element on screen').toEqual([]);
   });
 
   it('hides a collapsed legal document with display, not with a class that does nothing', () => {
@@ -892,7 +932,12 @@ describe('hud.css is syntactically whole', () => {
     // Two of the versus figures move with the fixture's player count and one with how
     // many slots are BOTS, so a fixture that picked a different count pins a different
     // number -- which is the prompt to re-measure rather than to adjust the literal.
-    expect(buttons.length).toBe(130);
+    // Issue #325 adds ONE: the match-failure alert's single dismiss action. Rendered
+    // unconditionally at construction and hidden by `--hidden` exactly like the
+    // confirmation's two answers beside it, so this fixture counts it without ever showing
+    // it. 130 -> 131. It carries `.ui-btn--slab` like the confirmation's, so `unstyled`
+    // stays empty -- the check this pin exists to prompt, performed rather than assumed.
+    expect(buttons.length).toBe(131);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -973,11 +1018,14 @@ describe('hud.css is syntactically whole', () => {
     // outbound links in About & Legal, which are `.ui-btn` without being `<button>`, and
     // which are exactly the kind of control a `button`-only sweep misses.
     //
-    //   130 - (11 + 4 + 1 + 1 + 1) + 2 = 114
+    //   131 - (11 + 4 + 1 + 1 + 1) + 2 = 115
+    //
+    // 131 since issue #325's match-failure dismiss button; the 18 non-primitives and the 2
+    // anchors are unchanged by it.
     //
     // Non-vacuity as well as arithmetic: a selector that matched nothing would make the
     // assertion below pass while measuring nothing.
-    expect(controls.length).toBe(114);
+    expect(controls.length).toBe(115);
 
     const sizeless = controls
       .filter((el) => {

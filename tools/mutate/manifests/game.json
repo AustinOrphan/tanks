@@ -6213,5 +6213,34 @@
       "hud.css is syntactically whole gives every control in the kit a size: a modifier, or a rule of its own"
     ],
     "why": "Restores the SHIPPED defect, not an invented one: the per-slot Human/Bot/Off buttons carried `.ui-btn` with no size modifier and no rule of their own, so they took the primitive's deliberately sizeless base and rendered with zero padding -- a hit area the height of their own text, in a row whose team and difficulty buttons are `--sm`. THREE existing sweeps pass on it, which is why it shipped: the fall-through guard measures the RESOLVED style against a bare `<button>` and `.ui-btn` supplies colour, border, radius and font, so the control looks themed and is merely the wrong size; the primitive-grouping guard checks for `.ui-btn`, which is present; and both shape-group cases walk hand-maintained lists this control was never added to. The case that kills it derives its population from the DOM instead -- every `.ui-btn` must carry a size modifier or have a rule of its own -- so the next control added without one fails without anyone remembering to list it."
+  },
+  {
+    "id": "startup-failure-reads-the-call-site-before-the-cause",
+    "file": "src/game/startup-failure.ts",
+    "find": "  if (err instanceof UnsupportedRenderError) {\n    return STARTUP_FAILURES[err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'];\n  }\n  if (at === 'match') return STARTUP_FAILURES['match-failed'];",
+    "replace": "  if (at === 'match') return STARTUP_FAILURES['match-failed'];\n  if (err instanceof UnsupportedRenderError) {\n    return STARTUP_FAILURES[err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'];\n  }",
+    "expect": "killed",
+    "tests": [
+      "src/boot.test.ts"
+    ],
+    "killedBy": [
+      "boot: the message itself classifies each cause into its own state, and guesses at nothing",
+      "boot: nothing starts until the player asks (issue #428) a FATAL cause still replaces the page, even from a menu click"
+    ],
+    "why": "Restores the SHIPPED ordering, which issue #325's 2026-09-11 ruling reversed. With the call site checked first, `at === 'match'` short-circuits before the error is examined: a browser with no WebGL 2 that gets as far as a menu click is told 'that match could not start' and handed back a Main Menu whose every Start fails identically. After the ruling that is worse than a wrong message -- the transient state is now a DISMISSIBLE OVERLAY, so the mutation turns a fatal, unrecoverable condition into a dialog the player closes to return to a menu that cannot work. Both halves are killed: the classification case pins the pair directly, and the boot case proves the page still replaces the shell for a fatal cause reached from a click."
+  },
+  {
+    "id": "alert-overlay-modifier-does-nothing",
+    "file": "src/game/hud.css",
+    "find": ".hud-alert--hidden {\n  display: none;\n}",
+    "replace": ".hud-alert--hidden {\n}",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "killedBy": [
+      "hud.css is syntactically whole gives every --hidden modifier something that actually hides"
+    ],
+    "why": "The modifier reduced to a class that styles nothing -- the fourth instance of the shape `.hud-splash--hidden`, `.ui-app-ground--hidden` and `.hud-legal-body--hidden` each carry their own note about. `.hud-alert` is `position: absolute; inset: 0` with an opaque page scrim at `z-index: 3`, so with nothing hiding it the match-failure alert covers the entire game from page load and never leaves -- strictly worse than the ground scrim, because it also swallows every click. The presence sweep is satisfied by an empty rule and the HUD's own tests read the CLASS, so only a computed-display assertion measured against the same element unmodified can see it. FOUND BY THIS ENTRY: it SURVIVED on first run. The four one-off cases named above each pin their own modifier and nothing swept the rest, so a fifth was invisible. The sweep that now kills it derives its population from the stylesheet -- 56 `--hidden` modifiers today -- and applies each over its own base class, so the next one is covered without anyone remembering to add it."
   }
 ]

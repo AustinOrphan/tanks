@@ -59,7 +59,13 @@ describe('HUD landmarks (issue #629)', () => {
     // A region with no accessible name is not a landmark -- it is an extra level of
     // nesting. So the two halves are asserted together: the role is worthless without
     // the name, and the name was already there without the role.
-    const { root } = mount();
+    const { hud: h, root } = mount();
+    // The match-failure alert is named from the failure it was given, so its `<h1>` is
+    // empty until one arrives (issue #325) -- the same shape as `.hud-action` in the
+    // control sweep below. Driven rather than excluded, on the same precedent: the state
+    // worth asserting is the one the player actually meets, and a filter that skipped
+    // unnamed panes would skip exactly the pane most likely to be wrong.
+    h.showMatchFailure({ title: 'That match could not start.', detail: 'Something went wrong.', action: 'Back to menu' });
     const panes = Array.from(root.querySelectorAll('[tabindex="-1"][aria-labelledby]'));
     expect(panes.length, 'the pane population this sweeps').toBeGreaterThan(5);
     for (const pane of panes) {
@@ -128,6 +134,10 @@ describe('HUD control names (issue #629)', () => {
     h.setState('playing');
     h.setState('outcome-lose');
     h.setOutcome({ tally: 'solo', attempt: ZERO_STATS, action: 'campaign-levels', typedOutcome: lost });
+    // The match-failure alert's dismiss button is nameless the same way and for the same
+    // reason (issue #325): its label comes from the classified failure, so the markup
+    // carries none. Driven, not filtered, on exactly the precedent above.
+    h.showMatchFailure({ title: 'That match could not start.', detail: 'Something went wrong.', action: 'Back to menu' });
 
     const unnamed = Array.from(root.querySelectorAll('button'))
       .filter((b) => accessibleName(b) === '')

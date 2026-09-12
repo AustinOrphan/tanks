@@ -1198,6 +1198,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onQuitToTitle: (cb: () => void) => {
           onQuit = cb;
         },
+        // Issue #325, route-owned. A THROW rather than a no-op: `hud-ownership.test.ts`
+        // pins that a live session may not reach a route member, and a silent stub here
+        // would let a future loop.ts call it and still go green.
+        showMatchFailure: () => {
+          throw new Error('loop.ts must not reach the route-owned showMatchFailure');
+        },
         onPauseTap: (cb: () => void) => {
           onPauseTap = cb;
         },

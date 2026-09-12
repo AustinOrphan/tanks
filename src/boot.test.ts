@@ -68,6 +68,8 @@ function harness(
   routeHostDisposals: number;
   /** How many times the failure screen's action reloaded the page (issue #325). */
   reloads: number;
+  /** Every failure handed to the shell's overlay instead of replacing the page (#325). */
+  overlays: { title: string; detail: string; action: string }[];
   /** The root each route host was built in. */
   routeHostRoots: HTMLElement[];
   /** The application-level start requests boot handed the route UI (issue #468). */
@@ -100,6 +102,8 @@ function harness(
     routeHostDisposals: 0,
     /** How many times the failure screen's recovery action reloaded the page (issue #325). */
     reloads: 0,
+    /** Every failure handed to the shell's overlay instead of replacing the page (#325). */
+    overlays: [] as { title: string; detail: string; action: string }[],
   };
   /**
    * A stand-in for the page's ONE shell. Identity is the whole assertion: every session
@@ -132,6 +136,15 @@ function harness(
   const routeHost = {
     dispose(): void {
       box.routeHostDisposals += 1;
+    },
+    // The shell's alert surface (issue #325). Recorded rather than stubbed away: the
+    // overlay path's whole claim is that a transient match failure reaches the HUD
+    // INSTEAD of replacing the page, and only a ledger can tell "drew the overlay" apart
+    // from "did nothing and left the menu up", which look identical from the DOM.
+    hud: {
+      showMatchFailure(failure: { title: string; detail: string; action: string }): void {
+        box.overlays.push(failure);
+      },
     },
   } as unknown as RouteHost;
 
@@ -209,6 +222,9 @@ function harness(
     },
     get routeHostDisposals(): number {
       return box.routeHostDisposals;
+    },
+    get overlays(): { title: string; detail: string; action: string }[] {
+      return box.overlays;
     },
     get reloads(): number {
       return box.reloads;
@@ -417,20 +433,24 @@ describe('boot: the page-scoped settings owner', () => {
 
 describe('boot: no WebGL', () => {
   it('replaces the page with a readable explanation instead of a blank background', () => {
-    const err = new Error('Error creating WebGL context.');
-    const h = harness({ throwOnStart: err });
-    bootAndStart(h);
-    // `bootAndStart` reaches this through `requestStart`, which is the MATCH boundary --
-    // the shell came up and the menu is what the player clicked. The state named here is
-    // the one that boundary produces, not the boot one.
-    expect(shownFailure(h)).toBe('match-failed');
+    // Driven from the BOOT boundary since issue #325's 2026-09-11 ruling. It used to use a
+    // failing match, which was a convenient trigger while every failure replaced the page;
+    // a transient match failure now draws an overlay over the working shell instead, so
+    // that trigger no longer exercises this subject. The subject is unchanged: what the
+    // PAGE renders when there is nothing to draw over.
+    const h = harness({ throwOnAppSettings: new Error('storage denied') });
+    boot(h.deps);
+    expect(shownFailure(h)).toBe('startup-failed');
   });
 
   it('clears whatever was in the root first, so the message is not appended below it', () => {
-    const h = harness({ throwOnStart: new Error('no webgl') });
+    // Boot boundary, for the reason above: this is about the page CLEARING the root, and
+    // only a page state clears it. The overlay path deliberately leaves the root alone --
+    // asserted separately in the overlay case below, which is its mirror image.
+    const h = harness({ throwOnAppSettings: new Error('storage denied') });
     h.root.appendChild(document.createElement('canvas'));
     expect(h.root.querySelector('canvas')).not.toBeNull();
-    bootAndStart(h);
+    boot(h.deps);
     expect(h.root.querySelector('canvas')).toBeNull();
     expect(h.root.children).toHaveLength(1);
   });
@@ -469,7 +489,11 @@ describe('boot: no WebGL', () => {
     const h = harness({ throwOnStart: 'a string, not an Error' });
     expect(() => bootAndStart(h)).not.toThrow();
     expect(h.errors).toEqual(['a string, not an Error']);
-    expect(shownFailure(h)).toBe('match-failed');
+    // A bare string is not an `UnsupportedRenderError`, so it is TRANSIENT and reaches the
+    // overlay rather than the page (issue #325's ruling). What this case is about is
+    // unchanged: the error path does not itself crash on a non-Error.
+    expect(shownFailure(h)).toBeNull();
+    expect(h.overlays.map((o) => o.title)).toEqual([STARTUP_FAILURES['match-failed'].title]);
   });
 });
 
@@ -570,7 +594,10 @@ describe('boot: the shell capability probe (issue #470)', () => {
   it('still catches a session that fails for a reason the probe cannot see', () => {
     const h = harness({ throwOnStart: new Error('context lost during init') });
     bootAndStart(h);
-    expect(shownFailure(h)).toBe('match-failed');
+    // Overlay, not page: the probe said yes, so this is not the renderer being absent and
+    // the shell behind it is working (issue #325's ruling).
+    expect(shownFailure(h)).toBeNull();
+    expect(h.overlays.map((o) => o.title)).toEqual([STARTUP_FAILURES['match-failed'].title]);
     expect(h.errors).toHaveLength(1);
     expect(h.errors[0]).not.toBeInstanceOf(UnsupportedRenderError);
     // The probe said YES and this failure is not the probe's, so nothing here may claim
@@ -800,6 +827,43 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
     expect(h.enteredIds).toEqual([]);
   });
 
+  it('a FATAL cause still replaces the page, even from a menu click', () => {
+    // The other half of issue #325's ruling, and the ordering bug it fixed. An
+    // `UnsupportedRenderError` means the renderer is ABSENT: the next match will fail
+    // exactly as this one did, so handing the player back a Main Menu is an invitation to
+    // prove it again. Before the ruling, `at === 'match'` short-circuited before the error
+    // was examined and this case drew the transient overlay.
+    const h = harness({ throwOnStart: new UnsupportedRenderError('no-webgl2') });
+    boot(h.deps);
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+
+    expect(shownFailure(h)).toBe('unsupported-render');
+    expect(h.overlays, 'a fatal cause was drawn as a dismissible overlay').toEqual([]);
+    // ...and it says what is actually wrong. The page it replaces the menu with is the
+    // same one a failed boot shows, because the situation is the same.
+    expect(h.root.textContent).toContain('WebGL');
+  });
+
+  it('leaves the shell standing when the cause is transient', () => {
+    // The mirror of "clears whatever was in the root first": the page path empties the
+    // root, and the overlay path must not. Asserted on the DOM rather than on the ledger,
+    // because "the menu is still there" is the player-visible claim the ruling rests on.
+    const h = harness({ throwOnStart: new Error('context lost during init') });
+    boot(h.deps);
+    const marker = document.createElement('div');
+    marker.id = 'shell-marker';
+    h.root.appendChild(marker);
+
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+
+    expect(h.root.querySelector('#shell-marker'), 'the overlay cleared the root').not.toBeNull();
+    expect(h.overlays).toHaveLength(1);
+    // The copy is the overlay's own, and it must not tell a player to reload a shell that
+    // is working -- which is what the old page copy said.
+    expect(h.overlays[0].action).toBe('Back to menu');
+    expect(h.overlays[0].detail).not.toMatch(/reload/i);
+  });
+
   it('a failed start reaches the same message page a failed boot always has', () => {
     // The boundary that had to be added: with the eager start gone, a renderer that gets
     // its context and then fails to initialise throws out of a HUD click handler, and
@@ -810,8 +874,15 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
     expect(h.root.textContent, 'the page still showed a working menu').toBe('');
 
     h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
-    expect(shownFailure(h)).toBe('match-failed');
+    // The guard is unchanged; WHERE it draws is not (issue #325's 2026-09-11 ruling). The
+    // failure is transient -- the probe said yes, the shell is up -- so it blocks over the
+    // working menu instead of replacing it. The property this case exists for survives
+    // intact: a start that throws is never silent.
+    expect(h.overlays.map((o) => o.title)).toEqual([STARTUP_FAILURES['match-failed'].title]);
     expect(h.errors).toEqual([boom]);
+    // ...and the shell it drew over was NOT torn down, which is the half the page path
+    // cannot claim and the whole point of the change.
+    expect(h.routeHostDisposals, 'the working shell was disposed to show an error').toBe(0);
   });
 });
 
@@ -980,10 +1051,48 @@ describe('boot: the message itself', () => {
     );
     expect(classifyStartupFailure('a string, not an Error', 'boot').kind).toBe('startup-failed');
     expect(classifyStartupFailure(undefined, 'boot').kind).toBe('startup-failed');
-    // WHERE beats WHAT: the same error means a different thing once the menu is up.
+    // WHAT BEATS WHERE for a FATAL cause -- REVERSED at issue #325's 2026-09-11 ruling,
+    // and the line above used to read "WHERE beats WHAT". The old order short-circuited on
+    // the call site before the error was examined, so a browser with no WebGL 2 that
+    // reached a menu click was told "that match could not start" and handed back a Main
+    // Menu whose every Start would fail identically. The renderer is ABSENT, not busy.
     expect(classifyStartupFailure(new UnsupportedRenderError('no-webgl2'), 'match').kind).toBe(
-      'match-failed',
+      'unsupported-render',
     );
+    expect(classifyStartupFailure(new UnsupportedRenderError('probe-failed'), 'match').kind).toBe(
+      'probe-blocked',
+    );
+    // WHERE still decides for everything else, which is the half that did not change: an
+    // unrecognised throw during boot is "Tanks! could not start", and the same throw from a
+    // menu click is "that match could not start".
+    expect(classifyStartupFailure(new Error('renderer init'), 'match').kind).toBe('match-failed');
+    expect(classifyStartupFailure('a string', 'match').kind).toBe('match-failed');
+  });
+
+  it('shows a fatal cause on the page and a transient one over the shell', () => {
+    // The ruling as a property rather than as four literals: presentation follows the
+    // CAUSE. Replacing the page is right when there is nothing to go back to (boot) or
+    // nothing that would work if you did (the renderer is unavailable); keeping the shell
+    // is right only when the shell is up and the failure might not repeat.
+    for (const kind of ['unsupported-render', 'probe-blocked', 'startup-failed'] as const) {
+      expect(STARTUP_FAILURES[kind].presentation, kind).toBe('page');
+    }
+    expect(STARTUP_FAILURES['match-failed'].presentation).toBe('overlay');
+
+    // Exactly one overlay state, stated as the denominator: a second one would need its own
+    // argument about why the shell survives that cause, and it must not arrive by omission.
+    const overlays = Object.values(STARTUP_FAILURES).filter((f) => f.presentation === 'overlay');
+    expect(overlays.map((f) => f.kind)).toEqual(['match-failed']);
+
+    // A page state offers Reload because nothing else can work; the overlay must NOT, since
+    // reloading would throw away the working menu it is drawn over. This is the assertion
+    // that fails if the copy and the presentation ever drift apart.
+    for (const f of Object.values(STARTUP_FAILURES)) {
+      if (f.presentation === 'page') expect(f.action, f.kind).toBe('Reload');
+      else expect(f.action, f.kind).not.toBe('Reload');
+    }
+    expect(STARTUP_FAILURES['match-failed'].detail, 'the overlay still tells them to reload')
+      .not.toMatch(/reload/i);
   });
 
   it('OFFERS A WAY OUT, and the way out works', () => {
@@ -1063,8 +1172,10 @@ describe('boot: the message itself', () => {
   });
 
   it('is styled to fill the viewport rather than sitting in the top-left corner', () => {
-    const h = harness({ throwOnStart: new Error('no webgl') });
-    bootAndStart(h);
+    // Boot boundary: this is about the PAGE's own styling, and a transient match failure
+    // no longer produces a page to style (issue #325's ruling).
+    const h = harness({ throwOnAppSettings: new Error('storage denied') });
+    boot(h.deps);
     const el = h.root.firstElementChild as HTMLElement;
     expect(el.style.height).toBe('100%');
     expect(el.style.display).toBe('flex');

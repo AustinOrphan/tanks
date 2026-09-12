@@ -80,13 +80,38 @@ export interface StartupFailure {
    * The recovery action, as a label.
    *
    * ALWAYS present, and always exactly one, because at this boundary exactly one thing is
-   * genuinely available: the page has been replaced, so there is no Main Menu to go Back
-   * to and no Settings to open. Issue #325 asks for "only relevant recovery actions", and
-   * offering a Back that cannot work would be worse than offering nothing. Reloading is a
-   * real recovery for three of the four kinds and a real route back to the menu for the
-   * fourth.
+   * genuinely available. For a `page` state the page has been replaced, so there is no
+   * Main Menu to go Back to and no Settings to open, and Reloading is the only real
+   * recovery. For the `overlay` state the opposite holds: the menu is still there and
+   * intact, so Reload would be the wrong advice -- it would throw away a working shell to
+   * recover from a match that failed. Issue #325 asks for "only relevant recovery
+   * actions", and which actions are relevant is decided by `presentation`.
    */
   readonly action: string;
+  /**
+   * WHERE this state is shown, and it is a property of the CAUSE rather than of the call
+   * site (issue #325, owner ruling 2026-09-11: "overlay for transient, full page for
+   * fatal").
+   *
+   * `page` replaces the document. Correct when nothing is left to return to -- boot never
+   * finished -- and correct when the failure is FATAL rather than transient: an
+   * `UnsupportedRenderError` means the renderer is unavailable, so the next match will fail
+   * exactly as this one did, and handing the player back a Main Menu is an invitation to
+   * prove it again.
+   *
+   * `overlay` keeps the working shell and blocks over it. Correct only when the shell IS
+   * working and the failure might not repeat, which after this change is exactly one state:
+   * a match that failed for a reason that is not the renderer being absent.
+   *
+   * A KNOWN RESIDUAL, recorded rather than papered over. `UnsupportedRenderError` is the
+   * only typed cause, so a renderer that gets no context DURING CONSTRUCTION -- as opposed
+   * to failing the probe -- arrives here as a bare `Error` and is classified transient,
+   * even though every later match will fail identically. The copy is written not to vouch
+   * for the rest, so it is not a lie, but the player can dismiss and retry forever. Typing
+   * that failure so the classifier can call it fatal is the fix, and it belongs with
+   * `session-host.ts`/`startGame` rather than here.
+   */
+  readonly presentation: 'page' | 'overlay';
 }
 
 /**
@@ -103,6 +128,7 @@ export const STARTUP_FAILURES: Readonly<Record<StartupFailureKind, StartupFailur
         'The game needs WebGL 2, and this browser is not providing it. Try a different ' +
         'browser, or turn on hardware acceleration in this one’s settings.',
       action: 'Reload',
+      presentation: 'page',
     }),
     'probe-blocked': Object.freeze({
       kind: 'probe-blocked',
@@ -117,6 +143,7 @@ export const STARTUP_FAILURES: Readonly<Record<StartupFailureKind, StartupFailur
         'often an extension, or a privacy mode that blocks graphics access. Try ' +
         'disabling extensions for this page, or use a different browser.',
       action: 'Reload',
+      presentation: 'page',
     }),
     'startup-failed': Object.freeze({
       kind: 'startup-failed',
@@ -128,6 +155,7 @@ export const STARTUP_FAILURES: Readonly<Record<StartupFailureKind, StartupFailur
       detail:
         'Something went wrong before the game was ready. Reloading usually fixes it.',
       action: 'Reload',
+      presentation: 'page',
     }),
     'match-failed': Object.freeze({
       kind: 'match-failed',
@@ -138,10 +166,24 @@ export const STARTUP_FAILURES: Readonly<Record<StartupFailureKind, StartupFailur
       // every later match will fail too and the reassurance would be a lie the player
       // disproves on their next click. Naming the match without vouching for the rest is
       // true in both cases.
+      // The copy CHANGED with the presentation (issue #325, 2026-09-11 ruling). It used to
+      // end "Reload to get back to the menu and try again", which was right while this
+      // state replaced the page; the shell now survives, so telling the player to reload
+      // would throw away a working one to recover from a single match.
+      //
+      // It does NOT say the menu is visible, and an earlier draft did. The HUD's layer
+      // stack SWAPS surfaces -- every layer hides the one beneath it, the existing
+      // confirmation included -- so what "overlay" buys is `navigation.ts`'s rule that a
+      // route may never be pushed over one, not visual stacking. Measured: with the alert
+      // open, `.hud-panel` reports a 0x0 box. The claim to make is about the button, which
+      // returns to the menu in one press and without a reload.
       detail:
-        'Something went wrong while loading the match. Reload to get back to the menu ' +
-        'and try again.',
-      action: 'Reload',
+        'Something went wrong while loading the match. Go back to the menu and try again.',
+      action: 'Back to menu',
+      // The ONE overlay state. Reached only when the shell is up AND the cause is not the
+      // renderer being unavailable -- see `classifyStartupFailure`, which checks the cause
+      // before the call site precisely so a fatal failure cannot land here.
+      presentation: 'overlay',
     }),
   });
 
@@ -154,9 +196,15 @@ export const STARTUP_FAILURES: Readonly<Record<StartupFailureKind, StartupFailur
  * than a licence to guess.
  */
 export function classifyStartupFailure(err: unknown, at: FailurePoint): StartupFailure {
-  if (at === 'match') return STARTUP_FAILURES['match-failed'];
+  // CAUSE FIRST, call site second, and the order is the whole of the 2026-09-11 ruling.
+  // It used to be the other way round, which meant `at === 'match'` short-circuited before
+  // the error was examined: a browser with no WebGL 2 that got as far as a menu click was
+  // told "that match could not start" and handed back a Main Menu whose every Start would
+  // fail the same way. An `UnsupportedRenderError` is FATAL wherever it is thrown -- the
+  // renderer is absent, not busy -- so it keeps the full-page state at both boundaries.
   if (err instanceof UnsupportedRenderError) {
     return STARTUP_FAILURES[err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'];
   }
+  if (at === 'match') return STARTUP_FAILURES['match-failed'];
   return STARTUP_FAILURES['startup-failed'];
 }

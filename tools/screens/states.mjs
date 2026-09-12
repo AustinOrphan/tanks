@@ -448,15 +448,24 @@ export const SCREEN_STATES = Object.freeze([
     id: 'screen.startup.match-failed',
     title: 'A match could not start',
     description:
-      'The probe passed and the menu came up; the renderer fails when a match starts. A '
-      + 'different screen from a boot failure, and it deliberately does not vouch for the rest.',
+      'The probe passed and the menu came up; the renderer fails when a match starts. Since '
+      + "issue #325's 2026-09-11 ruling this is an OVERLAY over the working Main Menu rather "
+      + 'than a replacement for the page: the shell behind it is intact, so the recovery is '
+      + 'Back to menu rather than Reload. It deliberately does not vouch for the rest.',
     steps: [
       ...PAST_SPLASH,
       { breakWebgl: 'probe-blocked' },
       { click: '.hud-new-game' },
-      { waitVisible: '[role="alert"]' },
+      // `.hud-alert`, not `[role="alertdialog"]`: the replace-run confirmation declares the
+      // same role, and a selector that could match either would pass on the wrong dialog.
+      { waitVisible: '.hud-alert' },
     ],
-    measure: ['[role="alert"]'],
+    // `.hud-panel` is measured EXPECTING it to be hidden, which is why this state reports
+    // 3 of 4 visible rather than 4 of 4. The layer stack swaps surfaces, so the menu is not
+    // drawn behind the alert; its 0x0 box is the record of that, and an earlier draft of
+    // this feature claimed the opposite in player-facing copy. Remove it here and the next
+    // reader has to rediscover the fact by hand.
+    measure: ['.hud-alert', '.hud-alert-body', '.hud-alert-dismiss', '.hud-panel'],
   }),
   state({
     id: 'screen.no-script',
