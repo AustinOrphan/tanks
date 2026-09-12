@@ -6242,5 +6242,43 @@
       "hud.css is syntactically whole gives every --hidden modifier something that actually hides"
     ],
     "why": "The modifier reduced to a class that styles nothing -- the fourth instance of the shape `.hud-splash--hidden`, `.ui-app-ground--hidden` and `.hud-legal-body--hidden` each carry their own note about. `.hud-alert` is `position: absolute; inset: 0` with an opaque page scrim at `z-index: 3`, so with nothing hiding it the match-failure alert covers the entire game from page load and never leaves -- strictly worse than the ground scrim, because it also swallows every click. The presence sweep is satisfied by an empty rule and the HUD's own tests read the CLASS, so only a computed-display assertion measured against the same element unmodified can see it. FOUND BY THIS ENTRY: it SURVIVED on first run. The four one-off cases named above each pin their own modifier and nothing swept the rest, so a fifth was invisible. The sweep that now kills it derives its population from the stylesheet -- 56 `--hidden` modifiers today -- and applies each over its own base class, so the next one is covered without anyone remembering to add it."
+  },
+  {
+    "id": "reduced-motion-class-never-reaches-the-root",
+    "file": "src/game/hud.ts",
+    "find": "      el.classList.toggle('hud--reduced-motion', on);",
+    "replace": "      el.classList.toggle('hud--reduced-motion', false);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.controls.test.ts"
+    ],
+    "why": "Severs the stylesheet from the resolved policy while leaving `transitionMs()` intact, so a player who asks for reduced motion gets their TRANSITIONS calmed and every keyframe ANIMATION still running -- the damage vignette, the life-loss pulse, the splash pulse, the countdown pop. Exactly the split the shipped code had before issue #631, except the OS query no longer papers over it. Invisible to any test that reads hud.css text, because the stylesheet is correct under this mutation; only an assertion on the ROOT ELEMENT after `setReducedMotion(true)` can see it."
+  },
+  {
+    "id": "reduced-motion-cancels-a-cue-that-rests-invisible",
+    "file": "src/game/hud.css",
+    "find": ".hud--reduced-motion .hud-capacity--flash {\n  animation-name: hud-capacity-flash--still;",
+    "replace": ".hud--reduced-motion .hud-capacity--flash {\n  animation: none;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/hud.css.test.ts",
+      "src/game/menu-transition.test.ts"
+    ],
+    "why": "The plausible-looking wrong fix, and the one the shipped stylesheet's own comment warns against: `.hud-capacity` rests at `opacity: 0`, so cancelling its animation does not calm the blocked-fire cue -- it DELETES it. A player with reduced motion would simply never learn why their shot was refused. Reads as a tidier rule than the motionless keyframe set it replaces, which is what makes it the likely edit. Killed by the never-answers-by-cancelling case, which is written about the two cues that rest invisible rather than about this one line."
+  },
+  {
+    "id": "reduced-motion-block-returns-to-the-media-query",
+    "file": "src/game/hud.css",
+    "find": ".hud--reduced-motion .hud-damage--hit {",
+    "replace": "@media (prefers-reduced-motion: reduce) { .hud-damage--hit {",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/game/hud.css.test.ts",
+      "src/game/menu-transition.test.ts"
+    ],
+    "why": "Puts one rule back on the raw OS query. That is the whole defect issue #631 removed, reintroduced for a single cue -- and the disagreement runs in both directions: a player who chose `reduced` against an OS saying `full` keeps the full-screen damage flash, and one who chose `full` against an OS saying `reduce` loses it against their explicit choice. The second is the case `--ui-transition-duration`'s comment had warned about for transitions since issue #364. Killed by 2: the no-media-query assertion in menu-transition.test.ts and the population sweep, which stops seeing an answer for that cue."
   }
 ]
