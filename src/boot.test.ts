@@ -13,6 +13,7 @@ import {
 import type { AppShell } from './game/app-shell';
 import { RENDER_CAPABILITY_SUPPORTED, type RenderCapability } from './game/render-capability';
 import type { RouteHost, SessionRequests, StartIntent } from './game/route-host';
+import { RenderContextUnavailableError } from './presentation/render-context';
 
 type StartArgs = [
   HTMLCanvasElement,
@@ -1067,6 +1068,44 @@ describe('boot: the message itself', () => {
     // menu click is "that match could not start".
     expect(classifyStartupFailure(new Error('renderer init'), 'match').kind).toBe('match-failed');
     expect(classifyStartupFailure('a string', 'match').kind).toBe('match-failed');
+  });
+
+  it('calls a context that could not be BUILT fatal, not just one the probe refused', () => {
+    // The residual `startup-failure.ts` used to carry, now closed. The capability probe
+    // (#470) throws `UnsupportedRenderError` and was the ONLY typed cause, so a browser that
+    // PASSED the probe and then failed to build a context in `createScene` threw a bare
+    // Error, classified `match-failed`, and got a dismissable overlay over a Main Menu whose
+    // every Start would fail identically. Nothing was a lie; the player could just retry
+    // forever.
+    //
+    // Reachable without any exotic browser: the probe builds its own throwaway canvas, so a
+    // context lost between probe and match, a GPU blocklisted for the real canvas but not the
+    // probe's, or a driver that grants one context and refuses a second all land here.
+    const err = new RenderContextUnavailableError(new Error('Error creating WebGL context.'));
+    // BOTH boundaries, for the same reason `UnsupportedRenderError` is asserted at both: the
+    // renderer is absent rather than busy, so where it was noticed changes nothing about
+    // what is true to say.
+    expect(classifyStartupFailure(err, 'boot').kind).toBe('unsupported-render');
+    expect(classifyStartupFailure(err, 'match').kind).toBe('unsupported-render');
+    // ...and fatal means the full page, not an overlay the player can dismiss and retry
+    // against. This is the half that actually changes what happens to them.
+    expect(classifyStartupFailure(err, 'match').presentation).toBe('page');
+
+    // The negative control, and it is the point of typing this at all: an ordinary throw
+    // from the same boundary is still "we do not know", still transient, still an overlay.
+    // A change that made every match failure fatal would pass every assertion above.
+    expect(classifyStartupFailure(new Error('Error creating WebGL context.'), 'match').kind)
+      .toBe('match-failed');
+    expect(classifyStartupFailure(new Error('anything else'), 'match').presentation)
+      .toBe('overlay');
+  });
+
+  it('keeps the original throw on the typed error, so a developer still gets the real one', () => {
+    // The player copy deliberately says nothing technical (#325 keeps diagnostics out of it),
+    // which only works if the underlying cause survives to `reportError`. A wrapper that
+    // swallowed it would trade a debuggable report for a nicer sentence.
+    const original = new Error('Error creating WebGL context.');
+    expect(new RenderContextUnavailableError(original).cause).toBe(original);
   });
 
   it('shows a fatal cause on the page and a transient one over the shell', () => {

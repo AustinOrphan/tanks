@@ -1,8 +1,8 @@
 {
   "id": "startup-failure-reads-the-call-site-before-the-cause",
   "file": "src/game/startup-failure.ts",
-  "find": "  if (err instanceof UnsupportedRenderError) {\n    return STARTUP_FAILURES[err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'];\n  }\n  if (at === 'match') return STARTUP_FAILURES['match-failed'];",
-  "replace": "  if (at === 'match') return STARTUP_FAILURES['match-failed'];\n  if (err instanceof UnsupportedRenderError) {\n    return STARTUP_FAILURES[err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'];\n  }",
+  "find": "  if (err instanceof UnsupportedRenderError) {",
+  "replace": "  if (err instanceof UnsupportedRenderError && at !== 'match') {",
   "expect": "killed",
   "tests": [
     "src/boot.test.ts"
@@ -11,5 +11,5 @@
     "boot: the message itself classifies each cause into its own state, and guesses at nothing",
     "boot: nothing starts until the player asks (issue #428) a FATAL cause still replaces the page, even from a menu click"
   ],
-  "why": "Restores the SHIPPED ordering, which issue #325's 2026-09-11 ruling reversed. With the call site checked first, `at === 'match'` short-circuits before the error is examined: a browser with no WebGL 2 that gets as far as a menu click is told 'that match could not start' and handed back a Main Menu whose every Start fails identically. After the ruling that is worse than a wrong message -- the transient state is now a DISMISSIBLE OVERLAY, so the mutation turns a fatal, unrecoverable condition into a dialog the player closes to return to a menu that cannot work. Both halves are killed: the classification case pins the pair directly, and the boot case proves the page still replaces the shell for a fatal cause reached from a click."
+  "why": "Lets the CALL SITE beat the CAUSE, which is the ordering issue #325's 2026-09-11 ruling reversed. With `at !== 'match'` on the guard, a menu click short-circuits before the error is honoured: a browser with no WebGL 2 that gets as far as Start is told 'that match could not start' and handed back a Main Menu whose every Start fails identically. After the ruling that is worse than a wrong message -- the transient state is a DISMISSIBLE OVERLAY, so this turns a fatal, unrecoverable condition into a dialog the player closes to return to a menu that cannot work. EXPRESSED AS A GUARD rather than as the statement reordering it used to be: the original find spanned the `UnsupportedRenderError` branch through the `at === 'match'` line, and a second fatal cause (`RenderContextUnavailableError`, the same issue) now sits between them, so that anchor could no longer match. The defect and the two tests that kill it are unchanged; only the way the manifest reaches it is."
 }

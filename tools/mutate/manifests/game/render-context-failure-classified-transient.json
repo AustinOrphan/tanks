@@ -1,0 +1,14 @@
+{
+  "id": "render-context-failure-classified-transient",
+  "file": "src/game/startup-failure.ts",
+  "find": "  if (err instanceof RenderContextUnavailableError) return STARTUP_FAILURES['unsupported-render'];",
+  "replace": "  if (err instanceof RenderContextUnavailableError) return STARTUP_FAILURES['match-failed'];",
+  "expect": "killed",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "why": "The typed cause recognised and then classified TRANSIENT, which is the plausible wrong answer rather than an absurd one: the failure did happen at a match start, and `match-failed` is what the call site alone would suggest. It restores the exact player-facing bug -- a dismissable overlay and a Main Menu whose every Start fails the same way -- while the type, the throw and the wrapper all still look correct. Only the fatal/transient decision moves.",
+  "killedBy": [
+    "boot: the message itself calls a context that could not be BUILT fatal, not just one the probe refused"
+  ]
+}

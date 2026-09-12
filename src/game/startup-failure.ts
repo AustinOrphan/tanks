@@ -24,6 +24,7 @@
  * a home for them here.
  */
 import type { RenderCapabilityFailure } from './render-capability';
+import { RenderContextUnavailableError } from '../presentation/render-context';
 
 /**
  * The capability probe said no, so boot stopped before building anything (issue #470).
@@ -103,13 +104,15 @@ export interface StartupFailure {
    * working and the failure might not repeat, which after this change is exactly one state:
    * a match that failed for a reason that is not the renderer being absent.
    *
-   * A KNOWN RESIDUAL, recorded rather than papered over. `UnsupportedRenderError` is the
-   * only typed cause, so a renderer that gets no context DURING CONSTRUCTION -- as opposed
-   * to failing the probe -- arrives here as a bare `Error` and is classified transient,
-   * even though every later match will fail identically. The copy is written not to vouch
-   * for the rest, so it is not a lie, but the player can dismiss and retry forever. Typing
-   * that failure so the classifier can call it fatal is the fix, and it belongs with
-   * `session-host.ts`/`startGame` rather than here.
+   * That residual is now CLOSED. It read: `UnsupportedRenderError` is the only typed cause,
+   * so a renderer that gets no context DURING CONSTRUCTION -- as opposed to failing the
+   * probe -- arrives as a bare `Error`, is classified transient, and the player can dismiss
+   * and retry forever against a browser that will fail identically every time.
+   * `render/scene.ts` now throws a typed `RenderContextUnavailableError` from the one
+   * statement that asks the browser for a context, and `classifyStartupFailure` calls it
+   * fatal. What remains untyped below that is geometry and materials, whose failure is a bug
+   * in this repository rather than a browser that cannot render, and `startup-failed` /
+   * `match-failed` are the honest states for a cause we genuinely do not know.
    */
   readonly presentation: 'page' | 'overlay';
 }
@@ -205,6 +208,17 @@ export function classifyStartupFailure(err: unknown, at: FailurePoint): StartupF
   if (err instanceof UnsupportedRenderError) {
     return STARTUP_FAILURES[err.failure === 'probe-failed' ? 'probe-blocked' : 'unsupported-render'];
   }
+  // The OTHER fatal cause, and the one that closes this function's former residual: the
+  // capability probe passed and `createScene` still could not build a context (issue #325).
+  // Fatal for `UnsupportedRenderError`'s exact reason -- the renderer is absent, not busy --
+  // so it takes the same full-page state at both boundaries rather than a dismissable
+  // overlay the player can retry against forever.
+  //
+  // `unsupported-render`, not `probe-blocked`: the probe is not what failed here. It ran and
+  // said yes, which is precisely what makes this case worth distinguishing in the first
+  // place, and the copy 'unsupported-render' carries -- the browser is not providing WebGL 2
+  // -- is true of it.
+  if (err instanceof RenderContextUnavailableError) return STARTUP_FAILURES['unsupported-render'];
   if (at === 'match') return STARTUP_FAILURES['match-failed'];
   return STARTUP_FAILURES['startup-failed'];
 }
