@@ -1,47 +1,38 @@
-# Issue #651 — the renderer's own animations answer to the motion policy
+# Issue #651 — the renderer's own animations answer to the resolved motion policy
 
-Captured with `npm run gallery -- --elements fuse --view close`, over the `fuse` element
-("a mine burning its whole fuse, for watching the pulse rate climb"). `--motion reduced` is
-the flag this change adds: the gallery builds `createEntityViews`/`createParticleSystem`
-directly rather than through `renderer.ts`, so it could not photograph the preference at all
-before.
+Captured with `npm run gallery`, using the `--motion reduced` flag this change adds: the
+gallery builds `createEntityViews`/`createParticleSystem` directly rather than through
+`renderer.ts`, so it could not photograph the preference at all before.
 
-| File | What it shows |
-| --- | --- |
-| `fuse-full.gif` | The shipped strobe over the whole fuse: an accelerating blink, 1.67 Hz mean, peaking at 3.333 Hz where the warning window takes over. |
-| `fuse-reduced.gif` | The same fuse as a monotone brightening. No blink; the body gets hotter as expiry approaches. |
+## The three treatments, side by side
 
-## The measurement that makes the case
-
-Single frames at three points in the fuse, by SHA-256:
-
-| age | full motion | reduced |
+| Clip | Command | What changes |
 | --- | --- | --- |
-| 30 | `e171294b…` | `0c9525c8…` |
-| 60 | **`e171294b…`** | `f8bcf113…` |
-| 88 | `4ece859e…` | `896b8b45…` |
+| `mine-fuse-full.gif` / `mine-fuse-reduced-squared.gif` | `--elements fuse --view close --anim` | An accelerating strobe becomes a monotone brightening. |
+| `kill-particles-full.gif` / `kill-particles-reduced.gif` | `--scene destroyed --anim` | The burst still appears and fades; the debris stops flying and falling. |
+| `respawn-spawn-full.gif` / `respawn-spawn-reduced.gif` | `--scene respawn --anim` | The tank fades in without swelling; the invincibility ring holds instead of pulsing. |
 
-**At full motion, age 30 and age 60 are byte-identical** — the strobe passes through the
-same brightness twice, so a single frame cannot say how far along the fuse is. A player has
-to watch the RATE over time to read it. Under reduced motion all three differ, and they
-differ monotonically: the same information, readable from one frame, which is what a
-reduced-motion preference is asking for.
+**Every pair runs the same length.** Frame counts are identical within each pair — 180,
+549 and 270 — which is the "keeps the fade and the lifetime, drops the movement" rule made
+visible: a calmed effect is not a shorter effect.
 
-Armed-versus-idle is untouched either way — it lives in the base colours, not in the pulse.
+| pair | frames | full | reduced |
+| --- | --- | --- | --- |
+| kill | 180 = 180 | 909 KB | 365 KB |
+| respawn | 549 = 549 | 296 KB | 129 KB |
+| mine fuse | 270 = 270 | 333 KB | 348 KB |
 
-## A pose that proves nothing, recorded so it is not repeated
-
-`--elements mine` places `timer: MINE_TIMER` — a *fresh* mine, independent of `--age` — so
-every frame of it is identical under either policy, and so is `--mineWarn lance` against it.
-Two byte-identical captures there are evidence about the pose, not about the flag. `fuse` is
-the element with a burning fuse in it.
+The file sizes are a by-product of GIF inter-frame compression, not a perceptual measure —
+but they say plainly that far less moves between frames in the two clips whose treatment is
+about movement. The mine fuse is the exception and should be: nothing stopped moving there,
+the movement changed shape, so there is no compression win to have.
 
 ## The brightness ramp is nonlinear, and that is measured
 
-`fuse-reduced.gif` is the SQUARED, capped ramp. The first version was linear in fuse
-progress, and two measurements say that was wrong. The parameter is a lerp between two reds
-that the renderer then tone-maps, and that whole transfer is compressive, so a linear
-parameter does not read as a linear brightening.
+The first version of the fuse ramp was linear in fuse progress, and two measurements say
+that was wrong. The parameter is a lerp between two reds that the renderer then tone-maps,
+and that whole transfer is compressive, so a linear parameter does not read as a linear
+brightening.
 
 Captured through `--elements fuse --view close --age <n> --motion reduced`, brightest mine
 pixel decoded from the PNG, CIE L* over Rec.709 luminance:
@@ -69,5 +60,16 @@ there exactly as it always did.
 very start of the fuse is less distinguishable than before. That is the trade -- early
 progress for a legible imminent-detonation cue.
 
-`ramp-linear-a*.png` and `ramp-squared-a*.png` are the frames those two columns were decoded
-from.
+`ramp-linear-a<n>.png` and `ramp-squared-a<n>.png` are the frames those two columns were
+decoded from, at ages 0/15/30/45/60/75 out of 90.
+
+## A pose that proves nothing, recorded so it is not repeated
+
+`--elements mine` places `timer: MINE_TIMER` — a *fresh* mine, independent of `--age` — so
+every frame of it is identical under either policy, and so is `--mineWarn lance` against it.
+Two byte-identical captures there are evidence about the pose, not about the flag. `fuse` is
+the element with a burning fuse in it.
+
+`fuse-a30-*.png`, `fuse-a60-*.png` and `fuse-a88-reduced.png` are from the first round and
+show the full-motion strobe passing through the same brightness at two different fuse points
+(a30-full and a60-full are byte-identical).
