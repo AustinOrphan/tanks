@@ -1456,6 +1456,68 @@ describe('hud.css is syntactically whole', () => {
     ).toContain('box-sizing: border-box');
   });
 
+  it('holds every map card to one height, with the clamp and the reserved space agreeing at both widths', () => {
+    // The owner report this answers: "the teams unavailable copy changes the size of the
+    // map selection previews when it shouldn't". The note was NOT the cause -- toggling it
+    // alone was measured in Chromium to move nothing. Grid rows are equal-height and a
+    // card's height follows how far its intent wraps, so swapping which boards the row
+    // offers resized the cards beside them: the second row measured 122.4px at two players
+    // (Pinwheel) and 140.1px at three (Keystone) at 1280x800.
+    //
+    // A TEXT assertion, for `forces the who's-playing cards`'s reason: jsdom's window is a
+    // fixed 1024px and never matches `@media (max-width: 760px)`, and jsdom has no layout,
+    // so neither the query nor the resulting heights can be computed here. MEASURED in real
+    // Chromium against the built app instead -- every card 124.8px at 1280x800 and 81.9px
+    // at 390x844, identical at two, three and four players, where before it took three
+    // different heights per viewport.
+    //
+    // What this pins is the AGREEMENT, which is the part a future edit breaks silently: the
+    // clamp caps a long intent and the min-height floors a short one, and they have to name
+    // the same number of lines. A clamp of 4 against a min-height of 2 lines would leave
+    // Arena 3 (three lines) shorter than its neighbours -- exactly the uneven card these
+    // rules exist to remove -- while still looking like a clamp is in place.
+    const src = stripComments(css);
+
+    const blockAt = (idx: number) => src.slice(idx, src.indexOf('}', idx));
+    const linesOf = (block: string, label: string) => {
+      const clamp = /-webkit-line-clamp:\s*(\d+)/.exec(block);
+      const min = /min-height:\s*calc\(1\.35em\s*\*\s*(\d+)\)/.exec(block);
+      expect(clamp, `${label}: lost the line clamp`).not.toBeNull();
+      expect(min, `${label}: lost the reserved height`).not.toBeNull();
+      // The standard property beside the prefixed one, so the rule does not depend on a
+      // vendor prefix surviving.
+      expect(block, `${label}: lost the unprefixed line-clamp`).toMatch(/[^-]line-clamp:\s*\d+/);
+      return { clamp: Number(clamp![1]), min: Number(min![1]) };
+    };
+
+    const baseIdx = src.indexOf('.hud-versus-map-intent {');
+    expect(baseIdx, 'the base intent rule is gone').toBeGreaterThan(-1);
+    const base = linesOf(blockAt(baseIdx), 'base');
+    expect(base.clamp, 'the base clamp and reserved height name different line counts').toBe(base.min);
+    // 4 at the desktop width, where the text column beside the 74px canvas measured 138px
+    // in a 240px grid column.
+    expect(base.clamp).toBe(4);
+
+    // lastIndexOf: the narrow-viewport override is the second of the two, and the
+    // media-proximity check is what proves this landed inside the query.
+    const narrowIdx = src.lastIndexOf('.hud-versus-map-intent {');
+    expect(narrowIdx, 'the narrow-viewport intent override is gone').toBeGreaterThan(baseIdx);
+    const mediaIdx = src.lastIndexOf('@media (max-width: 760px)', narrowIdx);
+    expect(mediaIdx, 'the intent override is not inside a 760px query').toBeGreaterThan(-1);
+    expect(
+      narrowIdx - mediaIdx,
+      'the nearest preceding 760px query is too far away to be the one wrapping this rule',
+    ).toBeLessThan(600);
+    const narrow = linesOf(blockAt(narrowIdx), 'narrow');
+    expect(narrow.clamp, 'the narrow clamp and reserved height name different line counts').toBe(narrow.min);
+    // 2, not 4: the map row is a single full-width column below 760px, so the same text
+    // column measured 288px. Forcing four lines there would add ~30px of whitespace per
+    // card down a seven-card phone column.
+    expect(narrow.clamp).toBe(2);
+    expect(narrow.clamp, 'the phone clamp must be looser-fitting than the desktop one, not equal')
+      .toBeLessThan(base.clamp);
+  });
+
   it('centres the win/lose/pause/title panel text, so a wrapped heading does not read as left-shifted (issue #151)', () => {
     // `.hud-title` is 56px/900: at phone widths a two- or three-digit level number
     // ("Level 12 cleared!") does not fit one line and wraps. A wrapped block-level

@@ -3231,16 +3231,62 @@
 
 /* Which counts and modes the board supports, and what it plays like. Both are quieter than
    the name; the intent is quieter still and wraps to as many lines as it needs. */
+/* Two lines held open for the same reason the intent holds four (below): the config line
+ * is the OTHER text row that differs card to card. Every board's reads "2-4 players . FFA,
+ * Teams" and wraps to two lines in the 138px desktop text column; Random's reads "N eligible
+ * boards" and takes one, which left it 12px shorter than every card beside it. Boards
+ * already occupy both lines, so this raises Random to meet them rather than growing the row.
+ *
+ * No clamp here, unlike the intent: this line is GENERATED (versusMapConfigLine, and
+ * Random's own count in hud.ts), so it cannot drift the way authored copy can, and
+ * ellipsising a player count or a mode name would hide the fact the card exists to state.
+ * Below 760px both forms fit one line in the wider column, so the override drops it back. */
 .hud-versus-map-config {
   font-size: 11px;
+  /* 1.2, the UA default for this size, stated explicitly ONLY so the min-height below is
+   * arithmetic rather than a guess at the UA's normal. Raising it to the intent's 1.35
+   * would add ~1.7px per card -- 20px down a seven-card phone column, on the screen issue
+   * #658's fit complaint was about -- to buy nothing this rule needs. */
+  line-height: 1.2;
   opacity: 0.75;
+  min-height: calc(1.2em * 2);
 }
 
+/* ONE HEIGHT FOR EVERY CARD, whatever boards the row is offering (owner report: "the
+ * teams unavailable copy changes the size of the map selection previews when it
+ * shouldn't").
+ *
+ * The note was not the cause -- MEASURED, toggling it alone moves nothing. Grid rows are
+ * equal-height, and a card's height follows how far its INTENT wraps, so swapping which
+ * boards the row offers resizes the cards beside them. At 1280x800 the second row measured
+ * 122.4px at two players (Pinwheel) and 140.1px at three (Keystone), because Keystone's
+ * intent ran one line longer. The canvas itself is a fixed 74px and never moved.
+ *
+ * Both halves are needed and they do different jobs: the CLAMP caps a long intent, and the
+ * `min-height` stops a short one (Arena 3, three lines) leaving its card shorter than its
+ * neighbours. A clamp alone sets a maximum, which is only half of "uniform".
+ *
+ * The line count is per-breakpoint because the text column is, and by a factor of two:
+ * MEASURED at 138px wide beside the canvas in a 240px desktop grid column, and 288px in the
+ * single full-width column below 760px. Four lines there is two lines here, and forcing four
+ * on a phone would add ~30px of whitespace per card on the narrowest screen -- the screen
+ * issue #658 was already about.
+ *
+ * Shipped copy is held under the clamp rather than truncated by it (every catalog intent is
+ * <= 88 characters, pinned in versus-catalog.test.ts with this derivation), so nothing
+ * ellipsises today. The clamp is the guarantee that a future board cannot reintroduce the
+ * resize, not a licence to write past it. */
 .hud-versus-map-intent {
   font-size: 11px;
   line-height: 1.35;
   opacity: 0.65;
   white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  min-height: calc(1.35em * 4);
 }
 
 /* The who's-playing note. Since issue #260 it is unconditional -- devices really are
@@ -3407,6 +3453,22 @@
     flex: 0 1 40vw;
     min-width: 0;
     box-sizing: border-box;
+  }
+
+  /* Two lines, not the base rule's four -- see .hud-versus-map-intent. The map row is a
+   * single full-width column here, so the text beside the canvas measured 288px rather
+   * than 138px and every shipped intent fits in two. Kept in step with the base rule by
+   * hud.css.test.ts, which asserts the clamp and the min-height agree at both widths: a
+   * clamp of 4 against a min-height of 2 lines would reintroduce exactly the uneven card
+   * this rule exists to remove. */
+  .hud-versus-map-intent {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    min-height: calc(1.35em * 2);
+  }
+
+  .hud-versus-map-config {
+    min-height: calc(1.2em * 1);
   }
 }
 

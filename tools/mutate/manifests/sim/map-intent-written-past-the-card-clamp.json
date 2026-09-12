@@ -1,0 +1,14 @@
+{
+  "id": "map-intent-written-past-the-card-clamp",
+  "file": "src/sim/config/data/versus-catalog.json",
+  "find": "A three-player arch: two mirrored bases and a keystone spawn equally far from both.",
+  "replace": "A three-player arch: two mirrored base corners, one keystone between the pylons, and an axis spawn equally far from both bases.",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/versus-catalog.test.ts"
+  ],
+  "why": "Keystone's intent restored to the 127-character form it shipped with. The clamp means this no longer resizes the card -- it SILENTLY ELLIPSISES the sentence instead, and the tail ('an axis spawn equally far from both bases') is the part that says what the board is. A capture or a playtest report would show a truncated card and nothing would name the cause, which is why the bound is asserted in the catalog rather than left to the stylesheet to absorb.",
+  "killedBy": [
+    "displayName is what the map row renders (issue #271, criterion 5) keeps every intent inside the map card's clamp, so no board truncates -- population: all 8"
+  ]
+}
