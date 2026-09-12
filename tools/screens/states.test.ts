@@ -12,6 +12,7 @@ import {
   SCREEN_STATE_IDS,
   STEP_KINDS,
   WEBGL_MODES,
+  GAMEPAD_FIXTURES,
   findScreenState,
 } from './states.mjs';
 import { buildScreenArguments, runScreenState } from '../capture/screen-adapter.mjs';
@@ -49,6 +50,21 @@ describe('the screen-state catalogue', () => {
         expect(STEP_KINDS, `${state.id}: unknown step '${keys[0]}'`).toContain(keys[0]);
       }
     }
+  });
+
+  it('names a known gamepad fixture on every step that installs one', () => {
+    // `GAMEPAD_FIXTURES` is the contract between this pure-data module and the runner that
+    // holds the pad VALUES (`tools/screens/run.mjs`, which throws on an unknown fixture).
+    // Without this the two could only disagree at capture time, in a browser, on a machine
+    // that may not be the one that edited the state -- and an export nothing checks is an
+    // export nothing keeps true.
+    const named = SCREEN_STATES.flatMap((state: any) =>
+      state.steps.filter((s: any) => 'fakeGamepads' in s).map((s: any) => s.fakeGamepads),
+    );
+    expect(named.length, 'no state installs a fixture: this guard would measure nothing').toBeGreaterThan(0);
+    for (const fixture of named) expect(GAMEPAD_FIXTURES).toContain(fixture);
+    // The control: the list must be capable of saying no.
+    expect(GAMEPAD_FIXTURES).not.toContain('no-such-fixture');
   });
 
   it('uses only known capability and scripting modes', () => {
