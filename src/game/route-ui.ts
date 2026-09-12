@@ -241,6 +241,40 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   hud.onHapticsChange((next) => {
     deps.settings.setDeviceHaptics(next);
   });
+  // Its own stored key, never folded into device haptics: the two are detected, stored and
+  // resolved independently end to end, and until issue #227 this one had no writer at all.
+  hud.onControllerRumbleChange((next) => {
+    deps.settings.setControllerRumble(next);
+  });
+
+  /**
+   * Keep platform capabilities live while Settings is open (issue #227).
+   *
+   * The rumble control is shown REFUSED when no connected pad reports an actuator, and the
+   * refusal names plugging one in as the fix -- so a reason that did not clear on hotplug
+   * would be instructing the player to do something that then appears not to work.
+   *
+   * Needed because the only other `refreshCapabilities` caller is `loop.ts`'s per-frame pad
+   * sweep, which runs while a match SIMULATES. A player in Settings with no match running is
+   * the ordinary case and had no refresh at all.
+   *
+   * Read once immediately on open for the same reason the Controllers panel does: the
+   * browser's hotplug events fire only on CHANGE, so opening over an already-connected pad
+   * would otherwise show the boot snapshot. `refreshCapabilities` publishes only on a real
+   * change, so the common case costs one scan and notifies nobody.
+   */
+  const onCapabilityHotplug = (): void => {
+    deps.effectiveSettings.refreshCapabilities();
+  };
+  hud.onSettingsOpen(() => {
+    onCapabilityHotplug();
+    deps.host.addEventListener('gamepadconnected', onCapabilityHotplug);
+    deps.host.addEventListener('gamepaddisconnected', onCapabilityHotplug);
+  });
+  hud.onSettingsClose(() => {
+    deps.host.removeEventListener('gamepadconnected', onCapabilityHotplug);
+    deps.host.removeEventListener('gamepaddisconnected', onCapabilityHotplug);
+  });
   // The store and nothing else (issue #289). The display comes back through
   // `route-host.ts`'s `paintSettingsControls`, which the store's own notification wakes --
   // so the label redraws from the value the store ACCEPTED, and the same notification is

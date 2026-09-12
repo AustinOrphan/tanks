@@ -197,7 +197,7 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
 }
 
 /**
- * The 21 registrations this module owns, and the boundary of the claim.
+ * The 24 registrations this module owns, and the boundary of the claim.
  *
  * Pinned as a SET rather than a count so that a handler quietly leaving for the session,
  * or a session handler quietly arriving here, names itself in the diff. The seven absent
@@ -206,11 +206,16 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
  * render-quality control, `onMotionChange` came with #289's motion control, and
  * `onRecordsOpen` before both with issue #324's step S5.
  */
+// Issue #227's three are the newest: `onControllerRumbleChange` writes the stored key that
+// had no writer, and the `onSettingsOpen`/`Close` pair scopes a capability re-probe to
+// exactly while the pane that shows its result is open.
 const ROUTE_HANDLERS = [
-  'onCampaignOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
+  'onCampaignOpen', 'onControllerRumbleChange', 'onControllersClose', 'onControllersOpen',
+  'onCustomizeClose',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
   'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin', 'onQualityChange',
-  'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onTouchSchemeChange', 'onVersusOpen',
+  'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onSettingsClose', 'onSettingsOpen',
+  'onTouchSchemeChange', 'onVersusOpen',
   'onVersusStart', 'onVolumeChange',
 ];
 

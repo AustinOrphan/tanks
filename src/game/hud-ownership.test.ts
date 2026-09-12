@@ -153,6 +153,12 @@ describe('HUD ownership boundary (issue #324)', () => {
     // is counted twice, so the roles sum to 69. Issue #325 added ONE, `showMatchFailure`,
     // and it is route-owned: it is drawn over the Main Menu when a match FAILED to start,
     // so there is no session to own it -- failing to create one is the event.
+    // Issue #227 adds FIVE, all route-owned: `setControllerRumble` and
+    // `onControllerRumbleChange` (the control the stored preference never had), the
+    // `onSettingsOpen`/`Close` pair, and `setControlRelevance`. 73 members, showToast counted
+    // twice, so the roles sum to 74. Route rather than gameplay because every one of them
+    // serves the Settings pane, which the PAGE owns and which is reachable with no session
+    // in existence -- a session must not be able to hide a control or write the preference.
     // Four FEWER than the 72 that stood before
     // issue #324's step S6, and the arithmetic is the whole of that step: five per-kind
     // status members (`setLives`, `setEnemiesRemaining`, `setLevel`, `setSessionKind`,
@@ -162,7 +168,7 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Growth here is not automatically a regression and neither is a fall: what these
     // numbers guard is that a member arrived or left through a diff someone read. The
     // assertion below is what pins that a session still cannot reach a route member.
-    expect(frame.size + route.size + gameplay.size).toBe(69);
+    expect(frame.size + route.size + gameplay.size).toBe(74);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

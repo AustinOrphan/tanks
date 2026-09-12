@@ -937,7 +937,13 @@ describe('hud.css is syntactically whole', () => {
     // confirmation's two answers beside it, so this fixture counts it without ever showing
     // it. 130 -> 131. It carries `.ui-btn--slab` like the confirmation's, so `unstyled`
     // stays empty -- the check this pin exists to prompt, performed rather than assumed.
-    expect(buttons.length).toBe(131);
+    // Issue #227 adds ONE: the controller-rumble toggle, beside device haptics in the
+    // Controls section. 131 -> 132. It is static markup rendered unconditionally at
+    // construction -- per-device hiding is a `--hidden` class this fixture never applies, so
+    // the figure is a property of the MARKUP and does not move with capabilities. It carries
+    // `.ui-btn--sm` like its sibling, so `unstyled` stays empty -- the check this pin exists
+    // to prompt, performed rather than assumed.
+    expect(buttons.length).toBe(132);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1018,14 +1024,15 @@ describe('hud.css is syntactically whole', () => {
     // outbound links in About & Legal, which are `.ui-btn` without being `<button>`, and
     // which are exactly the kind of control a `button`-only sweep misses.
     //
-    //   131 - (11 + 4 + 1 + 1 + 1) + 2 = 115
+    //   132 - (11 + 4 + 1 + 1 + 1) + 2 = 116
     //
-    // 131 since issue #325's match-failure dismiss button; the 18 non-primitives and the 2
-    // anchors are unchanged by it.
+    // 131 since issue #325's match-failure dismiss button, and 132 since issue #227's
+    // controller-rumble toggle; the 18 non-primitives and the 2 anchors are unchanged by
+    // either.
     //
     // Non-vacuity as well as arithmetic: a selector that matched nothing would make the
     // assertion below pass while measuring nothing.
-    expect(controls.length).toBe(115);
+    expect(controls.length).toBe(116);
 
     const sizeless = controls
       .filter((el) => {

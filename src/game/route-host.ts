@@ -5,6 +5,7 @@ import type { GameplayHud, Hud } from './hud';
 import type { RelaunchTarget } from './session-intent';
 import { isMuteHotkey, locationToHudSurface, musicContextFor, type GameDeps } from './loop';
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
+import { settingRelevance } from './control-relevance';
 import type { GetGamepads } from '../input/gamepad';
 import type { UiAction } from '../input/ui-actions';
 import { createModalityTracker, type Modality } from './modality';
@@ -636,6 +637,17 @@ export function createRouteHost(
     // device reads the same either way, and an unsupported one had no session to correct
     // it. Making this the ONLY writer would have shipped that reading everywhere.
     hud.setHaptics(deps.settings.snapshot().input.deviceHaptics);
+    // THE STORED PREFERENCE again, and for the same reason: this toggle EDITS the
+    // preference, and a pad that is merely unplugged must not make it read 'Off'.
+    // Availability is said by the relevance verdict below, not by the label.
+    hud.setControllerRumble(deps.settings.snapshot().input.controllerRumble);
+    // WHICH of these controls this device is worth offering (issue #227). Capabilities, not
+    // modality: the last input touched oscillates on a hybrid device, and a settings pane
+    // that rearranged itself because someone brushed a trackpad is the flicker the issue
+    // exists to prevent. This runs on the same subscription as everything above it, and
+    // `effectiveSettings` fires on a CAPABILITY change as well as a stored one -- so
+    // plugging in a rumble pad repaints the refusal without a second registration.
+    hud.setControlRelevance(settingRelevance(deps.effectiveSettings.capabilities()));
     // THE STORED PREFERENCE for the same reason haptics is, and a sharper one: the motion
     // control has three states and the resolved policy has two, so painting it from
     // `effective` would erase 'system' entirely -- a player following their device would
