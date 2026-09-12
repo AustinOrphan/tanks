@@ -41,7 +41,7 @@
  * BufferGeometry rather than adding sibling meshes -- which is also the cheaper thing to
  * draw, and keeps `disposeObject` correct with no new teardown path.
  */
-export const IDENTITY_MARKER_STYLES = ['arcs', 'shape'] as const;
+export const IDENTITY_MARKER_STYLES = ['arcs', 'shape', 'roof'] as const;
 export type IdentityMarkerStyle = (typeof IDENTITY_MARKER_STYLES)[number];
 
 /** Is this a marker style this module builds? The parse-side guard (`asIdentityMarker`). */
@@ -57,6 +57,39 @@ export function isIdentityMarkerStyle(value: unknown): value is IdentityMarkerSt
  * many slots exist would be a second opinion on a question presentation/identity.ts owns.
  */
 export const MARKER_VARIANTS = 4;
+
+/**
+ * WHICH SURFACE a style paints, because the third candidate does not use the ring.
+ *
+ * `arcs` and `shape` reshape the ground ring. `roof` (issue #630, owner's pick to try)
+ * leaves the ring exactly as shipped and puts the count on the TURRET CROWN instead --
+ * the one flat surface in the arena that nothing occludes. The ground is the largest
+ * identity surface there is (mid-radius perimeter ~364-546px against ~21-31px of blade),
+ * and that AREA is what the ring arms buy; what the roof buys is that a tread trail, a
+ * wreck, a spawn ring, a mine glow or a second tank parked alongside cannot cover it.
+ * Which of those matters more is what playing all three answers.
+ *
+ * Two consequences fall out of the split and both are load-bearing:
+ *
+ *  - `makeIdentityRing` must keep its exact shipped `RingGeometry` expression under
+ *    `roof`, not merely an equivalent one -- the control for the comparison has to be the
+ *    shipped rendering.
+ *  - The ring's COUNTER-ROTATION must be gated on this, not on "a marker is active".
+ *    Spinning a plain annulus is invisible (a circle is rotation-invariant) and would pass
+ *    every visual check while making the marker-spin test assert something untrue.
+ */
+export function ringMarkerFor(style: IdentityMarkerStyle | null): IdentityMarkerStyle | null {
+  return style === 'arcs' || style === 'shape' ? style : null;
+}
+
+/**
+ * Does this style paint the turret crown? Separate from `ringMarkerFor` rather than its
+ * negation: a future style could paint both, and `!ringMarkerFor(s)` would quietly claim
+ * the roof for every style that ever leaves the ring alone -- including `null`.
+ */
+export function marksTurretRoof(style: IdentityMarkerStyle | null): boolean {
+  return style === 'roof';
+}
 
 /**
  * The counter-rotation, in radians, that holds a marker still while its tank turns.

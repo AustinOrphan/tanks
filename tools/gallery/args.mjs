@@ -219,7 +219,7 @@ export function parseArgs(argv) {
     // and cannot import the TypeScript that owns the vocabulary. IDENTITY_MARKER_STYLES
     // (src/presentation/identity-marker.ts) is the source of truth, and args.test.ts pins
     // the two together so a value added there without a change here fails.
-    const styles = ['arcs', 'shape'];
+    const styles = ['arcs', 'shape', 'roof'];
     if (!styles.includes(out.identityMarker)) {
       throw new Error(
         `--identityMarker must be one of ${styles.join('|')}, got '${out.identityMarker}'`,

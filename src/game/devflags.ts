@@ -1098,9 +1098,11 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...IDENTITY_MARKER_STYLES],
     description:
-      'Adds a second, non-colour channel to the player identity ring (issue #630): ' +
-      "'arcs' breaks it into one arc per slot, 'shape' gives each slot its own outline. " +
-      'The shipped default carries identity in hue alone.',
+      'Adds a second, non-colour channel to player identity (issue #630). On the ground ' +
+      "ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own " +
+      "outline. On the turret crown instead: 'roof' leaves the ring exactly as shipped " +
+      'and counts the slot in blades, trading the ring\'s area for a surface nothing can ' +
+      'occlude. The shipped default carries identity in hue alone.',
   },
   menuTransition: {
     kind: 'valued',

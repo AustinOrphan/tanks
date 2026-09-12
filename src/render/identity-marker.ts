@@ -11,6 +11,41 @@ import {
  * one of them is held world-fixed.
  */
 
+/**
+ * The turret-crown blades: `slot + 1` radial spokes in a flat disc, as ONE geometry.
+ *
+ * A COUNT, so it needs no counter-rotation -- and that is a genuine simplification over
+ * both ring arms, which exist only because a square turned 45 degrees is the diamond.
+ * Blades may spin with the turret freely; three blades are three blades at every yaw.
+ *
+ * Sized against `TURRET_R` (0.36) rather than the ring's radii: inner 0.07, outer 0.32,
+ * so the mark sits inside the crown with a margin and never overhangs the dome's edge
+ * where the silhouette would clip it. Each blade spans 30 degrees.
+ */
+export function identityRoofGeometry(
+  slot: number,
+  inner: number,
+  outer: number,
+): THREE.BufferGeometry {
+  const count = (((slot % MARKER_VARIANTS) + MARKER_VARIANTS) % MARKER_VARIANTS) + 1;
+  // 44 degrees, not 30. The first build used a thin 30-degree wedge and it read as
+  // spindly at the shipped camera -- a hairline scratch on the crown rather than a mark.
+  // A blade is also foreshortened to 0.78 of its width across one axis (sin 51), so the
+  // drawn span has to start wider than it needs to look.
+  //
+  // Why a FIXED span rather than a fraction of the spacing: at four blades the gaps are
+  // already 46 degrees, so a proportional span would close them up as the count rises,
+  // and "how many gaps" is the read. Fixed keeps every gap at least as wide as a blade.
+  const half = (44 * Math.PI) / 180 / 2;
+  const runs = Array.from({ length: count }, (_, k) => {
+    const c = -Math.PI / 2 + (k * 2 * Math.PI) / count;
+    // Seven samples per blade: the wider span needs more of them to stay a sector rather
+    // than flattening into a quad at the edges. Four blades still sit under 120 vertices.
+    return Array.from({ length: 7 }, (_, i) => c - half + (2 * half * i) / 6);
+  });
+  return bandGeometry(runs, inner, outer);
+}
+
 /** Vertex angles of a regular n-gon, first vertex pointing along -Z (up-screen). */
 function polygonAngles(sides: number, rotation: number): number[] {
   return Array.from({ length: sides }, (_, i) => rotation + (i * 2 * Math.PI) / sides);
@@ -37,6 +72,28 @@ function bandGeometry(runs: readonly (readonly number[])[], inner: number, outer
       const o0 = base + i * 2, i0 = o0 + 1, o1 = o0 + 2, i1 = o0 + 3;
       index.push(o0, i0, o1, i0, i1, o1);
     }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * A band whose OUTER edge follows a per-vertex radius while the inner edge stays circular.
+ * `bandGeometry` above holds both radii constant, which cannot describe a star.
+ */
+function starBand(verts: readonly (readonly [number, number])[], inner: number): THREE.BufferGeometry {
+  const position: number[] = [];
+  const index: number[] = [];
+  for (const [a, r] of verts) {
+    position.push(Math.cos(a) * r, Math.sin(a) * r, 0);
+    position.push(Math.cos(a) * inner, Math.sin(a) * inner, 0);
+  }
+  for (let i = 0; i < verts.length - 1; i++) {
+    const o0 = i * 2, i0 = o0 + 1, o1 = o0 + 2, i1 = o0 + 3;
+    index.push(o0, i0, o1, i0, i1, o1);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
@@ -79,16 +136,56 @@ export function identityMarkerGeometry(
     return bandGeometry(runs, inner, outer);
   }
 
+  if (style === 'roof') {
+    // Unreachable: the roof style paints the turret crown, not the ring, and
+    // `makeIdentityRing` is handed `ringMarkerFor(style)` which is null here. Returning
+    // null rather than throwing keeps this function total, and the caller's `?? new
+    // RingGeometry(...)` then produces the shipped ring -- which is exactly what the roof
+    // arm wants underneath its blades.
+    return null;
+  }
+
   // `shape`: circle, triangle, square, diamond. The square and the diamond are the SAME
   // polygon 45 degrees apart, which is only a legitimate pair because the marker is held
   // world-fixed (`identityMarkerSpin`). Were it to spin with the hull they would be one
   // marker wearing two names, and the fourth slot would be indistinguishable from the
   // third for most of every match.
+  // Slot 4 is a STARBURST, not the diamond it used to be.
+  //
+  // The diamond was a square turned 45 degrees, which made it the only slot whose
+  // distinctness depended entirely on the marker being held world-fixed: lose the
+  // counter-rotation and slots 3 and 4 become one marker wearing two names. It was also
+  // the weakest of the four to read in a real capture -- its vertices point at the
+  // corners where the hull is widest, so the outline collapsed to a flat line under the
+  // tank. A starburst is topologically different from every other slot rather than a
+  // rotation of one, so it survives both problems, and its points project OUTWARD past
+  // the hull silhouette, which is exactly the visibility the diamond lacked.
+  if (variant === 3) {
+    // Outer edge alternates between the band's full radius and just above its inner edge,
+    // so the star lives entirely inside the annulus the other three occupy -- a literal
+    // 5-point star would need concave vertices at ~0.3 of the radius, which is under the
+    // hull and invisible.
+    // SIX TEETH, PINCHED TO NOTHING between them. The first build set the valleys at 18%
+    // of the band and the shape rendered as a smooth hexagon -- at this size a shallow
+    // waviness in an outline is not a star, it is a slightly irregular polygon. Taking the
+    // valley all the way to `inner` collapses the band to zero width between points, so
+    // the mark separates into six distinct teeth instead of one wobbly ring, which is the
+    // only version of "star" that reads once the hull has eaten the far half of it.
+    const points = 6;
+    const valley = inner;
+    const verts: [number, number][] = [];
+    for (let i = 0; i < points * 2; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / points;
+      verts.push([a, i % 2 === 0 ? outer : valley]);
+    }
+    verts.push(verts[0]);
+    return starBand(verts, inner);
+  }
+
   const spec: ReadonlyArray<{ sides: number; rotation: number }> = [
     { sides: segments, rotation: -Math.PI / 2 },
     { sides: 3, rotation: -Math.PI / 2 },
     { sides: 4, rotation: -Math.PI / 4 },
-    { sides: 4, rotation: 0 },
   ];
   const { sides, rotation } = spec[variant];
   const angles = polygonAngles(sides, rotation);
