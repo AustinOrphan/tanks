@@ -6253,8 +6253,8 @@
       "src/game/hud.css.test.ts"
     ],
     "killedBy": [
-      "hud.css is syntactically whole hides a collapsed legal document with display, not with a class that does nothing"
+      "hud.css is syntactically whole gives every --hidden modifier something that actually hides"
     ],
-    "why": "The modifier reduced to a class that styles nothing -- the fourth instance of the shape `.hud-splash--hidden`, `.ui-app-ground--hidden` and `.hud-legal-body--hidden` each carry their own note about. `.hud-alert` is `position: absolute; inset: 0` with an opaque page scrim at `z-index: 3`, so with nothing hiding it the match-failure alert covers the entire game from page load and never leaves -- strictly worse than the ground scrim, because it also swallows every click. The presence sweep is satisfied by an empty rule and the HUD's own tests read the CLASS, so only a computed-display assertion measured against the same element unmodified can see it."
+    "why": "The modifier reduced to a class that styles nothing -- the fourth instance of the shape `.hud-splash--hidden`, `.ui-app-ground--hidden` and `.hud-legal-body--hidden` each carry their own note about. `.hud-alert` is `position: absolute; inset: 0` with an opaque page scrim at `z-index: 3`, so with nothing hiding it the match-failure alert covers the entire game from page load and never leaves -- strictly worse than the ground scrim, because it also swallows every click. The presence sweep is satisfied by an empty rule and the HUD's own tests read the CLASS, so only a computed-display assertion measured against the same element unmodified can see it. FOUND BY THIS ENTRY: it SURVIVED on first run. The four one-off cases named above each pin their own modifier and nothing swept the rest, so a fifth was invisible. The sweep that now kills it derives its population from the stylesheet -- 56 `--hidden` modifiers today -- and applies each over its own base class, so the next one is covered without anyone remembering to add it."
   }
 ]
