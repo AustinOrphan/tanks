@@ -268,3 +268,78 @@ describe('particles: dispose', () => {
     expect(scene.children.length).toBe(0);
   });
 });
+
+describe('particles under reduced motion (issue #651)', () => {
+  it('still draws the burst, so the event is not deleted along with its movement', () => {
+    // The trap #652 records for the cues that rest invisible: answering an effect by
+    // producing nothing at all removes the feedback rather than calming it. A hit must still
+    // say a hit happened.
+    const { scene, ps } = setup();
+    ps.setReducedMotion(true);
+    ps.spawn([{ type: 'explosion', pos: { x: 3, y: 7 } }]);
+    expect(activeMeshes(scene).length).toBe(24);
+  });
+
+  it('holds every particle at the event position instead of flying it outward', () => {
+    // Sparks, explosions and debris ignored the preference entirely -- `grep reducedMotion`
+    // returned nothing in this file. Both the velocity integration and the gravity that acts
+    // on it are what stop; the burst stays where the event was.
+    const { scene, ps } = setup();
+    ps.setReducedMotion(true);
+    ps.spawn([{ type: 'explosion', pos: { x: 3, y: 7 } }]);
+    for (let i = 0; i < 10; i++) ps.update(1 / 60);
+    for (const m of activeMeshes(scene)) {
+      expect(m.position.x).toBe(3);
+      expect(m.position.y).toBe(EVENT_Y);
+      expect(m.position.z).toBe(7);
+    }
+  });
+
+  it('negative control: at full motion the same burst has moved by then', () => {
+    // Without this, "held at the event position" would pass on a system that never moved
+    // anything, and the preference would be measuring nothing.
+    const { scene, ps } = setup();
+    ps.spawn([{ type: 'explosion', pos: { x: 3, y: 7 } }]);
+    for (let i = 0; i < 10; i++) ps.update(1 / 60);
+    const moved = activeMeshes(scene).filter(
+      (m) => m.position.x !== 3 || m.position.y !== EVENT_Y || m.position.z !== 7,
+    );
+    expect(moved.length, 'no particle moved at full motion').toBeGreaterThan(0);
+  });
+
+  it('keeps the fade and the lifetime, so a calmed burst recycles on the same frame', () => {
+    // `death-pulse.ts`'s "nothing else about the effect's lifetime changes". Asserted by
+    // running BOTH systems on the same clock and comparing when each empties -- a treatment
+    // that shortened or lengthened the burst would be a different effect, not a calmer one.
+    // The SAME seeded rng for both: particle lifetimes are randomised per particle, so two
+    // systems on `Math.random` produce different bursts and the comparison would be against
+    // a different effect. Caught by this case failing at frame 26 with 24 against 22.
+    const calm = setup(seededRng(7));
+    calm.ps.setReducedMotion(true);
+    const free = setup(seededRng(7));
+    for (const s of [calm, free]) s.ps.spawn([{ type: 'explosion', pos: { x: 0, y: 0 } }]);
+    let frames = 0;
+    while (activeMeshes(free.scene).length > 0 && frames < 600) {
+      calm.ps.update(1 / 60);
+      free.ps.update(1 / 60);
+      frames += 1;
+      expect(
+        activeMeshes(calm.scene).length,
+        `frame ${frames}: the two must empty together`,
+      ).toBe(activeMeshes(free.scene).length);
+    }
+    expect(frames, 'the burst never expired').toBeLessThan(600);
+    expect(activeMeshes(calm.scene).length).toBe(0);
+  });
+
+  it('resumes at full motion, rather than staying calm for the life of the page', () => {
+    const { scene, ps } = setup();
+    ps.setReducedMotion(true);
+    ps.spawn([{ type: 'explosion', pos: { x: 3, y: 7 } }]);
+    ps.update(1 / 60);
+    ps.setReducedMotion(false);
+    for (let i = 0; i < 10; i++) ps.update(1 / 60);
+    const moved = activeMeshes(scene).filter((m) => m.position.x !== 3 || m.position.z !== 7);
+    expect(moved.length).toBeGreaterThan(0);
+  });
+});

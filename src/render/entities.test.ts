@@ -514,6 +514,39 @@ describe('mine views', () => {
     views.dispose();
   });
 
+  it('under reduced motion states the fuse as a monotone brightness, not a strobe', () => {
+    // The strobe's information was its RATE, which a player had to watch over TIME to read.
+    // As a brightness it is readable from one frame, which is what the preference asks for,
+    // and the mine still says how close it is to going off. Armed-versus-idle is untouched:
+    // it lives in the base colours, not in the pulse.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    views.setReducedMotion(true);
+    const mat = () => (mineMesh(scene).material as THREE.MeshStandardMaterial);
+    const sample = (timer: number): number => {
+      const w = withMine({ timer, armed: true });
+      views.sync(w, w, 0);
+      return mat().emissive.r;
+    };
+
+    // Sampled across the fuse OUTSIDE the warning window, which owns the last 0.5s and has
+    // its own ramp. Monotone means every step up, not merely brighter at the end -- the
+    // strobe is brighter at the end too, several times over.
+    const timers = [3.0, 2.75, 2.5, 2.25, 2.0, 1.5, 1.0, 0.75];
+    const seen = timers.map(sample);
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i], `t=${timers[i]} must be brighter than t=${timers[i - 1]}`).toBeGreaterThan(
+        seen[i - 1],
+      );
+    }
+
+    // Still a projection of world state and never of a clock -- the rule mine-warning.ts
+    // pins for this whole surface. A "freeze the pulse where it is" treatment would fail
+    // exactly here.
+    expect(sample(2.0)).toBeCloseTo(sample(2.0), 12);
+    views.dispose();
+  });
+
   it('pulses from the sim timer alone, and faster as the fuse burns down', () => {
     // THE POINT OF THIS TEST: the blink must be a projection of world state, not a clock.
     // Same timer in, same emissive out -- otherwise a paused game keeps flashing and two
@@ -1554,6 +1587,34 @@ describe('skins (player texture override)', () => {
     views.sync(w, w, 0, 0.5);
     const camoMap = matOf(scene, 3, 'hull').map as THREE.Texture;
     expect(camoMap.offset.x).toBe(0); // no scroll in the def, no drift
+    views.dispose();
+  });
+
+  it('holds the texture offset under reduced motion, with dt still flowing', () => {
+    // A drift is continuous wall-clock movement carrying nothing: the pattern IS the skin,
+    // and it is still there when it stops sliding (issue #651). The case above is the
+    // control -- same skin, same dt, same 0.08 repeats/s -- so this one only has to show the
+    // policy stops it. Deliberately NOT asserting the full-motion drift again here: that
+    // would also fail under `presentation-skin-scroll-never-animates`, taking a pinned
+    // expectFailures from 1 to 2 for a control that already exists.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+
+    views.setPlayerStyle(null, 'flow', null);
+    views.setReducedMotion(true);
+    views.sync(w, w, 0, 0.5);
+    const flowMap = matOf(scene, 3, 'hull').map as THREE.Texture;
+    expect(flowMap.offset.x, 'a full second of dt must move nothing').toBe(0);
+    views.sync(w, w, 0, 0.5);
+    expect(flowMap.offset.x).toBe(0);
+
+    // ...and it RESUMES, rather than being frozen for the life of the page: the preference
+    // can be turned off with the game already running.
+    views.setReducedMotion(false);
+    views.sync(w, w, 0, 0.5);
+    expect(flowMap.offset.x).toBeCloseTo(0.04, 6);
     views.dispose();
   });
 
