@@ -8,7 +8,7 @@
     "src/render/entities.test.ts"
   ],
   "killedBy": [
-    "entities: animated skins holds the texture offset under reduced motion, with dt still flowing"
+    "skins (player texture override) holds the texture offset under reduced motion, with dt still flowing"
   ],
   "why": "An animated skin drifts its texture on the wall clock for as long as the page is open -- permanent motion carrying no information, since the pattern is still the skin when it stops sliding. The least conspicuous of the five and the one most likely to be left behind."
 }

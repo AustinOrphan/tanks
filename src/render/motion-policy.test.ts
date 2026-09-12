@@ -101,8 +101,14 @@ describe('the reduced-motion fan-out (issue #651)', () => {
     // drops a module from renderer.ts's list survives today." Derived from the declarations
     // rather than from a list, so a system added tomorrow is covered when it declares the
     // member, not when someone remembers this file.
+    // The CALL, not the identifier. An earlier draft asked whether the binding's name
+    // appeared anywhere in the block, and a mutation replacing `entities.setReducedMotion(on)`
+    // with `void entities;` survived it: the name was still there and the policy was not
+    // handed over. Found by running that mutation, not by reading.
     const block = fanOutBlock();
-    const missing = declaringModules().filter((p) => !block.includes(`${bindingFor(factoryFor(p))}`));
+    const handed = (binding: string): boolean =>
+      new RegExp(`\\b${binding}\\??\\.setReducedMotion\\(`).test(block);
+    const missing = declaringModules().filter((p) => !handed(bindingFor(factoryFor(p))));
     expect(missing, 'declares setReducedMotion and is never handed the policy').toEqual([]);
   });
 

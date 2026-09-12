@@ -10,5 +10,5 @@
   "killedBy": [
     "the reduced-motion fan-out (issue #651) routes the policy to EVERY render system that declares an answer to it"
   ],
-  "why": "The entity layer owns three of this issue's five treatments -- the spawn frames, the mine fuse and the animated skin's drift -- so dropping it from the router silently un-does most of the change while every other reduced treatment still works. This is the same hole the barrel-recoil entry names, on the member this issue adds."
+  "why": "The entity layer owns three of this issue's five treatments -- the spawn frames, the mine fuse and the animated skin's drift -- so dropping it from the router silently un-does most of the change while every other reduced treatment still works. This is the same hole the barrel-recoil entry names, on the member this issue adds. MEASURED AS A SURVIVOR first: the guard asked whether the binding's NAME appeared in the fan-out block, and `void entities;` keeps the name while handing over nothing. It now asks for the call."
 }
