@@ -270,14 +270,45 @@ describe('particles: dispose', () => {
 });
 
 describe('particles under reduced motion (issue #651)', () => {
-  it('still draws the burst, so the event is not deleted along with its movement', () => {
-    // The trap #652 records for the cues that rest invisible: answering an effect by
-    // producing nothing at all removes the feedback rather than calming it. A hit must still
-    // say a hit happened.
+  it('draws ONE particle, not the whole coincident burst', () => {
+    // The material is additively blended, so N particles at the same point and opacity 1 sum
+    // past every channel and clip. Measured through the gallery on the kill moment: the
+    // 24-particle reduced burst rendered as a small WHITE core over an unchanged background
+    // -- orange pixels flat at the pre-explosion baseline of 5180 while full motion reached
+    // 18689 -- so it was a white FLASH rather than a calmer explosion. One particle keeps the
+    // burst's own colour.
     const { scene, ps } = setup();
     ps.setReducedMotion(true);
     ps.spawn([{ type: 'explosion', pos: { x: 3, y: 7 } }]);
-    expect(activeMeshes(scene).length).toBe(24);
+    expect(activeMeshes(scene).length).toBe(1);
+  });
+
+  it('draws ONE and never zero, because some events have no other visual cue', () => {
+    // The other half, and the reason this is not "spawn nothing": an event carried by audio
+    // and haptics alone is what the accessibility direction rules out, and `ricochet` has no
+    // second cue at all -- no ring, no disappearing wall, nothing but these particles.
+    const { scene, ps } = setup();
+    ps.setReducedMotion(true);
+    for (const ev of [
+      { type: 'ricochet', pos: { x: 1, y: 1 } },
+      { type: 'fire', pos: { x: 2, y: 2 } },
+      { type: 'wall-destroyed', pos: { x: 3, y: 3 } },
+    ] as SimEvent[]) {
+      const before = activeMeshes(scene).length;
+      ps.spawn([ev]);
+      expect(activeMeshes(scene).length, `${ev.type} drew nothing`).toBe(before + 1);
+    }
+  });
+
+  it('keeps the burst COLOUR, which is what the coincident stack was destroying', () => {
+    // An explosion is orange and a fire flash is gold. Stacked additively they were both
+    // white; one particle each keeps them distinguishable.
+    const { scene, ps } = setup();
+    ps.setReducedMotion(true);
+    ps.spawn([{ type: 'explosion', pos: { x: 0, y: 0 } }]);
+    const boom = activeMeshes(scene)[0] as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+    expect(boom.material.color.getHex()).toBe(0xff6a2b);
+    expect(boom.material.opacity).toBe(1);
   });
 
   it('holds every particle at the event position instead of flying it outward', () => {
@@ -288,6 +319,7 @@ describe('particles under reduced motion (issue #651)', () => {
     ps.setReducedMotion(true);
     ps.spawn([{ type: 'explosion', pos: { x: 3, y: 7 } }]);
     for (let i = 0; i < 10; i++) ps.update(1 / 60);
+    expect(activeMeshes(scene).length, 'the one particle must still be alive').toBe(1);
     for (const m of activeMeshes(scene)) {
       expect(m.position.x).toBe(3);
       expect(m.position.y).toBe(EVENT_Y);
@@ -307,29 +339,29 @@ describe('particles under reduced motion (issue #651)', () => {
     expect(moved.length, 'no particle moved at full motion').toBeGreaterThan(0);
   });
 
-  it('keeps the fade and the lifetime, so a calmed burst recycles on the same frame', () => {
-    // `death-pulse.ts`'s "nothing else about the effect's lifetime changes". Asserted by
-    // running BOTH systems on the same clock and comparing when each empties -- a treatment
-    // that shortened or lengthened the burst would be a different effect, not a calmer one.
-    // The SAME seeded rng for both: particle lifetimes are randomised per particle, so two
-    // systems on `Math.random` produce different bursts and the comparison would be against
-    // a different effect. Caught by this case failing at frame 26 with 24 against 22.
-    const calm = setup(seededRng(7));
-    calm.ps.setReducedMotion(true);
-    const free = setup(seededRng(7));
-    for (const s of [calm, free]) s.ps.spawn([{ type: 'explosion', pos: { x: 0, y: 0 } }]);
+  it('keeps the fade and the lifetime, measured on the one particle it draws', () => {
+    // The cross-system count comparison this replaced stopped meaning anything once the
+    // counts differed by design (1 against 24). So the claim is measured directly on the
+    // particle: it fades monotonically, and it expires inside the band production declares
+    // for an explosion -- `life * (0.7 + rng() * 0.6)` over `life = 0.6`, so 0.42s to 0.78s,
+    // which is 26 to 47 frames at 1/60. A policy that shortened or stretched the effect
+    // lands outside that band.
+    const { scene, ps } = setup(seededRng(7));
+    ps.setReducedMotion(true);
+    ps.spawn([{ type: 'explosion', pos: { x: 0, y: 0 } }]);
+    const mesh = activeMeshes(scene)[0] as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
     let frames = 0;
-    while (activeMeshes(free.scene).length > 0 && frames < 600) {
-      calm.ps.update(1 / 60);
-      free.ps.update(1 / 60);
+    let last = mesh.material.opacity;
+    while (activeMeshes(scene).length > 0 && frames < 200) {
+      ps.update(1 / 60);
       frames += 1;
-      expect(
-        activeMeshes(calm.scene).length,
-        `frame ${frames}: the two must empty together`,
-      ).toBe(activeMeshes(free.scene).length);
+      if (activeMeshes(scene).length === 0) break;
+      expect(mesh.material.opacity, `frame ${frames}: the fade must keep going`).toBeLessThan(last);
+      last = mesh.material.opacity;
     }
-    expect(frames, 'the burst never expired').toBeLessThan(600);
-    expect(activeMeshes(calm.scene).length).toBe(0);
+    expect(frames, 'expired outside the declared lifetime band').toBeGreaterThanOrEqual(26);
+    expect(frames, 'expired outside the declared lifetime band').toBeLessThanOrEqual(47);
+    expect(activeMeshes(scene).length, 'it must be recycled, not left on screen').toBe(0);
   });
 
   it('resumes at full motion, rather than staying calm for the life of the page', () => {

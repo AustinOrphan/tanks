@@ -43,6 +43,8 @@ export function createParticleSystem(scene: THREE.Scene, rng: () => number = Mat
   const geo = new THREE.SphereGeometry(0.08, 6, 6);
   const pool: Particle[] = [];
   const active: Particle[] = [];
+  /** Declared here rather than beside `update`, because `burst` reads it too. */
+  let reducedMotion = false;
 
   function acquire(): Particle | null {
     let p = pool.pop();
@@ -82,7 +84,20 @@ export function createParticleSystem(scene: THREE.Scene, rng: () => number = Mat
     life: number,
     scale: number,
   ): void {
-    for (let i = 0; i < count; i++) {
+    // ONE particle under reduced motion, not `count` of them, and this is a COLOUR fix as
+    // much as a cost one. The material is additively blended, so N coincident particles at
+    // opacity 1 sum past every channel and clip: measured through the gallery on the kill
+    // moment, the reduced burst rendered as a small WHITE core over an unchanged background
+    // -- orange pixel count flat at the pre-explosion baseline of 5180 while full motion
+    // reached 18689 -- so the treatment was not a calmer explosion but a white FLASH, which
+    // is the opposite of what the preference asks for. One particle keeps the burst's own
+    // colour, its position, its lifetime and its fade, and drops 23 meshes that were adding
+    // saturation rather than information.
+    //
+    // Not zero: an event with no visual at all leaves audio and haptics carrying it alone,
+    // which the accessibility direction rules out -- and `ricochet` has no other cue.
+    const n = reducedMotion ? 1 : count;
+    for (let i = 0; i < n; i++) {
       const p = acquire();
       if (!p) return;
       const theta = rng() * Math.PI * 2;
@@ -134,8 +149,6 @@ export function createParticleSystem(scene: THREE.Scene, rng: () => number = Mat
       }
     }
   }
-
-  let reducedMotion = false;
 
   function update(dt: number): void {
     for (let i = active.length - 1; i >= 0; i--) {

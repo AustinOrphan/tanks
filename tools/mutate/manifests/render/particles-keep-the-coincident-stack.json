@@ -1,0 +1,14 @@
+{
+  "id": "particles-keep-the-coincident-stack",
+  "file": "src/render/particles.ts",
+  "find": "    const n = reducedMotion ? 1 : count;",
+  "replace": "    const n = count;",
+  "expect": "killed",
+  "tests": [
+    "src/render/particles.test.ts"
+  ],
+  "killedBy": [
+    "particles under reduced motion (issue #651) draws ONE particle, not the whole coincident burst"
+  ],
+  "why": "Restores the whole burst at one point. The material is additively blended, so N coincident particles at opacity 1 sum past every channel and clip: measured through the gallery on the kill moment, the 24-particle reduced burst rendered as a small WHITE core over an unchanged background -- orange pixel count flat at the pre-explosion baseline of 5180 while full motion reached 18689 at the same frame. So the reduced treatment was not a calmer explosion but a white FLASH, which is the opposite of what the preference asks for, plus 23 meshes adding saturation rather than information."
+}

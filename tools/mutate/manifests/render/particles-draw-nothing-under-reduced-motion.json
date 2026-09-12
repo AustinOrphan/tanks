@@ -1,0 +1,14 @@
+{
+  "id": "particles-draw-nothing-under-reduced-motion",
+  "file": "src/render/particles.ts",
+  "find": "    const n = reducedMotion ? 1 : count;",
+  "replace": "    const n = reducedMotion ? 0 : count;",
+  "expect": "killed",
+  "tests": [
+    "src/render/particles.test.ts"
+  ],
+  "killedBy": [
+    "particles under reduced motion (issue #651) draws ONE and never zero, because some events have no other visual cue"
+  ],
+  "why": "The over-correction on the other side, and the reason this treatment is one particle rather than none. An event carried by audio and haptics alone is what the accessibility direction rules out, and `ricochet` has no second visual cue at all -- no ring, no disappearing wall, nothing but these particles. A kill would survive on the death-pulse ring and a destroyed wall on its own disappearance; a ricochet would simply stop existing."
+}
