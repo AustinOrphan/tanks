@@ -7,9 +7,11 @@ import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
 import { identityApplies, resolveOwnerColor } from '../presentation/identity';
-import { identityMarkerGeometry } from './identity-marker';
+import { identityMarkerGeometry, identityRoofGeometry } from './identity-marker';
 import {
   identityMarkerSpin,
+  marksTurretRoof,
+  ringMarkerFor,
   type IdentityMarkerStyle,
 } from '../presentation/identity-marker';
 import { angleOf } from '../sim/types';
@@ -361,6 +363,10 @@ interface TankView {
   kind: TankKind;
   gen: number;
   ring: THREE.Mesh | null;
+  /** The turret-crown identity blades (issue #630's `roof` arm), or null. A Group, not a
+   *  Mesh: it is a keyline plus a blade set, and both share its lifetime -- and it hangs
+   *  off `turret`, not `group`, which is what keeps it clear of the ground entirely. */
+  roof: THREE.Group | null;
   spawn: SpawnViewState | null;
 }
 
@@ -1178,7 +1184,7 @@ export function createEntityViews(
       }
       if (!view) {
         const gen = t.kind === 'player' ? styleFor(slot).gen : 0;
-        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen, ring: null, spawn: null };
+        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen, ring: null, roof: null, spawn: null };
         tankViews.set(t.id, view);
       }
       // Identity ring: WHO, not WHAT style -- see presentation/identity.ts's IDENTITY_RING_COLORS. Only a
@@ -1198,11 +1204,74 @@ export function createEntityViews(
       if (t.kind === 'player') {
         if (multiPlayer && !view.ring) {
           const color = resolveOwnerColor(curr, t);
-          view.ring = makeIdentityRing(color, identityMarker, slot);
+          view.ring = makeIdentityRing(color, ringMarkerFor(identityMarker), slot);
           view.group.add(view.ring);
         } else if (!multiPlayer && view.ring) {
           disposeObject(view.ring);
           view.ring = null;
+        }
+        // THE ROOF ARM (issue #630). Same gate as the ring -- it is the same fact about
+        // the same tanks -- but parented to the TURRET, so it rides the crown and stays
+        // clear of everything the ground carries. Two meshes: a light keyline under a
+        // dark blade set, so the pair holds on every hull swatch including white paint
+        // and a black accent. Unlit `MeshBasicMaterial` for the reason the ring is
+        // unlit: a lit mark dims on the side away from the key light, which would make
+        // the count harder to read exactly where the tank is already darkest.
+        const wantsRoof = multiPlayer && marksTurretRoof(identityMarker);
+        if (wantsRoof && !view.roof) {
+          const y = TURRET_H / 2 + 0.004;
+          const keyline = new THREE.Mesh(
+            new THREE.RingGeometry(0.05, 0.34, 40),
+            new THREE.MeshBasicMaterial({
+              color: 0xf2f2f2, transparent: true, opacity: 0.85, depthWrite: false,
+              side: THREE.DoubleSide,
+            }),
+          );
+          const blades = new THREE.Mesh(
+            identityRoofGeometry(slot, 0.07, 0.32),
+            new THREE.MeshBasicMaterial({
+              color: 0x14100c, transparent: true, opacity: 0.92, depthWrite: false,
+              side: THREE.DoubleSide,
+            }),
+          );
+          // EXPLICIT renderOrder, because nothing else decides this reliably.
+          //
+          // Both meshes are transparent with `depthWrite: false`, so the depth buffer does
+          // not separate them and Three.js falls back to sorting transparent objects by
+          // centroid distance. Two coplanar decals 2mm apart at a 51-degree camera are
+          // well inside that sort's precision, and it resolved one way for three tanks and
+          // the other way for the fourth: at `bodyAngle = PI` the dark blades landed UNDER
+          // the light keyline and washed out to nearly nothing.
+          //
+          // That is the kind of defect a still frame hides and a pixel count mis-diagnoses.
+          // The first reading here was "slot 3 renders no blades", from counting white
+          // pixels per disc -- which was measuring blade count MINUS each tank's own barrel
+          // occlusion, and the barrel's overlap varies with yaw. A top-down capture showed
+          // all three blades present and crisp, which is what located the real cause.
+          keyline.renderOrder = 1;
+          blades.renderOrder = 2;
+
+          // SEPARATED IN Y, NOT BY polygonOffset, and the difference is not academic.
+          // The first build stacked both at the same height and ordered them with
+          // `polygonOffsetFactor`. That scales by the DEPTH SLOPE, which flips sign when a
+          // surface turns away -- so the blades rendered correctly on three tanks and
+          // vanished entirely on the one at `bodyAngle = PI`, where the offset pushed them
+          // behind the keyline instead of in front. Caught by counting white pixels in a
+          // real capture (slot 3 came back with MORE white than slot 1, which is
+          // impossible if its three blades drew), not by looking at it.
+          //
+          // 2mm of world separation is unambiguous at every yaw and costs nothing.
+          keyline.rotation.x = -Math.PI / 2;
+          keyline.position.y = y;
+          blades.rotation.x = -Math.PI / 2;
+          blades.position.y = y + 0.002;
+          view.roof = new THREE.Group();
+          view.roof.name = 'identity-roof';
+          view.roof.add(keyline, blades);
+          view.turret.add(view.roof);
+        } else if (!wantsRoof && view.roof) {
+          disposeObject(view.roof);
+          view.roof = null;
         }
       }
       // New id (no prev): snap to curr pose, do not lerp from a garbage origin.
@@ -1240,7 +1309,11 @@ export function createEntityViews(
       // annulus, and fatal for a shape or an arc count, since a square turned 45 degrees
       // is the diamond. Guarded on a marker being active so the shipped default never
       // takes a write it did not take before.
-      if (identityMarker !== null && view.ring) {
+      // RING markers only. The roof arm needs no counter-rotation at all -- a COUNT is
+      // rotation-invariant, three blades are three blades at every yaw -- and writing a
+      // spin onto a plain annulus under `roof` would be invisible (a circle cannot show
+      // rotation) while making the marker-spin contract assert something untrue.
+      if (ringMarkerFor(identityMarker) !== null && view.ring) {
         view.ring.rotation.z = identityMarkerSpin(bodyA);
       }
       // The turret is a CHILD of group, so its world heading composes with the

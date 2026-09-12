@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { identityMarkerGeometry } from './identity-marker';
+import { identityMarkerGeometry, identityRoofGeometry } from './identity-marker';
 import {
   IDENTITY_MARKER_STYLES,
   identityMarkerSpin,
   isIdentityMarkerStyle,
+  marksTurretRoof,
+  ringMarkerFor,
 } from '../presentation/identity-marker';
 import { IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R } from './entities';
 
@@ -61,10 +63,10 @@ function arcRuns(geo: THREE.BufferGeometry): number {
 }
 
 describe('identity marker vocabulary (issue #630)', () => {
-  it('offers exactly the two candidates, and rejects anything else', () => {
-    expect([...IDENTITY_MARKER_STYLES]).toEqual(['arcs', 'shape']);
+  it('offers exactly the three candidates, and rejects anything else', () => {
+    expect([...IDENTITY_MARKER_STYLES]).toEqual(['arcs', 'shape', 'roof']);
     for (const s of IDENTITY_MARKER_STYLES) expect(isIdentityMarkerStyle(s)).toBe(true);
-    for (const bad of ['solid', 'Arcs', '', 'shapes', null, 7, undefined]) {
+    for (const bad of ['solid', 'Arcs', '', 'shapes', 'Roof', null, 7, undefined]) {
       expect(isIdentityMarkerStyle(bad), String(bad)).toBe(false);
     }
   });
@@ -84,6 +86,62 @@ describe('identity marker vocabulary (issue #630)', () => {
     // unchanged down to the vertex rather than merely equivalent to it. A comparison whose
     // control has also moved is not a comparison.
     expect(identityMarkerGeometry(null, 0, 0.65, 0.8, SEGMENTS)).toBeNull();
+  });
+});
+
+describe('identity marker: roof (issue #630)', () => {
+  /*
+   * The third candidate, and the first that does NOT use the ground ring.
+   *
+   * The ring arms buy AREA -- its mid-radius perimeter is 364-546px at the game camera,
+   * against 21-31px for a blade. What the roof buys is that nothing can cover it: not a
+   * tread trail, not a wreck, not a spawn ring, not a mine's warning glow, not a second
+   * tank parked alongside. Which matters more is a question for play, which is why all
+   * three are in the tree at once rather than one of them being chosen from a desk.
+   */
+  it('leaves the ring geometry alone, so the control stays the shipped rendering', () => {
+    // `ringMarkerFor('roof')` is null, so `makeIdentityRing` falls through to the exact
+    // `RingGeometry` expression that shipped. A comparison whose control has also moved
+    // is not a comparison -- the same reasoning the null-marker case already pins.
+    expect(ringMarkerFor('roof')).toBeNull();
+    expect(identityMarkerGeometry('roof', 0, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, SEGMENTS))
+      .toBeNull();
+  });
+
+  it('claims the turret crown, and nothing else does', () => {
+    expect(marksTurretRoof('roof')).toBe(true);
+    for (const s of ['arcs', 'shape'] as const) expect(marksTurretRoof(s), s).toBe(false);
+    // NOT the negation of ringMarkerFor: `marksTurretRoof(null)` must be false, or a HUD
+    // with no marker selected would still build blades.
+    expect(marksTurretRoof(null)).toBe(false);
+  });
+
+  it('draws one blade per slot, counting from one', () => {
+    for (let slot = 0; slot < 4; slot++) {
+      const geo = identityRoofGeometry(slot, 0.07, 0.32);
+      expect(arcRuns(geo), `slot ${slot + 1}`).toBe(slot + 1);
+    }
+  });
+
+  it('keeps every blade inside the turret crown', () => {
+    // TURRET_R is 0.36; blades run to 0.32, so they never reach the dome's edge where the
+    // silhouette would clip them. A blade that overhung would read as a bent aerial.
+    for (let slot = 0; slot < 4; slot++) {
+      const pos = identityRoofGeometry(slot, 0.07, 0.32).getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        expect(Math.hypot(pos.getX(i), pos.getY(i))).toBeLessThanOrEqual(0.32 + 1e-6);
+      }
+    }
+  });
+
+  it('needs no counter-rotation, because a count cannot be turned wrong', () => {
+    // The simplification over both ring arms, asserted rather than assumed. `shape`'s
+    // slots 3 and 4 are the same polygon 45 degrees apart and collapse without the spin;
+    // a blade COUNT is invariant, so the same test that catches that cannot fire here.
+    const a = identityRoofGeometry(2, 0.07, 0.32);
+    const b = identityRoofGeometry(2, 0.07, 0.32);
+    expect(arcRuns(a)).toBe(arcRuns(b));
+    expect(arcRuns(identityRoofGeometry(2, 0.07, 0.32))).toBe(3);
   });
 });
 
@@ -130,18 +188,30 @@ describe('identity marker: shape (issue #630)', () => {
     expect(new Set(sigs).size, 'two slots share an outline').toBe(4);
   });
 
-  it('distinguishes the square from the diamond, which are the same polygon turned 45 degrees', () => {
-    // THE PAIR THAT ONLY WORKS BECAUSE THE MARKER IS HELD WORLD-FIXED. Slots 3 and 4 are
-    // both 4-gons; all that separates them is a 45 degree offset. If the marker spun with
-    // the hull they would be one marker wearing two names for most of every match, which
-    // is the failure this candidate would have shipped with had the ring's parenting gone
-    // unchecked.
-    const square = outerAngles(build('shape', 2));
-    const diamond = outerAngles(build('shape', 3));
-    expect(square.length, 'both are four-sided').toBe(diamond.length);
-    const offset = Math.abs(square[0] - diamond[0]);
-    expect(offset).toBeGreaterThan(Math.PI / 4 - 0.01);
-    expect(offset).toBeLessThan(Math.PI / 4 + 0.01);
+  it('makes slot 4 a STARBURST, not the square turned 45 degrees', () => {
+    // WHY THE DIAMOND WENT. Slots 3 and 4 used to be the same 4-gon 45 degrees apart, so
+    // slot 4's distinctness rested entirely on the marker being held world-fixed -- lose
+    // the counter-rotation and the two became one marker wearing two names. It was also
+    // the weakest of the four in a real capture: its vertices point at the corners where
+    // the hull is widest, so the outline collapsed to a flat line under the tank.
+    //
+    // A starburst is topologically different rather than a rotation, which is what this
+    // asserts: a varying outer radius is something no regular polygon in the set has.
+    const square = build('shape', 2);
+    const star = build('shape', 3);
+    const radii = (g: THREE.BufferGeometry): number[] => {
+      const pos = g.getAttribute('position');
+      const out: number[] = [];
+      for (let i = 0; i < pos.count; i += 2) out.push(Math.hypot(pos.getX(i), pos.getY(i)));
+      return out;
+    };
+    const sq = radii(square), st = radii(star);
+    const spread = (v: number[]): number => Math.max(...v) - Math.min(...v);
+    expect(spread(sq), 'a square sits at one radius').toBeLessThan(1e-6);
+    expect(spread(st), 'a starburst alternates between two').toBeGreaterThan(0.05);
+    // ...and it still lives inside the band, so it cannot reach under the hull.
+    expect(Math.max(...st)).toBeLessThanOrEqual(IDENTITY_RING_OUTER_R + 1e-6);
+    expect(Math.min(...st)).toBeGreaterThanOrEqual(IDENTITY_RING_INNER_R - 1e-6);
   });
 
   it('draws slot 1 as a full circle, matching the shipped ring it replaces', () => {
