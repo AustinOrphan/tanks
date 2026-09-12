@@ -666,6 +666,42 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
+  it('gives every --hidden modifier something that actually hides', () => {
+    // THE SWEEP THAT SHOULD HAVE EXISTED FOUR TIMES AGO. `.hud-shells--hidden`,
+    // `.hud-splash--hidden`, `.ui-app-ground--hidden` and `.hud-legal-body--hidden` each
+    // carry their own note about the same failure -- the class goes on, the element stays
+    // painted -- and each was pinned one at a time, by whoever was bitten. A mutation
+    // emptying `.hud-alert--hidden` SURVIVED against those four cases, because a list of
+    // four cannot cover a file with dozens.
+    //
+    // Derived from the stylesheet's own text so a modifier added tomorrow is swept without
+    // anyone remembering to list it. Measured through the cascade, not by parsing: a rule
+    // that is empty, that sets only a margin, or that lives in an `@media` that never
+    // matches all resolve to a visible element and all fail here.
+    const declared = [...new Set(
+      [...stripComments(css).matchAll(/^\.([a-z0-9-]+--hidden)\s*[,{]/gm)].map((m) => m[1]),
+    )];
+    // Non-vacuity, and the denominator: 56 modifiers in the file today. A regex that
+    // stopped matching would make the loop below trivially true.
+    expect(declared.length).toBeGreaterThan(40);
+
+    const visible: string[] = [];
+    for (const cls of declared) {
+      const base = cls.replace(/--hidden$/, '');
+      const el = document.createElement('div');
+      // BOTH classes, in the order the HUD writes them: the modifier only has to beat its
+      // own base rule, and testing it alone would pass for a modifier that is simply never
+      // stronger than the thing it modifies.
+      el.className = `${base} ${cls}`;
+      document.body.appendChild(el);
+      const hidden =
+        getComputedStyle(el).display === 'none' || getComputedStyle(el).visibility === 'hidden';
+      if (!hidden) visible.push(cls);
+      el.remove();
+    }
+    expect(visible, 'a --hidden modifier that leaves its element on screen').toEqual([]);
+  });
+
   it('hides a collapsed legal document with display, not with a class that does nothing', () => {
     // Same failure as the ground above, one pane further in (issue #117). Every test that
     // asserts a document is collapsed -- in legal.test.ts and in hud.surfaces.test.ts -- reads
