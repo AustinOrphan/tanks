@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   ANGLE_HASH,
+  classifyAngleFingerprint,
   computeAngleBands,
   computeAngleHash,
+  formatAngleBands,
   hashFloat64s,
+  VERIFIED_ANGLE_ARCHITECTURES,
   VENDORED_ANGLE_HASH,
   computeVendoredAngleBands,
   computeVendoredAngleHash,
@@ -28,10 +31,83 @@ import {
  */
 
 describe('angle probe', () => {
-  it('fingerprint matches the pinned V8 hash', async () => {
-    const hash = await computeAngleHash();
-    console.log(`ANGLE ${hash}`);
+  it('fingerprint matches the pinned V8 hash on a VERIFIED architecture (issue #484)', async () => {
+    // ARCHITECTURE-AWARE since issue #484, on the owner's ruling: enforce a native-V8 golden
+    // only where that exact fingerprint has been deliberately verified. `ANGLE_HASH` was
+    // measured across three Node/V8 builds, all x86-64. On macOS arm64 the same sweep is
+    // stable and DIFFERENT, so the pin was permanently red there -- which does not surface a
+    // regression, it hides one: every `verify:quick` needed manual dismissal, and a real
+    // break in the sweep or the hashing would have looked exactly like the expected failure.
+    //
+    // The vendored probe below stays a hard assertion everywhere, and that is the point of
+    // the pair: src/sim/math is built only from operations ECMA-262 specifies exactly, so
+    // bit-identical output is a construction guarantee rather than a hope. Native `Math.*`
+    // never promised that. Weakening the native pin on an unverified architecture costs
+    // nothing the deterministic path was relying on.
+    const bands = await computeAngleBands();
+    const hash = await computeAngleHash(bands);
+    const verdict = classifyAngleFingerprint(process.arch, hash);
+    console.log(`ANGLE ${hash} (${process.arch}, ${verdict.kind})`);
+
+    if (verdict.kind === 'unverified') {
+      // Report, do not fail. Per-band output so the divergence can be localised to a
+      // function and a range rather than appearing as one rolled-up hash -- which is what
+      // #484 had to reconstruct by hand before this existed.
+      console.log(
+        `no verified golden for ${process.arch}; x86-64 golden is ${ANGLE_HASH}\n` +
+          `per-band fingerprints:\n${formatAngleBands(bands)}`,
+      );
+      // Still asserted, weakly but not vacuously: the probe RAN and produced a full-width
+      // digest. An unverified architecture must not become a branch where nothing is checked.
+      expect(hash).toMatch(/^[0-9a-f]{64}$/);
+      return;
+    }
+
+    // Verified architecture: the pin is hard, exactly as before. Per-band lines on failure,
+    // so the first question after a red run -- which function, which range -- is answered by
+    // the output rather than by a second debugging session.
+    if (verdict.kind === 'verified-mismatch') console.log(`per-band fingerprints:\n${formatAngleBands(bands)}`);
+    expect(verdict.kind, `native V8 fingerprint moved on ${process.arch}`).toBe('verified-match');
     expect(hash).toBe(ANGLE_HASH);
+  });
+
+  it('does not treat an unverified architecture as a verified pass', () => {
+    // THE BRANCH THIS MACHINE CANNOT REACH. `process.arch` is whatever the box is -- x64
+    // here -- so the arm64 path is unreachable by running the suite, and the policy is
+    // exercised with synthetic pairs instead. Without this case, #484's fix would be one
+    // typo away from silently accepting any hash on every architecture.
+    expect(VERIFIED_ANGLE_ARCHITECTURES).toContain('x64');
+    expect(VERIFIED_ANGLE_ARCHITECTURES, 'an arm64 golden was added without a ruling').not.toContain(
+      'arm64',
+    );
+
+    // A verified architecture still fails on a real divergence.
+    expect(classifyAngleFingerprint('x64', ANGLE_HASH).kind).toBe('verified-match');
+    expect(classifyAngleFingerprint('x64', 'deadbeef').kind).toBe('verified-mismatch');
+
+    // An unverified one reports rather than fails -- and, deliberately, does so even when
+    // the hash HAPPENS to match: one coincidental sample is not the repeated verified
+    // measurement the ruling requires before an architecture joins the list.
+    expect(classifyAngleFingerprint('arm64', 'deadbeef').kind).toBe('unverified');
+    expect(classifyAngleFingerprint('arm64', ANGLE_HASH).kind).toBe('unverified');
+    // ...which is the assertion that stops `unverified` being read as `verified-match`.
+    expect(classifyAngleFingerprint('arm64', ANGLE_HASH).kind).not.toBe('verified-match');
+  });
+
+  it('reports every band when a fingerprint has to be explained', async () => {
+    // The per-band output is a product, not a debug aid: #484 had to paste a hand-built
+    // table of thirteen sub-hashes into the issue because nothing printed them. A format
+    // that silently dropped bands would leave the next reader doing the same.
+    const bands = await computeAngleBands();
+    const text = formatAngleBands(bands);
+    const lines = text.split('\n');
+    expect(lines.length).toBe(bands.length);
+    for (const b of bands) {
+      expect(text, `${b.name} missing from the per-band report`).toContain(b.name);
+      expect(text, `${b.name}'s hash missing`).toContain(b.hash);
+    }
+    // Non-vacuity: thirteen bands, the same population the coverage case above pins.
+    expect(bands.length).toBe(13);
   });
 
   it('covers sin/cos on all 5 reachability bands, plus atan2, hypot and sqrt', async () => {
