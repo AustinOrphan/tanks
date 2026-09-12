@@ -1,0 +1,14 @@
+{
+  "id": "map-card-intent-clamp-dropped",
+  "file": "src/game/hud.css",
+  "find": "  -webkit-line-clamp: 4;\n  line-clamp: 4;",
+  "replace": "  -webkit-line-clamp: 99;\n  line-clamp: 99;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The clamp raised past any real intent, so a long board sentence grows its card again and every card sharing that grid row grows with it. This is the owner-reported defect exactly: swapping Pinwheel for Keystone moved the second row from 122.4px to 140.1px at 1280x800. The rule still LOOKS like a clamp, which is what makes it the plausible edit -- someone widening the copy budget would reach for this number first.",
+  "killedBy": [
+    "hud.css is syntactically whole holds every map card to one height, with the clamp and the reserved space agreeing at both widths"
+  ]
+}

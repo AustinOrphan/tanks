@@ -106,4 +106,30 @@ describe('displayName is what the map row renders (issue #271, criterion 5)', ()
     expect(duel.displayName, 'the name fell back to the id').not.toBe(duel.id);
     expect(duel.intent.length, 'the intent note is empty').toBeGreaterThan(20);
   });
+
+  it('keeps every intent inside the map card\'s clamp, so no board truncates -- population: all 8', () => {
+    // The card's intent is line-clamped (hud.css, `.hud-versus-map-intent`) so that swapping
+    // which boards a row offers cannot resize the cards beside them. The clamp is the
+    // structural guarantee; this bound is what keeps it from ever having to FIRE.
+    //
+    // 88 characters, DERIVED rather than chosen: the binding case is the desktop card, whose
+    // text column measured 138px beside the 74px canvas in a 240px grid column, at 11px. The
+    // four-line boundary was measured in real Chromium to sit between 95 characters
+    // (Pinwheel's old intent, four lines) and 100 (Arena 1's old intent, five), so 88 clears
+    // it with room for a word break landing badly. Phone is not the constraint: the same
+    // text column measured 288px there and the clamp is 2.
+    //
+    // Failing here is not "the copy is wrong" -- it means the card will ellipsise that
+    // board, which is a silent loss of the sentence #274 put on the card deliberately.
+    // Shorten the intent, or move the clamp and re-derive this number against a measurement.
+    const LONGEST = 88;
+    for (const entry of VERSUS_CATALOG) {
+      expect(entry.intent.length, `${entry.id} would be truncated on its card`)
+        .toBeLessThanOrEqual(LONGEST);
+    }
+    // The bound is only meaningful while it is near the real maximum: a bound of 500 would
+    // pass forever and assert nothing. MEASURED: the longest shipped intent is 85.
+    const longest = Math.max(...VERSUS_CATALOG.map((e) => e.intent.length));
+    expect(longest, 'the shipped maximum this bound was derived against').toBe(85);
+  });
 });

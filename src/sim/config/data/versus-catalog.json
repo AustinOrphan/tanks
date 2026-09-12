@@ -4,7 +4,7 @@
       "id": "arena-01",
       "arenaId": "arena-01",
       "displayName": "Arena 1",
-      "intent": "Sparse destructibles on a mid-size board; cover is mostly permanent, so lanes stay stable all match.",
+      "intent": "Sparse destructibles; cover is mostly permanent, so lanes stay stable all match.",
       "preview": "arena-01",
       "players": [
         2,
@@ -24,7 +24,7 @@
       "id": "arena-02",
       "arenaId": "arena-02",
       "displayName": "Arena 2",
-      "intent": "Destructible-heavy centre; the board opens up as a match runs and variants reshape it most here.",
+      "intent": "Destructible-heavy centre; the board opens up most as a match runs.",
       "preview": "arena-02",
       "players": [
         2,
@@ -104,7 +104,7 @@
       "id": "vs-duel-01",
       "arenaId": "vs-duel-01",
       "displayName": "Pinwheel",
-      "intent": "A compact duel board: two covered corners, one contested centre, and four walls worth breaking.",
+      "intent": "A compact duel: two covered corners, one contested centre, four breakable walls.",
       "preview": "vs-duel-01",
       "players": [
         2
@@ -122,7 +122,7 @@
       "id": "vs-tri-01",
       "arenaId": "vs-tri-01",
       "displayName": "Keystone",
-      "intent": "A three-player arch: two mirrored base corners, one keystone between the pylons, and an axis spawn equally far from both bases.",
+      "intent": "A three-player arch: two mirrored bases and a keystone spawn equally far from both.",
       "preview": "vs-tri-01",
       "players": [
         3
@@ -140,7 +140,7 @@
       "id": "vs-quad-01",
       "arenaId": "vs-quad-01",
       "displayName": "Quarters",
-      "intent": "A four-player rotunda: one open centre every corner can see into, four wide avenues, and a breakable island in the middle.",
+      "intent": "A four-player rotunda: open centre, four wide avenues, a breakable island.",
       "preview": "vs-quad-01",
       "players": [
         4
