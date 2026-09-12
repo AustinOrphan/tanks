@@ -51,7 +51,28 @@ export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked'])
  *                         starts a match -- which is a different screen from a boot
  *                         failure and says so ("That match could not start.").
  */
-export const STEP_KINDS = Object.freeze(['click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl']);
+export const STEP_KINDS = Object.freeze([
+  'click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl', 'fakeGamepads',
+]);
+
+/**
+ * Named gamepad fixtures for `{ fakeGamepads }` (issue #599).
+ *
+ * A HEADLESS BROWSER HAS NO CONTROLLER, and a browser reports no pad until one has been
+ * ACTUATED, so the controller self-test photographs an empty pane on every capture machine
+ * in existence -- true, and evidence for nothing the feature does. The fixture overrides
+ * `navigator.getGamepads` on the live page, which is the same seam every unit test in
+ * `src/input/` injects and the same seam production reads through
+ * `readNavigatorGamepads`.
+ *
+ *  - `none`    -- no override. The pane's empty state, which IS what a tester sees first.
+ *  - `mixed`   -- one `mapping: 'standard'` pad (4 axes, 17 buttons) and one unmapped pad
+ *                 with a different channel count, both off centre with a button down, so
+ *                 one picture carries both rendering paths and a filled bar.
+ *
+ * The VALUES live in the runner, not here: this module is pure data and imports nothing.
+ */
+export const GAMEPAD_FIXTURES = Object.freeze(['none', 'mixed']);
 
 /** A save two levels into the campaign, so the menu shows Continue and a Levels grid. */
 const MID_CAMPAIGN = Object.freeze({
@@ -269,6 +290,44 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-versus-map-note' },
     ],
     measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-note'],
+  }),
+  // ---- Developer Tools -------------------------------------------------------------
+  state({
+    id: 'screen.devtools',
+    title: 'Developer Tools',
+    description:
+      'The developer shell behind ?dev=1: the non-privilege statement, the Controller ' +
+      'Self-Test entry, Exit and Back.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1',
+    steps: [...PAST_SPLASH, { click: '.hud-devtools-open' }, { waitVisible: '.hud-devtools' }],
+    // `.hud-selftest-open` is measured for its BOX: it is the control issue #599 added to
+    // this pane, and the pane is one of the two issue #642 still owns for centring the main
+    // axis of a scroll container -- so where this button sits is the number that says
+    // whether one more control pushed the pane into its own clip.
+    measure: ['.hud-devtools', '.hud-selftest-open', '.hud-devtools-back'],
+  }),
+  state({
+    id: 'screen.devtools.controller-selftest',
+    title: 'Controller Self-Test',
+    description:
+      'The controller compatibility self-test over two synthetic pads: one the browser ' +
+      'remapped to the standard layout and one it did not, each showing live axis and ' +
+      'button rows.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1',
+    steps: [
+      ...PAST_SPLASH,
+      { fakeGamepads: 'mixed' },
+      { click: '.hud-devtools-open' },
+      { waitVisible: '.hud-devtools' },
+      { click: '.hud-selftest-open' },
+      { waitVisible: '.hud-selftest' },
+      { waitHidden: '.hud-selftest-empty' },
+    ],
+    // The empty state is measured for its ABSENCE beside a populated list: a pane that
+    // showed both, or neither, is the failure this picture has to be able to show.
+    measure: ['.hud-selftest', '.hud-selftest-pads', '.hud-selftest-pad', '.hud-selftest-channel', '.hud-selftest-copy'],
   }),
   state({
     id: 'screen.about',

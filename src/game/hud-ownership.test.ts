@@ -159,6 +159,11 @@ describe('HUD ownership boundary (issue #324)', () => {
     // twice, so the roles sum to 74. Route rather than gameplay because every one of them
     // serves the Settings pane, which the PAGE owns and which is reachable with no session
     // in existence -- a session must not be able to hide a control or write the preference.
+    // Issue #599 adds THREE more, also route-owned: `setPadDiagnostics` and the
+    // `onControllerSelfTestOpen`/`Close` pair. 76 members, showToast counted twice, so the
+    // roles sum to 77. Same reason the Controllers panel's three are route-owned: the
+    // self-test is a Developer Tools pane the PAGE owns, reachable with no session in
+    // existence, and a session must not be able to write to it.
     // Four FEWER than the 72 that stood before
     // issue #324's step S6, and the arithmetic is the whole of that step: five per-kind
     // status members (`setLives`, `setEnemiesRemaining`, `setLevel`, `setSessionKind`,
@@ -168,7 +173,7 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Growth here is not automatically a regression and neither is a fall: what these
     // numbers guard is that a member arrived or left through a diff someone read. The
     // assertion below is what pins that a session still cannot reach a route member.
-    expect(frame.size + route.size + gameplay.size).toBe(74);
+    expect(frame.size + route.size + gameplay.size).toBe(77);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

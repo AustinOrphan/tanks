@@ -51,6 +51,8 @@ on:
           - gallery.ricochet.still
           - screen.about
           - screen.about.document
+          - screen.devtools
+          - screen.devtools.controller-selftest
           - screen.confirm.new-campaign
           - screen.customize
           - screen.levels

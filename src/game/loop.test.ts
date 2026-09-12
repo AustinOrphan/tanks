@@ -148,6 +148,7 @@ import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLe
 import { createLevelSystem } from './levels';
 import type { SlotSource } from '../input/assignment';
 import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
+import type { PadDiagnostic } from '../input/gamepad-diagnostics';
 import { SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
@@ -404,6 +405,8 @@ interface Recorder {
   rumblePushes: boolean[];
   /** Every value passed to hud.setControlRelevance, in order. */
   relevancePushes: unknown[];
+  /** Every value passed to hud.setPadDiagnostics, in order (each a snapshot copy). */
+  padDiagnosticsPushes: PadDiagnostic[][];
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; savedQuality?: QualityPreset; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
@@ -472,6 +475,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     closeControllers(): void;
     openSettings(): void;
     closeSettings(): void;
+    openSelfTest(): void;
+    closeSelfTest(): void;
+    /** What `deps.readPadDiagnostics()` returns next -- the self-test's live pad state. */
+    setPadDiagnosticsFixture(pads: PadDiagnostic[]): void;
     openVersus(): void;
     startVersus(config: VersusConfig): void;
     openCampaign(): void;
@@ -619,6 +626,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     detectedPadsPushes: [],
     rumblePushes: [],
     relevancePushes: [],
+    padDiagnosticsPushes: [],
   };
 
   let pending: ((now: number) => void) | null = null;
@@ -671,6 +679,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let fireNext = false;
   let gamepadConnectedNext = false;
   let detectedPadsFixture: DetectedPad[] = [];
+  let padDiagnosticsFixture: PadDiagnostic[] = [];
   let onQuit = (): void => {};
   let onPauseTap = (): void => {};
   let onMineTap = (): void => {};
@@ -693,6 +702,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onSettingsClose = (): void => {};
   let onControllersOpen = (): void => {};
   let onControllersClose = (): void => {};
+  let onSelfTestOpen = (): void => {};
+  let onSelfTestClose = (): void => {};
   let onVersusOpenCb = (): void => {};
   let onVersusStartCb = (_config: VersusConfig): void => {};
   let onCampaignOpenCb = (): void => {};
@@ -986,6 +997,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     // can push into via `setDetectedPadsFixture` below, mirroring `gamepadConnectedNext`'s
     // own closed-over-mutable convention.
     readDetectedPads: () => detectedPadsFixture,
+    readPadDiagnostics: () => padDiagnosticsFixture,
     // SESSION-owned audio, which is what a single-session test is about: the engine this
     // harness hands out is rebuilt per session, so releasing it means disposing it. The
     // PAGE-owned wiring production uses is `createBrowserDeps`' -- one engine, released by
@@ -1345,11 +1357,20 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onSettingsClose: (cb: () => void) => {
           onSettingsClose = cb;
         },
+        setPadDiagnostics: (pads: readonly PadDiagnostic[]) => {
+          rec.padDiagnosticsPushes.push([...pads]);
+        },
         onControllersOpen: (cb: () => void) => {
           onControllersOpen = cb;
         },
         onControllersClose: (cb: () => void) => {
           onControllersClose = cb;
+        },
+        onControllerSelfTestOpen: (cb: () => void) => {
+          onSelfTestOpen = cb;
+        },
+        onControllerSelfTestClose: (cb: () => void) => {
+          onSelfTestClose = cb;
         },
         // Task 5's own wiring, page-owned since issue #427 and reached through the
         // slot since #324's step S5: `route-ui.ts` subscribes both and is the one caller
@@ -1881,6 +1902,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       closeControllers: () => onControllersClose(),
       openSettings: () => onSettingsOpen(),
       closeSettings: () => onSettingsClose(),
+      openSelfTest: () => onSelfTestOpen(),
+      closeSelfTest: () => onSelfTestClose(),
+      setPadDiagnosticsFixture: (pads: PadDiagnostic[]) => {
+        padDiagnosticsFixture = pads;
+      },
       openVersus: () => onVersusOpenCb(),
       startVersus: (config: VersusConfig) => onVersusStartCb(config),
       openCampaign: () => onCampaignOpenCb(),

@@ -1430,6 +1430,185 @@
   display: none;
 }
 
+/* THE CONTROLLER SELF-TEST PANE (issue #599). The pane geometry of its siblings with ONE
+   deliberate difference: `justify-content: flex-start`, not `center`.
+
+   Centring the main axis of an `overflow-y: auto` column puts the overflow ABOVE the
+   scroll origin, where no scrollbar reaches it -- measured at 454px of lost content on
+   `.hud-about` under #117. This pane is as tall as the connected hardware makes it (a
+   standard pad alone is 21 channel rows), so it would overflow on the first connected
+   controller rather than only on a short viewport. `.hud-settings` and `.hud-devtools`
+   still carry the old shape; issue #642 owns them, and hud.css.test.ts pins that set so
+   this pane joining it would be a red test rather than a silent third case. */
+.hud-selftest {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
+  overflow-y: auto;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+/* Same reason as .hud-devtools--hidden: without it the pane covers the page from load. */
+.hud-selftest--hidden {
+  display: none;
+}
+
+.hud-selftest-line {
+  margin: 0;
+  max-width: 46ch;
+  text-align: center;
+  opacity: 0.9;
+}
+
+/* The menu-suppression sentence is a footnote to the line above it, the same weight
+   relationship .hud-devtools-note has to .hud-devtools-line. */
+.hud-selftest-note {
+  margin: 0;
+  max-width: 46ch;
+  text-align: center;
+  font-size: 0.9em;
+  opacity: 0.72;
+}
+
+.hud-selftest-list {
+  width: 100%;
+  max-width: 52ch;
+}
+
+/* Same measure and centring as the prose above, so the empty state does not read as a
+   different pane from the list it replaces. */
+.hud-selftest-empty {
+  margin: 0;
+  max-width: 46ch;
+  margin-inline: auto;
+  text-align: center;
+  opacity: 0.9;
+}
+
+.hud-selftest-empty--hidden {
+  display: none;
+}
+
+.hud-selftest-pads,
+.hud-selftest-channels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hud-selftest-pad {
+  margin-block-end: var(--hud-space-6);
+  padding: var(--hud-space-3);
+  border-radius: var(--hud-radius-md);
+  background: var(--hud-scrim-panel);
+}
+
+.hud-selftest-pad-name {
+  margin: 0;
+  font-size: 1em;
+  color: var(--hud-text-bright);
+}
+
+.hud-selftest-pad-meta {
+  margin: 0 0 var(--hud-space-2);
+  font-size: 0.85em;
+  opacity: 0.72;
+}
+
+/* Three columns: the channel's name, a bar, and the number. A fixed name column keeps the
+   bars on one left edge, so a stick's travel is read against its neighbours rather than
+   against a ragged start. */
+.hud-selftest-channel {
+  display: grid;
+  grid-template-columns: 8ch 1fr 5ch;
+  align-items: center;
+  gap: var(--hud-space-2);
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-selftest-channel-bar {
+  display: block;
+  height: 6px;
+  border-radius: var(--hud-radius-pill);
+  background: var(--hud-quiet-fill);
+  overflow: hidden;
+}
+
+/* THE CENTRE MARK, and only on an AXIS. A stick rests in the middle of its range, so its
+   bar needs an origin to be read against -- without one, "at rest" and "pushed to exactly
+   centre" look the same, and the direction of a push has nothing to be a direction from. A
+   BUTTON fills 0 to 1 from the left and has no centre to mark; drawn there the tick reads
+   as a partial fill on an untouched button, which the first capture of this pane showed on
+   all 17 button rows of a standard pad.
+
+   The shorthand above and the image here, in that order: `background` resets
+   `background-image` to `none`, so a gradient declared before it is erased by it. That is
+   the other thing the capture showed, and neither was visible in jsdom. */
+.hud-selftest-channel--axis .hud-selftest-channel-bar {
+  background-image: linear-gradient(
+    to right,
+    transparent calc(50% - 1px),
+    var(--hud-schematic-solid) calc(50% - 1px),
+    var(--hud-schematic-solid) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+}
+
+.hud-selftest-channel-fill {
+  display: block;
+  height: 100%;
+  background: var(--hud-text);
+}
+
+/* A pressed button is distinguished by COLOUR AND by the bar being full, so the state
+   survives a forced-colours mode and a monochrome capture alike. */
+.hud-selftest-channel--down {
+  color: var(--hud-text-bright);
+  font-weight: 700;
+}
+
+.hud-selftest-channel--down .hud-selftest-channel-fill {
+  background: var(--hud-gold);
+}
+
+.hud-selftest-channel-value {
+  text-align: end;
+}
+
+/* The copyable report. Monospace and pre-wrapped, because the rows it carries are columns
+   of numbers that a proportional font makes unreadable in a pasted issue. */
+.hud-selftest-report {
+  width: 100%;
+  max-width: 52ch;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75em;
+  color: var(--hud-text);
+  background: var(--hud-scrim-panel);
+  border: 1px solid var(--hud-quiet-fill);
+  border-radius: var(--hud-radius-sm);
+  padding: var(--hud-space-2);
+}
+
+.hud-selftest-report--hidden {
+  display: none;
+}
+
+/* The field is in the tab order (it is how the report is copied by keyboard), so it needs
+   the same ring every other control here has. */
+.hud-selftest-report:focus-visible {
+  outline: var(--hud-focus-width) solid var(--hud-focus-color);
+  outline-offset: var(--hud-focus-offset);
+}
+
 /* Prose, so it takes a measure rather than the pane's full width -- a legal paragraph
    run edge to edge on a TV is unreadable. */
 .hud-about-line {

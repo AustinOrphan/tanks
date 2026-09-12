@@ -1,0 +1,14 @@
+{
+  "id": "selftest-retains-the-browsers-own-arrays",
+  "file": "src/input/gamepad-diagnostics.ts",
+  "find": "  const axes: number[] = [];\n  for (let i = 0; i < pad.axes.length; i++) axes.push(pad.axes[i] ?? 0);",
+  "replace": "  const axes: number[] = pad.axes as number[];",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "readPadDiagnostics copies the live axis and button arrays instead of retaining the browser\u2019s own"
+  ],
+  "why": "A real `Gamepad` object is re-read each frame, so a retained reference is a snapshot of nothing in particular. It is also how a live readout silently stops updating: the pane would redraw the same array object forever and show a stick that never moves, which is the one failure mode this feature exists to rule out."
+}

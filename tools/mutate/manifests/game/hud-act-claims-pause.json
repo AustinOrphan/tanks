@@ -1,8 +1,8 @@
 {
   "id": "hud-act-claims-pause",
   "file": "src/game/hud.ts",
-  "find": "    if (action === 'pause') return false;\n    const container = activePanelContainer();",
-  "replace": "    if (action === 'pause') return true;\n    const container = activePanelContainer();",
+  "find": "    if (action === 'pause') return false;\n    /*\n     * THE SELF-TEST TAKES THE PAD OFF THE MENU",
+  "replace": "    if (action === 'pause') return true;\n    /*\n     * THE SELF-TEST TAKES THE PAD OFF THE MENU",
   "tests": [
     "src/game/hud.navigation.test.ts",
     "src/game/route-host.test.ts"

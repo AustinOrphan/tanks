@@ -112,14 +112,29 @@ export function deadzoneVector(x: number, y: number, deadzone: number = GAMEPAD_
 /** The subset of a real `Gamepad` this reader touches, so a fake needs only this much. */
 export interface GamepadLike {
   readonly axes: ArrayLike<number>;
-  readonly buttons: ArrayLike<{ readonly pressed: boolean }>;
+  /**
+   * `value` is OPTIONAL for the same reason `id` is: the reader reads `pressed` alone, so
+   * requiring it would break every pre-existing fake for no benefit. Only
+   * `gamepad-diagnostics.ts` reads it, and it falls back to the pressed flag when the
+   * browser reports no analog value.
+   */
+  readonly buttons: ArrayLike<{ readonly pressed: boolean; readonly value?: number }>;
   /**
    * The browser's own name for the pad. OPTIONAL: `poll()`/`connected()` never read it
    * (hence its absence from every pre-existing `fakePad` in this file's tests), so
    * making it required would break every one of those fakes for no reason. Only
-   * `readDetectedPads` below reads it, for the controller assignment UI's live list.
+   * `readDetectedPads` below and `gamepad-diagnostics.ts` read it, for the controller
+   * assignment UI's live list and the compatibility self-test.
    */
   readonly id?: string;
+  /**
+   * The Gamepad API's own `mapping`: `'standard'` when the browser has remapped the pad
+   * onto the standard layout this file's button and axis indices assume, `''` (or a
+   * vendor string) when it has not. OPTIONAL on the same grounds as `id`; only
+   * `gamepad-diagnostics.ts` reads it, because whether a pad IS standard is exactly the
+   * question a compatibility report has to answer (issue #599).
+   */
+  readonly mapping?: string;
 }
 
 /** Matches `navigator.getGamepads`'s own signature: a possibly-sparse array of pads or nulls. */
@@ -403,6 +418,30 @@ export interface DetectedPad {
  * is the one production caller.
  */
 export function readDetectedPads(getGamepads: GetGamepads): DetectedPad[] {
+  return readConnectedPads(getGamepads).map(({ padIndex, pad }) => ({
+    padIndex,
+    id: pad.id ?? '',
+  }));
+}
+
+/** One connected pad paired with the `getGamepads()` index it was found at. */
+export interface ConnectedPad {
+  readonly padIndex: number;
+  readonly pad: GamepadLike;
+}
+
+/**
+ * The ONE tolerant walk over `getGamepads()`, shared by every caller that wants "every
+ * pad that is plugged in right now" rather than one fixed index.
+ *
+ * Extracted rather than duplicated when `gamepad-diagnostics.ts` arrived (issue #599):
+ * two independent walkers would each carry their own copy of the sparse-array rule (the
+ * array holds `null` at unoccupied indices, and its length is not the pad count) and of
+ * the throw tolerance, and could drift apart on which indices they report. The INDEX is
+ * preserved deliberately -- it is what `pad[i] -> slot[i]` binds to and what a
+ * compatibility report has to name.
+ */
+export function readConnectedPads(getGamepads: GetGamepads): ConnectedPad[] {
   let pads: ArrayLike<GamepadLike | null | undefined>;
   try {
     pads = getGamepads() ?? [];
@@ -410,10 +449,10 @@ export function readDetectedPads(getGamepads: GetGamepads): DetectedPad[] {
     // Tolerate a throwing implementation exactly like createGamepadReader does.
     pads = [];
   }
-  const out: DetectedPad[] = [];
+  const out: ConnectedPad[] = [];
   for (let i = 0; i < pads.length; i++) {
     const p = pads[i];
-    if (p != null) out.push({ padIndex: i, id: p.id ?? '' });
+    if (p != null) out.push({ padIndex: i, pad: p });
   }
   return out;
 }

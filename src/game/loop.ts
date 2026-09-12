@@ -98,6 +98,7 @@ import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-diffic
 import type { BlockedFireCue } from '../presentation/blocked-fire';
 import type { GameplayRouteHost, RouteHostDeps, StartIntent } from './route-host';
 import { resolveOwnerColor } from '../presentation/identity';
+import { readPadDiagnostics, type PadDiagnostic } from '../input/gamepad-diagnostics';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
@@ -210,6 +211,18 @@ export interface GameDeps {
    * while the panel is open.
    */
   readonly readDetectedPads: () => DetectedPad[];
+  /**
+   * Every connected pad in FULL -- mapping, every axis, every button -- for the Developer
+   * Tools controller self-test (issue #599). `gamepad-diagnostics.ts`'s `readPadDiagnostics`
+   * bound to the same production `GetGamepads` as `readDetectedPads`, and injected for the
+   * same reason.
+   *
+   * Called on every animation frame while `.hud-selftest` is open and not at all while it
+   * is closed: sticks and triggers are analog, and the Gamepad API reports no change event
+   * for them, so a hotplug-driven read like the assignment panel's would show a frozen
+   * stick. READ-ONLY -- nothing downstream of this writes an assignment or a setting.
+   */
+  readonly readPadDiagnostics: () => PadDiagnostic[];
   readonly createAudio: () => AudioEngine;
   /**
    * Release the engine `createAudio` handed this session, at session teardown.
@@ -1121,6 +1134,7 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
     createInput: createInputController,
     createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
     readDetectedPads: () => readDetectedPads(readNavigatorGamepads),
+    readPadDiagnostics: () => readPadDiagnostics(readNavigatorGamepads),
     // The PAGE's engine, the same instance on every session (issue #317) -- so the
     // context a session resumed is still resumed for the next one, which is what keeps
     // skipping the splash from trading a redundant screen for a silent menu.

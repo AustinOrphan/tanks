@@ -43,6 +43,8 @@ describe('capture recipe schema', () => {
       'screen.versus-setup.map-replaced',
       'screen.about',
       'screen.about.document',
+      'screen.devtools',
+      'screen.devtools.controller-selftest',
       'screen.confirm.new-campaign',
       'screen.startup.unsupported-render',
       'screen.startup.probe-blocked',

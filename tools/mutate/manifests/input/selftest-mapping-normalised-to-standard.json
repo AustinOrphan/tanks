@@ -1,0 +1,14 @@
+{
+  "id": "selftest-mapping-normalised-to-standard",
+  "file": "src/input/gamepad-diagnostics.ts",
+  "find": "return { padIndex, id: pad.id ?? '', mapping: pad.mapping ?? '', axes, buttons };",
+  "replace": "return { padIndex, id: pad.id ?? '', mapping: pad.mapping ?? 'standard', axes, buttons };",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "readPadDiagnostics leaves an unmapped pad unmapped rather than normalising it to standard"
+  ],
+  "why": "A pad the browser has NOT remapped is the whole subject of the compatibility report (issue #599). Defaulting the absent `mapping` to 'standard' makes the report state that the browser remapped a pad it did not -- the single most misleading sentence this feature could produce, and one a reader would act on."
+}

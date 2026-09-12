@@ -1,0 +1,14 @@
+{
+  "id": "selftest-leaves-the-pad-on-the-menu",
+  "file": "src/game/hud.ts",
+  "find": "    if (selfTestOpen) return true;",
+  "replace": "    if (false) return true;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test takes the pad off the menu (issue #599) consumes and drops every gamepad action except Back while the pane is open"
+  ],
+  "why": "`gamepad-menu.ts` reads button 0 as Confirm and the left stick as the four directions. Without this the two buttons a tester most needs to identify activate a control and walk the focus ring instead of moving the readout -- the pane cannot test the controls it is most asked about."
+}
