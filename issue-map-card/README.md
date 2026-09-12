@@ -44,10 +44,14 @@ Every card is one height, and the two states are identical.
 
 | | before | after |
 | --- | --- | --- |
-| desktop card heights | 110.4 / 122.4 / 137.2 / 140.1 | **124.8, every card, every count** |
-| phone card heights | 80.7 / 95.5 | **81.9, every card, every count** |
-| desktop row height, 2p vs 3p | 774 vs 808 | **782 vs 782** |
-| phone row height, 2p vs 3p | 1226 vs 1256 | **1244 vs 1244** |
+| desktop board cards | 122.4 / 137.2 / 140.1, moving with the list | **122.4, every board, every count** |
+| phone cards | 80.7 / 95.5 | **80.7, every card, every count** |
+| desktop map row, 2p vs 3p | 774 vs 808 | **identical** |
+| phone map row, 2p vs 3p | 1226 vs 1256 | **identical** |
+
+Random stays 110.4 on desktop. It is always alone in the last row (the grid caps at 46rem and
+resolves to three columns, so seven cards lay out 3 + 3 + 1), and grid rows are already
+equal-height, so no card ever sits beside it to mismatch.
 
 ## How
 
@@ -63,6 +67,6 @@ Shorten **and** clamp, per the owner's call:
   240px desktop grid column, **288px** in the single full-width column below 760px. Four lines
   there is two here; forcing four on a phone would add ~30px of whitespace per card down a
   seven-card column.
-- The config line gets the same treatment at 2 lines / 1 line — it was the remaining 12px,
-  since a board reads "2/3/4 players - FFA and Teams" (two lines) and Random reads
-  "6 eligible boards" (one).
+- The config line gets **no** reserved height. A draft gave it one, to raise Random to meet
+  the boards, and it was removed after looking at the render: it bought a cross-row difference
+  nobody can see and cost a blank line inside Random's card that read as missing copy.
