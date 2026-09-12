@@ -1,0 +1,14 @@
+{
+  "id": "mutate-reaper-deletes-a-live-runs-worktree",
+  "file": "tools/mutate/run.mjs",
+  "find": "    if (pid === selfPid || isAlive(pid)) continue;",
+  "replace": "    if (pid === selfPid) continue;",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "The liveness check dropped, so the reaper collects EVERY pid-named worker worktree it finds -- including the ones a mutate run happening right now is using. It then deletes a running job's working directory mid-mutation, which is far worse than the residue this reaper exists to remove: the victim's next `git` or file read fails from a directory that no longer exists, with nothing in its own output explaining why. Silent on a machine running one sweep at a time, which is most of them, so the harness looks fine until the day it does real damage.",
+  "killedBy": [
+    "staleWorkerWorktrees: collecting a killed run's leftovers (issue #664) LEAVES a live run's worktrees alone -- the property that makes this safe to run"
+  ]
+}

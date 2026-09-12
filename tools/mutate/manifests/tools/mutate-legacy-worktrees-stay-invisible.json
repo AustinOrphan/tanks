@@ -1,0 +1,14 @@
+{
+  "id": "mutate-legacy-worktrees-stay-invisible",
+  "file": "tools/mutate/run.mjs",
+  "find": "    if (name.startsWith('mutate-worker-') && !/^mutate-worker-\\d+-/.test(name)) legacy.push(dir);",
+  "replace": "    if (false) legacy.push(dir);",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "The report silenced, restoring the status quo that made this residue invisible. Worktrees from before the pid naming carry nothing to check a process against, so they are deliberately NOT collected -- but `git status` does not show them and `git worktree prune` does not remove them, so with the report gone the only way to learn they exist is for someone to think to run `git worktree list`. That is how the pair on the development machine went unnoticed across a whole session.",
+  "killedBy": [
+    "staleWorkerWorktrees: collecting a killed run's leftovers (issue #664) NAMES a pre-PID worker worktree instead of silently ignoring it"
+  ]
+}
