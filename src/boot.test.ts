@@ -827,6 +827,43 @@ describe('boot: nothing starts until the player asks (issue #428)', () => {
     expect(h.enteredIds).toEqual([]);
   });
 
+  it('a FATAL cause still replaces the page, even from a menu click', () => {
+    // The other half of issue #325's ruling, and the ordering bug it fixed. An
+    // `UnsupportedRenderError` means the renderer is ABSENT: the next match will fail
+    // exactly as this one did, so handing the player back a Main Menu is an invitation to
+    // prove it again. Before the ruling, `at === 'match'` short-circuited before the error
+    // was examined and this case drew the transient overlay.
+    const h = harness({ throwOnStart: new UnsupportedRenderError('no-webgl2') });
+    boot(h.deps);
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+
+    expect(shownFailure(h)).toBe('unsupported-render');
+    expect(h.overlays, 'a fatal cause was drawn as a dismissible overlay').toEqual([]);
+    // ...and it says what is actually wrong. The page it replaces the menu with is the
+    // same one a failed boot shows, because the situation is the same.
+    expect(h.root.textContent).toContain('WebGL');
+  });
+
+  it('leaves the shell standing when the cause is transient', () => {
+    // The mirror of "clears whatever was in the root first": the page path empties the
+    // root, and the overlay path must not. Asserted on the DOM rather than on the ledger,
+    // because "the menu is still there" is the player-visible claim the ruling rests on.
+    const h = harness({ throwOnStart: new Error('context lost during init') });
+    boot(h.deps);
+    const marker = document.createElement('div');
+    marker.id = 'shell-marker';
+    h.root.appendChild(marker);
+
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+
+    expect(h.root.querySelector('#shell-marker'), 'the overlay cleared the root').not.toBeNull();
+    expect(h.overlays).toHaveLength(1);
+    // The copy is the overlay's own, and it must not tell a player to reload a shell that
+    // is working -- which is what the old page copy said.
+    expect(h.overlays[0].action).toBe('Back to menu');
+    expect(h.overlays[0].detail).not.toMatch(/reload/i);
+  });
+
   it('a failed start reaches the same message page a failed boot always has', () => {
     // The boundary that had to be added: with the eager start gone, a renderer that gets
     // its context and then fails to initialise throws out of a HUD click handler, and
