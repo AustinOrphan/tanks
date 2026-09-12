@@ -112,6 +112,8 @@ export type RouteUiDeps = Pick<
   | 'effectiveSettings'
   | 'createPreview'
   | 'readDetectedPads'
+  | 'readPadDiagnostics'
+  | 'raf'
   | 'host'
   | 'requestVersusSession'
   | 'requestCampaignSession'
@@ -350,6 +352,43 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   hud.onControllersClose(() => {
     deps.host.removeEventListener('gamepadconnected', onGamepadHotplug);
     deps.host.removeEventListener('gamepaddisconnected', onGamepadHotplug);
+  });
+
+  /**
+   * The controller self-test's live readout (issue #599), on the page's own frame loop for
+   * exactly as long as the pane is open.
+   *
+   * A FRAME LOOP, not the hotplug listeners above, and the difference is the whole reason
+   * this is separate wiring: `gamepadconnected`/`gamepaddisconnected` fire when a pad
+   * arrives or leaves, and NOTHING fires when a stick moves. The Gamepad API has no change
+   * event for axis or button state -- a reader polls or it sees nothing -- so a self-test
+   * driven by hotplug events would show a pad that never moves, which is indistinguishable
+   * from a broken pad and is the exact thing the tester is trying to rule out.
+   *
+   * SELF-RESCHEDULING, and stopped two ways: the pending handle is cancelled, AND the
+   * callback checks the flag before asking for another frame. Either alone leaves a hole --
+   * cancelling cannot reach a callback already running, and a flag alone leaves one frame
+   * queued after close. The driver does not tick while a pane is up, so this loop is the
+   * only thing running, and leaving it running would poll the hardware for the life of the
+   * page over a pane that is gone.
+   */
+  let selfTestFrame: number | null = null;
+  let selfTestPolling = false;
+  const pollSelfTest = (): void => {
+    selfTestFrame = null;
+    hud.setPadDiagnostics(deps.readPadDiagnostics());
+    if (selfTestPolling) selfTestFrame = deps.raf.request(pollSelfTest);
+  };
+  hud.onControllerSelfTestOpen(() => {
+    selfTestPolling = true;
+    // Read once immediately rather than waiting a frame: the pane is on screen before the
+    // first callback lands, and an empty list for one frame reads as "no controller".
+    pollSelfTest();
+  });
+  hud.onControllerSelfTestClose(() => {
+    selfTestPolling = false;
+    if (selfTestFrame !== null) deps.raf.cancel(selfTestFrame);
+    selfTestFrame = null;
   });
 
   /**

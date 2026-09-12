@@ -143,6 +143,12 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
     previewDisposals: 0,
     previewResizes: 0,
     sunkStyles: [] as Triple[],
+    /** Frame callbacks requested and not yet fired or cancelled, by handle. */
+    frames: new Map<number, () => void>(),
+    nextFrameHandle: 1,
+    cancelledFrames: [] as number[],
+    /** How many times `deps.readPadDiagnostics` was called -- the poll's own tick count. */
+    padDiagnosticReads: 0,
   };
 
   const hostListeners = new Map<string, Array<() => void>>();
@@ -172,6 +178,24 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
       } as unknown as TankPreview;
     },
     readDetectedPads: () => [],
+    readPadDiagnostics: () => {
+      box.padDiagnosticReads += 1;
+      return [];
+    },
+    // A frame scheduler this test DRIVES, rather than a real rAF: the self-test poll
+    // re-requests itself, so a real scheduler would either run forever or never run at all
+    // under fake timers. Time moves here only when a case says it does.
+    raf: {
+      request: (cb: (now: number) => void): number => {
+        const handle = box.nextFrameHandle++;
+        box.frames.set(handle, () => cb(0));
+        return handle;
+      },
+      cancel: (handle: number): void => {
+        box.cancelledFrames.push(handle);
+        box.frames.delete(handle);
+      },
+    },
     // Records the registrations AND keeps the callbacks, so a test can fire a hotplug
     // rather than only assert that something subscribed to one.
     host: {
@@ -244,8 +268,8 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
 // had no writer, and the `onSettingsOpen`/`Close` pair scopes a capability re-probe to
 // exactly while the pane that shows its result is open.
 const ROUTE_HANDLERS = [
-  'onCampaignOpen', 'onControllerRumbleChange', 'onControllersClose', 'onControllersOpen',
-  'onCustomizeClose',
+  'onCampaignOpen', 'onControllerRumbleChange', 'onControllerSelfTestClose',
+  'onControllerSelfTestOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
   'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin', 'onQualityChange',
   'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onSettingsClose', 'onSettingsOpen',

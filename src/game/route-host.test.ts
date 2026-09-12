@@ -213,6 +213,8 @@ function fixture(
   } as unknown as AudioEngine;
 
   const routeUiDeps: RouteUiDeps = {
+    readPadDiagnostics: () => [],
+    raf: { request: () => 0, cancel: () => {} },
     settings: stores.settings,
     stats: stores.stats,
     progress: stores.progress,

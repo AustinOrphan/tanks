@@ -819,7 +819,9 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       '2026-08-21-versus-setup-menu-design.md), and issue #226 the 8th, 9th and 10th -- ' +
       'Settings, About & Legal, and the replace-run confirmation), and issue #243 the ' +
       '11th -- the Developer Tools shell, and issue #325 the 12th -- the match-failure ' +
-      'alert, which is an OVERLAY rather than a route but takes focus the same way)').toBe(12);
+      'alert, which is an OVERLAY rather than a route but takes focus the same way), and ' +
+      'issue #599 the 13th -- the controller self-test, its own layer inside the developer ' +
+      'shell rather than more of that pane').toBe(13);
     for (const c of containers) {
       const ref = c.getAttribute('aria-labelledby');
       expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();

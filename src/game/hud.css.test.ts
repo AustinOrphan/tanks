@@ -731,10 +731,10 @@ describe('hud.css is syntactically whole', () => {
     const scrollers = Array.from(root.querySelectorAll<HTMLElement>('*')).filter(
       (el) => getComputedStyle(el).overflowY === 'auto',
     );
-    // Non-vacuity: `.hud-about`, `.hud-settings`, `.hud-devtools`, the achievement list and
-    // the versus pane are the scrollers this fixture builds. A filter that matched nothing
-    // would pass while measuring nothing, and this guard's whole subject is a property of
-    // the elements that DO scroll.
+    // Non-vacuity: `.hud-about`, `.hud-settings`, `.hud-devtools`, `.hud-selftest`, the
+    // achievement list and the versus pane are the scrollers this fixture builds. A filter
+    // that matched nothing would pass while measuring nothing, and this guard's whole
+    // subject is a property of the elements that DO scroll.
     expect(scrollers.length).toBeGreaterThan(3);
     const centred = scrollers
       .filter((el) => getComputedStyle(el).justifyContent === 'center')
@@ -943,7 +943,14 @@ describe('hud.css is syntactically whole', () => {
     // the figure is a property of the MARKUP and does not move with capabilities. It carries
     // `.ui-btn--sm` like its sibling, so `unstyled` stays empty -- the check this pin exists
     // to prompt, performed rather than assumed.
-    expect(buttons.length).toBe(132);
+    // Issue #599 adds THREE more: the Developer Tools pane's Controller Self-Test entry, and
+    // the self-test pane's own Copy Report and Back. 132 -> 135. All three are static markup
+    // rendered unconditionally at construction and hidden by `--hidden` like the developer
+    // shell's own four, so this fixture counts them whether or not a page is in developer
+    // mode. Each carries `.ui-btn--slab`, so `unstyled` stays empty. The self-test's live pad
+    // rows build NO buttons at all (they are `<li>`/`<span>`), so the figure does not move
+    // with connected hardware.
+    expect(buttons.length).toBe(135);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1024,15 +1031,16 @@ describe('hud.css is syntactically whole', () => {
     // outbound links in About & Legal, which are `.ui-btn` without being `<button>`, and
     // which are exactly the kind of control a `button`-only sweep misses.
     //
-    //   132 - (11 + 4 + 1 + 1 + 1) + 2 = 116
+    //   135 - (11 + 4 + 1 + 1 + 1) + 2 = 119
     //
-    // 131 since issue #325's match-failure dismiss button, and 132 since issue #227's
-    // controller-rumble toggle; the 18 non-primitives and the 2 anchors are unchanged by
-    // either.
+    // 131 since issue #325's match-failure dismiss button, 132 since issue #227's
+    // controller-rumble toggle, and 135 since issue #599's three (the Developer Tools entry
+    // plus the self-test pane's Copy Report and Back); the 18 non-primitives and the 2
+    // anchors are unchanged by any of them.
     //
     // Non-vacuity as well as arithmetic: a selector that matched nothing would make the
     // assertion below pass while measuring nothing.
-    expect(controls.length).toBe(116);
+    expect(controls.length).toBe(119);
 
     const sizeless = controls
       .filter((el) => {

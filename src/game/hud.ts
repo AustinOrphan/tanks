@@ -46,6 +46,8 @@ export type HudLayerId =
   | 'settings'
   | 'about'
   | 'developer-tools'
+  /** The controller compatibility self-test, opened from Developer Tools (issue #599). */
+  | 'controller-selftest'
   | 'confirm-new-campaign'
   /** A match that failed to start for a transient reason (issue #325). */
   | 'match-failed';
@@ -279,6 +281,11 @@ import {
   renderLegalLinks,
   setLegalExpanded,
 } from './legal';
+import {
+  renderControllerSelfTest,
+  type ControllerSelfTestView,
+} from './controller-selftest';
+import type { PadDiagnostic } from '../input/gamepad-diagnostics';
 import type { RoundPhase } from '../sim/round';
 import { VERSUS_STOCK } from '../sim/constants';
 import { configFor } from '../sim/config';
@@ -981,6 +988,24 @@ export interface Hud {
   onControllersOpen(cb: () => void): void;
   onControllersClose(cb: () => void): void;
   /**
+   * One frame of live pad state for the controller self-test (issue #599), pushed by
+   * `route-ui.ts` on every animation frame while `.hud-selftest` is open and not at all
+   * while it is closed. Unlike `setDetectedPads` there is no event to key off: sticks and
+   * triggers are analog and the Gamepad API reports no change events for them, so the only
+   * way to show live values is to read every frame.
+   *
+   * Pushing while the pane is closed is harmless and wasteful, not wrong -- the writes land
+   * on detached rows. The open/close pair below is what keeps it from happening.
+   */
+  setPadDiagnostics(pads: readonly PadDiagnostic[]): void;
+  /**
+   * The self-test pane just became visible/hidden -- the ONE chokepoint for both
+   * transitions, same shape and same reason as `onControllersOpen`/`onControllersClose`:
+   * `route-ui.ts` owns a per-frame poll whose lifetime must match the pane's.
+   */
+  onControllerSelfTestOpen(cb: () => void): void;
+  onControllerSelfTestClose(cb: () => void): void;
+  /**
    * The title screen's Versus button was clicked -- a bare click passthrough, the
    * shape `onNewGame`/`onQuitToTitle` already use, NOT the transition-guarded
    * onCustomizeOpen/onControllersOpen shape. Those two pair with an onClose because an
@@ -1185,6 +1210,7 @@ export type RouteHudKey =
   | 'onReassignSlot' | 'setControllers' | 'setDetectedPads' | 'setBotAssignmentAllowed'
   | 'onControllersOpen' | 'onControllersClose'
   | 'onSettingsOpen' | 'onSettingsClose'
+  | 'setPadDiagnostics' | 'onControllerSelfTestOpen' | 'onControllerSelfTestClose'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
   | 'setRelaunchTarget';
 
@@ -2056,8 +2082,28 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <h1 id="hud-devtools-title">Developer Tools</h1>
       <p class="hud-devtools-line">Developer mode is on for this page.</p>
       <p class="hud-devtools-line hud-devtools-note">It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from the address and reloads.</p>
+      <button class="ui-btn ui-btn--slab hud-selftest-open" type="button">Controller Self-Test</button>
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devtools-exit" type="button">Exit Developer Mode</button>
       <button class="ui-btn ui-btn--slab hud-devtools-back" type="button">Back</button>
+    </div>
+    <!-- THE CONTROLLER SELF-TEST (issue #599). Inside the developer shell issue #243
+         built, as its own layer rather than more of that pane: the list is as tall as the
+         connected hardware makes it, and '.hud-devtools' is one of the two panes issue
+         #642 still owns for centring the main axis of a scroll container. A pane that
+         never had that property cannot inherit the clip.
+
+         The body is built by 'controller-selftest.ts' into the empty container below,
+         because it is derived from live hardware on every frame and 'hud.ts' models none
+         of it. The report TEXTAREA is filled on demand rather than live: a field that
+         rewrote itself sixty times a second could not be selected. -->
+    <div class="hud-selftest hud-selftest--hidden" role="region" tabindex="-1" aria-labelledby="hud-selftest-title">
+      <h1 id="hud-selftest-title">Controller Self-Test</h1>
+      <p class="hud-selftest-line">Every gamepad this page can see, exactly as the browser reports it — no mapping applied. Move a stick or press a button and the row for it moves.</p>
+      <p class="hud-selftest-note">A controller does not drive the menus while this pane is open, so every button can be tested here. B still leaves.</p>
+      <div class="hud-selftest-list"></div>
+      <button class="ui-btn ui-btn--slab hud-selftest-copy" type="button">Copy Report</button>
+      <textarea class="hud-selftest-report hud-selftest-report--hidden" readonly rows="8" aria-label="Controller compatibility report"></textarea>
+      <button class="ui-btn ui-btn--slab hud-selftest-back" type="button">Back</button>
     </div>
     <!-- The persistent DEV indicator (issue #243). On the HUD ROOT rather than in the
          topbar, because the topbar is gameplay-status-only since issue #226 and is hidden
@@ -2197,6 +2243,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const devToolsView = el.querySelector('.hud-devtools') as HTMLElement;
   const devToolsExitBtn = el.querySelector('.hud-devtools-exit') as HTMLButtonElement;
   const devToolsBackBtn = el.querySelector('.hud-devtools-back') as HTMLButtonElement;
+  const selfTestOpenBtn = el.querySelector('.hud-selftest-open') as HTMLButtonElement;
+  const selfTestView = el.querySelector('.hud-selftest') as HTMLElement;
+  const selfTestListEl = el.querySelector('.hud-selftest-list') as HTMLElement;
+  const selfTestCopyBtn = el.querySelector('.hud-selftest-copy') as HTMLButtonElement;
+  const selfTestReportEl = el.querySelector('.hud-selftest-report') as HTMLTextAreaElement;
+  const selfTestBackBtn = el.querySelector('.hud-selftest-back') as HTMLButtonElement;
   const devBadge = el.querySelector('.hud-devbadge') as HTMLButtonElement;
   const confirmView = el.querySelector('.hud-confirm') as HTMLElement;
   const alertView = el.querySelector('.hud-alert') as HTMLElement;
@@ -2421,6 +2473,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
   const controllersOpenCbs: Array<() => void> = [];
   const controllersCloseCbs: Array<() => void> = [];
+  const selfTestOpenCbs: Array<() => void> = [];
+  const selfTestCloseCbs: Array<() => void> = [];
+  /**
+   * Whether the controller self-test is on screen. Tracked rather than read back off the
+   * class, because `act` consults it on every gamepad action and because open/close fire
+   * subscriber callbacks that must not run twice for one transition.
+   */
+  let selfTestOpen = false;
   const recordsOpenCbs: Array<() => void> = [];
   let currentAssignment: Assignment = [];
   let currentDetectedPads: readonly DetectedPad[] = [];
@@ -2876,6 +2936,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const SETTINGS_SURFACE: Surface = { el: settingsView, hidden: 'hud-settings--hidden' };
   const ABOUT_SURFACE: Surface = { el: aboutView, hidden: 'hud-about--hidden' };
   const DEVTOOLS_SURFACE: Surface = { el: devToolsView, hidden: 'hud-devtools--hidden' };
+  const SELFTEST_SURFACE: Surface = { el: selfTestView, hidden: 'hud-selftest--hidden' };
   const CONFIRM_SURFACE: Surface = { el: confirmView, hidden: 'hud-confirm--hidden' };
   const ALERT_SURFACE: Surface = { el: alertView, hidden: 'hud-alert--hidden' };
   /**
@@ -3305,6 +3366,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * The controller self-test (issue #599).
+   *
+   * Open and close are a CHOKEPOINT with subscribers, the shape `onControllersOpen`/
+   * `onControllersClose` already uses and for the same reason: `route-ui.ts` owns a
+   * per-frame poll whose lifetime has to match the pane's exactly. Every exit runs through
+   * here -- the Back button, `back()`, and `setState`'s unconditional close -- so there is
+   * no path that leaves the poll running over a pane that is gone.
+   *
+   * The report field is emptied on close rather than retained: it is a snapshot of pad
+   * state from whenever Copy was last pressed, and a stale one presented on the next visit
+   * would be indistinguishable from a fresh one.
+   */
+  function showControllerSelfTest(show: boolean): void {
+    if (show === selfTestOpen) return;
+    selfTestOpen = show;
+    if (show) {
+      swapSurface(openSurface(), SELFTEST_SURFACE, () => selfTestView.focus());
+      for (const cb of selfTestOpenCbs) cb();
+    } else {
+      closeSurface(SELFTEST_SURFACE);
+      selfTestReportEl.value = '';
+      selfTestReportEl.classList.add('hud-selftest-report--hidden');
+      for (const cb of selfTestCloseCbs) cb();
+    }
+  }
+
+  /**
    * The replace-run confirmation. Its body is written from the run summary the Main Menu
    * is already showing, so the question names the run it would destroy rather than
    * warning about runs in general.
@@ -3581,6 +3669,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       settingsView,
       aboutView,
       devToolsView,
+      selfTestView,
       confirmView,
     ]) {
       // A surface fading OUT is displayed but no longer active (issue #364). Before the
@@ -3680,6 +3769,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function act(action: UiAction): boolean {
     if (action === 'back') return back();
     if (action === 'pause') return false;
+    /*
+     * THE SELF-TEST TAKES THE PAD OFF THE MENU (issue #599). Its whole subject is which
+     * physical control is which index, so a Confirm pressed in it has to show up in the
+     * readout rather than activate whatever is focused, and a stick push has to move an
+     * axis bar rather than the focus ring. Every action is consumed and dropped here while
+     * the pane is open -- except `back`, handled above, which stays live so a tester
+     * holding nothing but a controller is never trapped, and `pause`, which is the page's.
+     *
+     * The KEYBOARD is untouched: `onNavKeyDown` does not route through here, so Tab, the
+     * arrows and Enter still reach Copy Report and Back.
+     */
+    if (selfTestOpen) return true;
     const container = activePanelContainer();
     if (!container) return false;
     if (isDirection(action)) {
@@ -3901,6 +4002,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       container: devToolsView,
       open: () => showDeveloperTools(true),
       close: () => showDeveloperTools(false),
+    },
+    'controller-selftest': {
+      container: selfTestView,
+      open: () => showControllerSelfTest(true),
+      close: () => showControllerSelfTest(false),
     },
     'match-failed': {
       container: alertView,
@@ -4203,6 +4309,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * they just read. The pane scrolls, so the cost of two open documents is scroll length
    * rather than lost content.
    */
+  /*
+   * Built ONCE, like the legal documents: the container is the HUD's and the body is the
+   * self-test's, and nothing about the structure depends on a visit. What the pane shows
+   * is written by `setPadDiagnostics` from the frames `route-ui.ts` pushes while it is open.
+   */
+  const selfTest: ControllerSelfTestView = renderControllerSelfTest(selfTestListEl);
   const legalDisclosures = renderLegalDocuments(legalListEl);
   renderLegalLinks(aboutLinksEl);
   for (const disclosure of legalDisclosures) {
@@ -4231,6 +4343,28 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   const handleDevToolsExit = (): void => {
     opts.exitDeveloperMode?.();
+  };
+  const handleSelfTestOpen = (): void => {
+    openLayer('controller-selftest', selfTestOpenBtn);
+  };
+  const handleSelfTestBack = (): void => {
+    back();
+  };
+  /*
+   * Copy fills the field FROM the last frame's pads and selects it, so the tester can copy
+   * with the keyboard even where the async Clipboard API is unavailable -- it is
+   * origin-gated and permission-gated, and a file:// or insecure-context page has none. The
+   * write is attempted anyway and its rejection swallowed: a refused clipboard must not
+   * take the selected text away with it, which is the only path that always works.
+   */
+  const handleSelfTestCopy = (): void => {
+    const text = selfTest.report();
+    selfTestReportEl.value = text;
+    selfTestReportEl.classList.remove('hud-selftest-report--hidden');
+    selfTestReportEl.focus();
+    selfTestReportEl.select();
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    void clipboard?.writeText(text).catch(() => {});
   };
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
@@ -4272,6 +4406,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   devToolsBackBtn.addEventListener('click', blurIfPointer);
   devToolsExitBtn.addEventListener('click', handleDevToolsExit);
   devToolsExitBtn.addEventListener('click', blurIfPointer);
+  selfTestOpenBtn.addEventListener('click', handleSelfTestOpen);
+  selfTestOpenBtn.addEventListener('click', blurIfPointer);
+  selfTestBackBtn.addEventListener('click', handleSelfTestBack);
+  selfTestBackBtn.addEventListener('click', blurIfPointer);
+  selfTestCopyBtn.addEventListener('click', handleSelfTestCopy);
 
   /*
    * The gate is a URL fact, so it is read ONCE here rather than re-evaluated per surface:
@@ -6102,6 +6241,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     closeSettingsSubscribers();
     cleanupHide(aboutView, 'hud-about--hidden');
     cleanupHide(devToolsView, 'hud-devtools--hidden');
+    // The self-test is the one pane here with a subscriber whose resource must stop, so a
+    // surface change goes through its close function rather than the bare class add its
+    // siblings use -- `route-ui.ts`'s per-frame poll would otherwise outlive the pane.
+    showControllerSelfTest(false);
     cleanupHide(confirmView, 'hud-confirm--hidden');
     cleanupHide(alertView, 'hud-alert--hidden');
     disarmReset();
@@ -6802,6 +6945,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onControllersClose(cb: () => void): void {
       controllersCloseCbs.push(cb);
     },
+    setPadDiagnostics(pads: readonly PadDiagnostic[]): void {
+      selfTest.update(pads);
+    },
+    onControllerSelfTestOpen(cb: () => void): void {
+      selfTestOpenCbs.push(cb);
+    },
+    onControllerSelfTestClose(cb: () => void): void {
+      selfTestCloseCbs.push(cb);
+    },
     onVersusOpen(cb: () => void): void {
       versusOpenCbs.push(cb);
     },
@@ -7037,6 +7189,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       devToolsBackBtn.removeEventListener('click', blurIfPointer);
       devToolsExitBtn.removeEventListener('click', handleDevToolsExit);
       devToolsExitBtn.removeEventListener('click', blurIfPointer);
+      selfTestOpenBtn.removeEventListener('click', handleSelfTestOpen);
+      selfTestOpenBtn.removeEventListener('click', blurIfPointer);
+      selfTestBackBtn.removeEventListener('click', handleSelfTestBack);
+      selfTestBackBtn.removeEventListener('click', blurIfPointer);
+      selfTestCopyBtn.removeEventListener('click', handleSelfTestCopy);
       statsBackBtn.removeEventListener('click', handleStatsBack);
       statsBackBtn.removeEventListener('click', blurIfPointer);
       resetStatsBtn.removeEventListener('click', handleResetStats);
