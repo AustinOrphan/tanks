@@ -1,0 +1,16 @@
+{
+  "id": "relevance-refused-control-counts-as-gone",
+  "file": "src/game/control-relevance.ts",
+  "find": "export function isOffered(relevance: Relevance): boolean {\n  return relevance.kind !== 'omitted';",
+  "replace": "export function isOffered(relevance: Relevance): boolean {\n  return relevance.kind === 'shown';",
+  "expect": "killed",
+  "tests": [
+    "src/game/control-relevance.test.ts",
+    "src/game/hud.relevance.test.ts"
+  ],
+  "killedBy": [
+    "isOffered counts a refused control as on screen, and only an omitted one as gone",
+    "setControlRelevance (issue #227) never collapses a section whose ONLY survivor is a refused control"
+  ],
+  "why": "A refused control carries its own explanation. Counted as gone it is hidden, the section holding it collapses, and the player loses both the setting and the sentence telling them how to get it back. The case that kills it hides the Controllers entry first: while that neighbour is visible the section stays alive for a reason unrelated to the claim, and an earlier draft passed under this very mutation."
+}

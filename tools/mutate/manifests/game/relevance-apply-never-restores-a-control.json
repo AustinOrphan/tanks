@@ -1,0 +1,14 @@
+{
+  "id": "relevance-apply-never-restores-a-control",
+  "file": "src/game/hud.ts",
+  "find": "    btn.classList.toggle(hiddenClass, !isOffered(relevance));",
+  "replace": "    if (!isOffered(relevance)) btn.classList.add(hiddenClass);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.relevance.test.ts"
+  ],
+  "killedBy": [
+    "setControlRelevance (issue #227) RESTORES a control when the device gains the capability, not only hides it"
+  ],
+  "why": "A one-way apply is the classic shape of this bug and survives every single-push test: a control hidden for one device never comes back when the next verdict says it applies, so plugging in a touchscreen or a pad leaves the setting permanently gone for the life of the page."
+}

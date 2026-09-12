@@ -1,0 +1,14 @@
+{
+  "id": "settings-capability-probe-outlives-the-pane",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onSettingsClose(() => {\n    deps.host.removeEventListener('gamepadconnected', onCapabilityHotplug);",
+  "replace": "  hud.onSettingsClose(() => {\n    deps.host.removeEventListener('gamepadconnected', () => {});",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the application routes work with no gameplay session behind them stops probing when the pane closes, and the listener really is gone"
+  ],
+  "why": "Removing a listener by a DIFFERENT function identity is a no-op that still records a removal, so a test asserting only that `removeEventListener` was called passes on it. The probe then runs for the life of the page on every pad event, over a pane that is gone."
+}

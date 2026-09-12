@@ -1,0 +1,15 @@
+{
+  "id": "relevance-omits-rumble-instead-of-refusing-it",
+  "file": "src/game/control-relevance.ts",
+  "find": "    controllerRumble: capabilities.controllerRumble ? SHOWN : RUMBLE_UNAVAILABLE,",
+  "replace": "    controllerRumble: capabilities.controllerRumble ? SHOWN : OMITTED,",
+  "expect": "killed",
+  "tests": [
+    "src/game/control-relevance.test.ts"
+  ],
+  "killedBy": [
+    "settingRelevance omits a STABLE absence and explains a TRANSIENT one",
+    "the device matrix (issue #227) desktop keyboard and mouse: offers the right controls and the right prompt"
+  ],
+  "why": "Rumble availability is TRANSIENT -- it is 'at least one CONNECTED pad exposes an actuator', which the player changes by plugging one in. Omitted, the control appears from nowhere on hotplug with nothing to have anticipated it, and the sentence naming the fix is never shown to the player who needs it."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "relevance-never-omits-a-stable-absence",
+  "file": "src/game/control-relevance.ts",
+  "find": "    deviceHaptics: capabilities.deviceVibration ? SHOWN : OMITTED,",
+  "replace": "    deviceHaptics: SHOWN,",
+  "expect": "killed",
+  "tests": [
+    "src/game/control-relevance.test.ts"
+  ],
+  "killedBy": [
+    "the device matrix (issue #227) desktop keyboard and mouse: offers the right controls and the right prompt",
+    "settingRelevance omits a STABLE absence and explains a TRANSIENT one"
+  ],
+  "why": "A haptics toggle on a browser with no `navigator.vibrate` is a control that can never do anything, whatever the player sets it to. Issue #227's first criterion is that irrelevant settings are OMITTED rather than left present without purpose."
+}

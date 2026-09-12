@@ -1,0 +1,14 @@
+{
+  "id": "settings-close-skipped-on-a-surface-change",
+  "file": "src/game/hud.ts",
+  "find": "hotplug listeners attached to a pane that is gone (issue #227).\n    closeSettingsSubscribers();",
+  "replace": "hotplug listeners attached to a pane that is gone (issue #227).\n    void 0;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.relevance.test.ts"
+  ],
+  "killedBy": [
+    "the Settings open/close chokepoint (issue #227) closes on a surface change too, which never runs showSettings(false)"
+  ],
+  "why": "`setState` drops every layer outright rather than closing it, and that is the path a match starting under an open Settings pane takes. Without the release there, `route-ui.ts`'s gamepad hotplug listeners outlive the pane and re-probe the platform for the life of the page."
+}

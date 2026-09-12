@@ -1,0 +1,14 @@
+{
+  "id": "rumble-label-reads-the-effective-value",
+  "file": "src/game/route-host.ts",
+  "find": "    hud.setControllerRumble(deps.settings.snapshot().input.controllerRumble);",
+  "replace": "    hud.setControllerRumble(effective.controllerRumble);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED rumble preference, and the relevance verdict that says it is refused"
+  ],
+  "why": "The toggle EDITS the preference. Painting it from the effective value shows `Rumble: Off` on any machine with no pad connected, which reads as the preference having been erased -- the reading issue #320 forbids, and the same trap the haptics toggle beside it already records."
+}
