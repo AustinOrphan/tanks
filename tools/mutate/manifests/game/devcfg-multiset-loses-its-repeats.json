@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-multiset-loses-its-repeats",
+  "file": "src/game/dev-config-menu.ts",
+  "find": "    for (let i = 0; i < (counts.get(v) ?? 0); i++) parts.push(v);",
+  "replace": "    if ((counts.get(v) ?? 0) > 0) parts.push(v);",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config-menu.test.ts"
+  ],
+  "killedBy": [
+    "stepMultiset builds a list with repeats, which is what the parser takes"
+  ],
+  "why": "The whole point of a MULTISET: `sandboxTanks` keeps repeats, so three brown tanks is `brown,brown,brown` and not `brown`. Collapsing to a set silently caps every kind at one, and a sandbox asked for three enemies gets one with no note anywhere -- the parser accepts both strings, so nothing else in the model objects."
+}

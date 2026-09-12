@@ -1,0 +1,15 @@
+{
+  "id": "dev-url-builder-can-omit-the-gate",
+  "file": "src/game/dev-config.ts",
+  "find": "  const out = new URLSearchParams();\n  out.append('dev', '1');",
+  "replace": "  const out = new URLSearchParams();",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config.test.ts",
+    "src/game/dev-config-menu.test.ts"
+  ],
+  "killedBy": [
+    "resetSelection keeps the gate, so Reset clears the options and does not leave developer mode"
+  ],
+  "why": "The builder's own doc states the rule: every other developer parameter is inert without the gate, so a builder that could omit it would produce a URL that silently does nothing. Issue #246's Reset Options is `devSearchFrom({})` -- the gate alone -- and this is what makes that the whole of 'clear the options without leaving developer mode'. Dropping the gate also moves the page into the production namespace on the next load, because `selectStorageNamespace` keys off it, and a developer page cannot see a production save. WRITTEN HERE rather than on `resetSelection`, where the obvious mutation (`{ dev: false }`) is a no-op: the builder always emits the gate, so the selection cannot express its absence -- which is the safety property, and it belongs to this line."
+}

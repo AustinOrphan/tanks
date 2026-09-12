@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-preset-merges-instead-of-replacing",
+  "file": "src/game/hud.ts",
+  "find": "        devCfgSelection = { ...preset.selection };",
+  "replace": "        devCfgSelection = { ...devCfgSelection, ...preset.selection };",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "what a press does to the previewed URL a preset REPLACES the selection rather than merging into it"
+  ],
+  "why": "Half of one preset over half of another is a configuration neither of them describes. The preview would be perfectly accurate about something nobody chose, and 'preview every preset through the same parser' stops meaning what it says -- the thing previewed is no longer the preset."
+}

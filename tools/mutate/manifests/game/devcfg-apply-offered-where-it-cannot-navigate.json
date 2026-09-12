@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-apply-offered-where-it-cannot-navigate",
+  "file": "src/game/hud.ts",
+  "find": "  (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =\n    !opts.applyDeveloperConfig;",
+  "replace": "  (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "Apply and Reload is HIDDEN on a HUD that cannot navigate, rather than offered and inert"
+  ],
+  "why": "The same rule Exit Developer Mode beside it already follows: a button that cannot do its job is not offered. The HUD may not touch `location`, so a HUD built without the navigation option can only sit there doing nothing when pressed."
+}

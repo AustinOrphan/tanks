@@ -1,8 +1,8 @@
 {
   "id": "devtools-shell-outside-the-panel-family",
   "file": "src/game/hud.ts",
-  "find": "    DEVTOOLS_SURFACE,\n    SELFTEST_SURFACE,\n    CONFIRM_SURFACE,",
-  "replace": "    SELFTEST_SURFACE,\n    CONFIRM_SURFACE,",
+  "find": "    DEVTOOLS_SURFACE,\n    SELFTEST_SURFACE,",
+  "replace": "    SELFTEST_SURFACE,",
   "expect": "killed",
   "tests": [
     "src/game/hud.selftest.test.ts"
@@ -10,5 +10,5 @@
   "killedBy": [
     "the controller self-test pane (issue #599) replaces the developer shell rather than stacking on it, and Back lands on the menu"
   ],
-  "why": "`openSurface()` is the SOURCE of every transition, so a surface missing from PANEL_FAMILY cannot be the one a navigation leaves. Opening the self-test then sources from the Main Menu panel instead and leaves the developer shell DISPLAYED underneath it -- two surfaces on screen at once. This is the state the shell actually shipped in (issue #243); nothing could observe it until a pane was reachable FROM the shell."
+  "why": "`openSurface()` is the SOURCE of every transition, so a surface missing from PANEL_FAMILY cannot be the one a navigation leaves. Opening the self-test then sources from the Main Menu panel instead and leaves the developer shell DISPLAYED underneath it -- two surfaces on screen at once. This is the state the shell actually shipped in (issue #243); nothing could observe it until a pane was reachable FROM the shell. FIND RETARGETED by issue #246, which inserted DEVCFG_SURFACE between SELFTEST and CONFIRM: the entry now names only the two lines its mutation is about."
 }

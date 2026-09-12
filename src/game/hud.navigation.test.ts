@@ -2,6 +2,8 @@
 import { defaultSlots } from './versus-setup';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type GameplayOutcome, type GameplayStatus, type Hud } from './hud';
+import { devControls } from './dev-config';
+import { LITERALS } from './devtools-menu';
 import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { resolveVersusConfig, versusMapChoices, type VersusConfig } from './versus-config';
@@ -27,6 +29,22 @@ afterEach(() => {
   hud = null;
   document.body.innerHTML = '';
 });
+
+/**
+ * The configuration menu's SELECTABLE buttons (issue #246): every value button and every
+ * toggle. Derived from the registry rather than pinned, so a developer flag added tomorrow
+ * does not break a UI-kit sweep that has nothing to do with it. The stepper arrows are not
+ * choices and are deliberately outside this.
+ */
+function devMenuSelectables(): number {
+  let n = 0;
+  for (const c of devControls()) {
+    if (c.control === 'toggle') n += 1;
+    else if (c.control === 'select') n += 1 + (c.values?.length ?? 0);
+    else n += 1 + (LITERALS[c.field]?.length ?? 0);
+  }
+  return n;
+}
 
 describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md)', () => {
   const openBtn = (root: HTMLElement): HTMLButtonElement =>
@@ -821,7 +839,8 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       '11th -- the Developer Tools shell, and issue #325 the 12th -- the match-failure ' +
       'alert, which is an OVERLAY rather than a route but takes focus the same way), and ' +
       'issue #599 the 13th -- the controller self-test, its own layer inside the developer ' +
-      'shell rather than more of that pane').toBe(13);
+      'shell rather than more of that pane, and issue #246 the 14th -- the configuration ' +
+      'menu, its own layer for the same reason').toBe(14);
     for (const c of containers) {
       const ref = c.getAttribute('aria-labelledby');
       expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();
@@ -1932,7 +1951,12 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     // are the sweep's only members that never move, which is exactly why they have to be
     // in it: a static `aria-pressed` that disagreed with its static class would be
     // invisible to any test that only watched controls change.
-    expect(btns.length).toBe(11 + 7 + 8 + 26 + 4);
+    // Issue #246 adds the configuration menu's value buttons and toggles. DERIVED from the
+    // registry rather than added as a literal: the menu renders one row per registered flag,
+    // so a literal would make every future developer flag break this sweep. What the sweep is
+    // ABOUT is unchanged -- every one of them must still announce its choice, asserted below
+    // over the whole population.
+    expect(btns.length).toBe(11 + 7 + 8 + 26 + 4 + devMenuSelectables());
     const missing = btns
       .filter((b) => !b.hasAttribute('aria-pressed'))
       .map((b) => Array.from(b.classList).join('.'));

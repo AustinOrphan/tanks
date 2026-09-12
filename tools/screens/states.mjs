@@ -45,6 +45,12 @@ export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked'])
  *  - `{ press }`       -- a keyboard key, for the Launch splash and Escape.
  *  - `{ waitVisible }` -- wait for a selector to be present and displayed.
  *  - `{ waitHidden }`  -- wait for it to be gone or `display: none`.
+ *  - `{ scroll }`      -- scroll a selector's own scroll container to a named position.
+ *                         `{ scroll: { selector, to } }`, where `to` is a CSS selector to
+ *                         bring into view. Needed because a pane can be taller than any
+ *                         viewport -- issue #246's configuration menu runs to about 4900px --
+ *                         and a capture that can only ever show the top is evidence about a
+ *                         heading, not about the control someone asked to see.
  *  - `{ breakWebgl }`  -- apply a WEBGL_MODES override *now*, after the page has booted.
  *                         This is how a MATCH failure is reached: the probe has already
  *                         passed, the menu is up, and the renderer fails when the player
@@ -52,7 +58,7 @@ export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked'])
  *                         failure and says so ("That match could not start.").
  */
 export const STEP_KINDS = Object.freeze([
-  'click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl', 'fakeGamepads',
+  'click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl', 'fakeGamepads', 'scroll',
 ]);
 
 /**
@@ -306,6 +312,45 @@ export const SCREEN_STATES = Object.freeze([
     // axis of a scroll container -- so where this button sits is the number that says
     // whether one more control pushed the pane into its own clip.
     measure: ['.hud-devtools', '.hud-selftest-open', '.hud-devtools-back'],
+  }),
+  state({
+    id: 'screen.devtools.config',
+    title: 'Developer Configuration',
+    description:
+      'The registry-driven configuration menu: the six presets, every developer parameter ' +
+      'in its own group, the persistence namespace and the URL the selection means.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-devtools-open' },
+      { waitVisible: '.hud-devtools' },
+      { click: '.hud-devcfg-open' },
+      { waitVisible: '.hud-devcfg' },
+    ],
+    // `.hud-devcfg-url` is measured for its TEXT: it is what Apply navigates to and Copy
+    // copies, so a capture that showed the menu without it would not show the thing the
+    // whole pane is for. `.hud-devcfg-namespace` for the same reason -- it is the
+    // consequence that outlives the reload.
+    measure: ['.hud-devcfg', '.hud-devcfg-presets', '.hud-devcfg-group', '.hud-devcfg-namespace', '.hud-devcfg-url'],
+  }),
+  state({
+    id: 'screen.devtools.config.sandbox',
+    title: 'Developer Configuration — Sandbox',
+    description:
+      'The Sandbox group of the configuration menu, scrolled into view: the tank multiset ' +
+      'built by a count per kind rather than typed as a comma-separated list.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-devtools-open' },
+      { waitVisible: '.hud-devtools' },
+      { click: '.hud-devcfg-open' },
+      { waitVisible: '.hud-devcfg' },
+      { scroll: { selector: '.hud-devcfg', to: '.hud-devcfg-control[data-field="sandboxTanks"]' } },
+    ],
+    measure: ['.hud-devcfg-control[data-field="sandboxTanks"]', '.hud-devcfg-count'],
   }),
   state({
     id: 'screen.devtools.controller-selftest',

@@ -187,6 +187,24 @@ async function runStep(page, step, timeout) {
     // failure instead, which is a different screen.
     return void (await page.evaluate(webglOverrideSource(step.breakWebgl)));
   }
+  if (kind === 'scroll') {
+    const { selector, to } = step.scroll;
+    await page.waitForFunction(visibleIn(to), undefined, { timeout });
+    // `scrollIntoView` on the TARGET rather than a pixel offset on the container: a pixel
+    // offset is a number that goes stale the moment anything above it changes height, and
+    // this pane's height is a property of the flag registry.
+    await page.evaluate(
+      ([containerSel, targetSel]) => {
+        const container = document.querySelector(containerSel);
+        const target = document.querySelector(targetSel);
+        if (!container || !target) throw new Error(`scroll: ${containerSel} -> ${targetSel}`);
+        container.scrollTop =
+          target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+      },
+      [selector, to],
+    );
+    return;
+  }
   if (kind === 'fakeGamepads') {
     // Applied to the LIVE page like `breakWebgl`, not as an init script: the self-test
     // reads `navigator.getGamepads` on every frame while its pane is open, so the override

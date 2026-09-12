@@ -9,6 +9,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
+import { devControls, DEV_PRESETS } from './dev-config';
+import { isMultiset } from './dev-config-menu';
+import { LITERALS } from './devtools-menu';
 // hud.ts's own text, so the script-read token exemption below can prove the exemption is
 // still true rather than asserting it. A TEST may read a fixture; this is the same shape
 // `index-html.test.ts` uses for index.html.
@@ -206,6 +209,28 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
       document.body.innerHTML = '';
     },
   };
+}
+
+/**
+ * How many buttons the developer configuration menu builds (issue #246).
+ *
+ * DERIVED FROM THE REGISTRY rather than pinned as a literal, and that is the point: the menu
+ * renders one row per `FLAG_REGISTRY` entry, so a literal here would make every future
+ * developer flag break a CSS test that has nothing to do with it. Derived from
+ * `devControls()` and the renderer's literal TABLE -- both data -- and not from the
+ * renderer's loop, so a forgotten Unset button or a dropped stepper arrow still fails.
+ */
+function devMenuButtons(): number {
+  let n = DEV_PRESETS.length + 3; // presets, then Apply / Reset / Copy
+  for (const c of devControls()) {
+    if (c.control === 'toggle') n += 1;
+    else if (c.control === 'select') n += 1 + (c.values?.length ?? 0); // Unset + one per value
+    // A MULTISET is a pair of arrows per kind plus Unset -- its value is a list, not a point
+    // on an axis -- where a plain number is one pair, Unset, and any literals beside it.
+    else if (isMultiset(c)) n += (c.values?.length ?? 0) * 2 + 1;
+    else n += 3 + (LITERALS[c.field]?.length ?? 0); // minus, plus, Unset, then any literals
+  }
+  return n;
 }
 
 describe('resolved(): the token-aware computed style this suite reads', () => {
@@ -950,7 +975,10 @@ describe('hud.css is syntactically whole', () => {
     // mode. Each carries `.ui-btn--slab`, so `unstyled` stays empty. The self-test's live pad
     // rows build NO buttons at all (they are `<li>`/`<span>`), so the figure does not move
     // with connected hardware.
-    expect(buttons.length).toBe(135);
+    // Issue #246 adds the configuration menu, whose size is a property of `FLAG_REGISTRY`
+    // rather than of any markup. The two static buttons are the Developer Tools entry and
+    // the pane's own Back.
+    expect(buttons.length).toBe(135 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1040,7 +1068,7 @@ describe('hud.css is syntactically whole', () => {
     //
     // Non-vacuity as well as arithmetic: a selector that matched nothing would make the
     // assertion below pass while measuring nothing.
-    expect(controls.length).toBe(119);
+    expect(controls.length).toBe(119 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

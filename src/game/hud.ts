@@ -48,6 +48,8 @@ export type HudLayerId =
   | 'developer-tools'
   /** The controller compatibility self-test, opened from Developer Tools (issue #599). */
   | 'controller-selftest'
+  /** The registry-driven configuration menu, opened from Developer Tools (issue #246). */
+  | 'developer-config'
   | 'confirm-new-campaign'
   /** A match that failed to start for a transient reason (issue #325). */
   | 'match-failed';
@@ -285,6 +287,16 @@ import {
   renderControllerSelfTest,
   type ControllerSelfTestView,
 } from './controller-selftest';
+import { renderDevConfigMenu, type DevConfigMenuView } from './devtools-menu';
+import {
+  devMenuView,
+  resetSelection,
+  setLiteral,
+  stepMultiset,
+  stepNumeric,
+  toggleField,
+} from './dev-config-menu';
+import { devControls, DEV_PRESETS, type DevSelection } from './dev-config';
 import type { PadDiagnostic } from '../input/gamepad-diagnostics';
 import type { RoundPhase } from '../sim/round';
 import { VERSUS_STOCK } from '../sim/constants';
@@ -1385,6 +1397,22 @@ export interface HudOptions {
    * than a button that silently does nothing. `createBrowserDeps` binds the real one.
    */
   readonly exitDeveloperMode?: () => void;
+  /**
+   * The page's own `location.search`, so the configuration menu (issue #246) can carry the
+   * NON-developer half of a real URL through Apply -- a deep link, a campaign tag, a
+   * router's query. An option rather than a pushed value because it cannot change without a
+   * reload, and because that is how `exitDeveloperMode` above already takes the same fact.
+   */
+  readonly developerSearch?: string;
+  /**
+   * Navigate to a developer URL the menu built (issue #246). Bound in `createBrowserDeps`
+   * for the reason `exitDeveloperMode` is: the HUD may not touch `location`, and its absence
+   * from every injected HUD in a test is what keeps them off the History/Location APIs.
+   *
+   * Apply and Reload is hidden when this is absent, so a HUD that cannot navigate does not
+   * offer a button that would do nothing.
+   */
+  readonly applyDeveloperConfig?: (search: string) => void;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -2082,6 +2110,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <h1 id="hud-devtools-title">Developer Tools</h1>
       <p class="hud-devtools-line">Developer mode is on for this page.</p>
       <p class="hud-devtools-line hud-devtools-note">It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from the address and reloads.</p>
+      <button class="ui-btn ui-btn--slab hud-devcfg-open" type="button">Configuration</button>
       <button class="ui-btn ui-btn--slab hud-selftest-open" type="button">Controller Self-Test</button>
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devtools-exit" type="button">Exit Developer Mode</button>
       <button class="ui-btn ui-btn--slab hud-devtools-back" type="button">Back</button>
@@ -2096,6 +2125,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          because it is derived from live hardware on every frame and 'hud.ts' models none
          of it. The report TEXTAREA is filled on demand rather than live: a field that
          rewrote itself sixty times a second could not be selected. -->
+    <!-- THE CONFIGURATION MENU (issue #246). Renders the model issue #623 built -- the
+         registry-derived control list, the six presets, the URL builder and the explainer --
+         and reimplements none of it. The body is built by 'devtools-menu.ts' into the empty
+         container below, because it is derived from 'FLAG_REGISTRY' and 'hud.ts' models none
+         of that.
+
+         Its own layer rather than more of the developer shell, for the reason the self-test
+         is: seven groups of controls is taller than any viewport, and '.hud-devtools' still
+         centres the main axis of its own scroll container. -->
+    <div class="hud-devcfg hud-devcfg--hidden" role="region" tabindex="-1" aria-labelledby="hud-devcfg-title">
+      <h1 id="hud-devcfg-title">Configuration</h1>
+      <p class="hud-devcfg-line">Every developer parameter this build knows, and what the URL you are building would actually do. Nothing here applies until you press Apply and Reload.</p>
+      <div class="hud-devcfg-body"></div>
+      <!-- Filled by Copy Link and selected, so the URL can be copied by keyboard where the
+           async Clipboard API is unavailable -- it is origin- and permission-gated. -->
+      <textarea class="hud-devcfg-copyfield hud-devcfg-copyfield--hidden" readonly rows="3" aria-label="Developer URL"></textarea>
+      <button class="ui-btn ui-btn--slab hud-devcfg-back" type="button">Back</button>
+    </div>
     <div class="hud-selftest hud-selftest--hidden" role="region" tabindex="-1" aria-labelledby="hud-selftest-title">
       <h1 id="hud-selftest-title">Controller Self-Test</h1>
       <p class="hud-selftest-line">Every gamepad this page can see, exactly as the browser reports it — no mapping applied. Move a stick or press a button and the row for it moves.</p>
@@ -2243,6 +2290,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const devToolsView = el.querySelector('.hud-devtools') as HTMLElement;
   const devToolsExitBtn = el.querySelector('.hud-devtools-exit') as HTMLButtonElement;
   const devToolsBackBtn = el.querySelector('.hud-devtools-back') as HTMLButtonElement;
+  const devCfgOpenBtn = el.querySelector('.hud-devcfg-open') as HTMLButtonElement;
+  const devCfgView = el.querySelector('.hud-devcfg') as HTMLElement;
+  const devCfgBodyEl = el.querySelector('.hud-devcfg-body') as HTMLElement;
+  const devCfgUrlField = el.querySelector('.hud-devcfg-copyfield') as HTMLTextAreaElement;
+  const devCfgBackBtn = el.querySelector('.hud-devcfg-back') as HTMLButtonElement;
   const selfTestOpenBtn = el.querySelector('.hud-selftest-open') as HTMLButtonElement;
   const selfTestView = el.querySelector('.hud-selftest') as HTMLElement;
   const selfTestListEl = el.querySelector('.hud-selftest-list') as HTMLElement;
@@ -2937,6 +2989,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const ABOUT_SURFACE: Surface = { el: aboutView, hidden: 'hud-about--hidden' };
   const DEVTOOLS_SURFACE: Surface = { el: devToolsView, hidden: 'hud-devtools--hidden' };
   const SELFTEST_SURFACE: Surface = { el: selfTestView, hidden: 'hud-selftest--hidden' };
+  const DEVCFG_SURFACE: Surface = { el: devCfgView, hidden: 'hud-devcfg--hidden' };
   const CONFIRM_SURFACE: Surface = { el: confirmView, hidden: 'hud-confirm--hidden' };
   const ALERT_SURFACE: Surface = { el: alertView, hidden: 'hud-alert--hidden' };
   /**
@@ -2974,6 +3027,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      */
     DEVTOOLS_SURFACE,
     SELFTEST_SURFACE,
+    DEVCFG_SURFACE,
     CONFIRM_SURFACE,
   ];
 
@@ -3390,6 +3444,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * state from whenever Copy was last pressed, and a stale one presented on the next visit
    * would be indistinguishable from a fresh one.
    */
+  /**
+   * The configuration menu (issue #246). No open/close subscribers: unlike the self-test it
+   * owns no per-frame resource -- the whole surface is a function of a SELECTION this HUD
+   * holds, and nothing outside has to be started or stopped for it.
+   *
+   * The selection survives a close, deliberately. Building a configuration is the slow part;
+   * losing it because Back was pressed to check something would make the menu hostile.
+   */
+  function showDevConfig(show: boolean): void {
+    if (show) swapSurface(openSurface(), DEVCFG_SURFACE, () => devCfgView.focus());
+    else closeSurface(DEVCFG_SURFACE);
+  }
+
   function showControllerSelfTest(show: boolean): void {
     if (show === selfTestOpen) return;
     selfTestOpen = show;
@@ -3682,6 +3749,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       aboutView,
       devToolsView,
       selfTestView,
+      devCfgView,
       confirmView,
     ]) {
       // A surface fading OUT is displayed but no longer active (issue #364). Before the
@@ -4020,6 +4088,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       open: () => showControllerSelfTest(true),
       close: () => showControllerSelfTest(false),
     },
+    'developer-config': {
+      container: devCfgView,
+      open: () => showDevConfig(true),
+      close: () => showDevConfig(false),
+    },
     'match-failed': {
       container: alertView,
       open: () => showAlert(true),
@@ -4326,6 +4399,84 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * self-test's, and nothing about the structure depends on a visit. What the pane shows
    * is written by `setPadDiagnostics` from the frames `route-ui.ts` pushes while it is open.
    */
+  /*
+   * THE MENU'S OWN STATE, and the only mutable thing this pane has: which values the player
+   * has chosen. Everything else shown -- the effective flags, every note, the namespace, the
+   * URL -- is derived from it by `devMenuView` on each change, through the same parser the
+   * game boots with.
+   *
+   * `devCfgBase` is the page's `location.search`, pushed in rather than read here, so the
+   * non-developer half of a real URL (a deep link, a router's query) survives Apply.
+   */
+  let devCfgSelection: DevSelection = {};
+  const devCfgBase = opts.developerSearch ?? '';
+  const devCfgControl = (field: string) => devControls().find((c) => c.field === field);
+  function repaintDevConfig(): void {
+    devCfgMenu.update(devMenuView(devCfgSelection, devCfgBase));
+  }
+  const devCfgMenu: DevConfigMenuView = renderDevConfigMenu(
+    devCfgBodyEl,
+    {
+      onSet: (field, value) => {
+        const control = devCfgControl(field);
+        if (!control) return;
+        devCfgSelection = setLiteral(devCfgSelection, control, value);
+        repaintDevConfig();
+      },
+      onToggle: (field) => {
+        devCfgSelection = toggleField(devCfgSelection, field);
+        repaintDevConfig();
+      },
+      onStep: (field, step) => {
+        const control = devCfgControl(field);
+        if (!control) return;
+        // `bots` is the one valued flag whose first accepted value is 0; every other starts
+        // at 1. Asked of the model rather than tabulated -- `stepNumeric` refuses a value the
+        // parser rejects, so a wrong floor here costs one press, not a wrong URL.
+        devCfgSelection = stepNumeric(devCfgSelection, control, step, field === 'bots' ? 0 : 1, devCfgBase);
+        repaintDevConfig();
+      },
+      onStepValue: (field, value, step) => {
+        const control = devCfgControl(field);
+        if (!control) return;
+        devCfgSelection = stepMultiset(devCfgSelection, control, value, step, devCfgBase);
+        repaintDevConfig();
+      },
+      onPreset: (id) => {
+        const preset = DEV_PRESETS.find((p) => p.id === id);
+        if (!preset) return;
+        // A preset REPLACES the selection rather than merging into it: half of one preset
+        // over half of another is a configuration neither describes, and the preview would
+        // be accurate about something nobody chose.
+        devCfgSelection = { ...preset.selection };
+        repaintDevConfig();
+      },
+      onApply: () => {
+        opts.applyDeveloperConfig?.(devCfgMenu.search());
+      },
+      onReset: () => {
+        devCfgSelection = resetSelection();
+        repaintDevConfig();
+      },
+      onCopy: () => {
+        // Same shape as the self-test's Copy: the field is filled and selected, and the
+        // async Clipboard API attempted where it exists. Selection is the path that always
+        // works -- the API is origin- and permission-gated.
+        const text = devCfgMenu.search();
+        devCfgUrlField.value = text;
+        devCfgUrlField.classList.remove('hud-devcfg-copyfield--hidden');
+        devCfgUrlField.focus();
+        devCfgUrlField.select();
+        const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+        void clipboard?.writeText(text).catch(() => {});
+      },
+    },
+    // The FIRST view takes the base too. Constructing with an empty one and relying on a
+    // later repaint is how a page's own query silently vanishes from the menu until
+    // something else happens to touch it.
+    devMenuView({}, devCfgBase),
+  );
+
   const selfTest: ControllerSelfTestView = renderControllerSelfTest(selfTestListEl);
   const legalDisclosures = renderLegalDocuments(legalListEl);
   renderLegalLinks(aboutLinksEl);
@@ -4355,6 +4506,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   const handleDevToolsExit = (): void => {
     opts.exitDeveloperMode?.();
+  };
+  const handleDevCfgOpen = (): void => {
+    openLayer('developer-config', devCfgOpenBtn);
+  };
+  const handleDevCfgBack = (): void => {
+    back();
   };
   const handleSelfTestOpen = (): void => {
     openLayer('controller-selftest', selfTestOpenBtn);
@@ -4418,6 +4575,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   devToolsBackBtn.addEventListener('click', blurIfPointer);
   devToolsExitBtn.addEventListener('click', handleDevToolsExit);
   devToolsExitBtn.addEventListener('click', blurIfPointer);
+  devCfgOpenBtn.addEventListener('click', handleDevCfgOpen);
+  devCfgOpenBtn.addEventListener('click', blurIfPointer);
+  devCfgBackBtn.addEventListener('click', handleDevCfgBack);
+  devCfgBackBtn.addEventListener('click', blurIfPointer);
   selfTestOpenBtn.addEventListener('click', handleSelfTestOpen);
   selfTestOpenBtn.addEventListener('click', blurIfPointer);
   selfTestBackBtn.addEventListener('click', handleSelfTestBack);
@@ -4437,6 +4598,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   devBadge.classList.toggle('hud-devbadge--hidden', !developerMode);
   devToolsOpenBtn.classList.toggle('hud-devtools-open--hidden', !developerMode);
   devToolsExitBtn.hidden = !opts.exitDeveloperMode;
+  // Same rule as Exit above: a button that cannot do its job is not offered. Reset and Copy
+  // stay -- they change the menu and the clipboard, neither of which needs `location`.
+  (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =
+    !opts.applyDeveloperConfig;
   settingsMuteBtn.addEventListener('click', handleMute);
   settingsMuteBtn.addEventListener('click', blurIfPointer);
   settingsVolumeEl.addEventListener('input', handleSettingsVolume);
@@ -6253,6 +6418,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     closeSettingsSubscribers();
     cleanupHide(aboutView, 'hud-about--hidden');
     cleanupHide(devToolsView, 'hud-devtools--hidden');
+    cleanupHide(devCfgView, 'hud-devcfg--hidden');
     // The self-test is the one pane here with a subscriber whose resource must stop, so a
     // surface change goes through its close function rather than the bare class add its
     // siblings use -- `route-ui.ts`'s per-frame poll would otherwise outlive the pane.
@@ -6960,6 +7126,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     setPadDiagnostics(pads: readonly PadDiagnostic[]): void {
       selfTest.update(pads);
     },
+
     onControllerSelfTestOpen(cb: () => void): void {
       selfTestOpenCbs.push(cb);
     },
@@ -7201,6 +7368,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       devToolsBackBtn.removeEventListener('click', blurIfPointer);
       devToolsExitBtn.removeEventListener('click', handleDevToolsExit);
       devToolsExitBtn.removeEventListener('click', blurIfPointer);
+      devCfgOpenBtn.removeEventListener('click', handleDevCfgOpen);
+      devCfgOpenBtn.removeEventListener('click', blurIfPointer);
+      devCfgBackBtn.removeEventListener('click', handleDevCfgBack);
+      devCfgBackBtn.removeEventListener('click', blurIfPointer);
       selfTestOpenBtn.removeEventListener('click', handleSelfTestOpen);
       selfTestOpenBtn.removeEventListener('click', blurIfPointer);
       selfTestBackBtn.removeEventListener('click', handleSelfTestBack);

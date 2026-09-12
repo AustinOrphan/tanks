@@ -1201,6 +1201,19 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
           const target = `${globalThis.location.pathname}${developerExitSearch(search)}${globalThis.location.hash}`;
           globalThis.location.assign(target);
         },
+        // The configuration menu's two page facts (issue #246), bound here for the same
+        // reason and with the same consequence: the HUD may not touch `location`, and an
+        // injected HUD in a test has neither, so Apply is hidden there rather than inert.
+        //
+        // `search` is the boot query, which cannot change without a reload -- the same value
+        // `exitDeveloperMode` above reads -- so the menu carries a deep link or a router's
+        // own parameters through Apply instead of dropping them.
+        developerSearch: search,
+        applyDeveloperConfig: (next: string) => {
+          globalThis.location.assign(
+            `${globalThis.location.pathname}${next}${globalThis.location.hash}`,
+          );
+        },
       }),
     levels: createLevelSystem(devFlags, run),
     progress,

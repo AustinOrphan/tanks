@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-stepper-trusts-its-own-arithmetic",
+  "file": "src/game/dev-config-menu.ts",
+  "find": "  out[control.field] = String(next);\n  return accepted(out as DevSelection, control, base) ? (out as DevSelection) : selection;",
+  "replace": "  out[control.field] = String(next);\n  return out as DevSelection;",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-config-menu.test.ts"
+  ],
+  "killedBy": [
+    "stepNumeric: the parser owns the bounds, not this module walks `players` up to its ceiling and refuses to pass it"
+  ],
+  "why": "The registry states each input's range as prose for a human and nothing machine-readable, so the stepper proposes a value and asks the model whether it is accepted. Without that check the menu happily builds `players=9`, which the parser refuses -- the URL looks right, the preview says rejected, and Apply lands on a default."
+}

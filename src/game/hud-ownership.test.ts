@@ -173,6 +173,10 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Growth here is not automatically a regression and neither is a fall: what these
     // numbers guard is that a member arrived or left through a diff someone read. The
     // assertion below is what pins that a session still cannot reach a route member.
+    // Issue #246 adds NONE. Its two page-facing facts -- the base `location.search` and the
+    // navigation Apply performs -- are HUD OPTIONS rather than interface members, the shape
+    // `exitDeveloperMode` already uses: neither can change without a reload, and their
+    // absence from an injected HUD is what keeps tests off the History/Location APIs.
     expect(frame.size + route.size + gameplay.size).toBe(77);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
