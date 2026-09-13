@@ -69,6 +69,14 @@ export const LABEL_DIMENSIONS = Object.freeze({
     'area:rendering',
     'area:gameplay',
     'area:developer-tools',
+    // `area:input` was IN USE on the tracker before it was listed here, and the audit was
+    // rejecting every issue that carried it: #595, #598, #606 and #616 each reported
+    // `invalid-area`, and #598 reported `missing-area` on top of that because the only area
+    // label it had was this one. Six of the audit's fifteen standing errors were this
+    // omission. Browser gamepad support is genuinely its own surface -- `src/input/` is a
+    // directory with its own scoped rule -- so the list was behind the taxonomy rather than
+    // the labels being wrong.
+    'area:input',
   ]),
   impact: Object.freeze(['impact:high', 'impact:medium', 'impact:low']),
   priority: Object.freeze(['priority:now', 'priority:next', 'priority:later']),

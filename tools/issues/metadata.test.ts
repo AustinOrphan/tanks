@@ -466,3 +466,24 @@ describe('audit report', () => {
     for (const risk of LABEL_DIMENSIONS.risk) expect(report).toContain(risk);
   });
 });
+
+describe('the area dimension covers the areas the tracker actually uses', () => {
+  it('recognizes area:input', () => {
+    // Not a taste assertion: the label was applied to five issues (#595, #596, #598, #606,
+    // #616) and this list did not have it, so the audit reported `invalid-area` on every one
+    // of them and `missing-area` on the one whose only area label it was. Six of the
+    // workflow's fifteen standing errors were that single omission.
+    //
+    // Pinned by NAME rather than by count, because a count pins nothing about which label is
+    // missing -- and the failure this guards is exactly "a label the board uses is absent".
+    expect(LABEL_DIMENSIONS.area).toContain('area:input');
+  });
+
+  it('lists every area exactly once, and each under the area: prefix', () => {
+    // The cheap structural half. A duplicate would make `invalid-area` and `missing-area`
+    // disagree about the same label, and a member without the prefix could never match.
+    const areas = [...LABEL_DIMENSIONS.area];
+    expect(new Set(areas).size).toBe(areas.length);
+    for (const a of areas) expect(a.startsWith('area:'), a).toBe(true);
+  });
+});
