@@ -3,7 +3,6 @@ import {
   STANDARD_PROFILE,
   PROFILE_CATALOGUE,
   classifyPad,
-  isSupported,
   profileFor,
   profileCollisions,
   profileRequirements,
@@ -126,7 +125,6 @@ describe('classifyPad: the four verdicts', () => {
     const support = classifyPad(standardPad());
     expect(support.kind).toBe('standard');
     expect(profileFor(support)).toBe(STANDARD_PROFILE);
-    expect(isSupported(support)).toBe(true);
   });
 
   it('reads a catalogued non-standard pad as a recognized profile, NOT as standard', () => {
@@ -149,8 +147,11 @@ describe('classifyPad: the four verdicts', () => {
       kind: 'unknown',
       reason: { code: 'unknown-mapping', mapping: '', id: 'HuiJia  USB GamePad' },
     });
+    // `profileFor` is the ONE way a caller asks "may I read this pad", and it is what both
+    // readers call. An `isSupported` convenience sat here in an earlier draft with no
+    // production caller at all -- the same dead-export shape `gamepad.ts`'s comment about a
+    // returned-but-unused "just connected" edge records, and removed for the same reason.
     expect(profileFor(support)).toBeNull();
-    expect(isSupported(support)).toBe(false);
   });
 
   it('refuses a recognized pad that lacks the controls its profile names, and counts both sides', () => {

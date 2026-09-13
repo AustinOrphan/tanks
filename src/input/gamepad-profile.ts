@@ -185,11 +185,6 @@ export function profileFor(support: PadSupport): ControlProfile | null {
   return support.kind === 'standard' || support.kind === 'profile' ? support.profile : null;
 }
 
-/** True for the two verdicts that permit reading. One place, so no caller re-derives it. */
-export function isSupported(support: PadSupport): boolean {
-  return profileFor(support) !== null;
-}
-
 /**
  * How many axes and buttons a profile's own indices require.
  *
