@@ -211,6 +211,20 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # The commit the published bundle was built from (issue #247), read back by
+          # `readBuildIdentity` and printed in the developer Copy Diagnostics report.
+          #
+          # THE SAME EXPRESSION the checkout above resolves `ref:` from, and deliberately so:
+          # a re-run of an old CI run republishes that run's tree, and a report naming the
+          # workflow's own SHA instead would identify a commit whose code is not what is
+          # being served. The two must agree or the report lies about the exact case -- a
+          # rollback -- where somebody is most likely to be reading it.
+          #
+          # `VITE_`-prefixed because that is the only prefix Vite exposes to client code.
+          # Every other way of building this game leaves it unset, which `readBuildIdentity`
+          # reports as an explicit unknown rather than an empty field.
+          VITE_BUILD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # The Pages-critical check, and the reason this workflow can trust its own output:
       # `base: './'` is what makes the bundle work under a deploy subpath rather than
