@@ -304,7 +304,12 @@ describe('createInputController — gamepad', () => {
     );
     if (overrides.fire !== undefined) pressed[GAMEPAD_FIRE_BUTTON] = overrides.fire;
     if (overrides.mine !== undefined) pressed[GAMEPAD_MINE_BUTTON] = overrides.mine;
-    return { axes, buttons: pressed.map((p) => ({ pressed: p })) };
+      // `mapping: 'standard'` since issue #596: the reader classifies a pad before reading it,
+    // and a pad reporting no mapping is now refused rather than read with standard indices.
+    // These fakes have always BEEN standard pads -- indexed with GAMEPAD_FIRE_BUTTON and the
+    // standard stick axes -- so saying so is what they always meant. A fake that omits it is
+    // the `unknown` case, which has tests of its own in gamepad-profile.test.ts.
+    return { axes, buttons: pressed.map((p) => ({ pressed: p })), mapping: 'standard' };
   }
 
   it('is completely inert with the flag off, even with a fully-active fake pad present', () => {

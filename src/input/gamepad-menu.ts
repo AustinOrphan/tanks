@@ -15,6 +15,7 @@
  * and two players both pressing Down should move focus once, not twice.
  */
 import type { GetGamepads, GamepadLike } from './gamepad';
+import { STANDARD_PROFILE, classifyPad, profileFor, type ControlProfile } from './gamepad-profile';
 import { UI_ACTIONS, type UiAction } from './ui-actions';
 
 /**
@@ -29,15 +30,23 @@ import { UI_ACTIONS, type UiAction } from './ui-actions';
  * resync stays for the held-trigger case, and `gamepad-menu.test.ts` pins the separation so
  * a future rebinding cannot quietly restore the collision.
  */
-export const MENU_CONFIRM_BUTTON = 0;
-export const MENU_BACK_BUTTON = 1;
-export const MENU_PAUSE_BUTTON = 9;
-const DPAD_UP = 12;
-const DPAD_DOWN = 13;
-const DPAD_LEFT = 14;
-const DPAD_RIGHT = 15;
-const STICK_X = 0;
-const STICK_Y = 1;
+export const MENU_CONFIRM_BUTTON = STANDARD_PROFILE.buttons.confirm;
+export const MENU_BACK_BUTTON = STANDARD_PROFILE.buttons.back;
+export const MENU_PAUSE_BUTTON = STANDARD_PROFILE.buttons.pause;
+
+/*
+ * DERIVED, not restated (issue #596). The D-pad and stick indices that used to sit here as
+ * their own constants are the standard profile's, and `actionsDown` below reads whatever
+ * profile `classifyPad` resolved for the pad in hand rather than these -- a pad this
+ * catalogue does not recognize emits no menu action at all. The three exports above remain
+ * because `route-host.ts` and the tests name them; deriving them is what stops "the standard
+ * profile's confirm" and "the button the menu reads on a standard pad" becoming two numbers.
+ *
+ * The disjointness above is now MACHINE-CHECKED rather than merely observed:
+ * `profileCollisions` in `gamepad-profile.ts` refuses any catalogue profile that puts a menu
+ * action on the fire or mine button, which is the #494 collision stated as a rule instead of
+ * as a comment.
+ */
 
 /**
  * How far the left stick must travel before it counts as a menu direction. Wider than
@@ -69,17 +78,17 @@ export interface GamepadMenuPoller {
   dispose(): void;
 }
 
-function actionsDown(pad: GamepadLike, into: Set<UiAction>): void {
+function actionsDown(pad: GamepadLike, profile: ControlProfile, into: Set<UiAction>): void {
   const pressed = (i: number): boolean => pad.buttons[i]?.pressed ?? false;
-  if (pressed(DPAD_UP)) into.add('up');
-  if (pressed(DPAD_DOWN)) into.add('down');
-  if (pressed(DPAD_LEFT)) into.add('left');
-  if (pressed(DPAD_RIGHT)) into.add('right');
-  if (pressed(MENU_CONFIRM_BUTTON)) into.add('confirm');
-  if (pressed(MENU_BACK_BUTTON)) into.add('back');
-  if (pressed(MENU_PAUSE_BUTTON)) into.add('pause');
-  const x = pad.axes[STICK_X] ?? 0;
-  const y = pad.axes[STICK_Y] ?? 0;
+  if (pressed(profile.buttons.up)) into.add('up');
+  if (pressed(profile.buttons.down)) into.add('down');
+  if (pressed(profile.buttons.left)) into.add('left');
+  if (pressed(profile.buttons.right)) into.add('right');
+  if (pressed(profile.buttons.confirm)) into.add('confirm');
+  if (pressed(profile.buttons.back)) into.add('back');
+  if (pressed(profile.buttons.pause)) into.add('pause');
+  const x = pad.axes[profile.axes.moveX] ?? 0;
+  const y = pad.axes[profile.axes.moveY] ?? 0;
   if (Math.abs(y) >= Math.abs(x)) {
     if (y <= -MENU_STICK_THRESHOLD) into.add('up');
     else if (y >= MENU_STICK_THRESHOLD) into.add('down');
@@ -114,8 +123,17 @@ export function createGamepadMenuPoller(
       for (let i = 0; i < pads.length; i++) {
         const pad = pads[i];
         if (pad == null) continue;
+        // PRESENT COUNTS, READABLE IS SEPARATE (issue #596). `any` is set for every pad the
+        // browser reports, unsupported ones included, because `connected()` answers "is there
+        // a pad" for the connect toast and issue #597's visible-but-unsupported state -- a
+        // refused pad that reported as absent would be indistinguishable from no hardware.
+        // What it does NOT do is contribute actions: a pad whose layout is unknown cannot
+        // have its button 0 read as Confirm, which on a differently-laid-out device is a
+        // menu activating itself.
         any = true;
-        actionsDown(pad, down);
+        const profile = profileFor(classifyPad(pad));
+        if (profile === null) continue;
+        actionsDown(pad, profile, down);
       }
       cachedConnected = any;
       for (const action of UI_ACTIONS) {

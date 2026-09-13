@@ -73,7 +73,12 @@ function fakePad(
   );
   if (overrides.fire !== undefined) pressed[GAMEPAD_FIRE_BUTTON] = overrides.fire;
   if (overrides.mine !== undefined) pressed[GAMEPAD_MINE_BUTTON] = overrides.mine;
-  return { axes, buttons: pressed.map((p) => ({ pressed: p })) };
+  // `mapping: 'standard'` since issue #596: the reader classifies a pad before reading it,
+  // and a pad reporting no mapping is now refused rather than read with standard indices.
+  // These fakes have always BEEN standard pads -- indexed with GAMEPAD_FIRE_BUTTON and the
+  // standard stick axes -- so saying so is what they always meant. A fake that omits it is
+  // the `unknown` case, which has tests of its own in gamepad-profile.test.ts.
+  return { axes, buttons: pressed.map((p) => ({ pressed: p })), mapping: 'standard' };
 }
 
 describe('createGamepadReader: no pad present', () => {
@@ -201,10 +206,47 @@ describe('createGamepadReader: move (left stick)', () => {
     expect(reader.poll(null).move).toEqual(deadzoneVector(1, 0));
   });
 
-  it('tolerates a pad reporting fewer than 4 axes', () => {
+  it('tolerates a pad reporting fewer than 4 axes, and reads NOTHING off it', () => {
+    // The tolerance half is unchanged and is still the point: a short pad must never be the
+    // reason the game throws. What changed is the second line. This test used to assert
+    // `move.x > 0` -- a deflection read off axis 0 of a pad that has no axis 1, 2 or 3 and
+    // no buttons at all, on the reasoning that partial input beats none.
+    //
+    // Issue #596 reverses that reasoning, and this is the test that says so. Axis 0 of an
+    // unclassifiable pad is not "the left stick, partially" -- it is an unknown control, and
+    // driving the tank with it is the silent-wrong-input defect. `classifyPad` refuses the
+    // pad (no `mapping`, no catalogue entry, so `unknown`) and `poll()` returns the neutral
+    // poll, exactly as it does for an absent pad.
     const reader = createGamepadReader(() => [{ axes: [1], buttons: [] } as unknown as GamepadLike]);
     expect(() => reader.poll(null)).not.toThrow();
-    expect(reader.poll(null).move.x).toBeGreaterThan(0);
+    expect(reader.poll(null).move).toEqual({ x: 0, y: 0 });
+    // ...and it is still PRESENT, which is the distinction issue #597 needs: absent hardware
+    // and hardware we refuse to read are different states, and `connected()` alone cannot
+    // tell them apart.
+    expect(reader.connected()).toBe(true);
+    expect(reader.support()?.kind).toBe('unknown');
+  });
+
+  it('refuses a browser-remapped pad that does not expose the axes the standard layout names', () => {
+    // `mapping: 'standard'` and one axis: the browser says it has remapped this pad onto the
+    // standard layout, and the pad does not have the controls that layout names. Both halves
+    // are real -- a browser reports what the device gives it -- and the pair is the
+    // `insufficient` verdict, which is a DIFFERENT verdict from `unknown` on purpose: the
+    // recognition succeeded and the hardware is the thing that fell short.
+    const reader = createGamepadReader(() => [
+      { axes: [1], buttons: [], mapping: 'standard' } as unknown as GamepadLike,
+    ]);
+    expect(reader.poll(null).move).toEqual({ x: 0, y: 0 });
+    const support = reader.support();
+    expect(support?.kind).toBe('insufficient');
+    expect(support?.kind === 'insufficient' ? support.reason : null).toEqual({
+      code: 'insufficient-controls',
+      profileId: 'standard',
+      axes: 1,
+      buttons: 0,
+      requiredAxes: 4,
+      requiredButtons: 16,
+    });
   });
 });
 

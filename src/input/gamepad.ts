@@ -1,5 +1,6 @@
 import type { InputState, Vec2 } from '../sim/types';
 import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
+import { STANDARD_PROFILE, classifyPad, profileFor, type PadSupport } from './gamepad-profile';
 
 /**
  * Gamepad API reader: `navigator.getGamepads()`, mapped to the same `InputState` shape
@@ -64,7 +65,7 @@ export const GAMEPAD_DEADZONE = 0.2;
  * 7 is the right trigger (RT / R2) and 6 the left (LT / L2).
  *
  * WHY THE TRIGGERS, and why the face buttons were wrong. This is a TWIN-STICK game: the
- * left stick drives and the right stick aims (`AIM_AXIS_X/Y` below). Fire used to sit on
+ * left stick drives and the right stick aims (the profile's `aimX`/`aimY`). Fire used to sit on
  * button 0 -- A / Cross -- which is under the same right thumb that has to stay on the aim
  * stick. Firing therefore meant letting go of aim, so a player could aim or shoot but not
  * both, in a game whose whole subject is aiming. The mouse split it was mirroring does not
@@ -81,14 +82,18 @@ export const GAMEPAD_DEADZONE = 0.2;
  * read as a fresh press -- but the specific face-button overlap that motivated it (issue
  * #494) is gone.
  */
-export const GAMEPAD_FIRE_BUTTON = 7;
-export const GAMEPAD_MINE_BUTTON = 6;
+export const GAMEPAD_FIRE_BUTTON = STANDARD_PROFILE.buttons.fire;
+export const GAMEPAD_MINE_BUTTON = STANDARD_PROFILE.buttons.mine;
 
-/** Standard mapping axis indices: left stick is 0/1, right stick is 2/3. */
-const MOVE_AXIS_X = 0;
-const MOVE_AXIS_Y = 1;
-const AIM_AXIS_X = 2;
-const AIM_AXIS_Y = 3;
+/*
+ * The axis indices that used to sit here -- left stick 0/1, right stick 2/3 -- are in
+ * `gamepad-profile.ts`'s `STANDARD_PROFILE` now, along with the two buttons above, and
+ * `poll()` reads NEITHER set directly (issue #596). It reads whatever profile
+ * `classifyPad` resolves for the pad in hand; the standard layout is only the answer it
+ * gets back for a pad the browser has already remapped. The two exports above remain
+ * because tests and `input.ts` name them, and they are derived rather than restated so
+ * "what the standard profile says" and "what the reader reads" cannot drift apart.
+ */
 
 /**
  * A raw `(x, y)` axis pair, clamped to a unit circle and rescaled past the dead zone.
@@ -174,6 +179,19 @@ export interface GamepadReader {
    */
   connected(): boolean;
   /**
+   * How the last `poll()` classified this slot's pad, or `null` when no pad was there
+   * (issue #596).
+   *
+   * Cached from `poll()` for the same reason `connected()` is: a second `getGamepads()`
+   * call from a per-frame HUD check would re-read the hardware outside the tick, and the
+   * classification must describe the pad the reader actually used.
+   *
+   * ABSENT AND UNSUPPORTED ARE DIFFERENT, which is the whole point of returning `null` for
+   * one and a verdict for the other -- issue #597 builds the player-facing recovery on
+   * exactly that distinction, and `connected()` alone cannot carry it.
+   */
+  support(): PadSupport | null;
+  /**
    * Arm a one-poll edge resync (issue #494): the NEXT `poll()` adopts whatever the fire and
    * mine buttons are doing as the "previous" state without reporting an edge.
    *
@@ -209,6 +227,7 @@ export interface GamepadReader {
  */
 export function createGamepadReader(getGamepads: GetGamepads, padIndex: number = 0): GamepadReader {
   let cachedConnected = false;
+  let cachedSupport: PadSupport | null = null;
   let prevFire = false;
   let prevMine = false;
   let resyncPending = false;
@@ -225,8 +244,27 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
       }
       const pad = pads.length > padIndex ? pads[padIndex] ?? null : null;
       cachedConnected = pad != null;
+      cachedSupport = pad == null ? null : classifyPad(pad);
 
       if (pad == null) {
+        prevFire = false;
+        prevMine = false;
+        resyncPending = false;
+        return NEUTRAL_POLL;
+      }
+
+      // CLASSIFY BEFORE READING (issue #596). A pad whose layout we cannot name is not read
+      // with the standard indices "just in case" -- that is the silent-wrong-input defect
+      // this exists to remove, and it is worse than no input because the game cannot tell it
+      // from a player's own hands. The edge state is cleared on the same branch as an absent
+      // pad, so plugging in an unknown device and then a supported one cannot carry a stale
+      // "previously held" across from the first.
+      //
+      // `connected()` above stays TRUE for such a pad on purpose: it is present, and issue
+      // #597 needs visible-but-unsupported to remain distinguishable from absent. `support()`
+      // is where that distinction is read.
+      const profile = cachedSupport === null ? null : profileFor(cachedSupport);
+      if (profile === null) {
         prevFire = false;
         prevMine = false;
         resyncPending = false;
@@ -237,10 +275,10 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
       // rising edge itself from connected(), and two mechanisms for one concept is how
       // the unwired one rots while its tests keep advertising coverage.
 
-      const move = deadzoneVector(pad.axes[MOVE_AXIS_X] ?? 0, pad.axes[MOVE_AXIS_Y] ?? 0);
+      const move = deadzoneVector(pad.axes[profile.axes.moveX] ?? 0, pad.axes[profile.axes.moveY] ?? 0);
 
       let aim: Vec2 | null = null;
-      const aimStick = deadzoneVector(pad.axes[AIM_AXIS_X] ?? 0, pad.axes[AIM_AXIS_Y] ?? 0);
+      const aimStick = deadzoneVector(pad.axes[profile.axes.aimX] ?? 0, pad.axes[profile.axes.aimY] ?? 0);
       if ((aimStick.x !== 0 || aimStick.y !== 0) && playerPos !== null) {
         const len = Math.hypot(aimStick.x, aimStick.y);
         aim = {
@@ -249,8 +287,8 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
         };
       }
 
-      const firePressed = pad.buttons[GAMEPAD_FIRE_BUTTON]?.pressed ?? false;
-      const minePressed = pad.buttons[GAMEPAD_MINE_BUTTON]?.pressed ?? false;
+      const firePressed = pad.buttons[profile.buttons.fire]?.pressed ?? false;
+      const minePressed = pad.buttons[profile.buttons.mine]?.pressed ?? false;
       // A resync poll reports no edge and only records what is held -- see `resync()`.
       const fire = firePressed && !prevFire && !resyncPending;
       const mine = minePressed && !prevMine && !resyncPending;
@@ -262,6 +300,9 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
     },
     connected(): boolean {
       return cachedConnected;
+    },
+    support(): PadSupport | null {
+      return cachedSupport;
     },
     resync(): void {
       resyncPending = true;
