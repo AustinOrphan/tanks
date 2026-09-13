@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SPAWN_ANIMATORS, ENTRANCE_SECONDS } from './spawn-anim';
+import { SPAWN_ANIMATORS, ENTRANCE_SECONDS, SHIELD_TRANSLUCENCY, protectedOpacity } from './spawn-anim';
 
 const warp = SPAWN_ANIMATORS.warp;
 const C = 0x3fd0ff;
@@ -15,14 +15,20 @@ describe('warp animator', () => {
     expect(b.tankOpacity).toBeCloseTo(1, 5); // fully solid by end of entrance
     expect(b.tankScale).toBeCloseTo(1, 5);
   });
-  it('invincible: tank is translucent at the start and solidifies to opaque', () => {
+  it('invincible: MEETS the entrance at opaque, goes translucent, and returns to opaque', () => {
     // progress here is 0=just shielded, 1=shield about to end.
+    //
+    // THIS CASE USED TO ASSERT THE DEFECT. It read "tank is translucent at the start and
+    // solidifies to opaque" and required `start.tankOpacity < 1` -- which is precisely the
+    // one-frame drop issue #230 describes: the entrance ends at 1.0 (asserted two cases
+    // above) and this phase opened at 0.45. The old assertion could only pass while the
+    // discontinuity existed.
     const start = warp('invincible', 0, C);
+    const mid = warp('invincible', 0.5, C);
     const end = warp('invincible', 1, C);
-    // Mutation that breaks this: dropping the invincibility branch (returns entrance frame).
-    expect(start.tankOpacity).toBeLessThan(1);
-    expect(end.tankOpacity).toBeCloseTo(1, 5);
-    expect(start.tankOpacity).toBeLessThan(end.tankOpacity);
+    expect(start.tankOpacity).toBeCloseTo(1, 5); // continuous with the entrance's last frame
+    expect(end.tankOpacity).toBeCloseTo(1, 5); // continuous with the un-shielded tank
+    expect(mid.tankOpacity).toBeLessThan(1); // ...and visibly protected in between
   });
   it('clamps progress outside [0,1] (negative control: no NaN, no >1 opacity)', () => {
     for (const p of [-1, 2]) {
@@ -238,5 +244,90 @@ describe('converge: an arrival gathers instead of expanding (issue #230)', () =>
       const opposed = SPAWN_ANIMATORS[id]('invincible', 0.4, 0, false, true);
       expect(opposed, id).toEqual(shipped);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #230's entrance -> invincibility contract, applied to all three variants.
+//
+// The owner's 2026-09-12 comment names the defect precisely: `warp` and `rise` end their
+// entrance at `tankOpacity: 1` and opened the invincible phase at `0.45 + 0.55·p` = 0.45,
+// and `beacon` held 1.0 throughout so it read as fully vulnerable while protected. These
+// cases are the contract that replaced all three behaviours, asserted as a SWEEP over every
+// variant rather than one spot-check per animator -- the defect class is "one variant
+// disagrees with the others", which a per-variant case cannot see.
+// ---------------------------------------------------------------------------
+
+describe('the shielded-spawn opacity contract (issue #230)', () => {
+  const VARIANTS = [
+    ['warp', warp],
+    ['rise', rise],
+    ['beacon', beacon],
+  ] as const;
+
+  it('meets the entrance at OPAQUE, with no step at the phase boundary', () => {
+    // The boundary is where `entities.ts` switches animators: the last entrance frame runs
+    // at progress ~1 and the first invincible frame at 0. Both must read the same opacity,
+    // or the tank flickers on the frame it becomes protected.
+    for (const [name, anim] of VARIANTS) {
+      const lastEntrance = anim('entrance', 1, 0xffffff);
+      const firstProtected = anim('invincible', 0, 0xffffff);
+      expect(lastEntrance.tankOpacity, `${name} entrance end`).toBeCloseTo(1, 5);
+      expect(firstProtected.tankOpacity, `${name} protected start`).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('is visibly translucent while protection is running', () => {
+    // Criterion: "the tank ... transitions smoothly to a visibly TRANSLUCENT protected
+    // state". `beacon` is the one this was false for -- it held 1.0 for the entire phase.
+    // 0.9 rather than 1 as the threshold: a difference a player could not see would satisfy
+    // "less than opaque" while leaving the variant looking vulnerable, which is the defect.
+    for (const [name, anim] of VARIANTS) {
+      expect(anim('invincible', 0.5, 0xffffff).tankOpacity, name).toBeLessThan(0.9);
+    }
+  });
+
+  it('is back at OPAQUE before the shield ends, so an expiring shield cannot dip', () => {
+    // `entities.ts` drops to the un-shielded tank at `tankOpacity: 1` the moment `shieldLeft`
+    // hits 0. If the curve were still translucent at p = 1 the tank would snap opaque -- the
+    // same discontinuity as the entrance boundary, at the other end of the phase.
+    for (const [name, anim] of VARIANTS) {
+      expect(anim('invincible', 1, 0xffffff).tankOpacity, name).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('never steps by more than a hair between adjacent frames', () => {
+    // The two boundary cases above pin the ENDS. This pins the middle: a curve that satisfied
+    // both ends and jumped somewhere inside would pass them and still flicker. 120 samples is
+    // roughly two seconds of 60Hz frames across the phase; the bound is well under what an
+    // eye reads as a step, and well over the curve's real per-sample slope.
+    for (const [name, anim] of VARIANTS) {
+      let prev = anim('invincible', 0, 0xffffff).tankOpacity;
+      for (let i = 1; i <= 120; i++) {
+        const next = anim('invincible', i / 120, 0xffffff).tankOpacity;
+        expect(Math.abs(next - prev), `${name} at ${i}/120`).toBeLessThan(0.05);
+        prev = next;
+      }
+    }
+  });
+
+  it('gives all three variants the SAME protected opacity at every point', () => {
+    // "Warp, Rise, and Beacon all communicate protection under one documented visual
+    // contract." One curve, so the three cannot drift apart -- and this is what would fail if
+    // a future variant re-inlined its own numbers, which is how beacon came to differ.
+    for (let i = 0; i <= 20; i++) {
+      const p = i / 20;
+      const [a, b, c] = VARIANTS.map(([, anim]) => anim('invincible', p, 0xffffff).tankOpacity);
+      expect(b, `at p=${p}`).toBeCloseTo(a as number, 10);
+      expect(c, `at p=${p}`).toBeCloseTo(a as number, 10);
+    }
+  });
+
+  it('keeps the shipped translucency floor, so this is a WHERE change and not a depth retune', () => {
+    // The old curve's most translucent frame was 0.45 (`0.45 + 0.55·0`). `SHIELD_TRANSLUCENCY`
+    // is 0.55, so the new floor is the same number -- the issue defers retuning the depth to
+    // play, and this pins that the change moved the floor's position rather than its value.
+    expect(1 - SHIELD_TRANSLUCENCY).toBeCloseTo(0.45, 10);
+    expect(protectedOpacity(0.5)).toBeCloseTo(0.45, 10);
   });
 });

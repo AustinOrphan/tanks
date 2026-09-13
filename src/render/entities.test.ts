@@ -30,6 +30,7 @@ import { distance, overFelt } from '../presentation/colour-distance';
  */
 const OWNER_FLOOR = 15;
 const TEAM_FLOOR = 25;
+import { protectedOpacity } from './spawn-anim';
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
@@ -2482,19 +2483,30 @@ describe('spawn animation (#199)', () => {
     const curr = alivePlayerWorld(90, 10); // shieldUntilTick 90, tick 10 -> 80 ticks left
     views.sync(prev, curr, 1, 0.6);
     const opacity = tankBodyMaterial(scene, 1).opacity;
-    // Expected value re-derived from spawn-anim.ts's `warp` invincible formula
-    // (tankOpacity = 0.45 + 0.55*p) rather than hardcoded, so the assertion states its
-    // own derivation: shieldLeft = shieldUntilTick - curr.tick = 90 - 10 = 80,
+    // Expected value re-derived from spawn-anim.ts rather than hardcoded, so the assertion
+    // states its own derivation: shieldLeft = shieldUntilTick - curr.tick = 90 - 10 = 80,
     // p = 1 - shieldLeft/RESPAWN_SHIELD_TICKS = 1 - 80/90 = 1/9.
+    //
+    // It CALLS `protectedOpacity` now instead of restating `0.45 + 0.55*p` (issue #230). The
+    // restated formula was a second copy of the curve living in a test, and it went stale the
+    // moment the curve changed -- which is how this case failed on a change it was never
+    // about. Calling the production function keeps the derivation visible without duplicating
+    // it.
     const shieldLeft = 90 - 10;
     const expectedP = 1 - shieldLeft / RESPAWN_SHIELD_TICKS;
-    const expectedOpacity = 0.45 + 0.55 * expectedP;
+    const expectedOpacity = protectedOpacity(expectedP);
     // Mutation A (shieldLeft read off `prev.tick` instead of `curr.tick`): shieldLeft
     // becomes 90 - 0 = 90, p = 0, opacity = 0.45 -- fails this assertion.
     // Mutation B (progress derived from `spawn.elapsed` instead of shieldUntilTick -
     // curr.tick): elapsed is 0.6 on this first sync, a different number entirely --
     // fails this assertion too.
     expect(opacity).toBeCloseTo(expectedOpacity, 5);
+    // WHAT THIS ASSERTION NO LONGER DISCRIMINATES, stated rather than left as a gap: since
+    // issue #230 the protected-opacity curve is symmetric about the middle of the phase, so
+    // `p` and `1 - p` give the same tank opacity and an INVERTED progress would survive here.
+    // It did not need saying before, when the curve was the monotone `0.45 + 0.55*p`.
+    // `entities-inverts-the-shield-progress` is the entry that establishes where that case is
+    // caught instead.
     views.dispose();
   });
 

@@ -107,6 +107,63 @@ function convergeRing(p: number, reducedMotion: boolean): { radius: number; opac
   return { radius: reducedMotion ? 1 : 2.4 - 1.4 * p, opacity: p, arc: 1 };
 }
 
+/**
+ * HOW TRANSLUCENT A PROTECTED TANK IS AT ITS DEEPEST (issue #230).
+ *
+ * 0.55 keeps the shipped floor: the old curve was `0.45 + 0.55 * p`, so its most translucent
+ * frame was 0.45, and `1 - 0.55` is the same number. The change is WHERE that floor sits in
+ * the phase, not how deep it goes -- retuning the depth is a separate judgement the issue
+ * defers to play.
+ */
+export const SHIELD_TRANSLUCENCY = 0.55;
+
+/**
+ * How much of the invincible phase is spent easing in, and the same again easing out.
+ *
+ * Short enough that the protected state reads as a STATE rather than as a bump -- the tank
+ * spends the middle 70% of its shield at the full translucency -- and long enough that
+ * neither boundary is a step. Feel, not measurement; judged in the gallery at real-time
+ * playback rather than by reading the curve.
+ */
+export const SHIELD_EASE_FRACTION = 0.15;
+
+/** Hermite smoothstep, 0 at `edge0`, 1 at `edge1`, with zero slope at both ends. */
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = clamp01((x - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * The tank's opacity while respawn protection is running -- ONE CURVE FOR ALL THREE VARIANTS
+ * (issue #230).
+ *
+ * THE DEFECT IT REPLACES. `warp` and `rise` ended their entrance at `tankOpacity: 1` and
+ * opened this phase at `0.45 + 0.55 * p`, which is 0.45 at p = 0: a one-frame drop from
+ * opaque to 45% the instant the entrance finished. `beacon` held 1.0 for the whole phase and
+ * so read as fully vulnerable while protected. Two different wrong answers to one question.
+ *
+ * CONTINUOUS AT BOTH ENDS BY CONSTRUCTION, which is what makes the issue's criteria
+ * structural rather than a tuning accident:
+ *
+ *  - `p = 0` returns exactly 1, so it meets the entrance's final frame with no step.
+ *  - `p = 1` returns exactly 1, so it meets the un-shielded tank `entities.ts` restores when
+ *    `shieldLeft` hits 0 -- and an expired shield cannot produce a late dip, because the
+ *    curve is already back at opaque before the phase ends.
+ *
+ * Both properties come from the two smoothsteps being mirror images, not from a clamp or a
+ * special case, so neither can be lost by retuning `SHIELD_EASE_FRACTION`.
+ *
+ * UNCHANGED UNDER REDUCED MOTION, deliberately, and by this file's own rule: what moves here
+ * is a single slow transition carrying STATE ("you are protected"), not decoration. It is
+ * the same reason `beacon`'s depleting timer arc is left alone below -- calming it would
+ * delete information rather than motion.
+ */
+export function protectedOpacity(p: number): number {
+  const t = clamp01(p);
+  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);
+  return 1 - SHIELD_TRANSLUCENCY * ramp;
+}
+
 const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false) => {
   const p = clamp01(progress);
   if (phase === 'entrance') {
@@ -118,9 +175,10 @@ const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opp
         : { radius: reducedMotion ? 1 : 0.4 + 1.6 * p, opacity: 1 - p, arc: 1 },
     };
   }
-  // invincible: translucent, solidifying as the shield runs out (p: 0 fresh -> 1 ending).
+  // invincible: eases into translucency and back out, meeting the entrance at opaque and the
+  // un-shielded tank at opaque. See `protectedOpacity`.
   return {
-    tankOpacity: 0.45 + 0.55 * p,
+    tankOpacity: protectedOpacity(p),
     tankScale: 1,
     ring: { radius: 1, opacity: 0.35 * (1 - p), arc: 1 },
   };
@@ -149,7 +207,7 @@ const rise: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opp
   // trap #652 records for `.hud-capacity` and `.hud-count`.
   const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(p * Math.PI * (4 + 6 * p));
   return {
-    tankOpacity: 0.45 + 0.55 * p,
+    tankOpacity: protectedOpacity(p),
     tankScale: 1,
     ring: { radius: 1, opacity: 0.3 * pulse, arc: 1 },
   };
@@ -168,9 +226,13 @@ const beacon: SpawnAnimator = (phase, progress, _color, reducedMotion = false, o
   // The invincible frame below is UNCHANGED under reduced motion, deliberately: its ring
   // neither grows nor pulses, and the depleting `arc` is a TIMER -- how much shield is left
   // -- so calming it would delete information rather than motion.
-  // Opaque tank; the ring is the timer — its arc depletes as the shield runs out.
+  // The ring is the timer -- its arc depletes as the shield runs out -- and SINCE ISSUE #230
+  // the tank is translucent under it like its two siblings. It used to hold `tankOpacity: 1`
+  // for the whole phase, which made the one variant that shows its shield most clearly the
+  // one that looked fully vulnerable. The arc says how much is left; the translucency says
+  // there is any.
   return {
-    tankOpacity: 1,
+    tankOpacity: protectedOpacity(p),
     tankScale: 1,
     ring: { radius: 1, opacity: 0.9, arc: 1 - p },
   };
