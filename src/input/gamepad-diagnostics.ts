@@ -1,4 +1,5 @@
 import { readConnectedPads, type GamepadLike, type GetGamepads } from './gamepad';
+import { classifyPad, type PadSupport } from './gamepad-profile';
 
 /**
  * Controller compatibility self-test (issue #599): read EVERY browser-visible pad in full,
@@ -47,6 +48,17 @@ export interface PadDiagnostic {
   readonly mapping: string;
   readonly axes: readonly number[];
   readonly buttons: readonly PadButtonSample[];
+  /**
+   * Whether Tanks will read this pad, and through which profile (issue #596).
+   *
+   * The self-test's original question was "what does the browser report", and the answer was
+   * a wall of numbers a tester could paste somewhere. This is the question those numbers were
+   * being pasted to ANSWER: does the game accept this device. Carrying it here rather than
+   * recomputing it in `hud.ts` is what stops the pane and the copied report disagreeing about
+   * one pad -- and this is the surface that consumes `classifyPad`'s verdict, which is why
+   * there is no second accessor for it on `GamepadReader`.
+   */
+  readonly support: PadSupport;
 }
 
 /**
@@ -84,7 +96,7 @@ function diagnosePad(padIndex: number, pad: GamepadLike): PadDiagnostic {
     const b = pad.buttons[i];
     buttons.push(b == null ? { pressed: false, value: 0 } : sampleButton(b));
   }
-  return { padIndex, id: pad.id ?? '', mapping: pad.mapping ?? '', axes, buttons };
+  return { padIndex, id: pad.id ?? '', mapping: pad.mapping ?? '', axes, buttons, support: classifyPad(pad) };
 }
 
 /** What the report states about the machine it was taken on, so a pasted report is attributable. */
@@ -97,6 +109,29 @@ export interface ReportContext {
 /** Two decimals: enough to see drift and dead-zone travel, short enough that 17 buttons fit a line. */
 function fixed(n: number): string {
   return Number.isFinite(n) ? n.toFixed(2) : '0.00';
+}
+
+/**
+ * The verdict as one short developer-facing line (issue #596).
+ *
+ * PROSE LIVES HERE, NOT IN `gamepad-profile.ts`. The issue asks for "a structured
+ * unsupported reason ... without embedding presentation copy in the input layer", and the
+ * classifier holds to that: it returns codes and counts. This module already owns
+ * developer-facing report text (`formatPadReport` below), so the one place a code becomes
+ * words is beside the report it goes into. None of it is PLAYER copy -- issue #597 owns the
+ * sentence a player reads on the assignment panel, and must not reuse these.
+ */
+export function describeSupport(support: PadSupport): string {
+  switch (support.kind) {
+    case 'standard':
+      return 'supported (standard mapping)';
+    case 'profile':
+      return `supported (profile: ${support.profile.id})`;
+    case 'unknown':
+      return 'NOT supported: no profile matches this mapping/id';
+    case 'insufficient':
+      return `NOT supported: ${support.reason.axes} axes and ${support.reason.buttons} buttons, profile ${support.reason.profileId} needs ${support.reason.requiredAxes} and ${support.reason.requiredButtons}`;
+  }
 }
 
 /** `''` is what the browser reported, so the report says so rather than inventing a name. */
@@ -125,6 +160,10 @@ export function formatPadReport(pads: readonly PadDiagnostic[], context: ReportC
   for (const pad of pads) {
     lines.push('', `### Index ${pad.padIndex} -- ${padLabel(pad)}`, '');
     lines.push(`- mapping: ${pad.mapping === '' ? '(none reported)' : pad.mapping}`);
+    // FIRST AFTER THE MAPPING, because it is the line the report exists to carry: a
+    // compatibility report whose reader has to infer acceptance from an axis count is
+    // making the reader do the classifier's job.
+    lines.push(`- Tanks support: ${describeSupport(pad.support)}`);
     lines.push(`- axes: ${pad.axes.length}`);
     lines.push(`- buttons: ${pad.buttons.length}`);
     lines.push('', '```');

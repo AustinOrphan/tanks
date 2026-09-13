@@ -1717,6 +1717,17 @@
   opacity: 0.72;
 }
 
+/* The verdict line (issue #596), and the ONE thing on this row that is not dimmed.
+   `.hud-selftest-pad-meta` above describes the device and is deliberately quiet at 0.72;
+   this says what Tanks will actually do with it, which is the question the pane is open to
+   answer, so it keeps full opacity and the pane's normal weight. Without a rule of its own a
+   <p> here falls to browser defaults -- a 16px margin block on every pad row -- which is the
+   dead-CSS failure hud.css.test.ts exists to catch. */
+.hud-selftest-pad-support {
+  margin: 0 0 var(--hud-space-2);
+  font-size: 0.85em;
+}
+
 /* Three columns: the channel's name, a bar, and the number. A fixed name column keeps the
    bars on one left edge, so a stick's travel is read against its neighbours rather than
    against a ragged start. */

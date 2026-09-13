@@ -1,4 +1,5 @@
 import {
+  describeSupport,
   formatPadReport,
   padLabel,
   type PadDiagnostic,
@@ -128,12 +129,20 @@ function buildPadRow(pad: PadDiagnostic): PadRow {
   // The three facts a compatibility report turns on, on the row itself and not only in the
   // copied text: whether the browser remapped the pad, and how many channels it has.
   meta.textContent = `mapping: ${pad.mapping === '' ? '(none reported)' : pad.mapping} · axes: ${pad.axes.length} · buttons: ${pad.buttons.length}`;
+  // THE VERDICT, on its own line under the counts (issue #596). The three facts above
+  // describe the device; this one says what Tanks will do with it, which is the question a
+  // tester opened this pane to answer. Same text as the copied report's support line, from
+  // the same `describeSupport`, so the pane and the paste cannot disagree.
+  const support = document.createElement('p');
+  support.className = 'hud-selftest-pad-support';
+  support.textContent = describeSupport(pad.support);
+
   const channels = document.createElement('ul');
   channels.className = 'hud-selftest-channels';
   const axes = pad.axes.map((_, i) => channelRow(`Axis ${i}`, true));
   const buttons = pad.buttons.map((_, i) => channelRow(`Button ${i}`, false));
   for (const row of [...axes, ...buttons]) channels.appendChild(row.root);
-  root.append(name, meta, channels);
+  root.append(name, meta, support, channels);
   return { key: padKey(pad), root, axes, buttons };
 }
 

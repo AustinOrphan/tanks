@@ -1,6 +1,6 @@
 import type { InputState, Vec2 } from '../sim/types';
 import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
-import { STANDARD_PROFILE, classifyPad, profileFor, type PadSupport } from './gamepad-profile';
+import { STANDARD_PROFILE, classifyPad, profileFor } from './gamepad-profile';
 
 /**
  * Gamepad API reader: `navigator.getGamepads()`, mapped to the same `InputState` shape
@@ -179,19 +179,6 @@ export interface GamepadReader {
    */
   connected(): boolean;
   /**
-   * How the last `poll()` classified this slot's pad, or `null` when no pad was there
-   * (issue #596).
-   *
-   * Cached from `poll()` for the same reason `connected()` is: a second `getGamepads()`
-   * call from a per-frame HUD check would re-read the hardware outside the tick, and the
-   * classification must describe the pad the reader actually used.
-   *
-   * ABSENT AND UNSUPPORTED ARE DIFFERENT, which is the whole point of returning `null` for
-   * one and a verdict for the other -- issue #597 builds the player-facing recovery on
-   * exactly that distinction, and `connected()` alone cannot carry it.
-   */
-  support(): PadSupport | null;
-  /**
    * Arm a one-poll edge resync (issue #494): the NEXT `poll()` adopts whatever the fire and
    * mine buttons are doing as the "previous" state without reporting an edge.
    *
@@ -227,7 +214,6 @@ export interface GamepadReader {
  */
 export function createGamepadReader(getGamepads: GetGamepads, padIndex: number = 0): GamepadReader {
   let cachedConnected = false;
-  let cachedSupport: PadSupport | null = null;
   let prevFire = false;
   let prevMine = false;
   let resyncPending = false;
@@ -244,7 +230,6 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
       }
       const pad = pads.length > padIndex ? pads[padIndex] ?? null : null;
       cachedConnected = pad != null;
-      cachedSupport = pad == null ? null : classifyPad(pad);
 
       if (pad == null) {
         prevFire = false;
@@ -261,9 +246,13 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
       // "previously held" across from the first.
       //
       // `connected()` above stays TRUE for such a pad on purpose: it is present, and issue
-      // #597 needs visible-but-unsupported to remain distinguishable from absent. `support()`
-      // is where that distinction is read.
-      const profile = cachedSupport === null ? null : profileFor(cachedSupport);
+      // #597 needs visible-but-unsupported to remain distinguishable from absent. WHICH
+      // verdict it got is not cached here: this reader owns one slot inside the simulated
+      // tick, and every surface that wants to describe a pad -- the self-test, and issue
+      // #597's assignment panel -- walks every pad instead, through
+      // `readPadDiagnostics`. A second accessor here would be the same fact reachable two
+      // ways, with only one of them wired.
+      const profile = profileFor(classifyPad(pad));
       if (profile === null) {
         prevFire = false;
         prevMine = false;
@@ -300,9 +289,6 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
     },
     connected(): boolean {
       return cachedConnected;
-    },
-    support(): PadSupport | null {
-      return cachedSupport;
     },
     resync(): void {
       resyncPending = true;

@@ -107,8 +107,9 @@ describe('readPadDiagnostics', () => {
 
 describe('padLabel', () => {
   it('falls back to the index when the browser reports no name, and never invents one otherwise', () => {
-    expect(padLabel({ padIndex: 2, id: '', mapping: '', axes: [], buttons: [] })).toBe('Controller 2');
-    expect(padLabel({ padIndex: 2, id: 'Real Name', mapping: '', axes: [], buttons: [] })).toBe('Real Name');
+    const unknown = { kind: 'unknown', reason: { code: 'unknown-mapping', mapping: '', id: '' } } as const;
+    expect(padLabel({ padIndex: 2, id: '', mapping: '', axes: [], buttons: [], support: unknown })).toBe('Controller 2');
+    expect(padLabel({ padIndex: 2, id: 'Real Name', mapping: '', axes: [], buttons: [], support: unknown })).toBe('Real Name');
   });
 });
 

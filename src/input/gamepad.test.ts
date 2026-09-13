@@ -10,6 +10,7 @@ import {
   type GamepadLike,
   type GetGamepads,
 } from './gamepad';
+import { classifyPad } from './gamepad-profile';
 import { AIM_PROJECTION_UNITS, AIM_GRID } from './touch';
 import { createWorld, applyPlayerInput } from '../sim/world';
 import type { Tank } from '../sim/types';
@@ -221,10 +222,12 @@ describe('createGamepadReader: move (left stick)', () => {
     expect(() => reader.poll(null)).not.toThrow();
     expect(reader.poll(null).move).toEqual({ x: 0, y: 0 });
     // ...and it is still PRESENT, which is the distinction issue #597 needs: absent hardware
-    // and hardware we refuse to read are different states, and `connected()` alone cannot
-    // tell them apart.
+    // and hardware we refuse to read are different states, and a refused pad that also read
+    // as absent would be indistinguishable from no hardware at all. WHICH verdict it got is
+    // not this reader's to report -- `readPadDiagnostics` walks every pad and carries it --
+    // so the classifier is asked directly here rather than through a second accessor.
     expect(reader.connected()).toBe(true);
-    expect(reader.support()?.kind).toBe('unknown');
+    expect(classifyPad({ axes: [1], buttons: [] }).kind).toBe('unknown');
   });
 
   it('refuses a browser-remapped pad that does not expose the axes the standard layout names', () => {
@@ -237,9 +240,9 @@ describe('createGamepadReader: move (left stick)', () => {
       { axes: [1], buttons: [], mapping: 'standard' } as unknown as GamepadLike,
     ]);
     expect(reader.poll(null).move).toEqual({ x: 0, y: 0 });
-    const support = reader.support();
-    expect(support?.kind).toBe('insufficient');
-    expect(support?.kind === 'insufficient' ? support.reason : null).toEqual({
+    const support = classifyPad({ axes: [1], buttons: [], mapping: 'standard' });
+    expect(support.kind).toBe('insufficient');
+    expect(support.kind === 'insufficient' ? support.reason : null).toEqual({
       code: 'insufficient-controls',
       profileId: 'standard',
       axes: 1,

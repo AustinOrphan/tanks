@@ -6,9 +6,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderControllerSelfTest } from './controller-selftest';
 import type { PadDiagnostic } from '../input/gamepad-diagnostics';
+import { STANDARD_PROFILE } from '../input/gamepad-profile';
 
 function pad(overrides: Partial<PadDiagnostic> = {}): PadDiagnostic {
   return {
+    // `support` defaults to the standard verdict since issue #596: these fixtures describe a
+    // standard-mapping pad, and the pane now renders what Tanks will do with it beside what
+    // the browser reported. An override is how the refused cases are posed.
+    support: overrides.support ?? { kind: 'standard', profile: STANDARD_PROFILE },
     padIndex: overrides.padIndex ?? 0,
     id: overrides.id ?? 'Test Pad',
     mapping: overrides.mapping ?? 'standard',

@@ -142,26 +142,28 @@ export const PROFILE_CATALOGUE: readonly ProfileEntry[] = Object.freeze([]);
  * unsupported reason for UI/diagnostics without embedding presentation copy in the input
  * layer", and #597 owns the sentence a player sees.
  */
-export type UnsupportedReason =
-  /** No catalogue entry matched, and the browser did not report the standard mapping. */
-  | {
-      readonly code: 'unknown-mapping';
-      /** Verbatim, `''` when the browser reported none -- the same convention `PadDiagnostic` uses. */
-      readonly mapping: string;
-      readonly id: string;
-    }
-  /**
-   * A profile DID match, and the pad does not expose the controls it names. The counts are
-   * carried so a diagnostic can say "4 buttons, 16 needed" without re-deriving either.
-   */
-  | {
-      readonly code: 'insufficient-controls';
-      readonly profileId: string;
-      readonly axes: number;
-      readonly buttons: number;
-      readonly requiredAxes: number;
-      readonly requiredButtons: number;
-    };
+/** No catalogue entry matched, and the browser did not report the standard mapping. */
+export interface UnknownMappingReason {
+  readonly code: 'unknown-mapping';
+  /** Verbatim, `''` when the browser reported none -- the same convention `PadDiagnostic` uses. */
+  readonly mapping: string;
+  readonly id: string;
+}
+
+/**
+ * A profile DID match, and the pad does not expose the controls it names. The counts are
+ * carried so a diagnostic can say "4 buttons, 16 needed" without re-deriving either.
+ */
+export interface InsufficientControlsReason {
+  readonly code: 'insufficient-controls';
+  readonly profileId: string;
+  readonly axes: number;
+  readonly buttons: number;
+  readonly requiredAxes: number;
+  readonly requiredButtons: number;
+}
+
+export type UnsupportedReason = UnknownMappingReason | InsufficientControlsReason;
 
 /**
  * The verdict on one pad. Four cases, which are the four the issue asks to distinguish --
@@ -172,8 +174,11 @@ export type UnsupportedReason =
 export type PadSupport =
   | { readonly kind: 'standard'; readonly profile: ControlProfile }
   | { readonly kind: 'profile'; readonly profile: ControlProfile }
-  | { readonly kind: 'unknown'; readonly reason: UnsupportedReason }
-  | { readonly kind: 'insufficient'; readonly reason: UnsupportedReason };
+  // The `reason` is narrowed to the matching variant rather than left as the whole union, so
+  // `kind` and `reason.code` cannot disagree and a consumer reading `reason.axes` off an
+  // `insufficient` verdict does not have to re-narrow a union the `kind` already settled.
+  | { readonly kind: 'unknown'; readonly reason: UnknownMappingReason }
+  | { readonly kind: 'insufficient'; readonly reason: InsufficientControlsReason };
 
 /** The profile to read a pad with, or `null` when it must not be read at all. */
 export function profileFor(support: PadSupport): ControlProfile | null {
