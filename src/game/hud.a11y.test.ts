@@ -263,3 +263,168 @@ describe('About & Legal heading structure (issue #117)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #629's remaining half: announcing the status transitions that deserve it.
+//
+// The policy is narrow on purpose. `setStatus` is pushed EVERY FRAME from the loop's
+// `refreshTopbar`, so the interesting failure is not "nothing is announced" -- it is a
+// live region that narrates continuously, talks over the toasts, or repeats a sentence a
+// focused surface already read aloud.
+// ---------------------------------------------------------------------------
+
+/** The screen-reader-only line inside the page's one live region. */
+const spoken = (root: HTMLElement): string =>
+  (root.querySelector('.hud-announce') as HTMLElement).textContent ?? '';
+
+const campaign = (over: Partial<{ mission: number; missions: number; lives: number; enemies: number }> = {}) =>
+  ({
+    kind: 'campaign' as const,
+    mission: over.mission ?? 1,
+    missions: over.missions ?? 5,
+    lives: over.lives ?? 3,
+    enemies: over.enemies ?? 4,
+  });
+
+const versus = (stocks: Array<{ slot: number; stock: number }>) =>
+  ({ kind: 'versus' as const, mission: 1, missions: 1, stocks });
+
+describe('live status announcements (issue #629)', () => {
+  it('announces a life loss ONCE, with the count the bar is showing', () => {
+    // The number comes from the status push that follows the death, not from the death
+    // signal -- `signalPlayerDeath` carries only a colour, and reading the previous push
+    // would speak a count one frame out of step with the topbar beside it.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ lives: 3 }));
+    expect(spoken(root)).toBe('');
+    h.signalPlayerDeath(0xff0000);
+    h.setStatus(campaign({ lives: 2 }));
+    expect(spoken(root)).toBe('Life lost. 2 lives remaining.');
+  });
+
+  it('says "1 life", not "1 lives"', () => {
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ lives: 2 }));
+    h.signalPlayerDeath(0xff0000);
+    h.setStatus(campaign({ lives: 1 }));
+    expect(spoken(root)).toBe('Life lost. 1 life remaining.');
+  });
+
+  it('does NOT announce a life loss from a lives drop with no death behind it', () => {
+    // THE REASON THIS IS NOT A DIFF. `pushStatus` fires on every world build -- a level
+    // advance with fresh lives, a quit, issue #252's restarts -- so a session replaced by a
+    // different board that starts lower would otherwise be narrated as a death.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ lives: 3 }));
+    h.setStatus(campaign({ lives: 1 }));
+    expect(spoken(root)).toBe('');
+  });
+
+  it('announces each life loss once, not once per frame', () => {
+    // Criterion 6, and the load-bearing one: the loop re-pushes the same status every
+    // frame. Sixty identical writes to a live region is speech spam, which is the failure
+    // mode this whole feature is most likely to produce.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ lives: 3 }));
+    h.signalPlayerDeath(0xff0000);
+    for (let i = 0; i < 60; i++) h.setStatus(campaign({ lives: 2 }));
+    expect(spoken(root)).toBe('Life lost. 2 lives remaining.');
+    // ...and a SECOND death still speaks, because its sentence differs.
+    h.signalPlayerDeath(0xff0000);
+    h.setStatus(campaign({ lives: 1 }));
+    expect(spoken(root)).toBe('Life lost. 1 life remaining.');
+  });
+
+  it('WRITES the live region once across sixty identical pushes, not sixty times', () => {
+    // The case above asserts the final text, which a broken repeat guard also produces --
+    // sixty identical writes leave the same string behind. What distinguishes them is the
+    // number of DOM mutations, because that is what a screen reader reacts to: a live
+    // region rewritten every frame announces every frame, even with identical content.
+    // `takeRecords()` is synchronous, so no timing is involved.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ lives: 3 }));
+    h.signalPlayerDeath(0xff0000);
+    const node = root.querySelector('.hud-announce') as HTMLElement;
+    const observer = new MutationObserver(() => {});
+    observer.observe(node, { childList: true, characterData: true, subtree: true });
+    for (let i = 0; i < 60; i++) h.setStatus(campaign({ lives: 2 }));
+    const writes = observer.takeRecords().length;
+    observer.disconnect();
+    expect(writes).toBe(1);
+  });
+
+  it('says nothing at all for the high-frequency readouts', () => {
+    // Criterion 4. Enemies is the one that changes on every kill; shells and the countdown
+    // never reach `setStatus` at all, which is why the topbar is still not a live region.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ enemies: 4 }));
+    for (const enemies of [3, 2, 1, 0]) h.setStatus(campaign({ enemies }));
+    expect(spoken(root)).toBe('');
+  });
+
+  it('announces a versus stock loss, naming the player and what is left', () => {
+    const { hud: h, root } = mount();
+    h.setStatus(versus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    h.setStatus(versus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
+    expect(spoken(root)).toBe('Player 2 lost a stock. 2 remaining.');
+  });
+
+  it('does not narrate a rematch, where every stock goes back UP', () => {
+    const { hud: h, root } = mount();
+    h.setStatus(versus([{ slot: 0, stock: 1 }, { slot: 1, stock: 2 }]));
+    h.setStatus(versus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    expect(spoken(root)).toBe('');
+  });
+
+  it('does not read a DIFFERENT match’s lower stock as a loss in this one', () => {
+    // A two-player match replaced by a four-player one: slot 0 holds fewer stocks than it
+    // did, and nobody lost anything. The slot SET is what distinguishes them.
+    const { hud: h, root } = mount();
+    h.setStatus(versus([{ slot: 0, stock: 5 }, { slot: 1, stock: 5 }]));
+    h.setStatus(versus([
+      { slot: 0, stock: 3 }, { slot: 1, stock: 3 }, { slot: 2, stock: 3 }, { slot: 3, stock: 3 },
+    ]));
+    expect(spoken(root)).toBe('');
+  });
+
+  it('announces a level advance', () => {
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ mission: 1, missions: 5 }));
+    h.setStatus(campaign({ mission: 2, missions: 5 }));
+    expect(spoken(root)).toBe('Level 2 of 5.');
+  });
+
+  it('stays SILENT about the level while an outcome surface is up', () => {
+    // Criterion 5: the win panel is focused and read at exactly the moment the next mission
+    // number arrives, so announcing it here would say the same thing twice. Gated on the
+    // panel's own visibility rather than on a delay.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ mission: 1, missions: 5 }));
+    h.setState('outcome-win');
+    h.setStatus(campaign({ mission: 2, missions: 5 }));
+    expect(spoken(root)).toBe('');
+  });
+
+  it('forgets the transition across a gap in gameplay', () => {
+    // `setStatus(null)` is leaving gameplay. Re-entering on a different level must not read
+    // as an advance, and an owed death announcement belongs to the session that is over.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ mission: 1, lives: 3 }));
+    h.signalPlayerDeath(0xff0000);
+    h.setStatus(null);
+    h.setStatus(campaign({ mission: 4, lives: 1 }));
+    expect(spoken(root)).toBe('');
+  });
+
+  it('keeps the announcement out of sight, inside the one live region', () => {
+    // The visual HUD is unchanged (criterion 7): this is a `.ui-sr-only` child of the toast
+    // stack, not a second region and not a visible toast. Both halves asserted, because a
+    // node that was merely hidden would announce nothing and a node outside the region
+    // would compete with it.
+    const { root } = mount();
+    const node = root.querySelector('.hud-announce') as HTMLElement;
+    expect(node.classList.contains('ui-sr-only')).toBe(true);
+    expect(node.closest('[aria-live]')?.className).toBe('hud-toasts');
+    expect(node.hasAttribute('aria-live')).toBe(false);
+  });
+});
