@@ -59,7 +59,7 @@
 // It expands their npm-run graph so duplicate work, cycles, missing leaves, or drift
 // between agents and CI fail at the same boundary.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 const read = (p: string): string => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -736,6 +736,29 @@ describe('the Engines Matrix iOS Simulator beacon', () => {
 //   delete timeout-minutes                     -> bounds artifact retention and job runtime
 //   playwright 1.62.0 -> 1.63.0 in capture.yml -> pins the same browser the visual job pins
 // ---------------------------------------------------------------------------
+describe('measure.yml: the on-demand AI measurement workflow', () => {
+  it('offers every AI measurement harness under src/sim/ai, and resolves each to its own file', () => {
+    // Issue #694: the choice list is a second copy of a directory. It listed three harnesses
+    // while three more were added beside them, and those three could only be run by hand.
+    // The copy silently omitting one is invisible, because every run still works. The
+    // listing is derived from the directory, so a harness added tomorrow fails here
+    // until it is offered.
+    const MEASURE = read('.github/workflows/measure.yml');
+    const harnesses = readdirSync(new URL('../src/sim/ai/', import.meta.url))
+      .filter((name) => name.endsWith('.measure.test.ts'))
+      .map((name) => name.replace(/\.measure\.test\.ts$/, ''));
+    expect(harnesses.length, 'no harness found; this test would pass vacuously').toBeGreaterThan(0);
+    const block = MEASURE.slice(MEASURE.indexOf('      harness:'), MEASURE.indexOf('      testTimeout:'));
+    const offered = [...block.matchAll(/^ {10}- (\S+)$/gm)].map((m) => m[1]);
+    expect(new Set(offered)).toEqual(new Set(harnesses));
+    expect(offered).toHaveLength(harnesses.length);
+    for (const h of harnesses) {
+      expect(MEASURE, `${h} has no case arm resolving to its own file`)
+        .toContain(`${h}) echo "path=src/sim/ai/${h}.measure.test.ts" >> "$GITHUB_OUTPUT" ;;`);
+    }
+  });
+});
+
 describe('capture.yml: the on-demand capture workflow', () => {
   it('offers exactly the recipes committed to the registry, and no others', () => {
     // THE drift guard. A `choice` input is an allowlist expressed in YAML, so it is a second
