@@ -5172,6 +5172,100 @@ describe('startGameWith: a pinned dev seed', () => {
   });
 });
 
+describe("startGameWith: the developer actions' port (issue #252)", () => {
+  /** The port the route host registered, or null before a session holds the slot. */
+  const portOf = (h: ReturnType<typeof boot>): DevActionPort => {
+    const getter = h.rec.devActionPorts[0];
+    expect(getter, 'the host must register a dev-action port getter').toBeTruthy();
+    const port = getter?.();
+    expect(port, 'a live session must supply a port').toBeTruthy();
+    return port as DevActionPort;
+  };
+
+  it('rebuilds with an EXACT seed when one is named, which is Restart with Same Seed', () => {
+    // Criterion 1: same-seed restart reproduces the deterministic initial state. `rec.seeds`
+    // is every seed a world was built from, so a duplicate is the assertion -- and the
+    // rebuild goes through `switchTo`, so the bots reseed off that same number too.
+    const h = boot(makeDeps({ wallMs: 1000 }));
+    h.setState('playing');
+    const first = h.rec.seeds[0];
+    expect(portOf(h).rebuild(first, false)).toBe(first);
+    expect(h.rec.seeds).toEqual([first, first]);
+    h.handle.dispose();
+  });
+
+  it('REROLLS PAST A PINNED ?seed=, which is the case the whole override exists for', () => {
+    // Without the supersede flag, `nextSeed()` reads `devFlags.seed ?? clock` and returns
+    // 4242 forever: Reroll rebuilds an identical world and reports a "new" seed that is the
+    // old one. A developer who pinned a seed is the likeliest person to press Reroll, so the
+    // dead case would be the common one. This is the negative control for that.
+    const h = boot(makeDeps({ wallMs: 999, devFlags: { seed: 4242 } }));
+    h.setState('playing');
+    expect(h.rec.seeds[0]).toBe(4242);
+    const rerolled = portOf(h).rebuild(null, false);
+    expect(rerolled).not.toBe(4242);
+    expect(rerolled).toBe(deriveSeed(999));
+    expect(h.rec.seeds[1]).toBe(rerolled);
+    h.handle.dispose();
+  });
+
+  it('keeps the pin superseded for later builds, rather than pinning the rerolled number', () => {
+    // A FLAG, not a stored seed. Pinning the rerolled value would give every subsequent world
+    // that same seed -- which is what the URL parameter already does, and the opposite of
+    // what Reroll asked for. So a second reroll draws again, and so would a level advance.
+    const h = boot(makeDeps({ wallMs: 999, devFlags: { seed: 4242 } }));
+    h.setState('playing');
+    const port = portOf(h);
+    port.rebuild(null, false);
+    port.rebuild(null, false);
+    expect(h.rec.seeds.slice(1)).toEqual([deriveSeed(999), deriveSeed(999)]);
+    expect(h.rec.seeds.slice(1)).not.toContain(4242);
+    h.handle.dispose();
+  });
+
+  it('reports the seed the world was built with, never the one it was asked for', () => {
+    // `rebuild` returns `driver.world.seed` read back, not its own argument. `dev-actions.ts`
+    // reports whatever this returns, so an echo here would put a number in a copied report
+    // that no world was ever built from.
+    const h = boot(makeDeps({ wallMs: 1000 }));
+    h.setState('playing');
+    expect(portOf(h).rebuild(null, false)).toBe(h.rec.seeds[h.rec.seeds.length - 1]);
+    h.handle.dispose();
+  });
+
+  it('carries the round\u2019s lives only when asked, which is the whole of Restart Current Round', () => {
+    // Criterion 3: "preserves documented match/session fields and resets only documented
+    // round state". Lives are the one carried field a caller may ask for -- `undefined` lets
+    // the board build with its own default, which is a fresh attempt. Both directions in one
+    // case, because a `keepLives` that was ignored, or always honoured, passes either alone.
+    const h = boot(makeDeps({ savedRun: { level: 0, lives: 2 } }));
+    h.setState('playing');
+    const port = portOf(h);
+    port.rebuild(null, true);
+    const kept = h.rec.levelBuilds[h.rec.levelBuilds.length - 1];
+    port.rebuild(null, false);
+    const reset = h.rec.levelBuilds[h.rec.levelBuilds.length - 1];
+    expect(typeof kept.lives).toBe('number');
+    expect(reset.lives).toBeUndefined();
+    // ...and the LEVEL is the same one both times: no action here changes which board is
+    // built, which is how "preserves documented match/session fields" is satisfied -- by the
+    // level never being an argument at all.
+    expect(reset.level).toBe(kept.level);
+    h.handle.dispose();
+  });
+
+  it('says there is no round at the main menu, where the world is only the backdrop', () => {
+    // The pane is reachable from the menu. A world exists there -- it is what is drawn behind
+    // the title -- so "is there a world" would answer yes and restart something nobody is
+    // playing. `sm.atMainMenu` is the question that actually distinguishes them.
+    const h = boot(makeDeps());
+    expect(portOf(h).hasRound()).toBe(false);
+    h.setState('playing');
+    expect(portOf(h).hasRound()).toBe(true);
+    h.handle.dispose();
+  });
+});
+
 describe('startGameWith: the mine-trigger policy reaches the world', () => {
   it('passes the policy to createWorld', () => {
     const h = boot(makeDeps({
