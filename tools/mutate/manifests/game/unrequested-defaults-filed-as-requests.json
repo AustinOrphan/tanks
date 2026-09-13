@@ -1,0 +1,15 @@
+{
+  "id": "unrequested-defaults-filed-as-requests",
+  "file": "src/game/dev-diagnostics.ts",
+  "find": "  const asked = report.notes.filter((n) => n.requested !== undefined);",
+  "replace": "  const asked = report.notes;",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "formatDiagnostics files an unrequested default under its OWN heading, not under \"requested\"",
+    "formatDiagnostics keeps the two apart when both are present at once"
+  ],
+  "why": "Collapses the two sections back into one, so every note lands under \"Requested, but not in effect\". That is false on EVERY report this pane can produce: `sandboxDisarmed` defaults ON, so `explainDevConfig` emits an `inverted-default` note with no `requested` value on every developer session, and the heading would claim a request that was never made. Issue #247's criterion is that requested and effective \"cannot be confused in the output\", and one section for both directions is exactly that confusion. Found by the test rather than by inspection -- the first draft of this formatter had the single section."
+}

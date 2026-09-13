@@ -1,0 +1,14 @@
+{
+  "id": "pinned-seed-appended-beside-the-old-one",
+  "file": "src/game/dev-diagnostics.ts",
+  "find": "  params.set(SEED_PARAM, String(input.session.seed));",
+  "replace": "  params.append(SEED_PARAM, String(input.session.seed));",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "pinnedSeedUrl recreates the seed without touching anything REPLACES a seed the URL already carried rather than appending a second"
+  ],
+  "why": "Appends the pinned seed instead of replacing one the URL already carried. `devflags.ts` reads a duplicated parameter's FIRST value -- `canonicalDevSearch`'s own comment says so, and says why canonicalising to the last would be wrong -- so the URL then reproduces the OLD seed while displaying the new one. Silent, and silent in the worst direction: the developer reloads, sees a different world, and concludes the seed does not work. The killing test PARSES the result with the same `parseDevFlags` the game boots with rather than string-matching, which is the only assertion that can tell the two apart."
+}
