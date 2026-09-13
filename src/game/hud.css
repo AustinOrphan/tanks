@@ -1389,9 +1389,10 @@
   flex-direction: column;
   align-items: center;
   /* flex-start, not center (issue #642) -- the same clip .hud-about above describes, and
-     the same fix. This pane's content is only 318 CSS px tall today, so the clip is LATENT
-     at handset sizes rather than reachable: it took a 568x280 viewport to show it, where
-     the "Developer Tools" heading sat at y = -19 under `center` and y = +35 under
+     the same fix. This pane's content is short -- 318 CSS px at 844 wide, 336 at 320 wide --
+     so the clip is LATENT rather than reachable: none of the four viewports it was measured
+     at (320x480, 568x320, 667x375, 844x390) clipped it, and it took a 568x280 one to show,
+     where the "Developer Tools" heading sat at y = -19 under `center` and y = +35 under
      `flex-start`. Fixed at the latent stage deliberately -- the comment above says this
      shell grows registry-generated controls, and the pane that grows into the clip is the
      one nobody re-measures. */
