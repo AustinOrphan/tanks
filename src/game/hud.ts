@@ -297,7 +297,7 @@ import {
   stepNumeric,
   toggleField,
 } from './dev-config-menu';
-import { devControls, DEV_PRESETS, type DevSelection } from './dev-config';
+import { canonicalDevSearch, devControls, DEV_PRESETS, type DevSelection } from './dev-config';
 import type { PadDiagnostic } from '../input/gamepad-diagnostics';
 import type { RoundPhase } from '../sim/round';
 import { VERSUS_STOCK } from '../sim/constants';
@@ -1464,6 +1464,29 @@ export interface HudOptions {
    * no buttons rather than two that would report a page they cannot see.
    */
   readonly developerPage?: DeveloperPage;
+  /**
+   * Which key namespace this page is persisting into (issue #249).
+   *
+   * Shown continuously in Developer Tools, and shown as a WARNING when it is `production` --
+   * criterion 4 is that "namespace status remains obvious while production data is active in
+   * a dev session", and a line that looked the same either way would satisfy the letter of
+   * that and none of it.
+   *
+   * Passed in rather than derived from `developerSearch`: `app-settings.ts` resolves the
+   * namespace exactly once and hands the same object to every store, so re-deriving here
+   * would be a second answer to a question that already has one.
+   */
+  readonly storageNamespace?: 'production' | 'developer';
+  /**
+   * Delete every key in the DEVELOPER namespace (issue #249).
+   *
+   * Always the developer namespace, whatever namespace this session is running on -- a
+   * `prodSave` session resetting "developer data" must still mean the developer keys, or the
+   * button would wipe the player's real save under a name that promises the opposite.
+   * Injected because the HUD may not reach a `Storage`, the rule every store is already
+   * under; its absence hides the control.
+   */
+  readonly resetDeveloperData?: () => void;
 }
 
 /** Where the page is and what built it -- the half of a diagnostics report that is not the session. */
@@ -2207,6 +2230,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button"></button>
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button"></button>
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button"></button>
+      <!-- PERSISTENCE (issue #249). The namespace line is always present while the pane is,
+           because "obvious" is a property of being shown continuously rather than on demand;
+           it takes a warning modifier when the session is on the production keys. Both
+           buttons arm before they fire, the same two-press confirmation the resets and the
+           runtime actions use -- and for Use Production Save that IS the issue's "deliberate
+           confirmation immediately before reload", since the second press is what navigates. -->
+      <p class="hud-devns"></p>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-prodsave" type="button">Use Production Save</button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devreset" type="button">Reset Developer Data</button>
       <textarea class="hud-diag-out hud-diag-out--hidden" readonly rows="8" aria-label="Session diagnostics"></textarea>
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devtools-exit" type="button">Exit Developer Mode</button>
       <button class="ui-btn ui-btn--slab hud-devtools-back" type="button">Back</button>
@@ -2422,6 +2454,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const diagCopyBtn = el.querySelector('.hud-diag-copy') as HTMLButtonElement;
   const diagPinBtn = el.querySelector('.hud-diag-pin') as HTMLButtonElement;
   const diagOutEl = el.querySelector('.hud-diag-out') as HTMLTextAreaElement;
+  const devNsEl = el.querySelector('.hud-devns') as HTMLElement;
+  const prodSaveBtn = el.querySelector('.hud-prodsave') as HTMLButtonElement;
+  const devResetBtn = el.querySelector('.hud-devreset') as HTMLButtonElement;
   const devActionBtns = Array.from(el.querySelectorAll<HTMLButtonElement>('.hud-devact'));
   // Labelled FROM the catalogue rather than written into the markup, so a renamed action
   // cannot leave a stale word on a button that still dispatches the new id.
@@ -3355,6 +3390,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function restingLabel(btn: HTMLButtonElement): string {
     if (btn === resetStatsBtn) return 'Reset stats';
     if (btn === resetProgressBtn) return 'Reset progress';
+    // Issue #249's two persistence controls carry their labels in the markup rather than in a
+    // catalogue, so they are named here. A ternary over five buttons is the shape this
+    // function replaced; extending the lookup is the point of it being one.
+    if (btn === prodSaveBtn) return 'Use Production Save';
+    if (btn === devResetBtn) return 'Reset Developer Data';
     return DEV_ACTIONS[btn.dataset.action as DevActionId].label;
   }
 
@@ -3589,6 +3629,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // `hasRound()` is false -- so a set-once availability would leave all three controls
       // hidden for the whole page. Whether a round exists changes underneath a shut pane.
       refreshDevActions();
+      refreshNamespace();
       swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
     } else {
       closeSurface(DEVTOOLS_SURFACE);
@@ -4806,6 +4847,50 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     );
   };
 
+  /**
+   * The namespace line, and the warning it becomes (issue #249).
+   *
+   * Rewritten whenever the pane opens rather than once at construction, for the reason the
+   * developer actions' availability is: the pane can be opened at any point in a page's life.
+   * The namespace itself cannot change without a reload, so this is cheap either way.
+   */
+  function refreshNamespace(): void {
+    const ns = opts.storageNamespace;
+    if (ns === undefined) {
+      devNsEl.textContent = '';
+      devNsEl.classList.remove('hud-devns--warning');
+      return;
+    }
+    const production = ns === 'production';
+    devNsEl.textContent = production
+      ? 'Saving to the PRODUCTION keys. Changes here affect the real save.'
+      : 'Saving to the developer keys (tanks.dev.). The real save is untouched.';
+    devNsEl.classList.toggle('hud-devns--warning', production);
+  }
+
+  /*
+   * Use Production Save: arm, then navigate. The second press IS the confirmation issue #249
+   * asks for "immediately before reload", because it is the press that reloads -- there is no
+   * window between confirming and applying for the decision to go stale in.
+   *
+   * Built from `developerSearch` through the same `canonicalDevSearch` the configuration menu
+   * uses, so this URL is the one the model would produce for those flags, and a deep link or
+   * router query the page was opened with survives.
+   */
+  const handleProdSave = (): void => {
+    const apply = opts.applyDeveloperConfig;
+    if (apply === undefined) return;
+    const params = new URLSearchParams((opts.developerSearch ?? '').replace(/^\?/, ''));
+    params.set('dev', '1');
+    params.set('prodSave', '1');
+    apply(canonicalDevSearch(`?${params.toString()}`).search);
+  };
+
+  const handleDevReset = (): void => {
+    opts.resetDeveloperData?.();
+    showDiagnostics('Developer data cleared. The production save was not touched.');
+  };
+
   const handleSelfTestCopy = (): void => {
     const text = selfTest.report();
     selfTestReportEl.value = text;
@@ -4815,6 +4900,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
     void clipboard?.writeText(text).catch(() => {});
   };
+  prodSaveBtn.addEventListener('click', () =>
+    handleDangerClick(prodSaveBtn, [handleProdSave], 'Reload onto the REAL save?'),
+  );
+  devResetBtn.addEventListener('click', () =>
+    handleDangerClick(devResetBtn, [handleDevReset], 'Erase all developer data?'),
+  );
   diagCopyBtn.addEventListener('click', handleDiagCopy);
   diagPinBtn.addEventListener('click', handleDiagPin);
   for (const btn of devActionBtns) {
@@ -4893,6 +4984,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // Hidden until a session says otherwise: no port has been registered at construction, so
   // the three actions start unavailable rather than flashing on before the first push.
   refreshDevActions();
+  // Issue #249: a control whose seam is absent is not rendered. `applyDeveloperConfig` is
+  // what Use Production Save navigates through, and offering it on a session ALREADY on the
+  // production keys would be a button that reloads onto where it already is.
+  prodSaveBtn.hidden = !opts.applyDeveloperConfig || opts.storageNamespace !== 'developer';
+  devResetBtn.hidden = !opts.resetDeveloperData;
+  refreshNamespace();
   // Same rule as Exit above: a button that cannot do its job is not offered. Reset and Copy
   // stay -- they change the menu and the clipboard, neither of which needs `location`.
   (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =

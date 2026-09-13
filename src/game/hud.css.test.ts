@@ -475,6 +475,11 @@ describe('hud.css is syntactically whole', () => {
       // fill it. Listed here because nothing sweeps the classes the HUD writes -- this
       // population is maintained by hand.
       '.hud-diag-out', '.hud-diag-out--hidden',
+      // The developer namespace line and its warning modifier (issue #249). Without the base
+      // rule a <p> falls to browser defaults; without the modifier the line reads the same
+      // whether the session is on the real save or the developer keys, which is the ONE thing
+      // that line exists to distinguish. Listed by hand, like every entry here.
+      '.hud-devns', '.hud-devns--warning',
       // The application backdrop (issue #317). Without the base rule the menu is drawn
       // over the live arena again; without the hidden rule an opaque ground covers the
       // game from load and never leaves. The felt pair is the ruling's switchable
@@ -1032,7 +1037,14 @@ describe('hud.css is syntactically whole', () => {
     // `hidden` is not what this sweep filters on. Each carries `.ui-btn--slab` and
     // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
     // modifier -- the checks these pins exist to prompt, performed rather than assumed.
-    expect(buttons.length).toBe(140 + 2 + devMenuButtons());
+    // Issue #249 adds TWO: the Developer Tools pane's Use Production Save and Reset Developer
+    // Data. 140 -> 142. Static markup rendered unconditionally at construction like the developer
+    // shell's other entries, so this fixture counts both whether or not a page is in developer
+    // mode -- their `hidden` property tracks the injected seams and the active namespace, and
+    // `hidden` is not what this sweep filters on. Both carry `.ui-btn--slab` and
+    // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
+    // modifier. The NAMESPACE line is a <p>, not a button, so it moves neither figure.
+    expect(buttons.length).toBe(142 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1136,7 +1148,14 @@ describe('hud.css is syntactically whole', () => {
     // `hidden` is not what this sweep filters on. Each carries `.ui-btn--slab` and
     // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
     // modifier -- the checks these pins exist to prompt, performed rather than assumed.
-    expect(controls.length).toBe(124 + 2 + devMenuButtons());
+    // Issue #249 adds TWO: the Developer Tools pane's Use Production Save and Reset Developer
+    // Data. 124 -> 126. Static markup rendered unconditionally at construction like the developer
+    // shell's other entries, so this fixture counts both whether or not a page is in developer
+    // mode -- their `hidden` property tracks the injected seams and the active namespace, and
+    // `hidden` is not what this sweep filters on. Both carry `.ui-btn--slab` and
+    // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
+    // modifier. The NAMESPACE line is a <p>, not a button, so it moves neither figure.
+    expect(controls.length).toBe(126 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

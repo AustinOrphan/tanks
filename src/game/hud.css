@@ -1414,6 +1414,29 @@
   display: none;
 }
 
+/* ---- The developer persistence namespace line (issue #249) ------------------------ */
+
+/* Quiet by default: on a developer session the namespace is reassurance, not a warning, and
+   the pane already says developer mode is on. Same measure and dimming as the prose above. */
+.hud-devns {
+  margin: 0;
+  max-width: 46ch;
+  text-align: center;
+  font-size: 0.85em;
+  opacity: 0.9;
+}
+
+/* ...and LOUD when the session is on the real save. Issue #249 requires the namespace to stay
+   obvious "while production data is active in a dev session", which a line that read the same
+   either way would satisfy in letter and not at all in fact. `--hud-text-danger` is the token
+   the destructive controls already use, so this reads as the same class of thing they are.
+   Not a colour alone: the weight carries it where colour does not (issue #327). */
+.hud-devns--warning {
+  color: var(--hud-text-danger);
+  font-weight: 700;
+  opacity: 1;
+}
+
 /* Same measure and de-emphasis as .hud-about-line: prose takes a measure rather than the
    pane's full width, and `opacity` is how this file dims text -- there is no muted token. */
 .hud-devtools-line {

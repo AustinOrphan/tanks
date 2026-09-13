@@ -1,10 +1,10 @@
 {
   "id": "browser-deps-hardcodes-the-storage-namespace",
   "file": "src/game/loop.ts",
-  "find": "    storageNamespace: appSettings.namespace,",
-  "replace": "    storageNamespace: 'production',",
+  "find": "    // The namespace `storage` already applies -- read from the same object, so the two\n    // cannot disagree about which keys this session is on.\n    storageNamespace: appSettings.namespace,",
+  "replace": "    // The namespace `storage` already applies -- read from the same object, so the two\n    // cannot disagree about which keys this session is on.\n    storageNamespace: 'production',",
   "expect": "killed",
-  "why": "Labels every export 'production' regardless of the session, which is the issue #250 defect reintroduced in the wiring rather than the logic. createBrowserDeps is unpinned wiring that no gameplay test enters, so this is caught only by app-shell.test.ts calling it directly against a shell built on each namespace.",
+  "why": "Labels every export 'production' regardless of the session, which is the issue #250 defect reintroduced in the wiring rather than the logic. createBrowserDeps is unpinned wiring that no gameplay test enters, so this is caught only by app-shell.test.ts calling it directly against a shell built on each namespace. The find string grew its two preceding comment lines under issue #249: the HUD now takes the same fact as an option, so the bare assignment appears twice in this file and a substring match is ambiguous between them. Same mutation, anchored to the deps-level binding.",
   "tests": [
     "src/game/app-shell.test.ts"
   ],
