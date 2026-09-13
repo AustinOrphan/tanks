@@ -13,6 +13,7 @@ import { ELEMENTS, VIEWS, compose } from '../../src/render/gallery/subjects';
 import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
 import { ARRIVAL_LANGUAGES } from '../../src/presentation/arrival-language';
 import { SHELL_TRAIL_STYLES } from '../../src/presentation/shell-trail';
+import { ENEMY_ROLE_CUES } from '../../src/presentation/enemy-role';
 
 const ESC = String.fromCharCode(27);
 
@@ -322,6 +323,24 @@ describe('gallery args', () => {
       simulateMoment(MOMENTS[id]).worlds.some((w) => w.bullets.some((b) => b.alive)),
     );
     for (const id of ['fire', 'ricochet', 'ricochet-twice']) expect(firing, id).toContain(id);
+  });
+
+  it('pins --enemyRole to the vocabulary the renderer actually owns', () => {
+    // args.mjs is .mjs and cannot import the TypeScript that owns the cues, so it hardcodes
+    // them. This is the two-way pin that keeps the copy honest -- the same shape the
+    // --view/VIEWS and --identityMarker pins use. A lever added to ENEMY_ROLE_CUES without a
+    // change there would be refused by the CLI with a message naming a set that is no longer
+    // whole, which for a PROTOTYPE flag is the worst failure: the comparison silently stops
+    // covering the option someone just added.
+    for (const cue of ENEMY_ROLE_CUES) {
+      expect(parseArgs(['--elements', 'roster', '--enemyRole', cue]).enemyRole).toBe(cue);
+    }
+    // `barrel` and `band` are the near-misses that matter: they were this flag's own earlier
+    // value names, so they are exactly what a stale note or an old capture command would say.
+    for (const v of ['', 'barrel', 'band', 'GIRTH', 'collars']) {
+      expect(() => parseArgs(['--elements', 'roster', '--enemyRole', v]))
+        .toThrow(/--enemyRole must be one of/);
+    }
   });
 
   it('pins --arrival to the vocabulary the renderer actually owns', () => {

@@ -301,7 +301,7 @@ export function parseArgs(argv) {
     // Hardcoded for --mineWarn's reason: this file is .mjs and cannot import the TypeScript
     // that owns the vocabulary. ENEMY_ROLE_CUES (src/presentation/enemy-role.ts) is the source
     // of truth, and args.test.ts pins the two together in both directions.
-    const cues = ['barrel', 'band', 'both'];
+    const cues = ['girth', 'flare', 'dome', 'deck', 'riser', 'crown', 'both'];
     if (!cues.includes(out.enemyRole)) {
       throw new Error(`--enemyRole must be one of ${cues.join('|')}, got '${out.enemyRole}'`);
     }
