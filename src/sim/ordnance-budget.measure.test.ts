@@ -328,7 +328,7 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
         `${SECONDS}s cap each, countdown excluded`,
     );
     console.log(
-      '\nkind     shellCap    mineCap   meanLiveShells      meanLiveMines       capacityStall        shots',
+      '\nkind     shellCap    mineCap   meanLiveShells      meanLiveMines       capacityStall        shots        tickSamples',
     );
     for (const kind of [...arm.agg.keys()].sort()) {
       const a = arm.agg.get(kind) as KindStat;
@@ -342,7 +342,13 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
           `${rb.shells.toFixed(4)}->${ra.shells.toFixed(4)}   ` +
           `${rb.mines.toFixed(4)}->${ra.mines.toFixed(4)}   ` +
           `${rb.stall.toFixed(2)}%->${ra.stall.toFixed(2)}%   ` +
-          `${String(b.shots).padStart(4)}->${String(a.shots).padEnd(4)}`,
+          `${String(b.shots).padStart(4)}->${String(a.shots).padEnd(4)}  ` +
+          // TICK SAMPLES ARE THE DENOMINATOR, printed because the two arms do NOT run for
+          // the same number of ticks: the arm resolves more encounters before the 60s cap,
+          // so total live time differs. The per-tick RATES either side of each arrow are
+          // comparable; the raw `shots` counts are not, and this column is what lets a
+          // reader see that rather than take it on trust.
+          `${String(b.liveTicks).padStart(5)}->${String(a.liveTicks).padEnd(5)}`,
       );
     }
 
@@ -355,5 +361,10 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
       `\ndifficulty (coarse): player deaths ${base.agg.get('player')?.deaths} -> ${arm.agg.get('player')?.deaths}, ` +
         `encounters resolved ${ended(base)}/${base.encounters.length} -> ${ended(arm)}/${arm.encounters.length}`,
     );
-  });
+    // THREE full arms -- baseline, arm, and the arm again for the determinism check -- over
+    // 3 seeds x 4 arenas x 60s each. That is ~17s on this machine against vitest's 5000ms
+    // default, which failed the case while printing every number correctly: a timeout reads
+    // as a red harness rather than as a slow one, and the numbers above would have been
+    // quoted from a run marked failed.
+  }, 120_000);
 });
