@@ -2306,9 +2306,11 @@
    * The enclosing .hud-customize is `touch-action: pan-y`; this wins on the canvas
    * itself, which is the whole point of scoping touch-action per element. (An earlier
    * version of this comment said the pane was pan-y "because it scrolls". It does not:
-   * the `overflow-y: auto` scrollers in this file are .hud-achievement-list,
-   * .hud-controller-rows and the whole .hud-versus-setup pane, and this pane is not one
-   * of them. The achievement list's own comment gives the real reason -- it keeps a
+   * the `overflow-y: auto` scrollers in this file are .hud-settings, .hud-about,
+   * .hud-devtools, .hud-devcfg, .hud-selftest, .hud-achievement-list, .hud-controller-rows
+   * and the whole .hud-versus-setup pane, and this pane is not one of them. (Three of those
+   * when this was written; hud.css.test.ts now pins the list, so it cannot fall behind
+   * again without a red test.) The achievement list's own comment gives the real reason -- it keeps a
    * two-finger gesture on a panel from becoming a zoom trap the board's
    * `touch-action: none` then cannot undo.)
    *
