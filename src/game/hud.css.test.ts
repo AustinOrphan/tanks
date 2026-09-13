@@ -462,6 +462,13 @@ describe('hud.css is syntactically whole', () => {
       // The disabled-reason line. Without it the two reasons in the HUD render at body
       // size and full opacity, reading as content rather than as an aside.
       '.ui-hint',
+      // The controller self-test's support verdict (issue #596). Same failure as `.ui-hint`
+      // above and the reason it sits beside it: a <p> with no rule takes the browser's
+      // default 16px block margin, and this one repeats once per connected pad, so losing
+      // the rule pushes every channel list down by a line per pad rather than disabling
+      // anything outright. Nothing sweeps the classes the HUD writes -- this list is
+      // maintained by hand -- so a class added without an entry here is unguarded.
+      '.hud-selftest-pad-support',
       // The application backdrop (issue #317). Without the base rule the menu is drawn
       // over the live arena again; without the hidden rule an opaque ground covers the
       // game from load and never leaves. The felt pair is the ruling's switchable

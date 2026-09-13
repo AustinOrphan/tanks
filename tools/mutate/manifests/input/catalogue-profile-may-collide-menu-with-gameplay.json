@@ -1,0 +1,14 @@
+{
+  "id": "catalogue-profile-may-collide-menu-with-gameplay",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "    const collisions = profileCollisions(entry.profile);\n    if (collisions.length > 0) {",
+  "replace": "    const collisions = profileCollisions(entry.profile);\n    if (collisions.length > 99) {",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "validateProfileCatalogue refuses a catalogue that cannot mean what it says refuses a profile that puts confirm on the fire button, naming the pair"
+  ],
+  "why": "Lets a profile put a menu action and a gameplay action on one button. That is issue #494 exactly: Confirm and Fire were button 0, so confirming Resume while still holding it read as a fresh fire press on the first simulated tick and leaked a shell. The standard layout no longer collides and a comment has said so ever since; this is what stops a NON-standard profile reintroducing it, which is the likely case because a pad with few buttons is where an author is tempted to double one up. A catalogue is data, so the check belongs at authoring time."
+}

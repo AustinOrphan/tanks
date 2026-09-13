@@ -1,0 +1,14 @@
+{
+  "id": "selftest-row-drops-its-support-verdict",
+  "file": "src/game/controller-selftest.ts",
+  "find": "  root.append(name, meta, support, channels);",
+  "replace": "  root.append(name, meta, channels);",
+  "expect": "killed",
+  "tests": [
+    "src/game/controller-selftest.test.ts"
+  ],
+  "killedBy": [
+    "renderControllerSelfTest: structure states what Tanks will do with the pad, beside what the browser reported (issue #596)"
+  ],
+  "why": "Builds the verdict element and never appends it, which is the specific way a rendered line dies without anything throwing: the text is computed, the node exists, and no eye ever sees it. The row falls back to what it showed before issue #596 -- a mapping string and two counts -- leaving a tester to infer from an axis count whether the game accepted the device, which is the inference the verdict exists to remove."
+}

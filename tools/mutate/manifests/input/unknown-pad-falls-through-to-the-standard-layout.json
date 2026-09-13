@@ -1,0 +1,16 @@
+{
+  "id": "unknown-pad-falls-through-to-the-standard-layout",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "  if (recognized === null) {\n    return { kind: 'unknown', reason: { code: 'unknown-mapping', mapping, id: pad.id ?? '' } };\n  }",
+  "replace": "  if (recognized === null) {\n    return { kind: 'standard', profile: STANDARD_PROFILE };\n  }",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-profile.test.ts",
+    "src/input/gamepad.test.ts"
+  ],
+  "killedBy": [
+    "classifyPad: the four verdicts refuses a pad no catalogue entry matches, and says what the browser reported",
+    "createGamepadReader: move (left stick) tolerates a pad reporting fewer than 4 axes, and reads NOTHING off it"
+  ],
+  "why": "Restores the exact behaviour issue #596 was filed against: a pad the browser did not remap, and this catalogue does not recognize, read with the standard mapping's indices anyway. It is not a lesser version of working -- axis 0 of an unknown device is not 'the left stick, roughly', and button 7 is not 'fire, roughly'. The game cannot distinguish the input it invents this way from a player's own hands, which is why the refusal is the feature. Two tests kill it from opposite ends: the classifier's own verdict, and the reader proving a refused pad moves nothing while still reporting as connected."
+}

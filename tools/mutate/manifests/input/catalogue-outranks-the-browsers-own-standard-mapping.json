@@ -1,0 +1,15 @@
+{
+  "id": "catalogue-outranks-the-browsers-own-standard-mapping",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "    mapping === 'standard'\n      ? { profile: STANDARD_PROFILE, kind: 'standard' }\n      : (() => {",
+  "replace": "    mapping === 'zzz-never'\n      ? { profile: STANDARD_PROFILE, kind: 'standard' }\n      : (() => {",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "classifyPad: how a pad is matched lets the browser's own 'standard' win over a catalogue entry that would also match",
+    "classifyPad: the four verdicts reads a browser-remapped pad as standard, and hands back the standard profile"
+  ],
+  "why": "Breaks the order contract by making the standard-mapping branch unreachable, so every pad -- including one the browser has already remapped -- falls through to the catalogue search. That is how issue #596's 'standard-mapped controllers retain current behavior' criterion dies quietly later: the shipped catalogue is empty today so the damage is total and obvious, but once issue #606 adds an entry, a loose matcher would capture working Xbox and PlayStation pads and re-lay them out. The order is what makes a catalogue entry unable to do that, at any looseness."
+}

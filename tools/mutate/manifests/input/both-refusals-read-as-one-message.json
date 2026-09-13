@@ -1,0 +1,14 @@
+{
+  "id": "both-refusals-read-as-one-message",
+  "file": "src/input/gamepad-diagnostics.ts",
+  "find": "      return 'NOT supported: no profile matches this mapping/id';",
+  "replace": "      return `NOT supported: ${support.reason.code}`;",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the support verdict the self-test carries (issue #596) turns each of the four verdicts into a distinct developer line"
+  ],
+  "why": "Replaces the unknown-mapping sentence with its bare code. Both refusals then read as a machine token rather than a diagnosis, and the tester filing the compatibility report has nothing to file: 'unknown-mapping' does not say the game found no profile for this device, and it is the sentence, not the code, that decides whether a report arrives describing an adapter or describing a browser. The codes stay in the structured reason, where issue #597 reads them; the words are this module's job."
+}

@@ -43,7 +43,11 @@ function fakePad(): FakePad {
     },
   }));
   return {
-    pad: { axes, buttons },
+    // `mapping: 'standard'` since issue #596: the poller classifies each pad before reading
+    // it, and one reporting no mapping contributes no actions. This fake has always been a
+    // standard pad -- it is indexed with MENU_CONFIRM_BUTTON and the standard D-pad -- so
+    // saying so is what it always meant. The refusal itself has its own tests below.
+    pad: { axes, buttons, mapping: 'standard' },
     press: (...bs) => bs.forEach((b) => down.add(b)),
     release: (...bs) => bs.forEach((b) => down.delete(b)),
     stick: (x, y) => {
@@ -315,6 +319,41 @@ describe('createGamepadMenuPoller: the union of every pad', () => {
 });
 
 describe('createGamepadMenuPoller: presence and failure', () => {
+  it('emits NOTHING from a pad it cannot classify, while still counting it as connected', () => {
+    // Issue #596. Before this, every visible pad was read at the standard indices: button 0
+    // as Confirm, 12-15 as the D-pad. On a pad laid out differently that is a menu operating
+    // itself -- an unrelated control activating whatever has focus -- which is worse than a
+    // pad that does nothing, because the player cannot tell it from a bug in the menu.
+    //
+    // The two halves are deliberately opposite, and both are the contract: NO actions, and
+    // connected() TRUE. Issue #597 builds "this controller is visible but unsupported" on
+    // exactly that pair, and a refused pad that also read as absent would be indistinguishable
+    // from no hardware at all.
+    const unknown = fakePad();
+    const pad: GamepadLike = { ...unknown.pad, mapping: '' };
+    const h = harness(() => [pad]);
+    unknown.press(MENU_CONFIRM_BUTTON, MENU_BACK_BUTTON, MENU_PAUSE_BUTTON, DPAD_DOWN);
+    unknown.stick(0, 1);
+    h.poller.poll(0);
+    expect(h.drain()).toEqual([]);
+    expect(h.poller.connected()).toBe(true);
+  });
+
+  it('reads the supported pad beside an unsupported one, so one bad device does not mute the menu', () => {
+    // The union is per-pad now, not all-or-nothing. A player with an unrecognized adapter
+    // plugged in beside a working controller keeps the working one -- and this is the
+    // negative control for the test above: it proves the refusal is scoped to the pad that
+    // earned it rather than being a poller that stopped emitting.
+    const good = fakePad();
+    const bad = fakePad();
+    const badPad: GamepadLike = { ...bad.pad, mapping: '' };
+    const h = harness(() => [badPad, good.pad]);
+    bad.press(MENU_BACK_BUTTON);
+    good.press(MENU_CONFIRM_BUTTON);
+    h.poller.poll(0);
+    expect(h.drain()).toEqual(['confirm']);
+  });
+
   it('connected() is false before any poll and reflects the LAST poll afterwards', () => {
     let pads: GamepadLike[] = [];
     const p = fakePad();

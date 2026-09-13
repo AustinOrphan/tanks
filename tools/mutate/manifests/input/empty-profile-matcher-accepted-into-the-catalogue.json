@@ -1,0 +1,14 @@
+{
+  "id": "empty-profile-matcher-accepted-into-the-catalogue",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "    if (fields.length === 0) {",
+  "replace": "    if (fields.length === -1) {",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "validateProfileCatalogue refuses a catalogue that cannot mean what it says refuses an empty matcher, which would swallow every unknown pad"
+  ],
+  "why": "Lets a catalogue entry with NO criteria through validation. Such an entry matches the first pad it is offered, so every unrecognized device silently acquires that entry's layout -- which is issue #596's defect restored from the opposite direction, and worse than the original because it wears a profile id and looks deliberate in a trace. Refused at authoring time rather than branched on at runtime, on the same grounds as the entity catalogues in src/sim/."
+}

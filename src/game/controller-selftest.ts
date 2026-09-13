@@ -1,4 +1,5 @@
 import {
+  describeSupport,
   formatPadReport,
   padLabel,
   type PadDiagnostic,
@@ -113,6 +114,12 @@ function channelRow(label: string, axis: boolean): ChannelRow {
   return { root, fill, value };
 }
 
+/*
+ * The five fields are also exactly what `classifyPad` reads, which is why the support line
+ * (issue #596) needs nothing added here: a pad whose verdict could change is a pad whose key
+ * already changed, so the row is rebuilt and the line rewritten. Add a sixth input to the
+ * classifier and this key has to grow with it, or a stale verdict survives the frame.
+ */
 function padKey(pad: PadDiagnostic): string {
   return [pad.padIndex, pad.id, pad.mapping, pad.axes.length, pad.buttons.length].join('|');
 }
@@ -128,12 +135,20 @@ function buildPadRow(pad: PadDiagnostic): PadRow {
   // The three facts a compatibility report turns on, on the row itself and not only in the
   // copied text: whether the browser remapped the pad, and how many channels it has.
   meta.textContent = `mapping: ${pad.mapping === '' ? '(none reported)' : pad.mapping} · axes: ${pad.axes.length} · buttons: ${pad.buttons.length}`;
+  // THE VERDICT, on its own line under the counts (issue #596). The three facts above
+  // describe the device; this one says what Tanks will do with it, which is the question a
+  // tester opened this pane to answer. Same text as the copied report's support line, from
+  // the same `describeSupport`, so the pane and the paste cannot disagree.
+  const support = document.createElement('p');
+  support.className = 'hud-selftest-pad-support';
+  support.textContent = describeSupport(pad.support);
+
   const channels = document.createElement('ul');
   channels.className = 'hud-selftest-channels';
   const axes = pad.axes.map((_, i) => channelRow(`Axis ${i}`, true));
   const buttons = pad.buttons.map((_, i) => channelRow(`Button ${i}`, false));
   for (const row of [...axes, ...buttons]) channels.appendChild(row.root);
-  root.append(name, meta, channels);
+  root.append(name, meta, support, channels);
   return { key: padKey(pad), root, axes, buttons };
 }
 

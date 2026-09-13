@@ -1,0 +1,14 @@
+{
+  "id": "compatibility-report-omits-the-support-verdict",
+  "file": "src/input/gamepad-diagnostics.ts",
+  "find": "    lines.push(`- mapping: ${pad.mapping === '' ? '(none reported)' : pad.mapping}`);\n    // FIRST AFTER THE MAPPING, because it is the line the report exists to carry: a\n    // compatibility report whose reader has to infer acceptance from an axis count is\n    // making the reader do the classifier's job.\n    lines.push(`- Tanks support: ${describeSupport(pad.support)}`);",
+  "replace": "    lines.push(`- mapping: ${pad.mapping === '' ? '(none reported)' : pad.mapping}`);",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "formatPadReport states the support verdict per pad, so the reader is not left to infer it (issue #596)"
+  ],
+  "why": "Drops the support line from the copied compatibility report. The pane keeps its own, so the two surfaces disagree about the same pad -- and the report is the half that leaves the machine, which makes it the half whose omission survives into an issue thread where nobody can re-run it. `describeSupport` is shared by both precisely so they cannot diverge; this is what proves the report actually calls it."
+}

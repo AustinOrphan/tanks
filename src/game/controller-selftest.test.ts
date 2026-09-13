@@ -6,9 +6,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderControllerSelfTest } from './controller-selftest';
 import type { PadDiagnostic } from '../input/gamepad-diagnostics';
+import { STANDARD_PROFILE } from '../input/gamepad-profile';
 
 function pad(overrides: Partial<PadDiagnostic> = {}): PadDiagnostic {
   return {
+    // `support` defaults to the standard verdict since issue #596: these fixtures describe a
+    // standard-mapping pad, and the pane now renders what Tanks will do with it beside what
+    // the browser reported. An override is how the refused cases are posed.
+    support: overrides.support ?? { kind: 'standard', profile: STANDARD_PROFILE },
     padIndex: overrides.padIndex ?? 0,
     id: overrides.id ?? 'Test Pad',
     mapping: overrides.mapping ?? 'standard',
@@ -52,6 +57,33 @@ describe('renderControllerSelfTest: structure', () => {
     expect(container.querySelector('.hud-selftest-pad-meta')?.textContent).toBe(
       'mapping: (none reported) · axes: 1 · buttons: 0',
     );
+  });
+
+  it('states what Tanks will do with the pad, beside what the browser reported (issue #596)', () => {
+    // The counts describe the device; this line answers the question the pane is open to
+    // answer. Two pads in one render, one accepted and one refused, because a verdict line
+    // that was really a constant reads correctly on either pad alone.
+    const view = renderControllerSelfTest(container, () => CONTEXT);
+    view.update([
+      pad({ padIndex: 0 }),
+      pad({
+        padIndex: 1,
+        id: 'HuiJia  USB GamePad',
+        mapping: '',
+        support: { kind: 'unknown', reason: { code: 'unknown-mapping', mapping: '', id: 'HuiJia  USB GamePad' } },
+      }),
+    ]);
+    const lines = Array.from(
+      container.querySelectorAll('.hud-selftest-pad-support'),
+      (el) => el.textContent,
+    );
+    expect(lines).toEqual([
+      'supported (standard mapping)',
+      'NOT supported: no profile matches this mapping/id',
+    ]);
+    // One per pad row, in pad order -- the same nesting the channel lists rely on, so a
+    // verdict cannot end up under its neighbour.
+    expect(container.querySelectorAll('.hud-selftest-pad').length).toBe(2);
   });
 
   it('keeps the SAME nodes across a frame whose pad set has not changed', () => {

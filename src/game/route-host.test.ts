@@ -1686,6 +1686,10 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     axes: [0, 0, 0, 0],
     buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
     id: 'Fake Pad',
+    // The comment above already called this a standard-mapping pad; since issue #596 it has
+    // to SAY so, because the menu poller classifies before it reads and a pad reporting no
+    // mapping contributes no actions.
+    mapping: 'standard',
   });
   /** Run the one queued page frame at `now`; the poller queues the next one itself. */
   const frame = (f: Fixture, now: number): void => {
@@ -1867,6 +1871,10 @@ describe('createRouteHost: prompts follow the input the player is using (issue #
     axes: [0, 0, 0, 0],
     buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
     id: 'Fake Pad',
+    // The comment above already called this a standard-mapping pad; since issue #596 it has
+    // to SAY so, because the menu poller classifies before it reads and a pad reporting no
+    // mapping contributes no actions.
+    mapping: 'standard',
   });
 
   it('the first input of the page sets the hint with no threshold: a touch tap drops the key hint', () => {

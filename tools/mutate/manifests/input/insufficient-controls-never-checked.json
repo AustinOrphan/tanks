@@ -1,0 +1,17 @@
+{
+  "id": "insufficient-controls-never-checked",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "  if (pad.axes.length < need.axes || pad.buttons.length < need.buttons) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-profile.test.ts",
+    "src/input/gamepad.test.ts"
+  ],
+  "killedBy": [
+    "classifyPad: the four verdicts refuses a recognized pad that lacks the controls its profile names, and counts both sides",
+    "classifyPad: the four verdicts applies the same shortfall test to a catalogued profile, not only to the standard one",
+    "createGamepadReader: move (left stick) refuses a browser-remapped pad that does not expose the axes the standard layout names"
+  ],
+  "why": "Drops the second half of the classification: a pad is recognized and then read without checking it HAS the controls its profile names. A browser really does report `mapping: 'standard'` for a device with fewer controls than the standard layout has, and every index past the end then reads `undefined` -- which the reader's `?? 0` turns into a centred stick and an unpressed button, so the pad reads as present and permanently idle with nothing anywhere saying why. Three tests kill it, and the third is the one that matters most: it enters through `createGamepadReader`, so this is caught at the seam a player's hardware actually reaches rather than only in the pure classifier."
+}
