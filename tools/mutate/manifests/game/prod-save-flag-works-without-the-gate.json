@@ -1,0 +1,14 @@
+{
+  "id": "prod-save-flag-works-without-the-gate",
+  "file": "src/game/storage.ts",
+  "find": "  if (!parseDeveloperMode(search)) return 'production';\n  return parseDevFlags(search).prodSave ? 'production' : 'developer';",
+  "replace": "  return parseDevFlags(search).prodSave || !parseDeveloperMode(search) ? 'production' : 'developer';",
+  "expect": "killed",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "killedBy": [
+    "selectStorageNamespace can only ever move developer -> production, never the reverse"
+  ],
+  "why": "Reads `prodSave` OUTSIDE the gate. The observable result is the same for every URL -- which is why this is worth an entry rather than obvious -- because `parseDevFlags` already returns DEV_FLAGS_OFF without `dev=1`, so the flag is false there either way. What changes is the ORDER of the two questions, and with it the property that a query string can only ever move a session developer -> production and never the reverse. An entry that restructured the check while keeping the current parser's behaviour would slip through a table of inputs; the killing case sweeps the gate-less shapes of the flag instead."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "developer-reset-clears-the-whole-storage",
+  "file": "src/game/loop.ts",
+  "find": "          createNamespacedStorage(resolveStorage(), 'developer').clear();",
+  "replace": "          resolveStorage().clear();",
+  "expect": "killed",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "killedBy": [
+    "createNamespacedStorage: developer clear() removes ONLY the developer keys, and leaves every production key"
+  ],
+  "why": "Resets EVERY key instead of the developer namespace, so Reset Developer Data wipes the player's real campaign, stats, achievements and customization -- the single most damaging thing this pane could do, under a button whose label promises the opposite. Issue #249's third criterion is exactly this: \"Reset Developer Data cannot remove or rewrite any production key.\" The scoping is structural -- `createNamespacedStorage`'s developer `clear()` walks only the prefixed names -- and this entry is what stops that being true only until someone reaches for the base storage, which is one identifier away."
+}
