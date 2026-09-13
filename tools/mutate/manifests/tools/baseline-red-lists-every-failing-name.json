@@ -1,0 +1,14 @@
+{
+  "id": "baseline-red-lists-every-failing-name",
+  "file": "tools/mutate/orchestrate.mjs",
+  "find": "  const shown = names.slice(0, BASELINE_NAMES_SHOWN);",
+  "replace": "  const shown = names;",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "The cap removed, which looks like more information and is less. A starved scope can report dozens of names into a log already interleaved across nine workers, burying the one line a reader needs; the '+N more' tail is what keeps the count honest while the message stays one line. Invisible whenever fewer than four tests fail, which is most of the time.",
+  "killedBy": [
+    "runOne baseline check (the scoped tests must be green BEFORE any mutation) caps the named tests and says how many it withheld"
+  ]
+}

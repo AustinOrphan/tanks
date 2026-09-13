@@ -87,7 +87,9 @@ vi.setConfig({ testTimeout: 60_000 });
  *     post-mutation check) -- this is what most existing tests already set, and
  *     keeping it as "the post-mutation result" is what lets them stay unchanged.
  */
-type TestRunResult = { failed: number; total: number; failedSuites?: number };
+// Mirrors the JSDoc typedef in orchestrate.mjs. `failedTests` is the names vitest reported,
+// which `runTestsReal` always supplies and which BASELINE-RED now prints (issue #664).
+type TestRunResult = { failed: number; total: number; failedSuites?: number; failedTests?: string[] };
 type FakeDepsOverrides = {
   initialFiles?: [string, string][];
   runTests?: (tests: string[]) => TestRunResult;
@@ -568,6 +570,53 @@ describe('runOne', () => {
       expect(r.detail).toMatch(/baseline is red before any mutation: 1 of 14 failing/);
       expect(deps.applyToDisk).not.toHaveBeenCalled();
       expect(deps.calls.runTests).toBe(1); // only the baseline call -- no post-mutation run at all
+    });
+
+    it('NAMES the tests that failed, so a red baseline is diagnosable at all (issue #664)', () => {
+      // The information was always there and was thrown away. `runTestsReal` puts
+      // `failedTestNames(report)` on every result and the killedBy contract reads it; this
+      // message printed two integers.
+      //
+      // What that cost: a sweep reports "1 of 322 failing", the scope passes 322/322 when
+      // re-run by hand, and there is nothing else to go on -- no name, no message, no way to
+      // separate a starved timeout from a genuine order-dependent failure. Three separate
+      // investigations reached "not reproducible" and stopped, and PR #671 lost a required
+      // check to it. A name makes each of those a five-minute question instead.
+      const deps = fakeDeps({
+        baseline: {
+          failed: 2, total: 322, failedSuites: 0,
+          failedTests: ['hud: surfaces > a slow one', 'hud: navigation > another'],
+        },
+      });
+      const r = runOne(entry({ expect: 'killed' }), deps, applyAt);
+      expect(r.status).toBe(STATUS.BASELINE_RED);
+      expect(r.detail).toContain('hud: surfaces > a slow one');
+      expect(r.detail).toContain('hud: navigation > another');
+      // The count stays beside the names -- the names are capped and the count is not.
+      expect(r.detail).toMatch(/2 of 322 failing/);
+    });
+
+    it('caps the named tests and says how many it withheld', () => {
+      // A starved 322-test scope can report dozens, and a wall of names in a log already
+      // interleaved across nine workers is no more readable than a bare count.
+      const failedTests = Array.from({ length: 7 }, (_, i) => `suite > case ${i}`);
+      const deps = fakeDeps({ baseline: { failed: 7, total: 322, failedSuites: 0, failedTests } });
+      const r = runOne(entry(), deps, applyAt);
+      expect(r.detail).toContain('case 0');
+      expect(r.detail).toContain('case 2');
+      expect(r.detail, 'listed past the cap').not.toContain('case 3');
+      expect(r.detail).toContain('(+4 more)');
+    });
+
+    it('degrades honestly when there are no names to give', () => {
+      // A file that failed to COLLECT contributes no test names at all: the run has a failed
+      // suite and zero collected failures. The message must not grow an empty "--" tail
+      // suggesting it knows something it does not; `suiteNote` already explains that case.
+      const deps = fakeDeps({ baseline: { failed: 0, total: 20, failedSuites: 1, failedTests: [] } });
+      const r = runOne(entry(), deps, applyAt);
+      expect(r.status).toBe(STATUS.BASELINE_RED);
+      expect(r.detail).toMatch(/1 suite\(s\) failed to collect/);
+      expect(r.detail, 'dangling separator with nothing after it').not.toMatch(/--\s*$/);
     });
 
     it('a baseline where a whole suite fails to collect is BASELINE-RED even if failed === 0', () => {
