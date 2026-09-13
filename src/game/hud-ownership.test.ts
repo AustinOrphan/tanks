@@ -177,7 +177,13 @@ describe('HUD ownership boundary (issue #324)', () => {
     // navigation Apply performs -- are HUD OPTIONS rather than interface members, the shape
     // `exitDeveloperMode` already uses: neither can change without a reload, and their
     // absence from an injected HUD is what keeps tests off the History/Location APIs.
-    expect(frame.size + route.size + gameplay.size).toBe(77);
+    //
+    // Issue #247 adds ONE, `setDiagnosticsSource`, and it is route-owned: 77 -> 78. Its page
+    // half went the #246 way -- `developerPage` is an OPTION, since a path, a hash and a
+    // build identity cannot change without a reload. Its SESSION half could not: the seed is
+    // derived per world at runtime, so it has to be read from whatever session is live, and
+    // a trampoline the host registers once is how every other such member already works.
+    expect(frame.size + route.size + gameplay.size).toBe(78);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

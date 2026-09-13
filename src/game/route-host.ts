@@ -11,6 +11,7 @@ import type { UiAction } from '../input/ui-actions';
 import { createModalityTracker, type Modality } from './modality';
 import type { VersusConfig } from './versus-config';
 import type { Assignment, SlotSource } from '../input/assignment';
+import type { SessionDiagnostics } from './dev-diagnostics';
 
 /**
  * The PAGE's application-route UI, owned above every gameplay session (issue #468).
@@ -164,6 +165,15 @@ export interface GameplaySlot {
   onQuitToTitle(cb: () => void): void;
   onReassignSlot(cb: (slot: number, source: SlotSource) => void): void;
   /**
+   * State what this session is, for the developer diagnostics summary (issue #247).
+   *
+   * The OPPOSITE DIRECTION from every `onX` above, and the reason it is named differently: a
+   * session does not handle diagnostics, it supplies them, and the host pulls when the
+   * button is pressed. The seed is why -- `loop.ts` derives it per world from the wall clock,
+   * so it exists nowhere but inside the running session.
+   */
+  provideDiagnostics(source: () => SessionDiagnostics | null): void;
+  /**
    * This session's gameplay hotkeys -- mute, pause, the developer keys.
    *
    * On the SLOT rather than on the host directly (issue #428) because the page has to see
@@ -311,6 +321,8 @@ interface SlotState {
   quitToTitle?: () => void;
   reassignSlot?: (slot: number, source: SlotSource) => void;
   key?: (e: KeyboardEvent) => void;
+  /** What the live session says about itself, for issue #247's diagnostics summary. */
+  diagnostics?: () => SessionDiagnostics | null;
   outcome?: OutcomeContext;
   style?: StyleSink;
 }
@@ -463,6 +475,13 @@ export function createRouteHost(
   hud.onFireTap(() => live?.fireTap?.());
   hud.onQuitToTitle(() => leavingGameplay(() => live?.quitToTitle?.()));
   hud.onReassignSlot((slot, source) => live?.reassignSlot?.(slot, source));
+  /*
+   * Registered ONCE, here, as a trampoline into whichever session holds the slot -- the same
+   * shape as the seven gameplay-facing callbacks above, and for the same reason: a session
+   * that registered its own would leak past its own detach. `null` when nothing is live,
+   * which the report states rather than hiding behind a seed of zero.
+   */
+  hud.setDiagnosticsSource(() => live?.diagnostics?.() ?? null);
 
   /**
    * THE LAUNCH GESTURE, moved to the page by issue #428.
@@ -1017,6 +1036,12 @@ export function createRouteHost(
         },
         onReassignSlot(cb): void {
           if (current()) state.reassignSlot = cb;
+        },
+        // `current()`-guarded like every member beside it: a session that has lost the slot
+        // must not be able to answer for the one that holds it now, which for diagnostics
+        // would mean reporting a seed from a world that no longer exists.
+        provideDiagnostics(source): void {
+          if (current()) state.diagnostics = source;
         },
         onKey(cb): void {
           if (current()) state.key = cb;

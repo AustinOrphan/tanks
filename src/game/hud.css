@@ -1837,6 +1837,41 @@
   outline-offset: var(--hud-focus-offset);
 }
 
+/* ---- The developer diagnostics field (issue #247) --------------------------------- */
+
+/* The same field the self-test's report uses, RESTATED rather than shared -- the same
+   decision `.hud-devtools` made about `.hud-about`'s geometry, and for the same reason: the
+   two are alike today because both are monospaced blocks a developer copies out of, and they
+   will stop being alike the moment issue #241 gives this one an export. A shared rule would
+   have to be unpicked with the self-test depending on it.
+
+   It sits INSIDE `.hud-devtools`, which is a top-aligned scroll container since issue #642,
+   so the field grows the pane rather than overflowing it. */
+.hud-diag-out {
+  width: 100%;
+  max-width: 52ch;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75em;
+  color: var(--hud-text);
+  background: var(--hud-scrim-panel);
+  border: 1px solid var(--hud-quiet-fill);
+  border-radius: var(--hud-radius-sm);
+  padding: var(--hud-space-2);
+}
+
+/* Without this the field is on the pane from load, empty, above the buttons that fill it --
+   the dead-CSS failure this file's test exists to catch. */
+.hud-diag-out--hidden {
+  display: none;
+}
+
+/* In the tab order, because keyboard-selecting the text is the copy path that works where
+   the async Clipboard API does not. Same ring as every other control here. */
+.hud-diag-out:focus-visible {
+  outline: var(--hud-focus-width) solid var(--hud-focus-color);
+  outline-offset: var(--hud-focus-offset);
+}
+
 /* Prose, so it takes a measure rather than the pane's full width -- a legal paragraph
    run edge to edge on a TV is unreadable. */
 .hud-about-line {

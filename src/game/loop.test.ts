@@ -11,6 +11,7 @@ import { QUALITY_PRESETS } from '../render/quality';
 import { ZERO_STATS } from './stats';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import type { AchievementContext, AchievementId } from './achievements';
+import type { SessionDiagnostics } from './dev-diagnostics';
 import { TANK_KINDS, configFor } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
@@ -405,6 +406,8 @@ interface Recorder {
   rumblePushes: boolean[];
   /** Every value passed to hud.setControlRelevance, in order. */
   relevancePushes: unknown[];
+  /** Every source registered through hud.setDiagnosticsSource, in order (issue #247). */
+  diagnosticsSources: ((() => SessionDiagnostics | null) | null)[];
   /** Every value passed to hud.setPadDiagnostics, in order (each a snapshot copy). */
   padDiagnosticsPushes: PadDiagnostic[][];
 }
@@ -626,6 +629,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     detectedPadsPushes: [],
     rumblePushes: [],
     relevancePushes: [],
+    diagnosticsSources: [],
     padDiagnosticsPushes: [],
   };
 
@@ -1359,6 +1363,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setPadDiagnostics: (pads: readonly PadDiagnostic[]) => {
           rec.padDiagnosticsPushes.push([...pads]);
+        },
+        // Issue #247's diagnostics trampoline. Recorded rather than ignored so this harness
+        // can say WHETHER the host registered one: a member stubbed to a bare no-op would
+        // let the registration disappear and every test here stay green.
+        setDiagnosticsSource: (source: (() => SessionDiagnostics | null) | null) => {
+          rec.diagnosticsSources.push(source);
         },
         onControllersOpen: (cb: () => void) => {
           onControllersOpen = cb;

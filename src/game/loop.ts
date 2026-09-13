@@ -106,6 +106,7 @@ import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } fro
 import { developerExitSearch } from './dev-config';
 import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
+import { readBuildIdentity } from './dev-diagnostics';
 
 /**
  * Construction and wiring: the boundary where the untestable collaborators are
@@ -1210,6 +1211,17 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // `exitDeveloperMode` above reads -- so the menu carries a deep link or a router's
         // own parameters through Apply instead of dropping them.
         developerSearch: search,
+        // The diagnostics summary's page half (issue #247), bound here for the reason
+        // `developerSearch` beside it is: the HUD may not touch `location`, and it may not
+        // read `import.meta.env` either. Neither a path, a hash nor a build identity can
+        // change without a reload, so all three are options rather than pushed values -- and
+        // their absence from an injected HUD is what hides both buttons in a test rather than
+        // rendering two that would report a page the test does not have.
+        developerPage: {
+          path: globalThis.location.pathname,
+          hash: globalThis.location.hash,
+          build: readBuildIdentity(import.meta.env),
+        },
         applyDeveloperConfig: (next: string) => {
           globalThis.location.assign(
             `${globalThis.location.pathname}${next}${globalThis.location.hash}`,
@@ -1780,6 +1792,17 @@ export function startGameWith(
     );
   }
 
+  /*
+   * The quality preset NAME this session was built with (issue #247's diagnostics).
+   *
+   * Hoisted out of the renderer options below rather than read again when Copy is pressed,
+   * and that is the whole point: the comment on `quality:` there says a preset changed in
+   * Settings mid-match cannot reach the live context and applies from the NEXT match. A
+   * diagnostics line that re-read the store would therefore name a preset this session is
+   * not running -- the one number in the report a reader is most likely to act on.
+   */
+  const sessionQuality = deps.devFlags.quality ?? deps.effectiveSettings.current().quality;
+
   // The STARTED level's board, not a fixed arena and not the level system's own
   // `start`: the renderer must be born fitting the board `level` names by the time the
   // START BOUNDARY above has run. Those two used to be the same level, because a session
@@ -1823,7 +1846,7 @@ export function startGameWith(
     // `low` decides whether the muzzle-smoke system was constructed at all), so it applies
     // from the next match. That is also why the whole preset is applied at one moment
     // instead of half of it live -- see hud.ts's `QUALITY_TIMING`, which tells the player.
-    quality: qualityFor(deps.devFlags.quality ?? deps.effectiveSettings.current().quality),
+    quality: qualityFor(sessionQuality),
     // `?dev=1&enemyDeathPulse=1` (issue #200): player deaths always ring; this only
     // gates non-player ones. See death-pulse.ts's own doc comment.
     enemyDeathPulse: deps.devFlags.enemyDeathPulse,
@@ -3171,6 +3194,31 @@ export function startGameWith(
 
   // The controller assignment UI's one write path -- see reassignSlot's own doc comment.
   slot.onReassignSlot(reassignSlot);
+
+  /*
+   * WHAT THIS SESSION IS, for the developer diagnostics summary (issue #247).
+   *
+   * READ AT PRESS TIME, through a closure, because three of the six facts move: `level` is
+   * reassigned on every level change, `driver.world` is replaced on every rebuild, and the
+   * seed changes with it. A snapshot taken here would describe the session's first world for
+   * the rest of its life.
+   *
+   * `humanPlayers` is derived rather than carried: `playerCount` is every slot and `botCount`
+   * is the trailing run of them, so humans are the difference -- and stating both halves is
+   * what distinguishes `players=3&bots=2` from `players=1`, two sessions that a single
+   * "players" number would render identically.
+   *
+   * Nothing here writes. The slot's own `current()` guard means a detached session cannot
+   * answer for the one that replaced it.
+   */
+  slot.provideDiagnostics(() => ({
+    seed: driver.world.seed,
+    arenaId: level.arenaId,
+    mode: driver.world.rules.mode,
+    humanPlayers: playerCount - botCount,
+    bots: botCount,
+    quality: sessionQuality,
+  }));
 
   /**
    * The music is NOT followed here any more (issue #485).

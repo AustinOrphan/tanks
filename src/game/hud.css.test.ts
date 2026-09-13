@@ -469,6 +469,12 @@ describe('hud.css is syntactically whole', () => {
       // anything outright. Nothing sweeps the classes the HUD writes -- this list is
       // maintained by hand -- so a class added without an entry here is unguarded.
       '.hud-selftest-pad-support',
+      // The developer diagnostics field and its hidden rule (issue #247). The base rule makes
+      // a <textarea> legible against the pane instead of a white browser default; the hidden
+      // one is what keeps an empty field off the pane from load, above the two buttons that
+      // fill it. Listed here because nothing sweeps the classes the HUD writes -- this
+      // population is maintained by hand.
+      '.hud-diag-out', '.hud-diag-out--hidden',
       // The application backdrop (issue #317). Without the base rule the menu is drawn
       // over the live arena again; without the hidden rule an opaque ground covers the
       // game from load and never leaves. The felt pair is the ruling's switchable
@@ -1012,7 +1018,14 @@ describe('hud.css is syntactically whole', () => {
     // Issue #246 adds the configuration menu, whose size is a property of `FLAG_REGISTRY`
     // rather than of any markup. The two static buttons are the Developer Tools entry and
     // the pane's own Back.
-    expect(buttons.length).toBe(135 + 2 + devMenuButtons());
+    // Issue #247 adds TWO: the Developer Tools pane's Copy Diagnostics and Pin Current
+    // Seed. 135 -> 137. Static markup rendered unconditionally at construction like the developer
+    // shell's other entries, so this fixture counts them whether or not a page is in
+    // developer mode -- their `hidden` property tracks the `developerPage` option, which an
+    // injected HUD in a test does not supply, and `hidden` is not what this sweep filters on.
+    // Both carry `.ui-btn--slab`, so `unstyled` stays empty. The diagnostics FIELD is a
+    // <textarea>, not a button, so it moves neither figure.
+    expect(buttons.length).toBe(137 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1102,7 +1115,14 @@ describe('hud.css is syntactically whole', () => {
     //
     // Non-vacuity as well as arithmetic: a selector that matched nothing would make the
     // assertion below pass while measuring nothing.
-    expect(controls.length).toBe(119 + 2 + devMenuButtons());
+    // Issue #247 adds TWO: the Developer Tools pane's Copy Diagnostics and Pin Current
+    // Seed. 119 -> 121. Static markup rendered unconditionally at construction like the developer
+    // shell's other entries, so this fixture counts them whether or not a page is in
+    // developer mode -- their `hidden` property tracks the `developerPage` option, which an
+    // injected HUD in a test does not supply, and `hidden` is not what this sweep filters on.
+    // Both carry `.ui-btn--slab`, so `unstyled` stays empty. The diagnostics FIELD is a
+    // <textarea>, not a button, so it moves neither figure.
+    expect(controls.length).toBe(121 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {
