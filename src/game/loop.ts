@@ -1525,29 +1525,34 @@ export function startGameWith(
   }
 
   /**
-   * A seed a RUNTIME action chose, which outranks the URL's (issue #252).
+   * Whether a runtime Reroll has SUPERSEDED the URL's pinned seed (issue #252).
    *
-   * `?seed=` is a boot-time default: it says what this session should start from. Reroll
+   * `?seed=` is a boot-time default -- it says what this session should start from. Reroll
    * Seed is a gesture made with the session already running, and it can only mean "a
-   * different world than the one I am looking at" -- so the more specific of the two wins,
-   * which is the same direction `devFlags.quality` already beats the stored Settings preset.
+   * different world than the one I am looking at", so the more specific of the two wins.
+   * Same direction `devFlags.quality` already beats the stored Settings preset.
    *
-   * WITHOUT THIS, REROLL IS DEAD EXACTLY WHERE IT IS WANTED. `nextSeed()` below reads
+   * WITHOUT THIS, REROLL IS DEAD EXACTLY WHERE IT IS WANTED. `nextSeed()` reads
    * `devFlags.seed ?? clock`, so with a seed pinned it returns the same number every time --
-   * and Reroll would rebuild an identical world while reporting a "new" seed that is the old
-   * one. A developer who pinned a seed is the likeliest person to press Reroll, so the dead
-   * case would be the common one.
+   * Reroll would rebuild an identical world and report a "new" seed that is the old one. A
+   * developer who pinned a seed is the likeliest person to press Reroll.
    *
-   * SESSION-SCOPED, not written back to the flags or the URL: the address bar still says
-   * what the page was opened with, and Copy Diagnostics reports `world.seed`, which is the
+   * A FLAG, NOT A STORED NUMBER, and the difference matters after the next level: pinning
+   * one rerolled seed here would give every subsequent world that same seed, which is what
+   * the URL parameter already does and the opposite of what Reroll asked for. This says the
+   * pin is off; each later build draws its own.
+   *
+   * SESSION-SCOPED, and never written back to the flags or the URL. The address bar still
+   * says what the page was opened with; Copy Diagnostics reports `world.seed`, which is the
    * resolved one either way.
    */
-  let seedOverride: number | null = null;
+  let seedPinSuperseded = false;
 
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
   // for a before/after comparison.
-  const nextSeed = (): number => seedOverride ?? deps.devFlags.seed ?? deriveSeed(deps.wallMs());
+  const nextSeed = (): number =>
+    (seedPinSuperseded ? undefined : deps.devFlags.seed) ?? deriveSeed(deps.wallMs());
 
   /**
    * The ONE place worlds are built: boot, level advance, quit-to-title and level pick
@@ -3247,6 +3252,41 @@ export function startGameWith(
    * Nothing here writes. The slot's own `current()` guard means a detached session cannot
    * answer for the one that replaced it.
    */
+  /*
+   * THE DEVELOPER-ACTIONS PORT (issue #252), and the reason `dev-actions.ts` exists: the
+   * three controls decide WHICH arguments a rebuild gets, and this decides what a rebuild
+   * IS. The pane never touches a world.
+   *
+   * Everything goes through `switchTo`, not around it. A world is not only a world here: the
+   * descriptor and resolved session are re-derived from it, the status bar is re-pushed, an
+   * owed landing is satisfied, and the bot sources are reseeded FROM the new world's seed.
+   * That last one is why Restart with Same Seed reproduces the same fight and not merely the
+   * same board -- a parallel rebuild path that only replaced `world` would give identical
+   * walls and different bots.
+   *
+   * WHAT IS PRESERVED IS WHAT IS NOT AN ARGUMENT: `level`, `sessionIdentity`, `assignment`,
+   * the run, and the persistence namespace are all untouched by every action, because none
+   * of them is passed. Lives are the one carried field a caller may ask for, which is how
+   * Restart Current Round differs from the other two.
+   */
+  slot.provideActions({
+    currentSeed: () => driver.world.seed,
+    // A round exists once the session has left its own title screen. The pane is reachable
+    // from the menu, where a world exists only as the backdrop behind the title and
+    // rebuilding it would restart something nobody is playing.
+    hasRound: () => !sm.atMainMenu,
+    rebuild: (seed, keepLives) => {
+      // A fresh seed was asked for: the URL's pin stops applying from here on. Set BEFORE
+      // the rebuild, because `switchTo` is what reads `nextSeed()`.
+      if (seed === null) seedPinSuperseded = true;
+      switchTo(level, keepLives ? driver.world.lives : undefined, seed ?? undefined);
+      // Read back off the world, never echoed from the argument -- `dev-actions.ts` reports
+      // whatever this returns, and reporting the request would state a seed no world was
+      // built from.
+      return driver.world.seed;
+    },
+  });
+
   slot.provideDiagnostics(() => ({
     seed: driver.world.seed,
     arenaId: level.arenaId,

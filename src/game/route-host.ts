@@ -12,6 +12,7 @@ import { createModalityTracker, type Modality } from './modality';
 import type { VersusConfig } from './versus-config';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { SessionDiagnostics } from './dev-diagnostics';
+import type { DevActionPort } from './dev-actions';
 
 /**
  * The PAGE's application-route UI, owned above every gameplay session (issue #468).
@@ -174,6 +175,14 @@ export interface GameplaySlot {
    */
   provideDiagnostics(source: () => SessionDiagnostics | null): void;
   /**
+   * Hand over the one thing only a session can do: rebuild its own board (issue #252).
+   *
+   * The same supplying direction as `provideDiagnostics` above, and registered the same way.
+   * `dev-actions.ts` decides which arguments each control implies; this is what carries them
+   * to the session that owns the world.
+   */
+  provideActions(port: DevActionPort): void;
+  /**
    * This session's gameplay hotkeys -- mute, pause, the developer keys.
    *
    * On the SLOT rather than on the host directly (issue #428) because the page has to see
@@ -323,6 +332,8 @@ interface SlotState {
   key?: (e: KeyboardEvent) => void;
   /** What the live session says about itself, for issue #247's diagnostics summary. */
   diagnostics?: () => SessionDiagnostics | null;
+  /** How the live session rebuilds its own board, for issue #252's developer actions. */
+  actions?: DevActionPort;
   outcome?: OutcomeContext;
   style?: StyleSink;
 }
@@ -482,6 +493,12 @@ export function createRouteHost(
    * which the report states rather than hiding behind a seed of zero.
    */
   hud.setDiagnosticsSource(() => live?.diagnostics?.() ?? null);
+  /*
+   * The second trampoline, and registered once for the same reason (issue #252). `null` when
+   * nothing holds the slot, which is what makes the three controls unavailable at the main
+   * menu rather than present and inert.
+   */
+  hud.setDevActionPort(() => live?.actions ?? null);
 
   /**
    * THE LAUNCH GESTURE, moved to the page by issue #428.
@@ -1042,6 +1059,9 @@ export function createRouteHost(
         // would mean reporting a seed from a world that no longer exists.
         provideDiagnostics(source): void {
           if (current()) state.diagnostics = source;
+        },
+        provideActions(port): void {
+          if (current()) state.actions = port;
         },
         onKey(cb): void {
           if (current()) state.key = cb;

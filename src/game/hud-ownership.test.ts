@@ -183,7 +183,12 @@ describe('HUD ownership boundary (issue #324)', () => {
     // build identity cannot change without a reload. Its SESSION half could not: the seed is
     // derived per world at runtime, so it has to be read from whatever session is live, and
     // a trampoline the host registers once is how every other such member already works.
-    expect(frame.size + route.size + gameplay.size).toBe(78);
+    //
+    // Issue #252 adds ONE, `setDevActionPort`, route-owned for the same reason
+    // `setDiagnosticsSource` is: 78 -> 79. It is a second trampoline the host registers once,
+    // and its session half could not be an option either -- rebuilding a board is something
+    // only whichever session owns the world can do.
+    expect(frame.size + route.size + gameplay.size).toBe(79);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

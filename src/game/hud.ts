@@ -341,6 +341,7 @@ import {
   type RelevanceSettingId,
 } from './control-relevance';
 import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
+import { DEV_ACTIONS, runDevAction, type DevActionId, type DevActionPort } from './dev-actions';
 import {
   formatDiagnostics,
   pinnedSeedUrl,
@@ -618,6 +619,15 @@ export interface Hud {
    * push would allocate a snapshot every frame for a button nobody presses.
    */
   setDiagnosticsSource(source: (() => SessionDiagnostics | null) | null): void;
+  /**
+   * Register where the developer actions reach the live session (issue #252).
+   *
+   * A getter returning the PORT, not the port itself: which session holds the slot changes
+   * over a page's life, and `route-host.ts` registers this once at construction. `null` when
+   * nothing is live, which is what makes the three controls unavailable at the main menu
+   * rather than present and inert.
+   */
+  setDevActionPort(source: (() => DevActionPort | null) | null): void;
   /**
    * WHERE THE ACTIVE RUN STANDS, for the Main Menu's one-line confidence summary and the
    * replace-run confirmation's copy (issue #226): "Mission 3 -- 2 lives left".
@@ -1248,7 +1258,7 @@ export type RouteHudKey =
   // gameplay-facing callbacks above are: `route-host.ts` registers it exactly once, as a
   // trampoline into whichever session holds the slot. A session never touches it -- it
   // supplies its facts to the host through the slot, and the host decides what is live.
-  | 'setDiagnosticsSource'
+  | 'setDiagnosticsSource' | 'setDevActionPort'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
   | 'setRelaunchTarget';
 
@@ -2188,6 +2198,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            selected text is the one path that always works. -->
       <button class="ui-btn ui-btn--slab hud-diag-copy" type="button">Copy Diagnostics</button>
       <button class="ui-btn ui-btn--slab hud-diag-pin" type="button">Pin Current Seed</button>
+      <!-- RUNTIME ACTIONS (issue #252). Each rebuilds the board, so each arms first: the
+           same two-press confirmation Reset stats and Reset progress use, rather than a
+           modal, because these sit in a pane a developer is already working in. Labels come
+           from DEV_ACTIONS so the catalogue and the markup cannot name different things.
+           Hidden as a group whenever no session holds the slot -- there is no round to
+           restart from the main menu. -->
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button"></button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button"></button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button"></button>
       <textarea class="hud-diag-out hud-diag-out--hidden" readonly rows="8" aria-label="Session diagnostics"></textarea>
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devtools-exit" type="button">Exit Developer Mode</button>
       <button class="ui-btn ui-btn--slab hud-devtools-back" type="button">Back</button>
@@ -2403,6 +2422,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const diagCopyBtn = el.querySelector('.hud-diag-copy') as HTMLButtonElement;
   const diagPinBtn = el.querySelector('.hud-diag-pin') as HTMLButtonElement;
   const diagOutEl = el.querySelector('.hud-diag-out') as HTMLTextAreaElement;
+  const devActionBtns = Array.from(el.querySelectorAll<HTMLButtonElement>('.hud-devact'));
+  // Labelled FROM the catalogue rather than written into the markup, so a renamed action
+  // cannot leave a stale word on a button that still dispatches the new id.
+  for (const btn of devActionBtns) {
+    btn.textContent = DEV_ACTIONS[btn.dataset.action as DevActionId].label;
+  }
   const selfTestView = el.querySelector('.hud-selftest') as HTMLElement;
   const selfTestListEl = el.querySelector('.hud-selftest-list') as HTMLElement;
   const selfTestCopyBtn = el.querySelector('.hud-selftest-copy') as HTMLButtonElement;
@@ -3319,22 +3344,46 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     return PANEL_SURFACE;
   }
 
+  /**
+   * The resting label of every control this arming mechanism can own.
+   *
+   * A LOOKUP rather than the two-way `=== resetStatsBtn` ternary it replaces (issue #252):
+   * with three developer actions joining the two resets, that ternary would have restored
+   * "Reset progress" onto whichever action was armed. The developer ones are labelled from
+   * `DEV_ACTIONS`, which is the same place the markup gets them.
+   */
+  function restingLabel(btn: HTMLButtonElement): string {
+    if (btn === resetStatsBtn) return 'Reset stats';
+    if (btn === resetProgressBtn) return 'Reset progress';
+    return DEV_ACTIONS[btn.dataset.action as DevActionId].label;
+  }
+
   function disarmReset(): void {
     if (!armedReset) return;
     clearTimeout(armedReset.timer);
-    armedReset.btn.textContent = armedReset.btn === resetStatsBtn ? 'Reset stats' : 'Reset progress';
+    armedReset.btn.textContent = restingLabel(armedReset.btn);
     armedReset.btn.classList.remove('hud-danger--armed');
     armedReset = null;
   }
 
-  function handleDangerClick(btn: HTMLButtonElement, cbs: Array<() => void>): void {
+  /**
+   * @param armedLabel What the control says while it waits for the second press. Defaults to
+   * the resets' own wording; the developer actions each pass their own, because the armed
+   * control is the only thing that says WHICH action is one press from firing and three
+   * identical prompts would make the armed state useless.
+   */
+  function handleDangerClick(
+    btn: HTMLButtonElement,
+    cbs: Array<() => void>,
+    armedLabel = 'Really reset?',
+  ): void {
     if (armedReset?.btn === btn) {
       disarmReset();
       for (const cb of cbs) cb();
       return;
     }
     disarmReset();
-    btn.textContent = 'Really reset?';
+    btn.textContent = armedLabel;
     btn.classList.add('hud-danger--armed');
     armedReset = { btn, timer: setTimeout(disarmReset, 4000) };
   }
@@ -4649,6 +4698,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * which the report states rather than hiding.
    */
   let diagnosticsSource: (() => SessionDiagnostics | null) | null = null;
+  /** Where the three developer actions reach the live session -- see `setDevActionPort`. */
+  let devActionPort: (() => DevActionPort | null) | null = null;
 
   /** Everything `dev-diagnostics.ts` needs, composed from the two halves at press time. */
   const diagnosticsInput = (): DiagnosticsInput | null => {
@@ -4707,6 +4758,48 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     );
   };
 
+  /**
+   * Whether the three actions are offered at all.
+   *
+   * Pushed rather than asked at click time, because it decides VISIBILITY: a control the
+   * session cannot serve is not rendered, the rule `exitDeveloperMode` and both diagnostics
+   * buttons already follow. Re-run whenever the port changes -- which is once per page from
+   * `route-host.ts`, and whenever the pane opens, since the slot can fill or empty while it
+   * is shut.
+   */
+  function refreshDevActions(): void {
+    const available = (devActionPort?.() ?? null)?.hasRound() === true;
+    for (const btn of devActionBtns) btn.hidden = !available;
+    if (!available) disarmReset();
+  }
+
+  /*
+   * One handler for all three, dispatching on the button's own `data-action`. The catalogue
+   * decides the wording and `dev-actions.ts` decides the arguments; this does the arming and
+   * writes the answer where Copy Diagnostics already writes its report, so the seed a reroll
+   * lands on is one selection away from a URL.
+   */
+  const runDevActionFor = (btn: HTMLButtonElement): void => {
+    const id = btn.dataset.action as DevActionId;
+    const port = devActionPort?.() ?? null;
+    if (port === null) return;
+    const outcome = runDevAction(id, port);
+    if (outcome.kind === 'refused') {
+      showDiagnostics('No round is running, so there is nothing to restart. Start a round and press this again.');
+      return;
+    }
+    // The seed the WORLD is running, straight from the outcome -- and the pinned URL beside
+    // it, because "reports an exact seed that can immediately be copied into a reproduction
+    // URL" is the criterion, and a bare number still leaves the developer to build one.
+    const input = diagnosticsInput();
+    const url = input === null ? null : pinnedSeedUrl({ ...input, session: input.session });
+    showDiagnostics(
+      url === null
+        ? `${DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.`
+        : `${DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.\n${url}`,
+    );
+  };
+
   const handleSelfTestCopy = (): void => {
     const text = selfTest.report();
     selfTestReportEl.value = text;
@@ -4718,6 +4811,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   diagCopyBtn.addEventListener('click', handleDiagCopy);
   diagPinBtn.addEventListener('click', handleDiagPin);
+  for (const btn of devActionBtns) {
+    btn.addEventListener('click', () =>
+      handleDangerClick(btn, [() => runDevActionFor(btn)], DEV_ACTIONS[btn.dataset.action as DevActionId].confirmLabel),
+    );
+  }
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
   customizeOpenBtn.addEventListener('click', handleCustomizeOpen);
@@ -4786,6 +4884,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // gets neither button and cannot report a page it cannot see.
   diagCopyBtn.hidden = !opts.developerPage;
   diagPinBtn.hidden = !opts.developerPage;
+  // Hidden until a session says otherwise: no port has been registered at construction, so
+  // the three actions start unavailable rather than flashing on before the first push.
+  refreshDevActions();
   // Same rule as Exit above: a button that cannot do its job is not offered. Reset and Copy
   // stay -- they change the menu and the clipboard, neither of which needs `location`.
   (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =
@@ -7064,6 +7165,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     setDiagnosticsSource(source): void {
       diagnosticsSource = source;
+    },
+    setDevActionPort(source): void {
+      devActionPort = source;
+      refreshDevActions();
     },
     setContinueAvailable(available: boolean): void {
       hasProgress = available;

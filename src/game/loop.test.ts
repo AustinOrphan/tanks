@@ -12,6 +12,7 @@ import { ZERO_STATS } from './stats';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import type { AchievementContext, AchievementId } from './achievements';
 import type { SessionDiagnostics } from './dev-diagnostics';
+import type { DevActionPort } from './dev-actions';
 import { TANK_KINDS, configFor } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
@@ -408,6 +409,8 @@ interface Recorder {
   relevancePushes: unknown[];
   /** Every source registered through hud.setDiagnosticsSource, in order (issue #247). */
   diagnosticsSources: ((() => SessionDiagnostics | null) | null)[];
+  /** Every port registered through hud.setDevActionPort, in order (issue #252). */
+  devActionPorts: ((() => DevActionPort | null) | null)[];
   /** Every value passed to hud.setPadDiagnostics, in order (each a snapshot copy). */
   padDiagnosticsPushes: PadDiagnostic[][];
 }
@@ -630,6 +633,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     rumblePushes: [],
     relevancePushes: [],
     diagnosticsSources: [],
+    devActionPorts: [],
     padDiagnosticsPushes: [],
   };
 
@@ -1369,6 +1373,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // let the registration disappear and every test here stay green.
         setDiagnosticsSource: (source: (() => SessionDiagnostics | null) | null) => {
           rec.diagnosticsSources.push(source);
+        },
+        // Issue #252's action trampoline, recorded for the same reason as the one above: a
+        // no-op stub would let the registration disappear silently.
+        setDevActionPort: (source: (() => DevActionPort | null) | null) => {
+          rec.devActionPorts.push(source);
         },
         onControllersOpen: (cb: () => void) => {
           onControllersOpen = cb;
