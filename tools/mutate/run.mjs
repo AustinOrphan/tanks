@@ -291,6 +291,39 @@ export function pidIsAlive(pid) {
 }
 
 /**
+ * How many test workers ONE mutate worker's vitest may use.
+ *
+ * THE BUG THIS FIXES, measured rather than reasoned about. Each mutate worker spawns
+ * `vitest run` as a subprocess, and vitest sizes its OWN pool (`forks` by default in v3)
+ * from the machine it finds -- it has no idea it is one of nine siblings doing the same
+ * thing. On this 10-core development machine, `--jobs auto` (9 workers) was measured at a
+ * PEAK OF 66 CONCURRENT NODE PROCESSES: nine mutate workers times roughly seven forks each,
+ * against ten cores. Every one of those is running a real jsdom suite.
+ *
+ * The consequence is not slowness, it is FAILURE. Vitest's default per-test timeout is
+ * 5000ms of WALL CLOCK, and a test that takes 200ms on an idle machine has no headroom at
+ * six times oversubscription. When one blows, the harness reports its whole scope as
+ * BASELINE-RED -- "the tests were already failing before any mutation" -- which is literally
+ * true and reads as a broken repository rather than a starved one. That is issue #664's
+ * symptom, and it cost PR #671 a required check on a diff that touched only the gallery.
+ *
+ * The parent already provides the parallelism, ACROSS workers. So the right share is the
+ * machine divided by the number of workers, floored at one: total vitest workers then lands
+ * near the core count instead of multiplying by it. At `--jobs auto`, where jobs is
+ * `cores - 1`, this is exactly 1.
+ *
+ * Serial runs (`--jobs 1`, the default) are unchanged and deliberately so: with no siblings
+ * there is nothing to divide, and a multi-file scope keeps the file parallelism that makes
+ * it quick.
+ *
+ * Pure, so a test can pin the arithmetic without a machine of any particular size.
+ * @param {number} jobs @param {number} cores @returns {number}
+ */
+export function vitestWorkersPerJob(jobs, cores) {
+  return Math.max(1, Math.floor(cores / Math.max(1, jobs)));
+}
+
+/**
  * Split entries across `jobs` workers WITHOUT splitting an exact test scope: every
  * entry of one scope goes to one worker, so each scope is still baselined exactly
  * once per run (`runManifest` caches baselines per scope inside one process). Scopes
@@ -692,7 +725,11 @@ export function runTestsReal(testFiles, root = process.cwd()) {
   const outFile = join(tmpdir(), `mutate-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
   try {
     const vitestBin = join(root, 'node_modules/.bin/vitest');
-    const res = spawnSync(vitestBin, ['run', ...testFiles, '--reporter=json', `--outputFile=${outFile}`], {
+    // Set by the parent for POOL WORKERS only -- see `vitestWorkersPerJob`. Absent for a
+    // serial run, which keeps vitest's own sizing and the whole machine.
+    const share = process.env.MUTATE_VITEST_WORKERS;
+    const poolArgs = share ? [`--maxWorkers=${share}`, `--minWorkers=${share}`] : [];
+    const res = spawnSync(vitestBin, ['run', ...testFiles, ...poolArgs, '--reporter=json', `--outputFile=${outFile}`], {
       cwd: root,
       encoding: 'utf8',
       timeout: SUBPROCESS_TIMEOUT_MS,
@@ -947,6 +984,10 @@ async function runParallel(entries, jobs, root, reportPath) {
       const child = spawn(process.execPath, [thisFile, '--root', w.dir, '--manifest', slicePath, '--report', workerReport], {
         cwd: root,
         stdio: ['ignore', 'pipe', 'pipe'],
+        // The worker's share of the machine. Passed by ENVIRONMENT rather than as a flag
+        // because the worker IS run.mjs: a flag would have to be parsed, defaulted and kept
+        // in step with parseArgs, for a value only the parent is in a position to know.
+        env: { ...process.env, MUTATE_VITEST_WORKERS: String(vitestWorkersPerJob(slices.length, availableParallelism())) },
       });
       w.child = child;
       /** @param {import('node:stream').Readable} stream @param {(line: string) => void} write */
