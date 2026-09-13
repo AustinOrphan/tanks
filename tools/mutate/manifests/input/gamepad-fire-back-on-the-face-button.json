@@ -12,7 +12,7 @@
   "killedBy": [
     "createGamepadReader: fire and mine are edges, never held state reads the TRIGGERS, not the face buttons -- the twin-stick fix",
     "createGamepadMenuPoller: button indices confirm and back are DISJOINT from fire and mine, so a menu press cannot leak a shot, and pause is Start (9)",
-    "the standard profile never puts a menu action on a gameplay button, which is issue #494 stated as a rule"
+    "the standard profile is the one copy of the standard indices never puts a menu action on a gameplay button, which is issue #494 stated as a rule"
   ],
   "why": "Puts fire back on button 0, A/Cross. That is under the same right thumb that has to hold the aim stick, so a twin-stick player can aim or fire but not both -- the ergonomic defect this binding was moved to fix. It also re-collides with the menu's confirm button, restoring the leaked-shell class issue #494 was filed for: confirming Resume with A, still held on the first simulated tick, reads as a fresh fire press. The number moved to STANDARD_PROFILE under issue #596 -- gamepad.ts's GAMEPAD_FIRE_BUTTON is derived from it now, so this one edit still reaches every reader, which is the point of there being one copy. THREE tests catch it and they catch different halves, which is why all three are named: one pins the index as the trigger, one pins menu and gameplay buttons as disjoint sets, and one runs profileCollisions over the standard profile itself so the #494 rule is machine-checked rather than merely observed. The behavioural edge tests deliberately do NOT catch it -- they press through the constant, so they measure edge semantics rather than binding, and a binding change should not disturb them."
 }
