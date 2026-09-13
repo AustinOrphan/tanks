@@ -58,8 +58,24 @@ same viewport — content at the top, empty space below, `.hud-about-line` measu
 `.hud-selftest` (#599) and `.hud-devcfg` (#246) were both written `flex-start` from the
 start. The two panes here are joining four siblings, not departing from them.
 
+## The padding Settings gains, on the narrowest viewport
+
 Settings also gains `padding: var(--hud-space-5)` in the same change, which is why its
 heading lands at +35 rather than at 0: centring gave the pane its inset for free, and
 top-aligned without padding the heading butts the viewport edge. `--hud-space-5` is the inset
 `.hud-about`, `.hud-devtools` and `.hud-selftest` already use. Both lines moved between the
 two captures, so neither number above attributes to one of them alone.
+
+That is 14px taken off **each** side, so it narrows the content box by 28px as well as
+insetting it — invisible at 844 and 1280 wide, about 7% of the width at 390. Measured rather
+than assumed, at the narrowest viewport in this set:
+
+| Before, 390x700 | After, 390x700 |
+| --- | --- |
+| `settings-before-390x700.png` | `settings-after-390x700.png` |
+
+No control row rewraps: Haptics/Rumble/Controllers stays one row and Motion/Quality stays one
+row, and `.hud-reset-stats` sits at x = 78 w = 99 in both. What does change is the prose,
+and in the pane's favour — before, "Progress, stats and customization are saved in this
+browser only." runs the full 390px to the viewport edge with the final word against it;
+after, it wraps one word earlier inside a 14px gutter.
