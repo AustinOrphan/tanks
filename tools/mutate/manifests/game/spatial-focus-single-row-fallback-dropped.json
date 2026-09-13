@@ -18,7 +18,7 @@
     "createHud roving-tabindex focus navigation (issue #115) treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach",
     "hud: relaunch target -- the title/outcome affordance policy roving tabindex reaches the Campaign button on a versus-kind title screen",
     "hud: the semantic action dispatcher (issue #494) a direction walks the active panel like the arrows do, and reports unconsumed with nothing shown",
-    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Back, then Start -- the two controls the task brief names explicitly",
     "spatial-focus: no layout to follow (every rect empty, as jsdom reports) Up and Down walk document order and wrap, the pre-#495 cycle",
     "spatial-focus: no layout to follow (every rect empty, as jsdom reports) a genuinely single visual row behaves the same way -- the negative control for the fallback"
   ]
