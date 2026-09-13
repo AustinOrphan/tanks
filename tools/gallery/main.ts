@@ -30,6 +30,7 @@ const motionParam = params.get('motion') === 'reduced' ? 'reduced' : 'full';
 const identityMarkerParam = params.get('identityMarker') as import('../../src/presentation/identity-marker').IdentityMarkerStyle | null;
 const blockedFireParam = params.get('blockedFire') as import('../../src/presentation/blocked-fire').BlockedFireCue | null;
 const arrivalParam = params.get('arrival') as import('../../src/presentation/arrival-language').ArrivalLanguage | null;
+const enemyRoleParam = params.get('enemyRole') as import('../../src/presentation/enemy-role').EnemyRoleCue | null;
 
 // `scene` selects one of MOMENTS's scripted timelines over the default posed gallery.
 // Looking the id up directly in MOMENTS (rather than checking against a hardcoded list)
@@ -78,6 +79,7 @@ const g = moment
       // nothing depending on a `--scene` the user may never have set.
       mineWarn: mineWarnParam,
       identityMarker: identityMarkerParam,
+      enemyRole: enemyRoleParam,
       motion: motionParam,
     });
 

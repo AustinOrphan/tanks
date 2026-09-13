@@ -367,6 +367,8 @@ export interface GalleryOptions {
    */
   mineWarn?: MineWarnStyle | null;
   identityMarker?: IdentityMarkerStyle | null;
+  /** Issue #357's non-colour role cues; absent = the shipped board. */
+  enemyRole?: import('../../src/presentation/enemy-role').EnemyRoleCue | null;
   /**
    * The resolved motion policy (issue #651). Absent means the shipped default, full motion,
    * on the same contract as the two above.
@@ -437,7 +439,8 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   // undefined so a flag that arrives as an empty string still resolves to the default
   // rather than to a falsy value the renderer would have to interpret.
   const views = createEntityViews(
-    scene, undefined, opts.mineWarn ?? null, opts.identityMarker ?? null,
+    scene, undefined, opts.mineWarn ?? null, opts.identityMarker ?? null, null,
+    opts.enemyRole ?? null,
   );
   // Pushed, never inferred -- the same one-way projection `renderer.ts` performs. A gallery
   // that read the policy itself would be a second source of truth for it.
