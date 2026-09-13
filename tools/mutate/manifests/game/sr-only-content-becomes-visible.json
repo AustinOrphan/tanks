@@ -1,0 +1,14 @@
+{
+  "id": "sr-only-content-becomes-visible",
+  "file": "src/game/hud.css",
+  "find": ".ui-sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  margin: -1px;\n  padding: 0;\n  overflow: hidden;\n  clip-path: inset(50%);\n  white-space: nowrap;\n  border: 0;\n}",
+  "replace": ".ui-sr-only-renamed {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  margin: -1px;\n  padding: 0;\n  overflow: hidden;\n  clip-path: inset(50%);\n  white-space: nowrap;\n  border: 0;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole still carries the rules the features depend on"
+  ],
+  "why": "Renames the screen-reader-only rule, so everything carrying that class is drawn. That is both Records tables' captions (issue #640) and the live announcement line (issue #629) -- a visual regression produced BY an accessibility feature, which is the direction nobody looks in, and the announcement line would appear under the toast stack narrating the player's own lives at them. Renamed to a name sharing no prefix, because the guard asserts with `toContain` and a `-renamed` suffix would still contain the original as a substring."
+}
