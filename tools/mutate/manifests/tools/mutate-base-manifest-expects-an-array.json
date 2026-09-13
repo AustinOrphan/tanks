@@ -1,0 +1,14 @@
+{
+  "id": "mutate-base-manifest-expects-an-array",
+  "file": "tools/mutate/run.mjs",
+  "find": "    for (const entry of parseManifestText(shown.stdout, `${base}:${path}`).entries) {",
+  "replace": "    for (const entry of JSON.parse(shown.stdout)) {",
+  "why": "The per-entry layout stores one entry OBJECT per file; a base reader that iterates the parsed file as an array throws on the first one, so fixing only the listing would turn the selector from over-selecting into failing every pull-request run.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "baseManifestById: the manifest as it was at the merge base (issue #689) reads every per-entry file of the nested layout at base, including one deleted since and not one added since"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mutate-base-manifest-lists-one-level",
+  "file": "tools/mutate/run.mjs",
+  "find": "    const listing = git(['ls-tree', '-r', '--name-only', base, '--', rel]);",
+  "replace": "    const listing = git(['ls-tree', '--name-only', base, '--', rel]);",
+  "why": "Issue #689: a one-level listing of the manifest directory finds no file in the <area>/<id>.json layout, so the merge-base map is empty, every entry reads as new, and every pull request runs the whole manifest while reporting a narrowed selection.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "baseManifestById: the manifest as it was at the merge base (issue #689) reads every per-entry file of the nested layout at base, including one deleted since and not one added since"
+  ]
+}

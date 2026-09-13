@@ -1,12 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
-import { staleWorkerWorktrees, legacyWorkerWorktrees, pidIsAlive, parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, formatRunSummary, formatSelectionEcho, selectOnly, missingOnlyReport, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest } from './run.mjs';
+import { staleWorkerWorktrees, legacyWorkerWorktrees, pidIsAlive, parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, formatRunSummary, formatSelectionEcho, selectOnly, missingOnlyReport, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest, baseManifestById } from './run.mjs';
 import { scopeCosts } from './scope-costs.mjs';
-import { selectAffected, entryText } from './select.mjs';
+import { selectAffected, entryText, ALWAYS_RUN_PATTERNS } from './select.mjs';
 import type { ManifestEntry } from './lib.mjs';
 
 /**
@@ -1471,18 +1472,66 @@ describe('selectAffected', () => {
     expect(ids(isolated)).toEqual(['cap-1']);
   });
 
-  it('the always-run list: harness, runner config, dependencies and workflows select everything, and the manifest directory is not on it', () => {
-    for (const path of ['tools/mutate/run.mjs', 'tools/mutate/package.json', 'vite.config.ts', 'package.json', 'package-lock.json', 'tsconfig.json', '.github/workflows/ci.yml']) {
+  it('the always-run list: harness, runner config, dependencies and the mutation workflows select everything, and the manifest directory is not on it', () => {
+    for (const path of ['tools/mutate/run.mjs', 'tools/mutate/package.json', 'vite.config.ts', 'package.json', 'package-lock.json', 'tsconfig.json', '.github/workflows/ci.yml', '.github/workflows/mutation-floor.yml']) {
       const sel = run([path]);
       expect(sel.all, path).toBe(true);
     }
     // The three things under tools/mutate/ that cannot change an outcome. The README case
     // is not hypothetical: replaying this rule over PR #508 selected all 376 entries on a
-    // docs-only line before the pattern was narrowed to harness code.
-    for (const path of ['tools/mutate/manifests/sim', 'tools/mutate/README.md', 'tools/mutate/scope-costs.json']) {
+    // docs-only line before the pattern was narrowed to harness code. The two workflows
+    // are dispatch-only lanes that never run the manifest (issue #689).
+    for (const path of ['tools/mutate/manifests/sim', 'tools/mutate/README.md', 'tools/mutate/scope-costs.json', '.github/workflows/capture.yml', '.github/workflows/measure.yml']) {
       const sel = run([path]);
       expect(sel.all, path).toBe(false);
       expect(ids(sel), path).toEqual([]);
+    }
+  });
+
+  it('every workflow that runs the manifest is on the always-run list, so a new mutation lane cannot fall off it', () => {
+    const dir = new URL('../../.github/workflows/', import.meta.url);
+    const lanes = readdirSync(dir)
+      .filter((name) => /npm run mutate\b/.test(readFileSync(new URL(name, dir), 'utf8')))
+      .map((name) => `.github/workflows/${name}`);
+    expect(lanes.length, 'the scan found no mutation workflow, so it checks nothing').toBeGreaterThan(0);
+    for (const path of lanes) expect(ALWAYS_RUN_PATTERNS.some((re) => re.test(path)), path).toBe(true);
+  });
+});
+
+/**
+ * `baseManifestById` against a REAL throwaway repository, deliberately not a faked git: the
+ * defect in issue #689 was the git invocation and the paths it named -- a one-level listing
+ * of the working tree that found no file in the `<area>/<id>.json` layout, so every entry
+ * read as new and every pull request ran the whole manifest.
+ */
+describe('baseManifestById: the manifest as it was at the merge base (issue #689)', () => {
+  const git = (cwd: string, ...argv: string[]) =>
+    execFileSync('git', ['-c', 'user.email=mutate@example.invalid', '-c', 'user.name=mutate', '-c', 'commit.gpgsign=false', ...argv], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const put = (root: string, rel: string, value: unknown) => {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), JSON.stringify(value, null, 2));
+  };
+  const entry = (id: string) => ({ id, file: `src/sim/${id}.ts`, find: 'a', replace: 'b', tests: [`src/sim/${id}.test.ts`], why: 'fixture' });
+
+  it('reads every per-entry file of the nested layout at base, including one deleted since and not one added since', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mutate-base-manifest-'));
+    try {
+      git(root, 'init', '-q');
+      put(root, 'tools/mutate/manifests/sim/kept.json', entry('kept'));
+      put(root, 'tools/mutate/manifests/game/deleted.json', entry('deleted'));
+      git(root, 'add', '-A');
+      git(root, 'commit', '-q', '-m', 'base');
+      const base = git(root, 'rev-parse', 'HEAD').trim();
+      // The branch: one entry deleted, one added, one edited. Only base's content counts.
+      rmSync(join(root, 'tools/mutate/manifests/game/deleted.json'));
+      put(root, 'tools/mutate/manifests/sim/added.json', entry('added'));
+      put(root, 'tools/mutate/manifests/sim/kept.json', { ...entry('kept'), why: 'edited on the branch' });
+
+      const byId = baseManifestById(base, 'tools/mutate/manifests', root);
+      expect([...byId.keys()].sort()).toEqual(['deleted', 'kept']);
+      expect(byId.get('kept')).toEqual(entry('kept'));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

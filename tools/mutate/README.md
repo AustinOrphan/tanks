@@ -101,7 +101,8 @@ module (the reachability worker's graph, asked for every changed source that sti
 exists); or a file the entry declares in `reads` changed -- the one input the graph
 cannot see, a test reading a file through `fs`. A change under `tools/mutate/` (other
 than the manifests), to `vite.config.*`, `package.json`, `package-lock.json`,
-`tsconfig*.json` or `.github/workflows/` runs everything. `--list` prints the selection
+`tsconfig*.json`, or to the two workflows that run the manifest (`ci.yml`,
+`mutation-floor.yml`) runs everything. `--list` prints the selection
 without running it. Pull-request CI uses this; pushes to `main` run the complete set.
 
 ## The worktree pool (`--jobs`)

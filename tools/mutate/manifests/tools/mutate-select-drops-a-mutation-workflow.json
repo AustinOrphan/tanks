@@ -1,0 +1,15 @@
+{
+  "id": "mutate-select-drops-a-mutation-workflow",
+  "file": "tools/mutate/select.mjs",
+  "find": "  /^\\.github\\/workflows\\/(?:ci|mutation-floor)\\.yml$/,",
+  "replace": "  /^\\.github\\/workflows\\/ci\\.yml$/,",
+  "why": "mutation-floor.yml runs the complete manifest; a change to it must select everything, and narrowing the workflows rule to dispatch-only lanes (issue #689) must not silently drop a workflow that runs `npm run mutate`.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "selectAffected the always-run list: harness, runner config, dependencies and the mutation workflows select everything, and the manifest directory is not on it",
+    "selectAffected every workflow that runs the manifest is on the always-run list, so a new mutation lane cannot fall off it"
+  ]
+}
