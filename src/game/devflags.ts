@@ -167,6 +167,17 @@ export interface DevFlags {
    * button: whether it earns a permanent affordance is a product call, and
    * shipping a button now would decide it by accident.
    */
+  /**
+   * Use the PRODUCTION save keys on a developer session (issue #249).
+   *
+   * The one flag that moves where every store reads and writes, which is why it is a
+   * registry flag rather than a hidden toggle: issue #249 requires that production-save
+   * access "cannot be enabled through hidden UI state; it is represented by the canonical
+   * registry/parser". `storage.ts`'s `selectStorageNamespace` is the single place it is
+   * honoured -- `createBrowserAppSettings` resolves the namespace exactly once and hands the
+   * same object to every store, so there is no way for half a session to land in each.
+   */
+  prodSave: boolean;
   saveIo: boolean;
   /**
    * Record the per-tick input stream, and publish it on the dev console object.
@@ -456,6 +467,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   corpseBlock: false,
   muzzleInside: false,
   autoplay: false,
+  prodSave: false,
   saveIo: false,
   replay: false,
   gamepad: false,
@@ -744,6 +756,7 @@ export function parseDevFlags(search: string): DevFlags {
     corpseBlock: isOn(params, 'corpseBlock'),
     muzzleInside: isOn(params, 'muzzleInside'),
     autoplay: isOn(params, 'autoplay'),
+    prodSave: isOn(params, 'prodSave'),
     saveIo: isOn(params, 'saveIo'),
     replay: isOn(params, 'replay'),
     gamepad: isOn(params, 'gamepad'),
@@ -954,6 +967,13 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       "Drives the player with the scripted \"competent player\" AI instead of reading the " +
       'input controller -- the game demos itself.',
+  },
+  prodSave: {
+    kind: 'boolean',
+    description:
+      'Runs a developer session against the PRODUCTION save keys instead of the `tanks.dev.` ' +
+      'namespace, for deliberate persistence testing. Inert without `dev=1`, like every other ' +
+      'flag here. Developer Tools shows the active namespace continuously while it is on.',
   },
   saveIo: {
     kind: 'boolean',

@@ -9,7 +9,7 @@ import {
 import { createAchievementsStore, type AchievementsStore } from './achievements';
 import { createRunStore, type RunStore } from './run';
 import { createVersusSetupStore, type VersusSetupStore } from './versus-setup-store';
-import { parseDeveloperMode } from './devflags';
+import { parseDeveloperMode, parseDevFlags } from './devflags';
 
 /**
  * The ONE place the game decides where persisted state lives.
@@ -174,9 +174,21 @@ export function namespacedKey(namespace: StorageNamespace, key: string): string 
  * alone turns nothing on, so it must not move the session off the production keys either.
  * Pure, so the whole table is assertable without a browser -- the same reason
  * `parseDevFlags` takes a string.
+ *
+ * `prodSave` INVERTS THE RESULT WITHOUT INVERTING THE GATE (issue #249). A developer session
+ * that has deliberately asked for the production save runs on the production keys; a URL that
+ * asks for it WITHOUT `dev=1` still gets production, because that is what it would have got
+ * anyway and because a flag outside the gate must never do anything -- the same rule
+ * `?aimRay=1` is under. So the flag can only ever move `developer` to `production`, never the
+ * other way, and no query string can put an ordinary player on the developer keys.
+ *
+ * `parseDevFlags` rather than a second `isOn` here: it returns `DEV_FLAGS_OFF` wholesale
+ * without the gate, so the gate check below is what the flag is read THROUGH rather than
+ * beside, and the two cannot disagree about whether developer mode is on.
  */
 export function selectStorageNamespace(search: string): StorageNamespace {
-  return parseDeveloperMode(search) ? 'developer' : 'production';
+  if (!parseDeveloperMode(search)) return 'production';
+  return parseDevFlags(search).prodSave ? 'production' : 'developer';
 }
 
 /**

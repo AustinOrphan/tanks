@@ -237,6 +237,27 @@ describe('selectStorageNamespace', () => {
     // session off the production keys either.
     expect(selectStorageNamespace('?aimRay=1')).toBe('production');
   });
+
+  // ---- `prodSave`, issue #249 ------------------------------------------------------
+  it.each([
+    // The whole table, because the interesting rows are the ones that do NOTHING.
+    ['?dev=1&prodSave=1', 'production', 'the gate is open and the flag asks for production'],
+    ['?dev=1&prodSave=0', 'developer', 'an explicit off is off, not merely present'],
+    ['?prodSave=1', 'production', 'the flag ALONE is inert -- it was production anyway'],
+    ['?dev=1', 'developer', 'the default under the gate is unchanged'],
+  ])('reads %o as %s: %s', (search, expected) => {
+    expect(selectStorageNamespace(search)).toBe(expected);
+  });
+
+  it('can only ever move developer -> production, never the reverse', () => {
+    // THE SAFETY DIRECTION, and the reason the flag is read THROUGH the gate rather than
+    // beside it: no query string may put an ordinary player on the developer keys, where
+    // their real save would silently stop being read. Swept over every shape of the flag a
+    // URL can carry, with the gate absent.
+    for (const q of ['?prodSave=1', '?prodSave=0', '?prodSave', '?prodSave=yes', '?prodSave=0&prodSave=1']) {
+      expect(selectStorageNamespace(q), q).toBe('production');
+    }
+  });
 });
 
 describe('createNamespacedStorage: production', () => {
