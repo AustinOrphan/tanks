@@ -9,6 +9,7 @@ import {
   DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
 } from '../../src/sim/constants';
 import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
+import { TANK_KINDS } from '../../src/sim/config/validate';
 
 export const BLAST_LIFE = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS;
 
@@ -38,6 +39,30 @@ export interface ElementDef {
   /** Height of its visual centre, so the camera looks at the right place. */
   focusY: number;
 }
+
+/**
+ * Every kind an ENEMY can be: the shipped roster minus the player. Exported so a test can
+ * assert the `roster` subject really poses all of them -- the guard that makes "derived, not
+ * listed" worth anything.
+ */
+export const ENEMY_KINDS = TANK_KINDS.filter((k) => k !== 'player');
+
+/**
+ * ONE facing for every tank in the roster row, and that is the opposite of what `identity`
+ * does deliberately.
+ *
+ * `identity` varies its angles because the thing under test THERE is a marker that must
+ * survive its hull rotating. Here the question is whether the kinds differ at all, so any
+ * variation is a confound: a row at four angles invites "olive looks different" when what is
+ * different is that olive was drawn at 45 degrees. Holding the pose fixed leaves hue as the
+ * only variable, which is precisely the claim #357 makes and this subject has to be able to
+ * show or refute.
+ *
+ * A three-quarter facing rather than head-on or broadside: it is the pose that shows the hull
+ * side, the turret crown and the full barrel length at once, so a cue placed on any of the
+ * three is visible in the same frame.
+ */
+const ROSTER_ANGLE = Math.PI / 6;
 
 export const ELEMENTS: Record<string, ElementDef> = {
   mine: {
@@ -156,6 +181,44 @@ export const ELEMENTS: Record<string, ElementDef> = {
           aiState: 'idle', aiTimer: 0,
         });
       }
+    },
+  },
+  /**
+   * ONE TANK OF EVERY ENEMY KIND, in a row (issue #357).
+   *
+   * The subject that issue needs and did not have. `tank` alternates player and brown, so
+   * the only way to see two enemy kinds together was to boot a real match -- and the match
+   * decides which kinds, where they stand and which way they face, none of which is
+   * controllable. #357's whole question is whether the kinds are TELLABLE APART, and that
+   * cannot be asked of a frame where they are never side by side.
+   *
+   * DERIVED from `TANK_KINDS` rather than listed here, and that is the point rather than a
+   * convenience: a new enemy added to the roster joins this row automatically, so the
+   * comparison cannot quietly stop covering the thing it claims to cover. `yellow` is the
+   * live example -- it is a full entry in `tank-defs.json` with its own arena letter, and it
+   * is placed in no shipped arena, so a match-based capture can never show it however long
+   * you play. Here it is simply the last tank in the row.
+   *
+   * Every tank holds the SAME pose -- see `ROSTER_ANGLE` for why that is the opposite of
+   * what `identity` wants, and why it matters here.
+   */
+  roster: {
+    // 1.8 spacing, matching `identity`; the width is that spacing across the kinds plus a
+    // tank's own footprint of margin, so the framing does not clip the end tanks.
+    width: ENEMY_KINDS.length * 1.8, frames: 1, focusY: 0.3,
+    place: (w, x) => {
+      const span = (ENEMY_KINDS.length - 1) * 1.8;
+      ENEMY_KINDS.forEach((kind, i) => {
+        w.tanks.push({
+          id: 1 + w.tanks.length, kind,
+          pos: { x: x - span / 2 + i * 1.8, y: 0 },
+          bodyAngle: ROSTER_ANGLE,
+          turretAngle: ROSTER_ANGLE,
+          alive: true,
+          desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+          aiState: 'idle', aiTimer: 0,
+        });
+      });
     },
   },
   /** One shell broadside and one nose-on: a shell's read changes with angle. */

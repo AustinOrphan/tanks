@@ -5,7 +5,8 @@
 // No `@vitest-environment` pragma: node, like the rest of the sim-adjacent tests.
 import { describe, it, expect } from 'vitest';
 import { DT } from '../../src/sim/constants';
-import { compose, timelineDt, ELEMENTS } from './subjects';
+import { compose, timelineDt, ELEMENTS, ENEMY_KINDS } from './subjects';
+import { TANK_KINDS } from '../../src/sim/config/validate';
 
 describe('timelineDt: the gallery animation clock', () => {
   it('turns a whole age step into exactly one sim tick of seconds', () => {
@@ -81,5 +82,59 @@ describe('compose still lays subjects out the way the camera assumes', () => {
     expect(alive.tanks).toHaveLength(1);
     expect(alive.tanks[0].alive).toBe(true);
     expect(alive.tanks[0].kind).toBe('player');
+  });
+});
+
+
+describe('the roster subject: every enemy kind, side by side (issue #357)', () => {
+  const tanks = () => compose(['roster'], 0).world.tanks;
+
+  it('poses one tank of EVERY enemy kind -- population: the shipped roster minus the player', () => {
+    // The guard that makes "derived from TANK_KINDS, not listed" worth anything. Without it
+    // the derivation is a comment: a kind added to the roster could quietly miss the one
+    // subject whose entire job is to show every kind together, and the capture would still
+    // look complete.
+    //
+    // `yellow` is why this is not hypothetical. It is a full entry in tank-defs.json with its
+    // own arena letter and it is placed in NO shipped arena, so no match-based capture can
+    // ever include it. A hand-written list would have been written from what the author had
+    // seen in play.
+    // Asserted against TANK_KINDS, the CANONICAL roster, not against ENEMY_KINDS. Comparing
+    // the posed row to ENEMY_KINDS is a tautology -- both come from the same constant, so a
+    // wrong list matches its own output and the test passes. MEASURED: replacing the
+    // derivation with a hand-written five-kind list leaves that comparison green.
+    const expected = TANK_KINDS.filter((k) => k !== 'player');
+    expect([...new Set(tanks().map((t) => t.kind))].sort()).toEqual([...expected].sort());
+    expect(tanks()).toHaveLength(expected.length);
+    // ...and the exported list agrees with the roster too, since the subject's framing and
+    // the args-layer checks both read it.
+    expect([...ENEMY_KINDS].sort()).toEqual([...expected].sort());
+  });
+
+  it('poses NO player tank, so nothing in the row is the thing being compared against', () => {
+    expect(tanks().some((t) => t.kind === 'player')).toBe(false);
+    // ...and ENEMY_KINDS really is the roster minus exactly one entry, rather than a list
+    // that happens to agree today.
+    expect(ENEMY_KINDS.length).toBe(TANK_KINDS.length - 1);
+  });
+
+  it('holds every tank at ONE pose, which is what leaves hue as the only variable', () => {
+    // The property the subject exists for. A row at mixed angles invites "olive looks
+    // different" when what differs is that olive was drawn at 45 degrees; #357's claim is
+    // that the kinds are separated by colour ALONE, and a confounded row can neither show
+    // that nor refute it.
+    const angles = new Set(tanks().map((t) => t.bodyAngle));
+    expect(angles.size, 'the row poses tanks at more than one angle').toBe(1);
+    expect(new Set(tanks().map((t) => t.turretAngle)).size).toBe(1);
+  });
+
+  it('lays them out left to right with even spacing, centred on the subject slot', () => {
+    // Framing depends on it: `width` is derived from the same spacing, so a row that drifted
+    // would clip its end tanks out of the capture.
+    const xs = tanks().map((t) => t.pos.x);
+    const gaps = xs.slice(1).map((x, i) => +(x - xs[i]).toFixed(6));
+    expect(new Set(gaps).size, 'spacing is uneven').toBe(1);
+    expect(Math.abs((xs[0] + xs[xs.length - 1]) / 2), 'the row is not centred').toBeLessThan(1e-9);
+    expect(ELEMENTS.roster.width).toBeGreaterThanOrEqual(xs[xs.length - 1] - xs[0]);
   });
 });
