@@ -2,7 +2,7 @@
   "id": "selftest-support-line-has-no-rule",
   "file": "src/game/hud.css",
   "find": ".hud-selftest-pad-support {\n  margin: 0 0 var(--hud-space-2);\n  font-size: 0.85em;\n}",
-  "replace": ".hud-selftest-pad-supportX {\n  margin: 0 0 var(--hud-space-2);\n  font-size: 0.85em;\n}",
+  "replace": ".hud-selftest-pad-verdict {\n  margin: 0 0 var(--hud-space-2);\n  font-size: 0.85em;\n}",
   "expect": "killed",
   "tests": [
     "src/game/hud.css.test.ts"
@@ -10,5 +10,5 @@
   "killedBy": [
     "hud.css is syntactically whole still carries the rules the features depend on"
   ],
-  "why": "Renames the verdict line's rule so the class the TypeScript writes has none. A <p> with no rule takes the browser's default 16px block margin, and this one repeats once per connected pad, so the channel lists are pushed down by a line per pad. Caught by hud.css.test.ts's hand-maintained presence list rather than by a sweep -- there is no sweep, which this entry found out the hard way: it SURVIVED until `.hud-selftest-pad-support` was added to that list, so the entry is also the proof the list was extended rather than assumed to cover a new class."
+  "why": "Renames the verdict line's rule so the class the TypeScript writes has none. A <p> with no rule takes the browser's default 16px block margin, and this one repeats once per connected pad, so the channel lists are pushed down by a line per pad. Caught by hud.css.test.ts's hand-maintained presence list rather than by a sweep -- there is no sweep, which this entry established the hard way: it SURVIVED until `.hud-selftest-pad-support` was added to that list. It survived a SECOND time against a `-supportX` rename, because that guard asserts with `toContain` and the renamed selector still contains the original as a substring -- the same trap the file's own comment records for `.hud-achievements-open`. The rename here is to a name that shares no prefix, so the entry tests the guard rather than the guard's blind spot."
 }
