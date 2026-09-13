@@ -1,0 +1,15 @@
+{
+  "id": "entities-inverts-the-shield-progress",
+  "file": "src/render/entities.ts",
+  "find": "            const p = 1 - shieldLeft / RESPAWN_SHIELD_TICKS; // 0 fresh -> 1 ending",
+  "replace": "            const p = shieldLeft / RESPAWN_SHIELD_TICKS; // 0 fresh -> 1 ending",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts",
+    "src/render/spawn-anim.test.ts"
+  ],
+  "why": "Runs the invincible phase BACKWARDS: freshly shielded reads as about-to-expire and vice versa. Filed because issue #230 made the protected-opacity curve symmetric about the middle of the phase -- `p` and `1 - p` now give the same tank opacity -- so the assertion in `drives the invincibility overlay from shieldUntilTick` no longer discriminates it, and it did not need to before, when the curve was the monotone `0.45 + 0.55*p`. This entry SURVIVED on its first run -- nothing caught it -- so the case it names now asserts the spawn ring as well, which is strictly decreasing across the phase. The hole was created by making the opacity curve symmetric, and it was found by asking rather than assumed closed.",
+  "killedBy": [
+    "spawn animation (#199) drives the invincibility overlay from shieldUntilTick, not a latched copy"
+  ]
+}

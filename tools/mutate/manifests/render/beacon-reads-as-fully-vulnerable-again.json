@@ -1,0 +1,15 @@
+{
+  "id": "beacon-reads-as-fully-vulnerable-again",
+  "file": "src/render/spawn-anim.ts",
+  "find": "  return {\n    tankOpacity: protectedOpacity(p),\n    tankScale: 1,\n    ring: { radius: 1, opacity: 0.9, arc: 1 - p },",
+  "replace": "  return {\n    tankOpacity: 1,\n    tankScale: 1,\n    ring: { radius: 1, opacity: 0.9, arc: 1 - p },",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "killedBy": [
+    "the shielded-spawn opacity contract (issue #230) is visibly translucent while protection is running",
+    "the shielded-spawn opacity contract (issue #230) gives all three variants the SAME protected opacity at every point"
+  ],
+  "why": "Restores beacon's shipped behaviour of holding `tankOpacity: 1` for the whole protected phase, which is what issue #230 records: the one variant that shows its shield most clearly -- a depleting timer arc -- was also the one that looked fully vulnerable. Two cases kill it, and they fail for different reasons: one that beacon is not translucent at all, one that it no longer agrees with its two siblings. The second is the durable guard, because it fails for ANY variant drifting rather than only for this one."
+}
