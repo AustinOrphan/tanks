@@ -565,6 +565,8 @@ describe('hud.css is syntactically whole', () => {
       // measure. `.hud-alert-title` is deliberately absent -- it is an `<h1>` with no rule
       // of its own, styled by the same heading defaults every pane title uses.
       '.hud-alert', '.hud-alert--hidden', '.hud-alert-body',
+      // issue #685: without its rule, Retry is offered on a failure with nothing to retry
+      '.hud-alert-retry--hidden',
       // Records is one Main Menu entry with two tabs (issue #226): the tab row's layout,
       // and the hidden rule that keeps the entry off the pause panel.
       '.hud-records-tabs', '.hud-records-open--hidden',
@@ -1051,7 +1053,10 @@ describe('hud.css is syntactically whole', () => {
     // `hidden` is not what this sweep filters on. Both carry `.ui-btn--slab` and
     // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
     // modifier. The NAMESPACE line is a <p>, not a button, so it moves neither figure.
-    expect(buttons.length).toBe(142 + 2 + devMenuButtons());
+    // Issue #685 adds ONE: the match-failure alert's Retry. 142 -> 143. Static markup rendered unconditionally
+    // at construction, hidden by `.hud-alert-retry--hidden` until a caller hands over a retry, and
+    // `hidden` is not what this sweep filters on. It carries `.ui-btn--slab`, so `unstyled` stays empty.
+    expect(buttons.length).toBe(143 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1162,7 +1167,10 @@ describe('hud.css is syntactically whole', () => {
     // `hidden` is not what this sweep filters on. Both carry `.ui-btn--slab` and
     // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
     // modifier. The NAMESPACE line is a <p>, not a button, so it moves neither figure.
-    expect(controls.length).toBe(126 + 2 + devMenuButtons());
+    // Issue #685 adds ONE: the match-failure alert's Retry. 126 -> 127. Static markup rendered unconditionally
+    // at construction, hidden by `.hud-alert-retry--hidden` until a caller hands over a retry, and
+    // `hidden` is not what this sweep filters on. It carries `.ui-btn--slab`, so `unstyled` stays empty.
+    expect(controls.length).toBe(127 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

@@ -1,0 +1,14 @@
+{
+  "id": "boot-drops-the-retry",
+  "file": "src/boot.ts",
+  "find": "      overlayHost.showMatchFailure(state, retry);",
+  "replace": "      overlayHost.showMatchFailure(state);",
+  "why": "Issue #685: the host hands boot the exact descriptor that failed, and boot is the only thing that can turn it into the overlay's Retry. Dropping it leaves a failed Rematch with only Back to menu, which is not the recovery the issue asks for.",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "boot: a session replacement that fails to start (issue #685) Retry restarts the SAME descriptor on a fresh canvas"
+  ]
+}

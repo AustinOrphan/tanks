@@ -23,8 +23,16 @@ type StartArgs = [
   RouteHost,
 ];
 
-function harness(): {
+function harness(opts: {
+  /** Which `startGame` calls throw, by call order (0-based), and what they throw (issue #685). */
+  failStart?: ReadonlySet<number>;
+  /** Which sessions' `enterGameplay` throws, by construction order (issue #685). */
+  failEnter?: ReadonlySet<number>;
+  error?: unknown;
+} = {}): {
   host: GameSessionHost;
+  /** Every failure the host handed to `onStartFailure`, in order, with the intent it was for. */
+  failures: { err: unknown; intent: StartIntent }[];
   root: HTMLElement;
   shell: AppShell;
   startArgs: StartArgs[];
@@ -49,8 +57,10 @@ function harness(): {
   const canvases: HTMLCanvasElement[] = [];
   const disposedIds: number[] = [];
   const enteredIds: number[] = [];
+  const failures: { err: unknown; intent: StartIntent }[] = [];
   const box = { shellDisposals: 0, routeHostDisposals: 0 };
   let nextId = 0;
+  let startCalls = 0;
   const shell = {
     dispose(): void {
       box.shellDisposals += 1;
@@ -74,9 +84,13 @@ function harness(): {
     },
     startGame: (canvas, versus, reqVersus, reqCampaign, s, rh): GameHandle => {
       startArgs.push([canvas, versus, reqVersus, reqCampaign, s, rh]);
+      // Thrown BEFORE an id is allocated: a session that failed to build never existed, so
+      // the ledgers below number only the sessions that did.
+      if (opts.failStart?.has(startCalls++)) throw opts.error;
       const id = nextId++;
       return {
         enterGameplay(): void {
+          if (opts.failEnter?.has(id)) throw opts.error;
           enteredIds.push(id);
         },
         dispose(): void {
@@ -89,10 +103,14 @@ function harness(): {
     // rather than a real one for the same reason: this file asserts that the host
     // hands the SAME object to every session, not what that object does.
     routeHost,
+    onStartFailure: (err, intent) => {
+      failures.push({ err, intent });
+    },
   });
 
   return {
     host,
+    failures,
     root,
     shell,
     routeHost,
@@ -445,5 +463,68 @@ describe('createGameSessionHost: the empty host (issue #427)', () => {
     h.host.start(CONTINUE);
     expect(h.host.hasSession()).toBe(true);
     expect(h.disposedIds).toEqual([0, 1]);
+  });
+});
+
+/**
+ * A start that fails, at the one boundary every start goes through (issue #685).
+ *
+ * A session's own Rematch reaches `requestVersusSession` without passing through anything
+ * `boot.ts` guards, so before this the replacement's throw went straight out of a HUD
+ * click handler. By then the outgoing session was already disposed and a fresh canvas
+ * already appended, which left the player with a canvas that never initialised and no way
+ * back.
+ */
+describe('createGameSessionHost: a start that fails (issue #685)', () => {
+  const boom = new Error('renderer failed to initialise');
+
+  it('a REPLACEMENT that throws leaves no canvas and no session, and reports once with its intent', () => {
+    const h = harness({ failStart: new Set([1]), error: boom });
+    h.host.start(CONTINUE);
+    const rematch = config('vs-duel-01');
+    expect(() => h.host.requestVersusSession(rematch), 'the throw escaped into the HUD handler').not.toThrow();
+
+    expect(h.host.hasSession(), 'a failed replacement left a session behind').toBe(false);
+    expect(h.root.querySelectorAll('canvas'), 'the canvas that never initialised was left in the page').toHaveLength(0);
+    expect(h.failures.map((f) => f.err), 'the failure was not reported exactly once').toEqual([boom]);
+    expect(h.failures[0].intent).toEqual({ kind: 'versus', config: rematch });
+    expect(h.disposedIds, 'the outgoing session was not disposed exactly once').toEqual([0]);
+    expect(h.enteredIds, 'the disposed session was shown again').toEqual([0]);
+  });
+
+  it('a FIRST start that throws leaves the host just as empty', () => {
+    const h = harness({ failStart: new Set([0]), error: boom });
+    h.host.start(CONTINUE);
+    expect(h.host.hasSession()).toBe(false);
+    expect(h.root.querySelectorAll('canvas')).toHaveLength(0);
+    expect(h.failures).toEqual([{ err: boom, intent: CONTINUE }]);
+  });
+
+  it('a session whose reveal throws is disposed, not left running where nobody can see it', () => {
+    // The second throw site. `startGame` returned a live handle, so a cleanup that only
+    // removed the canvas would leak the whole session: loop, listeners and GL context.
+    const h = harness({ failEnter: new Set([0]), error: boom });
+    h.host.start(CONTINUE);
+    expect(h.disposedIds, 'the half-started session was never disposed').toEqual([0]);
+    expect(h.host.hasSession()).toBe(false);
+    expect(h.root.querySelectorAll('canvas')).toHaveLength(0);
+    expect(h.failures.map((f) => f.err)).toEqual([boom]);
+  });
+
+  it('a retry with the reported intent starts ONE fresh session on ONE fresh canvas', () => {
+    const h = harness({ failStart: new Set([1]), error: boom });
+    h.host.start(CONTINUE);
+    h.host.requestVersusSession(config('vs-duel-01'));
+    const { intent } = h.failures[0];
+
+    h.host.start(intent);
+    expect(h.host.hasSession()).toBe(true);
+    expect(h.startArgs.at(-1)?.[1], 'the retry did not carry the SAME descriptor').toBe(intent);
+    expect(h.root.querySelectorAll('canvas'), 'the retry left more than one canvas').toHaveLength(1);
+    // Parent, not `isConnected`: the harness root is never attached to the document, so
+    // `isConnected` is false for every canvas here and would measure nothing.
+    expect(h.canvases.at(-1)?.parentElement, 'the retry drew on a canvas outside the root').toBe(h.root);
+    expect(h.enteredIds).toEqual([0, 1]);
+    expect(h.failures, 'a successful retry reported a failure').toHaveLength(1);
   });
 });

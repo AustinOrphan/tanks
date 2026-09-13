@@ -1,0 +1,14 @@
+{
+  "id": "alert-retry-hidden-rule-missing",
+  "file": "src/game/hud.css",
+  "find": ".hud-alert-retry--hidden {",
+  "replace": ".hud-alert-retry--unused {",
+  "why": "Issue #685: hud.ts hides Retry with this modifier whenever a failure has nothing to retry. Without a rule behind the class, the button stays on screen and does nothing when pressed.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud.css is syntactically whole still carries the rules the features depend on"
+  ]
+}

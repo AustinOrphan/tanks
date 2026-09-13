@@ -1,0 +1,14 @@
+{
+  "id": "session-host-leaks-a-session-whose-reveal-threw",
+  "file": "src/game/session-host.ts",
+  "find": "      stop();\n      canvas?.remove();\n      canvas = null;\n      deps.onStartFailure(err, intent);",
+  "replace": "      canvas?.remove();\n      canvas = null;\n      deps.onStartFailure(err, intent);",
+  "why": "The second throw site in create (issue #685): when enterGameplay throws, startGame has already returned a live handle. A cleanup that only removes the canvas leaks that session's loop, listeners and GL context with nothing left holding it.",
+  "tests": [
+    "src/game/session-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createGameSessionHost: a start that fails (issue #685) a session whose reveal throws is disposed, not left running where nobody can see it"
+  ]
+}

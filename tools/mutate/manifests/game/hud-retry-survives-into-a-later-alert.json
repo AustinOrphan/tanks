@@ -1,0 +1,14 @@
+{
+  "id": "hud-retry-survives-into-a-later-alert",
+  "file": "src/game/hud.ts",
+  "find": "      pendingRetry = retry ?? null;",
+  "replace": "      if (retry !== undefined) pendingRetry = retry;",
+  "why": "Issue #685: Retry belongs to the failure it was opened with. An alert opened with no retry must not offer, or run, one left over from an earlier failure that has already been dismissed.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: the match-failure alert offers Retry only when it can (issue #685) hides Retry when no retry was given, and never runs a retry left over from an earlier alert"
+  ]
+}

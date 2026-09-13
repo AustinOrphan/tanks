@@ -2146,6 +2146,13 @@
   display: none;
 }
 
+/* Retry appears only when the caller can rerun the descriptor that failed (issue #685).
+   Without this rule a failure with nothing to retry still offers a button that does
+   nothing. */
+.hud-alert-retry--hidden {
+  display: none;
+}
+
 /* Prose measure, as `.hud-about-line` takes: an error read edge to edge on a TV is the
    least readable moment to make a player work. */
 .hud-alert-body {

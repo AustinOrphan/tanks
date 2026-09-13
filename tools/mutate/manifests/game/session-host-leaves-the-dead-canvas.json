@@ -1,0 +1,15 @@
+{
+  "id": "session-host-leaves-the-dead-canvas",
+  "file": "src/game/session-host.ts",
+  "find": "      canvas?.remove();\n      canvas = null;\n      deps.onStartFailure(err, intent);",
+  "replace": "      canvas = null;\n      deps.onStartFailure(err, intent);",
+  "why": "Issue #685's blank screen: bootCanvas appends the fresh canvas before startGame throws, so a cleanup that forgets the element leaves a canvas that never initialised sitting in the page under whatever is drawn next.",
+  "tests": [
+    "src/game/session-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createGameSessionHost: a start that fails (issue #685) a REPLACEMENT that throws leaves no canvas and no session, and reports once with its intent",
+    "createGameSessionHost: a start that fails (issue #685) a FIRST start that throws leaves the host just as empty"
+  ]
+}

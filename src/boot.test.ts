@@ -41,6 +41,8 @@ function versusConfigOf(intent: StartIntent): VersusConfig | null {
 function harness(
   opts: {
     throwOnStart?: unknown;
+    /** Throw from ONE `startGame` call, by call order (0-based), and let the rest succeed (issue #685). */
+    throwOnStartCall?: { index: number; error: unknown };
     throwOnAppSettings?: unknown;
     /**
      * What the shell's capability probe answered (issue #470). Defaults to supported, so
@@ -71,6 +73,8 @@ function harness(
   reloads: number;
   /** Every failure handed to the shell's overlay instead of replacing the page (#325). */
   overlays: { title: string; detail: string; action: string }[];
+  /** The Retry each overlay was handed, in the same order as `overlays` (issue #685). */
+  retries: Array<(() => void) | undefined>;
   /** The root each route host was built in. */
   routeHostRoots: HTMLElement[];
   /** The application-level start requests boot handed the route UI (issue #468). */
@@ -105,6 +109,7 @@ function harness(
     reloads: 0,
     /** Every failure handed to the shell's overlay instead of replacing the page (#325). */
     overlays: [] as { title: string; detail: string; action: string }[],
+    retries: [] as Array<(() => void) | undefined>,
   };
   /**
    * A stand-in for the page's ONE shell. Identity is the whole assertion: every session
@@ -143,8 +148,9 @@ function harness(
     // INSTEAD of replacing the page, and only a ledger can tell "drew the overlay" apart
     // from "did nothing and left the menu up", which look identical from the DOM.
     hud: {
-      showMatchFailure(failure: { title: string; detail: string; action: string }): void {
+      showMatchFailure(failure: { title: string; detail: string; action: string }, retry?: () => void): void {
         box.overlays.push(failure);
+        box.retries.push(retry);
       },
     },
   } as unknown as RouteHost;
@@ -181,6 +187,7 @@ function harness(
     startGame: (canvas, versus, requestVersusSession, requestCampaignSession, settings, host): GameHandle => {
       startArgs.push([canvas, versus, requestVersusSession, requestCampaignSession, settings, host]);
       if ('throwOnStart' in opts) throw opts.throwOnStart;
+      if (opts.throwOnStartCall?.index === startArgs.length - 1) throw opts.throwOnStartCall.error;
       const id = nextId++;
       return {
         // Recorded by id, like the disposals: "every session was revealed" and "the FIRST
@@ -226,6 +233,9 @@ function harness(
     },
     get overlays(): { title: string; detail: string; action: string }[] {
       return box.overlays;
+    },
+    get retries(): Array<(() => void) | undefined> {
+      return box.retries;
     },
     get reloads(): number {
       return box.reloads;
@@ -1432,5 +1442,62 @@ describe('boot: the Campaign return from a versus session (Task 5b, re-anchored 
     requestVersusSession(CONFIG_B);
     expect(h.startArgs).toHaveLength(3);
     expect(versusConfigOf(h.startArgs[2][1])).toBe(CONFIG_B);
+  });
+});
+
+/**
+ * A REPLACEMENT that fails, entered the way a player enters it (issue #685).
+ *
+ * Deliberately separate from the start-failure suite above: that one fails the FIRST start
+ * from a menu click, which `requestStart` always guarded. This one fails a session's own
+ * Rematch, which reaches the host through the session's reboot seam and passed through no
+ * guard at all, so one catch cannot stand in for the other.
+ */
+describe('boot: a session replacement that fails to start (issue #685)', () => {
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+
+  /** Start a versus match, then press Rematch in it: the session's own reboot seam. */
+  function rematch(h: ReturnType<typeof harness>): void {
+    h.sessionRequests[0].requestStart({ kind: 'versus', config: VS });
+    const requestVersusSession = h.startArgs[0][2];
+    requestVersusSession(VS);
+  }
+
+  it('draws the recoverable overlay over the working shell, and reports the original once', () => {
+    const boom = new Error('renderer failed to initialise');
+    const h = harness({ throwOnStartCall: { index: 1, error: boom } });
+    boot(h.deps);
+    expect(() => rematch(h), 'the Rematch failure escaped the click handler').not.toThrow();
+
+    expect(h.overlays.map((o) => o.title)).toEqual([STARTUP_FAILURES['match-failed'].title]);
+    expect(h.errors, 'the failure was not reported exactly once').toEqual([boom]);
+    expect(h.root.querySelectorAll('canvas'), 'a canvas that never initialised was left behind').toHaveLength(0);
+    expect(h.disposedIds, 'the outgoing session was not disposed exactly once').toEqual([0]);
+    expect(h.routeHostDisposals, 'the working shell was torn down to show an error').toBe(0);
+  });
+
+  it('a FATAL replacement failure still replaces the page and offers no retry', () => {
+    const h = harness({ throwOnStartCall: { index: 1, error: new UnsupportedRenderError('no-webgl2') } });
+    boot(h.deps);
+    rematch(h);
+    expect(shownFailure(h)).toBe('unsupported-render');
+    expect(h.overlays, 'a fatal cause was drawn as a retryable overlay').toEqual([]);
+    expect(h.errors).toHaveLength(1);
+  });
+
+  it('Retry restarts the SAME descriptor on a fresh canvas', () => {
+    const h = harness({ throwOnStartCall: { index: 1, error: new Error('renderer failed to initialise') } });
+    boot(h.deps);
+    rematch(h);
+    const retry = h.retries[0];
+    expect(retry, 'the recoverable overlay was given no Retry').toBeTypeOf('function');
+
+    retry?.();
+    expect(h.startArgs, 'Retry did not start exactly one more session').toHaveLength(3);
+    expect(h.startArgs[2][1]).toEqual({ kind: 'versus', config: VS });
+    expect(h.startArgs[2][1], 'Retry rebuilt the descriptor instead of reusing it').toBe(h.startArgs[1][1]);
+    expect(h.enteredIds).toEqual([0, 1]);
+    expect(h.root.querySelectorAll('canvas')).toHaveLength(1);
+    expect(h.errors).toHaveLength(1);
   });
 });

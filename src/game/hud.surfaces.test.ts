@@ -2613,3 +2613,81 @@ describe('the About & Legal pane in the assembled HUD (issue #117)', () => {
     }
   });
 });
+
+/**
+ * Retry on the match-failure alert (issue #685).
+ *
+ * The alert had exactly one action, Back to menu, because every failure that reached it came
+ * from a menu click and going back WAS the recovery. A failed Rematch leaves the player where
+ * the match used to be, so the same descriptor on a fresh canvas is the other valid action. It
+ * is offered only when the caller can retry: the HUD does not know what failed.
+ */
+describe('hud: the match-failure alert offers Retry only when it can (issue #685)', () => {
+  const failure = { title: 'That match could not start.', detail: 'Something went wrong.', action: 'Back to menu' };
+
+  it('shows Retry for a retryable failure, and runs it once', () => {
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      const alert = root.querySelector('.hud-alert') as HTMLElement;
+      const retryBtn = root.querySelector('.hud-alert-retry') as HTMLButtonElement;
+      const retry = vi.fn();
+
+      h.showMatchFailure(failure, retry);
+      expect(alert.classList.contains('hud-alert--hidden')).toBe(false);
+      expect(retryBtn.classList.contains('hud-alert-retry--hidden'), 'a retryable failure hid its Retry').toBe(false);
+      expect(retryBtn.textContent).toBe('Retry');
+
+      retryBtn.click();
+      retryBtn.click();
+      vi.advanceTimersByTime(1000);
+      expect(retry, 'Retry did not run exactly once for two presses').toHaveBeenCalledTimes(1);
+      expect(alert.classList.contains('hud-alert--hidden'), 'Retry left the alert on screen').toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a retry that fails AGAIN leaves the new alert open, not closed by the old one', () => {
+    // The ordering claim, measured at the settled state. The alert's close is a fade, so
+    // "closed before the retry ran" cannot be read off the class mid-transition; what it
+    // BUYS can. Retry pops the alert layer and then runs the retry. When that retry fails
+    // and reopens the alert, the reopened alert is the top layer and stays. Run in the
+    // other order, the pop would land on the REOPENED alert and the player would see a
+    // failure vanish with nothing on screen.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      const alert = root.querySelector('.hud-alert') as HTMLElement;
+      const retryBtn = root.querySelector('.hud-alert-retry') as HTMLButtonElement;
+
+      h.showMatchFailure(failure, () => h.showMatchFailure(failure));
+      vi.advanceTimersByTime(1000);
+      retryBtn.click();
+      vi.advanceTimersByTime(1000);
+
+      expect(alert.classList.contains('hud-alert--hidden'), 'the reopened alert was closed by the retry that reopened it').toBe(false);
+      expect(retryBtn.classList.contains('hud-alert-retry--hidden'), 'the second alert offered a Retry it was not given').toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hides Retry when no retry was given, and never runs a retry left over from an earlier alert', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    const retryBtn = root.querySelector('.hud-alert-retry') as HTMLButtonElement;
+    const dismissBtn = root.querySelector('.hud-alert-dismiss') as HTMLButtonElement;
+    const stale = vi.fn();
+
+    h.showMatchFailure(failure, stale);
+    dismissBtn.click();
+    h.showMatchFailure(failure);
+    expect(retryBtn.classList.contains('hud-alert-retry--hidden'), 'Retry was offered with nothing to retry').toBe(true);
+    retryBtn.click();
+    dismissBtn.click();
+    expect(stale, 'a retry from a previous alert ran').not.toHaveBeenCalled();
+  });
+});
