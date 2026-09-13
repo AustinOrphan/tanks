@@ -9,7 +9,7 @@ import {
 import { createAchievementsStore, type AchievementsStore } from './achievements';
 import { createRunStore, type RunStore } from './run';
 import { createVersusSetupStore, type VersusSetupStore } from './versus-setup-store';
-import { parseDeveloperMode } from './devflags';
+import { parseDeveloperMode, parseDevFlags } from './devflags';
 
 /**
  * The ONE place the game decides where persisted state lives.
@@ -174,9 +174,21 @@ export function namespacedKey(namespace: StorageNamespace, key: string): string 
  * alone turns nothing on, so it must not move the session off the production keys either.
  * Pure, so the whole table is assertable without a browser -- the same reason
  * `parseDevFlags` takes a string.
+ *
+ * `prodSave` INVERTS THE RESULT WITHOUT INVERTING THE GATE (issue #249). A developer session
+ * that has deliberately asked for the production save runs on the production keys; a URL that
+ * asks for it WITHOUT `dev=1` still gets production, because that is what it would have got
+ * anyway and because a flag outside the gate must never do anything -- the same rule
+ * `?aimRay=1` is under. So the flag can only ever move `developer` to `production`, never the
+ * other way, and no query string can put an ordinary player on the developer keys.
+ *
+ * `parseDevFlags` rather than a second `isOn` here: it returns `DEV_FLAGS_OFF` wholesale
+ * without the gate, so the gate check below is what the flag is read THROUGH rather than
+ * beside, and the two cannot disagree about whether developer mode is on.
  */
 export function selectStorageNamespace(search: string): StorageNamespace {
-  return parseDeveloperMode(search) ? 'developer' : 'production';
+  if (!parseDeveloperMode(search)) return 'production';
+  return parseDevFlags(search).prodSave ? 'production' : 'developer';
 }
 
 /**
@@ -273,6 +285,27 @@ export interface GameStores {
  * object alone. Defaults to `'persistent'` so a caller handing over a real localStorage
  * (or a test's memory storage standing in for one) says nothing extra.
  */
+/**
+ * Delete every key in the DEVELOPER namespace, and nothing else (issue #249).
+ *
+ * LIVES HERE, NOT AT THE CALL SITE. The first draft bound this inline in `loop.ts`'s browser
+ * wiring, and the mutation harness refused to measure it: nothing in the suite reaches that
+ * file's `createBrowserDeps`, so a mutation swapping the namespaced `clear()` for the base
+ * one could only ever report SURVIVES -- indistinguishable from genuinely uncaught. The most
+ * destructive line in the feature was the one that could not be pinned.
+ *
+ * Behind this seam it is a plain function over an injected `Storage`, so the guarantee issue
+ * #249 asks for -- "Reset Developer Data cannot remove or rewrite any production key" -- is
+ * asserted directly, with a production key seeded and read back afterwards.
+ *
+ * Takes the BASE storage, never a namespaced one. On a `prodSave` session the app's storage
+ * IS the production object, so resetting "developer data" through it would wipe the player's
+ * real save under a name promising the opposite.
+ */
+export function resetDeveloperData(base: Storage): void {
+  createNamespacedStorage(base, 'developer').clear();
+}
+
 export function createStores(
   storage: Storage,
   availability: StorageAvailability = 'persistent',

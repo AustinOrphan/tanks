@@ -1,0 +1,12 @@
+{
+  "id": "prod-save-flag-works-without-the-gate",
+  "file": "src/game/storage.ts",
+  "find": "  if (!parseDeveloperMode(search)) return 'production';\n  return parseDevFlags(search).prodSave ? 'production' : 'developer';",
+  "replace": "  return parseDevFlags(search).prodSave || !parseDeveloperMode(search) ? 'production' : 'developer';",
+  "expect": "survives",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "EQUIVALENT on the shipped tree, and measured rather than assumed: it was declared `killed` first and SURVIVED. The fact that makes it so is `parseDevFlags`, which returns `DEV_FLAGS_OFF` wholesale without `dev=1` -- so `prodSave` is already false outside the gate and asking about it first cannot change any answer. Both forms produce the same namespace for every query string.\n\nThe entry stays because it records WHY the gate check is written first anyway. Issue #249's safety property is that no query string may move an ordinary player onto the developer keys, and the ordering is what makes that true of `selectStorageNamespace` ITSELF rather than only of the parser it calls. If `parseDevFlags` ever stopped gating -- or a future flag were read with a bare `isOn` -- this mutation would start being killable, and the entry is what says the protection was deliberate rather than incidental.",
+  "equivalent": true
+}

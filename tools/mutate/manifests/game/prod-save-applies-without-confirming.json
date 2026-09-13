@@ -1,0 +1,14 @@
+{
+  "id": "prod-save-applies-without-confirming",
+  "file": "src/game/hud.ts",
+  "find": "  prodSaveBtn.addEventListener('click', () =>\n    handleDangerClick(prodSaveBtn, [handleProdSave], 'Reload onto the REAL save?'),\n  );",
+  "replace": "  prodSaveBtn.addEventListener('click', handleProdSave);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the persistence controls (issue #249) navigates to the production save ONLY on the second press"
+  ],
+  "why": "Removes the arming step, so one press reloads the session onto the real save. Issue #249 requires \"a warning and deliberate confirmation immediately before reload\", and the two-press arm is what supplies both -- the armed label IS the warning, and the second press IS the reload, so nothing can go stale between confirming and applying. A single-press version still works and still shows the right URL, which is why it needs an entry rather than being caught by the happy path."
+}

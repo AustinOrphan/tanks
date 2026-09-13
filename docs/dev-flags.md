@@ -13,7 +13,7 @@ Nothing below does anything unless `dev` is present in the query string: `?aimRa
 alone is inert, it needs `?dev=1&aimRay=1`. A shared link cannot turn a flag on by
 accident.
 
-## Boolean flags (17)
+## Boolean flags (18)
 
 | Flag | Param | Default | Description |
 | --- | --- | --- | --- |
@@ -30,6 +30,7 @@ accident.
 | `mineTimer` | `mineTimer` | `false` | Shows each mine's remaining fuse, in seconds, beside it. |
 | `muzzleInside` | `muzzleInside` | `false` | Restores today's pre-clearance behaviour: a shell can be born already inside an adjacent live tank's hit circle. |
 | `pp1Roles` | `pp1Roles` | `false` | Applies issue #358's approved PP1 role-first ordnance matrix -- lower, role-specific active-shell caps -- instead of the roster's authored values. |
+| `prodSave` | `prodSave` | `false` | Runs a developer session against the PRODUCTION save keys instead of the `tanks.dev.` namespace, for deliberate persistence testing. Inert without `dev=1`, like every other flag here. Developer Tools shows the active namespace continuously while it is on. |
 | `replay` | `replay` | `false` | Records the per-tick input stream and publishes it on the dev console object. |
 | `sandboxDisarmed` | `disarmed` | `true` | Controls whether sandbox enemies carry weapons. |
 | `saveIo` | `saveIo` | `false` | Publishes save export/import and the player-settings surface (snapshot, effective values, status, reset) on the dev console object (`__tanks`). |

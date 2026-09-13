@@ -101,6 +101,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   autoplay: 'Diagnostics',
   replay: 'Diagnostics',
 
+  prodSave: 'Persistence',
   saveIo: 'Persistence',
 };
 

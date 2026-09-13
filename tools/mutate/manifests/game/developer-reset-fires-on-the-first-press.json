@@ -1,0 +1,14 @@
+{
+  "id": "developer-reset-fires-on-the-first-press",
+  "file": "src/game/hud.ts",
+  "find": "  devResetBtn.addEventListener('click', () =>\n    handleDangerClick(devResetBtn, [handleDevReset], 'Erase all developer data?'),\n  );",
+  "replace": "  devResetBtn.addEventListener('click', handleDevReset);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the persistence controls (issue #249) ARMS Reset Developer Data, and a cancelled confirmation changes nothing"
+  ],
+  "why": "Erases developer data on a single press, with no confirmation and no way to cancel. Issue #249's sixth criterion names cancellation first among the cases tests must cover, and a destructive control one click from firing in a pane a developer is working in is the shape the two-press arm exists for -- the same one Reset stats and Reset progress already use."
+}

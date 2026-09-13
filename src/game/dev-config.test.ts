@@ -130,9 +130,10 @@ describe('control type is derived from the registry, not declared twice', () => 
     }
     // Stated so the sweep has a population rather than possibly checking nothing. MEASURED,
     // and the first draft of this line guessed 17 -- the assertion caught it, which is the
-    // only reason a stated population is worth writing down.
-    expect(toggles).toBe(17);
-    expect(controls).toHaveLength(36); // +1 each: aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm), outcome (#591's capture arm), identityMarker (#630's identity-channel candidates), arrival (#230's opposed spawn/death language), versusActions (#668's action-bar arm)
+    // only reason a stated population is worth writing down. 17 -> 18 under issue #249's
+    // `prodSave`, which is a boolean and therefore a toggle like its seventeen siblings.
+    expect(toggles).toBe(18);
+    expect(controls).toHaveLength(37); // +1 each: aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm), outcome (#591's capture arm), identityMarker (#630's identity-channel candidates), arrival (#230's opposed spawn/death language), versusActions (#668's action-bar arm), prodSave (#249's production-save access)
   });
 
   it('reads each parameter from the registry, using the field name only where none is given', () => {

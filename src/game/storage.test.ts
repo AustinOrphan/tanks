@@ -5,6 +5,7 @@ import {
   createStores,
   namespacedKey,
   resolveStorage,
+  resetDeveloperData,
   selectStorageNamespace,
   DEVELOPER_KEY_PREFIX,
   STORAGE_NAMESPACES,
@@ -236,6 +237,66 @@ describe('selectStorageNamespace', () => {
     // `?aimRay=1` without `dev` turns nothing on (devflags.ts), so it must not move a
     // session off the production keys either.
     expect(selectStorageNamespace('?aimRay=1')).toBe('production');
+  });
+
+  // ---- `prodSave`, issue #249 ------------------------------------------------------
+  it.each([
+    // The whole table, because the interesting rows are the ones that do NOTHING.
+    ['?dev=1&prodSave=1', 'production', 'the gate is open and the flag asks for production'],
+    ['?dev=1&prodSave=0', 'developer', 'an explicit off is off, not merely present'],
+    ['?prodSave=1', 'production', 'the flag ALONE is inert -- it was production anyway'],
+    ['?dev=1', 'developer', 'the default under the gate is unchanged'],
+  ])('reads %o as %s: %s', (search, expected) => {
+    expect(selectStorageNamespace(search)).toBe(expected);
+  });
+
+  it('can only ever move developer -> production, never the reverse', () => {
+    // THE SAFETY DIRECTION, and the reason the flag is read THROUGH the gate rather than
+    // beside it: no query string may put an ordinary player on the developer keys, where
+    // their real save would silently stop being read. Swept over every shape of the flag a
+    // URL can carry, with the gate absent.
+    for (const q of ['?prodSave=1', '?prodSave=0', '?prodSave', '?prodSave=yes', '?prodSave=0&prodSave=1']) {
+      expect(selectStorageNamespace(q), q).toBe('production');
+    }
+  });
+});
+
+describe('resetDeveloperData (issue #249)', () => {
+  it('removes every developer key and leaves every production key byte-identical', () => {
+    // CRITERION 3, asserted directly: "Reset Developer Data cannot remove or rewrite any
+    // production key." The production keys are the negative control -- seeded, and read back
+    // after the reset -- because a reset that cleared everything would satisfy "the developer
+    // keys are gone" perfectly.
+    const base = createMemoryStorage();
+    base.setItem('tanks.progress.v1', 'REAL');
+    base.setItem('tanks.stats.v1', 'REAL-STATS');
+    base.setItem('tanks.dev.tanks.progress.v1', 'dev');
+    base.setItem('tanks.dev.tanks.stats.v1', 'dev-stats');
+    resetDeveloperData(base);
+    expect(base.getItem('tanks.dev.tanks.progress.v1')).toBeNull();
+    expect(base.getItem('tanks.dev.tanks.stats.v1')).toBeNull();
+    expect(base.getItem('tanks.progress.v1')).toBe('REAL');
+    expect(base.getItem('tanks.stats.v1')).toBe('REAL-STATS');
+  });
+
+  it('leaves an unrelated key alone, not just the ones the game owns', () => {
+    // The allow-list `save.ts` works from is not what scopes this -- the PREFIX is. A key no
+    // store knows about must survive too, or the reset is deleting other software's data on a
+    // shared origin, which is what `DEVELOPER_KEY_PREFIX`'s own comment warns about.
+    const base = createMemoryStorage();
+    base.setItem('someone-elses-key', 'keep');
+    base.setItem('tanks.dev.tanks.run.v2', 'dev');
+    resetDeveloperData(base);
+    expect(base.getItem('someone-elses-key')).toBe('keep');
+    expect(base.getItem('tanks.dev.tanks.run.v2')).toBeNull();
+  });
+
+  it('is a no-op on a storage with no developer keys at all', () => {
+    const base = createMemoryStorage();
+    base.setItem('tanks.progress.v1', 'REAL');
+    resetDeveloperData(base);
+    expect(base.length).toBe(1);
+    expect(base.getItem('tanks.progress.v1')).toBe('REAL');
   });
 });
 

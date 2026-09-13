@@ -1,0 +1,14 @@
+{
+  "id": "namespace-warning-reads-the-same-either-way",
+  "file": "src/game/hud.ts",
+  "find": "    devNsEl.classList.toggle('hud-devns--warning', production);",
+  "replace": "    devNsEl.classList.toggle('hud-devns--warning', false);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the persistence controls (issue #249) states the namespace continuously, and WARNS only on the production keys"
+  ],
+  "why": "Drops the warning treatment, so the line naming the PRODUCTION keys looks exactly like the one naming the developer keys. Issue #249's fourth criterion is that namespace status \"remains obvious while production data is active in a dev session\", and a line that reads the same either way satisfies the letter of \"states the namespace\" and none of what it is for. The text still differs, which is what makes this worth its own entry: a case asserting only the words would pass."
+}

@@ -302,3 +302,95 @@ describe('the field does not outlive the pane', () => {
     expect(shown(out(root))).toBe(false);
   });
 });
+
+describe('the persistence controls (issue #249)', () => {
+  const q2 = <T extends HTMLElement>(root: HTMLElement, sel: string): T =>
+    root.querySelector<T>(sel) as T;
+
+  it('states the namespace continuously, and WARNS only on the production keys', () => {
+    // Criterion 4: "namespace status remains obvious while production data is active in a dev
+    // session". Both directions in one case, because a line that read the same either way
+    // would satisfy "states the namespace" and none of what it is for.
+    const dev = mountDev({ developerPage: PAGE, storageNamespace: 'developer' });
+    expect(q2(dev, '.hud-devns').textContent).toContain('developer keys');
+    expect(q2(dev, '.hud-devns').classList.contains('hud-devns--warning')).toBe(false);
+    hud?.dispose();
+    document.body.innerHTML = '';
+    const prod = mountDev({ developerPage: PAGE, storageNamespace: 'production' });
+    expect(q2(prod, '.hud-devns').textContent).toContain('PRODUCTION');
+    expect(q2(prod, '.hud-devns').classList.contains('hud-devns--warning')).toBe(true);
+  });
+
+  it('ARMS Reset Developer Data, and a cancelled confirmation changes nothing', () => {
+    // Criterion 6 names cancellation first. The first press only relabels; arming a DIFFERENT
+    // control disarms this one, which is the cancel path a developer actually takes.
+    const cleared: number[] = [];
+    const root = mountDev({
+      developerPage: PAGE,
+      storageNamespace: 'developer',
+      resetDeveloperData: () => cleared.push(1),
+      applyDeveloperConfig: () => {},
+    });
+    q2<HTMLButtonElement>(root, '.hud-devreset').click();
+    expect(cleared).toEqual([]);
+    expect(q2(root, '.hud-devreset').textContent).toBe('Erase all developer data?');
+    // Arming ANOTHER danger control is the cancel a developer actually performs: the
+    // mechanism holds one armed button at a time, and arming a second disarms the first.
+    // (`.hud-diag-copy` would not do it -- it is not a danger control and never disarms
+    // anything, which a first draft of this case got wrong and the assertion caught.)
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    expect(q2(root, '.hud-devreset').textContent).toBe('Reset Developer Data');
+    expect(cleared).toEqual([]);
+  });
+
+  it('clears developer data on the second press, and says the real save was spared', () => {
+    const cleared: number[] = [];
+    const root = mountDev({
+      developerPage: PAGE,
+      storageNamespace: 'developer',
+      resetDeveloperData: () => cleared.push(1),
+    });
+    q2<HTMLButtonElement>(root, '.hud-devreset').click();
+    q2<HTMLButtonElement>(root, '.hud-devreset').click();
+    expect(cleared).toEqual([1]);
+    expect(out(root).value).toContain('production save was not touched');
+  });
+
+  it('navigates to the production save ONLY on the second press', () => {
+    // "Enabling it requires a warning and deliberate confirmation immediately before reload."
+    // The second press IS the reload, so there is no window between confirming and applying.
+    const applied: string[] = [];
+    const root = mountDev({
+      developerPage: PAGE,
+      storageNamespace: 'developer',
+      applyDeveloperConfig: (s) => applied.push(s),
+    });
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    expect(applied).toEqual([]);
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    expect(applied).toHaveLength(1);
+    // The URL carries the gate AND the flag, canonicalised -- `selectStorageNamespace` needs
+    // both, and a URL with the flag alone would be inert.
+    expect(applied[0]).toContain('dev=1');
+    expect(applied[0]).toContain('prodSave=1');
+  });
+
+  it('does not offer Use Production Save on a session already on the production keys', () => {
+    // It would reload onto where it already is. `Reset Developer Data` stays offered, because
+    // the developer keys still exist and are still resettable from a prodSave session.
+    const root = mountDev({
+      developerPage: PAGE,
+      storageNamespace: 'production',
+      applyDeveloperConfig: () => {},
+      resetDeveloperData: () => {},
+    });
+    expect(q2(root, '.hud-prodsave').hidden).toBe(true);
+    expect(q2(root, '.hud-devreset').hidden).toBe(false);
+  });
+
+  it('hides both when their seams are absent, which is every injected HUD in this suite', () => {
+    const root = mountDev({ developerPage: PAGE, storageNamespace: 'developer' });
+    expect(q2(root, '.hud-prodsave').hidden).toBe(true);
+    expect(q2(root, '.hud-devreset').hidden).toBe(true);
+  });
+});
