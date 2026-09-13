@@ -69,8 +69,20 @@ import type { TankKind } from './types';
 
 const SECONDS = 60;
 const SEEDS = [1, 2, 3];
-/** Campaign boards, by index into ARENA_DEFS. Kept small: the point is per-kind rates. */
-const ARENAS_UNDER_TEST = [0, 1, 2];
+/**
+ * Campaign boards, by index into ARENA_DEFS. Kept small: the point is per-kind rates.
+ *
+ * ARENA-04 WAS ADDED FOR ISSUE #358's CONTRAST, and finding out why is the useful part: the
+ * previous set was `[0, 1, 2]`, and **green never spawns on any of them**. arena-01 and
+ * arena-02 hold brown/grey/teal, arena-03 adds olive, and only arena-04 and arena-05 carry
+ * all six campaign kinds. So the baseline table below has been silently missing a row for a
+ * kind the roster has, and the contrast threw on it rather than reporting five of six as if
+ * it were the roster.
+ *
+ * Every measurement quoted in this file's header was taken under the OLD three-arena set and
+ * should be read against that narrower sample; none of them concerned green.
+ */
+const ARENAS_UNDER_TEST = [0, 1, 2, 3];
 
 interface KindStat {
   cap: number;
