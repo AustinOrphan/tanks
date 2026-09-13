@@ -756,32 +756,59 @@ describe('hud.css is syntactically whole', () => {
     const scrollers = Array.from(root.querySelectorAll<HTMLElement>('*')).filter(
       (el) => getComputedStyle(el).overflowY === 'auto',
     );
-    // Non-vacuity: `.hud-about`, `.hud-settings`, `.hud-devtools`, `.hud-selftest`, the
-    // achievement list and the versus pane are the scrollers this fixture builds. A filter
-    // that matched nothing would pass while measuring nothing, and this guard's whole
-    // subject is a property of the elements that DO scroll.
-    expect(scrollers.length).toBeGreaterThan(3);
+    // THE POPULATION IS NAMED, because the centred set below is now EMPTY and an empty
+    // expectation carries no evidence of its own. `[] === []` passes just as well when
+    // `mountEveryButton` stops building a pane, when a selector is renamed, or when
+    // `getComputedStyle` returns nothing at all -- three ways this guard could go quiet
+    // while advertising that every scroller was checked. A count (`> 3`) does not close
+    // that: it survives any pane being swapped for any other. So the scrollers are pinned
+    // by name, which fails if one disappears AND fails if one arrives unconsidered.
+    //
+    // The list is also the first thing here that has ever been WRONG and silent: the
+    // comment this replaces named six scrollers, and there are eight -- `.hud-devcfg` and
+    // `.hud-controller-rows` arrived after it was written, and `> 3` could not notice.
+    //
+    // EIGHT is also every `overflow-y: auto` rule in hud.css, counted with
+    // `grep -nE 'overflow(-y)?: *auto' src/game/hud.css`: .hud-settings, .hud-about,
+    // .hud-devtools, .hud-devcfg, .hud-selftest, .hud-achievement-list,
+    // .hud-controller-rows, .hud-versus-setup. That equality is what lets this guard claim
+    // no scrolling PANE centres its axis rather than only the ones the fixture happens to
+    // build -- and if a ninth rule is added to a surface `mountEveryButton` does not mount,
+    // the two populations part and this comment is the thing that has gone stale.
+    expect([...new Set(scrollers.map((el) => el.className.split(' ')[0]))].sort()).toEqual([
+      'hud-about',
+      'hud-achievement-list',
+      'hud-controller-rows',
+      'hud-devcfg',
+      'hud-devtools',
+      'hud-selftest',
+      'hud-settings',
+      'hud-versus-setup',
+    ]);
     const centred = scrollers
       .filter((el) => getComputedStyle(el).justifyContent === 'center')
-      .map((el) => (el.className.split(' ')[0]));
-    // THE POPULATION IS PINNED, NOT EMPTIED, and the residual is stated rather than swept
-    // under a narrower selector. TWO panes still carry the shape -- Settings and Developer
-    // Tools -- and they are not fixed here: each is a visible vertical-alignment change on a
-    // pane owing its own before/after evidence. Issue #642 owns them, with the measurement.
-    //
-    // The two that have come off this list each did so because their own change made the
-    // clip reachable in ordinary use rather than only on a short viewport, and each was
-    // measured through tools/screens with only `justify-content` differing:
+      .map((el) => el.className.split(' ')[0]);
+    // EMPTY, and emptied one pane at a time. Each came off this list when its own change
+    // made the clip reachable, and each was measured through tools/screens before and
+    // after -- the pane's first child's y, which is the box that goes above the scroll
+    // origin:
     //  - `.hud-about` (issue #117), at 900x500 with a legal document open: the document's
     //    top box at y = -454 under `center`, y = +388 under `flex-start`.
     //  - `.hud-versus-setup` (issue #274), at 1280x800: seven map cards pushed the Mode and
     //    Players rows above the scroll origin, unreachable.
+    //  - `.hud-settings` (issue #642), at 844x390 -- a handset in landscape: the "Settings"
+    //    heading at y = -64, now y = +35. `justify-content` and a new `--hud-space-5`
+    //    padding moved together there, so +35 is the pair's number, not one line's.
+    //  - `.hud-devtools` (issue #642), at 568x280: the heading at y = -19, now y = +35.
+    //    Latent rather than reachable -- that pane's content is 318px tall, so no handset
+    //    clips it today, and it was fixed before the developer shell grows into it.
     //
-    // So this asserts two things, and both can fail:
-    //  - neither fixed pane is in the list, so either regressing to `center` is caught;
-    //  - no THIRD pane joins the two, so a new scroller inherits the decision, not the bug.
-    expect(centred.sort()).toEqual(['hud-devtools', 'hud-settings']);
-    for (const fixed of ['hud-about', 'hud-versus-setup']) {
+    // What still fails here, now that there is no residual to pin: any of the eight
+    // scrollers above re-centring, and any ninth arriving centred. The `for` loop is the
+    // first of those spelled out per pane, so a failure names which one regressed rather
+    // than printing a one-element diff.
+    expect(centred.sort()).toEqual([]);
+    for (const fixed of ['hud-about', 'hud-versus-setup', 'hud-settings', 'hud-devtools']) {
       expect(centred, `${fixed} centres its main axis and clips its own overflow`).not.toContain(
         fixed,
       );

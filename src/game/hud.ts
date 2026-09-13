@@ -2117,9 +2117,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     </div>
     <!-- THE CONTROLLER SELF-TEST (issue #599). Inside the developer shell issue #243
          built, as its own layer rather than more of that pane: the list is as tall as the
-         connected hardware makes it, and '.hud-devtools' is one of the two panes issue
-         #642 still owns for centring the main axis of a scroll container. A pane that
-         never had that property cannot inherit the clip.
+         connected hardware makes it, and '.hud-devtools' was one of the two panes that
+         still centred the main axis of a scroll container until issue #642 top-aligned
+         them. A pane that never had that property cannot inherit the clip.
 
          The body is built by 'controller-selftest.ts' into the empty container below,
          because it is derived from live hardware on every frame and 'hud.ts' models none

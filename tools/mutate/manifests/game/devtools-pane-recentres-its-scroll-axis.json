@@ -1,0 +1,14 @@
+{
+  "id": "devtools-pane-recentres-its-scroll-axis",
+  "file": "src/game/hud.css",
+  "find": "  justify-content: flex-start;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Same reason as .hud-about--hidden: without it the pane covers the page from load. */",
+  "replace": "  justify-content: center;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Same reason as .hud-about--hidden: without it the pane covers the page from load. */",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ],
+  "why": "Restores the shape Developer Tools shipped before issue #642, the same clip as its About sibling. LATENT rather than reachable today: the pane's content is short (318 CSS px at 844 wide), so it took a 568x280 viewport to put the heading above the scroll origin (y = -19, now y = +35); none of the four viewports it was measured at -- 320x480, 568x320, 667x375, 844x390 -- clipped it, which is a sample of four rather than a sweep of every device. The entry exists because the pane is the one the developer shell grows registry-generated controls into, and a pane that grows into a clip nobody re-measures is exactly how About shipped the defect for as long as it did. Killed by the same sweep as its siblings, which asserts the centred set is EMPTY over a scroller list pinned by name."
+}

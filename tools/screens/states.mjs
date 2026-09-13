@@ -197,7 +197,11 @@ export const SCREEN_STATES = Object.freeze([
     description: 'Audio, accessibility and the Data section the destructive actions live under.',
     storage: MID_CAMPAIGN,
     steps: [...PAST_SPLASH, { click: '.hud-settings-open' }, { waitVisible: '.hud-settings' }],
-    measure: ['.hud-settings', '.hud-reset-stats', '.hud-reset-progress'],
+    // `#hud-settings-title` is measured for its Y (issue #642): it is the pane's FIRST
+    // child, and the centred-overflow clip is a property of the TOP of a scroll container
+    // -- the bottom controls already measured here stay on screen either way. A negative y
+    // is content above the scroll origin, which no scrollbar reaches.
+    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
   }),
   state({
     id: 'screen.customize',
@@ -308,10 +312,12 @@ export const SCREEN_STATES = Object.freeze([
     query: '?dev=1',
     steps: [...PAST_SPLASH, { click: '.hud-devtools-open' }, { waitVisible: '.hud-devtools' }],
     // `.hud-selftest-open` is measured for its BOX: it is the control issue #599 added to
-    // this pane, and the pane is one of the two issue #642 still owns for centring the main
-    // axis of a scroll container -- so where this button sits is the number that says
-    // whether one more control pushed the pane into its own clip.
-    measure: ['.hud-devtools', '.hud-selftest-open', '.hud-devtools-back'],
+    // this pane, and the pane was one of the two that centred the main axis of a scroll
+    // container until issue #642 top-aligned it -- so where this button sits is still the
+    // number that says whether one more control pushed the pane past the viewport.
+    // `#hud-devtools-title` is measured for the same reason as Settings': the pane's first
+    // child is where the centred-overflow clip shows, and a negative y is lost content.
+    measure: ['.hud-devtools', '#hud-devtools-title', '.hud-selftest-open', '.hud-devtools-back'],
   }),
   state({
     id: 'screen.devtools.config',
