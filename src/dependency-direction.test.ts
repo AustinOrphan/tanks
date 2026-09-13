@@ -173,6 +173,12 @@ const ROOT_FILES: ReadonlySet<string> = new Set([
   './boot.ts',
   './boot.test.ts',
   './dependency-direction.test.ts',
+  // Ambient declarations, not a module (issue #247). `env.d.ts` declares the one build-time
+  // variable the bundle reads; it has no imports and nothing imports it, so it can neither
+  // point up the layer order nor be pointed at. Listed rather than layered because putting a
+  // global declaration inside one layer would say it belonged to that layer, which is the
+  // opposite of what an ambient type is.
+  './env.d.ts',
 ]);
 
 type Placement = Layer | 'root' | 'unclassified';

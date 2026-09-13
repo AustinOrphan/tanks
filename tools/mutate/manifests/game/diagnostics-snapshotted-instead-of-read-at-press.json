@@ -1,0 +1,16 @@
+{
+  "id": "diagnostics-snapshotted-instead-of-read-at-press",
+  "file": "src/game/hud.ts",
+  "find": "      session: diagnosticsSource?.() ?? null,",
+  "replace": "      session: null,",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "Copy Diagnostics writes the session it was given reports the live seed, and the field is only shown once there is something in it",
+    "Copy Diagnostics writes the session it was given READS THE SOURCE AT PRESS TIME, not when it was registered",
+    "Pin Current Seed offers a URL and changes nothing writes a URL carrying the live seed"
+  ],
+  "why": "Stops the HUD asking the session anything, so every report says \"none simulating\" and Pin never has a seed to pin. The page half of the report still renders -- URL, build, developer mode -- which is what makes this worth an entry: the button keeps working, the field keeps filling, and the one fact the whole feature exists to surface is the only thing missing. Three tests kill it, and the middle one is the shape that matters: it changes the source's answer BETWEEN two presses, so a handler that read once and cached fails there too."
+}

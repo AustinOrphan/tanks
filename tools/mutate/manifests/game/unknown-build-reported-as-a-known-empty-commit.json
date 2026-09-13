@@ -1,0 +1,15 @@
+{
+  "id": "unknown-build-reported-as-a-known-empty-commit",
+  "file": "src/game/dev-diagnostics.ts",
+  "find": "  return raw === '' ? { commit: '', known: false } : { commit: raw, known: true };",
+  "replace": "  return { commit: raw, known: true };",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "readBuildIdentity says unknown rather than inventing a version reports an absent variable as unknown, not as an empty commit",
+    "readBuildIdentity says unknown rather than inventing a version treats an empty or whitespace value as absent"
+  ],
+  "why": "Calls every build known, including the ones that are not. Issue #247 requires copied diagnostics to \"identify local/unknown builds honestly\", and this is the dishonest version: a dev server, a local build and any tree that never went through the deploy workflow all report `known: true` with an empty commit, so the report prints a Build line with nothing after it. A reader takes that for a formatting bug and assumes the build IS identified -- which is worse than saying unknown, because it removes the prompt to go and find out. NOT killed by the formatter's own \"says a local build is unknown\" case, which passes a build literal and never calls this function -- named in an earlier draft of this entry and removed when the run reported it green."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "diagnostics-trampoline-latches-the-first-session",
+  "file": "src/game/route-host.ts",
+  "find": "  hud.setDiagnosticsSource(() => live?.diagnostics?.() ?? null);",
+  "replace": "  hud.setDiagnosticsSource(live?.diagnostics ?? null);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: the diagnostics trampoline (issue #247) answers null with no session, the session facts with one, and null again after detach"
+  ],
+  "why": "Passes whatever `live` held AT REGISTRATION rather than a closure that reads it per call. The host registers once, at construction, before any session exists -- so this hands the HUD `null` forever and no session's facts ever reach a report. The trampoline shape is the whole point of registering once, and this is the mistake that shape invites."
+}

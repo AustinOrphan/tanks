@@ -339,6 +339,49 @@ const GAMEPLAY_HANDLERS = [
   { hudName: 'onReassignSlot', slotName: 'onReassignSlot', args: [1, 'keyboard'] as unknown[] },
 ] as const;
 
+describe('createRouteHost: the diagnostics trampoline (issue #247)', () => {
+  /** The one source the host registers, read back out of the recording HUD. */
+  const registered = (f: ReturnType<typeof fixture>): (() => unknown) => {
+    const calls = f.hud.argsOf('setDiagnosticsSource');
+    expect(calls, 'the host must register exactly one diagnostics source').toHaveLength(1);
+    return calls[0][0] as () => unknown;
+  };
+
+  it('registers exactly ONE source for the life of the page, not one per session', () => {
+    // The same property the seven gameplay-facing callbacks above are guarded for, and the
+    // reason this is a trampoline rather than something a session registers: `hud.ts` APPENDS
+    // registrations, so a session that registered its own would leave a closure over a dead
+    // world behind on every detach, and the oldest one would answer first.
+    const f = fixture();
+    f.host.attach(CAMPAIGN).detach();
+    f.host.attach(CAMPAIGN).detach();
+    expect(f.hud.argsOf('setDiagnosticsSource')).toHaveLength(1);
+  });
+
+  it('answers null with no session, the session facts with one, and null again after detach', () => {
+    // All three in one case on purpose: the interesting failure is a trampoline that latches
+    // -- it reports the last session's seed forever, which reads as correct right up until
+    // somebody pastes a report from a world that ended ten minutes ago.
+    const f = fixture();
+    const source = registered(f);
+    expect(source()).toBeNull();
+    const slot = f.host.attach(CAMPAIGN);
+    slot.provideDiagnostics(() => ({
+      seed: 7, arenaId: 'arena-01', mode: 'campaign', humanPlayers: 1, bots: 0, quality: 'high',
+    }));
+    expect((source() as { seed: number }).seed).toBe(7);
+    slot.detach();
+    expect(source()).toBeNull();
+  });
+
+  // WHAT IS *NOT* ASSERTED HERE, and why. A draft of this file had a third case claiming
+  // `provideDiagnostics`'s `current()` guard stops a detached slot answering for the live
+  // one. A mutation removing that guard SURVIVED all 85 cases -- and it was right to: every
+  // `attach()` builds its own `state` object, so a stale handle writes to a record `live` no
+  // longer points at, guard or no guard. The guard stays for consistency with every member
+  // beside it; the assertion went, because nothing could have made it fail.
+});
+
 /** Fill every gameplay handler on a slot, recording which fired and with what. */
 function fillSlot(host: RouteHost): { fired: Array<[string, unknown[]]>; slot: ReturnType<RouteHost['attach']> } {
   const slot = host.attach(CAMPAIGN);

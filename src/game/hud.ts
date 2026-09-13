@@ -340,6 +340,13 @@ import {
   type RelevanceSettingId,
 } from './control-relevance';
 import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
+import {
+  formatDiagnostics,
+  pinnedSeedUrl,
+  type BuildIdentity,
+  type DiagnosticsInput,
+  type SessionDiagnostics,
+} from './dev-diagnostics';
 
 /*
  * ---- WHAT EACH ENDING SAYS, AND WHAT IT OFFERS (issue #323) ----------------------
@@ -597,6 +604,19 @@ export interface Hud {
    * the button can be seen and one that necessarily precedes seeing it.
    */
   setContinueAvailable(available: boolean): void;
+  /**
+   * Register where the diagnostics summary reads the LIVE session from (issue #247).
+   *
+   * The seed is the whole reason this exists: `loop.ts` derives it from the wall clock when
+   * the URL names none, so it lives only inside the running world and no page fact can
+   * recover it. `route-host.ts` registers a getter that forwards to whichever session holds
+   * the slot, and returns `null` when none does -- which the report states rather than
+   * hiding behind a zero.
+   *
+   * A GETTER, not a pushed value: the facts are read at the instant Copy is pressed, and a
+   * push would allocate a snapshot every frame for a button nobody presses.
+   */
+  setDiagnosticsSource(source: (() => SessionDiagnostics | null) | null): void;
   /**
    * WHERE THE ACTIVE RUN STANDS, for the Main Menu's one-line confidence summary and the
    * replace-run confirmation's copy (issue #226): "Mission 3 -- 2 lives left".
@@ -1223,6 +1243,11 @@ export type RouteHudKey =
   | 'onControllersOpen' | 'onControllersClose'
   | 'onSettingsOpen' | 'onSettingsClose'
   | 'setPadDiagnostics' | 'onControllerSelfTestOpen' | 'onControllerSelfTestClose'
+  // `setDiagnosticsSource` is the ROUTE's (issue #247) for the same reason the seven
+  // gameplay-facing callbacks above are: `route-host.ts` registers it exactly once, as a
+  // trampoline into whichever session holds the slot. A session never touches it -- it
+  // supplies its facts to the host through the slot, and the host decides what is live.
+  | 'setDiagnosticsSource'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
   | 'setRelaunchTarget';
 
@@ -1413,6 +1438,25 @@ export interface HudOptions {
    * offer a button that would do nothing.
    */
   readonly applyDeveloperConfig?: (search: string) => void;
+  /**
+   * The page facts the diagnostics summary needs that `developerSearch` does not carry
+   * (issue #247), plus which build is running.
+   *
+   * One option rather than three, and bound in `createBrowserDeps` for the reason
+   * `developerSearch` is: the HUD may not touch `location` or `import.meta.env`. Its ABSENCE
+   * is what hides Copy Diagnostics and Pin Current Seed, so an injected HUD in a test gets
+   * no buttons rather than two that would report a page they cannot see.
+   */
+  readonly developerPage?: DeveloperPage;
+}
+
+/** Where the page is and what built it -- the half of a diagnostics report that is not the session. */
+export interface DeveloperPage {
+  /** `location.pathname`. */
+  readonly path: string;
+  /** `location.hash`, carried through the canonical URL untouched. */
+  readonly hash: string;
+  readonly build: BuildIdentity;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -2112,6 +2156,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <p class="hud-devtools-line hud-devtools-note">It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from the address and reloads.</p>
       <button class="ui-btn ui-btn--slab hud-devcfg-open" type="button">Configuration</button>
       <button class="ui-btn ui-btn--slab hud-selftest-open" type="button">Controller Self-Test</button>
+      <!-- DIAGNOSTICS (issue #247). Copy states what this session IS; Pin rewrites the URL
+           with the seed it is actually running, which is the one fact about an unseeded
+           session that cannot be recovered by looking at anything. Pin only ever fills the
+           field below -- it does not navigate and does not touch the world, which is the
+           issue's "seed pinning does not change the current world before the user
+           applies/reloads". The same readonly textarea carries both, for the reason the
+           self-test's does: an async clipboard is origin- and permission-gated, and
+           selected text is the one path that always works. -->
+      <button class="ui-btn ui-btn--slab hud-diag-copy" type="button">Copy Diagnostics</button>
+      <button class="ui-btn ui-btn--slab hud-diag-pin" type="button">Pin Current Seed</button>
+      <textarea class="hud-diag-out hud-diag-out--hidden" readonly rows="8" aria-label="Session diagnostics"></textarea>
       <button class="ui-btn ui-btn--slab ui-btn--danger hud-devtools-exit" type="button">Exit Developer Mode</button>
       <button class="ui-btn ui-btn--slab hud-devtools-back" type="button">Back</button>
     </div>
@@ -2296,6 +2351,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const devCfgUrlField = el.querySelector('.hud-devcfg-copyfield') as HTMLTextAreaElement;
   const devCfgBackBtn = el.querySelector('.hud-devcfg-back') as HTMLButtonElement;
   const selfTestOpenBtn = el.querySelector('.hud-selftest-open') as HTMLButtonElement;
+  const diagCopyBtn = el.querySelector('.hud-diag-copy') as HTMLButtonElement;
+  const diagPinBtn = el.querySelector('.hud-diag-pin') as HTMLButtonElement;
+  const diagOutEl = el.querySelector('.hud-diag-out') as HTMLTextAreaElement;
   const selfTestView = el.querySelector('.hud-selftest') as HTMLElement;
   const selfTestListEl = el.querySelector('.hud-selftest-list') as HTMLElement;
   const selfTestCopyBtn = el.querySelector('.hud-selftest-copy') as HTMLButtonElement;
@@ -3428,7 +3486,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /** The developer shell (issue #243). Static like About, for now -- see the markup. */
   function showDeveloperTools(show: boolean): void {
     if (show) swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
-    else closeSurface(DEVTOOLS_SURFACE);
+    else {
+      closeSurface(DEVTOOLS_SURFACE);
+      // Same reason the self-test's report field is cleared on close (issue #247 following
+      // #599): a URL or a report left in the field is a stale statement about a session that
+      // may since have been restarted, and the next opener would read it as current.
+      diagOutEl.value = '';
+      diagOutEl.classList.add('hud-diag-out--hidden');
+    }
   }
 
   /**
@@ -4526,6 +4591,73 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * write is attempted anyway and its rejection swallowed: a refused clipboard must not
    * take the selected text away with it, which is the only path that always works.
    */
+  /**
+   * The live session's own facts, supplied by whoever owns the running world.
+   *
+   * A PULL, not a push: diagnostics are read at the instant Copy is pressed, and a value
+   * pushed on every frame would be a per-frame allocation for a button nobody presses. `null`
+   * until something registers one, and `null` again whenever no session holds the slot --
+   * which the report states rather than hiding.
+   */
+  let diagnosticsSource: (() => SessionDiagnostics | null) | null = null;
+
+  /** Everything `dev-diagnostics.ts` needs, composed from the two halves at press time. */
+  const diagnosticsInput = (): DiagnosticsInput | null => {
+    const page = opts.developerPage;
+    if (page === undefined) return null;
+    return {
+      path: page.path,
+      search: opts.developerSearch ?? '',
+      hash: page.hash,
+      build: page.build,
+      session: diagnosticsSource?.() ?? null,
+    };
+  };
+
+  /*
+   * Both diagnostics buttons end here, and it is the self-test's copy path restated rather
+   * than shared: fill the field, select it, and attempt the async clipboard whose rejection
+   * is swallowed. A refused clipboard must not take the selected text away with it, which is
+   * the only path that works on a file:// or insecure-context page.
+   */
+  const showDiagnostics = (text: string): void => {
+    diagOutEl.value = text;
+    diagOutEl.classList.remove('hud-diag-out--hidden');
+    diagOutEl.focus();
+    diagOutEl.select();
+    // ...and back to the TOP. `select()` leaves a textarea scrolled to the end of the
+    // selection, so the field opened on the middle of the report -- the URL and the heading
+    // above the fold, and the first thing a reader wants at the bottom of what they can see.
+    // Caught in the capture at 900x900 (`issue-247/`), not in a test: jsdom lays nothing out,
+    // so `scrollTop` is 0 there whether or not this line exists and an assertion on it could
+    // not fail.
+    diagOutEl.scrollTop = 0;
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    void clipboard?.writeText(text).catch(() => {});
+  };
+
+  const handleDiagCopy = (): void => {
+    const input = diagnosticsInput();
+    if (input === null) return;
+    showDiagnostics(formatDiagnostics(input));
+  };
+
+  /*
+   * Pin OFFERS a URL; it does not take it. No `location`, no `applyDeveloperConfig`, no write
+   * back into the world -- the issue requires that pinning "does not change the current world
+   * before the user applies/reloads", and the way to guarantee that is for this handler to
+   * have nothing it could change. With no session there is no seed, and the field says so
+   * rather than showing a URL that would reproduce nothing.
+   */
+  const handleDiagPin = (): void => {
+    const input = diagnosticsInput();
+    if (input === null) return;
+    const url = pinnedSeedUrl(input);
+    showDiagnostics(
+      url ?? 'No session is running, so there is no resolved seed to pin. Start a round and press this again.',
+    );
+  };
+
   const handleSelfTestCopy = (): void => {
     const text = selfTest.report();
     selfTestReportEl.value = text;
@@ -4535,6 +4667,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
     void clipboard?.writeText(text).catch(() => {});
   };
+  diagCopyBtn.addEventListener('click', handleDiagCopy);
+  diagPinBtn.addEventListener('click', handleDiagPin);
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
   customizeOpenBtn.addEventListener('click', handleCustomizeOpen);
@@ -4598,6 +4732,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   devBadge.classList.toggle('hud-devbadge--hidden', !developerMode);
   devToolsOpenBtn.classList.toggle('hud-devtools-open--hidden', !developerMode);
   devToolsExitBtn.hidden = !opts.exitDeveloperMode;
+  // Same rule as Exit and Apply above: a control whose seam is not wired is not rendered,
+  // rather than rendered and inert. An injected HUD in a test has no `developerPage`, so it
+  // gets neither button and cannot report a page it cannot see.
+  diagCopyBtn.hidden = !opts.developerPage;
+  diagPinBtn.hidden = !opts.developerPage;
   // Same rule as Exit above: a button that cannot do its job is not offered. Reset and Copy
   // stay -- they change the menu and the clipboard, neither of which needs `location`.
   (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =
@@ -6873,6 +7012,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     onLevelSelect(cb: (level: number) => void): void {
       levelSelectCbs.push(cb);
+    },
+    setDiagnosticsSource(source): void {
+      diagnosticsSource = source;
     },
     setContinueAvailable(available: boolean): void {
       hasProgress = available;
