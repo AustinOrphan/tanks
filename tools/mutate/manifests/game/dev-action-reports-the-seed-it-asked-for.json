@@ -1,0 +1,14 @@
+{
+  "id": "dev-action-reports-the-seed-it-asked-for",
+  "file": "src/game/dev-actions.ts",
+  "find": "  return { kind: 'ran', id, seed: port.rebuild(requested, keepLives) };",
+  "replace": "  const got = port.rebuild(requested, keepLives);\n  return { kind: 'ran', id, seed: requested ?? got };",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-actions.test.ts"
+  ],
+  "killedBy": [
+    "runDevAction: what it reports, and when it refuses reports the seed the WORLD is running, not the one it asked for"
+  ],
+  "why": "Reports the REQUESTED seed rather than the one the world was built with, whenever a seed was requested. That is the difference between an action and a claim: a session can resolve a request differently -- something outranking it, a clamp, a refusal -- and a pane echoing its own intention states a number no world was ever built from. It is also the number that goes into the reproduction URL beside it, so the wrong one reproduces nothing."
+}

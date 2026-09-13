@@ -382,6 +382,36 @@ describe('createRouteHost: the diagnostics trampoline (issue #247)', () => {
   // beside it; the assertion went, because nothing could have made it fail.
 });
 
+describe('createRouteHost: the developer-action trampoline (issue #252)', () => {
+  const registered = (f: ReturnType<typeof fixture>): (() => unknown) => {
+    const calls = f.hud.argsOf('setDevActionPort');
+    expect(calls, 'the host must register exactly one dev-action port getter').toHaveLength(1);
+    return calls[0][0] as () => unknown;
+  };
+
+  it('registers exactly ONE getter for the life of the page, not one per session', () => {
+    const f = fixture();
+    f.host.attach(CAMPAIGN).detach();
+    f.host.attach(CAMPAIGN).detach();
+    expect(f.hud.argsOf('setDevActionPort')).toHaveLength(1);
+  });
+
+  it('answers null with no session, the port with one, and null again after detach', () => {
+    // A trampoline that latched would hand the HUD a port over a world that has since been
+    // torn down -- and the three controls rebuild worlds, so the consequence is not a stale
+    // readout but a restart of something that no longer exists.
+    const f = fixture();
+    const source = registered(f);
+    expect(source()).toBeNull();
+    const slot = f.host.attach(CAMPAIGN);
+    const port = { currentSeed: () => 7, hasRound: () => true, rebuild: () => 7 };
+    slot.provideActions(port);
+    expect(source()).toBe(port);
+    slot.detach();
+    expect(source()).toBeNull();
+  });
+});
+
 /** Fill every gameplay handler on a slot, recording which fired and with what. */
 function fillSlot(host: RouteHost): { fired: Array<[string, unknown[]]>; slot: ReturnType<RouteHost['attach']> } {
   const slot = host.attach(CAMPAIGN);

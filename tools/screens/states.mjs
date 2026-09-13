@@ -362,6 +362,33 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-devcfg-control[data-field="sandboxTanks"]', '.hud-devcfg-count'],
   }),
   state({
+    id: 'screen.devtools.actions',
+    title: 'Developer Tools, with a round running',
+    description:
+      'The three runtime actions issue #252 added, which are hidden unless a round exists. ' +
+      'Reached by continuing the saved run and opening the pane from the DEV badge, because ' +
+      'from the main menu there is nothing to restart and all three are absent.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-continue' },
+      { waitHidden: '.hud-panel' },
+      { click: '.hud-devbadge' },
+      { waitVisible: '.hud-devtools' },
+    ],
+    // Each action measured by its own id rather than by the shared class: `querySelector`
+    // returns the first match, so one `.hud-devact` selector would photograph three controls
+    // and report one, and a pane that rendered only the first would measure as correct.
+    measure: [
+      '.hud-devtools',
+      '.hud-devact[data-action="restart-same-seed"]',
+      '.hud-devact[data-action="reroll-seed"]',
+      '.hud-devact[data-action="restart-round"]',
+      '.hud-devtools-back',
+    ],
+  }),
+  state({
     id: 'screen.devtools.diagnostics',
     title: 'Developer Tools, diagnostics copied',
     description:

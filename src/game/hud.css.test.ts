@@ -1025,7 +1025,14 @@ describe('hud.css is syntactically whole', () => {
     // injected HUD in a test does not supply, and `hidden` is not what this sweep filters on.
     // Both carry `.ui-btn--slab`, so `unstyled` stays empty. The diagnostics FIELD is a
     // <textarea>, not a button, so it moves neither figure.
-    expect(buttons.length).toBe(137 + 2 + devMenuButtons());
+    // Issue #252 adds THREE: the Developer Tools pane's Restart with Same Seed, Reroll Seed
+    // and Restart Current Round. 137 -> 140. Static markup rendered unconditionally at construction
+    // like the developer shell's other entries, so this fixture counts all three whether or
+    // not a session is live -- their `hidden` property tracks whether a round exists, and
+    // `hidden` is not what this sweep filters on. Each carries `.ui-btn--slab` and
+    // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
+    // modifier -- the checks these pins exist to prompt, performed rather than assumed.
+    expect(buttons.length).toBe(140 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1122,7 +1129,14 @@ describe('hud.css is syntactically whole', () => {
     // injected HUD in a test does not supply, and `hidden` is not what this sweep filters on.
     // Both carry `.ui-btn--slab`, so `unstyled` stays empty. The diagnostics FIELD is a
     // <textarea>, not a button, so it moves neither figure.
-    expect(controls.length).toBe(121 + 2 + devMenuButtons());
+    // Issue #252 adds THREE: the Developer Tools pane's Restart with Same Seed, Reroll Seed
+    // and Restart Current Round. 121 -> 124. Static markup rendered unconditionally at construction
+    // like the developer shell's other entries, so this fixture counts all three whether or
+    // not a session is live -- their `hidden` property tracks whether a round exists, and
+    // `hidden` is not what this sweep filters on. Each carries `.ui-btn--slab` and
+    // `.ui-btn--danger`, so `unstyled` stays empty and the size sweep is satisfied by the
+    // modifier -- the checks these pins exist to prompt, performed rather than assumed.
+    expect(controls.length).toBe(124 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

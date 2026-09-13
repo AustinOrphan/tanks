@@ -1524,10 +1524,35 @@ export function startGameWith(
     return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
   }
 
+  /**
+   * Whether a runtime Reroll has SUPERSEDED the URL's pinned seed (issue #252).
+   *
+   * `?seed=` is a boot-time default -- it says what this session should start from. Reroll
+   * Seed is a gesture made with the session already running, and it can only mean "a
+   * different world than the one I am looking at", so the more specific of the two wins.
+   * Same direction `devFlags.quality` already beats the stored Settings preset.
+   *
+   * WITHOUT THIS, REROLL IS DEAD EXACTLY WHERE IT IS WANTED. `nextSeed()` reads
+   * `devFlags.seed ?? clock`, so with a seed pinned it returns the same number every time --
+   * Reroll would rebuild an identical world and report a "new" seed that is the old one. A
+   * developer who pinned a seed is the likeliest person to press Reroll.
+   *
+   * A FLAG, NOT A STORED NUMBER, and the difference matters after the next level: pinning
+   * one rerolled seed here would give every subsequent world that same seed, which is what
+   * the URL parameter already does and the opposite of what Reroll asked for. This says the
+   * pin is off; each later build draws its own.
+   *
+   * SESSION-SCOPED, and never written back to the flags or the URL. The address bar still
+   * says what the page was opened with; Copy Diagnostics reports `world.seed`, which is the
+   * resolved one either way.
+   */
+  let seedPinSuperseded = false;
+
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
   // for a before/after comparison.
-  const nextSeed = (): number => deps.devFlags.seed ?? deriveSeed(deps.wallMs());
+  const nextSeed = (): number =>
+    (seedPinSuperseded ? undefined : deps.devFlags.seed) ?? deriveSeed(deps.wallMs());
 
   /**
    * The ONE place worlds are built: boot, level advance, quit-to-title and level pick
@@ -1535,9 +1560,12 @@ export function startGameWith(
    * invincibility flag cannot drift apart between them -- their parity used to be
    * checked line-by-line in review instead of being structural.
    */
-  function buildWorld(atLevel: CampaignLevel, lives?: number): World {
+  function buildWorld(atLevel: CampaignLevel, lives?: number, seed?: number): World {
     const w = deps.levels.world(
-      atLevel, nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives,
+      // `seed ?? nextSeed()`: an explicitly REQUESTED seed outranks both the override and the
+      // flag, because the only caller that passes one is Restart with Same Seed, which is
+      // asking for a specific world rather than for a policy about seeds (issue #252).
+      atLevel, seed ?? nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives,
       playerCount >= 2 ? playerCount : undefined,
     );
     if (deps.devFlags.invincible) {
@@ -2860,9 +2888,18 @@ export function startGameWith(
    * level pick -- their parity was reviewed line-by-line three times before it
    * became structural.
    */
-  function switchTo(newLevel: CampaignLevel, lives?: number): void {
+  /**
+   * @param seed An exact seed to build with, for issue #252's Restart with Same Seed. Omitted
+   * everywhere else, which is every pre-existing call site: they take whatever `nextSeed()`
+   * decides. Threaded THROUGH here rather than around it deliberately -- the four side
+   * effects below (`pendingLanding`, the descriptor/session re-derivation, `pushStatus` and
+   * the bot reseed) all have to happen for a rebuilt world, and the bot reseed in particular
+   * is what makes a same-seed restart reproduce the same bot behaviour rather than only the
+   * same board.
+   */
+  function switchTo(newLevel: CampaignLevel, lives?: number, seed?: number): void {
     level = newLevel;
-    world = buildWorld(level, lives);
+    world = buildWorld(level, lives, seed);
     // The one site that can satisfy an owed landing, because it is the one site that
     // builds a world -- see `pendingLanding`.
     pendingLanding = false;
@@ -3215,6 +3252,41 @@ export function startGameWith(
    * Nothing here writes. The slot's own `current()` guard means a detached session cannot
    * answer for the one that replaced it.
    */
+  /*
+   * THE DEVELOPER-ACTIONS PORT (issue #252), and the reason `dev-actions.ts` exists: the
+   * three controls decide WHICH arguments a rebuild gets, and this decides what a rebuild
+   * IS. The pane never touches a world.
+   *
+   * Everything goes through `switchTo`, not around it. A world is not only a world here: the
+   * descriptor and resolved session are re-derived from it, the status bar is re-pushed, an
+   * owed landing is satisfied, and the bot sources are reseeded FROM the new world's seed.
+   * That last one is why Restart with Same Seed reproduces the same fight and not merely the
+   * same board -- a parallel rebuild path that only replaced `world` would give identical
+   * walls and different bots.
+   *
+   * WHAT IS PRESERVED IS WHAT IS NOT AN ARGUMENT: `level`, `sessionIdentity`, `assignment`,
+   * the run, and the persistence namespace are all untouched by every action, because none
+   * of them is passed. Lives are the one carried field a caller may ask for, which is how
+   * Restart Current Round differs from the other two.
+   */
+  slot.provideActions({
+    currentSeed: () => driver.world.seed,
+    // A round exists once the session has left its own title screen. The pane is reachable
+    // from the menu, where a world exists only as the backdrop behind the title and
+    // rebuilding it would restart something nobody is playing.
+    hasRound: () => !sm.atMainMenu,
+    rebuild: (seed, keepLives) => {
+      // A fresh seed was asked for: the URL's pin stops applying from here on. Set BEFORE
+      // the rebuild, because `switchTo` is what reads `nextSeed()`.
+      if (seed === null) seedPinSuperseded = true;
+      switchTo(level, keepLives ? driver.world.lives : undefined, seed ?? undefined);
+      // Read back off the world, never echoed from the argument -- `dev-actions.ts` reports
+      // whatever this returns, and reporting the request would state a seed no world was
+      // built from.
+      return driver.world.seed;
+    },
+  });
+
   slot.provideDiagnostics(() => ({
     seed: driver.world.seed,
     arenaId: level.arenaId,
