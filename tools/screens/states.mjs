@@ -628,8 +628,7 @@ export const SCREEN_STATES = Object.freeze([
       'The probe passed and the menu came up; the renderer fails when a match starts. Since '
       + "issue #325's 2026-09-11 ruling this is an OVERLAY over the working Main Menu rather "
       + 'than a replacement for the page: the shell behind it is intact, so the recovery is '
-      + 'Back to menu rather than Reload, and since issue #685 Retry beside it. It deliberately '
-      + 'does not vouch for the rest.',
+      + 'Back to menu rather than Reload. It deliberately does not vouch for the rest.',
     steps: [
       ...PAST_SPLASH,
       { breakWebgl: 'probe-blocked' },
