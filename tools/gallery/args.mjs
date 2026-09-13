@@ -67,6 +67,8 @@ export const DEFAULTS = {
   skin: 'solid',
   mineWarn: null,
   identityMarker: null,
+  /** Issue #357's role cues: barrel | band | both. Only meaningful where tanks are posed. */
+  enemyRole: null,
   /**
    * Which arrival/destruction language the moment plays (issue #230), matching the
    * game's own `?dev=1&arrival=<language>`. Only meaningful on the two moments that
@@ -258,6 +260,16 @@ export function parseArgs(argv) {
         `--identityMarker needs an element set that poses two or more player tanks `
         + `(${withRings.join(' or ')}), got --elements '${out.elements}'`,
       );
+    }
+  }
+
+  if (out.enemyRole !== null) {
+    // Hardcoded for --mineWarn's reason: this file is .mjs and cannot import the TypeScript
+    // that owns the vocabulary. ENEMY_ROLE_CUES (src/presentation/enemy-role.ts) is the source
+    // of truth, and args.test.ts pins the two together in both directions.
+    const cues = ['girth', 'flare', 'dome', 'deck', 'riser', 'crown', 'both'];
+    if (!cues.includes(out.enemyRole)) {
+      throw new Error(`--enemyRole must be one of ${cues.join('|')}, got '${out.enemyRole}'`);
     }
   }
 

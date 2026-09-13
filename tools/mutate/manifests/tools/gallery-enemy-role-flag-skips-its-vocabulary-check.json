@@ -1,0 +1,14 @@
+{
+  "id": "gallery-enemy-role-flag-skips-its-vocabulary-check",
+  "file": "tools/gallery/args.mjs",
+  "find": "    if (!cues.includes(out.enemyRole)) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "The vocabulary check dropped, so `--enemyRole barrel` -- this flag's own earlier value name, and exactly what a stale capture command would say -- is forwarded to the page, fails `isEnemyRoleCue` there, resolves to null, and shoots the SHIPPED tank while reporting success. For a flag whose entire job is comparing prototypes against each other, a silent fallback to the baseline is the worst possible failure: the sheet looks complete and one cell is quietly the control.",
+  "killedBy": [
+    "gallery args pins --enemyRole to the vocabulary the renderer actually owns"
+  ]
+}

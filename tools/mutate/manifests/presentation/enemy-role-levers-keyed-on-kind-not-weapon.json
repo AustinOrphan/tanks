@@ -1,0 +1,14 @@
+{
+  "id": "enemy-role-levers-keyed-on-kind-not-weapon",
+  "file": "src/presentation/enemy-role.ts",
+  "find": "  if (lever === 'girth') return { barrelGirth: [0.78, 1, 1.4][step + 1] };",
+  "replace": "  if (lever === 'girth') return { barrelGirth: [1, 1, 1.4][step + 1] };",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/enemy-role.test.ts"
+  ],
+  "why": "The zero-bounce arm collapsed onto the standard shell, so olive's rocket wears the same barrel as a shell that bounces. Olive is one of only TWO kinds this grammar separates from the pack at all -- it is the sole zero-bounce, no-mine kind -- so this quietly drops a quarter of what the cue buys while every other tank still looks correct.",
+  "killedBy": [
+    "enemy role cues: the mapping is the number the player needs orders EVERY weapon lever by the bounce budget -- population: all 3 levers x 3 types"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "enemy-role-both-pulls-only-one-lever",
+  "file": "src/presentation/enemy-role.ts",
+  "find": "  if (cue === 'deck' || cue === 'both') return 'deck';",
+  "replace": "  if (cue === 'deck') return 'deck';",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/enemy-role.test.ts"
+  ],
+  "why": "`both` stops pulling its mine lever, so the one arm that exists to answer 'do two cues on a 40px silhouette read as a grammar or as clutter' silently answers a different question -- it shows the weapon cue alone. The comparison still renders, still reports success, and is evidence for a claim nobody made.",
+  "killedBy": [
+    "enemy role cues: the vocabulary routes each cue to exactly one lever, and `both` to one of each"
+  ]
+}
