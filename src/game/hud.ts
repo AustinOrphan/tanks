@@ -2720,11 +2720,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * LIVE STATUS ANNOUNCEMENTS (issue #629), and the three pieces of state they need.
    *
-   * `lastAnnouncement` is the coalescing half of the policy: `setStatus` is pushed EVERY
-   * FRAME from `refreshTopbar`, so without it a status that has not changed would re-write
-   * the live region sixty times a second. Writing the same string back is not a no-op to a
-   * screen reader in every implementation, so the guard is an explicit comparison rather
-   * than a reliance on the DOM ignoring it.
+   * COALESCING IS THE EDGE CONDITIONS, not a separate guard. `setStatus` is pushed EVERY
+   * FRAME from `refreshTopbar`, so each rule below has to be true on the transition and
+   * false on the sixty pushes that follow it -- which is what `deathPending` being cleared
+   * as it fires, and the two comparisons against `prevStatus`, already do. See `announce`
+   * for the redundant guard that was drafted here and removed when a mutation proved
+   * nothing could break it.
    *
    * `deathPending` is why a life loss is not derived from a lives DIFF. `pushStatus` fires
    * on every world build too -- a level advance with fresh lives, a quit, issue #252's
@@ -2737,7 +2738,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * `prevStatus` backs the two transitions that have no event of their own: a versus stock
    * loss and a level advance.
    */
-  let lastAnnouncement = '';
   let deathPending = false;
   let prevStatus: GameplayStatus | null = null;
 
@@ -3392,16 +3392,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * Write one sentence into the page's live region, or nothing if it would repeat.
+   * Write one sentence into the page's live region.
    *
-   * The repeat guard is criterion 6 -- "repeated render/frame updates cannot emit duplicate
-   * identical announcements" -- and it is load-bearing rather than defensive: `setStatus`
-   * arrives every frame, so every caller below runs sixty times a second while the state it
-   * describes stands still.
+   * NO REPEAT GUARD HERE, and that is a measured decision rather than an omission. A drafted
+   * `if (message === lastAnnouncement) return;` looked like criterion 6 -- "repeated
+   * render/frame updates cannot emit duplicate identical announcements" -- and a mutation
+   * removing it SURVIVED every case in `hud.a11y.test.ts`. It could not fail, because every
+   * caller below is already EDGE-triggered: `deathPending` is cleared as it fires, and the
+   * stock and level rules compare against `prevStatus`, which moves on the same push. The
+   * coalescing lives in those comparisons, so a second copy of it here was a guard nothing
+   * could break -- exactly the shape this repository refuses. The edge conditions carry
+   * their own mutation entries instead.
    */
   function announce(message: string): void {
-    if (message === lastAnnouncement) return;
-    lastAnnouncement = message;
     announceEl.textContent = message;
   }
 

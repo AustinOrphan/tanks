@@ -1,0 +1,14 @@
+{
+  "id": "level-announced-on-every-frame",
+  "file": "src/game/hud.ts",
+  "find": "    if (prev !== null && next.mission > prev.mission && !outcomeVisible) {",
+  "replace": "    if (prev !== null && next.mission >= prev.mission && !outcomeVisible) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "killedBy": [
+    "live status announcements (issue #629) WRITES the live region once across sixty identical pushes, not sixty times"
+  ],
+  "why": "Turns the level rule from EDGE-triggered into level-triggered, so the live region is rewritten on every status push at the same mission -- and `refreshTopbar` pushes one per frame, so that is sixty rewrites a second while nothing changes. A screen reader reacts to the mutation, not to the content, so the result is continuous narration of a sentence that has not changed: the speech-spam failure issue #629's criterion 6 names, and the one this feature is most likely to produce. Invisible to an assertion on the final TEXT, which sixty identical writes leave looking correct -- the killing case counts DOM mutations through a MutationObserver instead. This entry replaced one that targeted a separate `lastAnnouncement` guard; that mutation SURVIVED, because every announcement site was already edge-triggered and the guard could not fail. The guard is gone."
+}

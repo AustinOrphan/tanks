@@ -336,20 +336,25 @@ describe('live status announcements (issue #629)', () => {
   });
 
   it('WRITES the live region once across sixty identical pushes, not sixty times', () => {
-    // The case above asserts the final text, which a broken repeat guard also produces --
-    // sixty identical writes leave the same string behind. What distinguishes them is the
-    // number of DOM mutations, because that is what a screen reader reacts to: a live
-    // region rewritten every frame announces every frame, even with identical content.
-    // `takeRecords()` is synchronous, so no timing is involved.
+    // The cases above assert the final TEXT, which sixty identical writes also produce. What
+    // distinguishes them is the number of DOM mutations, because that is what a screen
+    // reader reacts to: a live region rewritten every frame announces every frame, even with
+    // identical content. `takeRecords()` is synchronous, so no timing is involved.
+    //
+    // Posed on the LEVEL rule rather than the life-loss one, and the difference matters: a
+    // life loss stops repeating because `deathPending` is cleared as it fires, so the sixty
+    // pushes after it never reach `announce` at all and nothing about coalescing is
+    // measured. The level rule is the one whose condition could go from edge-triggered to
+    // level-triggered and start narrating every frame.
     const { hud: h, root } = mount();
-    h.setStatus(campaign({ lives: 3 }));
-    h.signalPlayerDeath(0xff0000);
+    h.setStatus(campaign({ mission: 1, missions: 5 }));
     const node = root.querySelector('.hud-announce') as HTMLElement;
     const observer = new MutationObserver(() => {});
     observer.observe(node, { childList: true, characterData: true, subtree: true });
-    for (let i = 0; i < 60; i++) h.setStatus(campaign({ lives: 2 }));
+    for (let i = 0; i < 60; i++) h.setStatus(campaign({ mission: 2, missions: 5 }));
     const writes = observer.takeRecords().length;
     observer.disconnect();
+    expect(spoken(root)).toBe('Level 2 of 5.');
     expect(writes).toBe(1);
   });
 
