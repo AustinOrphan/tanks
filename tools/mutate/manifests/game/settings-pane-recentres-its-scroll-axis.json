@@ -1,0 +1,14 @@
+{
+  "id": "settings-pane-recentres-its-scroll-axis",
+  "file": "src/game/hud.css",
+  "find": "  justify-content: flex-start;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Without this rule Settings covers every screen from page load",
+  "replace": "  justify-content: center;\n  gap: var(--hud-space-4);\n  padding: var(--hud-space-5);\n  overflow-y: auto;\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Without this rule Settings covers every screen from page load",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ],
+  "why": "Restores the shape Settings shipped before issue #642: `justify-content: center` on an `overflow-y: auto` column puts the overflow ABOVE the scrollable area, where no scrollbar reaches it. Measured through tools/screens at 844x390 -- a handset in landscape, an ordinary viewport rather than a contrived one -- where the pane's own \"Settings\" heading sat at y = -64, its whole box above the scroll origin and unreachable by any scroll. jsdom lays nothing out, so the case that kills this reads the computed `justify-content` of every scroller the fixture builds and asserts that set is EMPTY; the scroller names are pinned in the same assertion so an empty result cannot come from measuring nothing."
+}

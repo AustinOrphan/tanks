@@ -1,0 +1,14 @@
+{
+  "id": "settings-pane-stops-scrolling-at-all",
+  "file": "src/game/hud.css",
+  "find": "  padding: var(--hud-space-5);\n  overflow-y: auto;\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Without this rule Settings covers every screen from page load",
+  "replace": "  padding: var(--hud-space-5);\n  background: var(--hud-scrim-page);\n  color: var(--hud-text);\n}\n\n/* Without this rule Settings covers every screen from page load",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ],
+  "why": "The negative control for the OTHER half of the centred-axis sweep. That guard now asserts the centred set is EMPTY, and an empty list is what a sweep that measured nothing also produces -- so it pins the eight scrollers by name beside it. This mutation is what makes that pin load-bearing rather than decorative: dropping `overflow-y` from Settings removes it from the scroller population, leaves the centred set empty and therefore passing, and is caught only by the name list. It is also a real defect in its own right, since the pane is taller than a handset in landscape (measured at 844x390, where its content runs 536px) and would simply have its lower half unreachable."
+}
