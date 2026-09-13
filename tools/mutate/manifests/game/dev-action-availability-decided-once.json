@@ -1,8 +1,8 @@
 {
   "id": "dev-action-availability-decided-once",
   "file": "src/game/hud.ts",
-  "find": "      refreshDevActions();\n      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());",
-  "replace": "      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());",
+  "find": "      refreshDevActions();\n      refreshNamespace();\n      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());",
+  "replace": "      refreshNamespace();\n      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());",
   "expect": "killed",
   "tests": [
     "src/game/hud.diagnostics.test.ts"
@@ -10,5 +10,5 @@
   "killedBy": [
     "the three developer actions (issue #252) re-asks whether a round exists every time the pane opens, not only at registration"
   ],
-  "why": "Decides whether the three controls are offered ONCE, when the port is registered -- which `route-host.ts` does at construction, while the session is still at its own title screen and `hasRound()` is false. All three would then stay hidden for the entire life of the page, and the feature would ship invisible. Whether a round exists changes underneath a pane that is shut, so the question has to be re-asked when it opens."
+  "why": "Decides whether the three controls are offered ONCE, when the port is registered -- which `route-host.ts` does at construction, while the session is still at its own title screen and `hasRound()` is false. All three would then stay hidden for the entire life of the page, and the feature would ship invisible. Whether a round exists changes underneath a pane that is shut, so the question has to be re-asked when it opens. The pane-open path grew a `refreshNamespace()` call beside it under issue #249, so the find string grew with it; the mutation still removes only the availability refresh."
 }
