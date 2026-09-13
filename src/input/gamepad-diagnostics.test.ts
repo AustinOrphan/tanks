@@ -3,9 +3,11 @@ import {
   readPadDiagnostics,
   formatPadReport,
   padLabel,
+  describeSupport,
   type PadDiagnostic,
 } from './gamepad-diagnostics';
 import type { GamepadLike } from './gamepad';
+import { STANDARD_PROFILE } from './gamepad-profile';
 
 /**
  * A pad the browser HAS remapped onto the standard layout: `mapping: 'standard'`, the four
@@ -105,6 +107,50 @@ describe('readPadDiagnostics', () => {
   });
 });
 
+describe('the support verdict the self-test carries (issue #596)', () => {
+  it('accepts a browser-remapped pad and refuses the unmapped one, in the same walk', () => {
+    // The self-test's numbers always SHOWED the difference between these two pads; what it
+    // could not say is what the game does about it, which is the question a tester opens the
+    // pane to answer. Both pads in one call, because the interesting failure is a verdict
+    // that is really a constant: a classifier wired to always-supported passes a test that
+    // only ever poses a standard pad.
+    const [standard, unmapped] = readPadDiagnostics(() => [standardPad(), nonStandardPad()]);
+    expect(standard?.support.kind).toBe('standard');
+    expect(unmapped?.support).toEqual({
+      kind: 'unknown',
+      reason: { code: 'unknown-mapping', mapping: '', id: 'HuiJia  USB GamePad' },
+    });
+  });
+
+  it('turns each of the four verdicts into a distinct developer line', () => {
+    // Four, and all four distinct: a `describeSupport` that fell through to one string for
+    // both refusals would read as "unsupported" on a pad whose real problem is a missing
+    // stick, and the tester would file the wrong report.
+    expect(describeSupport({ kind: 'standard', profile: STANDARD_PROFILE })).toBe('supported (standard mapping)');
+    expect(
+      describeSupport({ kind: 'profile', profile: { ...STANDARD_PROFILE, id: 'made-up' } }),
+    ).toBe('supported (profile: made-up)');
+    expect(describeSupport({ kind: 'unknown', reason: { code: 'unknown-mapping', mapping: '', id: 'x' } })).toMatch(
+      /^NOT supported/,
+    );
+    const short = describeSupport({
+      kind: 'insufficient',
+      reason: {
+        code: 'insufficient-controls',
+        profileId: 'standard',
+        axes: 2,
+        buttons: 4,
+        requiredAxes: 4,
+        requiredButtons: 16,
+      },
+    });
+    // The COUNTS are in the line, both what the pad has and what the profile wanted. "Not
+    // supported" alone sends a tester to guess; "2 axes ... needs 4" is the whole diagnosis.
+    expect(short).toContain('2 axes and 4 buttons');
+    expect(short).toContain('needs 4 and 16');
+  });
+});
+
 describe('padLabel', () => {
   it('falls back to the index when the browser reports no name, and never invents one otherwise', () => {
     const unknown = { kind: 'unknown', reason: { code: 'unknown-mapping', mapping: '', id: '' } } as const;
@@ -150,5 +196,20 @@ describe('formatPadReport', () => {
   it('names an unreported mapping as unreported rather than printing an empty field', () => {
     const text = formatPadReport(readPadDiagnostics(() => [standardPad()]), context);
     expect(text).toContain('- mapping: standard');
+  });
+
+  it('states the support verdict per pad, so the reader is not left to infer it (issue #596)', () => {
+    // A compatibility report that lists a mapping string and an axis count, and leaves the
+    // reader to work out whether the game accepted the device, is making the reader do the
+    // classifier's job -- and getting it wrong is the entire failure mode this report exists
+    // to prevent. Both pads in one report, so a support line that was really a constant fails.
+    const text = formatPadReport(readPadDiagnostics(() => [standardPad(), nonStandardPad()]), context);
+    expect(text).toContain('- Tanks support: supported (standard mapping)');
+    expect(text).toContain('- Tanks support: NOT supported: no profile matches this mapping/id');
+    // One line per pad, directly under that pad's mapping line: the report is read per-section
+    // and a verdict that floated to the top would be attributed to whichever pad was first.
+    expect(text.match(/^- Tanks support: /gm)).toHaveLength(2);
+    const [mappingLine, supportLine] = [text.indexOf('- mapping: standard'), text.indexOf('- Tanks support: supported')];
+    expect(supportLine).toBeGreaterThan(mappingLine);
   });
 });

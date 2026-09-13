@@ -59,6 +59,33 @@ describe('renderControllerSelfTest: structure', () => {
     );
   });
 
+  it('states what Tanks will do with the pad, beside what the browser reported (issue #596)', () => {
+    // The counts describe the device; this line answers the question the pane is open to
+    // answer. Two pads in one render, one accepted and one refused, because a verdict line
+    // that was really a constant reads correctly on either pad alone.
+    const view = renderControllerSelfTest(container, () => CONTEXT);
+    view.update([
+      pad({ padIndex: 0 }),
+      pad({
+        padIndex: 1,
+        id: 'HuiJia  USB GamePad',
+        mapping: '',
+        support: { kind: 'unknown', reason: { code: 'unknown-mapping', mapping: '', id: 'HuiJia  USB GamePad' } },
+      }),
+    ]);
+    const lines = Array.from(
+      container.querySelectorAll('.hud-selftest-pad-support'),
+      (el) => el.textContent,
+    );
+    expect(lines).toEqual([
+      'supported (standard mapping)',
+      'NOT supported: no profile matches this mapping/id',
+    ]);
+    // One per pad row, in pad order -- the same nesting the channel lists rely on, so a
+    // verdict cannot end up under its neighbour.
+    expect(container.querySelectorAll('.hud-selftest-pad').length).toBe(2);
+  });
+
   it('keeps the SAME nodes across a frame whose pad set has not changed', () => {
     // The load-bearing one. `update` runs every animation frame, so a render that rebuilt
     // unconditionally would replace every node sixty times a second -- which is how the

@@ -1,0 +1,14 @@
+{
+  "id": "selftest-support-line-has-no-rule",
+  "file": "src/game/hud.css",
+  "find": ".hud-selftest-pad-support {\n  margin: 0 0 var(--hud-space-2);\n  font-size: 0.85em;\n}",
+  "replace": ".hud-selftest-pad-supportX {\n  margin: 0 0 var(--hud-space-2);\n  font-size: 0.85em;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole has a rule for every class the HUD writes, so no class is silently dead"
+  ],
+  "why": "Renames the verdict line's rule so the class the TypeScript writes has none. This is the dead-CSS class hud.css.test.ts exists for, and it is not cosmetic here: a <p> with no rule takes the browser's default 16px block margin, which on a pane that lists one row per connected pad pushes the channel bars down by a line per pad. The sweep over every class the HUD writes is what catches it; a test that only checked the classes it happened to think of would not."
+}

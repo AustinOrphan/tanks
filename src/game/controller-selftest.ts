@@ -114,6 +114,12 @@ function channelRow(label: string, axis: boolean): ChannelRow {
   return { root, fill, value };
 }
 
+/*
+ * The five fields are also exactly what `classifyPad` reads, which is why the support line
+ * (issue #596) needs nothing added here: a pad whose verdict could change is a pad whose key
+ * already changed, so the row is rebuilt and the line rewritten. Add a sixth input to the
+ * classifier and this key has to grow with it, or a stale verdict survives the frame.
+ */
 function padKey(pad: PadDiagnostic): string {
   return [pad.padIndex, pad.id, pad.mapping, pad.axes.length, pad.buttons.length].join('|');
 }
