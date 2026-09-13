@@ -1,0 +1,14 @@
+{
+  "id": "life-loss-announced-from-a-lives-diff",
+  "file": "src/game/hud.ts",
+  "find": "    if (deathPending) {\n      deathPending = false;",
+  "replace": "    if (deathPending || (prev !== null && prev.kind !== 'versus' && next.kind !== 'versus' && next.lives < prev.lives)) {\n      deathPending = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "killedBy": [
+    "live status announcements (issue #629) does NOT announce a life loss from a lives drop with no death behind it"
+  ],
+  "why": "Derives a life loss from lives going DOWN, which is the obvious implementation and the wrong one. `pushStatus` fires on every world build, not only on a death -- a level advance carrying fewer lives, a quit-to-title, issue #252's Restart with Same Seed -- so a session replaced by a board that starts lower is narrated as a death that did not happen. `signalPlayerDeath` is the authoritative event and `loop.ts` already fires it on a real one; this entry is why the announcement waits for it."
+}

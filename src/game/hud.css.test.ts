@@ -462,6 +462,13 @@ describe('hud.css is syntactically whole', () => {
       // The disabled-reason line. Without it the two reasons in the HUD render at body
       // size and full opacity, reading as content rather than as an aside.
       '.ui-hint',
+      // The screen-reader-only class (issue #640's table captions, and issue #629's live
+      // announcement line). Without the rule those are not hidden-but-read -- they are
+      // VISIBLE: a caption above each Records table, and a status sentence under the toast
+      // stack. The failure is a visual regression from an accessibility feature, which is
+      // the direction nobody looks in. Listed here because nothing sweeps the classes the
+      // HUD writes; this population is maintained by hand.
+      '.ui-sr-only',
       // The controller self-test's support verdict (issue #596). Same failure as `.ui-hint`
       // above and the reason it sits beside it: a <p> with no rule takes the browser's
       // default 16px block margin, and this one repeats once per connected pad, so losing

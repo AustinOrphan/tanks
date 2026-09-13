@@ -1,0 +1,14 @@
+{
+  "id": "stock-announcement-fires-on-a-rematch",
+  "file": "src/game/hud.ts",
+  "find": "      const lost = sameSlots ? next.stocks.find((s) => s.stock < (before.get(s.slot) as number)) : undefined;",
+  "replace": "      const lost = sameSlots ? next.stocks.find((s) => s.stock !== (before.get(s.slot) as number)) : undefined;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "killedBy": [
+    "live status announcements (issue #629) does not narrate a rematch, where every stock goes back UP"
+  ],
+  "why": "Announces on any CHANGE rather than on a decrease, so a rematch -- where every stock resets upward -- is narrated as a stock loss. The direction is the whole meaning of the announcement: `!==` and `<` agree on every real loss and disagree only on the setup, which is precisely where the sentence is false."
+}

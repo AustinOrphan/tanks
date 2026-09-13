@@ -1647,7 +1647,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <h1 class="hud-splash-title">TANKS!</h1>
       <p class="hud-splash-hint">Press any key or tap to begin</p>
     </div>
-    <div class="hud-toasts" aria-live="polite"></div>
+    <!-- THE PAGE'S ONE LIVE REGION, and since issue #629 it carries two things: the visible
+         toast stack, and a screen-reader-only line for the status transitions that deserve
+         announcing. Inside the SAME region rather than beside it, deliberately -- a second
+         aria-live element would compete with this one and make both unreliable, which is
+         what hud.a11y.test.ts's one-region guard exists to prevent. The child declares no
+         aria-live of its own; it inherits this one. -->
+    <div class="hud-toasts" aria-live="polite">
+      <p class="hud-announce ui-sr-only"></p>
+    </div>
     <!-- tabindex="-1" for the same reason .hud-panel carries one: it is what lets
          showAchievements(true) focus the PANE on arrival rather than a control inside it
          (see .hud-panel's own note on why arrivals land on the container). -->
@@ -2366,6 +2374,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const achCountEl = el.querySelector('.hud-achievements-count') as HTMLElement;
   const achBackBtn = el.querySelector('.hud-achievements-back') as HTMLButtonElement;
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
+  const announceEl = el.querySelector('.hud-announce') as HTMLElement;
   const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
   const runTallyEl = el.querySelector('.hud-run-tally') as HTMLElement;
   const coopKillsEl = el.querySelector('.hud-coop-kills') as HTMLElement;
@@ -2743,6 +2752,30 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * `setOutcome` stays, so all three lines below hide and the action button keeps its
    * campaign wording.
    */
+  /**
+   * LIVE STATUS ANNOUNCEMENTS (issue #629), and the three pieces of state they need.
+   *
+   * COALESCING IS THE EDGE CONDITIONS, not a separate guard. `setStatus` is pushed EVERY
+   * FRAME from `refreshTopbar`, so each rule below has to be true on the transition and
+   * false on the sixty pushes that follow it -- which is what `deathPending` being cleared
+   * as it fires, and the two comparisons against `prevStatus`, already do. See `announce`
+   * for the redundant guard that was drafted here and removed when a mutation proved
+   * nothing could break it.
+   *
+   * `deathPending` is why a life loss is not derived from a lives DIFF. `pushStatus` fires
+   * on every world build too -- a level advance with fresh lives, a quit, issue #252's
+   * restarts -- so "lives went down" also describes a session being replaced by a different
+   * board that happens to start lower. `signalPlayerDeath` is the authoritative event and
+   * `loop.ts` already fires it on a real death; this records that it happened and lets the
+   * NEXT status push supply the number. That also guarantees the count spoken is the count
+   * the bar shows, rather than one a frame out of step with it.
+   *
+   * `prevStatus` backs the two transitions that have no event of their own: a versus stock
+   * loss and a level advance.
+   */
+  let deathPending = false;
+  let prevStatus: GameplayStatus | null = null;
+
   let outcomeData: GameplayOutcome | null = null;
   /**
    * Whether a SURFACE that shows the outcome panel is up, maintained by `setState`
@@ -3396,6 +3429,79 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (btn === prodSaveBtn) return 'Use Production Save';
     if (btn === devResetBtn) return 'Reset Developer Data';
     return DEV_ACTIONS[btn.dataset.action as DevActionId].label;
+  }
+
+  /**
+   * Write one sentence into the page's live region.
+   *
+   * NO REPEAT GUARD HERE, and that is a measured decision rather than an omission. A drafted
+   * `if (message === lastAnnouncement) return;` looked like criterion 6 -- "repeated
+   * render/frame updates cannot emit duplicate identical announcements" -- and a mutation
+   * removing it SURVIVED every case in `hud.a11y.test.ts`. It could not fail, because every
+   * caller below is already EDGE-triggered: `deathPending` is cleared as it fires, and the
+   * stock and level rules compare against `prevStatus`, which moves on the same push. The
+   * coalescing lives in those comparisons, so a second copy of it here was a guard nothing
+   * could break -- exactly the shape this repository refuses. The edge conditions carry
+   * their own mutation entries instead.
+   */
+  function announce(message: string): void {
+    announceEl.textContent = message;
+  }
+
+  const lifeWord = (n: number): string => (n === 1 ? '1 life' : `${n} lives`);
+
+  /**
+   * Decide what, if anything, this status push is worth saying (issue #629).
+   *
+   * THE POLICY, in the order it is applied:
+   *
+   *  1. A LIFE LOST, when `signalPlayerDeath` has fired since the last push. The number
+   *     comes from THIS push, so the sentence and the bar agree.
+   *  2. A VERSUS STOCK LOST, from a per-slot decrease. Only a decrease: a rematch resets
+   *     every stock upward, and announcing that would narrate the setup rather than a loss.
+   *     Guarded on the previous push also being versus with the same slots, so a different
+   *     match's lower stock is not read as this match's loss.
+   *  3. A LEVEL ADVANCE, from `mission` increasing -- and ONLY while no outcome surface is
+   *     up. Criterion 5 forbids double-announcing something a focused surface already says,
+   *     and the win panel is focused and read at exactly the moment the next mission number
+   *     arrives. `outcomeVisible` is the panel's own state, not a timing guess.
+   *
+   * WHAT IS DELIBERATELY SILENT: `enemies`, shells, the countdown, aim, and every other
+   * per-frame readout. They are the "rapidly changing telemetry" the policy names, and the
+   * topbar that carries them is still not a live region.
+   */
+  function announceStatusChange(next: GameplayStatus): void {
+    const prev = prevStatus;
+    if (deathPending) {
+      deathPending = false;
+      if (next.kind !== 'versus') {
+        announce(`Life lost. ${lifeWord(next.lives)} remaining.`);
+        return;
+      }
+    }
+    if (next.kind === 'versus' && prev?.kind === 'versus' && next.stocks !== null && prev.stocks !== null) {
+      const before = new Map(prev.stocks.map((s) => [s.slot, s.stock]));
+      // Same slots, or it is a different match rather than a loss in this one.
+      const sameSlots =
+        next.stocks.length === prev.stocks.length && next.stocks.every((s) => before.has(s.slot));
+      const lost = sameSlots ? next.stocks.find((s) => s.stock < (before.get(s.slot) as number)) : undefined;
+      if (lost !== undefined) {
+        announce(`Player ${lost.slot + 1} lost a stock. ${lost.stock} remaining.`);
+        return;
+      }
+    }
+    if (prev !== null && next.mission > prev.mission && !outcomeVisible) {
+      // THE ORDINAL ALONE, never `of ${next.missions}`. The shipped topbar renders `Level: 3`
+      // and not `3/5` under a standing ruling recorded at `levelNum.textContent` below -- the
+      // bar "should not necessarily reveal how many levels there are" -- and a spoken
+      // announcement that named the total would hand a screen-reader user exactly the fact
+      // the screen withholds. An accessibility surface disclosing MORE than the visible one
+      // is still a disclosure, and this was that until it was caught in review.
+      //
+      // Deliberately does not mirror the `restoreDenominator` arm either: that is a developer
+      // experiment on the bar, and the announcement follows the shipped game.
+      announce(`Level ${next.mission}.`);
+    }
   }
 
   function disarmReset(): void {
@@ -7190,6 +7296,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   return {
     setStatus(status: GameplayStatus | null): void {
+      // The announcement is decided BEFORE `prevStatus` moves, and from the pushed value
+      // rather than from anything rendered (issue #629). Leaving gameplay (`null`) clears
+      // the diff state so re-entering cannot read a transition across the gap -- and clears
+      // any owed death announcement, which belongs to a session that is over.
+      if (status === null) {
+        prevStatus = null;
+        deathPending = false;
+      } else {
+        announceStatusChange(status);
+        prevStatus = status;
+      }
       statusData = status;
       // Every element the bar has, from the one projection -- see applyStatus. There is
       // no early return on an unchanged status: this setter is cheap by construction --
@@ -7339,6 +7456,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       capacityEl.classList.add('hud-capacity--flash');
     },
     signalPlayerDeath(color: number): void {
+      // The AUTHORITATIVE life-loss event (issue #629), and the reason the announcement is
+      // not derived from a lives diff: `pushStatus` fires on every world build too, so
+      // "lives went down" also describes a session replaced by a different board. Recorded
+      // rather than spoken here, because the remaining count belongs to the NEXT status
+      // push -- this cue and the topbar would otherwise be a frame out of step.
+      deathPending = true;
       // Set before the (re)trigger below, so the very first paint of the replayed
       // animation already carries the right colour rather than one frame of the old one.
       damageEl.style.setProperty('--hud-damage-color', cssColor(color));
