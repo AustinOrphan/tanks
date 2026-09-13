@@ -354,7 +354,7 @@ describe('live status announcements (issue #629)', () => {
     for (let i = 0; i < 60; i++) h.setStatus(campaign({ mission: 2, missions: 5 }));
     const writes = observer.takeRecords().length;
     observer.disconnect();
-    expect(spoken(root)).toBe('Level 2 of 5.');
+    expect(spoken(root)).toBe('Level 2.');
     expect(writes).toBe(1);
   });
 
@@ -392,11 +392,19 @@ describe('live status announcements (issue #629)', () => {
     expect(spoken(root)).toBe('');
   });
 
-  it('announces a level advance', () => {
+  it('announces a level advance, WITHOUT naming how many levels there are', () => {
+    // The shipped topbar renders `Level: 3`, not `3/5`, under a standing ruling recorded in
+    // `hud.ts` beside `levelNum.textContent`. This announcement said "Level 2 of 5." until
+    // review caught it: an accessibility surface disclosing MORE than the visible one is
+    // still a disclosure, and the total is exactly what the bar withholds.
+    //
+    // The `missions` figure is deliberately a DIFFERENT number from the mission here, so a
+    // regression that reintroduced the denominator cannot coincide with the ordinal.
     const { hud: h, root } = mount();
     h.setStatus(campaign({ mission: 1, missions: 5 }));
     h.setStatus(campaign({ mission: 2, missions: 5 }));
-    expect(spoken(root)).toBe('Level 2 of 5.');
+    expect(spoken(root)).toBe('Level 2.');
+    expect(spoken(root)).not.toContain('5');
   });
 
   it('stays SILENT about the level while an outcome surface is up', () => {

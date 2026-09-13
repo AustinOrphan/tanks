@@ -3451,7 +3451,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       }
     }
     if (prev !== null && next.mission > prev.mission && !outcomeVisible) {
-      announce(`Level ${next.mission} of ${next.missions}.`);
+      // THE ORDINAL ALONE, never `of ${next.missions}`. The shipped topbar renders `Level: 3`
+      // and not `3/5` under a standing ruling recorded at `levelNum.textContent` below -- the
+      // bar "should not necessarily reveal how many levels there are" -- and a spoken
+      // announcement that named the total would hand a screen-reader user exactly the fact
+      // the screen withholds. An accessibility surface disclosing MORE than the visible one
+      // is still a disclosure, and this was that until it was caught in review.
+      //
+      // Deliberately does not mirror the `restoreDenominator` arm either: that is a developer
+      // experiment on the bar, and the announcement follows the shipped game.
+      announce(`Level ${next.mission}.`);
     }
   }
 
