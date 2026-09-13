@@ -171,10 +171,13 @@ describe('formatDiagnostics', () => {
   });
 
   it('keeps the two apart when both are present at once', () => {
-    // The case that proves the split is a partition rather than an ordering: `?seed=7` with
-    // no gate is a closed-gate request, and the inverted default is present regardless. Both
-    // headings, and the requested one names only the parameter that was requested.
-    const text = formatDiagnostics(input({ search: '?seed=7' }));
+    // The case that proves the split is a partition rather than an ordering, and the fixture
+    // had to be chosen for it: a CLOSED gate (`?seed=7` alone) short-circuits
+    // `explainDevConfig` before the inverted default is reached, so only one heading appears
+    // and the case would be measuring an ordering it never saw. `?dev=1&seed=abc` opens the
+    // gate and asks for something unparseable, so a `rejected` note (requested) and the
+    // standing `inverted-default` one (not requested) arrive together.
+    const text = formatDiagnostics(input({ search: '?dev=1&seed=abc' }));
     // BOTH HEADINGS PRESENT is asserted first, and it is the half that makes the rest able
     // to fail: a formatter that merged the sections emits only the first heading, `indexOf`
     // of the second returns -1, and a slice to -1 would quietly exclude the very line the
