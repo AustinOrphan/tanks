@@ -41,7 +41,19 @@ import type { BulletType } from '../sim/types';
  *
  * Absent means the shipped board: hue alone.
  */
-export const ENEMY_ROLE_CUES = ['barrel', 'band', 'both'] as const;
+export const ENEMY_ROLE_CUES = [
+  // WEAPON CLASS, three ways of saying the same three states.
+  'girth',   // barrel tube thickness
+  'flare',   // muzzle size
+  'dome',    // turret height
+  // MINE LOAD, three ways.
+  'deck',    // a flat bar on the deck ahead of the turret, varying in width
+  'riser',   // the same bar raised into a block, so it casts and reads in silhouette
+  'crown',   // turret diameter
+  // The two that measured best, together -- the only way to see whether two cues on one
+  // 40px silhouette read as a grammar or as noise.
+  'both',
+] as const;
 
 export type EnemyRoleCue = (typeof ENEMY_ROLE_CUES)[number];
 
@@ -49,14 +61,19 @@ export function isEnemyRoleCue(value: unknown): value is EnemyRoleCue {
   return typeof value === 'string' && (ENEMY_ROLE_CUES as readonly string[]).includes(value);
 }
 
-/** Does this cue draw the barrel treatment? `both` draws everything. */
-export function cuesWeapon(cue: EnemyRoleCue | null): boolean {
-  return cue === 'barrel' || cue === 'both';
+/** Which lever a cue pulls; `both` pulls the two that measured best. */
+export function weaponLever(cue: EnemyRoleCue | null): 'girth' | 'flare' | 'dome' | null {
+  if (cue === 'girth' || cue === 'both') return 'girth';
+  if (cue === 'flare') return 'flare';
+  if (cue === 'dome') return 'dome';
+  return null;
 }
 
-/** Does this cue draw the hull-side mine band? */
-export function cuesMines(cue: EnemyRoleCue | null): boolean {
-  return cue === 'band' || cue === 'both';
+export function mineLever(cue: EnemyRoleCue | null): 'deck' | 'riser' | 'crown' | null {
+  if (cue === 'deck' || cue === 'both') return 'deck';
+  if (cue === 'riser') return 'riser';
+  if (cue === 'crown') return 'crown';
+  return null;
 }
 
 /**
@@ -95,4 +112,36 @@ export function barrelGirthFor(bulletType: BulletType): number {
 export function mineBlockFor(mineCapacity: number): number {
   if (mineCapacity <= 0) return 0;
   return mineCapacity <= 2 ? 0.3 : 0.62;
+}
+
+/**
+ * The shipped tank, scaled by whichever weapon lever a cue pulls -- all three carry the same
+ * three states, ordered by the bounce budget, so they can be compared against each other
+ * rather than against a different claim.
+ *
+ * Returned as multipliers of the shipped values, so an unpulled lever is exactly 1 and the
+ * shipped tank does not move a vertex.
+ */
+export function weaponShapeFor(
+  lever: 'girth' | 'flare' | 'dome' | null, bulletType: BulletType,
+): { barrelGirth?: number; muzzleFlare?: number; turretTall?: number } {
+  if (lever === null) return {};
+  const step = bulletType === 'fast' ? -1 : bulletType === 'ricochet' ? 1 : 0;
+  if (lever === 'girth') return { barrelGirth: [0.78, 1, 1.4][step + 1] };
+  if (lever === 'flare') return { muzzleFlare: [0.7, 1, 1.55][step + 1] };
+  return { turretTall: [0.72, 1, 1.4][step + 1] };
+}
+
+/**
+ * The same, for mine load. `crown` is the odd one: it spends the turret's DIAMETER, which is
+ * the biggest uninterrupted shape on the tank -- and also the surface #630 wants for owner
+ * identity, so it is here to be measured rather than because it is available.
+ */
+export function mineShapeFor(
+  lever: 'deck' | 'riser' | 'crown' | null, mineCapacity: number,
+): { deckBar?: number; raised?: boolean; turretWide?: number } {
+  if (lever === null) return {};
+  const step = mineCapacity <= 0 ? 0 : mineCapacity <= 2 ? 1 : 2;
+  if (lever === 'crown') return { turretWide: [0.82, 1, 1.22][step] };
+  return { deckBar: [0, 0.3, 0.62][step], raised: lever === 'riser' };
 }
