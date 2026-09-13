@@ -3583,8 +3583,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   /** The developer shell (issue #243). Static like About, for now -- see the markup. */
   function showDeveloperTools(show: boolean): void {
-    if (show) swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
-    else {
+    if (show) {
+      // RE-ASKED ON EVERY OPEN (issue #252), not only when the port is registered. The host
+      // registers once at construction, when the session is still at its own title screen and
+      // `hasRound()` is false -- so a set-once availability would leave all three controls
+      // hidden for the whole page. Whether a round exists changes underneath a shut pane.
+      refreshDevActions();
+      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
+    } else {
       closeSurface(DEVTOOLS_SURFACE);
       // Same reason the self-test's report field is cleared on close (issue #247 following
       // #599): a URL or a report left in the field is a stale statement about a session that

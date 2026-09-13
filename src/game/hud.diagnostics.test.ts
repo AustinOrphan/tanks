@@ -156,6 +156,133 @@ describe('Pin Current Seed offers a URL and changes nothing', () => {
   });
 });
 
+describe('the three developer actions (issue #252)', () => {
+  /** A port that records what it was asked and answers with a seed of its own. */
+  function fakePort(overrides: Partial<{ hasRound: boolean; seed: number; resolved: number }> = {}) {
+    const calls: Array<{ seed: number | null; keepLives: boolean }> = [];
+    return {
+      calls,
+      port: {
+        currentSeed: () => overrides.seed ?? 55,
+        hasRound: () => overrides.hasRound ?? true,
+        rebuild: (seed: number | null, keepLives: boolean) => {
+          calls.push({ seed, keepLives });
+          return overrides.resolved ?? 8888;
+        },
+      },
+    };
+  }
+
+  const act = (root: HTMLElement, id: string): HTMLButtonElement =>
+    q<HTMLButtonElement>(root, `.hud-devact[data-action="${id}"]`);
+
+  it('offers all three, labelled from the catalogue', () => {
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDevActionPort(() => fakePort().port);
+    expect(Array.from(root.querySelectorAll('.hud-devact'), (b) => b.textContent)).toEqual([
+      'Restart with Same Seed',
+      'Reroll Seed',
+      'Restart Current Round',
+    ]);
+  });
+
+  it('re-asks whether a round exists every time the pane opens, not only at registration', () => {
+    // THE LOAD-BEARING ONE. `route-host.ts` registers the port once, at construction, when
+    // the session is still at its own title screen -- so a set-once availability would leave
+    // all three controls hidden for the entire life of the page. Whether a round exists
+    // changes underneath a pane that is shut.
+    const root = mountDev({ developerPage: PAGE });
+    let roundStarted = false;
+    hud!.setDevActionPort(() => ({
+      currentSeed: () => 1,
+      hasRound: () => roundStarted,
+      rebuild: () => 1,
+    }));
+    expect(act(root, 'reroll-seed').hidden).toBe(true);
+    roundStarted = true;
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    expect(act(root, 'reroll-seed').hidden).toBe(false);
+  });
+
+  it('hides all three with no session, and shows them once one is live', () => {
+    // Distinct from the `developerPage` gate: the pane exists either way, but there is no
+    // round to restart from the main menu. A control the session cannot serve is not
+    // rendered, the rule Exit and both diagnostics buttons already follow.
+    const root = mountDev({ developerPage: PAGE });
+    expect(act(root, 'reroll-seed').hidden).toBe(true);
+    hud!.setDevActionPort(() => null);
+    expect(act(root, 'reroll-seed').hidden).toBe(true);
+    hud!.setDevActionPort(() => fakePort({ hasRound: false }).port);
+    expect(act(root, 'reroll-seed').hidden).toBe(true);
+    hud!.setDevActionPort(() => fakePort().port);
+    expect(act(root, 'reroll-seed').hidden).toBe(false);
+  });
+
+  it('ARMS before it fires, and the first press rebuilds nothing', () => {
+    // "Cancelled confirmations make no change." The first press only changes the label; the
+    // port is untouched, so a handler that fired on one press fails here rather than in a
+    // playtest with a lost round.
+    const root = mountDev({ developerPage: PAGE });
+    const f = fakePort();
+    hud!.setDevActionPort(() => f.port);
+    act(root, 'reroll-seed').click();
+    expect(f.calls).toEqual([]);
+    expect(act(root, 'reroll-seed').textContent).toBe('Reroll, losing this round?');
+    act(root, 'reroll-seed').click();
+    expect(f.calls).toEqual([{ seed: null, keepLives: false }]);
+  });
+
+  it('arming one action DISARMS another, so a stray second press cannot fire the wrong one', () => {
+    // The mechanism is single-slot (`armedReset`), which is what makes this true -- and the
+    // label restoration is what makes it visible. Before issue #252 that restoration was a
+    // two-way ternary over the two reset buttons; an armed developer action would have been
+    // relabelled "Reset progress".
+    const root = mountDev({ developerPage: PAGE });
+    const f = fakePort();
+    hud!.setDevActionPort(() => f.port);
+    act(root, 'reroll-seed').click();
+    act(root, 'restart-round').click();
+    expect(act(root, 'reroll-seed').textContent).toBe('Reroll Seed');
+    expect(act(root, 'restart-round').textContent).toBe('Restart this round?');
+    expect(f.calls).toEqual([]);
+  });
+
+  it('asks for the CURRENT seed on a same-seed restart, and reports what came back', () => {
+    const root = mountDev({ developerPage: PAGE });
+    const f = fakePort({ seed: 4242, resolved: 4242 });
+    hud!.setDevActionPort(() => f.port);
+    act(root, 'restart-same-seed').click();
+    act(root, 'restart-same-seed').click();
+    expect(f.calls).toEqual([{ seed: 4242, keepLives: false }]);
+    expect(out(root).value).toContain('now running seed 4242');
+  });
+
+  it('puts a REPRODUCTION URL beside a rerolled seed, not just the number', () => {
+    // "Reroll reports an exact seed that can immediately be copied into a reproduction URL."
+    // A bare number leaves the developer to build the URL; this is the same `pinnedSeedUrl`
+    // Pin Current Seed uses, so the two cannot produce different URLs for one session.
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDiagnosticsSource(() => ({ ...SESSION, seed: 8888 }));
+    hud!.setDevActionPort(() => fakePort({ resolved: 8888 }).port);
+    act(root, 'reroll-seed').click();
+    act(root, 'reroll-seed').click();
+    expect(out(root).value).toContain('now running seed 8888');
+    expect(out(root).value).toContain('/tanks/?dev=1&seed=8888');
+  });
+
+  it('says so rather than appearing to work when the port refuses', () => {
+    const root = mountDev({ developerPage: PAGE });
+    // Available at arm time, gone by the time the second press lands -- the session detached
+    // while the control sat armed, which a 4-second window makes reachable.
+    let live = true;
+    hud!.setDevActionPort(() => (live ? fakePort({ hasRound: false }).port : null));
+    live = true;
+    act(root, 'restart-round').click();
+    act(root, 'restart-round').click();
+    expect(out(root).value).toContain('nothing to restart');
+  });
+});
+
 describe('the field does not outlive the pane', () => {
   it('is cleared and re-hidden when Developer Tools closes', () => {
     // A URL or a report left in the field is a statement about a session that may since have
