@@ -1,0 +1,14 @@
+{
+  "id": "shield-opacity-dips-as-the-shield-expires",
+  "file": "src/render/spawn-anim.ts",
+  "find": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;\n}",
+  "replace": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "killedBy": [
+    "the shielded-spawn opacity contract (issue #230) is back at OPAQUE before the shield ends, so an expiring shield cannot dip"
+  ],
+  "why": "Drops the ease-OUT half, so the tank is at its most translucent on the last frame of protection and `entities.ts` snaps it to opaque the moment `shieldLeft` hits zero. Issue #230 names this separately from the entrance boundary -- \"an expired or absent shield cannot cause a late opacity dip\" -- because it is a different frame with a different cause, and the mirrored smoothsteps are what make both structural rather than tuned."
+}

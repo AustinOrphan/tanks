@@ -1,0 +1,14 @@
+{
+  "id": "shield-opacity-snaps-at-the-entrance-boundary",
+  "file": "src/render/spawn-anim.ts",
+  "find": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;",
+  "replace": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts"
+  ],
+  "killedBy": [
+    "the shielded-spawn opacity contract (issue #230) meets the entrance at OPAQUE, with no step at the phase boundary"
+  ],
+  "why": "Drops the ease-IN half, so the protected phase opens at its most translucent -- 0.45 on the frame after an entrance that ended at 1.0. That is exactly the one-frame drop issue #230 describes and the owner's 2026-09-12 comment measured on `warp` and `rise`. The ease-out half survives, so the OTHER boundary still looks right: half the contract holding is what made the original defect easy to miss."
+}
