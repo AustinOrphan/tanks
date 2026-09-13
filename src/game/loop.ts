@@ -1524,10 +1524,30 @@ export function startGameWith(
     return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
   }
 
+  /**
+   * A seed a RUNTIME action chose, which outranks the URL's (issue #252).
+   *
+   * `?seed=` is a boot-time default: it says what this session should start from. Reroll
+   * Seed is a gesture made with the session already running, and it can only mean "a
+   * different world than the one I am looking at" -- so the more specific of the two wins,
+   * which is the same direction `devFlags.quality` already beats the stored Settings preset.
+   *
+   * WITHOUT THIS, REROLL IS DEAD EXACTLY WHERE IT IS WANTED. `nextSeed()` below reads
+   * `devFlags.seed ?? clock`, so with a seed pinned it returns the same number every time --
+   * and Reroll would rebuild an identical world while reporting a "new" seed that is the old
+   * one. A developer who pinned a seed is the likeliest person to press Reroll, so the dead
+   * case would be the common one.
+   *
+   * SESSION-SCOPED, not written back to the flags or the URL: the address bar still says
+   * what the page was opened with, and Copy Diagnostics reports `world.seed`, which is the
+   * resolved one either way.
+   */
+  let seedOverride: number | null = null;
+
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
   // for a before/after comparison.
-  const nextSeed = (): number => deps.devFlags.seed ?? deriveSeed(deps.wallMs());
+  const nextSeed = (): number => seedOverride ?? deps.devFlags.seed ?? deriveSeed(deps.wallMs());
 
   /**
    * The ONE place worlds are built: boot, level advance, quit-to-title and level pick
@@ -1535,9 +1555,12 @@ export function startGameWith(
    * invincibility flag cannot drift apart between them -- their parity used to be
    * checked line-by-line in review instead of being structural.
    */
-  function buildWorld(atLevel: CampaignLevel, lives?: number): World {
+  function buildWorld(atLevel: CampaignLevel, lives?: number, seed?: number): World {
     const w = deps.levels.world(
-      atLevel, nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives,
+      // `seed ?? nextSeed()`: an explicitly REQUESTED seed outranks both the override and the
+      // flag, because the only caller that passes one is Restart with Same Seed, which is
+      // asking for a specific world rather than for a policy about seeds (issue #252).
+      atLevel, seed ?? nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives,
       playerCount >= 2 ? playerCount : undefined,
     );
     if (deps.devFlags.invincible) {
@@ -2860,9 +2883,18 @@ export function startGameWith(
    * level pick -- their parity was reviewed line-by-line three times before it
    * became structural.
    */
-  function switchTo(newLevel: CampaignLevel, lives?: number): void {
+  /**
+   * @param seed An exact seed to build with, for issue #252's Restart with Same Seed. Omitted
+   * everywhere else, which is every pre-existing call site: they take whatever `nextSeed()`
+   * decides. Threaded THROUGH here rather than around it deliberately -- the four side
+   * effects below (`pendingLanding`, the descriptor/session re-derivation, `pushStatus` and
+   * the bot reseed) all have to happen for a rebuilt world, and the bot reseed in particular
+   * is what makes a same-seed restart reproduce the same bot behaviour rather than only the
+   * same board.
+   */
+  function switchTo(newLevel: CampaignLevel, lives?: number, seed?: number): void {
     level = newLevel;
-    world = buildWorld(level, lives);
+    world = buildWorld(level, lives, seed);
     // The one site that can satisfy an owed landing, because it is the one site that
     // builds a world -- see `pendingLanding`.
     pendingLanding = false;
