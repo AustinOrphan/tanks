@@ -1,0 +1,14 @@
+{
+  "id": "map-intent-narrow-phone-tier-dropped",
+  "file": "src/game/hud.css",
+  "find": "@media (max-width: 340px) {\n  .hud-versus-map-intent {\n    -webkit-line-clamp: 3;",
+  "replace": "@media (max-width: 99999px) {\n  .hud-versus-map-intent {\n    -webkit-line-clamp: 3;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The narrowest tier's query widened until it swallows every phone, which is the plausible wrong edit rather than an absurd one -- a reader who sees three lines fixing 320px may reasonably think three lines is simply better everywhere. It is not: three lines is the answer to a 218px text column, and applying it at 390px (288px of column, where every intent fits two) reserves an empty third line on all seven cards, ~30px down the phone column that issue #658's fit complaint was about. The tiers track the TEXT COLUMN, not the viewport, which is also why they are not monotonic.",
+  "killedBy": [
+    "hud.css is syntactically whole holds every map card to one height: every intent tier clamps and reserves the SAME number of lines"
+  ]
+}

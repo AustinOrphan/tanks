@@ -3492,6 +3492,34 @@
 }
 
 /*
+ * A THIRD tier, for phones narrower than the one the two above were derived on.
+ *
+ * The 760px rule's two lines were measured against a 288px text column -- the width beside
+ * the 74px canvas at 390px, the phone that was checked. Below that the column keeps
+ * shrinking while the copy does not: MEASURED in Chromium, 414/393/375/360/352/344 all fit
+ * two lines, and at 320px the column is 218px and FOUR of the seven cards clip (each needs
+ * 45px of intent and has 30). That was shipped, and this is the repair.
+ *
+ * Three lines rather than dropping the clamp: removing it here would let the cards size to
+ * content again, which is precisely the resize-on-switch this whole rule exists to stop --
+ * it would just be stopped everywhere except the narrowest screen, where it is hardest to
+ * notice and most annoying to hit.
+ *
+ * THE TIERS ARE NOT MONOTONIC -- 4 lines, then 2, then 3 -- and that is correct rather than
+ * a mistake to tidy. They do not track viewport width; they track the TEXT COLUMN, which
+ * jumps when the card layout changes: 138px in a 240px desktop grid column, 288px in the
+ * single full-width column below 760px, 218px once the viewport itself is narrow enough to
+ * squeeze that. Ordering the numbers would break the rule they encode.
+ */
+@media (max-width: 340px) {
+  .hud-versus-map-intent {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    min-height: calc(1.35em * 3);
+  }
+}
+
+/*
  * The one motion contract (issue #364).
  *
  * KEYFRAMES, not `transition`. Every surface's `--hidden` modifier is `display: none`,
