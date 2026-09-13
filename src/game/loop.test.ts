@@ -5184,13 +5184,26 @@ describe("startGameWith: the developer actions' port (issue #252)", () => {
 
   it('rebuilds with an EXACT seed when one is named, which is Restart with Same Seed', () => {
     // Criterion 1: same-seed restart reproduces the deterministic initial state. `rec.seeds`
-    // is every seed a world was built from, so a duplicate is the assertion -- and the
-    // rebuild goes through `switchTo`, so the bots reseed off that same number too.
+    // is every seed a world was built from, and the rebuild goes through `switchTo`, so the
+    // bots reseed off that same number too rather than only the board being the same.
+    //
+    // THE NAMED SEED IS DELIBERATELY ONE THE CLOCK CANNOT PRODUCE. A first draft asked for
+    // the seed the session was already running, under a fixture whose `wallMs` is a constant
+    // -- so a rebuild that IGNORED the argument re-derived from the same 1000 and landed on
+    // the same number anyway. That mutation SURVIVED: the assertion was measuring a
+    // coincidence of the fixture rather than the argument being honoured.
     const h = boot(makeDeps({ wallMs: 1000 }));
     h.setState('playing');
     const first = h.rec.seeds[0];
-    expect(portOf(h).rebuild(first, false)).toBe(first);
-    expect(h.rec.seeds).toEqual([first, first]);
+    expect(first).toBe(deriveSeed(1000));
+    const named = 31337;
+    expect(named).not.toBe(first); // the guard against that coincidence returning
+    expect(portOf(h).rebuild(named, false)).toBe(named);
+    expect(h.rec.seeds).toEqual([first, named]);
+    // ...and naming the seed already running is what the control actually does, so the same
+    // number lands in the list twice.
+    expect(portOf(h).rebuild(named, false)).toBe(named);
+    expect(h.rec.seeds).toEqual([first, named, named]);
     h.handle.dispose();
   });
 
