@@ -1,0 +1,14 @@
+{
+  "id": "level-advance-announced-over-the-win-panel",
+  "file": "src/game/hud.ts",
+  "find": "    if (prev !== null && next.mission > prev.mission && !outcomeVisible) {",
+  "replace": "    if (prev !== null && next.mission > prev.mission) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "killedBy": [
+    "live status announcements (issue #629) stays SILENT about the level while an outcome surface is up"
+  ],
+  "why": "Announces the new level even while an outcome surface is up. That is criterion 5's double-announcement exactly: the win panel is focused and read aloud at the same moment the next mission number arrives, so the player hears the level twice -- once from the panel they are on, once from a live region talking over it. Gated on the panel's own `outcomeVisible` rather than on a delay, so this is a state check a mutation can break and a test can see."
+}

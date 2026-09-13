@@ -1,0 +1,14 @@
+{
+  "id": "announcement-state-survives-leaving-gameplay",
+  "file": "src/game/hud.ts",
+  "find": "      if (status === null) {\n        prevStatus = null;\n        deathPending = false;\n      } else {",
+  "replace": "      if (status === null) {\n        // left as-is\n      } else {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "killedBy": [
+    "live status announcements (issue #629) forgets the transition across a gap in gameplay"
+  ],
+  "why": "Keeps the diff state across a gap in gameplay, so returning to the menu and starting a different level reads as an advance from wherever the last session stopped -- and an owed death announcement, belonging to a session that has ended, is spoken against the new one's life count. `setStatus(null)` is the HUD's own word for leaving gameplay, which makes it the honest place to forget."
+}

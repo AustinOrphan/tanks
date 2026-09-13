@@ -1,0 +1,14 @@
+{
+  "id": "stock-loss-read-across-two-different-matches",
+  "file": "src/game/hud.ts",
+  "find": "      const sameSlots =\n        next.stocks.length === prev.stocks.length && next.stocks.every((s) => before.has(s.slot));",
+  "replace": "      const sameSlots = true;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "killedBy": [
+    "live status announcements (issue #629) does not read a DIFFERENT match\u2019s lower stock as a loss in this one"
+  ],
+  "why": "Drops the guard that the two pushes describe the SAME match. A two-player match replaced by a four-player one gives slot 0 fewer stocks than it had, and the pane announces a stock loss nobody suffered -- at the start of a match, which is the worst moment to be told someone is losing. The slot set is what distinguishes a new match from a loss within one, since versus carries no mission number to change."
+}

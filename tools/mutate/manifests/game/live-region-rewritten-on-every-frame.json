@@ -1,0 +1,14 @@
+{
+  "id": "live-region-rewritten-on-every-frame",
+  "file": "src/game/hud.ts",
+  "find": "    if (message === lastAnnouncement) return;",
+  "replace": "    if (false) return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "killedBy": [
+    "live status announcements (issue #629) WRITES the live region once across sixty identical pushes, not sixty times"
+  ],
+  "why": "Removes the coalescing guard, so the live region is rewritten on EVERY status push -- and `refreshTopbar` pushes one per frame, so that is sixty rewrites a second while nothing changes. A screen reader reacts to the mutation, not to the content, so the result is continuous narration of a sentence that has not changed: the speech-spam failure this feature is most likely to produce, and the one issue #629's criterion 6 names. Invisible to an assertion on the final text, which sixty identical writes leave looking correct -- the killing case counts DOM mutations through a MutationObserver instead."
+}
