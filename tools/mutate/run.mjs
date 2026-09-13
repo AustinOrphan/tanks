@@ -430,6 +430,28 @@ export function resolveManifestPath(root, manifestArg) {
 }
 
 /**
+ * One manifest file's text as its entries, naming `file` when the shape is wrong.
+ *
+ * The shape check lives HERE, not only in `mergeManifestFiles`: every reader goes through
+ * this function -- `readManifestFiles` from disk, including for `migrate-killed-by.mjs`,
+ * which rewrites each file in place and never merges, and `baseManifestById` from git.
+ * Without it a malformed file reaches a caller's `entries.map` as an unnamed TypeError
+ * instead of naming the broken file, and a per-entry OBJECT reaches a `for...of` that
+ * expected an array.
+ *
+ * `single` records which shape it was, so a rewriter puts an entry back as an object
+ * rather than silently promoting a per-entry file to a one-element array -- which would
+ * work, and would undo the layout one file at a time.
+ * @param {string} text @param {string} file @returns {{ entries: any[], single: boolean }}
+ */
+export function parseManifestText(text, file) {
+  const parsed = JSON.parse(text);
+  if (Array.isArray(parsed)) return { entries: parsed, single: false };
+  if (parsed !== null && typeof parsed === 'object') return { entries: [parsed], single: true };
+  throw new Error(`manifest ${file}: must be a JSON entry object, or an array of them`);
+}
+
+/**
  * The manifest as a list of files: ONE ENTRY PER FILE, under `manifests/<area>/<id>.json`
  * (issue #653).
  *
@@ -461,22 +483,7 @@ export function resolveManifestPath(root, manifestArg) {
  * @param {string} path @returns {{ path: string, entries: any[], single: boolean }[]}
  */
 export function readManifestFiles(path) {
-  // The shape check lives HERE, not only in `mergeManifestFiles`: every reader goes
-  // through this function, including `migrate-killed-by.mjs`, which rewrites each file
-  // in place and never merges. Without it a malformed file reaches that script's
-  // `entries.map` as an unnamed TypeError instead of naming the broken file.
-  //
-  // `single` records which shape it was, so a rewriter puts an entry back as an object
-  // rather than silently promoting a per-entry file to a one-element array -- which would
-  // work, and would undo the layout one file at a time.
-  const parse = (/** @type {string} */ file) => {
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    if (Array.isArray(parsed)) return { path: file, entries: parsed, single: false };
-    if (parsed !== null && typeof parsed === 'object') {
-      return { path: file, entries: [parsed], single: true };
-    }
-    throw new Error(`manifest ${file}: must be a JSON entry object, or an array of them`);
-  };
+  const parse = (/** @type {string} */ file) => ({ path: file, ...parseManifestText(readFileSync(file, 'utf8'), file) });
   if (!statSync(path).isDirectory()) return [parse(path)];
   // Sorted at every level, so the flattened order is stable and a report is reviewable.
   // ONE level of nesting only: the layout is `manifests/<area>/<id>.json`, and recursing
@@ -1054,24 +1061,39 @@ export function changedFilesSince(ref, root) {
 
 /**
  * The manifest as it was at `base`, by id, for rule 2 (an entry whose text changed is
- * selected). Read through git rather than a checkout: every file the current manifest
- * directory holds, plus the single file the repository used before issue #505, so the
- * selection can be exercised against history from either side of that split. A file
- * that did not exist at `base` contributes nothing, which makes every entry in it new.
+ * selected). Read through git rather than a checkout, and LISTED through git too.
+ *
+ * Issue #689: this used to list the WORKING TREE one level deep. Under the
+ * `<area>/<id>.json` layout that found no file at all, so the map was always empty, every
+ * entry read as new, and every pull request ran the whole manifest. A working-tree listing
+ * also cannot see an entry file the branch deleted. `git ls-tree` at `base` answers both,
+ * with the same traversal as `readManifestFiles` (direct `.json` files and one level of
+ * area directories) and the same shape check, `parseManifestText`.
+ *
+ * A manifest path that did not exist at `base`, or lies outside the repository, contributes
+ * nothing, which makes every entry new: the safe direction, selecting more rather than less.
  * @param {string} base @param {string} manifestArg @param {string} root
  * @returns {Map<string, unknown>}
  */
 export function baseManifestById(base, manifestArg, root) {
   const byId = new Map();
   const resolved = resolveManifestPath(root, manifestArg);
-  const rel = (/** @type {string} */ abs) => abs.startsWith(root) ? abs.slice(root.length).replace(/^\/+/, '') : abs;
-  const candidates = statSync(resolved).isDirectory()
-    ? [...readdirSync(resolved).filter((n) => n.endsWith('.json')).sort().map((n) => `${rel(resolved)}/${n}`), 'tools/mutate/manifest.json']
-    : [rel(resolved)];
-  for (const path of candidates) {
-    const res = spawnSync('git', ['show', `${base}:${path}`], { cwd: root, encoding: 'utf8' });
-    if (res.status !== 0) continue;
-    for (const entry of JSON.parse(res.stdout)) if (typeof entry?.id === 'string') byId.set(entry.id, entry);
+  const git = (/** @type {string[]} */ argv) => spawnSync('git', argv, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const top = root.replace(/\/+$/, '');
+  const rel = resolved.startsWith(`${top}/`) ? resolved.slice(top.length + 1).replace(/\/+$/, '') : null;
+  if (rel === null) return byId;
+  let paths = [rel];
+  if (statSync(resolved).isDirectory()) {
+    const listing = git(['ls-tree', '-r', '--name-only', base, '--', rel]);
+    if (listing.status !== 0) throw new Error(`git ls-tree ${base} -- ${rel} failed: ${listing.stderr.trim()}`);
+    paths = listing.stdout.split('\n').filter((p) => p.startsWith(`${rel}/`) && p.endsWith('.json') && p.slice(rel.length + 1).split('/').length <= 2);
+  }
+  for (const path of paths) {
+    const shown = git(['show', `${base}:./${path}`]);
+    if (shown.status !== 0) continue;
+    for (const entry of parseManifestText(shown.stdout, `${base}:${path}`).entries) {
+      if (typeof entry?.id === 'string') byId.set(entry.id, entry);
+    }
   }
   return byId;
 }

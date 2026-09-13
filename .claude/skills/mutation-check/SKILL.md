@@ -11,7 +11,7 @@ Treat invocation arguments as an optional mutation ID, source behavior, test fil
 
 ## Workflow
 
-1. Inspect the diff, `tools/mutate/manifest.json`, and the affected production/test files. Read the mutation section of the [command reference](../../../docs/agent/commands-and-operations.md) and the relevant [testing conventions](../../../docs/agent/testing-and-review.md#testing-conventions-learned-the-hard-way).
+1. Inspect the diff, the entry files under `tools/mutate/manifests/<area>/`, and the affected production/test files. Read the mutation section of the [command reference](../../../docs/agent/commands-and-operations.md) and the relevant [testing conventions](../../../docs/agent/testing-and-review.md#testing-conventions-learned-the-hard-way).
 2. Name the exact production defect the assertion must catch. For new coverage, run that production mutation against the pre-assertion tests first and observe the gap before treating the new test as evidence.
 3. For local candidate verification, run each entry relevant to the touched behavior, code, and tests with `npm run mutate -- --only <id>`; add or update entries when the coverage contract changes. Do not reproduce the harness with ad hoc search-and-replace commands.
 4. Let the harness establish a green scoped baseline, prove the declared tests reach the target file, apply the mutation, and restore the original bytes. After every run, independently inspect `git status --short` and the target diff to confirm restoration.

@@ -27,7 +27,10 @@ export const ALWAYS_RUN_PATTERNS = [
   /^package\.json$/,
   /^package-lock\.json$/,
   /^tsconfig[^/]*\.json$/,
-  /^\.github\/workflows\//,
+  // Only the workflows that run the manifest. `capture.yml` and `measure.yml` are
+  // dispatch-only lanes that cannot change an outcome (issue #689); a guard in
+  // `orchestrate.test.ts` fails if a workflow running `npm run mutate` falls off this list.
+  /^\.github\/workflows\/(?:ci|mutation-floor)\.yml$/,
 ];
 
 /**

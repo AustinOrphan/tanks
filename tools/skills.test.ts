@@ -111,6 +111,11 @@ function validateSkill(name: string, text: string): string[] {
   if (/^\s*(?:node|npx|vite|vitest)\s+[^`\n]*tools\//m.test(parsed.body)) {
     problems.push('skill must call repository scripts instead of tool implementations');
   }
+  // Issue #653 replaced the single manifest file with `manifests/<area>/<id>.json`; a skill
+  // still naming the old file sends the agent to read something that does not exist.
+  if (parsed.body.includes('tools/mutate/manifest.json')) {
+    problems.push('skill names the deleted tools/mutate/manifest.json');
+  }
 
   return problems;
 }
@@ -166,6 +171,7 @@ describe('the Claude Code project skills', () => {
       text.replace('background: false', 'background: false\nallowed-tools: Bash'),
       text.replace('## Stop conditions', '## Keep going'),
       text.replace('npm run verify:full', 'npm run verify:everything'),
+      text.replace('## Workflow', '## Workflow\n\nRead `tools/mutate/manifest.json` first.'),
       `${text}${'padding\n'.repeat(MAX_SKILL_LINES)}`,
     ];
 
