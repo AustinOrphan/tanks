@@ -1188,6 +1188,10 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // injected HUD in a test has an opinion about. `null` is the shipped bar, so
         // every one of them keeps rendering it.
         topbar: devFlags.topbar,
+        // Issue #668's action-bar arm, bound for the same reason as the two above: a
+        // developer flag no injected HUD in a test has an opinion about. `null` is the
+        // shipped bar, so every one of them keeps rendering it.
+        versusActions: devFlags.versusActions,
         // Issue #243's developer shell. The EFFECTIVE GATE, read from the same `search`
         // the flags came from: `parseDevFlags` returns `DEV_FLAGS_OFF` for a bare
         // `?dev=1`, so nothing on `devFlags` can distinguish "developer mode, nothing

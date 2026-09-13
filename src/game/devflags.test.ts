@@ -487,6 +487,35 @@ describe('parseDevFlags: backdrop (issue #317 -- the felt treatment kept switcha
   });
 });
 
+describe('parseDevFlags: versusActions (issue #668 -- where Start and Back live)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?versusActions=header').versusActions).toBeNull();
+  });
+
+  it('is null when absent -- the shipped pinned bar carries both buttons', () => {
+    expect(parseDevFlags('?dev=1').versusActions).toBeNull();
+  });
+
+  it('accepts header -- population: the one named layout this build carries', () => {
+    expect(parseDevFlags('?dev=1&versusActions=header').versusActions).toBe('header');
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 6 forms below', () => {
+    // `bar`, `footer` and `pinned` are in the set deliberately: they all name the SHIPPED
+    // layout, and naming the default is not a way to select it -- a parser that accepted one
+    // would put a value in the field that no consumer branches on, so the pane would render
+    // the default while the URL claimed an arm.
+    for (const v of ['', 'HEADER', 'bar', 'footer', 'pinned', 'top']) {
+      expect(parseDevFlags(`?dev=1&versusActions=${v}`).versusActions).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&versusActions=header'))
+      .toEqual({ ...DEV_FLAGS_OFF, versusActions: 'header' });
+  });
+});
+
 describe('parseDevFlags: arrival (issue #230 -- spawn and death told apart)', () => {
   it('is null without dev mode, whatever the value says', () => {
     expect(parseDevFlags('?arrival=opposed').arrival).toBeNull();

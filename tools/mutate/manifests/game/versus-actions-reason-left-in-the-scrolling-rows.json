@@ -1,0 +1,14 @@
+{
+  "id": "versus-actions-reason-left-in-the-scrolling-rows",
+  "file": "src/game/hud.ts",
+  "find": "      <div class=\"hud-versus-actions\">\n        <!-- The pane-level refusal",
+  "replace": "      <div class=\"hud-versus-actions\">\n        <!-- MOVED OUT -->\n      </div>\n      <div>\n        <!-- The pane-level refusal",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The refusal put back in the scrolling content, which is where it lived before the bar existed and where it reads perfectly well -- until the button it explains stops scrolling with it. Start is pinned; its reason is then a screen and a half up the pane, so a player meets a disabled control with no explanation anywhere on screen. Nothing errors and the refusal still appears, just never beside the thing it refuses.",
+  "killedBy": [
+    "hud: the versus action bar and its arm (issue #668) carries the refusal INTO the bar, with the button it explains"
+  ]
+}

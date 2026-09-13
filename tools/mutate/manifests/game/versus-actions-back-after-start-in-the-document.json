@@ -1,0 +1,14 @@
+{
+  "id": "versus-actions-back-after-start-in-the-document",
+  "file": "src/game/hud.ts",
+  "find": "        <button class=\"ui-btn ui-btn--slab hud-versus-back\" type=\"button\">Back</button>\n        <button class=\"ui-btn ui-btn--primary hud-versus-start\" type=\"button\">Start</button>",
+  "replace": "        <button class=\"ui-btn ui-btn--primary hud-versus-start\" type=\"button\">Start</button>\n        <button class=\"ui-btn ui-btn--slab hud-versus-back\" type=\"button\">Back</button>",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Document order reversed while the stylesheet keeps rendering Back on the left, so the keyboard walk and the screen disagree: focus lands on the RIGHT button first and then moves left. Invisible to a mouse and to a screenshot, and exactly the divergence the markup ordering exists to prevent -- the alternative implementation, a CSS order property, would have had this defect permanently.",
+  "killedBy": [
+    "hud: the versus action bar and its arm (issue #668) reads Back before Start, matching how the row is laid out"
+  ]
+}

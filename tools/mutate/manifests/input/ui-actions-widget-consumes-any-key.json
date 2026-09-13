@@ -31,6 +31,6 @@
     "hud: spatial focus follows the drawn layout (issue #495) the re-derived walk: Right along each row then Down reaches every control of the Versus pane exactly once -- population stated",
     "hud: spatial focus follows the drawn layout (issue #495) the slot cards navigate as a grid: Down lands on the nearest column of the next card",
     "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
-    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly"
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Back, then Start -- the two controls the task brief names explicitly"
   ]
 }

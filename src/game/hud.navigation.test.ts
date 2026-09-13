@@ -699,23 +699,125 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
   });
 
-  it('roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly', () => {
+  it('roving tabindex reaches Back, then Start -- the two controls the task brief names explicitly', () => {
+    // ORDER REVERSED at issue #668, and the reversal is the point rather than a detail.
+    // The two buttons used to be STACKED, Start above Back, and document order matched that
+    // reading. They are now a pinned ROW at the foot of the pane, Back left and Start right,
+    // so document order follows the new visual order -- done in the markup rather than with
+    // a CSS order property precisely so this walk keeps matching what is on screen.
+    //
+    // jsdom reports zero-size rects, so spatial-focus.ts takes its documented degenerate
+    // path and walks document order; that is why Down steps between two controls a real
+    // browser lays side by side and walks with Left/Right. The ORDER is what this pins, and
+    // it is the same order either way.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.showVersusSetup(true);
     expect(document.activeElement, 'opening the pane did not focus its CONTAINER').toBe(view(root));
     let steps = 0;
-    while (document.activeElement !== startBtn(root) && steps < 40) {
+    while (document.activeElement !== backBtn(root) && steps < 40) {
       (document.activeElement as HTMLElement).dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
       );
       steps += 1;
     }
-    expect(document.activeElement, 'never reached Start').toBe(startBtn(root));
+    expect(document.activeElement, 'never reached Back').toBe(backBtn(root));
     (document.activeElement as HTMLElement).dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
     );
-    expect(document.activeElement, 'the step after Start did not reach Back').toBe(backBtn(root));
+    expect(document.activeElement, 'the step after Back did not reach Start').toBe(startBtn(root));
+  });
+});
+
+describe('hud: the versus action bar and its arm (issue #668)', () => {
+  // Local copies: the pane selectors live in the sibling describe above, which mounts through
+  // its own helper. These three are the same three selectors.
+  const view = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-versus-setup') as HTMLElement;
+  const backBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-versus-back') as HTMLButtonElement;
+  const startBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-versus-start') as HTMLButtonElement;
+
+  /** The pane, with the action-bar arm chosen -- `createHud`'s own option, as loop.ts binds it. */
+  function mountArm(versusActions: 'header' | null): HTMLElement {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, { versusActions });
+    hud.setState('main-menu');
+    hud.showVersusSetup(true);
+    return root;
+  }
+
+  it('keeps Start and Back together in the pinned bar by default', () => {
+    // The shipped layout is the ABSENCE of a value. Asserted structurally rather than by
+    // geometry because jsdom has no layout: what makes the bar a bar is that both controls
+    // are inside the one sticky wrapper, which is what the stylesheet pins.
+    const root = mountArm(null);
+    const bar = root.querySelector('.hud-versus-actions')!;
+    expect(bar, 'no action bar at all').not.toBeNull();
+    expect(bar.contains(startBtn(root))).toBe(true);
+    expect(bar.contains(backBtn(root))).toBe(true);
+    expect(root.querySelector('.hud-versus-header'), 'built a header without being asked').toBeNull();
+    expect(view(root).classList.contains('hud-versus-setup--header')).toBe(false);
+  });
+
+  it('carries the refusal INTO the bar, with the button it explains', () => {
+    // The defect pinning introduces, and the reason the reason moved. Left in the
+    // who's-playing row it scrolls away from a Start that no longer does, so the player
+    // meets a dead control whose explanation is a screen and a half up the pane.
+    const root = mountArm(null);
+    const reason = root.querySelector('.hud-versus-start-reason')!;
+    expect(root.querySelector('.hud-versus-actions')!.contains(reason)).toBe(true);
+    // Its id is intact, which is what the refusal path binds Start to: `describeDisabledReason`
+    // sets `aria-describedby` only WHILE there is a refusal, so this asserts the association
+    // is still wireable rather than that it is currently wired -- moving the element must not
+    // have broken the id that association travels on.
+    expect(reason.id).toBe('hud-versus-start-reason');
+    // Hidden until there is something to say, so the bar is 83px at rest and grows only when
+    // refused.
+    expect(reason.classList.contains('hud-versus-start-reason--hidden')).toBe(true);
+  });
+
+  it('reads Back before Start, matching how the row is laid out', () => {
+    // DOM order is the accessible reading order, and the bar renders Back left / Start right.
+    // Pinned as a DOCUMENT question so a later CSS `order` cannot silently divorce the two.
+    const root = mountArm(null);
+    const controls = Array.from(root.querySelectorAll('.hud-versus-actions button'));
+    expect(controls).toEqual([backBtn(root), startBtn(root)]);
+  });
+
+  it('the arm lifts Back and the title into a header, leaving Start at the foot', () => {
+    const root = mountArm('header');
+    const header = root.querySelector('.hud-versus-header')!;
+    expect(header, 'the arm built no header').not.toBeNull();
+    expect(header.contains(backBtn(root)), 'Back stayed at the foot').toBe(true);
+    expect(header.querySelector('h1'), 'the title did not come with it').not.toBeNull();
+    // Start does NOT follow it up: the whole point of the arm is that the two separate.
+    expect(root.querySelector('.hud-versus-actions')!.contains(startBtn(root))).toBe(true);
+    expect(header.contains(startBtn(root))).toBe(false);
+    expect(view(root).classList.contains('hud-versus-setup--header')).toBe(true);
+  });
+
+  it('the arm puts Back FIRST in the document, where it now sits on screen', () => {
+    // Moving a control visually has to move it in the reading order too. In this arm Back is
+    // the first thing on the pane, so it must be the first thing reached.
+    const root = mountArm('header');
+    const controls = Array.from(view(root).querySelectorAll('button'));
+    expect(controls[0], 'Back is not the first control in the pane').toBe(backBtn(root));
+  });
+
+  it('both layouts expose the same controls -- the arm moves them, it does not add or drop any', () => {
+    // The property that makes this safe to flip at runtime: an arm that quietly lost Back,
+    // or grew a second one by cloning rather than moving, would pass every assertion above.
+    const names = (root: HTMLElement) =>
+      Array.from(view(root).querySelectorAll('button'))
+        .map((b) => b.className).sort();
+    const shipped = names(mountArm(null));
+    document.body.innerHTML = '';
+    hud?.dispose();
+    const armed = names(mountArm('header'));
+    expect(armed).toEqual(shipped);
   });
 });
 
