@@ -4625,6 +4625,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     diagOutEl.classList.remove('hud-diag-out--hidden');
     diagOutEl.focus();
     diagOutEl.select();
+    // ...and back to the TOP. `select()` leaves a textarea scrolled to the end of the
+    // selection, so the field opened on the middle of the report -- the URL and the heading
+    // above the fold, and the first thing a reader wants at the bottom of what they can see.
+    // Caught in the capture at 900x900 (`issue-247/`), not in a test: jsdom lays nothing out,
+    // so `scrollTop` is 0 there whether or not this line exists and an assertion on it could
+    // not fail.
+    diagOutEl.scrollTop = 0;
     const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
     void clipboard?.writeText(text).catch(() => {});
   };
