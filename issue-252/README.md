@@ -10,10 +10,12 @@ rather than a limitation of the capture.
 
 | | Frame |
 | --- | --- |
-| Before (this PR's base, `feat/developer-diagnostics-summary`) | `devtools-before.png` |
+| Before | `devtools-before.png` |
 | After | `devtools-after.png` |
 
-Measured from the two capture reports, same viewport and same state definition:
+The before frame is the tree this branch started from — issue #247's work, which has since
+merged as `a7108dd`. Measured from the two capture reports, same viewport and same state
+definition:
 
 | Element | Before | After |
 | --- | --- | --- |
