@@ -285,6 +285,27 @@ export interface GameStores {
  * object alone. Defaults to `'persistent'` so a caller handing over a real localStorage
  * (or a test's memory storage standing in for one) says nothing extra.
  */
+/**
+ * Delete every key in the DEVELOPER namespace, and nothing else (issue #249).
+ *
+ * LIVES HERE, NOT AT THE CALL SITE. The first draft bound this inline in `loop.ts`'s browser
+ * wiring, and the mutation harness refused to measure it: nothing in the suite reaches that
+ * file's `createBrowserDeps`, so a mutation swapping the namespaced `clear()` for the base
+ * one could only ever report SURVIVES -- indistinguishable from genuinely uncaught. The most
+ * destructive line in the feature was the one that could not be pinned.
+ *
+ * Behind this seam it is a plain function over an injected `Storage`, so the guarantee issue
+ * #249 asks for -- "Reset Developer Data cannot remove or rewrite any production key" -- is
+ * asserted directly, with a production key seeded and read back afterwards.
+ *
+ * Takes the BASE storage, never a namespaced one. On a `prodSave` session the app's storage
+ * IS the production object, so resetting "developer data" through it would wipe the player's
+ * real save under a name promising the opposite.
+ */
+export function resetDeveloperData(base: Storage): void {
+  createNamespacedStorage(base, 'developer').clear();
+}
+
 export function createStores(
   storage: Storage,
   availability: StorageAvailability = 'persistent',

@@ -1,14 +1,15 @@
 {
   "id": "developer-reset-clears-the-whole-storage",
-  "file": "src/game/loop.ts",
-  "find": "          createNamespacedStorage(resolveStorage(), 'developer').clear();",
-  "replace": "          resolveStorage().clear();",
+  "file": "src/game/storage.ts",
+  "find": "  createNamespacedStorage(base, 'developer').clear();",
+  "replace": "  base.clear();",
   "expect": "killed",
   "tests": [
     "src/game/storage.test.ts"
   ],
   "killedBy": [
-    "createNamespacedStorage: developer clear() removes ONLY the developer keys, and leaves every production key"
+    "resetDeveloperData (issue #249) removes every developer key and leaves every production key byte-identical",
+    "resetDeveloperData (issue #249) leaves an unrelated key alone, not just the ones the game owns"
   ],
-  "why": "Resets EVERY key instead of the developer namespace, so Reset Developer Data wipes the player's real campaign, stats, achievements and customization -- the single most damaging thing this pane could do, under a button whose label promises the opposite. Issue #249's third criterion is exactly this: \"Reset Developer Data cannot remove or rewrite any production key.\" The scoping is structural -- `createNamespacedStorage`'s developer `clear()` walks only the prefixed names -- and this entry is what stops that being true only until someone reaches for the base storage, which is one identifier away."
+  "why": "Resets EVERY key instead of the developer namespace, so Reset Developer Data wipes the player's real campaign, stats, achievements and customization -- the most damaging thing this pane could do, under a button whose label promises the opposite. Issue #249's third criterion is exactly this. The scoping is structural (the developer `clear()` walks only prefixed names) and this entry is what stops that being true only until someone reaches for the base storage, which is one identifier away. It also drove a REFACTOR: the first draft bound this inline in `loop.ts`'s browser wiring, and the harness refused the entry because nothing in the suite reaches that file -- a mutation there could only ever report SURVIVES. The most destructive line in the feature was the one that could not be pinned, so it moved behind `resetDeveloperData` where it can be."
 }

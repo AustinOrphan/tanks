@@ -107,7 +107,7 @@ import { developerExitSearch } from './dev-config';
 import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
 import { readBuildIdentity } from './dev-diagnostics';
-import { createNamespacedStorage, resolveStorage } from './storage';
+import { resetDeveloperData, resolveStorage } from './storage';
 
 /**
  * Construction and wiring: the boundary where the untestable collaborators are
@@ -1231,9 +1231,7 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // button would wipe the player's real save under a name promising the opposite.
         // Built over the BASE storage rather than `deps.storage`, which is already namespaced
         // and on a prodSave session IS the production object.
-        resetDeveloperData: () => {
-          createNamespacedStorage(resolveStorage(), 'developer').clear();
-        },
+        resetDeveloperData: () => resetDeveloperData(resolveStorage()),
         developerPage: {
           path: globalThis.location.pathname,
           hash: globalThis.location.hash,
