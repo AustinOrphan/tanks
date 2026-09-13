@@ -374,23 +374,12 @@ describe('createRouteHost: the diagnostics trampoline (issue #247)', () => {
     expect(source()).toBeNull();
   });
 
-  it('will not let a detached session answer for the one that replaced it', () => {
-    // `provideDiagnostics` is `current()`-guarded like every member beside it. A stale slot
-    // handle calling it after being replaced must be a no-op, not a takeover -- otherwise the
-    // report names a seed from a world that no longer exists.
-    const f = fixture();
-    const source = registered(f);
-    const stale = f.host.attach(CAMPAIGN);
-    stale.detach();
-    const fresh = f.host.attach(CAMPAIGN);
-    fresh.provideDiagnostics(() => ({
-      seed: 2, arenaId: 'arena-01', mode: 'campaign', humanPlayers: 1, bots: 0, quality: 'high',
-    }));
-    stale.provideDiagnostics(() => ({
-      seed: 999, arenaId: 'arena-09', mode: 'ffa', humanPlayers: 4, bots: 3, quality: 'low',
-    }));
-    expect((source() as { seed: number }).seed).toBe(2);
-  });
+  // WHAT IS *NOT* ASSERTED HERE, and why. A draft of this file had a third case claiming
+  // `provideDiagnostics`'s `current()` guard stops a detached slot answering for the live
+  // one. A mutation removing that guard SURVIVED all 85 cases -- and it was right to: every
+  // `attach()` builds its own `state` object, so a stale handle writes to a record `live` no
+  // longer points at, guard or no guard. The guard stays for consistency with every member
+  // beside it; the assertion went, because nothing could have made it fail.
 });
 
 /** Fill every gameplay handler on a slot, recording which fired and with what. */

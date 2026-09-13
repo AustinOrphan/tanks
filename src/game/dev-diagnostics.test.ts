@@ -175,9 +175,17 @@ describe('formatDiagnostics', () => {
     // no gate is a closed-gate request, and the inverted default is present regardless. Both
     // headings, and the requested one names only the parameter that was requested.
     const text = formatDiagnostics(input({ search: '?seed=7' }));
+    // BOTH HEADINGS PRESENT is asserted first, and it is the half that makes the rest able
+    // to fail: a formatter that merged the sections emits only the first heading, `indexOf`
+    // of the second returns -1, and a slice to -1 would quietly exclude the very line the
+    // assertion below is looking for. Measured -- the merged version survived this case
+    // until this line was added.
+    const at = (h: string): number => text.indexOf(h);
+    expect(at('### Requested, but not in effect')).toBeGreaterThan(-1);
+    expect(at('### In effect without being requested')).toBeGreaterThan(at('### Requested, but not in effect'));
     const requestedSection = text.slice(
-      text.indexOf('### Requested, but not in effect'),
-      text.indexOf('### In effect without being requested'),
+      at('### Requested, but not in effect'),
+      at('### In effect without being requested'),
     );
     expect(requestedSection).toContain('`seed`');
     expect(requestedSection).not.toContain('`disarmed`');
