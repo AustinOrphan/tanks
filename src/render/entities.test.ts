@@ -2505,8 +2505,17 @@ describe('spawn animation (#199)', () => {
     // issue #230 the protected-opacity curve is symmetric about the middle of the phase, so
     // `p` and `1 - p` give the same tank opacity and an INVERTED progress would survive here.
     // It did not need saying before, when the curve was the monotone `0.45 + 0.55*p`.
-    // `entities-inverts-the-shield-progress` is the entry that establishes where that case is
-    // caught instead.
+    // The RING is what catches it, and this is that assertion: `warp`'s invincible ring is
+    // `0.35 * (1 - p)`, strictly decreasing, so a correct progress and an inverted one cannot
+    // produce the same number. Filed as `entities-inverts-the-shield-progress`, which SURVIVED
+    // until this line existed -- the hole was created by making the opacity curve symmetric
+    // and was found by asking rather than assumed closed.
+    const ring = scene.getObjectByName('spawn-ring') as THREE.Mesh<
+      THREE.BufferGeometry,
+      THREE.MeshBasicMaterial
+    >;
+    expect(ring, 'the spawn ring must be in the scene while the shield runs').toBeTruthy();
+    expect(ring.material.opacity).toBeCloseTo(0.35 * (1 - expectedP), 5);
     views.dispose();
   });
 

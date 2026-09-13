@@ -76,6 +76,11 @@ export function makeSpawnRing(color: number, fat = false): THREE.Mesh {
       blending: THREE.AdditiveBlending,
     }),
   );
+  // NAMED so a test can find it in the scene graph (issue #230). `identity-ring` in
+  // entities.ts already carries a name for the same reason. The ring is the one part of a
+  // spawn frame that stays MONOTONE across the invincible phase -- the tank's opacity is
+  // symmetric about the middle of it since this issue -- so it is what tells a correct
+  // progress from an inverted one.
   mesh.name = 'spawn-ring';
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = RING_Y;
