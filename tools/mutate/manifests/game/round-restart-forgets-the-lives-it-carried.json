@@ -1,0 +1,14 @@
+{
+  "id": "round-restart-forgets-the-lives-it-carried",
+  "file": "src/game/loop.ts",
+  "find": "      switchTo(level, keepLives ? driver.world.lives : undefined, seed ?? undefined);\n",
+  "replace": "      switchTo(level, undefined, seed ?? undefined);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer actions' port (issue #252) carries the round\u2019s lives only when asked, which is the whole of Restart Current Round"
+  ],
+  "why": "Makes every action reset lives, collapsing Restart Current Round into Reroll Seed. Criterion 3 asks that a round restart 'preserves documented match/session fields and resets only documented round state', and lives are the one carried field the port takes an argument for -- so this drops the only thing that distinguished the third control from the second. Two entries target this line because they break it in different directions and each has its own killing case; neither subsumes the other."
+}

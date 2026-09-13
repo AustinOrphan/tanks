@@ -1,0 +1,15 @@
+{
+  "id": "reroll-cannot-outrun-a-pinned-seed",
+  "file": "src/game/loop.ts",
+  "find": "      if (seed === null) seedPinSuperseded = true;",
+  "replace": "      if (seed === null) seedPinSuperseded = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer actions' port (issue #252) REROLLS PAST A PINNED ?seed=, which is the case the whole override exists for",
+    "startGameWith: the developer actions' port (issue #252) keeps the pin superseded for later builds, rather than pinning the rerolled number"
+  ],
+  "why": "Stops Reroll Seed superseding the URL's pinned seed, which makes the button DEAD exactly where it is wanted: `nextSeed()` reads `devFlags.seed ?? clock`, so with `?seed=` set it returns the same number every time. The world is rebuilt identically and the pane reports a 'new' seed that is the old one -- a wrong number, in the line a developer is about to paste into an issue. The dead case is also the common one, because a developer who pinned a seed is the likeliest person to press Reroll. Not caught by the boundary's own tests: `dev-actions.ts` asks for `null` correctly either way, and only the session decides what `null` resolves to."
+}

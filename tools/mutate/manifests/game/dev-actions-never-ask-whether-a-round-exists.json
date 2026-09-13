@@ -1,0 +1,15 @@
+{
+  "id": "dev-actions-never-ask-whether-a-round-exists",
+  "file": "src/game/dev-actions.ts",
+  "find": "  if (!port.hasRound()) return { kind: 'refused', id, reason: 'no-round' };",
+  "replace": "  if (false) return { kind: 'refused', id, reason: 'no-round' };",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-actions.test.ts"
+  ],
+  "killedBy": [
+    "runDevAction: what it reports, and when it refuses refuses every action with no round, and rebuilds nothing",
+    "runDevAction: what it reports, and when it refuses asks whether there is a round BEFORE asking what seed it is running"
+  ],
+  "why": "Removes the availability check, so every action rebuilds whatever the session has -- including at the main menu, where the only world is the backdrop behind the title and restarting it restarts something nobody is playing. It also reverses the question order: `currentSeed()` is then asked of a session that may have no world, turning a refusal into whatever that port does when asked an unanswerable question."
+}

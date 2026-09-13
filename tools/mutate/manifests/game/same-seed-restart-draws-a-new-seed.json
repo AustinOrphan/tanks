@@ -1,0 +1,14 @@
+{
+  "id": "same-seed-restart-draws-a-new-seed",
+  "file": "src/game/loop.ts",
+  "find": "      switchTo(level, keepLives ? driver.world.lives : undefined, seed ?? undefined);",
+  "replace": "      switchTo(level, keepLives ? driver.world.lives : undefined, undefined);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer actions' port (issue #252) rebuilds with an EXACT seed when one is named, which is Restart with Same Seed"
+  ],
+  "why": "Drops the requested seed on the floor, so Restart with Same Seed draws a fresh one like every other rebuild -- and issue #252's first criterion, that it 'reproduces the deterministic initial state', is false while the button still appears to work. The failure is invisible without looking: a restart DOES happen, the board is a board, and only the arrangement differs. `rec.seeds` is what makes it visible, because a same-seed restart must put the same number in that list twice."
+}
