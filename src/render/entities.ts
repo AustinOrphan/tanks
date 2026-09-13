@@ -10,6 +10,9 @@ import { identityApplies, resolveOwnerColor } from '../presentation/identity';
 import { identityMarkerGeometry, identityRoofGeometry } from './identity-marker';
 import type { ArrivalLanguage } from '../presentation/arrival-language';
 import {
+  cuesWeapon, cuesMines, barrelGirthFor, mineBlockFor, type EnemyRoleCue,
+} from '../presentation/enemy-role';
+import {
   identityMarkerSpin,
   marksTurretRoof,
   ringMarkerFor,
@@ -31,7 +34,7 @@ import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
 import {
   TANK_BODY_H, TURRET_H, TURRET_SEAT,
   HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_H, TRACK_SHADE, HULL_CORNER, HULL_NOSE,
-  HULL_BEVEL, TRACK_BEVEL, HULL_RIDE, TRACK_PROUD, TRACK_OVERHANG, TURRET_R,
+  HULL_BEVEL, TRACK_BEVEL, HULL_RIDE, TRACK_PROUD, TRACK_OVERHANG, TURRET_R, BODY_WIDTH,
   STRIPE_TURRET_MODE, BULLET_Y, BARREL_OUT, MUZZLE_LEN, MUZZLE_FLARE,
   BARREL_R, TURRET_GROUP_Y,
   turretProfile, barrelProfile,
@@ -450,6 +453,12 @@ export function createEntityViews(
    * does. See presentation/arrival-language.ts.
    */
   arrival: ArrivalLanguage | null = null,
+  /**
+   * Experimental non-colour cues for what a tank's weapon and mine load DO (the `enemyRole`
+   * dev flag, issue #357); null/absent = the shipped board, where every kind shares one hull
+   * and is separated by hue alone. See presentation/enemy-role.ts.
+   */
+  enemyRole: EnemyRoleCue | null = null,
 ): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
@@ -866,7 +875,17 @@ export function createEntityViews(
     // would still leave two copies of where each part SITS, and where the parts sit is
     // half of what a canonical model is. What stays here is everything that model
     // excludes: materials, skins, the UV work below, and the per-tank decisions above.
-    const parts = tankParts();
+    // Issue #357's bounce-budget collars, derived from the tank's OWN weapon rather than from
+    // its kind: the cue answers "what is about to be fired at me", so it has to move when the
+    // roster does. `configFor` is the same resolved config the sim fires from.
+    //
+    // Applied to every tank, the player included. The gun is the gun -- in versus every tank is
+    // a player, and a cue that vanished on the one you are aiming at would be a strange kind of
+    // help. Zero collars for the shipped default, which leaves the profile byte-identical.
+    const girth = cuesWeapon(enemyRole)
+      ? barrelGirthFor(configFor(kind).weapon.bulletType)
+      : 1;
+    const parts = tankParts(girth);
     const partFor = (name: TankPart['name']): TankPart => {
       const found = parts.find((q) => q.name === name);
       if (found === undefined) throw new Error(`tankParts() is missing '${name}'`);
@@ -944,9 +963,59 @@ export function createEntityViews(
     // lay it along the turret's +x), so in GEOMETRY space the along-axis is y and the
     // horizontal across-axis is z -- which is what puts the stripe on its top and
     // bottom rather than its flanks.
-    if (striped) projectPlanarUV(barrelGeo, 'y', 'z', stripeAcrossFor(BARREL_R));
+    if (striped) projectPlanarUV(barrelGeo, 'y', 'z', stripeAcrossFor(BARREL_R * girth));
     // Every other skin: keep the lathe wrap the turret has, at the turret's world scale.
-    else if (mapped) matchLatheToTurret(barrelGeo, barrelProfile(), BARREL_R);
+    //
+    // THE SAME `collars` the geometry was built with, and this is the second call -- the
+    // first made the mesh. `matchLatheToTurret` walks the profile to map v along the
+    // barrel's real length, so a bare `barrelProfile()` here would paint a collared barrel
+    // using the uncollared one's arc lengths: the texture would slide relative to the steps
+    // it is supposed to follow, and only on the kinds that carry collars. Nothing would
+    // error, and it would look like a UV bug in the skin rather than a dropped argument.
+    else if (mapped) matchLatheToTurret(barrelGeo, barrelProfile(girth), BARREL_R * girth);
+    // ---- MINE LOAD, as a bar on the deck ahead of the turret (issue #357) --------------
+    //
+    // THIRD PLACEMENT, and the first two are worth recording because each was ruled out by a
+    // render rather than an argument:
+    //
+    //  - deck, behind the turret: the turret is 0.72 across on a 1.0 deck, so the mark drew
+    //    almost entirely under the dome. "The large free surface" ignored the turret.
+    //  - hull flank: the shipped camera direction is [0, 0.72, 0.86] -- NO x component -- so
+    //    the flanks are close to edge-on, and the tracks stand proud in front of what is left.
+    //    A loud debug block pushed clear of the tracks still rendered as a sliver.
+    //
+    // What IS visible from a camera 51 degrees above and dead ahead is the DECK, and the clear
+    // strip is the ~0.14 ahead of the turret. Shallow, but 0.875 wide: about 78 x 10 px near
+    // the camera. So the bar's WIDTH carries the load -- the axis with pixels to spend -- and
+    // its depth stays constant.
+    const mineBlock = cuesMines(enemyRole) ? mineBlockFor(configFor(kind).mineCapacity) : 0;
+    if (mineBlock > 0) {
+      const deckFree = HULL_LEN / 2 - TURRET_R;
+      const depth = deckFree * 0.62;
+      const geo = new THREE.PlaneGeometry(BODY_WIDTH * mineBlock * 1.4, depth);
+      geo.rotateX(-Math.PI / 2);
+      const mark = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        // A darker cast of the tank's own colour: the cue must not read as a second identity,
+        // which a contrasting hue would on a board that already means hue.
+        // MUCH darker than the tracks, and unlit. The first attempt used the tracks' own
+        // shade at 0.92 opacity and vanished: the deck is the brightest lit face on the tank,
+        // so a mark only a little darker than its own hull has no contrast where it matters.
+        // Still the tank's OWN colour rather than a new hue -- the cue must not read as a
+        // second identity on a board where hue already means owner.
+        color: new THREE.Color(color).multiplyScalar(0.22),
+        transparent: false,
+        depthWrite: true,
+      }));
+      mark.name = 'mine-block';
+      // Centred in the clear strip ahead of the dome. The hull does not rotate with the
+      // turret, so this mark holds still under aim.
+      mark.position.set(0, HULL_RIDE + TANK_BODY_H + 0.003, TURRET_R + deckFree / 2);
+      // Explicit for #630's reason: coplanar transparent decals sort by centroid distance,
+      // which is a coin flip at millimetre separation.
+      mark.renderOrder = 3;
+      visual.add(mark);
+    }
+
     const barrel = new THREE.Mesh(barrelGeo, turretMat);
     // The profile is built along the lathe's own +y from breech to muzzle, so rotating
     // -90deg about z lays it along local +x already positioned -- no offset to keep in

@@ -318,15 +318,16 @@ export function turretGeometry(): THREE.LatheGeometry {
  * One lathe rather than two cylinders, so the step is a real edge in the silhouette
  * rather than a seam between meshes that can drift apart.
  */
-export function barrelProfile(): THREE.Vector2[] {
+export function barrelProfile(girth = 1): THREE.Vector2[] {
+  const r = BARREL_R * girth;
   const breech = TURRET_R * 0.3; // seated inside the turret
   const muzzle = TURRET_R + BARREL_OUT;
   const flareStart = muzzle - MUZZLE_LEN;
-  const rMuzzle = BARREL_R * MUZZLE_FLARE;
+  const rMuzzle = r * MUZZLE_FLARE;
   return [
     new THREE.Vector2(0, breech), // closed at the breech
-    new THREE.Vector2(BARREL_R, breech),
-    new THREE.Vector2(BARREL_R, flareStart),
+    new THREE.Vector2(r, breech),
+    new THREE.Vector2(r, flareStart),
     new THREE.Vector2(rMuzzle, flareStart), // step out
     new THREE.Vector2(rMuzzle, muzzle),
     new THREE.Vector2(0, muzzle), // and closed at the tip
@@ -348,8 +349,8 @@ export function barrelProfile(): THREE.Vector2[] {
  */
 export const BARREL_SEAM_PHI = Math.PI / 2;
 
-export function barrelGeometry(): THREE.LatheGeometry {
-  return new THREE.LatheGeometry(barrelProfile(), BARREL_SEGMENTS, BARREL_SEAM_PHI);
+export function barrelGeometry(girth = 1): THREE.LatheGeometry {
+  return new THREE.LatheGeometry(barrelProfile(girth), BARREL_SEGMENTS, BARREL_SEAM_PHI);
 }
 
 /**
@@ -417,7 +418,12 @@ export interface TankPart {
  * the canonical model has no business reproducing. `parent` records the nesting so an
  * exporter can rebuild the same hierarchy without the reasons for it.
  */
-export function tankParts(): TankPart[] {
+/**
+ * @param barrelGirth issue #357's weapon-class cue as a multiple of the shipped tube, 1 for
+ * the shipped gun. Defaulted so every existing caller -- the exporter included -- keeps
+ * emitting the model unchanged.
+ */
+export function tankParts(barrelGirth = 1): TankPart[] {
   const parts: TankPart[] = [
     {
       name: 'hull',
@@ -445,7 +451,7 @@ export function tankParts(): TankPart[] {
   });
   parts.push({
     name: 'barrel',
-    geometry: barrelGeometry(),
+    geometry: barrelGeometry(barrelGirth),
     // The profile runs along the lathe's own +y from breech to muzzle, so rotating -90deg
     // about z lays it along local +x already positioned -- no offset to keep in step with
     // the length, which is how the barrel got shorter when the turret grew.
