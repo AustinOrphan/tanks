@@ -1,0 +1,14 @@
+{
+  "id": "menu-reads-a-pad-it-could-not-classify",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "        if (profile === null) continue;",
+  "replace": "        if (profile === null) { actionsDown(pad, STANDARD_PROFILE, down); continue; }",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-menu.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadMenuPoller: presence and failure emits NOTHING from a pad it cannot classify, while still counting it as connected"
+  ],
+  "why": "Falls the menu poller back to the standard layout for a pad it refused, which is what it did before issue #596. The consequence is not 'the menu does not respond': it is a menu OPERATING ITSELF -- an unrelated control on a differently-laid-out device reading as Confirm on whatever has focus, or as a D-pad direction walking the selection. A player cannot tell that from a bug in the menu, which is why silence is the correct failure. The paired negative control in the same file proves the refusal is scoped to the offending pad rather than being a poller that stopped emitting."
+}

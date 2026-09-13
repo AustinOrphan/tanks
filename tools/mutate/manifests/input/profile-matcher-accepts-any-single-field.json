@@ -1,0 +1,14 @@
+{
+  "id": "profile-matcher-accepts-any-single-field",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "  if (match.axes !== undefined && pad.axes.length !== match.axes) return false;\n  if (match.buttons !== undefined && pad.buttons.length !== match.buttons) return false;\n  return true;",
+  "replace": "  if (match.axes !== undefined && pad.axes.length !== match.axes) return true;\n  if (match.buttons !== undefined && pad.buttons.length !== match.buttons) return true;\n  return true;",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "classifyPad: how a pad is matched requires EVERY present matcher field, so a near-miss is not a match"
+  ],
+  "why": "Turns the last two matcher fields from requirements into passes, so a pad with the wrong axis or button count still matches an entry. The failure this guards is a device acquiring a layout measured on a DIFFERENT device: axis and button counts are the cheapest evidence that an adapter is in the mode a profile was written for, and issue #606 leans on exactly those 'robust browser-reported characteristics'. The killing test sweeps four one-field-off pads rather than one, so a matcher that went permissive in any single field is caught rather than only a wholesale OR."
+}
