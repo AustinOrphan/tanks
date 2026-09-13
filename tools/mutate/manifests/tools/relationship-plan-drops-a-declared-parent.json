@@ -1,0 +1,14 @@
+{
+  "id": "relationship-plan-drops-a-declared-parent",
+  "file": "tools/issues/relationship-migration-plan.mjs",
+  "find": "        616,",
+  "replace": "",
+  "why": "Issue #691: the reviewed migration plan is the only route a body-declared parent takes to a native one, and the audit stays red for every edge the plan omits. Dropping #616 -> #315 leaves a plan that still expands cleanly, so only the pinned edge list and request budget notice.",
+  "tests": [
+    "tools/issues/migrate-relationships.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "relationship migration plan keeps the reviewed repository ledger unambiguous, acyclic, and evidence-complete"
+  ]
+}

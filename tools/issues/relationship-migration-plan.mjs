@@ -12,8 +12,14 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
       children: [
         117, 226, 227, 228, 238, 240, 258, 289, 290, 316, 317, 318, 319, 320,
         321, 322, 323, 324, 325, 326, 327, 351, 364, 365, 366, 368,
+        // Issue #691: declared `Parent: #315` in its body after the first migration ran.
+        616,
       ],
     },
+    // Issue #691: the firing-budget comparison and its leaves, whose bodies declared these
+    // parents after the first migration ran.
+    { parent: 358, children: [518] },
+    { parent: 518, children: [519, 520, 521, 578] },
     { parent: 228, children: [260, 261, 267, 268, 269, 278, 279, 280, 281, 282] },
     { parent: 229, children: [270, 271, 272, 273, 274, 425] },
     { parent: 233, children: [275, 276, 277] },

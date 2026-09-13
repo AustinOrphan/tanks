@@ -86,8 +86,16 @@ function createFetch(
 describe('relationship migration plan', () => {
   it('keeps the reviewed repository ledger unambiguous, acyclic, and evidence-complete', () => {
     const expanded = expandRelationshipPlan(RELATIONSHIP_MIGRATION);
-    expect(expanded.parentEdges).toHaveLength(87);
+    expect(expanded.parentEdges).toHaveLength(93);
     expect(expanded.parentEdges).toEqual(expect.arrayContaining([
+      // Issue #691: six parents that issue bodies declared after the first migration ran,
+      // each reported by the audit as `declared-parent-missing-native`.
+      { parent: 358, child: 518 },
+      { parent: 518, child: 519 },
+      { parent: 518, child: 520 },
+      { parent: 518, child: 521 },
+      { parent: 518, child: 578 },
+      { parent: 315, child: 616 },
       { parent: 229, child: 425 },
       { parent: 317, child: 427 },
       { parent: 317, child: 468 },
@@ -131,8 +139,11 @@ describe('relationship migration plan', () => {
       + expanded.dependencyEdges.length
       + inspectionReads
     );
+    // Issue #691's six parent edges add 6 inspection reads (146 -> 152). They also add 6 new
+    // issue numbers (#518-#521, #578 and #616; #358 and #315 were already in the plan), 6
+    // writes and 6 verification reads: initialApply 632 + 24 = 656, planThenApply 778 + 30.
     expect({ inspectionReads, initialApply, planThenApply: inspectionReads + initialApply })
-      .toEqual({ inspectionReads: 146, initialApply: 632, planThenApply: 778 });
+      .toEqual({ inspectionReads: 152, initialApply: 656, planThenApply: 808 });
   });
 
   it('expands a reviewed plan and rejects ambiguous parents, duplicates, and cycles', () => {
