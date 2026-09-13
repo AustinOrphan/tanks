@@ -1,0 +1,14 @@
+{
+  "id": "enemy-role-shipped-tank-moves-with-the-cue-off",
+  "file": "src/presentation/enemy-role.ts",
+  "find": "  if (lever === null) return {};\n  const step = bulletType === 'fast' ? -1 : bulletType === 'ricochet' ? 1 : 0;",
+  "replace": "  const step = bulletType === 'fast' ? -1 : bulletType === 'ricochet' ? 1 : 0;",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/enemy-role.test.ts"
+  ],
+  "why": "The no-cue arm dropped, so every tank gets a weapon lever whether or not one was asked for -- `girth` becomes the default rather than an experiment. The shipped board would quietly change shape for every player, which is the one thing an arm flag exists to prevent, and it would look like a rendering regression rather than a flag that stopped being a flag.",
+  "killedBy": [
+    "enemy role cues: the vocabulary leaves the shipped tank untouched when no cue is chosen"
+  ]
+}
