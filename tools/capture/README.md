@@ -68,6 +68,7 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.devtools` | `screen.devtools` | `capture.png` | still |
 | `screen.devtools.config` | `screen.devtools.config` | `capture.png` | still |
 | `screen.devtools.config.sandbox` | `screen.devtools.config.sandbox` | `capture.png` | still |
+| `screen.devtools.diagnostics` | `screen.devtools.diagnostics` | `capture.png` | still |
 | `screen.devtools.controller-selftest` | `screen.devtools.controller-selftest` | `capture.png` | still |
 | `screen.confirm.new-campaign` | `screen.confirm.new-campaign` | `capture.png` | still |
 | `screen.startup.unsupported-render` | `screen.startup.unsupported-render` | `capture.png` | still |

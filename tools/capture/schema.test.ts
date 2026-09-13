@@ -46,6 +46,7 @@ describe('capture recipe schema', () => {
       'screen.devtools',
       'screen.devtools.config',
       'screen.devtools.config.sandbox',
+      'screen.devtools.diagnostics',
       'screen.devtools.controller-selftest',
       'screen.confirm.new-campaign',
       'screen.startup.unsupported-render',

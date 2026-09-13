@@ -317,7 +317,10 @@ export const SCREEN_STATES = Object.freeze([
     // number that says whether one more control pushed the pane past the viewport.
     // `#hud-devtools-title` is measured for the same reason as Settings': the pane's first
     // child is where the centred-overflow clip shows, and a negative y is lost content.
-    measure: ['.hud-devtools', '#hud-devtools-title', '.hud-selftest-open', '.hud-devtools-back'],
+    // `.hud-diag-copy` and `.hud-diag-pin` are measured for their BOXES (issue #247): they are
+    // the two controls that issue added to this pane, and where they sit is what says whether
+    // two more entries pushed the pane past a viewport.
+    measure: ['.hud-devtools', '#hud-devtools-title', '.hud-selftest-open', '.hud-diag-copy', '.hud-diag-pin', '.hud-devtools-back'],
   }),
   state({
     id: 'screen.devtools.config',
@@ -357,6 +360,26 @@ export const SCREEN_STATES = Object.freeze([
       { scroll: { selector: '.hud-devcfg', to: '.hud-devcfg-control[data-field="sandboxTanks"]' } },
     ],
     measure: ['.hud-devcfg-control[data-field="sandboxTanks"]', '.hud-devcfg-count'],
+  }),
+  state({
+    id: 'screen.devtools.diagnostics',
+    title: 'Developer Tools, diagnostics copied',
+    description:
+      'The session diagnostics report Copy Diagnostics writes into the pane. Taken from the ' +
+      'main menu, so it is the no-session report -- deterministic by construction, because a ' +
+      'running world would put a clock-derived seed in the picture.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-devtools-open' },
+      { waitVisible: '.hud-devtools' },
+      { click: '.hud-diag-copy' },
+      { waitVisible: '.hud-diag-out' },
+    ],
+    // The field is measured for its BOX and its TEXT: a button that wrote nothing, or wrote
+    // into a field still hidden by its own modifier, is the failure this picture has to show.
+    measure: ['.hud-devtools', '.hud-diag-out', '.hud-diag-copy'],
   }),
   state({
     id: 'screen.devtools.controller-selftest',
