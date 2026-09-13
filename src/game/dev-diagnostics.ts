@@ -18,10 +18,11 @@ import { canonicalDevSearch, explainDevConfig, type DevConfigNote } from './dev-
  *
  * NOT AN EXPORT FORMAT, and deliberately smaller than one. Issue #241 owns the diagnostic
  * file and its schema; this is the "concise enough for a GitHub issue" half issue #247 asks
- * for, and it keeps a structured source (`diagnosticsReport`) beside the text so #241 can
- * consume the record rather than re-parse the prose. The controller self-test's
- * `formatPadReport` is the precedent this follows -- a developer-facing formatter with its
- * own tests -- and is deliberately NOT absorbed here: that is #241's job, not this one's.
+ * for. The controller self-test's `formatPadReport` is the precedent this follows -- a
+ * developer-facing formatter with its own tests -- and is deliberately NOT absorbed here:
+ * that is #241's job, not this one's. Nothing is exported ahead of a consumer either: the
+ * record the text is built from stays module-private until something outside actually reads
+ * it.
  *
  * SECRETS AND UNRELATED BROWSER DATA ARE ABSENT BY CONSTRUCTION rather than by filtering.
  * Nothing in this module can reach a store, a cookie or a header; every field is named
@@ -102,8 +103,16 @@ export interface DiagnosticsInput {
   readonly session: SessionDiagnostics | null;
 }
 
-/** The structured form, so issue #241's export can consume a record rather than parse prose. */
-export interface DiagnosticsReport {
+/**
+ * Everything the text is rendered from, in one record.
+ *
+ * MODULE-PRIVATE, and it was exported in a first draft "so issue #241's export can consume a
+ * record rather than parse prose". Nothing consumes it, and a seam built for a consumer that
+ * does not exist yet is the dead-export shape this repository keeps paying for -- most
+ * recently one PR ago, where a `support()` accessor and an `isSupported` predicate were cut
+ * from `src/input/` for exactly this. #241 can export it the day #241 is written.
+ */
+interface DiagnosticsReport {
   readonly canonicalUrl: string;
   readonly build: BuildIdentity;
   readonly session: SessionDiagnostics | null;
@@ -130,7 +139,7 @@ function toParams(search: string): URLSearchParams {
  * and so a report pasted into an issue and a URL built by the configuration menu are the
  * same string for the same session.
  */
-export function canonicalUrl(path: string, search: string, hash: string): string {
+function canonicalUrl(path: string, search: string, hash: string): string {
   return `${path}${canonicalDevSearch(search).search}${hash}`;
 }
 
@@ -154,8 +163,7 @@ export function pinnedSeedUrl(input: DiagnosticsInput): string | null {
   return canonicalUrl(input.path, `?${params.toString()}`, input.hash);
 }
 
-/** Everything the text is rendered from, and what issue #241 can export instead of the text. */
-export function diagnosticsReport(input: DiagnosticsInput): DiagnosticsReport {
+function diagnosticsReport(input: DiagnosticsInput): DiagnosticsReport {
   const state = explainDevConfig(input.search);
   return {
     canonicalUrl: canonicalUrl(input.path, input.search, input.hash),

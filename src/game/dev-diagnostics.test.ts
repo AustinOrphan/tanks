@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   readBuildIdentity,
-  canonicalUrl,
   pinnedSeedUrl,
-  diagnosticsReport,
   formatDiagnostics,
   type DiagnosticsInput,
   type SessionDiagnostics,
@@ -56,20 +54,23 @@ describe('readBuildIdentity says unknown rather than inventing a version', () =>
   });
 });
 
-describe('canonicalUrl', () => {
+describe('the URL a report carries is the canonical one', () => {
+  // Exercised through `formatDiagnostics`, not against `canonicalUrl` directly: that helper
+  // is module-private, because nothing outside this file calls it and exporting it for a test
+  // to reach would be the test defining the module's surface.
   it('normalizes the developer parameters and keeps path and hash', () => {
     // Through `canonicalDevSearch`, so the URL in a report is the one the model produces for
     // those flags rather than the order they were typed -- which is what makes a pasted
     // report and a menu-built URL the same string for the same session.
-    const url = canonicalUrl('/tanks/', '?seed=7&dev=1', '#top');
-    expect(url).toBe('/tanks/?dev=1&seed=7#top');
+    const text = formatDiagnostics(input({ search: '?seed=7&dev=1', hash: '#top' }));
+    expect(text).toContain('- URL: /tanks/?dev=1&seed=7#top');
   });
 
   it('carries a parameter the model does not own, in place', () => {
     // A deep link or a router's own query must survive being copied: this model has no
     // authority over parameters it does not know, and a report that silently dropped one
     // would not reproduce the session it claims to describe.
-    expect(canonicalUrl('/tanks/', '?utm=x&dev=1', '')).toBe('/tanks/?dev=1&utm=x');
+    expect(formatDiagnostics(input({ search: '?utm=x&dev=1' }))).toContain('- URL: /tanks/?dev=1&utm=x');
   });
 });
 
@@ -213,20 +214,5 @@ describe('formatDiagnostics', () => {
       /^(##|###|$|- (URL|Build|Developer mode|Seed|Arena|Mode|Players|Quality|Session):|- `)/;
     const strays = text.split('\n').filter((l) => !allowed.test(l));
     expect(strays).toEqual([]);
-  });
-});
-
-describe('diagnosticsReport is the structured source the text is rendered from', () => {
-  it('carries the same facts as the text, for issue #241 to export without parsing prose', () => {
-    // The record exists so the file export owned by #241 consumes a structure rather than
-    // re-parsing Markdown. It is asserted against the TEXT rather than on its own, because a
-    // record that drifted from what the pane copies would be worse than no record at all.
-    const report = diagnosticsReport(input({ search: '?dev=1&notAFlag=2' }));
-    const text = formatDiagnostics(input({ search: '?dev=1&notAFlag=2' }));
-    expect(report.canonicalUrl).toBe('/tanks/?dev=1&notAFlag=2');
-    expect(text).toContain(report.canonicalUrl);
-    expect(report.developerMode).toBe(true);
-    expect(report.unknownParams).toEqual(['notAFlag']);
-    expect(report.session).toBe(SESSION);
   });
 });
