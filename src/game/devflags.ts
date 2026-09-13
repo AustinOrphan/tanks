@@ -18,6 +18,9 @@ import {
   type ArrivalLanguage,
 } from '../presentation/arrival-language';
 import {
+  VERSUS_ACTION_LAYOUTS, isVersusActionLayout, type VersusActionLayout,
+} from '../presentation/versus-actions';
+import {
   IDENTITY_MARKER_STYLES,
   isIdentityMarkerStyle,
   type IdentityMarkerStyle,
@@ -374,6 +377,11 @@ export interface DevFlags {
    */
   arrival: ArrivalLanguage | null;
   /**
+   * Where Versus Setup puts Start and Back (issue #668); null = the pinned bar carrying
+   * both. See presentation/versus-actions.ts.
+   */
+  versusActions: VersusActionLayout | null;
+  /**
    * Which experimental blocked-fire cue to play when the active-shell cap refuses a shot
    * (issue #356). `null` -- absent or unrecognised -- keeps the shipped silence.
    *
@@ -464,6 +472,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   mineWarn: null,
   identityMarker: null,
   arrival: null,
+  versusActions: null,
   aiPerception: null,
 };
 
@@ -591,6 +600,13 @@ function asMineWarn(params: URLSearchParams): MineWarnStyle | null {
   const raw = params.get('mineWarn');
   if (raw === null) return null;
   return MINE_WARN_STYLES.has(raw) ? (raw as MineWarnStyle) : null;
+}
+
+/** One of the named versus action layouts, or null when absent or unrecognised. */
+function asVersusActions(params: URLSearchParams): VersusActionLayout | null {
+  const raw = params.get('versusActions');
+  if (raw === null) return null;
+  return isVersusActionLayout(raw) ? raw : null;
 }
 
 /** One of the named arrival languages, or null when absent or unrecognised. */
@@ -745,6 +761,7 @@ export function parseDevFlags(search: string): DevFlags {
     mineWarn: asMineWarn(params),
     identityMarker: asIdentityMarker(params),
     arrival: asArrival(params),
+    versusActions: asVersusActions(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -1114,6 +1131,15 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Draws the mine fuse and proximity warnings with a named experimental treatment ' +
       '(issue #276 playtest round); the shipped default is the glow + illumination pair.',
+  },
+  versusActions: {
+    kind: 'valued',
+    values: [...VERSUS_ACTION_LAYOUTS],
+    description:
+      'Moves Back out of the pinned action bar and into a compact sticky header beside the '
+      + 'pane title (issue #668). The shipped bar carries Start and Back together at the '
+      + 'foot, which costs less of a small screen; \'header\' keeps the title visible while '
+      + 'scrolling, at 49px of permanent chrome.',
   },
   arrival: {
     kind: 'valued',

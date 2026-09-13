@@ -62,6 +62,11 @@
   --hud-scrim-page: rgba(10, 12, 16, 0.72);
   --hud-scrim-pane: rgba(11, 14, 20, 0.86);
 
+  /* How far a pinned surface fades into the content it covers. A LENGTH, not a percentage:
+     the surfaces that use it change height (the action bar grows when a refusal appears), and
+     a percentage stop moves with them -- which let content read through beside the refusal. */
+  --hud-fade-soft: 24px;
+
   /* Focus ring. One treatment, three selectors -- the panel, the preview canvas and the
    * rotate buttons all draw the same ring, and it must stay the same on all three. */
   --hud-focus-color: #7fd0ff;
@@ -3399,6 +3404,116 @@
    * is never itself the thing forcing a wrap there; four content-sized rows are what
    * decide when a desktop window wraps, not this number. */
   width: 92vw;
+}
+
+/*
+ * START AND BACK, PINNED TO THE FOOT OF THE PANE (issue #668).
+ *
+ * MEASURED before this existed: at 390x844 the pane is 1562px and Start sat 1462px down it --
+ * 1.73 screens of scrolling to begin a match, and 2.66 at 320x568. Desktop is not exempt:
+ * 1255px down an 800px viewport.
+ *
+ * `sticky`, not `fixed`, and that is why this needs no breakpoint. Sticky engages only once
+ * the element would otherwise scroll out of its container, so on a window tall enough to show
+ * the pane whole the bar sits at the end in normal flow, exactly as the two buttons did
+ * before. The pane decides when it is too long, not a media query.
+ */
+.hud-versus-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  /* The pane centres its children; without this the bar shrinks to its buttons and the
+     backdrop stops short of the edges, leaving scrolled content visible either side. */
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hud-space-2);
+  padding: var(--hud-fade-soft) var(--hud-space-3) max(12px, env(safe-area-inset-bottom));
+  /*
+   * TWO stacked gradients, reproducing the pane's own composite rather than approximating it.
+   *
+   * `--hud-scrim-pane` is a SCRIM (86% opaque), not a colour, so painting the bar with it
+   * alone leaves 14% of whatever scrolls underneath showing through -- MEASURED on the first
+   * attempt: a board card's whole intent sentence was legible through the Back button. Scrim
+   * over ground gives exactly the pane's colour AND full opacity, so the bar cannot drift
+   * from the surface it sits on if either token is retuned.
+   *
+   * THE COLOUR IS THE LAST LAYER, deliberately: a bare colour first makes the whole shorthand
+   * invalid and the element renders with no background at all, which is a silent, total
+   * failure rather than a wrong shade.
+   *
+   * The fade is a FIXED HEIGHT, not a percentage, and the bar's own padding-top clears it.
+   * The bar grows when the refusal appears, and a percentage stop moves with it -- which is
+   * what let a board card read through beside the refusal.
+   */
+  background:
+    linear-gradient(to top, var(--hud-scrim-pane) calc(100% - var(--hud-fade-soft)), transparent),
+    linear-gradient(to top, var(--hud-app-ground) calc(100% - var(--hud-fade-soft)), transparent);
+}
+
+/* Back takes a third and keeps its slab; Start takes the rest and keeps the primary. Stacked
+   (which is what pinning them unchanged gave) the two read as equals, which they are not, and
+   cost 100px against this 83px -- 12% of an 844px screen rather than 10%. */
+.hud-versus-actions .hud-versus-back { flex: 0 0 33%; }
+.hud-versus-actions .hud-versus-start { flex: 1 1 auto; }
+
+/* The refusal explaining a disabled Start sits ABOVE both, full width, and only exists while
+   there is one -- so the bar is 83px at rest and 115px refused. */
+.hud-versus-actions .hud-versus-start-reason {
+  flex: 1 0 100%;
+  margin: 0;
+  text-align: center;
+}
+
+/*
+ * THE PANE'S BLOCK PADDING MOVES ONTO ITS PINNED CHILDREN, and this is not cosmetic.
+ *
+ * A sticky child's containing block is the pane's CONTENT box, so with `padding: 12px 0` on
+ * the scroll container each pinned child parks 12px short of its scrollport edge and the list
+ * scrolls visibly through the strip. MEASURED at every scroll position, both ends: 12px above
+ * the header and 12px below the bar, until the padding moved here.
+ */
+.hud-versus-setup { padding-block: 0; }
+
+/*
+ * ARM: Back lifted into a compact sticky header (`?dev=1&versusActions=header`, issue #668).
+ *
+ * Kept as an arm rather than shipped because of what it costs on a small screen. It buys the
+ * pane title staying visible while scrolling -- but the shipped layout shows that title at
+ * rest anyway, so the arm only preserves it AFTER a scroll, and MEASURED at 320x568 the
+ * full-size header wrapped "Versus Setup" onto two lines: 94px, and 31% of the screen given
+ * to chrome against the bar's 15%. This is the compact form, which holds 49px at both widths
+ * and never wraps -- 23% at 320. Worth judging in play; not worth defaulting to unmeasured.
+ */
+.hud-versus-setup--header .hud-versus-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: var(--hud-space-2);
+  padding: calc(var(--hud-space-2) + 12px) var(--hud-space-3) var(--hud-space-2);
+  /* SOLID, unlike the foot. A fade here is wrong rather than merely different: the header's
+     own content sits in it, so a board card slides up BESIDE the pane title and reads as
+     clutter. The fade belongs where content flows out, not where chrome begins. */
+  background: linear-gradient(var(--hud-scrim-pane), var(--hud-scrim-pane)), var(--hud-app-ground);
+}
+
+.hud-versus-setup--header .hud-versus-header h1 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 19px;
+}
+
+/* Start alone at the foot then, capped rather than stretched: full width it becomes a slab
+   wider than anything else on the pane. 14rem is 224px, which sits in proportion with the
+   Players row, and `min()` lets it shrink rather than overflow at 320px. */
+.hud-versus-setup--header .hud-versus-actions .hud-versus-start {
+  flex: 0 1 auto;
+  width: min(100%, 14rem);
 }
 
 /* One slot's card: label, the three role buttons, its derived device line, and the

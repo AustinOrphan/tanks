@@ -272,6 +272,7 @@ import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/
 import { createTransitionRunner } from './transitions';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
+import type { VersusActionLayout } from '../presentation/versus-actions';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -1379,6 +1380,11 @@ export interface HudOptions {
    */
   readonly topbar?: TopbarTreatment | null;
   /**
+   * Where Versus Setup puts Start and Back (issue #668). Absent -- every existing test and
+   * every ordinary page load -- means the shipped bar carrying both at the foot.
+   */
+  readonly versusActions?: VersusActionLayout | null;
+  /**
    * Is the developer master gate on (issue #243)? Absent -- every existing test, and every
    * ordinary page load -- means no, and no developer UI is built into the surface at all.
    *
@@ -1693,13 +1699,29 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
              unconditionally shown. -->
         <p class="ui-hint hud-versus-assignment-note" id="hud-versus-assignment-note">Devices are assigned to human slots when the match starts.</p>
         <div class="hud-versus-slot-rows"></div>
-        <!-- The pane-level refusal, used for the ONE problem kind that names no slot
-             (no-human). Per-slot reasons live on their own row; see
-             renderVersusSlotRows. -->
-        <p class="ui-hint hud-versus-start-reason hud-versus-start-reason--hidden" id="hud-versus-start-reason"></p>
       </div>
-      <button class="ui-btn ui-btn--primary hud-versus-start" type="button">Start</button>
-      <button class="ui-btn ui-btn--slab hud-versus-back" type="button">Back</button>
+      <!-- Start and Back PINNED to the foot of the pane (issue #668). The wrapper exists
+           only to carry the sticky position for the PAIR: two separately-sticky buttons at
+           the same bottom offset would land on top of each other. It changes no DOM order,
+           so Tab and assistive technology read exactly what they read before, and
+           focusableControls finds both through the same descendant query.
+           NO BACKTICKS in this markup: it lives in a template literal, and one closes the
+           string -- which is exactly how this comment was written the first time. -->
+      <div class="hud-versus-actions">
+        <!-- The pane-level refusal, for the ONE problem kind that names no slot (no-human);
+             per-slot reasons live on their own row, see renderVersusSlotRows.
+             It lives HERE, with the button it explains, since issue #668 pinned that button:
+             left in the who's-playing row it scrolls away, so a player meets a dead Start
+             with its explanation ~1400px up the pane. -->
+        <p class="ui-hint hud-versus-start-reason hud-versus-start-reason--hidden" id="hud-versus-start-reason"></p>
+        <!-- Back BEFORE Start in the markup, which is how they read left to right in the
+             bar. Done here rather than with a CSS order property, so the tab order and the
+             visual order stay the same sequence -- reordering visually while leaving the DOM
+             alone is the classic way a keyboard walk stops matching what is on screen.
+             NO BACKTICKS: template literal. -->
+        <button class="ui-btn ui-btn--slab hud-versus-back" type="button">Back</button>
+        <button class="ui-btn ui-btn--primary hud-versus-start" type="button">Start</button>
+      </div>
     </div>
     <div class="hud-customize hud-customize--hidden" role="region" tabindex="-1" aria-labelledby="hud-customize-title">
       <h1 id="hud-customize-title">Customize</h1>
@@ -2254,6 +2276,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const versusOpenBtn = el.querySelector('.hud-versus-open') as HTMLButtonElement;
   const campaignOpenBtn = el.querySelector('.hud-campaign-open') as HTMLButtonElement;
   const versusSetupView = el.querySelector('.hud-versus-setup') as HTMLElement;
+  /**
+   * Issue #668's action-bar arm: Back lifted out of the pinned foot into a compact sticky
+   * header beside the pane title.
+   *
+   * The layouts are the same controls in different places, so the stylesheet carries almost
+   * all of it -- but Back cannot be in two places in one markup, so the arm MOVES it. Done
+   * once at construction, never per render: `versusActions` is a developer flag read from the
+   * URL, so it cannot change within a page load, and rebuilding this on every pane render
+   * would fight the roving-tabindex focus that `renderVersusSlotRows` restores.
+   *
+   * Moving Back to the front also moves it in TAB order, which is correct here rather than
+   * incidental: in this layout it is the first thing on the pane, and document order is what
+   * assistive technology reads. `focusableControls` finds it either way -- it queries
+   * descendants, not direct children -- and spatial focus derives its rows from geometry at
+   * navigation time, so neither needs telling.
+   */
+  if (opts.versusActions === 'header') {
+    versusSetupView.classList.add('hud-versus-setup--header');
+    const header = document.createElement('div');
+    header.className = 'hud-versus-header';
+    const title = versusSetupView.querySelector('h1');
+    const back = versusSetupView.querySelector('.hud-versus-back');
+    if (title && back) {
+      versusSetupView.insertBefore(header, versusSetupView.firstChild);
+      header.append(back, title);
+    }
+  }
   const versusLimitsLine = el.querySelector('.hud-versus-limits') as HTMLElement;
   const versusModeRow = el.querySelector('.hud-versus-mode-row') as HTMLElement;
   const versusModeNoteEl = el.querySelector('.hud-versus-mode-note') as HTMLElement;

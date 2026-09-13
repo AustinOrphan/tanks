@@ -54,7 +54,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (18)
+## Valued flags (19)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ Notes:
 | `sandboxWalls` | `walls` | a positive integer, bare or as `random:N` | `null` | Sets how many interior walls the sandbox scatters. |
 | `seed` | `seed` | a positive integer | `null` | Fixes the world's PRNG seed instead of deriving one from the clock, for a reproducible playthrough. |
 | `topbar` | `topbar` | `full`, `spare`, `mode-chips`, `spare-chips`, `enemies-only`, `denominator-only` | `null` | Renders the gameplay topbar as one of issue #552's alternatives to the shipped bar; `spare-chips` ships, and the others put back the enemy count, the level denominator, or both, and mark Practice alone instead of naming every session kind. `full` is all three together: the bar as it read before the ruling. |
+| `versusActions` | `versusActions` | `header` | `null` | Moves Back out of the pinned action bar and into a compact sticky header beside the pane title (issue #668). The shipped bar carries Start and Back together at the foot, which costs less of a small screen; 'header' keeps the title visible while scrolling, at 49px of permanent chrome. |
 
 Notes:
 
