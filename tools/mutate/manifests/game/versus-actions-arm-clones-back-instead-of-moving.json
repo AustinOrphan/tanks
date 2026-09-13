@@ -1,0 +1,14 @@
+{
+  "id": "versus-actions-arm-clones-back-instead-of-moving",
+  "file": "src/game/hud.ts",
+  "find": "      header.append(back, title);",
+  "replace": "      header.append(back.cloneNode(true), title);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The arm COPIES Back into its header instead of moving it, so the pane carries two Back buttons: one in the header where it is seen, one still in the pinned bar. The clone has no listeners, so the visible control does nothing -- and the keyboard walk now closes over an extra dead stop. Every structural assertion about the header still passes; only the population of controls changes, which is why one case compares the two layouts' full control sets rather than checking the header alone.",
+  "killedBy": [
+    "hud: the versus action bar and its arm (issue #668) both layouts expose the same controls -- the arm moves them, it does not add or drop any"
+  ]
+}
