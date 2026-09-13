@@ -130,9 +130,44 @@ function suiteNote(result) {
     : '';
 }
 
-/** @param {TestRunResult} baseline */
+/**
+ * How many failing test names a BASELINE-RED message lists before it stops.
+ *
+ * Three, not all of them: a starved 322-test scope can report dozens, and a wall of names
+ * in a log that is already interleaved across nine workers is no more readable than a bare
+ * count. Three is enough to recognise a pattern -- one timing-sensitive suite, or one file
+ * that failed to collect -- and the exact count is printed beside them either way.
+ */
+const BASELINE_NAMES_SHOWN = 3;
+
+/**
+ * @param {TestRunResult} baseline
+ *
+ * NAMES THE TESTS, and that is the point of this function rather than a nicety.
+ *
+ * BASELINE-RED means the scope failed BEFORE any mutation was applied, so it is a statement
+ * about the tree rather than about the mutation -- and the only actionable question is WHICH
+ * test failed. The harness has known the answer all along: `runTestsReal` puts
+ * `failedTestNames(report)` on every result, and the `killedBy` contract reads it. This
+ * message threw it away and printed two integers.
+ *
+ * The cost of that was paid in full on issue #664. A sweep reports "1 of 322 failing", the
+ * scope passes 322/322 when re-run by hand, and there is nothing else to go on: no name, no
+ * message, no way to tell a starved timeout from a genuine order-dependent failure. Three
+ * separate investigations reached "not reproducible" and stopped there, and PR #671 lost a
+ * required check to it. A name would have made each of those a five-minute question.
+ *
+ * Degrades honestly: a scope whose FILE failed to collect contributes no test names at all,
+ * and `suiteNote` already says so.
+ */
 function baselineDetail(baseline) {
-  return `baseline is red before any mutation: ${baseline.failed} of ${baseline.total} failing${suiteNote(baseline)}`;
+  const names = baseline.failedTests ?? [];
+  const shown = names.slice(0, BASELINE_NAMES_SHOWN);
+  const more = names.length - shown.length;
+  const named = shown.length
+    ? ` -- ${shown.join(' | ')}${more > 0 ? ` (+${more} more)` : ''}`
+    : '';
+  return `baseline is red before any mutation: ${baseline.failed} of ${baseline.total} failing${suiteNote(baseline)}${named}`;
 }
 
 /** @param {TestRunResult} result */

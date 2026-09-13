@@ -1,0 +1,14 @@
+{
+  "id": "baseline-red-discards-the-failing-test-names",
+  "file": "tools/mutate/orchestrate.mjs",
+  "find": "  const names = baseline.failedTests ?? [];",
+  "replace": "  const names = [];",
+  "expect": "killed",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "why": "Restores the state issue #664 was fought in: BASELINE-RED reports two integers and drops the names the harness already holds. The run still looks correct -- a count is printed, the status is right, nothing errors -- and every future occurrence becomes undiagnosable, which is exactly how three investigations reached 'not reproducible' and stopped. The information is free; discarding it is the defect.",
+  "killedBy": [
+    "runOne baseline check (the scoped tests must be green BEFORE any mutation) NAMES the tests that failed, so a red baseline is diagnosable at all (issue #664)"
+  ]
+}
