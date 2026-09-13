@@ -121,11 +121,18 @@ describe('the screen-state catalogue', () => {
      * is the kind of thing that looks like a broken recipe rather than a namespace rule.
      *
      * Both directions, so a state cannot seed the wrong half either way.
+     *
+     * `prodSave` IS THE ONE EXCEPTION, and it is the whole point of that flag (issue #249): a
+     * developer session that has deliberately asked for the production save reads the
+     * unprefixed keys, so a state carrying it must seed those. Written as "gate AND NOT
+     * prodSave" rather than as a state-id allow-list, because the rule is a property of the
+     * query string -- the same one `selectStorageNamespace` implements -- and an allow-list
+     * would need editing every time such a state is added.
      */
     for (const state of SCREEN_STATES) {
       const keys = Object.keys(state.storage);
       if (keys.length === 0) continue;
-      const gated = state.query.includes('dev=1');
+      const gated = state.query.includes('dev=1') && !state.query.includes('prodSave=1');
       for (const key of keys) {
         expect(
           key.startsWith(DEVELOPER_KEY_PREFIX),

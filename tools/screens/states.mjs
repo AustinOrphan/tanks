@@ -362,6 +362,23 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-devcfg-control[data-field="sandboxTanks"]', '.hud-devcfg-count'],
   }),
   state({
+    id: 'screen.devtools.production-save',
+    title: 'Developer Tools, on the production save',
+    description:
+      'The namespace warning issue #249 requires to stay obvious while production data is ' +
+      'active in a dev session. Reached with `?dev=1&prodSave=1`, which is the only way to ' +
+      'get there -- the flag is inert without the gate.',
+    // The PRODUCTION keys, deliberately: this state is about a session that is NOT namespaced,
+    // so seeding the developer keys would leave the pane describing an empty save.
+    storage: MID_CAMPAIGN,
+    query: '?dev=1&prodSave=1',
+    steps: [...PAST_SPLASH, { click: '.hud-devtools-open' }, { waitVisible: '.hud-devtools' }],
+    // The namespace line is measured for its TEXT and its colour: the warning is what
+    // distinguishes this state from the ordinary one, and a line that merely said something
+    // different would not be the criterion.
+    measure: ['.hud-devtools', '.hud-devns', '.hud-devreset', '.hud-devtools-back'],
+  }),
+  state({
     id: 'screen.devtools.actions',
     title: 'Developer Tools, with a round running',
     description:
