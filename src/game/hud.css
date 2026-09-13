@@ -1263,8 +1263,22 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* flex-start, not center (issue #642, the last two panes carrying the shape #117 named).
+     `justify-content: center` on an `overflow-y: auto` column puts the overflow ABOVE the
+     scrollable area, where no scrollbar reaches it. Measured through tools/screens at
+     844x390 -- an ordinary handset in landscape: the "Settings" heading sat at y = -64,
+     its whole box above the scroll origin, and now sits at y = +35.
+
+     THE PADDING BELOW IS PART OF THE SAME CHANGE, not a separate tidy-up, which is why
+     that +35 is not the 0 a bare `flex-start` would give. Centring gave this pane its
+     inset for free; top-aligned with no padding the heading butts the viewport edge and
+     the Data row butts the bottom one. `--hud-space-5` is what .hud-about, .hud-devtools
+     and .hud-selftest already inset by, so this joins the family rather than inventing a
+     value. Both lines moved between the two captures, so neither number attributes to
+     one of them alone. */
+  justify-content: flex-start;
   gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
   overflow-y: auto;
   background: var(--hud-scrim-page);
   color: var(--hud-text);
@@ -1374,7 +1388,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* flex-start, not center (issue #642) -- the same clip .hud-about above describes, and
+     the same fix. This pane's content is only 318 CSS px tall today, so the clip is LATENT
+     at handset sizes rather than reachable: it took a 568x280 viewport to show it, where
+     the "Developer Tools" heading sat at y = -19 under `center` and y = +35 under
+     `flex-start`. Fixed at the latent stage deliberately -- the comment above says this
+     shell grows registry-generated controls, and the pane that grows into the clip is the
+     one nobody re-measures. */
+  justify-content: flex-start;
   gap: var(--hud-space-4);
   padding: var(--hud-space-5);
   overflow-y: auto;
@@ -1434,8 +1455,8 @@
 
 /* Its own pane, and `flex-start` from the start for the reason `.hud-selftest` is: this one
    is seven groups of controls over a hundred buttons long, so it overflows on any viewport.
-   `.hud-devtools` still centres the main axis of its own scroll container -- issue #642 owns
-   that -- and a pane that never had the property cannot inherit the clip. */
+   `.hud-devtools` centred the main axis of its own scroll container when this was written;
+   issue #642 has since top-aligned it, so no pane in the file carries the shape any more. */
 .hud-devcfg {
   pointer-events: auto;
   position: absolute;
@@ -1632,8 +1653,9 @@
    `.hud-about` under #117. This pane is as tall as the connected hardware makes it (a
    standard pad alone is 21 channel rows), so it would overflow on the first connected
    controller rather than only on a short viewport. `.hud-settings` and `.hud-devtools`
-   still carry the old shape; issue #642 owns them, and hud.css.test.ts pins that set so
-   this pane joining it would be a red test rather than a silent third case. */
+   still carried the old shape when this was written; issue #642 has since top-aligned both,
+   and hud.css.test.ts now sweeps every scroller against an EMPTY centred set, so this pane
+   joining it would be a red test rather than a silent case. */
 .hud-selftest {
   pointer-events: auto;
   position: absolute;
@@ -3094,7 +3116,8 @@
      the scrollable area, where no scrollbar reaches it. Latent while the map row was a
      line of pills; a defect the moment the row became seven cards, which pushed Mode and
      Players off the top of a 1280x800 viewport with no way to scroll back up to them.
-     Measured that way before this line changed. #642 owns the two panes still like this. */
+     Measured that way before this line changed. #642 has since done the same for the two
+     panes that were still like this, `.hud-settings` and `.hud-devtools`. */
   justify-content: flex-start;
   gap: var(--hud-space-3);
   background: var(--hud-scrim-pane);
