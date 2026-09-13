@@ -130,8 +130,11 @@ describe('the support verdict the self-test carries (issue #596)', () => {
     expect(
       describeSupport({ kind: 'profile', profile: { ...STANDARD_PROFILE, id: 'made-up' } }),
     ).toBe('supported (profile: made-up)');
-    expect(describeSupport({ kind: 'unknown', reason: { code: 'unknown-mapping', mapping: '', id: 'x' } })).toMatch(
-      /^NOT supported/,
+    // The WHOLE sentence, not `/^NOT supported/`. That regex was the first draft and a
+    // mutation walked through it: collapsing both refusals to `NOT supported: ${code}` still
+    // matched, so the assertion advertised a diagnosis it was not checking.
+    expect(describeSupport({ kind: 'unknown', reason: { code: 'unknown-mapping', mapping: '', id: 'x' } })).toBe(
+      'NOT supported: no profile matches this mapping/id',
     );
     const short = describeSupport({
       kind: 'insufficient',
