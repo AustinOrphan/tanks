@@ -69,13 +69,29 @@ import type { TankKind } from './types';
 
 const SECONDS = 60;
 const SEEDS = [1, 2, 3];
-/** Campaign boards, by index into ARENA_DEFS. Kept small: the point is per-kind rates. */
-const ARENAS_UNDER_TEST = [0, 1, 2];
+/**
+ * Campaign boards, by index into ARENA_DEFS. Kept small: the point is per-kind rates.
+ *
+ * ARENA-04 WAS ADDED FOR ISSUE #358's CONTRAST, and finding out why is the useful part: the
+ * previous set was `[0, 1, 2]`, and **green never spawns on any of them**. arena-01 and
+ * arena-02 hold brown/grey/teal, arena-03 adds olive, and only arena-04 and arena-05 carry
+ * all six campaign kinds. So the baseline table below has been silently missing a row for a
+ * kind the roster has, and the contrast threw on it rather than reporting five of six as if
+ * it were the roster.
+ *
+ * Every measurement quoted in this file's header was taken under the OLD three-arena set and
+ * should be read against that narrower sample; none of them concerned green.
+ */
+const ARENAS_UNDER_TEST = [0, 1, 2, 3];
 
 interface KindStat {
   cap: number;
+  /** The EFFECTIVE mine capacity this arm gave the kind -- `tank.mineCap ?? configFor(...)`. */
+  mineCap: number;
   liveTicks: number;
   shellTicks: number;
+  /** Live mines owned, summed per tick, so mine density reads like shell density. */
+  mineTicks: number;
   atCapTicks: number;
   shots: number;
   deaths: number;
@@ -86,8 +102,10 @@ interface KindStat {
 
 const blank = (cap: number): KindStat => ({
   cap,
+  mineCap: -1,
   liveTicks: 0,
   shellTicks: 0,
+  mineTicks: 0,
   atCapTicks: 0,
   shots: 0,
   deaths: 0,
@@ -98,14 +116,29 @@ const blank = (cap: number): KindStat => ({
 
 const measure = import.meta.env.VITE_RUN_MEASURE ? describe : describe.skip;
 
-measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () => {
-  it('reports shell density, capacity stall, shell lifetime and encounter length', () => {
+/**
+ * Run every (seed, arena) encounter under ONE arm and aggregate it (issue #358).
+ *
+ * `pp1Roles` reaches the world through `createWorldFor`'s own init -- the same seam
+ * `levels.ts` uses for `?dev=1&pp1Roles=1`, so the arm measured here is the arm a player
+ * gets. That seam did not exist when this file was written; its header still describes a
+ * variant as "a DATA EDIT to config/data/tank-defs.json plus a second run", which was true
+ * then and is no longer the only way.
+ *
+ * SEEDS AND ARENAS ARE MATCHED ACROSS ARMS by construction: both calls walk the same
+ * `SEEDS` x `ARENAS_UNDER_TEST` product in the same order, and the scripted player is seeded
+ * from `seed * 7 + 1` either way. Issue #358's required output asks for exactly that.
+ */
+function runArm(pp1Roles: boolean): {
+  agg: Map<TankKind, KindStat>;
+  encounters: { arena: string; seed: number; ticks: number; ended: string }[];
+} {
     const agg = new Map<TankKind, KindStat>();
     const encounters: { arena: string; seed: number; ticks: number; ended: string }[] = [];
 
     for (const seed of SEEDS) {
       for (const ai of ARENAS_UNDER_TEST) {
-        let w = createWorldFor(arenaById(ARENA_DEFS[ai].id), seed) as World;
+        let w = createWorldFor(arenaById(ARENA_DEFS[ai].id), seed, { pp1Roles }) as World;
         const playerId = w.tanks.find((t) => t.kind === 'player')?.id;
         if (playerId === undefined) continue;
         const rnd = mulberry32(seed * 7 + 1);
@@ -167,12 +200,19 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
 
           for (const tank of w.tanks) {
             if (!tank.alive) continue;
-            const cap = configFor(tank.kind).weapon.maxActiveProjectiles;
+            // THE EFFECTIVE cap, off the TANK. `configFor` is the ROSTER's value and is the
+            // same in both arms by design -- issue #358's whole point is that shipped
+            // balance does not move -- so reading it here would report the baseline's cap
+            // beside the arm's behaviour, and `atCapTicks` would be computed against a
+            // threshold no tank in the run was actually held to.
+            const cap = tank.shellCap ?? configFor(tank.kind).weapon.maxActiveProjectiles;
             const stat = agg.get(tank.kind) ?? blank(cap);
             stat.cap = cap;
+            stat.mineCap = tank.mineCap ?? configFor(tank.kind).mineCapacity;
             const live = w.bullets.filter((b) => b.ownerId === tank.id).length;
             stat.liveTicks++;
             stat.shellTicks += live;
+            stat.mineTicks += w.mines.filter((m) => m.ownerId === tank.id).length;
             if (live >= cap) stat.atCapTicks++;
             agg.set(tank.kind, stat);
           }
@@ -185,6 +225,12 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
         encounters.push({ arena: ARENA_DEFS[ai].id, seed, ticks, ended });
       }
     }
+  return { agg, encounters };
+}
+
+measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () => {
+  it('reports shell density, capacity stall, shell lifetime and encounter length', () => {
+    const { agg, encounters } = runArm(false);
 
     console.log(
       `\nbaseline: ${SEEDS.length} seeds x ${ARENAS_UNDER_TEST.length} arenas, ` +
@@ -209,4 +255,116 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
       );
     }
   });
+
+  /**
+   * THE MATCHED CONTRAST issue #358's required output asks for: the shipped baseline against
+   * the `pp1Roles` arm, same seeds, same arenas, same scripted inputs.
+   *
+   * IT PROVES THE KNOB BEFORE IT REPORTS ANYTHING. A harness whose independent variable is
+   * not connected produces two runs of the same thing and a table of zero deltas that reads
+   * like a finding -- so the first thing this does is assert that the arm actually moved the
+   * caps it is supposed to move, per kind, and throw if it did not. Without that, every
+   * number below would be evidence for nothing and would look like evidence for "the arm
+   * changes little".
+   *
+   * WHAT HAS NO CONTROL ROW, stated because it is a real limit rather than an oversight: the
+   * arm touches ALL SIX campaign kinds' shell caps, so there is no untouched kind whose
+   * bit-identical row would separate signal from noise the way OLIVE did for the single-kind
+   * edits in this file's header. What stands in for it is determinism -- the same arm run
+   * twice is bit-identical, asserted below -- plus grey's MINE cap, which the arm
+   * deliberately leaves alone.
+   */
+  it('contrasts the shipped baseline against the pp1Roles arm, on matched seeds', () => {
+    const base = runArm(false);
+    const arm = runArm(true);
+
+    // 1. THE KNOB. Shell caps must differ for every kind the table names a different value
+    // for, and mine caps for Brown, Teal and Green. Grey's mine cap must NOT move: the arm
+    // leaves its placement behaviour alone by owner decision, and a moved value there would
+    // mean the experiment had quietly grown an AI change.
+    const moved: string[] = [];
+    for (const [kind, a] of arm.agg) {
+      const b = base.agg.get(kind);
+      if (b === undefined) continue;
+      if (a.cap !== b.cap) moved.push(`${kind}.shellCap ${b.cap}->${a.cap}`);
+      if (a.mineCap !== b.mineCap) moved.push(`${kind}.mineCap ${b.mineCap}->${a.mineCap}`);
+    }
+    if (moved.length === 0) {
+      throw new Error('pp1Roles arm changed no cap at all -- the independent variable is not wired');
+    }
+    for (const kind of ['brown', 'teal', 'green'] as const) {
+      const a = arm.agg.get(kind);
+      const b = base.agg.get(kind);
+      if (a === undefined || b === undefined) throw new Error(`${kind} never spawned in either arm`);
+      if (a.mineCap !== 0 || b.mineCap === 0) {
+        throw new Error(`${kind} mine cap did not move to 0 under the arm (${b.mineCap} -> ${a.mineCap})`);
+      }
+    }
+    const greyBase = base.agg.get('grey');
+    const greyArm = arm.agg.get('grey');
+    if (greyBase && greyArm && greyBase.mineCap !== greyArm.mineCap) {
+      throw new Error(`grey's mine cap moved under the arm (${greyBase.mineCap} -> ${greyArm.mineCap})`);
+    }
+    console.log(`\nknob wired: ${moved.sort().join(', ')}`);
+
+    // 2. DETERMINISM, which is what a missing control row is replaced by here. Two runs of
+    // the same arm must agree exactly, or a delta below could be run-to-run noise.
+    const repeat = runArm(true);
+    for (const [kind, a] of arm.agg) {
+      const r = repeat.agg.get(kind);
+      if (!r || JSON.stringify(a) !== JSON.stringify(r)) {
+        throw new Error(`the arm is not deterministic: ${kind} differs between two identical runs`);
+      }
+    }
+    console.log('determinism: two runs of the pp1Roles arm are bit-identical per kind');
+
+    const rate = (s: KindStat): { shells: number; mines: number; stall: number } => ({
+      shells: s.shellTicks / s.liveTicks,
+      mines: s.mineTicks / s.liveTicks,
+      stall: (100 * s.atCapTicks) / s.liveTicks,
+    });
+    console.log(
+      `\nmatched contrast: ${SEEDS.length} seeds x ${ARENAS_UNDER_TEST.length} arenas, ` +
+        `${SECONDS}s cap each, countdown excluded`,
+    );
+    console.log(
+      '\nkind     shellCap    mineCap   meanLiveShells      meanLiveMines       capacityStall        shots        tickSamples',
+    );
+    for (const kind of [...arm.agg.keys()].sort()) {
+      const a = arm.agg.get(kind) as KindStat;
+      const b = base.agg.get(kind);
+      if (b === undefined) continue;
+      const ra = rate(a);
+      const rb = rate(b);
+      console.log(
+        `${kind.padEnd(8)} ${String(rb.shells !== undefined ? b.cap : 0).padStart(2)}->${String(a.cap).padEnd(2)}    ` +
+          `${String(b.mineCap).padStart(2)}->${String(a.mineCap).padEnd(2)}   ` +
+          `${rb.shells.toFixed(4)}->${ra.shells.toFixed(4)}   ` +
+          `${rb.mines.toFixed(4)}->${ra.mines.toFixed(4)}   ` +
+          `${rb.stall.toFixed(2)}%->${ra.stall.toFixed(2)}%   ` +
+          `${String(b.shots).padStart(4)}->${String(a.shots).padEnd(4)}  ` +
+          // TICK SAMPLES ARE THE DENOMINATOR, printed because the two arms do NOT run for
+          // the same number of ticks: the arm resolves more encounters before the 60s cap,
+          // so total live time differs. The per-tick RATES either side of each arrow are
+          // comparable; the raw `shots` counts are not, and this column is what lets a
+          // reader see that rather than take it on trust.
+          `${String(b.liveTicks).padStart(5)}->${String(a.liveTicks).padEnd(5)}`,
+      );
+    }
+
+    // 3. DIFFICULTY, the comparison issue #358 requires explicitly. Player deaths and the
+    // fraction of encounters that ended rather than timing out are the two coarse signals
+    // this harness can honestly produce; neither is a substitute for normal-speed human play,
+    // which the issue names separately and which no harness here provides.
+    const ended = (r: typeof base): number => r.encounters.filter((e) => e.ended !== 'timeout').length;
+    console.log(
+      `\ndifficulty (coarse): player deaths ${base.agg.get('player')?.deaths} -> ${arm.agg.get('player')?.deaths}, ` +
+        `encounters resolved ${ended(base)}/${base.encounters.length} -> ${ended(arm)}/${arm.encounters.length}`,
+    );
+    // THREE full arms -- baseline, arm, and the arm again for the determinism check -- over
+    // 3 seeds x 4 arenas x 60s each. That is ~17s on this machine against vitest's 5000ms
+    // default, which failed the case while printing every number correctly: a timeout reads
+    // as a red harness rather than as a slow one, and the numbers above would have been
+    // quoted from a run marked failed.
+  }, 120_000);
 });
