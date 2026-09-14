@@ -1,0 +1,14 @@
+{
+  "id": "bench-flag-never-parsed",
+  "file": "src/game/devflags.ts",
+  "find": "    bench: asBench(params),\n",
+  "replace": "    bench: null,\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "`?dev=1&bench=versus-bots` would do nothing: the documented device-run URL silently measures no frames.",
+  "killedBy": [
+    "parseDevFlags: bench (issue #734) selects a named workload and changes no other flag"
+  ]
+}

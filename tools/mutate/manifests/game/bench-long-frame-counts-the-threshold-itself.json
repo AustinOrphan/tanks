@@ -1,0 +1,14 @@
+{
+  "id": "bench-long-frame-counts-the-threshold-itself",
+  "file": "src/game/bench.ts",
+  "find": "  const over = (ms: number): number => sorted.filter((v) => v > ms).length;",
+  "replace": "  const over = (ms: number): number => sorted.filter((v) => v >= ms).length;",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "Counts a frame exactly at 16.7, 33.3 or 50 ms as long. The thresholds are stated as strictly over; a frame on the line is not a dropped one.",
+  "killedBy": [
+    "summarizeFrames: nearest-rank percentiles and long-frame counts counts a frame as long only when it is strictly over each threshold"
+  ]
+}

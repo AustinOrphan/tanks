@@ -1,0 +1,15 @@
+{
+  "id": "bench-driver-never-instrumented",
+  "file": "src/game/loop.ts",
+  "find": "  const driverRaf: RafScheduler = benchRecorder === null\n    ? deps.raf\n",
+  "replace": "  const driverRaf: RafScheduler = true\n    ? deps.raf\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The report is published but the driver is handed the plain scheduler, so every report is an empty warm-up forever.",
+  "killedBy": [
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) steps every tank identically at every sampled frame, with frames actually recorded",
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) reports the session it measured, the rAF intervals the frames were fired at, and the preset cap"
+  ]
+}

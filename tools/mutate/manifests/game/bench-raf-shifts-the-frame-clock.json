@@ -1,0 +1,16 @@
+{
+  "id": "bench-raf-shifts-the-frame-clock",
+  "file": "src/game/bench.ts",
+  "find": "          cb(frameTimeMs);",
+  "replace": "          cb(frameTimeMs + 1);",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The instrument changes the timestamp the driver steps from, the one way this decorator could alter what the session simulates, which the issue forbids. The unit test pins the pass-through; the loop test pins the consequence. Measured while writing it: at a steady 100 ms and at a 50/17/100 ms cycle, this 1 ms shift left every snapshot identical and only the unit test failed; at the 23/41/88 ms cycle the loop test now uses, the same-simulation comparison fails too.",
+  "killedBy": [
+    "instrumentRaf: times the callback without changing it hands the callback the browser timestamp and reports its run time",
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) steps every tank identically at every sampled frame, with frames actually recorded"
+  ]
+}

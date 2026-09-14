@@ -1,0 +1,16 @@
+{
+  "id": "bench-report-never-published",
+  "file": "src/game/loop.ts",
+  "find": "  if (benchWorkload !== null && benchRecorder !== null) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The flag records frames but never publishes `__tanks.bench()`, so a device run has nothing to read.",
+  "killedBy": [
+    "startGameWith: the dev console surface publishes only the benchmark report with bench on (issue #734)",
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) steps every tank identically at every sampled frame, with frames actually recorded",
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) reports the session it measured, the rAF intervals the frames were fired at, and the preset cap"
+  ]
+}

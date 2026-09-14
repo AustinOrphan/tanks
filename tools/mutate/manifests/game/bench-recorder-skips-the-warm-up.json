@@ -1,0 +1,14 @@
+{
+  "id": "bench-recorder-skips-the-warm-up",
+  "file": "src/game/bench.ts",
+  "find": "        if (frameTimeMs - origin >= window.warmupMs) {",
+  "replace": "        if (frameTimeMs - origin >= 0) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "Opens the measurement window on the second frame, so shader compilation and cache warm-up land in the percentiles the device run compares.",
+  "killedBy": [
+    "createFrameRecorder: one warm-up, one measurement window measures nothing during warm-up, then samples the frames after the window opens"
+  ]
+}

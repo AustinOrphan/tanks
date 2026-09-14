@@ -1,0 +1,14 @@
+{
+  "id": "bench-report-uncapped-pixel-ratio",
+  "file": "src/game/bench.ts",
+  "find": "      effectivePixelRatio: Math.min(input.page.devicePixelRatio, input.pixelRatioCap),",
+  "replace": "      effectivePixelRatio: input.page.devicePixelRatio,",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "Reports the device ratio rather than what the renderer draws at. On a 3x phone under a cap of 2 the report would claim 2.25x the pixels actually drawn.",
+  "killedBy": [
+    "buildBenchReport caps the device pixel ratio by the preset, as the renderer does"
+  ]
+}
