@@ -161,6 +161,18 @@ describe('the benchmark summarizer refuses a report it would misread (issue #737
     );
   });
 
+  it('refuses a sweep flag on the preview workload, whose renderer ignores it', () => {
+    expect(readReport('preview-low.json', text(fixture({ workload: 'preview', extraQuery: '&quality=low' }))).refusal).toBe(
+      "preview-low.json: the page was not the named workload: quality is a sweep flag this workload's renderer ignores",
+    );
+  });
+
+  it('refuses a file named twice, which would count its run twice', () => {
+    const { io, err } = capture();
+    expect(runSummarize(['a.json', 'b.json', 'a.json'], io, () => text(fixture()))).toBe(1);
+    expect(err).toEqual(['Named more than once, so its run would count twice: a.json']);
+  });
+
   it('names a file it cannot read, and asks for a report when none is named', () => {
     const missing = run({});
     expect(missing.code).toBe(2);

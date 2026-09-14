@@ -79,10 +79,10 @@ const REQUIRED_SESSION = [
 
 /**
  * Where the page query breaks the workload's own: a workload parameter missing or changed, or
- * a parameter that is neither the workload's nor a sweep flag. Empty when the query is the
- * workload's, plus sweep flags only.
+ * a parameter that is neither the workload's nor one of the `allowed` sweep flags. Empty when
+ * the query is the workload's, plus allowed sweep flags only.
  */
-export function queryMismatches(workloadQuery, pageSearch) {
+export function queryMismatches(workloadQuery, pageSearch, allowed = ARM_FLAGS) {
   const want = new URLSearchParams(workloadQuery);
   const got = new URLSearchParams(pageSearch);
   const problems = [];
@@ -90,7 +90,12 @@ export function queryMismatches(workloadQuery, pageSearch) {
     if (got.get(key) !== value) problems.push(`${key} is ${JSON.stringify(got.get(key))}, the workload's is ${JSON.stringify(value)}`);
   }
   for (const key of new Set(got.keys())) {
-    if (!want.has(key) && !ARM_FLAGS.includes(key)) problems.push(`${key} is neither the workload's nor a sweep flag`);
+    if (want.has(key) || allowed.includes(key)) continue;
+    problems.push(
+      ARM_FLAGS.includes(key)
+        ? `${key} is a sweep flag this workload's renderer ignores`
+        : `${key} is neither the workload's nor a sweep flag`,
+    );
   }
   return problems;
 }
@@ -123,15 +128,19 @@ export function readReport(name, text) {
   for (const [path, ok] of required) {
     if (!ok(at(report, path))) reasons.push(`${path} is missing or not the expected type`);
   }
-  if (isObject(report.render) && !('overrides' in report.render)) reasons.push('render.overrides is missing');
-  if (subject === 'session' && isObject(report.render) && report.render.overrides !== null) {
+  if (isObject(report.render) && !('overrides' in report.render)) {
+    reasons.push('render.overrides is missing');
+  } else if (subject === 'session' && isObject(report.render) && report.render.overrides !== null) {
     if (!isObject(report.render.overrides) || OVERRIDE_FIELDS.some((f) => !(f in report.render.overrides))) {
       reasons.push('render.overrides does not carry the four override fields');
     }
   }
   if (isNumber(at(report, 'frames.count')) && report.frames.count === 0) reasons.push('measured no frames');
   if (typeof at(report, 'workload.query') === 'string' && typeof at(report, 'page.search') === 'string') {
-    for (const problem of queryMismatches(report.workload.query, report.page.search)) {
+    // The preview builds its own renderer, which neither the preset nor an override reaches, so
+    // a sweep flag on a preview page would label a run by a setting it did not have.
+    const allowed = subject === 'session' ? ARM_FLAGS : [];
+    for (const problem of queryMismatches(report.workload.query, report.page.search, allowed)) {
       reasons.push(`the page was not the named workload: ${problem}`);
     }
   }
@@ -306,6 +315,11 @@ export function runSummarize(paths, io, readText) {
   }
   const runs = [];
   const refusals = [];
+  const repeated = [...new Set(paths.filter((path, i) => paths.indexOf(path) !== i))];
+  if (repeated.length > 0) {
+    io.error(`Named more than once, so its run would count twice: ${repeated.join(', ')}`);
+    return 1;
+  }
   for (const path of paths) {
     let text;
     try {
