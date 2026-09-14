@@ -1,0 +1,15 @@
+{
+  "id": "clearance-misses-an-overlay-inside-the-bar",
+  "file": "tools/visual/clearance.mjs",
+  "find": "    if (box.top < topbar.bottom) {",
+  "replace": "    if (box.top < topbar.top) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Compares each overlay against the topbar's TOP edge instead of its bottom. Issue #687's defect is an overlay starting inside the bar -- the shipped 64px toast rail and 56px capacity flash under a bar that a 47px top inset had grown to 77px -- and every such overlay still starts below the bar's top at 0, so the visual gate would pass the exact overlap it exists to catch.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails the toast rail starting inside the bar -- the shipped 64px under a 77px bar",
+    "topbar clearance verdict (issue #687) fails the capacity flash starting inside the bar -- the shipped 56px under a 77px bar"
+  ]
+}

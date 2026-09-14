@@ -1,0 +1,14 @@
+{
+  "id": "topbar-floats-out-of-its-row",
+  "file": "src/game/hud.css",
+  "find": "  position: relative;\n  grid-row: 1;",
+  "replace": "  position: absolute;\n  grid-row: 1;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Takes the topbar back out of flow, the way it was positioned before issue #687. An absolutely positioned grid child sizes no track, so row 1 collapses to 0 and row 2 starts at the top of the screen: both overlays keep their `grid-row: 2` and still end up 12px and 4px from the top edge, inside the bar at every viewport. It is the one-word edit that looks like tidying, since the old rule said exactly this.",
+  "killedBy": [
+    "hud.css is syntactically whole places the toast rail and capacity flash from the topbar row, not a guessed height"
+  ]
+}

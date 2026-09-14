@@ -1,0 +1,14 @@
+{
+  "id": "clearance-lets-the-capacity-flash-reach-the-centre",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  if (capacity.top >= m.height / 2) {",
+  "replace": "  if (capacity.top >= m.height) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Only fails a capacity flash pushed fully off screen. Clearing the topbar is half of issue #687's contract; the other half is not trading the overlap for a cue in the arena's centre, where the player is aiming. An overlay moved far enough down satisfies the overlap check trivially, so without this bound 'clear of the bar' could be met by making the cue obstruct the board.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails a capacity flash pushed down into the arena centre"
+  ]
+}

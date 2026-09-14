@@ -1,0 +1,14 @@
+{
+  "id": "clearance-judges-a-match-with-no-topbar",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  if (topbar.display === 'none') {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Lets a match whose topbar never showed be judged. A hidden bar's rect is 0 tall at the top edge, so every overlay 'clears' it: a match that failed to start, or a state that hides the bar, would pass issue #687's clearance check by measuring nothing.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails a match whose topbar never showed, instead of clearing nothing"
+  ]
+}

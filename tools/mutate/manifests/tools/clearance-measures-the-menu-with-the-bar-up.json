@@ -1,0 +1,14 @@
+{
+  "id": "clearance-measures-the-menu-with-the-bar-up",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  if (m.menu.topbar.display !== 'none') {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Accepts a 'menu' reading taken with the topbar shown. That reading's toast rail sits under the bar, below the inset by construction, so the no-topbar case -- the one the hidden-topbar rule exists for -- would pass without being measured whenever the probe caught the page before the menu hid the bar.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails a menu measured with the topbar shown, which is not the no-topbar case"
+  ]
+}

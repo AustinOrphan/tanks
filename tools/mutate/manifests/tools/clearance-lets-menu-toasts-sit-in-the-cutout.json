@@ -1,0 +1,14 @@
+{
+  "id": "clearance-lets-menu-toasts-sit-in-the-cutout",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  } else if (m.menu.toasts.top < m.inset) {",
+  "replace": "  } else if (m.menu.toasts.top < 0) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Stops checking the toast rail against the inset when the topbar is hidden. With no bar, row 2 of the HUD grid starts at the display edge, so the rail's only protection from a cutout is its own rule; the M-key mute toast on the Main Menu is a real case. Without this, deleting that rule would leave menu toasts under the Dynamic Island and the gate green.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails a menu toast rail inside the inset once no topbar is there to clear it"
+  ]
+}

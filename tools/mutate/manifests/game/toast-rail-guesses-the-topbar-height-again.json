@@ -1,0 +1,14 @@
+{
+  "id": "toast-rail-guesses-the-topbar-height-again",
+  "file": "src/game/hud.css",
+  "find": "  grid-row: 2;\n  top: var(--hud-space-4);",
+  "replace": "  top: 64px;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Restores issue #687's toast-rail rule: out of the topbar row, back at a fixed 64px from the top of the HUD. That number is where the rail sat under the 52px desktop bar, and it is inside the bar whenever the bar is taller -- measured in Chromium with a 59px top inset, the bar's bottom was 86-99px at all five clearance viewports and verify.mjs failed every one. jsdom lays nothing out, so this entry kills on the structural assertion; the geometry itself is the visual gate's clearance pass.",
+  "killedBy": [
+    "hud.css is syntactically whole places the toast rail and capacity flash from the topbar row, not a guessed height"
+  ]
+}
