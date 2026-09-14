@@ -1,0 +1,14 @@
+{
+  "id": "gallery-workbench-animates-a-static-subject",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "    const animated = handle.frames > 1;",
+  "replace": "    const animated = true;",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Offers an animated GIF command for a one-frame posed element, a command that renders one frame as a GIF.",
+  "killedBy": [
+    "the gallery workbench offers the command line for its selection (issue #731) offers the animated command only for a subject with more than one frame"
+  ]
+}

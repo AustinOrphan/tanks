@@ -1,0 +1,15 @@
+{
+  "id": "gallery-command-never-quotes-a-word",
+  "file": "src/game/gallery-command.ts",
+  "find": "SHELL_SAFE.test(arg) ? arg :",
+  "replace": "true ? arg :",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-command.test.ts"
+  ],
+  "why": "Issue #731. Leaves every argument bare. A hull hex starts with #, which a shell reads as a comment, so a pasted command would silently drop --hull's value and every argument after it.",
+  "killedBy": [
+    "shell words (issue #731) leaves a plain word bare and single-quotes one a shell would read differently",
+    "shell words (issue #731) prefixes the gallery and capture runners"
+  ]
+}

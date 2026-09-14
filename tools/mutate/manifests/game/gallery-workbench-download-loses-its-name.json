@@ -1,0 +1,14 @@
+{
+  "id": "gallery-workbench-download-loses-its-name",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "    link.download = fileName;",
+  "replace": "    link.download = '';",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Downloads the still without its file name, so the browser names it from the blob URL and the frame, size and DPR the name carries are lost.",
+  "killedBy": [
+    "downloadCanvasStill (issue #731) encodes the canvas as a PNG and downloads it under the given name"
+  ]
+}

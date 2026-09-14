@@ -1,0 +1,15 @@
+{
+  "id": "gallery-workbench-recipe-line-never-hides",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "    recipeLine.hidden = still === null;",
+  "replace": "    recipeLine.hidden = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Leaves the recipe line on screen when no recipe matches, an empty line that reads as a recipe having been found.",
+  "killedBy": [
+    "the gallery workbench offers the command line for its selection (issue #731) names the registered capture recipe on an exact match, and not one frame away",
+    "the gallery workbench offers the command line for its selection (issue #731) drops the recipe once a control moves the selection off it"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "gallery-command-match-ignores-the-frame",
+  "file": "src/game/gallery-command.ts",
+  "find": "        s.spawnAnim === input.spawnAnim &&\n        s.tick === input.frame,",
+  "replace": "        s.spawnAnim === input.spawnAnim,",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-command.test.ts",
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Names gallery.fire.still on every frame of the fire moment, although the recipe captures only tick 10: the issue's near-miss that must not show a recipe.",
+  "killedBy": [
+    "matchingCaptureStill (issue #731) names none for a selection one field away -- population: every compared field",
+    "the gallery workbench offers the command line for its selection (issue #731) names the registered capture recipe on an exact match, and not one frame away"
+  ]
+}

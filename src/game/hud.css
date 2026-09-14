@@ -1875,10 +1875,32 @@
   resize: none;
 }
 
+/* The command line for the same selection, and a still of the frame (issue #731). */
+.hud-gallery-commandrow,
+.hud-gallery-stillrow {
+  display: flex;
+  align-items: center;
+  gap: var(--hud-space-2);
+}
+
+.hud-gallery-command {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+  resize: none;
+}
+
+.hud-gallery-note {
+  margin: 0;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
 /* These set their own display, which would otherwise override the `hidden` attribute the
    body toggles on them. */
 .hud-gallery-problems[hidden],
-.hud-gallery-linkrow[hidden] {
+.hud-gallery-linkrow[hidden],
+.hud-gallery-stillrow[hidden] {
   display: none;
 }
 
