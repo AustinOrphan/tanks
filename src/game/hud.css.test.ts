@@ -837,21 +837,27 @@ describe('hud.css is syntactically whole', () => {
     // comment this replaces named six scrollers, and there are eight -- `.hud-devcfg` and
     // `.hud-controller-rows` arrived after it was written, and `> 3` could not notice.
     //
-    // EIGHT is also every `overflow-y: auto` rule in hud.css, counted with
-    // `grep -nE 'overflow(-y)?: *auto' src/game/hud.css`: .hud-settings, .hud-about,
-    // .hud-devtools, .hud-devcfg, .hud-selftest, .hud-achievement-list,
-    // .hud-controller-rows, .hud-versus-setup. That equality is what lets this guard claim
-    // no scrolling PANE centres its axis rather than only the ones the fixture happens to
-    // build -- and if a ninth rule is added to a surface `mountEveryButton` does not mount,
-    // the two populations part and this comment is the thing that has gone stale.
+    // EIGHT was every `overflow-y: auto` rule in hud.css until issue #686 added a ninth that
+    // covers four panes at once, counted with `grep -nE 'overflow(-y)?: *auto' src/game/hud.css`:
+    // .hud-settings, .hud-about, .hud-devtools, .hud-devcfg, .hud-selftest,
+    // .hud-achievement-list, .hud-controller-rows, .hud-versus-setup, and the shared
+    // `.hud-panel, .hud-stats, .hud-customize, .hud-achievements` rule -- twelve panes in
+    // nine rules. That equality is what lets this guard claim no scrolling PANE centres its
+    // axis rather than only the ones the fixture happens to build -- and if another rule is
+    // added to a surface `mountEveryButton` does not mount, the two populations part and this
+    // comment is the thing that has gone stale.
     expect([...new Set(scrollers.map((el) => el.className.split(' ')[0]))].sort()).toEqual([
       'hud-about',
       'hud-achievement-list',
+      'hud-achievements',
       'hud-controller-rows',
+      'hud-customize',
       'hud-devcfg',
       'hud-devtools',
+      'hud-panel',
       'hud-selftest',
       'hud-settings',
+      'hud-stats',
       'hud-versus-setup',
     ]);
     const centred = scrollers
