@@ -623,6 +623,7 @@ describe('the exports (issue #254)', () => {
         saveText: () => {
           throw new Error('blocked');
         },
+        saveCanvas: () => Promise.resolve(),
       },
     });
     hud!.setDiagnosticsSource(() => SESSION);
