@@ -5,6 +5,7 @@ import { createEntityViews, BULLET_Y } from '../../src/render/entities';
 import type { MineWarnStyle } from '../../src/render/mine-warning';
 import type { IdentityMarkerStyle } from '../../src/presentation/identity-marker';
 import { createMineDebug } from '../../src/render/minedebug';
+import { createShellTrailSystem } from '../../src/render/shell-trail';
 import {
   DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
 } from '../../src/sim/constants';
@@ -249,6 +250,50 @@ export const ELEMENTS: Record<string, ElementDef> = {
       }
     },
   },
+  /**
+   * Every remaining-bounce state a shipped shell can be in, for two owners at once (issue #688).
+   *
+   * Rows are bounces left -- 2, 1, 0 from back to front -- and columns are the two owners, so
+   * the bounce channel and the identity hue can be read independently in one still. Two player
+   * tanks are posed because the shell tint only applies when identity does (two or more player
+   * tanks); with one, every shell is untinted brass and the "hue unchanged" half of the
+   * question could not be asked.
+   *
+   * The zero row holds the two ways a shell gets there: slot 1's is a FRESH fast shell (budget
+   * 0), slot 2's a normal shell that has already spent its one bounce. They are mechanically
+   * the same state -- the next wall stops both -- and a posed pair is the direct way to show
+   * the treatment draws them alike. Every shell flies +x at the normal speed: a still has no
+   * motion, and the trail reads only a shell's heading and `bouncesLeft`.
+   */
+  shelltrail: {
+    width: 6.0, frames: 1, focusY: BULLET_Y,
+    place: (w, x) => {
+      const owners: number[] = [];
+      for (let slot = 0; slot < 2; slot++) {
+        const id = 1 + w.tanks.length;
+        owners.push(id);
+        w.tanks.push({
+          id, kind: 'player', controlledBy: slot,
+          pos: { x: x - 2.4, y: -0.6 + slot * 1.2 }, bodyAngle: 0, turretAngle: 0, alive: true,
+          desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+          aiState: 'idle', aiTimer: 0,
+        });
+      }
+      const rows: { bouncesLeft: number; types: ['normal' | 'fast' | 'ricochet', 'normal' | 'fast' | 'ricochet'] }[] = [
+        { bouncesLeft: 2, types: ['ricochet', 'ricochet'] },
+        { bouncesLeft: 1, types: ['normal', 'normal'] },
+        { bouncesLeft: 0, types: ['fast', 'normal'] },
+      ];
+      rows.forEach((row, r) => {
+        for (let c = 0; c < 2; c++) {
+          w.bullets.push({
+            id: 100 + w.bullets.length, ownerId: owners[c], type: row.types[c], bouncesLeft: row.bouncesLeft,
+            alive: true, pos: { x: x + 0.2 + c * 1.9, y: -0.9 + r * 0.9 }, vel: { x: NORMAL_SPEED, y: 0 },
+          });
+        }
+      });
+    },
+  },
   blast: {
     width: 5.4, frames: BLAST_LIFE, focusY: 0.6,
     place: (w, x, age) => {
@@ -367,6 +412,8 @@ export interface GalleryOptions {
    */
   mineWarn?: MineWarnStyle | null;
   identityMarker?: IdentityMarkerStyle | null;
+  /** Experimental shell bounce-trail (issue #688); absent = none, the shipped render. */
+  shellTrail?: import('../../src/presentation/shell-trail').ShellTrailStyle | null;
   /**
    * The resolved motion policy (issue #651). Absent means the shipped default, full motion,
    * on the same contract as the two above.
@@ -455,6 +502,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
     views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null, 0, opts.spawnAnim);
   }
   const debug = createMineDebug(scene, { reach: opts.reach, timer: opts.timer });
+  const shellTrail = opts.shellTrail === 'segments' ? createShellTrailSystem(scene) : null;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
 
@@ -481,6 +529,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
     clock = at;
     // prev/curr one tick apart, so interpolated quantities animate rather than step.
     views.sync(compose(opts.elements, age - 1).world, compose(opts.elements, age).world, alpha, dt);
+    shellTrail?.sync(compose(opts.elements, age - 1).world, compose(opts.elements, age).world, alpha);
     debug.sync(compose(opts.elements, age).world);
     renderer.render(scene, cam);
   }
@@ -490,6 +539,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   function dispose(): void {
     views.dispose();
     debug.dispose();
+    shellTrail?.dispose();
     renderer.dispose();
   }
   return { draw, frames: opts.frames ?? layout.frames, dispose };

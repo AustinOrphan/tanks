@@ -21,6 +21,9 @@ import {
   VERSUS_ACTION_LAYOUTS, isVersusActionLayout, type VersusActionLayout,
 } from '../presentation/versus-actions';
 import {
+  SHELL_TRAIL_STYLES, isShellTrailStyle, type ShellTrailStyle,
+} from '../presentation/shell-trail';
+import {
   IDENTITY_MARKER_STYLES,
   isIdentityMarkerStyle,
   type IdentityMarkerStyle,
@@ -381,6 +384,13 @@ export interface DevFlags {
    */
   identityMarker: IdentityMarkerStyle | null;
   /**
+   * Which experimental shell BOUNCE-TRAIL to draw (issue #688). `null` draws none, which is
+   * the shipped render: today only the ricochet sound says how many bounces a shell has left.
+   * `segments` puts one more neutral dash behind each shell than its remaining bounces. An
+   * experiment for #632's adopt / revise / reject decision; see presentation/shell-trail.ts.
+   */
+  shellTrail: ShellTrailStyle | null;
+  /**
    * Which experimental ARRIVAL/DESTRUCTION language to speak (issue #230). `null` keeps the
    * shipped pair, where a spawn entrance and a death pulse both expand a ring and are, in
    * the issue's words, "hard to tell apart at normal speed". `opposed` converges the
@@ -483,6 +493,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   backdrop: null,
   mineWarn: null,
   identityMarker: null,
+  shellTrail: null,
   arrival: null,
   versusActions: null,
   aiPerception: null,
@@ -635,6 +646,13 @@ function asIdentityMarker(params: URLSearchParams): IdentityMarkerStyle | null {
   return isIdentityMarkerStyle(raw) ? raw : null;
 }
 
+/** One of the named shell bounce-trail treatments, or null when absent or unrecognised. */
+function asShellTrail(params: URLSearchParams): ShellTrailStyle | null {
+  const raw = params.get('shellTrail');
+  if (raw === null) return null;
+  return isShellTrailStyle(raw) ? raw : null;
+}
+
 /** A positive integer flag, or null when absent, empty, or not one. */
 function asSeed(params: URLSearchParams, name: string): number | null {
   const raw = params.get(name);
@@ -773,6 +791,7 @@ export function parseDevFlags(search: string): DevFlags {
     backdrop: asBackdrop(params),
     mineWarn: asMineWarn(params),
     identityMarker: asIdentityMarker(params),
+    shellTrail: asShellTrail(params),
     arrival: asArrival(params),
     versusActions: asVersusActions(params),
   };
@@ -1168,6 +1187,14 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Speaks an experimental arrival/destruction language (issue #230). The shipped pair '
       + 'both expand a ring and read alike at speed; \'opposed\' converges the spawn '
       + 'entrance onto the tank and throws a fat, hard-attacked band outward on death.',
+  },
+  shellTrail: {
+    kind: 'valued',
+    values: [...SHELL_TRAIL_STYLES],
+    description:
+      'Draws an experimental shell bounce-trail (issue #688). \'segments\' puts a row of '
+      + 'neutral dashes behind each shell, one more than the ricochets it has left, so a '
+      + 'shell on its last flight still shows one. No owner hue; the shipped game shows none.',
   },
   identityMarker: {
     kind: 'valued',

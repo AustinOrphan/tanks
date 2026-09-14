@@ -13,6 +13,8 @@ import type { ArrivalLanguage } from '../presentation/arrival-language';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
+import { createShellTrailSystem, type ShellTrailSystem } from './shell-trail';
+import type { ShellTrailStyle } from '../presentation/shell-trail';
 import { createAimRay, type AimRay } from './aimray';
 import type { SkinId } from '../presentation/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
@@ -90,6 +92,9 @@ export interface RendererOptions {
   /** Experimental arrival/destruction language (`arrival` dev flag, issue #230); absent =
    *  the shipped pair, which both expand a ring. */
   readonly arrival?: ArrivalLanguage | null;
+  /** Experimental shell bounce-trail (`shellTrail` dev flag, issue #688); absent = none
+   *  drawn, which is the shipped render. */
+  readonly shellTrail?: ShellTrailStyle | null;
   /** The paint shop's saved hull colour, applied from the first frame. */
   readonly playerColor?: string;
   /** The paint shop's saved skin, applied from the first frame. */
@@ -162,6 +167,12 @@ export function createRenderer(
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene, options.arrival === 'opposed');
   const treadTrails: TreadTrailSystem = createTreadTrailSystem(ctx.scene);
+  // Built only when the flag names it, like the blocked-fire arms below: without it there is
+  // no mesh in the scene and no per-frame sync, so the shipped render is untouched. It is not
+  // in the setReducedMotion fan-out because it has no motion of its own to reduce -- the
+  // dashes are placed from shell state each frame with no fade or animation.
+  const shellTrail: ShellTrailSystem | null =
+    options.shellTrail === 'segments' ? createShellTrailSystem(ctx.scene) : null;
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
   const mineDebug: MineDebug | null =
     options.mineReach || options.mineTimer
@@ -209,6 +220,7 @@ export function createRenderer(
     dt: number,
   ): void {
     entities.sync(prev, curr, alpha, dt);
+    shellTrail?.sync(prev, curr, alpha);
     aimRay?.sync(curr);
     mineDebug?.sync(curr);
     aiContact?.sync(curr);
@@ -291,6 +303,7 @@ export function createRenderer(
     barrelRecoil.dispose();
     muzzleSmoke?.dispose();
     blockedFirePips?.dispose();
+    shellTrail?.dispose();
     entities.dispose();
     particles.dispose();
     deathPulse.dispose();

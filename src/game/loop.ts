@@ -165,6 +165,7 @@ export interface GameDeps {
       mineTimer?: boolean;
       mineWarn?: import('../render/mine-warning').MineWarnStyle | null;
       identityMarker?: import('../presentation/identity-marker').IdentityMarkerStyle | null;
+      shellTrail?: import('../presentation/shell-trail').ShellTrailStyle | null;
       arrival?: import('../presentation/arrival-language').ArrivalLanguage | null;
       playerColor?: string;
       playerSkin?: SkinId;
@@ -1871,6 +1872,7 @@ export function startGameWith(
     mineTimer: deps.devFlags.mineTimer,
     mineWarn: deps.devFlags.mineWarn,
     identityMarker: deps.devFlags.identityMarker,
+    shellTrail: deps.devFlags.shellTrail,
     arrival: deps.devFlags.arrival,
     // The paint shop's saved colour, skin and accent, applied from the first frame.
     playerColor: deps.customization.hexFor(deps.customization.hull()),
