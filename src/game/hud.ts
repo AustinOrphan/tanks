@@ -3620,22 +3620,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // Locked entries keep their criteria visible: the list doubles as the
       // to-do, and later as the place unlock gating is explained.
       desc.textContent = a.description;
-      // EARNED STATE, IN WORDS (issue #629). It lived only in `--earned`, which is a
-      // class: the row read "Name. Description." whether or not it had been earned, so
-      // the single fact this whole pane exists to report was the one thing a screen
-      // reader could not get. A text node rather than `aria-label` on the row, because a
-      // `listitem` is announced from its CONTENTS in browse mode and a label on it is
-      // unreliable; `.ui-sr-only` keeps it out of the visual design.
+      // EARNED STATE, IN WORDS, ON SCREEN (issues #629 and #630). #629 put the state in a
+      // text node, because it lived only in `--earned` and a screen reader announced an
+      // earned row and a locked row identically; a text node rather than `aria-label`,
+      // because a `listitem` is announced from its CONTENTS in browse mode. That node was
+      // `.ui-sr-only`, and on screen the difference stayed `opacity: 0.45` plus a gold
+      // border -- a hue and a dimming, which forced colours and a greyscale screenshot
+      // both flatten.
       //
-      // THE VISUAL HALF IS NOT THIS ISSUE'S. #630 owns making earned-vs-locked survive
-      // without colour on screen (today it is `opacity: 0.45` plus a border hue). When
-      // that lands it should REPLACE this span with whatever visible marker it chooses,
-      // not sit beside it -- two announcements of the same fact is the predictable way
-      // these two fixes collide.
+      // #630 makes the SAME node visible rather than adding a second marker beside it, as
+      // #629's comment here asked: one word, read once by a screen reader and seen once by
+      // everyone else. It sits on the label's line, so the row still reads name first.
+      const head = document.createElement('span');
+      head.className = 'hud-achievement-head';
       const state = document.createElement('span');
-      state.className = 'ui-sr-only';
-      state.textContent = got ? 'Earned. ' : 'Locked. ';
-      row.append(state, name, desc);
+      state.className = got ? 'hud-achievement-state hud-achievement-state--earned' : 'hud-achievement-state';
+      state.textContent = got ? 'Earned' : 'Locked';
+      head.append(name, state);
+      row.append(head, desc);
       achListEl.appendChild(row);
     }
     achCountEl.textContent = `${earnedIds.size} of ${ACHIEVEMENTS.length} earned`;

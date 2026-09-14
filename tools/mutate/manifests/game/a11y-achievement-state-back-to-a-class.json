@@ -1,7 +1,7 @@
 {
   "id": "a11y-achievement-state-back-to-a-class",
   "file": "src/game/hud.ts",
-  "find": "      state.textContent = got ? 'Earned. ' : 'Locked. ';",
+  "find": "      state.textContent = got ? 'Earned' : 'Locked';",
   "replace": "      state.textContent = '';",
   "expect": "killed",
   "expectFailures": 1,

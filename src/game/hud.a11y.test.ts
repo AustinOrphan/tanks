@@ -209,9 +209,36 @@ describe('HUD achievement list (issue #629)', () => {
     const locked = rows.find((r) => (r as HTMLElement).dataset.achievement !== first.id)!;
     expect(earned.textContent).toMatch(/Earned/);
     expect(locked.textContent).toMatch(/Locked/);
-    // The state text must not be visible text a sighted reader also sees twice -- #630
-    // owns the visible marker, and two of them is the predictable collision.
-    expect(earned.querySelector('.ui-sr-only')?.textContent?.trim()).toBe('Earned.');
+    // ONE state word per row (issue #630 made #629's node visible instead of adding a
+    // second marker). Negative control: keeping a `.ui-sr-only` copy beside the visible word
+    // announces the state twice, and this count reads 2.
+    expect(earned.textContent!.match(/Earned/g)).toHaveLength(1);
+    expect(locked.textContent!.match(/Locked/g)).toHaveLength(1);
+  });
+
+  it('shows earned or locked as a visible word, not only a dimming and a border hue (issue #630)', () => {
+    // Negative control: rendering the state word `.ui-sr-only` again hides it from sight,
+    // leaving `opacity: 0.45` and a gold border as the only on-screen difference.
+    const { hud: h, root } = mount();
+    const first = ACHIEVEMENTS[0];
+    h.setAchievements(new Set([first.id]));
+    h.setState('main-menu');
+    (root.querySelector('.hud-records-open') as HTMLButtonElement).click();
+    (root.querySelector('.hud-records-tab-achievements') as HTMLButtonElement).click();
+
+    const rows = Array.from(root.querySelectorAll<HTMLElement>('.hud-achievement'));
+    const earned = rows.find((r) => r.dataset.achievement === first.id)!;
+    const locked = rows.find((r) => r.dataset.achievement !== first.id)!;
+    const stateOf = (row: HTMLElement): HTMLElement => row.querySelector('.hud-achievement-state') as HTMLElement;
+    expect(stateOf(earned).textContent).toBe('Earned');
+    expect(stateOf(locked).textContent).toBe('Locked');
+    for (const row of [earned, locked]) {
+      expect(stateOf(row).classList.contains('ui-sr-only')).toBe(false);
+      expect(stateOf(row).closest('.ui-sr-only')).toBeNull();
+    }
+    // The shape half: only the earned chip carries the filled modifier.
+    expect(stateOf(earned).classList.contains('hud-achievement-state--earned')).toBe(true);
+    expect(stateOf(locked).classList.contains('hud-achievement-state--earned')).toBe(false);
   });
 });
 

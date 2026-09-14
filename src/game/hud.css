@@ -2707,6 +2707,35 @@
   opacity: 0.8;
 }
 
+/*
+ * THE STATE WORD (issue #630). Earned and locked differ in WORDS and in SHAPE, so neither
+ * the gold border nor the 0.45 dimming above is the only thing carrying the fact:
+ * a locked chip is an outline, an earned one is filled, and both say which they are. The
+ * outline is a `border`, which forced colours repaints but keeps; the earned fill is a
+ * `background`, which forced colours drops -- so the word, not the fill, is the channel that
+ * has to survive, and it does.
+ */
+.hud-achievement-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--hud-space-2);
+}
+
+.hud-achievement-state {
+  font-size: 0.7em;
+  font-weight: var(--hud-weight-strong);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0 var(--hud-space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--hud-radius-sm);
+}
+
+.hud-achievement-state--earned {
+  background: rgba(255, 255, 255, 0.14);
+}
+
 /* ---- Unlock toasts -------------------------------------------------------------- */
 
 .hud-toasts {

@@ -625,6 +625,9 @@ describe('hud.css is syntactically whole', () => {
       // inside Records, so a rule for it would be dead.
       '.hud-achievements', '.hud-achievements--hidden',
       '.hud-achievement', '.hud-achievement--earned', '.hud-toasts', '.hud-toast',
+      // issue #630: the visible earned/locked word, its row with the label, and the filled
+      // earned chip
+      '.hud-achievement-head', '.hud-achievement-state', '.hud-achievement-state--earned',
       // controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
       // assignment.md): hidden rules, the row layout, the disconnected dimming, and the
       // per-candidate button's own size
