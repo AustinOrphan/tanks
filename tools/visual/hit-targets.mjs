@@ -22,11 +22,12 @@
  *
  * Input, one per screen state and viewport:
  *   { state, viewport, failed?: string,
- *     controls: [{ key, text, x, y, w, h, reachable }],
+ *     controls: [{ key, text, x, y, w, h, reachable, pinned }],
  *     overflow: { page: boolean } }
- * where x/y/w/h are CSS px from getBoundingClientRect, and `reachable` says the control's
- * bottom edge is within its scroll container's scrollHeight, or within the viewport when it
- * has none. The on-screen driving controls (`.hud-touch`) are not menu targets and are left
+ * where x/y/w/h are CSS px from getBoundingClientRect; `reachable` says the control's
+ * bottom edge is within its scroll container's scrollHeight (measured from the container's
+ * padding box), or within the viewport when it has none; and `pinned` names the sticky or
+ * fixed ancestor the control is drawn in, or is null. The on-screen driving controls (`.hud-touch`) are not menu targets and are left
  * out by the collector; they are sized by `--hud-control-touch`, 56 px.
  */
 
@@ -54,6 +55,10 @@ export function hitTargetFailures(run) {
     for (let j = i + 1; j < run.controls.length; j++) {
       const a = run.controls[i];
       const b = run.controls[j];
+      // A control in a sticky or fixed bar is DRAWN over the content scrolling beneath it --
+      // Versus Setup's Start and Back (issue #668) sit over the map cards by design -- and the
+      // bar owns every press where it paints. Only two controls on the same layer compete.
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) continue;
       const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
       const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
       if (ox > OVERLAP_EPSILON && oy > OVERLAP_EPSILON) {

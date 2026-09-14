@@ -11,7 +11,7 @@ import { HIT_FLOOR, hitTargetFailures } from './hit-targets.mjs';
  * toggle at 27 px tall, the versus player-count button at 39.4 px wide, and the tertiary
  * Start New Campaign at 157.9x19.
  */
-const control = (over: Partial<{ key: string; text: string; x: number; y: number; w: number; h: number; reachable: boolean }> = {}) => ({
+const control = (over: Partial<{ key: string; text: string; x: number; y: number; w: number; h: number; reachable: boolean; pinned: string }> = {}) => ({
   key: 'button.ui-btn.ui-btn--slab.hud-settings-back',
   text: 'Back',
   x: 100,
@@ -62,6 +62,17 @@ describe('menu hit-target verdict (issue #686)', () => {
     const touching = holding();
     touching.controls[1] = control({ key: 'button.ui-btn.hud-settings-mute', text: 'Mute (M)', y: 544 });
     expect(hitTargetFailures(touching), 'adjacent, not overlapping').toEqual([]);
+  });
+
+  it('does not fail scrolled content passing under a pinned action bar, but fails two pinned controls that overlap', () => {
+    // Measured at 320x568 on Versus Setup: a map card 29.8px under the sticky Start bar.
+    const card = control({ key: 'button.ui-btn.ui-selectable.hud-versus-map-card', text: 'Arena 3', x: 40, y: 480, w: 240, h: 80 });
+    const start = control({ key: 'button.ui-btn.ui-btn--primary.hud-versus-start', text: 'Start', x: 63, y: 530, w: 193, h: 47, pinned: 'hud-versus-actions' });
+    expect(hitTargetFailures({ ...holding(), controls: [card, start] })).toEqual([]);
+    const back = control({ key: 'button.ui-btn.ui-btn--slab.hud-versus-back', text: 'Back', x: 200, y: 530, pinned: 'hud-versus-actions' });
+    expect(hitTargetFailures({ ...holding(), controls: [card, start, back] })).toEqual([
+      'screen.settings 320x568: button.ui-btn.ui-btn--primary.hud-versus-start "Start" overlaps button.ui-btn.ui-btn--slab.hud-versus-back "Back"',
+    ]);
   });
 
   it('fails a control a player cannot scroll to', () => {

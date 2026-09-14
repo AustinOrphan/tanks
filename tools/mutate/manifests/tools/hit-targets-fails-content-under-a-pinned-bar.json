@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-fails-content-under-a-pinned-bar",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "      if (Boolean(a.pinned) !== Boolean(b.pinned)) continue;",
+  "replace": "      if (false) continue;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Judges a pinned control against the content scrolling beneath it. Versus Setup's Start and Back live in a sticky bar (issue #668) that is drawn over the map cards and stock buttons by design; measured on the tree before issue #686, that alone produced 54 overlap readings with no defect behind any of them. A gate that failed on them would be switched off, or would push a fix toward un-pinning Start, which #668 measured as 1.73 screens of scrolling on a phone.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) does not fail scrolled content passing under a pinned action bar, but fails two pinned controls that overlap"
+  ]
+}
