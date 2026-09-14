@@ -400,18 +400,17 @@ describe('queue reconciliation planning', () => {
     expect(result.changes).toEqual([]);
   });
 
-  it('finishes its own half-applied writes: a retained Now item sheds a stray priority label', () => {
-    // Promotion writes priority:now before it removes priority:next; if the removal fails the
-    // issue carries both. The next reconciliation must converge rather than report the
-    // duplicate forever.
-    const halfPromoted = issue(180, [...labelsFor(NOW_LABEL), NEXT_LABEL]);
-    const result = plan([halfPromoted]);
+  it('leaves a Now item that carries a second horizon alone, because a human may be mid-move', () => {
+    // Promotion writes priority:now before it removes priority:next, so an interrupted write
+    // leaves both -- but so does a human demoting by hand who adds priority:next first. One
+    // snapshot cannot tell them apart, and stripping the second label would leave the
+    // human's issue with no horizon. The audit's duplicate-priority error covers both.
+    const doubled = issue(180, [...labelsFor(NOW_LABEL), NEXT_LABEL]);
+    const result = plan([doubled]);
     expect(result.retained).toEqual([180]);
-    expect(result.changes).toEqual([
-      { issueNumber: 180, kind: 'repair', add: [], remove: [NEXT_LABEL], labels: halfPromoted.labels },
-    ]);
-    // Negative control: a single-label Now item gets no repair.
-    expect(plan([nowIssue(181)]).changes).toEqual([]);
+    expect(result.changes).toEqual([]);
+    expect(result.candidates).toEqual([]);
+    expect(auditOpenIssues([doubled]).errors.map((error) => error.code)).toEqual(['duplicate-priority']);
   });
 
   it('ignores closed issues and pull requests in the input', () => {
@@ -440,7 +439,7 @@ describe('queue reconciliation planning', () => {
       nextIssue(215, { human: 'human-required' }),
     ];
     const first = plan(issues);
-    expect(first.changes.map((change) => change.kind)).toEqual(['demote', 'repair', 'promote', 'promote']);
+    expect(first.changes.map((change) => change.kind)).toEqual(['demote', 'promote', 'promote']);
     const settled = applyPlan(issues, first);
     const second = plan(settled);
     expect(second.changes).toEqual([]);

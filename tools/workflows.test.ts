@@ -54,6 +54,8 @@
 //   delete the reconcile concurrency group        -> reconcile job assertion
 //   cancel-in-progress: true on reconcile         -> reconcile job assertion
 //   run reconcile on a merged PR's closed event   -> reconcile job assertion
+//   drop the `!` that negates the merged-PR clause -> reconcile job assertion
+//   `&&` -> `||` inside the merged-PR clause       -> reconcile job assertion
 //   pass a secrets.* token to reconcile           -> reconcile job assertion
 //   add ref: to any checkout                      -> pull_request_target safety assertion
 //   audit needs: [maintain] again / PR-gated audit -> audit wiring assertion
@@ -605,13 +607,19 @@ describe('issue backlog contract automation', () => {
 
   it('reconciles the Now queue after maintenance, serialized, with the workflow token only', () => {
     expect(reconcile).toContain('needs: [maintain]');
-    expect(reconcile).toMatch(/if: >-\n\s+always\(\) &&/);
     // A merged PR's queue effects all arrive through the issues.closed events GitHub fires
     // for its linked issues; reconciling on the PR event as well only races that run's
-    // label cleanup. An unmerged close (abandoned PR) frees the issue and does run.
-    expect(reconcile).toContain("github.event_name == 'pull_request_target'");
-    expect(reconcile).toContain("github.event.action == 'closed'");
-    expect(reconcile).toContain('github.event.pull_request.merged == true');
+    // label cleanup. An unmerged close (abandoned PR) frees the issue and does run. The
+    // condition is pinned as ONE exact block: checking its clauses separately let the
+    // negating `!` be dropped -- which turns "skip merged-PR closes" into "run ONLY on
+    // merged-PR closes" -- with every clause still present.
+    expect(reconcile).toContain([
+      '    if: >-',
+      '      always() &&',
+      "      !(github.event_name == 'pull_request_target' &&",
+      "        github.event.action == 'closed' &&",
+      '        github.event.pull_request.merged == true)',
+    ].join('\n'));
     expect(reconcile).toContain('group: issue-queue-reconcile-${{ github.repository }}');
     expect(reconcile).toContain('cancel-in-progress: false');
     expect(reconcile).toContain('timeout-minutes: 15');

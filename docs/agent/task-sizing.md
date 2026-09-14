@@ -123,10 +123,10 @@ pull request already implements is in progress, not queued. In-flight detection 
 own linkage: a `Closes #N` keyword or a Development-sidebar link, fork pull requests
 included). A branch without a pull request, or a pull request that merely mentions the
 issue, is not detected; nothing is inferred from titles. When a Now issue becomes in flight,
-reconciliation removes `priority:now`, restores `priority:next` so the issue keeps exactly
-one horizon, and refills the slot. The in-flight rule keeps it out of Now while the pull
-request is open; if the pull request closes unmerged it is a candidate again, and if its
-closing reference is edited away it can be re-promoted.
+reconciliation removes `priority:now`, adds `priority:next` if no other `priority:*` label
+remains so the issue keeps exactly one horizon, and refills the slot. The in-flight rule
+keeps it out of Now while the pull request is open; if the pull request closes unmerged it
+is a candidate again, and if its closing reference is edited away it can be re-promoted.
 
 **Eligibility.** A Next issue may enter Now automatically only when all of these hold: it is
 an open issue, not a pull request; it carries `priority:next` and `agent-ready`; it carries
@@ -152,9 +152,13 @@ flight (automatic demotion), or a human moves it. A Now item that loses `agent-r
 is an audit error that keeps its slot until a person resolves it; automation does not demote
 for those, because reconciliation runs on every label event and a human who adds
 `priority:now` and then `agent-ready` in two clicks must not have the first event bounce the
-issue back to Next. The audit also warns when Now is below capacity while eligible
-candidates exist. An over-full queue is likewise a human decision: automation promotes
-nothing into it and never demotes a valid item to make room.
+issue back to Next. For the same reason a Now item that carries a second `priority:*` label
+is left exactly as it is: it may be an interrupted promotion or a person half way through a
+hand demotion, and the audit's `duplicate-priority` error names it either way. The audit also
+warns when Now is below capacity while eligible candidates exist. An over-full queue is
+likewise a human decision: automation promotes nothing into it and never demotes a valid
+item to make room. Because a freed slot is refilled on the next event, swap by hand by
+adding the replacement to Now first and removing the outgoing item second.
 
 **Triggers.** Reconciliation runs on every issue event the workflow receives (opened,
 edited, deleted, transferred, reopened, labeled, unlabeled, closed), on pull requests being

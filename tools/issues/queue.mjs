@@ -20,7 +20,7 @@
  *
  * One label mutation. `labels` is the label set the plan was computed from, so the writer
  * can refuse to act on an issue that changed underneath it.
- * @typedef {{ issueNumber: number, kind: 'promote' | 'demote' | 'repair', add: string[], remove: string[], labels: string[] }} QueueChange
+ * @typedef {{ issueNumber: number, kind: 'promote' | 'demote', add: string[], remove: string[], labels: string[] }} QueueChange
  *
  * The per-candidate ranking keys. `undefined` means "could not be determined"; the ranker
  * then skips that criterion for every candidate rather than guessing a value.
@@ -208,14 +208,14 @@ export function planQueueReconciliation(inputIssues, { maxNow = MAX_NOW_ISSUES, 
       continue;
     }
 
+    // A retained item that also carries a second horizon is left exactly as it is. It may
+    // be a promotion whose priority:next removal failed, but it may equally be a human half
+    // way through a hand demotion (priority:next added, priority:now about to go); the two
+    // are indistinguishable from one snapshot, and stripping the second label would leave
+    // the human's issue with no horizon at all. The audit's duplicate-priority error names
+    // it either way.
     retained.push(number);
     if (reasons.length > 0) invalid.push({ number, reasons });
-    if (others.length > 0) {
-      // A promotion writes priority:now before it removes priority:next; if that removal
-      // failed, this finishes it. A human never puts two horizons on one issue on purpose
-      // (the audit rejects it), so this completes automation's own write, not a choice.
-      changes.push({ issueNumber: number, kind: 'repair', add: [], remove: others, labels });
-    }
   }
 
   const vacancies = Math.max(0, maxNow - retained.length);
@@ -343,11 +343,9 @@ export function renderQueuePlan(plan, { dryRun, applied = [], skipped = [] }) {
           .join(', ');
         const target = change.add.length > 0 ? ` to ${change.add.join(', ')}` : '';
         lines.push(`- #${change.issueNumber}: demote${target} — in flight through ${pulls}`);
-      } else if (change.kind === 'promote') {
+      } else {
         const candidate = plan.candidates.find((entry) => entry.number === change.issueNumber);
         lines.push(`- #${change.issueNumber}: promote (${candidate === undefined ? '' : describeKeys(candidate.keys)})`);
-      } else {
-        lines.push(`- #${change.issueNumber}: remove stray ${change.remove.join(', ')}`);
       }
     }
     lines.push('');

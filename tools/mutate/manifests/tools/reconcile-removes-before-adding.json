@@ -4,12 +4,12 @@
   "find": "    if (change.add.length > 0) {\n      await request(`/repos/${repo}/issues/${change.issueNumber}/labels`, {\n        method: 'POST',\n        body: { labels: change.add },\n      });\n    }\n    for (const label of change.remove) {\n      await request(`/repos/${repo}/issues/${change.issueNumber}/labels/${encodeURIComponent(label)}`, {\n        method: 'DELETE',\n        allowStatuses: [404],\n      });\n    }",
   "replace": "    for (const label of change.remove) {\n      await request(`/repos/${repo}/issues/${change.issueNumber}/labels/${encodeURIComponent(label)}`, {\n        method: 'DELETE',\n        allowStatuses: [404],\n      });\n    }\n    if (change.add.length > 0) {\n      await request(`/repos/${repo}/issues/${change.issueNumber}/labels`, {\n        method: 'POST',\n        body: { labels: change.add },\n      });\n    }",
   "expect": "killed",
-  "why": "Removal runs before addition, so an interrupted promotion leaves an issue with no priority label instead of two -- and an issue with no horizon is one the refill never sees again. The write-order test and the interrupted-promotion convergence test both fail.",
+  "why": "Removal runs before addition, so an interrupted promotion leaves an issue with no priority label instead of two -- and an issue with no horizon is one the refill never sees again. The write-order test fails on the call order; the interrupted-promotion test fails because the rate-limited DELETE now runs first and the issue never gains priority:now.",
   "tests": [
     "tools/issues/run.test.ts"
   ],
   "killedBy": [
     "queue plan application writes additions before removals so an interrupted write never leaves an issue without a horizon",
-    "reconcile command converges after an interrupted promotion instead of reporting the duplicate horizon forever"
+    "reconcile command leaves an interrupted promotion with two horizons, never none, and hands it to the audit"
   ]
 }

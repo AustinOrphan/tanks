@@ -197,9 +197,13 @@ promotes only into vacancies below `MAX_NOW_ISSUES`. It needs `GH_TOKEN`/`GITHUB
 candidates, so a run costs roughly a dozen reads plus two writes per change instead of the
 audit's ninety-odd; every write is preceded by a re-read of that issue and skipped if the
 issue closed or its labels moved since the plan was computed, and additions land before
-removals so an interrupted run leaves a duplicate horizon the next pass repairs, never an
-issue with no horizon. `--dry-run` prints the plan without writing; the plan is also
-appended to the Actions step summary. In the `Issue backlog contract` workflow the
+removals so an interrupted run leaves a duplicate horizon (an audit `duplicate-priority`
+error for a person to clear; automation never strips a second horizon because that state is
+indistinguishable from a hand demotion in progress), never an issue with no horizon.
+`--dry-run` prints the plan without writing; the plan is also appended to the Actions step
+summary. A `reconcile` run that dies on the token budget shows as a failed check on any
+pull request whose event started it; the check is informational, not required, and the next
+run reconciles the same state. In the `Issue backlog contract` workflow the
 `reconcile` job runs after `maintain` on every issue event, on `pull_request_target` opened,
 reopened, edited, and unmerged closed events (never checking out or executing pull-request
 content), on manual dispatch, and on the daily schedule; it and the `audit` job each carry a

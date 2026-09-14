@@ -711,23 +711,29 @@ describe('reconcile command', () => {
     expect(summaries[1]).toContain('No label changes planned.');
   });
 
-  it('converges after an interrupted promotion instead of reporting the duplicate horizon forever', async () => {
+  it('leaves an interrupted promotion with two horizons, never none, and hands it to the audit', async () => {
     const github = createFakeGitHub({
       issues: [{ number: 50, labels: readyNext }],
       // The first DELETE (priority:next, after priority:now was added) is rate limited.
       failDelete: (label, count) => label === 'priority:next' && count === 1,
     });
-    const run = () => main({ argv: ['reconcile', '--repo', 'AustinOrphan/tanks'], env, fetchImpl: github.fetchImpl, log: quiet });
+    const run = (mode: string) => main({ argv: [mode, '--repo', 'AustinOrphan/tanks'], env, fetchImpl: github.fetchImpl, log: quiet });
 
-    await expect(run()).rejects.toThrow('failed (403)');
+    await expect(run('reconcile')).rejects.toThrow('failed (403)');
+    // Additions land first, so the failure leaves the issue in Now with a stale Next label
+    // rather than with no horizon at all.
     expect(github.labelsOf(50)).toEqual([...readyNext, 'priority:now']);
 
+    // The next reconciliation does not guess which label a person meant: a human demoting by
+    // hand passes through the same two-label state. It writes nothing and the audit names it.
     github.writes.length = 0;
-    await expect(run()).resolves.toBe(0);
-    expect(github.writes.filter((write) => !write.endsWith('/graphql'))).toEqual([
-      'DELETE /repos/AustinOrphan/tanks/issues/50/labels/priority%3Anext',
-    ]);
-    expect(github.labelsOf(50)).toEqual([...readyNext.filter((l) => l !== 'priority:next'), 'priority:now']);
+    await expect(run('reconcile')).resolves.toBe(0);
+    expect(github.writes.filter((write) => !write.endsWith('/graphql'))).toEqual([]);
+    expect(github.labelsOf(50)).toEqual([...readyNext, 'priority:now']);
+    const reports: string[] = [];
+    await expect(main({ argv: ['audit', '--repo', 'AustinOrphan/tanks'], env, fetchImpl: github.fetchImpl, log: (r) => reports.push(r) }))
+      .resolves.toBe(1);
+    expect(reports.join('\n')).toContain('#50 `duplicate-priority`');
   });
 
   it('writes nothing when the pull-request read fails, rather than treating the failure as no PRs', async () => {
