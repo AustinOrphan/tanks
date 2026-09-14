@@ -1,0 +1,14 @@
+{
+  "id": "scrolling-panes-centre-into-the-clip",
+  "file": "src/game/hud.css",
+  "find": "  justify-content: safe center;",
+  "replace": "  justify-content: center;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Drops `safe` from the four newly scrolling panes, leaving plain `center` on an `overflow-y: auto` column -- the exact shape issue #642 removed from Settings and Developer Tools. The pane still scrolls, so it looks fixed, but its overflow is centred ABOVE the scroll origin where no scrollbar reaches: the top of an overflowing Records or Customize pane would be lost instead of the bottom.",
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ]
+}

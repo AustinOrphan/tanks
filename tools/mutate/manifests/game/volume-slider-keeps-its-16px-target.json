@@ -1,0 +1,14 @@
+{
+  "id": "volume-slider-keeps-its-16px-target",
+  "file": "src/game/hud.css",
+  "find": "thumb stay centred in it. */\n  height: var(--hud-control-min);",
+  "replace": "thumb stay centred in it. */",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Removes the volume slider's 44 px height. It is the one menu control that is not a `.ui-btn`, so the primitive's floor never reaches it: measured in Chromium before issue #686 it rendered 140x16, the smallest target in Settings, and a sweep over `.ui-btn` alone would report Settings as fixed with it still there.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps every menu control at the 44px touch floor (issue #686)"
+  ]
+}

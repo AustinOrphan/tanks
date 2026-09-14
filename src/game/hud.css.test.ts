@@ -892,6 +892,29 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
+  it('keeps every menu control at the 44px touch floor (issue #686)', () => {
+    // jsdom lays nothing out, so whether a control RENDERS at 44 px is measured in Chromium, by
+    // `tools/visual/hit-targets.mjs` over every player-facing surface. What this pins is the
+    // contract that measurement depends on, in the file an edit to it touches: take any of
+    // these declarations away and a control can render under the floor again with every
+    // other test here still green. Before the floor, 764 of 1016 control readings were under
+    // 44 px in that sweep.
+    const src = stripComments(css);
+    const rule = (sel: string): string => {
+      const at = src.search(new RegExp(`(^|\\n)${sel.replace(/[.]/g, '\\$&')} \\{`));
+      expect(at, `no ${sel} rule`).toBeGreaterThan(-1);
+      return src.slice(at, src.indexOf('}', at));
+    };
+    const btn = rule('.ui-btn');
+    expect(btn, 'the primitive no longer floors its height').toMatch(/min-height:\s*var\(--hud-control-min\);/);
+    expect(btn, 'the primitive no longer floors its width').toMatch(/min-width:\s*var\(--hud-control-min\);/);
+    // Without it the two <a class="ui-btn"> links put their padding ON TOP of the floor:
+    // measured 48 -> 56 px, a control grown past its design rather than raised to the floor.
+    expect(btn, 'the floor is no longer the outer size').toMatch(/box-sizing:\s*border-box;/);
+    // The one menu control that is not a `.ui-btn`, measured 140x16 before.
+    expect(rule('.hud-settings-volume')).toMatch(/height:\s*var\(--hud-control-min\);/);
+  });
+
   it('never lets a button fall through to browser default styling', () => {
     // `.hud-achievements-open` shipped with NO rule of its own -- only its `--hidden`
     // modifier -- so on the main menu it rendered as a stock grey browser button

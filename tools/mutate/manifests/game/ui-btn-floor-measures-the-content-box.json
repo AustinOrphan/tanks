@@ -1,0 +1,14 @@
+{
+  "id": "ui-btn-floor-measures-the-content-box",
+  "file": "src/game/hud.css",
+  "find": "  box-sizing: border-box;\n  pointer-events: auto;\n  cursor: pointer;",
+  "replace": "  pointer-events: auto;\n  cursor: pointer;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Takes `box-sizing: border-box` off the primitive. A <button> is border-box in Chromium anyway, so every button still measures exactly 44 px and the floor looks correct -- but the two `<a class=\"ui-btn\">` links in About & Legal are content-box, and their padding lands on top of the floor. The first Chromium sweep of issue #686 caught exactly that: those links grew from 48 px to 56 px, a control grown past its design rather than raised to the floor.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps every menu control at the 44px touch floor (issue #686)"
+  ]
+}
