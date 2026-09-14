@@ -2,7 +2,7 @@
   "id": "match-failed-capture-skips-the-retry-wait",
   "file": "tools/screens/states.mjs",
   "find": "      { waitVisible: '.hud-alert-retry' },\n",
-  "replace": "",
+  "replace": "      { waitVisible: '.hud-alert' },\n",
   "expect": "killed",
   "tests": [
     "tools/screens/states.test.ts"
