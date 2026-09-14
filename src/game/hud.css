@@ -1247,6 +1247,25 @@
   margin-top: 14px;
 }
 
+/*
+ * ONE WIDTH PER ROW (issue #706). `--hud-menu-col` is the row's widest visible button,
+ * measured by `menu-row-width.ts`, because CSS cannot say "as wide as the widest sibling" and
+ * still wrap. Before it, on the built bundle, each button was its label's width: Versus 89 and
+ * Practice 98; Customize 116, Records 100 and Settings 99 (CSS px, the same at 320, 390 and
+ * 1280 wide).
+ *
+ * THE ROWS STILL WRAP, and slab padding is unchanged. Measured before this change, the
+ * utilities row already folded onto two lines at 320x568, and a developer-mode fourth button
+ * (Developer Tools, 143) folded it at 390x844 as well. At equal widths the same folds hold,
+ * which is what keeps this from re-flowing the menu vertically.
+ *
+ * Unset until a visible row has been measured, when each button falls back to its own width.
+ */
+.hud-menu-play > .ui-btn,
+.hud-menu-utilities > .ui-btn {
+  width: var(--hud-menu-col, auto);
+}
+
 /* The footer is the quietest thing on the screen -- pushed away from the utilities and
    dimmed, so About & Legal is findable without competing with anything that plays. */
 .hud-menu-footer {

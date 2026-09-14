@@ -270,6 +270,7 @@ import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
+import { equalizeMenuRows } from './menu-row-width';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
@@ -2364,6 +2365,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const menuPlayRow = el.querySelector('.hud-menu-play') as HTMLElement;
   const menuUtilitiesRow = el.querySelector('.hud-menu-utilities') as HTMLElement;
   const menuFooterRow = el.querySelector('.hud-menu-footer') as HTMLElement;
+  // One width per row (issue #706), kept current by a ResizeObserver on every button in
+  // both rows -- see menu-row-width.ts for why that and not a call from setState.
+  const menuRowWidths = equalizeMenuRows([menuPlayRow, menuUtilitiesRow]);
   const recordsOpenBtn = el.querySelector('.hud-records-open') as HTMLButtonElement;
   const statsView = el.querySelector('.hud-stats') as HTMLElement;
   const statsTable = el.querySelector('.hud-stats-table') as HTMLElement;
@@ -7833,6 +7837,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // live timer pointing at elements this teardown is about to discard, which is the
       // exact leak issue #364's sixth criterion asks to be asserted rather than observed.
       transitions.dispose();
+      menuRowWidths.dispose(); // the row-width ResizeObserver
       disarmReset(); // a pending confirm timer must not outlive the HUD
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();
