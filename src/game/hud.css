@@ -3305,6 +3305,28 @@
   opacity: 0.45;
 }
 
+/*
+ * THE BROWSER BOUNDARY, said on the pane itself (issue #597). A controller the browser has
+ * not reported cannot be listed, and without this line a missing one looks like the game
+ * failing to detect it. Constant, not a warning: it describes the list, so it reads the same
+ * to a keyboard or touch player who never wanted a pad.
+ *
+ * The unsupported line is the other half: it names each pad the browser DOES report but
+ * Tanks cannot read, and it is the visible reason its disabled candidate points at. Visible
+ * rather than only `aria-describedby`, because roving focus skips a disabled button, so a
+ * controller player never lands on the control the attribute hangs from.
+ */
+.hud-controllers-help,
+.hud-controllers-unsupported {
+  max-width: 36ch;
+  margin: 0;
+  text-align: center;
+}
+
+.hud-controllers-unsupported--hidden {
+  display: none;
+}
+
 /* One button per candidate source (Keyboard / Bot / None / one per detected pad
  * index), same "one button per option" convention .hud-level-btn already uses. */
 .hud-controller-source-btn {

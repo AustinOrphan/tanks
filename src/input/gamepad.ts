@@ -1,6 +1,6 @@
 import type { InputState, Vec2 } from '../sim/types';
 import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
-import { STANDARD_PROFILE, classifyPad, profileFor } from './gamepad-profile';
+import { STANDARD_PROFILE, classifyPad, profileFor, type UnsupportedReason } from './gamepad-profile';
 
 /**
  * Gamepad API reader: `navigator.getGamepads()`, mapped to the same `InputState` shape
@@ -434,6 +434,17 @@ export function readNavigatorGamepads(): ArrayLike<GamepadLike | null | undefine
 export interface DetectedPad {
   readonly padIndex: number;
   readonly id: string;
+  /**
+   * Why Tanks will not read this pad, when it will not (issue #597). Absent for a pad the
+   * game reads.
+   *
+   * OPTIONAL rather than a required verdict, and the trade is deliberate: a required field
+   * would rewrite every supported-pad literal in the HUD and loop suites to say nothing new.
+   * Its one production producer is `readDetectedPads` below, which classifies every pad
+   * through `classifyPad` -- the same verdict `createGamepadReader` refuses to read with --
+   * and a test and a mutation entry pin that it does.
+   */
+  readonly unsupported?: UnsupportedReason;
 }
 
 /**
@@ -443,12 +454,19 @@ export interface DetectedPad {
  * player can assign a fresh pad to any slot. `getGamepads` injected for the same
  * testability reason every other function here takes it; `readNavigatorGamepads` above
  * is the one production caller.
+ *
+ * A pad the reader refuses is still LISTED (issue #597): it is present, and the panel has to
+ * say so rather than show a detection failure. It carries its reason instead, so the panel
+ * can present it as unsupported rather than as an ordinary choice.
  */
 export function readDetectedPads(getGamepads: GetGamepads): DetectedPad[] {
-  return readConnectedPads(getGamepads).map(({ padIndex, pad }) => ({
-    padIndex,
-    id: pad.id ?? '',
-  }));
+  return readConnectedPads(getGamepads).map(({ padIndex, pad }) => {
+    const detected = { padIndex, id: pad.id ?? '' };
+    const support = classifyPad(pad);
+    return support.kind === 'unknown' || support.kind === 'insufficient'
+      ? { ...detected, unsupported: support.reason }
+      : detected;
+  });
 }
 
 /** One connected pad paired with the `getGamepads()` index it was found at. */

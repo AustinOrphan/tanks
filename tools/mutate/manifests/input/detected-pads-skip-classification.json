@@ -1,0 +1,14 @@
+{
+  "id": "detected-pads-skip-classification",
+  "file": "src/input/gamepad.ts",
+  "find": "    return support.kind === 'unknown' || support.kind === 'insufficient'\n",
+  "replace": "    return false && (support.kind === 'unknown' || support.kind === 'insufficient')\n",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad.test.ts"
+  ],
+  "why": "Issue #597. `readDetectedPads` lists every pad without its verdict, so a pad the reader refuses reaches the assignment panel looking readable. The HUD suites write their pads by hand and cannot see this; the producer case is the only thing that can. Killed by the case that lists an unmapped pad with its reason.",
+  "killedBy": [
+    "readDetectedPads: the controller assignment panel's live list lists a pad Tanks will not read WITH its reason, and leaves a readable pad unmarked (issue #597)"
+  ]
+}
