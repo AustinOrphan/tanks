@@ -82,6 +82,9 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   // the player looks at, and none of them changes a rule of the match being played.
   topbar: 'Rendering',
   versusActions: 'Rendering',
+  // The workbench shows render subjects, so it sits with the render treatments it is used
+  // to review, not under Diagnostics, which reports on a live session.
+  gallery: 'Rendering',
 
   mineTrigger: 'Mines',
   mineReach: 'Mines',

@@ -646,6 +646,23 @@ describe('FLAG_REGISTRY: the "programmatically kept up to date" guarantee', () =
   });
 });
 
+describe('parseDevFlags: gallery (issue #730)', () => {
+  it('keeps the value it is given, trimmed, so the workbench can report what it refuses', () => {
+    // Deliberately not reject-to-null: a part no registry knows must reach the pane's problem
+    // list, and a parser that dropped it here would leave the pane nothing to report.
+    expect(parseDevFlags('?dev=1&gallery=scene:fire,view:low').gallery).toBe('scene:fire,view:low');
+    expect(parseDevFlags('?dev=1&gallery=view:sideways').gallery).toBe('view:sideways');
+    expect(parseDevFlags('?dev=1&gallery=%20elements:tank%20').gallery).toBe('elements:tank');
+  });
+
+  it('is null when absent, empty, or without the developer gate', () => {
+    expect(parseDevFlags('?dev=1').gallery).toBeNull();
+    expect(parseDevFlags('?dev=1&gallery=').gallery).toBeNull();
+    expect(parseDevFlags('?dev=1&gallery=%20%20').gallery).toBeNull();
+    expect(parseDevFlags('?gallery=scene:fire').gallery).toBeNull();
+  });
+});
+
 describe('PLAYTEST_BUNDLE: the single list the parser and the doc both read', () => {
   it('names exactly the four flags the playtest tests above observe', () => {
     expect([...PLAYTEST_BUNDLE.expandsTo].sort()).toEqual(
