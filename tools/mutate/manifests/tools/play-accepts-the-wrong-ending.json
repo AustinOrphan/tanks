@@ -1,0 +1,14 @@
+{
+  "id": "play-accepts-the-wrong-ending",
+  "file": "tools/screens/steps.mjs",
+  "find": "    if (expect !== undefined && sample.text !== expect.text) {\n",
+  "replace": "    if (false && expect !== undefined && sample.text !== expect.text) {\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/steps.test.ts"
+  ],
+  "why": "Issue #617. A `{ playUntil }` step stops at the first visible `.hud-action` whatever ending it belongs to. Mission Clear and Game Over both show one, so a campaign-over capture whose autoplay happened to win would photograph Mission Clear under the Game Over id and pass.",
+  "killedBy": [
+    "steps.mjs: advancePlay, the verdict of a played step fails when the game ends on the WRONG screen, quoting what it says instead"
+  ]
+}

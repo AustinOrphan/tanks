@@ -70,9 +70,19 @@ export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked', 
  *                         passed, the menu is up, and the renderer fails when the player
  *                         starts a match -- which is a different screen from a boot
  *                         failure and says so ("That match could not start.").
+ *  - `{ playUntil }`   -- let the game PLAY until a selector is visible, within a stated
+ *                         budget of SIMULATED ticks (issue #617):
+ *                         `{ playUntil: { visible, maxTicks } }`. This is how an ending is
+ *                         reached by winning or losing rather than by `?outcome=`. The tick
+ *                         count is read from `__tanks.replay()`, so the state's query must
+ *                         carry `dev=1&replay=1`; it is summed across world rebuilds, since
+ *                         each level and each retry starts a new trace. Exceeding the budget
+ *                         fails naming the selector that never showed -- "the game did not
+ *                         end", not a selector timeout -- and so do a missing replay surface,
+ *                         a truncated trace, and a simulation that stops advancing.
  */
 export const STEP_KINDS = Object.freeze([
-  'click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl', 'fakeGamepads', 'scroll',
+  'click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl', 'fakeGamepads', 'scroll', 'playUntil',
 ]);
 
 /**
@@ -567,6 +577,48 @@ export const SCREEN_STATES = Object.freeze([
     storage: MID_CAMPAIGN_DEV,
     query: '?dev=1&outcome=campaign-over',
     steps: [...PAST_SPLASH, { click: '.hud-continue' }, { waitVisible: '.hud-action' }],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
+  }),
+  // ---- The same two endings, reached by PLAYING (issue #617) -------------------------
+  //
+  // The pushed-outcome states above prove the SCREEN. These prove the PATH: the game is
+  // played from Continue until the ending's panel shows, with `autoplay` driving the player
+  // and `seed` pinning both the world and, since #617, the autoplay controller -- so the
+  // same match plays every run. A game that stopped being winnable, or stopped ending a run
+  // out of lives, fails these and not the pushed ones.
+  //
+  // `expect` checks WHICH ending was reached: both panels show `.hud-action`, so without it
+  // an autoplay that won would photograph Mission Clear under the Game Over id and pass.
+  //
+  // Campaign complete is deliberately NOT played: it would chain five levels of this, the
+  // most expensive capture in the repository for the least conditional screen (owner ruling
+  // on #617). Its pushed-outcome state stays the evidence.
+  state({
+    id: 'screen.ending.mission-clear.played',
+    title: 'Mission clear, played',
+    description: 'Level 3 won by autoplay from Continue, invincible so the win cannot turn into a loss: the path to Mission Clear, not only its panel.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1&replay=1&autoplay=1&invincible=1&seed=7',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-continue' },
+      // Budget: twice the 1035 simulated ticks this match took on each of 2 runs (issue #617).
+      { playUntil: { visible: '.hud-action', maxTicks: 2070, expect: { selector: '.hud-title', text: 'Level 3 cleared!' } } },
+    ],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
+  }),
+  state({
+    id: 'screen.ending.campaign-over.played',
+    title: 'Campaign over, played',
+    description: 'The run\'s last lives lost to level 3 by autoplay from Continue: the path to Game Over, not only its panel.',
+    storage: MID_CAMPAIGN_DEV,
+    query: '?dev=1&replay=1&autoplay=1&seed=7',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-continue' },
+      // Budget: twice the 2190 simulated ticks this match took on each of 2 runs (issue #617).
+      { playUntil: { visible: '.hud-action', maxTicks: 4380, expect: { selector: '.hud-title', text: 'Game Over' } } },
+    ],
     measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
   }),
   state({

@@ -116,10 +116,52 @@ classified as something more specific, which is the module working as designed. 
 would need a deliberate failure seam in `boot.ts`, which is a production change and its own
 decision. Stated here rather than left as a silently missing row.
 
-### The ending screens prove the panel, not the path to it
+### The ending screens: which captures prove the panel, and which prove the path
 
-The five `screen.ending.*` states are reached with `?dev=1&outcome=`, a development flag that
-ends the running session on its first simulated frame with a named ending (issue #591).
+| State | Reached by | Proves |
+|---|---|---|
+| `screen.ending.mission-clear` | `?dev=1&outcome=mission-clear` | the panel |
+| `screen.ending.campaign-over` | `?dev=1&outcome=campaign-over` | the panel |
+| `screen.ending.campaign-complete` | `?dev=1&outcome=campaign-complete` | the panel only; not played, see below |
+| `screen.ending.practice-cleared` | `?dev=1&outcome=practice-cleared` | the panel |
+| `screen.ending.practice-failed` | `?dev=1&outcome=practice-failed` | the panel |
+| `screen.ending.mission-clear.played` | playing level 3 with autoplay until it is won | the path, and the panel it arrives at |
+| `screen.ending.campaign-over.played` | playing level 3 with autoplay until the run is out of lives | the path, and the panel it arrives at |
+
+**The played pair (issue #617).** Each starts from Continue on the same mid-campaign save and
+runs `{ playUntil }` until `.hud-action` shows, then checks `.hud-title` says which ending it
+is. `?seed=7` pins the world and, since #617, the autoplay controller's own stream too, so the
+same match plays every run; mission-clear adds `invincible=1` so its win cannot become a loss.
+A game that stopped being winnable, or stopped ending a run out of lives, fails these and
+leaves the pushed-outcome states green.
+
+- **Their budget is simulated ticks, not wall-clock.** `playUntil` reads the tick count from
+  `__tanks.replay()` (hence `replay=1` in the query), sums it across world rebuilds, and fails
+  with "the game did not end" naming the selector when the budget is exceeded. A missing replay
+  surface, a truncated trace, a simulation that stops advancing for 15 s, and an ending with the
+  wrong title each fail with their own message.
+- **Their cost, measured on issue #617's branch** (software GL, 1280x800 at DPR 2, 2 runs
+  each): mission-clear took 1035 simulated ticks both times, in 58.7 s and 59.5 s of
+  wall-clock; campaign-over took 2190 ticks both times, in 125.4 s and 126.0 s. The identical
+  tick counts are the seeded autoplay repeating its match. Each budget is twice its measured
+  count (2070 and 4380), so a balance change that lengthens the match has room before it fails,
+  and one that stops the game ending fails by name. The budget is ticks; the recipe's 300 s
+  `timeoutMs` only has to cover it at this machine's rate, about 17.5 ticks per second of
+  wall-clock, which puts 4380 ticks near 250 s.
+- **Each capture reports its own cost.** The runner writes every `playUntil` step's `ticks`
+  and `wallMs` into `producer.json` under `played`, so a later run shows whether the price has
+  moved.
+- **Not in the required `visual` check's hit sweep.** A played ending is tens of seconds of
+  software-GL play, and its panel is the one the pushed-outcome state of the same ending is
+  already swept through (`tools/visual/hit-sweep.mjs`).
+- **Campaign complete is not played.** It would chain five levels of this, the most expensive
+  capture here for the least conditional of the endings; the owner ruling on #617 keeps it on
+  the pushed-outcome path unless later evidence shows the played path earns that cost.
+
+#### The pushed-outcome states
+
+The five pushed `screen.ending.*` states are reached with `?dev=1&outcome=`, a development flag
+that ends the running session on its first simulated frame with a named ending (issue #591).
 
 **What that buys.** The flag enters the real outcome phase through the same state-machine
 transition a played ending uses, so the real `OUTCOME_PANEL` entry renders through the real

@@ -1,0 +1,14 @@
+{
+  "id": "play-budget-never-enforced",
+  "file": "tools/screens/steps.mjs",
+  "find": "  if (total > maxTicks) {\n",
+  "replace": "  if (false && total > maxTicks) {\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/steps.test.ts"
+  ],
+  "why": "Issue #617. The stated tick budget is never checked, so a game that stopped ending plays on until the recipe's wall-clock timeout kills the runner, and the failure reads as a slow or broken capture instead of \"the game did not end\". The acceptance criterion is exactly that exceeding the budget fails with a message naming the unmet predicate.",
+  "killedBy": [
+    "steps.mjs: advancePlay, the verdict of a played step fails an over-budget run as \"the game did not end\", naming the selector, counted across worlds"
+  ]
+}

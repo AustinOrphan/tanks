@@ -1,0 +1,15 @@
+{
+  "id": "play-budget-forgets-the-previous-world",
+  "file": "tools/screens/steps.mjs",
+  "find": "  const banked = sample.ticks < state.last ? state.total + state.last : state.total;\n",
+  "replace": "  const banked = state.total;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/steps.test.ts"
+  ],
+  "why": "Issue #617. A `{ playUntil }` step counts only the CURRENT world's ticks, because the replay trace restarts at 0 on every new level and every retry after a lost life. A campaign-over capture then plays several worlds while claiming to be inside its budget, and the recorded cost under-reports what the capture actually spent.",
+  "killedBy": [
+    "steps.mjs: advancePlay, the verdict of a played step sums ticks across a world rebuild, where the replay trace restarts at 0",
+    "steps.mjs: advancePlay, the verdict of a played step fails an over-budget run as \"the game did not end\", naming the selector, counted across worlds"
+  ]
+}

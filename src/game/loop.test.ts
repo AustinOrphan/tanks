@@ -6499,16 +6499,18 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
     h.handle.dispose();
   });
 
-  it('autoplay actually DRIVES slot 0 when both claim it, not the bot: proven through the same wallMs-vs-seed signal the reproducibility test below uses', () => {
-    // autoplay's stream is wallMs()-seeded; a bot's is world.seed-seeded. With `seed`
-    // pinned identically across two sessions but wallMs DIFFERENT, slot 0's trajectory
-    // must DIVERGE if autoplay is really the one driving it -- and must NOT diverge if
-    // the bot branch (checked second) were somehow winning instead. `samples===0`
-    // alone (the test above) cannot tell the two branches apart, since neither ever
-    // calls the real controller; this one can, because only one of the two candidate
-    // drivers is sensitive to wallMs at all.
-    function slot0Trajectory(wallMs: number): Array<{ pos: Vec2; turretAngle: number }> {
-      const h = boot(makeDeps({ devFlags: { seed: 42, bots: 1, autoplay: true }, wallMs }));
+  it('autoplay actually DRIVES slot 0 when both claim it, not the bot: switching autoplay off at the same seed changes slot 0', () => {
+    // `samples===0` alone (the test above) cannot tell the two branches apart, since neither
+    // ever calls the real controller. This can: with the seed AND the clock identical, the
+    // only difference between the two sessions is the autoplay flag. If autoplay drives slot
+    // 0 it draws from its own stream (`seed + 1`) and the trajectory differs from the bot's
+    // (`seed - BOT_SEED_SPACING + 0`); if the bot branch (checked second) were winning, both
+    // sessions would run the same bot and agree exactly.
+    //
+    // This used to vary the CLOCK instead, relying on autoplay being clock-seeded. Issue
+    // #617 seeds it from a pinned `seed`, so that signal is gone by design.
+    function slot0Trajectory(autoplay: boolean): Array<{ pos: Vec2; turretAngle: number }> {
+      const h = boot(makeDeps({ devFlags: { seed: 42, bots: 1, autoplay }, wallMs: 111 }));
       h.setState('playing');
       const out: Array<{ pos: Vec2; turretAngle: number }> = [];
       // MANY SMALL steps, not a few big jumps: a single fireFrame call is clamped to
@@ -6528,16 +6530,41 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
       h.handle.dispose();
       return out;
     }
-    const a = slot0Trajectory(111);
-    const b = slot0Trajectory(987654321);
-    expect(a).not.toEqual(b);
+    expect(slot0Trajectory(true)).not.toEqual(slot0Trajectory(false));
+  });
+
+  it('autoplay under a pinned ?seed repeats its match: same seed, DIFFERENT clock, same slot-0 trajectory (issue #617)', () => {
+    // What makes a played capture able to state a tick budget and repeat its stats line.
+    // Negative control: seeding autoplay from `wallMs()` even when a seed is pinned -- the
+    // behaviour before #617 -- makes these two sessions drive the player differently.
+    function trajectory(wallMs: number): Array<{ pos: Vec2; turretAngle: number }> {
+      const h = boot(makeDeps({ devFlags: { seed: 42, autoplay: true }, wallMs }));
+      h.setState('playing');
+      const out: Array<{ pos: Vec2; turretAngle: number }> = [];
+      // Same stepping as the case above: many small frames, past the countdown.
+      for (let i = 1; i <= 80; i++) {
+        h.fireFrame(i * 100);
+        if (i % 10 === 0) {
+          const p0 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.kind === 'player')!;
+          out.push({ pos: { ...p0.pos }, turretAngle: p0.turretAngle });
+        }
+      }
+      h.handle.dispose();
+      return out;
+    }
+    const a = trajectory(111);
+    expect(a).toEqual(trajectory(987654321));
+    // Not vacuous: autoplay moved the tank inside the window, so agreement is about a
+    // driven trajectory rather than two tanks that never left their spawn.
+    expect(a[0].pos).not.toEqual(a[a.length - 1].pos);
   });
 
   describe('reproducibility (mutation 3, red-first): the resolved WORLD SEED, never wallMs', () => {
     // A bot's whole reason to exist (owner directive 1: "simulate multiplayer using
     // computer players") is a REPRODUCIBLE session: `?dev=1&seed=42&bots=K` must
-    // replay identically. wallMs is real-clock and MUST NOT leak into a bot's stream,
-    // unlike autoplay's own (deliberately session-scoped, non-reproducible) RNG.
+    // replay identically. wallMs is real-clock and MUST NOT leak into a bot's stream.
+    // (Autoplay's own stream is session-scoped, and since issue #617 it is clock-seeded
+    // only when no seed is pinned.)
     const NOW_SEQUENCE = [17, 100, 260, 500, 900, 1500, 2200, 3000, 4000];
 
     function runSession(wallMs: number): Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> {

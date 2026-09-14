@@ -1,0 +1,14 @@
+{
+  "id": "autoplay-ignores-the-pinned-seed",
+  "file": "src/game/loop.ts",
+  "find": "  const autoplayRnd = mulberry32((deps.devFlags.seed ?? deriveSeed(deps.wallMs())) + 1);\n",
+  "replace": "  const autoplayRnd = mulberry32(deriveSeed(deps.wallMs()) + 1);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #617. Autoplay goes back to seeding its stream from the clock even when `?seed=` is pinned, which is the behaviour before the ruling. A played ending capture then cannot repeat its own match: the feasibility probe on #617 reached the same mission-clear ending in 31 to 77 seconds with a different stats line on each of 4 runs, so no tick budget or stats line could be asserted.",
+  "killedBy": [
+    "startGameWith: bots (createBotInputSource, bots=K) autoplay under a pinned ?seed repeats its match: same seed, DIFFERENT clock, same slot-0 trajectory (issue #617)"
+  ]
+}

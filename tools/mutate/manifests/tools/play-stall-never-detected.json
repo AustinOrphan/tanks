@@ -1,0 +1,14 @@
+{
+  "id": "play-stall-never-detected",
+  "file": "tools/screens/steps.mjs",
+  "find": "  if (nowMs - next.lastChangeMs > stallMs) {\n",
+  "replace": "  if (false && nowMs - next.lastChangeMs > stallMs) {\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/steps.test.ts"
+  ],
+  "why": "Issue #617. A simulation that stops advancing -- a paused game, a modal nobody dismissed, a dead render loop -- never exhausts a tick budget, because no ticks are spent. Without the stall rule such a capture waits for the recipe's five-minute wall-clock timeout and then reports a timeout instead of saying the game stopped.",
+  "killedBy": [
+    "steps.mjs: advancePlay, the verdict of a played step fails a truncated trace, and a simulation that stops advancing"
+  ]
+}

@@ -1785,6 +1785,104 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.ending.mission-clear.played",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.ending.mission-clear.played"
+    },
+    "fixture": {
+      "id": "screen.ending.mission-clear.played",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Mission clear, played",
+    "description": "Level 3 won by autoplay from Continue, invincible so the win cannot turn into a loss: the path to Mission Clear, not only its panel.",
+    "altText": "Screenshot of the Tanks! mission clear ending screen, reached by playing the level.",
+    "timeoutMs": 300000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.ending.campaign-over.played",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.ending.campaign-over.played"
+    },
+    "fixture": {
+      "id": "screen.ending.campaign-over.played",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Campaign over, played",
+    "description": "The run's last lives lost to level 3 by autoplay from Continue: the path to Game Over, not only its panel.",
+    "altText": "Screenshot of the Tanks! game over ending screen, reached by playing until the run was out of lives.",
+    "timeoutMs": 300000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.ending.campaign-complete",
     "producer": {
       "kind": "screen",

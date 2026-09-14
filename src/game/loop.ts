@@ -1981,9 +1981,19 @@ export function startGameWith(
    *
    * Its own RNG stream and hold-state, independent of the world's own seed -- see
    * player-profile.ts's module comment for why driving the player must not draw from
-   * the same stream the enemy AI does. Seeded once per session (not per level/reset):
-   * autoplay is a demo aid, not a replay a test asserts against, so it does not need
-   * `buildWorld`'s reproducibility guarantees the way the world's own seed does.
+   * the same stream the enemy AI does. Seeded once per session (not per level/reset).
+   *
+   * SEEDED FROM `?seed=` WHEN ONE IS PINNED, from the clock otherwise (issue #617). A
+   * capture that PLAYS to an ending has to repeat its own match: with a clock-seeded
+   * controller, the same seed, save and query reached the same ending in 31 to 77 seconds
+   * with a different stats line every run, so the capture could not state a tick budget or
+   * reproduce its numbers. Without a seed nothing changes -- a demo session is still a
+   * different fight each time, which is what autoplay is for.
+   *
+   * `+ 1` keeps the stream off the world's own `seed`, and it cannot land on a bot's:
+   * bots draw from `seed - BOT_SEED_SPACING + slot`, which equals `seed + 1` only at slot
+   * 1010. Read off `deps.devFlags.seed`, not `nextSeed()`: this is built once, before any
+   * Reroll Seed could supersede the pin, and a reroll rebuilds the world, not the session.
    *
    * The flag is read HERE, at the boundary, and never reaches src/sim/: decidePlayerInput
    * takes a World and returns an InputState exactly like the real controller's sample()
@@ -1994,7 +2004,7 @@ export function startGameWith(
    * `playerCount >= 2`, every other slot's own source still samples through on the same
    * tick -- the two are not exclusive of each other.
    */
-  const autoplayRnd = mulberry32(deriveSeed(deps.wallMs()) + 1);
+  const autoplayRnd = mulberry32((deps.devFlags.seed ?? deriveSeed(deps.wallMs())) + 1);
   const autoplayState = createPlayerAiState(autoplayRnd);
   /**
    * The tank a slot drives, resolved the SAME way for every purpose this file needs it
@@ -2016,10 +2026,10 @@ export function startGameWith(
    *
    * Precedence when BOTH `autoplay` and `bots` claim slot 0 (`bots` can reach slot 0 --
    * see `botSlotsFor`): autoplay wins, checked first, unchanged from today's sole
-   * branch. This is a deliberate, narrow exception to bots' own reproducibility
-   * guarantee -- autoplay's stream is `wallMs()`-seeded, so a session with BOTH flags
-   * set is not reproducible at slot 0 even under a pinned `?dev=1&seed=`. Every other
-   * bot-claimed slot is unaffected: autoplay only ever substitutes slot 0.
+   * branch. Under a pinned `?dev=1&seed=` a session with BOTH flags set is reproducible at
+   * slot 0 too, since issue #617 seeds autoplay's stream from that seed; without a seed,
+   * autoplay's stream is `wallMs()`-seeded and slot 0 is not. Every other bot-claimed slot
+   * is unaffected: autoplay only ever substitutes slot 0.
    */
   const effectiveInput = {
     sample: (): InputState[] => {
