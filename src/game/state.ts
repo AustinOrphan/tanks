@@ -187,6 +187,18 @@ export interface GameStateMachine {
    */
   onEvents(events: SimEvent[]): void;
   /**
+   * Route the events of ONE developer-stepped tick, taken while paused (issue #253).
+   *
+   * `onEvents` ignores `paused`, and rightly for a stray queued frame. But a stepped tick really
+   * did simulate, and `stepInputs` resolves a round's status only while it is still `playing`
+   * (world.ts), so a `win`/`lose` that tick emits is never emitted again. Routed through
+   * `onEvents`, it would end the round in the world and leave the session paused on a board that
+   * can never finish. So this is `onEvents`' classification, legal from `paused` ONLY: a terminal
+   * batch moves paused -> outcome, and any other batch leaves the session paused. From `playing`
+   * or a route it does nothing -- a live session's events go through `onEvents`.
+   */
+  settleSteppedTick(events: SimEvent[]): void;
+  /**
    * End the live session with a GIVEN outcome, for issue #591's capture flag.
    *
    * The same transition `onEvents` makes -- `outcomePhase(outcome)` on the current
@@ -410,6 +422,17 @@ export function createGameStateMachine(config: GameStateMachineConfig): GameStat
       // stray queued frame (see the legacy pause-and-lose test).
       if (current.kind !== 'gameplay') return;
       if (current.phase.kind !== 'playing') return;
+      const outcome = classify(events, current.session);
+      if (outcome === null) return;
+      setLocation(locationInGameplay(current.session, outcomePhase(outcome)));
+    },
+
+    settleSteppedTick(events: SimEvent[]): void {
+      // `onEvents` with its phase guard turned to `paused`: see the interface for why a stepped
+      // tick needs its own entry rather than a resume-classify-pause round trip, which would
+      // tell every subscriber (the music duck, the HUD's pause panel) the game had resumed.
+      if (current.kind !== 'gameplay') return;
+      if (current.phase.kind !== 'paused') return;
       const outcome = classify(events, current.session);
       if (outcome === null) return;
       setLocation(locationInGameplay(current.session, outcomePhase(outcome)));

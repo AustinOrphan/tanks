@@ -749,6 +749,21 @@ export function isPauseHotkey(e: KeyboardEvent): boolean {
 }
 
 /**
+ * Period advances one tick while paused (issue #253), under the same guard as pause.
+ *
+ * `.` because nothing else binds it: the page claims M, pause is Escape and P, the tank reads
+ * WASD, the arrows and Space, and the menus W, S, the arrows, Enter, Space, Escape and P. A
+ * focused button keeps only Space and Enter (`consumesKey`), so the key still reaches the game
+ * with Developer Tools' own buttons focused. Key REPEAT is refused, so holding the key steps once
+ * rather than at the keyboard's repeat rate.
+ */
+export function isStepHotkey(e: KeyboardEvent): boolean {
+  if (e.repeat) return false;
+  if (consumesKey(e.target, e.key)) return false;
+  return e.key === '.';
+}
+
+/**
  * Shells the player currently has in flight, which is what SHELL_CAP limits.
  *
  * Counts the player's OWN live bullets: dropMine and spawnBullet enforce the
@@ -3589,6 +3604,9 @@ export function startGameWith(
       if (sm.isPaused) sm.resume();
       else sm.pause();
     }
+    // Issue #253's single-tick step. Developer mode only; the driver itself refuses unless the
+    // game is paused, so on any other surface the key does nothing.
+    if (deps.developerMode && isStepHotkey(e)) driver.advanceOneTick();
   };
   // Through the slot, not the host: `route-host.ts` owns the one keydown listener and
   // hands on only the keys that are not the Launch gesture.

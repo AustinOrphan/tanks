@@ -47,6 +47,8 @@ export interface DriverStateMachine {
    */
   readonly isPaused: boolean;
   onEvents(events: SimEvent[]): void;
+  /** A developer-stepped tick's events (issue #253); see `GameStateMachine.settleSteppedTick`. */
+  settleSteppedTick(events: SimEvent[]): void;
 }
 
 export interface DriverDeps {
@@ -118,6 +120,11 @@ export interface Driver {
    * told that its cross-frame state belongs to a board that no longer exists.
    */
   reset(world: World): void;
+  /**
+   * Advance exactly ONE fixed tick while the game is paused, and render it (issue #253).
+   * Returns whether it did: `false`, touching nothing, unless the state machine is paused.
+   */
+  advanceOneTick(): boolean;
 }
 
 export function createDriver(deps: DriverDeps): Driver {
@@ -216,6 +223,44 @@ export function createDriver(deps: DriverDeps): Driver {
     stop(): void {
       running = false;
       deps.raf.cancel(handle);
+    },
+    /*
+     * THE DEVELOPER SINGLE-TICK STEP (issue #253). One tick, on the terms a simulating frame
+     * gives a tick, from a board the game has PAUSED -- and the game stays paused throughout.
+     *
+     * What each clock does, which is the issue's criterion:
+     *
+     *  - SIMULATION: exactly one `stepInputs`, from exactly one `input.sample()`. So the replay
+     *    recorder, which decorates `sample()`, records exactly one tick per step.
+     *  - RESUMING neither repeats nor catches up. A paused frame already drops the accumulator
+     *    (`acc = 0` in `runFrame`) and every frame re-anchors `last = now`, so this touches
+     *    neither: the first frame after Resume credits only the time since the frame before it.
+     *  - RENDER EFFECTS stay frozen: the frame renders at animation dt 0, `animationDt`'s rule for
+     *    a paused game, and at alpha 1, the stepped pose whole rather than a fraction of it.
+     *  - AUDIO: the tick's events reach the audio director and haptics as any tick's do, so a
+     *    shot fired on it is heard; the music stays ducked, because nothing leaves `paused`.
+     *  - THE ROUND ENDING on this tick reaches the state machine through `settleSteppedTick`,
+     *    not `onEvents`, which ignores a paused session -- see the state machine for why that
+     *    would strand the round.
+     *
+     * `isSimulating` is never read: the gate is `isPaused`, and a session that is playing,
+     * over or at a route refuses the step without sampling, stepping or rendering.
+     */
+    advanceOneTick(): boolean {
+      if (!deps.stateMachine.isPaused) return false;
+      prev = curr;
+      const result = stepInputs(curr, deps.input.sample());
+      curr = result.world;
+      const frameEvents: FrameEvent[] = result.events.map((ev) => ({ ...ev, tick: result.world.tick }));
+      if (frameEvents.length > 0) {
+        deps.director.handle(frameEvents);
+        deps.haptics.handle(frameEvents);
+        deps.stateMachine.settleSteppedTick(frameEvents);
+        deps.onFrameEvents(frameEvents);
+      }
+      deps.onSimulated(curr);
+      deps.renderer.render(prev, curr, 1, frameEvents, animationDt(0, true));
+      return true;
     },
     reset(world: World): void {
       curr = world;
