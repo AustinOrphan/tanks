@@ -8,7 +8,7 @@
     "src/game/hud.diagnostics.test.ts"
   ],
   "killedBy": [
-    "the exports (issue #254) hides both unless the page supplies its facts AND a way to save"
+    "the exports (issue #254) hides all three unless the page supplies its facts AND a way to save"
   ],
   "why": "Download Diagnostics is offered on a HUD that has no way to save a file, where pressing it does nothing. The pane's rule since issue #243 is that a control whose seam is absent is not rendered, rather than rendered and inert."
 }
