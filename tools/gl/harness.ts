@@ -1403,16 +1403,17 @@ function workbenchOpts(over: Partial<WorkbenchSceneOptions>): WorkbenchSceneOpti
 }
 
 await checkAsync('a workbench still is a PNG of the stated pixel size, and not blank (issue #731)', async () => {
-  // What Download Still saves: the pane's canvas, encoded in a later task than the frame was
-  // drawn. That holds the picture only because createWorkbenchRenderer sets
-  // preserveDrawingBuffer; without it the encoded buffer is blank.
+  // What Download Still saves: the pane's canvas, encoded after the drawn frame has been
+  // presented, since the button is pressed in a later frame. The two animation frames stand in
+  // for that presentation; a timer alone does not present, and the buffer would read back intact
+  // whether or not createWorkbenchRenderer preserves it.
   const c = document.createElement('canvas');
   c.width = GALLERY_STILL.width;
   c.height = GALLERY_STILL.height;
   document.body.appendChild(c);
   const bench = createWorkbench(c, c.width, c.height, workbenchOpts({ subject: { kind: 'moment', id: 'fire' } }));
   bench.seek(10);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const blob = await new Promise<Blob | null>((resolve) => c.toBlob(resolve, 'image/png'));
   bench.dispose();
   c.remove();
