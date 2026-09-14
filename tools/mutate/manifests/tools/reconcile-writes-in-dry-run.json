@@ -1,0 +1,15 @@
+{
+  "id": "reconcile-writes-in-dry-run",
+  "file": "tools/issues/run.mjs",
+  "find": "  if (dryRun) return { applied, skipped };",
+  "replace": "  // dry run still applies",
+  "expect": "killed",
+  "why": "--dry-run writes. The flag exists so the plan can be inspected against the live repository (and is how this PR's evidence was gathered); a dry run that mutates labels is the worst kind of lie.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "queue plan application performs no reads or writes in dry-run mode",
+    "reconcile command rejects an unknown flag and accepts --dry-run"
+  ]
+}

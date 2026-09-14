@@ -1,0 +1,14 @@
+{
+  "id": "queue-demotes-without-restoring-a-horizon",
+  "file": "tools/issues/queue.mjs",
+  "find": "        add: others.length === 0 ? [NEXT_LABEL] : [],",
+  "replace": "        add: [],",
+  "expect": "killed",
+  "why": "A demoted issue loses priority:now and gains nothing, leaving it with no priority label at all -- the audit's missing-priority error, and an issue the refill can never pick up again because it is not Next. The change record must add priority:next.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "queue reconciliation planning demotes an in-flight Now issue to Next and refills its slot"
+  ]
+}

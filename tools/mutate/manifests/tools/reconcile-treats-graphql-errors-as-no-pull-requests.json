@@ -1,0 +1,15 @@
+{
+  "id": "reconcile-treats-graphql-errors-as-no-pull-requests",
+  "file": "tools/issues/run.mjs",
+  "find": "    if (Array.isArray(response?.errors) && response.errors.length > 0) {\n      const messages = response.errors.map((/** @type {{ message?: string }} */ error) => error?.message ?? 'unknown error');\n      throw new Error(`GitHub GraphQL pull-request query failed: ${messages.join('; ')}`);\n    }",
+  "replace": "    // GraphQL errors are ignored",
+  "expect": "killed",
+  "why": "A GraphQL error response (a token without pull-requests: read answers 200 with an errors array) is no longer surfaced by its message. The payload guard still throws generically, so the tests fail on the missing error text; if that guard were also loosened, an in-flight issue would be promoted.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "linked pull-request retrieval refuses GraphQL errors, a missing payload, or more closing references than one page holds",
+    "reconcile command writes nothing when the pull-request read fails, rather than treating the failure as no PRs"
+  ]
+}

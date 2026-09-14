@@ -1,0 +1,14 @@
+{
+  "id": "queue-leaves-a-half-applied-promotion",
+  "file": "tools/issues/queue.mjs",
+  "find": "      changes.push({ issueNumber: number, kind: 'repair', add: [], remove: others, labels });",
+  "replace": "      // no repair",
+  "expect": "killed",
+  "why": "A promotion whose priority:next removal failed (the token budget is the live failure mode) leaves the issue with two horizons forever: retained as Now, rejected by the audit every run, and never repaired. The planner must emit the removal of the stray label.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "queue reconciliation planning finishes its own half-applied writes: a retained Now item sheds a stray priority label"
+  ]
+}

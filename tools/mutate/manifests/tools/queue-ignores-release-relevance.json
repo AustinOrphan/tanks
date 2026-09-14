@@ -1,0 +1,14 @@
+{
+  "id": "queue-ignores-release-relevance",
+  "file": "tools/issues/queue.mjs",
+  "find": "    release: carriesReleaseMilestone(issue) ? 0 : 1,",
+  "replace": "    release: 1,",
+  "expect": "killed",
+  "why": "Every candidate reads as release-irrelevant, so the top-ranked criterion silently drops out and impact decides. Distinct from the 'undetermined' path: the key is defined, nothing is reported as skipped, and the low-impact Public Prototype 1.0 issue loses to the high-impact one.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "candidate ranking ranks Public Prototype 1.0 milestone work above everything else"
+  ]
+}

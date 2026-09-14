@@ -4,6 +4,8 @@ import {
   auditOpenIssues,
   declaredSingularParent,
   explicitFormLabels,
+  nowIneligibilityReasons,
+  openLinkedPullRequests,
   planIssueEventLabelChanges,
   renderAuditReport,
 } from './metadata.mjs';
@@ -485,5 +487,114 @@ describe('the area dimension covers the areas the tracker actually uses', () => 
     const areas = [...LABEL_DIMENSIONS.area];
     expect(new Set(areas).size).toBe(areas.length);
     for (const a of areas) expect(a.startsWith('area:'), a).toBe(true);
+  });
+});
+
+describe('Now eligibility reasons', () => {
+  const relationships = (blockedBy: Array<Record<string, unknown>> = [], loaded = true) => ({
+    loaded,
+    parentLoaded: false,
+    parent: null,
+    blockersLoaded: loaded,
+    blockedBy,
+    subIssues: [],
+  });
+  const ready = ['size:s', 'risk:low', 'area:repository', 'impact:medium', 'priority:now', 'agent-ready'];
+
+  it('returns no reason for an agent-ready XS-M issue with no open blocker and no linked PR', () => {
+    expect(nowIneligibilityReasons(issue(500, ready, undefined, {
+      nativeRelationships: relationships(),
+      linkedPullRequests: { loaded: true, open: [] },
+    }))).toEqual([]);
+  });
+
+  it('names each hard rule an issue fails, in a stable order', () => {
+    const failing = issue(501, [
+      'size:l', 'risk:low', 'area:repository', 'impact:medium', 'priority:now',
+      'human-required', 'needs-split',
+    ], undefined, {
+      nativeRelationships: relationships([{ number: 7, state: 'open' }]),
+      linkedPullRequests: { loaded: true, open: [{ number: 800, isDraft: false }] },
+    });
+    expect(nowIneligibilityReasons(failing)).toEqual([
+      'not-agent-ready', 'size', 'human-required', 'needs-split', 'native-blocked', 'in-flight',
+    ]);
+  });
+
+  it('cannot report native-blocked or in-flight from data that was never loaded', () => {
+    const unknown = issue(502, ready, undefined, {
+      nativeRelationships: relationships([{ number: 7, state: 'open' }], false),
+      linkedPullRequests: { loaded: false, open: [{ number: 800 }] },
+    });
+    expect(nowIneligibilityReasons(unknown)).toEqual([]);
+  });
+
+  it('exposes open linked pull requests only when linkage was inspected', () => {
+    expect(openLinkedPullRequests(issue(503, ready, undefined, {
+      linkedPullRequests: { loaded: true, open: [{ number: 801, isDraft: true }] },
+    }))).toEqual([{ number: 801, isDraft: true }]);
+    expect(openLinkedPullRequests(issue(504, ready, undefined, {
+      linkedPullRequests: { loaded: false, open: [{ number: 801 }] },
+    }))).toEqual([]);
+    expect(openLinkedPullRequests(issue(505, ready))).toEqual([]);
+  });
+});
+
+describe('Now queue invariants beyond readiness and blockers', () => {
+  const base = ['size:s', 'risk:low', 'area:repository', 'impact:medium', 'priority:now', 'agent-ready'];
+
+  it('rejects a Now issue that is human-required', () => {
+    const result = auditOpenIssues([issue(510, [...base, 'human-required'])]);
+    expect(codes(result.errors)).toEqual(['now-human-required']);
+    expect(result.errors[0].issueNumber).toBe(510);
+    expect(result.errors[0].remediation).toContain('priority:next');
+    // Negative control: the same issue in Next is accepted.
+    expect(auditOpenIssues([issue(511, [...completeLabels, 'agent-ready', 'human-required'])]).errors).toEqual([]);
+  });
+
+  it('rejects a Now issue that still needs splitting', () => {
+    const result = auditOpenIssues([issue(512, [...base, 'needs-split'])]);
+    expect(codes(result.errors)).toEqual(['now-needs-split']);
+  });
+
+  it('rejects a Now issue that an open pull request already implements, when linkage was inspected', () => {
+    const inFlight = issue(513, base, undefined, {
+      linkedPullRequests: { loaded: true, open: [{ number: 820, isDraft: true }] },
+    });
+    const result = auditOpenIssues([inFlight]);
+    expect(codes(result.errors)).toEqual(['now-in-flight']);
+    expect(result.errors[0].message).toContain('#820');
+    expect(result.errors[0].message).toContain('draft');
+    expect(result.pullRequestInspectedCount).toBe(1);
+  });
+
+  it('does not invent an in-flight error when linkage was not inspected', () => {
+    const uninspected = issue(514, base, undefined, {
+      linkedPullRequests: { loaded: false, open: [{ number: 820 }] },
+    });
+    const result = auditOpenIssues([uninspected, issue(515, base)]);
+    expect(result.errors).toEqual([]);
+    expect(result.pullRequestInspectedCount).toBe(0);
+  });
+
+  it('keeps the existing Now codes and their order for a not-ready, blocked Now issue', () => {
+    const both = issue(516, ['size:l', 'risk:low', 'area:repository', 'impact:medium', 'priority:now', 'needs-split'], undefined, {
+      nativeRelationships: {
+        loaded: true, parentLoaded: false, parent: null, blockersLoaded: true,
+        blockedBy: [{ number: 7, state: 'open' }], subIssues: [],
+      },
+    });
+    expect(codes(auditOpenIssues([both]).errors)).toEqual([
+      'invalid-now-item', 'now-native-blocked', 'now-needs-split',
+    ]);
+  });
+
+  it('states whether linked pull requests were inspected in the report header', () => {
+    const inspected = renderAuditReport(auditOpenIssues([issue(517, base, undefined, {
+      linkedPullRequests: { loaded: true, open: [] },
+    })]));
+    expect(inspected).toContain('Linked pull requests: inspected for 1 of 1 audited issues.');
+    const anonymous = renderAuditReport(auditOpenIssues([issue(518, base)]));
+    expect(anonymous).toContain('Linked pull requests: not inspected (no token); in-flight work cannot be detected.');
   });
 });

@@ -1,0 +1,14 @@
+{
+  "id": "reconcile-links-cross-repository-references",
+  "file": "tools/issues/run.mjs",
+  "find": "        if (String(reference?.repository?.nameWithOwner ?? '').toLowerCase() !== repository.toLowerCase()) continue;",
+  "replace": "        // every closing reference counts",
+  "expect": "killed",
+  "why": "A closing reference into another repository (`owner/repo#12`) is treated as this repository's #12, so an unrelated pull request elsewhere marks a local issue in flight.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "linked pull-request retrieval maps every open pull request onto the issues its closing references name, drafts included"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "audit-accepts-human-required-in-now",
+  "file": "tools/issues/metadata.mjs",
+  "find": "  if (labels.includes('human-required')) reasons.push('human-required');",
+  "replace": "  // human-required is not a Now rule",
+  "expect": "killed",
+  "why": "human-required stops being a Now rule in the one predicate both the audit and the planner read, so a Now issue that needs a person passes the audit and a human-required Next issue is promoted. The audit test and the candidacy test both fail.",
+  "tests": [
+    "tools/issues/metadata.test.ts",
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "Now queue invariants beyond readiness and blockers rejects a Now issue that is human-required",
+    "promotion candidacy excludes a human-required candidate"
+  ]
+}

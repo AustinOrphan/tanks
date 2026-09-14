@@ -1,0 +1,14 @@
+{
+  "id": "reconcile-skips-the-live-re-read-guard",
+  "file": "tools/issues/run.mjs",
+  "find": "    const reason = staleReason(live, change.labels);",
+  "replace": "    const reason = null;",
+  "expect": "killed",
+  "why": "The per-issue re-read no longer guards the write: an issue that closed or was relabelled between the snapshot and the write is written to anyway, which is how priority:now ends up on a closed issue no audit will ever see again.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "queue plan application re-reads each issue and skips one that closed or changed since the plan was computed"
+  ]
+}

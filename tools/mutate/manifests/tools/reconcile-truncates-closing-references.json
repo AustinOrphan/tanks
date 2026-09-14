@@ -1,0 +1,14 @@
+{
+  "id": "reconcile-truncates-closing-references",
+  "file": "tools/issues/run.mjs",
+  "find": "      if (Number(references?.totalCount ?? 0) > nodes.length) {\n        throw new Error(\n          `pull request #${pull?.number} has more closing references than one page holds; refusing to guess`,\n        );\n      }",
+  "replace": "      // one page is enough",
+  "expect": "killed",
+  "why": "A pull request with more closing references than the page holds is silently read as linking only the first page, so an issue beyond it can be promoted while in flight. The tool refuses rather than guesses everywhere else; this pins that here.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "linked pull-request retrieval refuses GraphQL errors, a missing payload, or more closing references than one page holds"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "queue-keeps-in-flight-now-items",
+  "file": "tools/issues/queue.mjs",
+  "find": "export const AUTOMATIC_DEMOTION_REASONS = Object.freeze(['in-flight']);",
+  "replace": "export const AUTOMATIC_DEMOTION_REASONS = Object.freeze([]);",
+  "expect": "killed",
+  "why": "Nothing is ever demoted, so an issue whose pull request is open keeps consuming a Now slot -- Now and In Progress collapse into one. The in-flight fixture expects the demotion, the freed slot, and the refill.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "queue reconciliation planning demotes an in-flight Now issue to Next and refills its slot"
+  ]
+}

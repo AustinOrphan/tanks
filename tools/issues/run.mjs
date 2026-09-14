@@ -10,6 +10,7 @@ import {
   planIssueEventLabelChanges,
   renderAuditReport,
 } from './metadata.mjs';
+import { planQueueReconciliation, renderQueuePlan } from './queue.mjs';
 
 const API_VERSION = '2022-11-28';
 
@@ -19,6 +20,8 @@ const API_VERSION = '2022-11-28';
  * caller -- CLI, workflow and test -- supplies a different subset.
  *
  * @typedef {import('./metadata.mjs').GhIssue} GhIssue
+ * @typedef {import('./metadata.mjs').LinkedPullRequest} LinkedPullRequest
+ * @typedef {import('./queue.mjs').QueuePlan} QueuePlan
  * @typedef {(path: string, options?: RequestOptions) => Promise<any>} GitHubRequest
  * @typedef {{ method?: string, body?: unknown, allowStatuses?: number[] }} RequestOptions
  */
@@ -202,6 +205,161 @@ export async function enrichOpenIssueRelationships(repository, issues, request) 
   });
 }
 
+// The reconciliation only needs relationships for the issues that can hold or enter a Now
+// slot: Now items and label-shaped candidates (Next with agent-ready). Everything else is
+// passed through marked uninspected, which the audit already treats as "not checked" rather
+// than "clean". This keeps a reconcile run to a handful of reads on a token budget the
+// per-event audit already exhausts under bursts.
+/** @param {string} repository @param {GhIssue[]} issues @param {GitHubRequest} request */
+export async function enrichQueueRelevantIssues(repository, issues, request) {
+  const relevant = issues.filter((issue) => {
+    const labels = issueLabelNames(issue);
+    return labels.includes('priority:now')
+      || (labels.includes('priority:next') && labels.includes('agent-ready'));
+  });
+  const enriched = await enrichOpenIssueRelationships(repository, relevant, request);
+  const byNumber = new Map(enriched.map((issue) => [issue.number, issue]));
+  return issues.map((issue) => byNumber.get(issue.number) ?? {
+    ...issue,
+    nativeRelationships: {
+      loaded: false,
+      parentLoaded: false,
+      parent: null,
+      blockersLoaded: false,
+      blockedBy: [],
+      subIssues: [],
+    },
+  });
+}
+
+const OPEN_PULL_REQUESTS_QUERY = `
+query($owner: String!, $name: String!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: [OPEN], first: 100, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number
+        isDraft
+        closingIssuesReferences(first: 100) {
+          totalCount
+          nodes { number repository { nameWithOwner } }
+        }
+      }
+    }
+  }
+}`;
+
+// Open pull requests keyed by the issues their closing references name. This is GitHub's own
+// linkage (the field behind the Development sidebar), so a `Closes #N` keyword and a manual
+// link look the same and nothing is inferred from titles. A read that fails in any way is an
+// error, never "no pull requests": treating it as none would promote in-flight work.
+/** @param {string} repository @param {GitHubRequest} request @returns {Promise<Map<number, LinkedPullRequest[]>>} */
+export async function loadOpenPullRequestLinks(repository, request) {
+  repositoryPath(repository);
+  const [owner, name] = repository.split('/');
+  /** @type {Map<number, LinkedPullRequest[]>} */
+  const links = new Map();
+
+  for (let after = null; ;) {
+    const response = await request('/graphql', {
+      method: 'POST',
+      body: { query: OPEN_PULL_REQUESTS_QUERY, variables: { owner, name, after } },
+    });
+    if (Array.isArray(response?.errors) && response.errors.length > 0) {
+      const messages = response.errors.map((/** @type {{ message?: string }} */ error) => error?.message ?? 'unknown error');
+      throw new Error(`GitHub GraphQL pull-request query failed: ${messages.join('; ')}`);
+    }
+    const page = response?.data?.repository?.pullRequests;
+    if (!Array.isArray(page?.nodes)) {
+      throw new Error('GitHub GraphQL pull-request query returned no pull requests payload');
+    }
+
+    for (const pull of page.nodes) {
+      const references = pull?.closingIssuesReferences;
+      const nodes = Array.isArray(references?.nodes) ? references.nodes : [];
+      if (Number(references?.totalCount ?? 0) > nodes.length) {
+        throw new Error(
+          `pull request #${pull?.number} has more closing references than one page holds; refusing to guess`,
+        );
+      }
+      for (const reference of nodes) {
+        if (String(reference?.repository?.nameWithOwner ?? '').toLowerCase() !== repository.toLowerCase()) continue;
+        if (!Number.isInteger(reference?.number)) continue;
+        const entry = links.get(reference.number) ?? [];
+        entry.push({ number: pull.number, isDraft: pull?.isDraft === true });
+        links.set(reference.number, entry);
+      }
+    }
+
+    if (page.pageInfo?.hasNextPage !== true) return links;
+    after = page.pageInfo.endCursor;
+  }
+}
+
+/** @template {GhIssue} T @param {T[]} issues @param {Map<number, LinkedPullRequest[]>} links */
+export const attachLinkedPullRequests = (issues, links) =>
+  issues.map((issue) => ({
+    ...issue,
+    linkedPullRequests: { loaded: true, open: links.get(/** @type {number} */ (issue.number)) ?? [] },
+  }));
+
+/** @param {GhIssue | null} live @param {string[]} plannedLabels @returns {string | null} */
+const staleReason = (live, plannedLabels) => {
+  if (live === null || live?.state !== 'open') return 'the issue is no longer open';
+  if (live.pull_request !== undefined) return 'the number now belongs to a pull request';
+  const current = [...issueLabelNames(live)].sort();
+  const planned = [...plannedLabels].map((label) => label.toLowerCase()).sort();
+  if (current.length !== planned.length || current.some((label, index) => label !== planned[index])) {
+    return 'labels changed since the plan was computed';
+  }
+  return null;
+};
+
+// Applies a plan's label writes. Each issue is re-read first and skipped if it closed or its
+// labels moved since the plan was computed, so a concurrent close (a merge, a human) cannot
+// leave priority:now on a closed issue that no audit will ever see again. Additions go
+// before removals: an interrupted write then leaves a duplicate horizon the next
+// reconciliation repairs, never an issue with no horizon at all.
+/**
+ * @param {string} repository
+ * @param {QueuePlan} plan
+ * @param {GitHubRequest} request
+ * @param {{ dryRun?: boolean }} [options]
+ * @returns {Promise<{ applied: number[], skipped: { issueNumber: number, reason: string }[] }>}
+ */
+export async function applyQueuePlan(repository, plan, request, { dryRun = false } = {}) {
+  const repo = repositoryPath(repository);
+  /** @type {number[]} */
+  const applied = [];
+  /** @type {{ issueNumber: number, reason: string }[]} */
+  const skipped = [];
+  if (dryRun) return { applied, skipped };
+
+  for (const change of plan.changes) {
+    const live = await request(`/repos/${repo}/issues/${change.issueNumber}`, { allowStatuses: [404] });
+    const reason = staleReason(live, change.labels);
+    if (reason !== null) {
+      skipped.push({ issueNumber: change.issueNumber, reason });
+      continue;
+    }
+    if (change.add.length > 0) {
+      await request(`/repos/${repo}/issues/${change.issueNumber}/labels`, {
+        method: 'POST',
+        body: { labels: change.add },
+      });
+    }
+    for (const label of change.remove) {
+      await request(`/repos/${repo}/issues/${change.issueNumber}/labels/${encodeURIComponent(label)}`, {
+        method: 'DELETE',
+        allowStatuses: [404],
+      });
+    }
+    applied.push(change.issueNumber);
+  }
+
+  return { applied, skipped };
+}
+
 /** @param {string} repository @param {{ action?: string, issue?: GhIssue }} payload @param {GitHubRequest} request */
 export async function applyIssueEvent(repository, payload, request) {
   const issue = payload?.issue;
@@ -241,6 +399,7 @@ function parseArguments(argv) {
   const args = [...argv];
   const mode = args.shift();
   let repository;
+  let dryRun = false;
 
   while (args.length > 0) {
     const flag = args.shift();
@@ -249,10 +408,14 @@ function parseArguments(argv) {
       if (!repository) throw new Error('--repo requires owner/name');
       continue;
     }
+    if (flag === '--dry-run') {
+      dryRun = true;
+      continue;
+    }
     throw new Error(`unknown argument: ${flag}`);
   }
 
-  return { mode, repository };
+  return { mode, repository, dryRun };
 }
 
 export async function main({
@@ -262,8 +425,8 @@ export async function main({
   log = console.log,
 } = {}) {
   const args = parseArguments(argv);
-  if (!['audit', 'event'].includes(args.mode ?? '')) {
-    throw new Error('usage: node tools/issues/run.mjs <audit|event> [--repo owner/name]');
+  if (!['audit', 'event', 'reconcile'].includes(args.mode ?? '')) {
+    throw new Error('usage: node tools/issues/run.mjs <audit|event|reconcile> [--repo owner/name] [--dry-run]');
   }
 
   const repository = resolveRepository({ explicit: args.repository, env });
@@ -285,10 +448,31 @@ export async function main({
     return 0;
   }
 
+  if (args.mode === 'reconcile') {
+    if (!token) throw new Error('reconcile mode requires GH_TOKEN or GITHUB_TOKEN');
+    const listedIssues = await listOpenIssues(repository, request);
+    const enriched = await enrichQueueRelevantIssues(repository, listedIssues, request);
+    const issues = attachLinkedPullRequests(enriched, await loadOpenPullRequestLinks(repository, request));
+    const audit = auditOpenIssues(issues);
+    const plan = planQueueReconciliation(issues, { maxNow: audit.maxNow, metadataErrors: audit.errors });
+    const outcome = await applyQueuePlan(repository, plan, request, { dryRun: args.dryRun });
+    const report = renderQueuePlan(plan, { dryRun: args.dryRun, ...outcome });
+    log(report.trimEnd());
+    appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
+    return 0;
+  }
+
   const listedIssues = await listOpenIssues(repository, request);
-  const issues = await enrichOpenIssueRelationships(repository, listedIssues, request);
+  const enriched = await enrichOpenIssueRelationships(repository, listedIssues, request);
+  // Linkage is a GraphQL read and GraphQL needs a token, so the anonymous audit stays
+  // label-and-relationship only and says so in its header.
+  const issues = token
+    ? attachLinkedPullRequests(enriched, await loadOpenPullRequestLinks(repository, request))
+    : enriched;
   const result = auditOpenIssues(issues);
-  const report = renderAuditReport(result);
+  const plan = planQueueReconciliation(issues, { maxNow: result.maxNow, metadataErrors: result.errors });
+  result.warnings.push(...plan.warnings);
+  const report = `${renderAuditReport(result)}\n${renderQueuePlan(plan, { dryRun: true })}`;
   log(report.trimEnd());
   appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
   return result.errors.length === 0 ? 0 : 1;
