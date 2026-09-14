@@ -46,8 +46,10 @@ const labelsFor = (priority: string, overrides: Record<string, string | null> = 
 const issue = (number: number, labels: string[], options: Options = {}) => {
   const blockedBy = options.blockedBy ?? [];
   const blocking = options.blocking ?? 0;
+  // Uninspected linkage carries a STALE entry on purpose: the contract is that nothing
+  // behind `loaded: false` is ever read, and an empty list could not prove that.
   const linkage = options.pullRequests === null
-    ? { loaded: false, open: [] }
+    ? { loaded: false, open: [{ number: 999, isDraft: false }] }
     : { loaded: true, open: options.pullRequests ?? [] };
   return {
     number,
