@@ -11,6 +11,7 @@
 import type { TankKind, UnarmedTrigger, GameMode } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import { QUALITY_PRESET_IDS, type QualityPreset } from '../presentation/quality';
+import { BENCH_WORKLOAD_IDS, BENCH_WORKLOADS, type BenchWorkloadId } from './bench';
 import type { AiTargetPerception } from '../sim/types';
 import {
   ARRIVAL_LANGUAGES,
@@ -261,6 +262,18 @@ export interface DevFlags {
    */
   quality: QualityPreset | null;
   /**
+   * A named benchmark workload (issue #734): record frame times for it and publish the report
+   * as `__tanks.bench()`. `null` when absent or unrecognised, the same reject-to-null idiom
+   * as `quality`. The flag only MEASURES: the session's own flags (`mode`, `players`, `bots`,
+   * `seed`) still decide what runs, so a run is the named workload only when it was opened
+   * with that workload's query, which the report carries beside the page's actual one.
+   *
+   * PERMANENT, not a flag for an open question: it is the instrument #288 runs on a phone, the
+   * way `quality` is the lever it sweeps. `bench.ts` says so in its own header, as
+   * `.claude/rules/game.md` requires of a flag kept on purpose.
+   */
+  bench: BenchWorkloadId | null;
+  /**
    * AI target-SELECTION perception. Null (the default) leaves `WorldRules.aiTargetPerception`
    * at `'full'` -- the AI may pick any live opponent, exactly as the player can see any tank
    * on the board. `los` restores the bound issue #359 shipped and the owner then superseded.
@@ -484,6 +497,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   players: null,
   coopPool: false,
   quality: null,
+  bench: null,
   bots: null,
   mode: null,
   outcome: null,
@@ -510,6 +524,15 @@ const MINE_TRIGGERS = new Set(['none', 'proximity', 'bullet', 'both']);
  * preference it overrides -- and the flag's help text below prints this same array.
  */
 const QUALITY_PRESET_NAMES: ReadonlySet<string> = new Set<string>(QUALITY_PRESET_IDS);
+
+const BENCH_WORKLOAD_NAMES: ReadonlySet<string> = new Set<string>(BENCH_WORKLOAD_IDS);
+
+/** A named workload, or null when absent or unrecognised -- see `asQuality`. */
+function asBench(params: URLSearchParams): BenchWorkloadId | null {
+  const raw = params.get('bench');
+  if (raw === null) return null;
+  return BENCH_WORKLOAD_NAMES.has(raw) ? (raw as BenchWorkloadId) : null;
+}
 
 const VERSUS_MODE_NAMES = new Set(['ffa', 'teams']);
 
@@ -781,6 +804,7 @@ export function parseDevFlags(search: string): DevFlags {
     players: asPlayers(params),
     coopPool: isOn(params, 'coopPool'),
     quality: asQuality(params),
+    bench: asBench(params),
     aiPerception: asAiPerception(params),
     bots: asBots(params),
     mode: asMode(params),
@@ -1070,6 +1094,20 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
         'is the override on top of it, for sweeping a device without touching a save.',
       'Read once, when a session builds its renderer: a value set here applies from the ' +
         'next match, exactly like the setting it overrides.',
+    ],
+  },
+  bench: {
+    kind: 'valued',
+    values: [...BENCH_WORKLOAD_IDS],
+    description:
+      'Records frame times for a named benchmark workload and publishes the report as ' +
+      '`__tanks.bench()`: rAF interval and frame-callback time percentiles, long-frame ' +
+      'counts, the quality preset, pixel ratio, viewport, build and session.',
+    notes: [
+      'It measures and changes nothing else: open the workload\'s own query so the session ' +
+        `is the one it names -- versus-bots is \`${BENCH_WORKLOADS['versus-bots'].query}\`.`,
+      'A permanent diagnostic, kept for the device run issue #288 needs, not a flag for an ' +
+        'open question.',
     ],
   },
   bots: {

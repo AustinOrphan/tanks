@@ -431,6 +431,11 @@ describe('parseDevFlags: quality', () => {
 
   it('does not disturb the boolean flags', () => {
     expect(parseDevFlags('?dev=1&quality=low')).toEqual({ ...DEV_FLAGS_OFF, quality: 'low' });
+    // `bench` (issue #734): a named workload, rejected to null when unknown, and nothing
+    // without the `dev` gate.
+    expect(parseDevFlags('?dev=1&bench=versus-bots')).toEqual({ ...DEV_FLAGS_OFF, bench: 'versus-bots' });
+    expect(parseDevFlags('?dev=1&bench=potato').bench).toBeNull();
+    expect(parseDevFlags('?bench=versus-bots')).toEqual(DEV_FLAGS_OFF);
   });
 });
 

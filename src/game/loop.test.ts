@@ -8044,6 +8044,63 @@ describe('startGameWith: the dev console surface', () => {
     both.handle.dispose();
   });
 
+  it('publishes only the benchmark report with bench on (issue #734)', () => {
+    const b = boot(makeDeps({ devFlags: { bench: 'versus-bots' } }));
+    expect(Object.keys(api(b)).sort()).toEqual(['bench']);
+    expect(api(b).bench!().workload.id).toBe('versus-bots');
+    b.handle.dispose();
+  });
+
+  describe('the benchmark measures a session without changing what it simulates (issue #734)', () => {
+    // Past the workload's 5 s warm-up, in steps small enough that no frame is clamped to
+    // MAX_FRAME_DT, so every frame simulates the time it was credited.
+    const NOW_SEQUENCE = Array.from({ length: 90 }, (_, i) => (i + 1) * 100);
+
+    function runSession(bench: boolean): {
+      snapshots: Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>>;
+      report: ReturnType<NonNullable<DevConsole['bench']>> | null;
+    } {
+      const devFlags = { seed: 42, players: 3, bots: 3, ...(bench ? { bench: 'versus-bots' as const } : {}) };
+      const h = boot(makeDeps({ devFlags, wallMs: 111 }));
+      h.setState('playing');
+      const snapshots: Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> = [];
+      for (const now of NOW_SEQUENCE) {
+        h.fireFrame(now);
+        const curr = h.rec.renders.at(-1)!.curr as World;
+        snapshots.push(curr.tanks.map((t) => ({ id: t.id, pos: { ...t.pos }, turretAngle: t.turretAngle, bodyAngle: t.bodyAngle })));
+      }
+      const report = bench ? api(h).bench!() : null;
+      h.handle.dispose();
+      return { snapshots, report };
+    }
+
+    it('steps every tank identically at every sampled frame, with frames actually recorded', () => {
+      const plain = runSession(false);
+      const benched = runSession(true);
+      expect(benched.snapshots).toEqual(plain.snapshots);
+      // The comparison is only worth something if the instrument was live: frames past the
+      // warm-up were measured, and the world advanced while they were.
+      expect(benched.report!.phase).toBe('measuring');
+      expect(benched.report!.frames.count).toBeGreaterThan(0);
+      expect(benched.report!.simulatedTicks).toBeGreaterThan(0);
+      // And the tanks moved, so identical snapshots are not two sessions standing still.
+      const first = plain.snapshots[0];
+      const last = plain.snapshots[plain.snapshots.length - 1];
+      expect(first.some((t0) => {
+        const t1 = last.find((t) => t.id === t0.id)!;
+        return Math.abs(t1.pos.x - t0.pos.x) > 1e-6 || Math.abs(t1.pos.y - t0.pos.y) > 1e-6;
+      })).toBe(true);
+    });
+
+    it('reports the session it measured, the rAF intervals the frames were fired at, and the preset cap', () => {
+      const { report } = runSession(true);
+      expect(report!.session).toMatchObject({ seed: 42, humanPlayers: 0, bots: 3 });
+      // Every frame here is fired 100 ms after the last, so every measured interval is 100.
+      expect([report!.frames.p50, report!.frames.max]).toEqual([100, 100]);
+      expect(report!.render.pixelRatioCap).toBe(QUALITY_PRESETS.high.pixelRatioCap);
+    });
+  });
+
   it('removes what it published on dispose', () => {
     const h = boot(makeDeps({ devFlags: { saveIo: true } }));
     expect(DEV_CONSOLE_KEY in h.devConsole).toBe(true);
