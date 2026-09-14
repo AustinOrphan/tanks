@@ -1226,11 +1226,12 @@ export function createRouteHost(
       menuPoller.dispose();
       // The preview then, for the same reason `startGameWith` disposed it before the
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
-      routeUi.disposeGallery();
-      routeUi.disposePreview();
+      // The `?bench=preview` report, only while it is still this page's own entry (issue #736).
       if (previewDevApi !== null && deps.devConsole[DEV_CONSOLE_KEY] === previewDevApi) {
         delete deps.devConsole[DEV_CONSOLE_KEY];
       }
+      routeUi.disposeGallery();
+      routeUi.disposePreview();
       // The page's own subscription, released for the same reason a session releases its
       // own: the machine and this host die together, but a reference kept past teardown
       // must not keep painting a disposed HUD.
