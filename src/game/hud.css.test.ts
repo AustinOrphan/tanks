@@ -2050,6 +2050,11 @@ describe('hud.css is syntactically whole', () => {
     for (const overlay of ['.hud-toasts', '.hud-capacity']) {
       expect(rule(overlay), `${overlay} is not placed under the topbar row`).toMatch(/grid-row:\s*2;/);
     }
+    // Issue #702: in landscape the board starts under the bar (y 48 under a 52px bar at
+    // 844x390), so under the bar is on the arena. The flash moves up into the bar's row there.
+    const landscape = src.match(/@media \(orientation: landscape\) \{\s*\.hud-capacity \{([^}]*)\}/);
+    expect(landscape, 'no landscape rule moves the capacity flash into the topbar row').not.toBeNull();
+    expect(landscape?.[1], 'the landscape flash is not in the topbar row').toMatch(/grid-row:\s*1;/);
     // With the bar hidden, row 2 starts at the display edge, where a cutout still is.
     expect(rule('.hud-topbar--hidden ~ .hud-toasts')).toMatch(
       /top:\s*max\(var\(--hud-safe-inset\),\s*env\(safe-area-inset-top\)\);/,

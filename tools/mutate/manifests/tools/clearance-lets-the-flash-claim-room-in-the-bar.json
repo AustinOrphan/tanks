@@ -1,0 +1,14 @@
+{
+  "id": "clearance-lets-the-flash-claim-room-in-the-bar",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  if (moved) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Stops comparing the topbar's chips before and after the flash is shown. A flash placed in the bar row as a flex item would never overlap a chip -- it would push them -- and that is the permanent ammunition counter issue #356 rules out. Chips that move when the flash appears are the only symptom of it.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails a flash that moves the chips when it shows, which is a chip claiming room in the bar"
+  ]
+}

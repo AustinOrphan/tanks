@@ -1,7 +1,7 @@
 {
   "id": "clearance-lets-menu-toasts-sit-in-the-cutout",
   "file": "tools/visual/clearance.mjs",
-  "find": "  } else if (m.menu.toasts.top < m.inset) {",
+  "find": "  } else if (m.menu.toasts.top < m.inset.top) {",
   "replace": "  } else if (m.menu.toasts.top < 0) {",
   "expect": "killed",
   "tests": [

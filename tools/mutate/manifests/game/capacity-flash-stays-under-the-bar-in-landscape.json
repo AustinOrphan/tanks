@@ -1,0 +1,14 @@
+{
+  "id": "capacity-flash-stays-under-the-bar-in-landscape",
+  "file": "src/game/hud.css",
+  "find": "@media (orientation: landscape) {\n  .hud-capacity {\n    grid-row: 1;",
+  "replace": "@media (orientation: landscape) {\n  .hud-capacity {\n    grid-row: 2;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Puts the landscape capacity flash back under the topbar, issue #702's defect. In landscape the board is height-bound and starts under the bar -- measured with the HUD hidden, board top 48 under a 52px bar at 844x390, and 39 under 38px at 568x320 -- so a flash below the bar is drawn on the arena. jsdom lays nothing out, so this entry kills on the structural assertion; the geometry is the visual gate's clearance pass.",
+  "killedBy": [
+    "hud.css is syntactically whole places the toast rail and capacity flash from the topbar row, not a guessed height"
+  ]
+}
