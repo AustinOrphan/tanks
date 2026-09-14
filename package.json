@@ -43,6 +43,7 @@
     "audit:prod": "node tools/audit/prod.mjs",
     "devflags:doc": "vite-node tools/devflags/generate.mjs",
     "bench:summarize": "vite-node tools/bench/summarize.mjs --",
+    "bench:contrast": "vite-node tools/bench/check-contrast.mjs --",
     "tanks:doc": "vite-node tools/tanks/generate.mjs",
     "notices": "node tools/notices/generate.mjs",
     "legal": "node tools/legal/generate.mjs",

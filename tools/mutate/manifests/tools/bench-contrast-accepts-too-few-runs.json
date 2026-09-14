@@ -1,0 +1,14 @@
+{
+  "id": "bench-contrast-accepts-too-few-runs",
+  "file": "tools/bench/contrast.mjs",
+  "find": "  if (high.length < MIN_RUNS || low.length < MIN_RUNS) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "why": "A verdict is given from a single run of an arm, where the slowest-against-fastest rule collapses to one run against one run and noise alone can decide it.",
+  "tests": [
+    "tools/bench/contrast.test.ts"
+  ],
+  "killedBy": [
+    "the render cost contrast check (issue #738) refuses a verdict with too few runs of either asserted arm"
+  ]
+}
