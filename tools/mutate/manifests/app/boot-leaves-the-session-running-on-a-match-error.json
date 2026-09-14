@@ -1,0 +1,16 @@
+{
+  "id": "boot-leaves-the-session-running-on-a-match-error",
+  "file": "src/boot.ts",
+  "find": "      host.stopSession();\n      showFailure(err, 'match');",
+  "replace": "      showFailure(err, 'match');",
+  "why": "Shows the overlay without stopping the session issue #690 says to stop. The frozen canvas, its renderer and GL context stay alive under the overlay, and because the host still reports a session every later event for the same failure is routed again -- the overlay and the report repeat instead of happening once.",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "boot: an uncaught error during a running match (issue #690) stops the session and draws the match-failed overlay, reporting the error once",
+    "boot: an uncaught error during a running match (issue #690) routes an unhandled rejection the same way",
+    "boot: an uncaught error during a running match (issue #690) reports a failure once, however many events it raises, and nothing with no session running"
+  ]
+}

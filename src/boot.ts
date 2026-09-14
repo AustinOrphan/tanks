@@ -25,7 +25,28 @@ import type { Hud } from './game/hud';
 /** Only what boot needs from `window`. */
 export interface BootHost {
   addEventListener(type: 'pagehide', fn: (e: PageHideEvent) => void): void;
+  addEventListener(type: 'error', fn: (e: HostErrorEvent) => void): void;
+  addEventListener(type: 'unhandledrejection', fn: (e: HostRejectionEvent) => void): void;
   removeEventListener(type: 'pagehide', fn: (e: PageHideEvent) => void): void;
+  removeEventListener(type: 'error', fn: (e: HostErrorEvent) => void): void;
+  removeEventListener(type: 'unhandledrejection', fn: (e: HostRejectionEvent) => void): void;
+}
+
+/**
+ * The fields of the two uncaught-failure events boot reads (issue #690), declared for the
+ * same reason as `PageHideEvent`: a node-environment test can dispatch a plain object.
+ *
+ * `error` is `ErrorEvent.error`, the thrown value. It is null for a cross-origin script's
+ * "Script error.", which is why `message` is read as the fallback.
+ */
+export interface HostErrorEvent {
+  readonly error?: unknown;
+  readonly message?: string;
+}
+
+/** `PromiseRejectionEvent.reason`: whatever the rejected promise was rejected with. */
+export interface HostRejectionEvent {
+  readonly reason?: unknown;
 }
 
 /**
@@ -366,6 +387,39 @@ export function boot(deps: BootDeps): void {
     // construction window only.
     const host = sessions;
 
+    /**
+     * A throw during a RUNNING match (issue #690), routed to the same overlay a failed start
+     * gets.
+     *
+     * Nothing caught these before. The host's try/catch covers building a session, and
+     * `onStartFailure` covers starting one; once a match is running, a throw from input
+     * sampling, a sim step or a render escaped the frame callback to the window, and the
+     * driver had already queued the next frame -- so the last pose stayed on screen and the
+     * same throw repeated every frame, with nothing shown. The driver now stops its own loop
+     * when a frame throws; this is the half that tells the player.
+     *
+     * GUARDED ON A SESSION RUNNING, and that guard is also the exactly-once rule:
+     * `stopSession()` empties the host before `showFailure` runs, so a second event for the
+     * same failure -- an `error` followed by an `unhandledrejection`, or a frame that was
+     * already in flight -- finds no session and does nothing. The same guard keeps a throw
+     * boot has ALREADY handled from being reported twice: a failed start is caught and
+     * shown through `onStartFailure`, and leaves the host empty.
+     *
+     * No Retry, unlike a failed start: a start carries the descriptor that failed, while a
+     * running match that throws does not, and a Retry that rebuilt the wrong board would be
+     * worse than the overlay's way back to the menu. No new failure kind or copy either --
+     * `showFailure` classifies it exactly as it classifies a failed start.
+     */
+    const onMatchError = (err: unknown): void => {
+      if (!host.hasSession()) return;
+      host.stopSession();
+      showFailure(err, 'match');
+    };
+    const onError = (e: HostErrorEvent): void => onMatchError(e.error ?? e.message);
+    const onRejection = (e: HostRejectionEvent): void => onMatchError(e.reason);
+    deps.host.addEventListener('error', onError);
+    deps.host.addEventListener('unhandledrejection', onRejection);
+
     // ...and NOTHING is started (issue #428).
     //
     // This is where `sessions.start()` used to be. Every page load built a canvas, a
@@ -415,6 +469,10 @@ export function boot(deps: BootDeps): void {
       // which would have burned the registration on the first bfcache entry and
       // left a real unload afterwards with no teardown at all.
       deps.host.removeEventListener('pagehide', onPageHide);
+      // The page's match-error listeners go with it (issue #690): they close over a host
+      // that was just disposed, and a late error on a dying document has no overlay to reach.
+      deps.host.removeEventListener('error', onError);
+      deps.host.removeEventListener('unhandledrejection', onRejection);
     };
     deps.host.addEventListener('pagehide', onPageHide);
   } catch (err) {

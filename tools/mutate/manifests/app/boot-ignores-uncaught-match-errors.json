@@ -1,0 +1,16 @@
+{
+  "id": "boot-ignores-uncaught-match-errors",
+  "file": "src/boot.ts",
+  "find": "    deps.host.addEventListener('error', onError);\n",
+  "replace": "",
+  "why": "Issue #690: nothing routed a throw during a running match to the player. Without the page's `error` listener a throw from input sampling, a sim step or a render escapes the frame to the window and nothing is shown -- the driver stops its loop, so the last pose simply freezes under a Main Menu-less screen. The exactly-once and already-handled cases still pass through the `unhandledrejection` half, so only the cases that dispatch an `error` or read its registration can see this.",
+  "tests": [
+    "src/boot.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "boot: an uncaught error during a running match (issue #690) stops the session and draws the match-failed overlay, reporting the error once",
+    "boot: an uncaught error during a running match (issue #690) reads the message when the error itself is missing, as for a cross-origin script error",
+    "boot: an uncaught error during a running match (issue #690) removes both listeners on page teardown, and not on a back/forward cache entry"
+  ]
+}
