@@ -34,6 +34,9 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     // The in-app gallery workbench (#248), split into leaves by its 2026-09-14 triage
     // clarification. #248 itself stays under #238 below.
     { parent: 248, children: [729, 730, 731] },
+    // The mobile benchmark instrumentation (#721), split into leaves on 2026-09-14 because its
+    // scope is several pull requests. #721 itself stays under #288 above.
+    { parent: 721, children: [734, 735, 736, 737, 738] },
     { parent: 228, children: [260, 261, 267, 268, 269, 278, 279, 280, 281, 282] },
     { parent: 229, children: [270, 271, 272, 273, 274, 425] },
     { parent: 233, children: [275, 276, 277] },
@@ -118,5 +121,11 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     // and still download need the route.
     { issue: 730, blockers: [729] },
     { issue: 731, blockers: [730] },
+    // #721's leaves: the overrides and the preview measurement need the benchmark report; the
+    // device procedure and the CI check need the report and the one-knob overrides.
+    { issue: 735, blockers: [734] },
+    { issue: 736, blockers: [734] },
+    { issue: 737, blockers: [734, 735] },
+    { issue: 738, blockers: [734, 735] },
   ]),
 });
