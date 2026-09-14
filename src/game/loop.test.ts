@@ -13,6 +13,7 @@ import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId }
 import type { AchievementContext, AchievementId } from './achievements';
 import type { SessionDiagnostics } from './dev-diagnostics';
 import type { DevActionPort } from './dev-actions';
+import type { DevExportPort } from './dev-exports';
 import { TANK_KINDS, configFor } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
@@ -411,6 +412,8 @@ interface Recorder {
   diagnosticsSources: ((() => SessionDiagnostics | null) | null)[];
   /** Every port registered through hud.setDevActionPort, in order (issue #252). */
   devActionPorts: ((() => DevActionPort | null) | null)[];
+  /** Every export-port getter the host registered (issue #254). */
+  devExportPorts: ((() => DevExportPort | null) | null)[];
   /** Every value passed to hud.setPadDiagnostics, in order (each a snapshot copy). */
   padDiagnosticsPushes: PadDiagnostic[][];
 }
@@ -634,6 +637,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     relevancePushes: [],
     diagnosticsSources: [],
     devActionPorts: [],
+    devExportPorts: [],
     padDiagnosticsPushes: [],
   };
 
@@ -1380,6 +1384,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // no-op stub would let the registration disappear silently.
         setDevActionPort: (source: (() => DevActionPort | null) | null) => {
           rec.devActionPorts.push(source);
+        },
+        setDevExportPort: (source: (() => DevExportPort | null) | null) => {
+          rec.devExportPorts.push(source);
         },
         onControllersOpen: (cb: () => void) => {
           onControllersOpen = cb;

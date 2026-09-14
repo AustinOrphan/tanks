@@ -352,6 +352,13 @@ import {
   type DiagnosticsInput,
   type SessionDiagnostics,
 } from './dev-diagnostics';
+import {
+  NO_SESSION_REPLAY_NOTE,
+  diagnosticsExport,
+  replayExport,
+  type DevExportPort,
+  type ExportResult,
+} from './dev-exports';
 
 /*
  * ---- WHAT EACH ENDING SAYS, AND WHAT IT OFFERS (issue #323) ----------------------
@@ -631,6 +638,11 @@ export interface Hud {
    * rather than present and inert.
    */
   setDevActionPort(source: (() => DevActionPort | null) | null): void;
+  /**
+   * Register where the developer exports read the live session (issue #254). A getter, for the
+   * reason `setDevActionPort`'s is; `null` when nothing is live, which the pane reports.
+   */
+  setDevExportPort(source: (() => DevExportPort | null) | null): void;
   /**
    * WHERE THE ACTIVE RUN STANDS, for the Main Menu's one-line confidence summary and the
    * replace-run confirmation's copy (issue #226): "Mission 3 -- 2 lives left".
@@ -1285,7 +1297,7 @@ export type RouteHudKey =
   // gameplay-facing callbacks above are: `route-host.ts` registers it exactly once, as a
   // trampoline into whichever session holds the slot. A session never touches it -- it
   // supplies its facts to the host through the slot, and the host decides what is live.
-  | 'setDiagnosticsSource' | 'setDevActionPort'
+  | 'setDiagnosticsSource' | 'setDevActionPort' | 'setDevExportPort'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
   | 'setRelaunchTarget';
 
@@ -1503,6 +1515,12 @@ export interface HudOptions {
    */
   readonly developerPage?: DeveloperPage;
   /**
+   * How the developer exports save a file (issue #254). Bound in `createBrowserDeps`, because
+   * starting a download is a page act; its absence hides Download Diagnostics and Download
+   * Replay, so an injected HUD in a test never starts one.
+   */
+  readonly developerDownloads?: DeveloperDownloads;
+  /**
    * Whether this page can mount the gallery workbench (issue #730). Its ABSENCE hides the
    * Developer Tools entry, for the reason `developerPage`'s hides Copy Diagnostics: the pane's
    * body needs a WebGL scene handle only `createBrowserDeps` binds, so an injected HUD in a
@@ -1541,6 +1559,11 @@ export interface DeveloperPage {
   /** `location.hash`, carried through the canonical URL untouched. */
   readonly hash: string;
   readonly build: BuildIdentity;
+}
+
+/** The page's download seam for the developer exports (issue #254); see `downloads.ts`. */
+export interface DeveloperDownloads {
+  saveText(text: string, fileName: string, type: string): void;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -2286,6 +2309,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
            selected text is the one path that always works. -->
       <button class="ui-btn ui-btn--slab hud-diag-copy" type="button">Copy Diagnostics</button>
       <button class="ui-btn ui-btn--slab hud-diag-pin" type="button">Pin Current Seed</button>
+      <!-- EXPORTS (issue #254). Each saves a file through the page's download seam, then says
+           in the field below what it saved, or why it saved nothing: a replay is never saved
+           empty. Hidden without that seam, as the two buttons above are without theirs. -->
+      <button class="ui-btn ui-btn--slab hud-export-diagnostics" type="button">Download Diagnostics</button>
+      <button class="ui-btn ui-btn--slab hud-export-replay" type="button">Download Replay</button>
       <!-- RUNTIME ACTIONS (issue #252). Each rebuilds the board, so each arms first: the
            same two-press confirmation Reset stats and Reset progress use, rather than a
            modal, because these sit in a pane a developer is already working in. Labels come
@@ -2538,6 +2566,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const selfTestOpenBtn = el.querySelector('.hud-selftest-open') as HTMLButtonElement;
   const diagCopyBtn = el.querySelector('.hud-diag-copy') as HTMLButtonElement;
   const diagPinBtn = el.querySelector('.hud-diag-pin') as HTMLButtonElement;
+  const exportDiagnosticsBtn = el.querySelector('.hud-export-diagnostics') as HTMLButtonElement;
+  const exportReplayBtn = el.querySelector('.hud-export-replay') as HTMLButtonElement;
   const diagOutEl = el.querySelector('.hud-diag-out') as HTMLTextAreaElement;
   const devNsEl = el.querySelector('.hud-devns') as HTMLElement;
   const prodSaveBtn = el.querySelector('.hud-prodsave') as HTMLButtonElement;
@@ -5055,6 +5085,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   let diagnosticsSource: (() => SessionDiagnostics | null) | null = null;
   /** Where the three developer actions reach the live session -- see `setDevActionPort`. */
   let devActionPort: (() => DevActionPort | null) | null = null;
+  /** Where the exports read the live session -- see `setDevExportPort`. */
+  let devExportPort: (() => DevExportPort | null) | null = null;
 
   /** Everything `dev-diagnostics.ts` needs, composed from the two halves at press time. */
   const diagnosticsInput = (): DiagnosticsInput | null => {
@@ -5112,6 +5144,49 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       url ?? 'No session is running, so there is no resolved seed to pin. Start a round and press this again.',
     );
   };
+
+  /*
+   * THE EXPORTS (issue #254). `dev-exports.ts` decides what each file is and what to say; this
+   * saves it and says it. The note goes in the same field without selecting it or touching the
+   * clipboard: it describes a file, and is not itself the thing to copy.
+   *
+   * A FAILURE IS REPORTED, NOT THROWN. Everything from reading the session to saving the file
+   * runs inside one `try`, and the port has only readers, so a failed export leaves the field
+   * saying what failed and the session as it was.
+   */
+  const showExportNote = (text: string): void => {
+    diagOutEl.value = text;
+    diagOutEl.classList.remove('hud-diag-out--hidden');
+    diagOutEl.scrollTop = 0;
+  };
+
+  const runExport = (label: string, build: () => ExportResult): void => {
+    const downloads = opts.developerDownloads;
+    if (downloads === undefined || opts.developerPage === undefined) return;
+    let result: ExportResult;
+    try {
+      result = build();
+      if (result.kind === 'file') downloads.saveText(result.text, result.fileName, result.type);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      showExportNote(`${label} failed, so no file was saved: ${reason}`);
+      return;
+    }
+    showExportNote(result.note);
+  };
+
+  const handleExportDiagnostics = (): void =>
+    runExport('Download Diagnostics', () => {
+      const input = diagnosticsInput() as DiagnosticsInput;
+      const port = input.session === null ? null : (devExportPort?.() ?? null);
+      return diagnosticsExport(input, port === null ? null : port.round());
+    });
+
+  const handleExportReplay = (): void =>
+    runExport('Download Replay', () => {
+      const port = devExportPort?.() ?? null;
+      return port === null ? { kind: 'unavailable', note: NO_SESSION_REPLAY_NOTE } : replayExport(port.replay());
+    });
 
   /**
    * Whether the three actions are offered at all.
@@ -5216,6 +5291,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   );
   diagCopyBtn.addEventListener('click', handleDiagCopy);
   diagPinBtn.addEventListener('click', handleDiagPin);
+  exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
+  exportReplayBtn.addEventListener('click', handleExportReplay);
   for (const btn of devActionBtns) {
     btn.addEventListener('click', () =>
       handleDangerClick(btn, [() => runDevActionFor(btn)], DEV_ACTIONS[btn.dataset.action as DevActionId].confirmLabel),
@@ -5297,6 +5374,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // gets neither button and cannot report a page it cannot see.
   diagCopyBtn.hidden = !opts.developerPage;
   diagPinBtn.hidden = !opts.developerPage;
+  // The exports need the page facts AND a way to save a file; either one missing hides both.
+  exportDiagnosticsBtn.hidden = !opts.developerPage || !opts.developerDownloads;
+  exportReplayBtn.hidden = !opts.developerPage || !opts.developerDownloads;
   galleryOpenBtn.hidden = !opts.galleryWorkbench;
   // Hidden until a session says otherwise: no port has been registered at construction, so
   // the three actions start unavailable rather than flashing on before the first push.
@@ -7605,6 +7685,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     setDevActionPort(source): void {
       devActionPort = source;
       refreshDevActions();
+    },
+    setDevExportPort(source): void {
+      devExportPort = source;
     },
     setContinueAvailable(available: boolean): void {
       hasProgress = available;
