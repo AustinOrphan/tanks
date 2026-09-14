@@ -625,6 +625,10 @@ describe('hud.css is syntactically whole', () => {
       // inside Records, so a rule for it would be dead.
       '.hud-achievements', '.hud-achievements--hidden',
       '.hud-achievement', '.hud-achievement--earned', '.hud-toasts', '.hud-toast',
+      // issue #630: the lock's line with the label, its fixed slot (without which an earned
+      // row's empty slot collapses and its title sits left of the locked ones), and the svg
+      // size (without which it falls back to 300x150)
+      '.hud-achievement-head', '.hud-achievement-icon', '.hud-achievement-lock',
       // controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
       // assignment.md): hidden rules, the row layout, the disconnected dimming, and the
       // per-candidate button's own size

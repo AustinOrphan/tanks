@@ -1,0 +1,14 @@
+{
+  "id": "achievement-lock-icon-dropped",
+  "file": "src/game/hud.ts",
+  "find": "      if (!got) icon.innerHTML = ACHIEVEMENT_LOCK_ICON;\n",
+  "replace": "      if (!got) icon.innerHTML = '';\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #630. Locked rows lose their padlock. A screen reader still hears 'Locked.', but on screen the only difference between an earned and a locked achievement is `opacity: 0.45` against 1 plus a gold border, a dimming and a hue that forced colours and a greyscale screenshot both flatten. The empty slot survives, so a check for `.hud-achievement-icon` alone would pass; the case looks for the svg inside it.",
+  "killedBy": [
+    "HUD achievement list (issue #629) marks a locked achievement with a padlock, not only a dimming and a border hue (issue #630)"
+  ]
+}
