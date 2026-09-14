@@ -2829,12 +2829,15 @@
  * free at every landscape width swept. `tools/visual/verify.mjs`'s clearance pass fails the
  * flash overlapping a chip, the board, or the side insets, and fails it moving a chip.
  *
- * `align-self: center` centres an absolutely positioned grid child in its row; the top
- * margin keeps a top inset, which grows the row, out of that centring. */
+ * `top: 0; bottom: 0` spans the row, and `align-self: center` centres the text's own box
+ * inside that span; the top margin keeps a top inset, which grows the row, out of the
+ * centring. Both insets are needed: with `top: auto`, Chromium centred the flash in the
+ * whole HUD, measured at y 182-209 of a 390px viewport, on the board. */
 @media (orientation: landscape) {
   .hud-capacity {
     grid-row: 1;
-    top: auto;
+    top: 0;
+    bottom: 0;
     align-self: center;
     margin-top: env(safe-area-inset-top, 0px);
     left: auto;
