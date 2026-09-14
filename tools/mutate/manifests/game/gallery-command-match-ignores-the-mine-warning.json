@@ -1,0 +1,14 @@
+{
+  "id": "gallery-command-match-ignores-the-mine-warning",
+  "file": "src/game/gallery-command.ts",
+  "find": "  if (input.subject.kind !== 'moment' || input.mineWarn !== null) return null;",
+  "replace": "  if (input.subject.kind !== 'moment') return null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-command.test.ts"
+  ],
+  "why": "Issue #731. Names a recipe for a selection drawn with an experimental mine warning, which the recipe adapter never passes, so the recipe would capture a different picture than the one named.",
+  "killedBy": [
+    "matchingCaptureStill (issue #731) names none for a selection one field away -- population: every compared field"
+  ]
+}

@@ -119,7 +119,7 @@ import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } from './devflags';
 import { developerExitSearch } from './dev-config';
 import { gallerySearch, type GalleryCatalog } from './gallery-selection';
-import type { GalleryWorkbenchDeps } from './gallery-workbench';
+import { downloadCanvasStill, type GalleryWorkbenchDeps } from './gallery-workbench';
 import { configFor } from '../sim/config';
 import {
   applyRenderOverrides,
@@ -267,6 +267,7 @@ export interface GameDeps {
     readonly create: GalleryWorkbenchDeps['create'];
     readonly initial: string | null;
     readonly linkFor?: (value: string) => string;
+    readonly saveStill?: GalleryWorkbenchDeps['saveStill'];
   };
   readonly createAudio: () => AudioEngine;
   /**
@@ -1204,6 +1205,7 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
       initial: devFlags.gallery,
       linkFor: (value) =>
         `${globalThis.location.pathname}${gallerySearch(search, value)}${globalThis.location.hash}`,
+      saveStill: downloadCanvasStill,
     },
     createInput: createInputController,
     createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
