@@ -1,0 +1,14 @@
+{
+  "id": "ledger-flag-count-goes-stale",
+  "file": "docs/superpowers/backlog/ledger.md",
+  "find": "`FLAG_REGISTRY` names 37 flags.",
+  "replace": "`FLAG_REGISTRY` names 18 flags.",
+  "expect": "killed",
+  "tests": [
+    "tools/backlog.test.ts"
+  ],
+  "why": "Restores the ledger's flag count from before issue #693: 18, when the registry held 37. The retirement item is only actionable with the real population, and the count moves every time a flag is added or retired; it is now read from FLAG_REGISTRY, so a stale figure must fail.",
+  "killedBy": [
+    "the backlog index is complete (issue #265) states the dev-flag count the registry actually holds (issue #693)"
+  ]
+}

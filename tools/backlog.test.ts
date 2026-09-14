@@ -16,6 +16,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import tracks from '../src/audio/data/music-tracks.json';
 import suitesJson from '../src/audio/data/music-suites.json';
+import { FLAG_REGISTRY } from '../src/game/devflags';
 
 // Issue #265 split the monolithic backlog into per-topic files under backlog/ with
 // backlog.md as their compact index. Every quoted measurement this suite recomputes
@@ -249,5 +250,11 @@ describe('the backlog index is complete (issue #265)', () => {
     // the index must not load the corpus. 40 lines comfortably holds ~16 entries plus
     // preamble; a body pasted back in blows through it immediately.
     expect(INDEX.split('\n').length).toBeLessThan(40);
+  });
+
+  it('states the dev-flag count the registry actually holds (issue #693)', () => {
+    // The ledger said 18 flags when FLAG_REGISTRY held twice that. Recomputed, like every
+    // other figure this suite pins, so the next flag added or retired moves this sentence.
+    expect(FLAT_BACKLOG).toContain(`\`FLAG_REGISTRY\` names ${Object.keys(FLAG_REGISTRY).length} flags.`);
   });
 });

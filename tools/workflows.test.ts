@@ -416,6 +416,30 @@ describe('canonical verification commands in workflows', () => {
     }
   });
 
+  it('keeps the deploy-path checking-step tally recomputed from the workflows (issue #693)', () => {
+    // commands-and-operations.md states how many of ci.yml's checking steps a manual
+    // deploy re-runs, and that bare number went stale unnoticed more than once. Recomputed
+    // here by the doc's own stated rule: every named step of the two ci.yml jobs except
+    // the runner set-up and artefact steps, counted once per distinct `run:` command.
+    const NOT_CHECKS = ['Install Playwright', 'Cache Playwright browsers', 'Install chromium', 'Upload screenshots'];
+    const checks = (job: string): string[] =>
+      [...job.matchAll(/^ {6}- name: (.+)$/gm)].map((m) => m[1]).filter((name) => !NOT_CHECKS.includes(name));
+    const runOf = (job: string, name: string): string => /^\s+run: (.+)$/m.exec(namedStep(job, name))?.[1] ?? name;
+
+    const verify = checks(ciVerify);
+    const verifyRuns = new Set(verify.map((name) => runOf(ciVerify, name)));
+    const visualAdds = checks(ciVisual).filter((name) => !verifyRuns.has(runOf(ciVisual, name)));
+    const deploy = checks(pagesBuild).filter((name) => verifyRuns.has(runOf(pagesBuild, name)));
+
+    expect(verify.length, 'the verify job has no named checks -- the step regex is not matching').toBeGreaterThan(0);
+    expect(deploy.length, 'a deploy step no longer matches a verify step').toBe(checks(pagesBuild).length);
+    const doc = read('docs/agent/commands-and-operations.md').replace(/\s+/g, ' ');
+    expect(doc).toContain(
+      `**${deploy.length} of \`ci.yml\`'s ${verify.length + visualAdds.length} checking steps** `
+      + `(\`verify\`: ${verify.length}, \`visual\`: ${visualAdds.length})`,
+    );
+  });
+
   it('runs the complete floor manifest only on a daily schedule or manual dispatch', () => {
     expect(MUTATION_FLOOR).toMatch(/^name: Mutation floor$/m);
     expect(MUTATION_FLOOR).toMatch(/^\s*schedule:\s*$/m);

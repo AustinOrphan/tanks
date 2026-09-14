@@ -1,0 +1,14 @@
+{
+  "id": "context-budget-rule-row-goes-stale",
+  "file": "docs/agent/context-budget.md",
+  "find": "| `.claude/rules/testing.md` | 47 | 2772 |",
+  "replace": "| `.claude/rules/testing.md` | 41 | 2275 |",
+  "expect": "killed",
+  "tests": [
+    "tools/instructions.test.ts"
+  ],
+  "why": "Restores the stale testing.md row issue #693 found: 41 lines / 2275 bytes against a file of 47 / 2772. Only the After row used to be asserted, so the rule table drifted with every rule edit and the document's own preamble records it drifting before. The table is now recomputed from the files; a row that no longer matches them has to fail.",
+  "killedBy": [
+    "the instruction files keeps every context-budget row recomputed from the files it measures (issue #693)"
+  ]
+}
