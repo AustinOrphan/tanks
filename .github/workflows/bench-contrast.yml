@@ -4,13 +4,11 @@ name: Benchmark contrast
 # several times per arm, and uploads every report. A contrast measured within one run on one
 # runner, never an absolute frame time, and nothing about a real device (#288 owns that).
 #
-# TEMPORARY `pull_request` trigger while the runner's run-to-run spread is measured: a
-# workflow_dispatch workflow can only be dispatched once its file is on the default branch, and a
-# pull_request run uses the branch's own workflow files. It is removed before this is marked ready.
+# Dispatch-only, like tools/gl/harness.ts's own timing measurements, which it records rather than
+# asserts because `npm run test:gl` runs inside the required `visual` job: a timing assertion on an
+# automatic trigger is a flaky check for every pull request. Making this one required is the owner's
+# call. The spread it was tuned on was measured through a temporary pull_request trigger on #749.
 on:
-  pull_request:
-    paths:
-      - .github/workflows/bench-contrast.yml
   workflow_dispatch:
     inputs:
       runs:
