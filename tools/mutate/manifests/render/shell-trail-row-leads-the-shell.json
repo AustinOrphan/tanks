@@ -1,0 +1,16 @@
+{
+  "id": "shell-trail-row-leads-the-shell",
+  "file": "src/render/shell-trail.ts",
+  "find": "        at.set(x - dx * back, BULLET_Y, y - dy * back);",
+  "replace": "        at.set(x + dx * back, BULLET_Y, y + dy * back);",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "why": "Lays the dashes out AHEAD of the shell instead of behind it. The count would still be right, but a row in front of a shell reads as its direction of travel -- the trajectory preview issue #688 rules out -- and it covers exactly the ground the player is trying to read.",
+  "killedBy": [
+    "shell bounce-trail system (issue #688) lays the row out behind the shell along its heading, at shell height",
+    "shell bounce-trail system (issue #688) turns the row with the shell the frame its heading turns",
+    "shell bounce-trail system (issue #688) follows the interpolated shell, not the tick position"
+  ]
+}

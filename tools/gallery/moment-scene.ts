@@ -3,6 +3,7 @@ import { createEntityViews } from '../../src/render/entities';
 import { createParticleSystem } from '../../src/render/particles';
 import { createDeathPulseSystem } from '../../src/render/death-pulse';
 import { createTreadTrailSystem } from '../../src/render/tread-trails';
+import { createShellTrailSystem } from '../../src/render/shell-trail';
 import { createBlockedFireRingSystem } from '../../src/render/blocked-fire-ring';
 import { createBlockedFireMuzzleSystem } from '../../src/render/blocked-fire-muzzle';
 import { createMuzzleSmokeSystem } from '../../src/render/muzzle-smoke';
@@ -55,6 +56,12 @@ export interface MomentSceneOptions {
    * evidence for a comparison nobody is making.
    */
   arrival?: import('../../src/presentation/arrival-language').ArrivalLanguage | null;
+  /**
+   * Experimental shell bounce-trail (issue #688); null = none, the shipped render. Built by
+   * the same flag-to-system mapping as renderer.ts, so a moment that fires (`fire`,
+   * `ricochet`) shows the count change at the bounce under real timeline motion.
+   */
+  shellTrail?: import('../../src/presentation/shell-trail').ShellTrailStyle | null;
   /**
    * Dressing for the entrance the moment stages -- required here, unlike
    * `GalleryOptions.spawnAnim` (subjects.ts), which is optional and only reaches
@@ -214,6 +221,7 @@ export function buildMomentScene(
   // position/orientation, so two renders of the same moment are already
   // byte-identical without one -- see tread-trails.ts's own doc comment.
   const treadTrails = createTreadTrailSystem(scene);
+  const shellTrail = opts.shellTrail === 'segments' ? createShellTrailSystem(scene) : null;
   // Constructed by the same cue-to-system mapping as renderer.ts, so what the gallery
   // shows is what the game would show for that flag. `views` is passed to the recoil
   // system directly: EntityViews already satisfies `BarrelSource` (its `barrelOf`), and
@@ -296,6 +304,7 @@ export function buildMomentScene(
     }
     // prev/curr one tick apart, so interpolated quantities animate rather than step.
     views.sync(tl.worlds[Math.max(0, a - 1)], tl.worlds[a], alpha, dt);
+    shellTrail?.sync(tl.worlds[Math.max(0, a - 1)], tl.worlds[a], alpha);
     particles.update(dt);
     deathPulse.update(dt);
     // AFTER views.sync, matching renderer.ts, where the ordering is load-bearing for the
@@ -320,6 +329,7 @@ export function buildMomentScene(
     particles.dispose();
     deathPulse.dispose();
     treadTrails.dispose();
+    shellTrail?.dispose();
     blockedFireRing?.dispose();
     blockedFireMuzzle?.dispose();
     barrelRecoil.dispose();

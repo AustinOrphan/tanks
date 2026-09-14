@@ -30,6 +30,8 @@ const motionParam = params.get('motion') === 'reduced' ? 'reduced' : 'full';
 const identityMarkerParam = params.get('identityMarker') as import('../../src/presentation/identity-marker').IdentityMarkerStyle | null;
 const blockedFireParam = params.get('blockedFire') as import('../../src/presentation/blocked-fire').BlockedFireCue | null;
 const arrivalParam = params.get('arrival') as import('../../src/presentation/arrival-language').ArrivalLanguage | null;
+// Forwarded to BOTH branches, for the reason the motion note above gives.
+const shellTrailParam = params.get('shellTrail') as import('../../src/presentation/shell-trail').ShellTrailStyle | null;
 
 // `scene` selects one of MOMENTS's scripted timelines over the default posed gallery.
 // Looking the id up directly in MOMENTS (rather than checking against a hardcoded list)
@@ -55,6 +57,7 @@ const g = moment
       mineWarn: mineWarnParam,
       blockedFire: blockedFireParam,
       arrival: arrivalParam,
+      shellTrail: shellTrailParam,
       motion: motionParam,
     })
   : buildGallery(canvas, W, H, {
@@ -78,6 +81,7 @@ const g = moment
       // nothing depending on a `--scene` the user may never have set.
       mineWarn: mineWarnParam,
       identityMarker: identityMarkerParam,
+      shellTrail: shellTrailParam,
       motion: motionParam,
     });
 

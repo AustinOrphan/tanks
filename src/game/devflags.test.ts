@@ -568,6 +568,27 @@ describe('registryKeyMismatch: proven against synthetic fixtures first', () => {
   });
 });
 
+describe('parseDevFlags: shellTrail (issue #688 -- remaining bounces without hue)', () => {
+  it('is inert without dev=1, like every flag', () => {
+    expect(parseDevFlags('?shellTrail=segments').shellTrail).toBeNull();
+  });
+
+  it('defaults to no trail, which is the shipped render', () => {
+    expect(parseDevFlags('?dev=1').shellTrail).toBeNull();
+  });
+
+  it('accepts the one built treatment and nothing else', () => {
+    expect(parseDevFlags('?dev=1&shellTrail=segments').shellTrail).toBe('segments');
+    for (const v of ['', 'length', 'SEGMENTS', '1']) {
+      expect(parseDevFlags(`?dev=1&shellTrail=${v}`).shellTrail, `'${v}'`).toBeNull();
+    }
+  });
+
+  it('changes no other flag', () => {
+    expect(parseDevFlags('?dev=1&shellTrail=segments')).toEqual({ ...DEV_FLAGS_OFF, shellTrail: 'segments' });
+  });
+});
+
 describe('FLAG_REGISTRY: the "programmatically kept up to date" guarantee', () => {
   it('has exactly one entry per DevFlags field, in both directions', () => {
     // The compile-time half is the `Record<keyof DevFlags, FlagSpec>` annotation on

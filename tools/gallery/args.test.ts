@@ -8,10 +8,11 @@ import {
   GALLERY_VIEW_IDS,
 } from './args.mjs';
 import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/presentation/customization';
-import { MOMENTS } from './moments';
+import { MOMENTS, simulateMoment } from './moments';
 import { ELEMENTS, VIEWS, compose } from './subjects';
 import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
 import { ARRIVAL_LANGUAGES } from '../../src/presentation/arrival-language';
+import { SHELL_TRAIL_STYLES } from '../../src/presentation/shell-trail';
 
 const ESC = String.fromCharCode(27);
 
@@ -281,10 +282,46 @@ describe('gallery args', () => {
     const ringBearing = Object.keys(ELEMENTS).filter(
       (name) => compose([name], 0).world.tanks.filter((t) => t.kind === 'player').length >= 2,
     );
-    expect(ringBearing.sort()).toEqual(['coop', 'identity']);
+    expect(ringBearing.sort()).toEqual(['coop', 'identity', 'shelltrail']);
     for (const name of ringBearing) {
       expect(parseArgs(['--elements', name, '--identityMarker', 'shape']).identityMarker).toBe('shape');
     }
+  });
+
+  it('pins --shellTrail to the vocabulary the renderer actually owns', () => {
+    for (const style of SHELL_TRAIL_STYLES) {
+      expect(parseArgs(['--elements', 'shelltrail', '--shellTrail', style]).shellTrail).toBe(style);
+    }
+    expect(() => parseArgs(['--elements', 'shelltrail', '--shellTrail', 'length']))
+      .toThrow(/--shellTrail must be one of/);
+  });
+
+  it('refuses --shellTrail where no shell is in the frame', () => {
+    expect(() => parseArgs(['--elements', 'tank', '--shellTrail', 'segments']))
+      .toThrow(/needs a shell in the frame/);
+    expect(() => parseArgs(['--scene', 'destroyed', '--shellTrail', 'segments']))
+      .toThrow(/needs a shell in the frame/);
+    expect(() => parseArgs(['--scene', 'game', '--shellTrail', 'segments']))
+      .toThrow(/pass it in --query/);
+    expect(parseArgs(['--scene', 'ricochet', '--shellTrail', 'segments']).shellTrail).toBe('segments');
+  });
+
+  it('pins the shell-bearing element list to the subjects that really pose a shell', () => {
+    // MEASURED, like the ring-bearing list below: every element's own `place` is run and its
+    // shells counted, so a subject that gains or loses one fails here.
+    const shellBearing = Object.keys(ELEMENTS).filter((name) => compose([name], 0).world.bullets.length > 0);
+    expect(shellBearing.sort()).toEqual(['coop', 'shell', 'shellring', 'shelltrail']);
+    for (const name of shellBearing) {
+      expect(parseArgs(['--elements', name, '--shellTrail', 'segments']).shellTrail).toBe('segments');
+    }
+  });
+
+  it('pins the shell-trail moments to the ones that really fire a shell', () => {
+    // Staged, not declared: a moment accepted for --shellTrail must have a live shell on some tick.
+    const firing = Object.keys(MOMENTS).filter((id) =>
+      simulateMoment(MOMENTS[id]).worlds.some((w) => w.bullets.some((b) => b.alive)),
+    );
+    for (const id of ['fire', 'ricochet']) expect(firing, id).toContain(id);
   });
 
   it('pins --arrival to the vocabulary the renderer actually owns', () => {

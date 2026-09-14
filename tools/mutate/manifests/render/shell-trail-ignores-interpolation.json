@@ -1,0 +1,14 @@
+{
+  "id": "shell-trail-ignores-interpolation",
+  "file": "src/render/shell-trail.ts",
+  "find": "      const x = p && p.alive ? p.pos.x + (b.pos.x - p.pos.x) * alpha : b.pos.x;",
+  "replace": "      const x = b.pos.x;",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "why": "Places the row at the shell's tick position while entities.ts draws the shell at its interpolated one. At 60Hz a normal shell moves 0.1 units a tick, so between ticks the row would slide up to a tick's travel out of step with the shell it belongs to -- a stutter on the cue, and a gap or overlap the count is read across.",
+  "killedBy": [
+    "shell bounce-trail system (issue #688) follows the interpolated shell, not the tick position"
+  ]
+}

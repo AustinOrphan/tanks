@@ -1,0 +1,14 @@
+{
+  "id": "shell-trail-flag-ignored-by-the-renderer",
+  "file": "src/game/loop.ts",
+  "find": "    shellTrail: deps.devFlags.shellTrail,",
+  "replace": "    shellTrail: null,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Severs the shellTrail dev flag from the renderer, so `?dev=1&shellTrail=segments` parses, validates and shows as set in the Developer panel while no trail is ever built. For an experiment that exists to be turned on and compared (issue #688), that reads as the treatment not helping rather than never running. Invisible to the render and presentation tests, which never go through loop.ts, and to the exact-object option tests, which only pin the default null.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default threads the shellTrail dev flag through to the renderer (issue #688)"
+  ]
+}

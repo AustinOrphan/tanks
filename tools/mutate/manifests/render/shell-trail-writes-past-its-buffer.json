@@ -1,0 +1,14 @@
+{
+  "id": "shell-trail-writes-past-its-buffer",
+  "file": "src/render/shell-trail.ts",
+  "find": "      if (n + segments > MAX_SHELL_TRAIL_DASHES) break;",
+  "replace": "      if (false) break;",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "why": "Drops the cap check, so a board with more than 64 live shells writes dash matrices past the fixed InstancedMesh buffer. Issue #688 requires the treatment not to buy readability with unbounded growth; the cap is where that bound is enforced, and without it the overflow is an out-of-range write rather than a quietly shortened trail.",
+  "killedBy": [
+    "shell bounce-trail system (issue #688) is bounded: a fixed buffer, one object, and later shells dropped past the cap"
+  ]
+}
