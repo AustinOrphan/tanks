@@ -95,6 +95,9 @@ const MAY_IMPORT: Readonly<Record<Layer, ReadonlySet<Layer>>> = {
  *   preset for a session (CLAUDE.md: `main.ts` is wiring only, so the session's wiring
  *   lives here), and forwards the `?mineWarn=` treatment to the renderer it built.
  * - `route-ui.ts` owns the Customize preview's handle above a session (issue #427).
+ * - `loop.ts` also binds the gallery workbench's scene handle and registry catalog for the
+ *   Developer Tools pane (issue #730). `route-ui.ts` mounts that pane through structural
+ *   types in `gallery-workbench.ts` and imports nothing from `render/gallery/` itself.
  * - `devflags.ts` validates `?mineWarn=` against the renderer's own option vocabulary: a
  *   renderer-owned treatment a developer flag selects, not player-facing semantics. It
  *   validated `?quality=` the same way until issue #540, and this entry said in advance
@@ -120,6 +123,7 @@ const GAME_WIRING: Readonly<Record<string, readonly string[]>> = {
     'render/preview',
     'render/quality',
     'render/mine-warning',
+    'render/gallery/workbench-scene',
     'audio/engine',
     'audio/suites',
     'audio/director',

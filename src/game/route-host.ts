@@ -804,6 +804,10 @@ export function createRouteHost(
   // the menu bed already in the right world rather than switching on arrival.
   followMusic(sm.location);
 
+  // A `?gallery=` link opens the workbench over the first screen (issue #730). The HUD refuses
+  // it outside developer mode or on a page with no workbench, so the flag alone opens nothing.
+  if (deps.devFlags.gallery !== null) hud.openGalleryWorkbench();
+
   /**
    * Which input the player is using, for the prompts that name a key or a button (issue
    * #496). Every page-level input path reports here -- the keydown listener below, the
@@ -1129,6 +1133,7 @@ export function createRouteHost(
       // The preview then, for the same reason `startGameWith` disposed it before the
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
       routeUi.disposePreview();
+      routeUi.disposeGallery();
       // The page's own subscription, released for the same reason a session releases its
       // own: the machine and this host die together, but a reference kept past teardown
       // must not keep painting a disposed HUD.
