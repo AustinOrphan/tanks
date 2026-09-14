@@ -1,0 +1,16 @@
+{
+  "id": "bench-report-drops-the-preview-renderer",
+  "file": "src/game/bench.ts",
+  "find": "    preview: input.preview,\n",
+  "replace": "    preview: null,\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Issue #736: the preview workload's report omits the preview's own renderer settings, so a reader cannot tell what antialias, pixel-ratio cap and shadows the measured frames were drawn with.",
+  "killedBy": [
+    "buildBenchReport reports the preview workload with no session and the preview renderer it measured (issue #736)",
+    "createRouteHost: the ?bench=preview workload is page-scoped (issue #736) hands the preview a timing scheduler, and publishes a report of the frames it ran with no session"
+  ]
+}
