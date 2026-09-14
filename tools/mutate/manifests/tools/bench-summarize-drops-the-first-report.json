@@ -1,0 +1,14 @@
+{
+  "id": "bench-summarize-drops-the-first-report",
+  "file": "tools/bench/summarize.mjs",
+  "find": "runSummarize(process.argv.slice(2),",
+  "replace": "runSummarize(process.argv.slice(3),",
+  "expect": "killed",
+  "why": "The command drops the first path it is given, which is the baseline report, so the package script summarizes without it or asks for a report that was named. Only the test that runs the real package script can see the entry point.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "npm run bench:summarize (issue #737) reads report files through the package script, first file as the baseline"
+  ]
+}

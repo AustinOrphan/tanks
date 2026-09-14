@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-skips-its-field-checks",
+  "file": "tools/bench/summary.mjs",
+  "find": "    if (!ok(at(report, path))) reasons.push(",
+  "replace": "    if (false) reasons.push(",
+  "expect": "killed",
+  "why": "The summarizer stops checking the fields it reads, so a report missing a percentile or carrying a mistyped seed is summarized as NaN or compared on the wrong value instead of refused by name.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer refuses a report it would misread (issue #737) names each field it reads that is missing or mistyped"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-takes-the-upper-median",
+  "file": "tools/bench/summary.mjs",
+  "find": "  return sorted[Math.ceil(sorted.length / 2) - 1];",
+  "replace": "  return sorted[Math.floor(sorted.length / 2)];",
+  "expect": "killed",
+  "why": "For an even run count the arm's figure becomes the upper middle run, not the lower one the summary states. Odd counts pick the same run either way, so only the even-count test can see it.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summary (issue #737) takes the lower of the two middle runs for an even count, so the figure is a run that happened"
+  ]
+}

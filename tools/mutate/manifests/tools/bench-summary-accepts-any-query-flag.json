@@ -1,0 +1,15 @@
+{
+  "id": "bench-summary-accepts-any-query-flag",
+  "file": "tools/bench/summary.mjs",
+  "find": "    if (want.has(key) || allowed.includes(key)) continue;",
+  "replace": "    continue;",
+  "expect": "killed",
+  "why": "Any extra query parameter passes, so a run opened with another development flag (aimRay, say) is compared as though it were the named workload.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a report whose page was not the named workload",
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a sweep flag on the preview workload, whose renderer ignores it"
+  ]
+}
