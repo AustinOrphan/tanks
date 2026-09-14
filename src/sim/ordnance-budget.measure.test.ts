@@ -49,14 +49,16 @@ import type { TankKind } from './types';
 // an error.
 //
 // ---------------------------------------------------------------------------
-// KNOWN HOLE: "capped fire attempts" is NOT measured here.
+// "Capped fire attempts" WAS a known hole here, and no longer is (issue #720).
 //
 // The count wanted is how often a tank TRIED to fire and was refused, which is
-// not derivable from world state -- the refusal happens inside spawnBullet and
-// leaves no trace. PR #445 adds the `fire-blocked` SimEvent that carries it.
-// Until that merges, `%ticksAtCap` below is the closest available proxy: it is
-// capacity-stall TIME, which is not the same quantity. A tank can sit at its cap
-// without ever wanting to shoot.
+// not derivable from world state -- the refusal happens inside spawnBullet. The
+// `fire-blocked` SimEvent now carries it, for every owner: the enemy dispatcher
+// calls spawnBullet without checking the cap first (ai/index.ts), and the
+// scripted player's fire decision has no cap check either. So `blocked` below is
+// counted off that event. `%ticksAtCap` stays, because it measures something
+// different -- capacity-stall TIME. A tank can sit at its cap without ever
+// wanting to shoot, which is exactly what the brown note below found.
 //
 // That gap is not hypothetical, and one variant measures its size. Dropping
 // BROWN from 5 to 2 raises its capacity stall from 0.00% to 0.44% and changes
@@ -94,8 +96,36 @@ interface KindStat {
   mineTicks: number;
   atCapTicks: number;
   shots: number;
+  /** Fire attempts refused at the shell cap: `fire-blocked` events this kind owned. */
+  blocked: number;
   deaths: number;
+  /**
+   * Every destruction this kind's tanks are CREDITED with, as before issue #720 -- which
+   * includes its own self-kills and kills of tanks on its own side. `selfKills` and
+   * `alliedKills` separate those out; `kills` keeps its old meaning so #681's published
+   * table stays comparable.
+   */
   kills: number;
+  /** Deaths by cause, from `tank-destroyed.by.source`: a shell impact or a mine's blast. */
+  deathsByShell: number;
+  deathsByBlast: number;
+  /** Deaths credited to the victim itself (`by.ownerId === tankId`), by shell or by blast. */
+  selfKills: number;
+  /**
+   * MINE SELF-INTERFERENCE: the subset of `selfKills` caused by a blast credited to the
+   * victim. A mine's blast spares no owner (mines.ts `applyBlast` skips only the damage-
+   * immune and, with friendly fire off, teammates), so this is the tank walking into, or
+   * failing to leave, its own mine. NOT counted here: a tank that shoots its own mine. A
+   * shell that sets off a mine passes the SHELL's credit to `detonateMine` (bullets.ts), so
+   * that blast carries `source: 'shell'` -- it is a self-kill, but by shell.
+   */
+  ownMineDeaths: number;
+  /**
+   * Kills of a DIFFERENT tank on the killer's own side, where side is player versus enemy.
+   * Campaign encounters have no `team`, so this is the enemy-on-enemy friendly fire
+   * #358 asks about (and player-on-player, which a one-player campaign cannot produce).
+   */
+  alliedKills: number;
   shellLifetimeTicks: number;
   shellsEnded: number;
 }
@@ -108,8 +138,14 @@ const blank = (cap: number): KindStat => ({
   mineTicks: 0,
   atCapTicks: 0,
   shots: 0,
+  blocked: 0,
   deaths: 0,
   kills: 0,
+  deathsByShell: 0,
+  deathsByBlast: 0,
+  selfKills: 0,
+  ownMineDeaths: 0,
+  alliedKills: 0,
   shellLifetimeTicks: 0,
   shellsEnded: 0,
 });
@@ -164,15 +200,34 @@ function runArm(pp1Roles: boolean): {
                 agg.set(owner.kind, st);
               }
             }
+            if (e.type === 'fire-blocked') {
+              const owner = w.tanks.find((x) => x.id === e.ownerId);
+              if (owner) {
+                const st = agg.get(owner.kind) ?? blank(configFor(owner.kind).weapon.maxActiveProjectiles);
+                st.blocked++;
+                agg.set(owner.kind, st);
+              }
+            }
             if (e.type === 'tank-destroyed') {
               const victim =
                 agg.get(e.kind) ?? blank(configFor(e.kind).weapon.maxActiveProjectiles);
               victim.deaths++;
+              if (e.by.source === 'shell') victim.deathsByShell++;
+              else victim.deathsByBlast++;
+              if (e.by.ownerId === e.tankId) {
+                victim.selfKills++;
+                if (e.by.source === 'blast') victim.ownMineDeaths++;
+              }
               agg.set(e.kind, victim);
+              // A destroyed tank stays in `w.tanks` with `alive: false`, so a killer that
+              // died on the same tick is still found here.
               const killer = w.tanks.find((x) => x.id === e.by.ownerId);
               if (killer) {
                 const st = agg.get(killer.kind) ?? blank(configFor(killer.kind).weapon.maxActiveProjectiles);
                 st.kills++;
+                if (killer.id !== e.tankId && (killer.kind === 'player') === (e.kind === 'player')) {
+                  st.alliedKills++;
+                }
                 agg.set(killer.kind, st);
               }
             }
@@ -254,7 +309,10 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
         `  ${e.arena} seed=${e.seed}  ${(e.ticks / TICK_HZ).toFixed(1)}s  ended=${e.ended}`,
       );
     }
-  });
+    // One full arm over 3 seeds x 4 arenas outran vitest's 5000ms default on this machine and
+    // failed the case after printing every number -- the same trap the contrast case below
+    // already records. Given the same headroom.
+  }, 120_000);
 
   /**
    * THE MATCHED CONTRAST issue #358's required output asks for: the shipped baseline against
@@ -360,6 +418,76 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
     console.log(
       `\ndifficulty (coarse): player deaths ${base.agg.get('player')?.deaths} -> ${arm.agg.get('player')?.deaths}, ` +
         `encounters resolved ${ended(base)}/${base.encounters.length} -> ${ended(arm)}/${arm.encounters.length}`,
+    );
+
+    // 4. REFUSALS AND CAUSES (issue #720). The attribution is CHECKED before it is printed,
+    // per arm, because a cause table that silently drops or double-counts a death reads just
+    // like a real one:
+    //  - every death is credited to a tank still in `w.tanks`, so summed kills equal summed
+    //    deaths (a credit naming a mine id, or a killer lookup that misses, breaks this);
+    //  - `source` is 'shell' or 'blast', so each kind's deaths split exactly into the two
+    //    (a third source added to DestroyedBy breaks this);
+    //  - own-mine deaths are a subset of self-kills, which are a subset of deaths.
+    for (const [label, run] of [['baseline', base], ['pp1Roles', arm]] as const) {
+      let kills = 0;
+      let deaths = 0;
+      for (const [kind, s] of run.agg) {
+        kills += s.kills;
+        deaths += s.deaths;
+        if (s.deathsByShell + s.deathsByBlast !== s.deaths) {
+          throw new Error(`${label} ${kind}: ${s.deathsByShell} shell + ${s.deathsByBlast} blast deaths != ${s.deaths}`);
+        }
+        if (s.ownMineDeaths > s.selfKills || s.selfKills > s.deaths) {
+          throw new Error(`${label} ${kind}: ownMine ${s.ownMineDeaths} / selfKills ${s.selfKills} / deaths ${s.deaths} out of order`);
+        }
+      }
+      if (kills !== deaths) throw new Error(`${label}: ${kills} credited kills but ${deaths} deaths`);
+    }
+    console.log('\ncause attribution checked: kills = deaths per arm, and deaths = byShell + byBlast per kind');
+
+    // Capped fire attempts, and how tanks died. Raw
+    // counts, with each arm's live-tick samples beside them for the same reason as above --
+    // the arms do not run for the same number of ticks. `blocked/1k` is per 1000 live ticks
+    // of that kind, which IS comparable across the arrow.
+    console.log(
+      '\nkind     blocked        blocked/1k      deaths    byShell    byBlast    selfKills   ownMine    alliedKills',
+    );
+    const perK = (n: number, s: KindStat): string => ((1000 * n) / s.liveTicks).toFixed(2);
+    for (const kind of [...arm.agg.keys()].sort()) {
+      const a = arm.agg.get(kind) as KindStat;
+      const b = base.agg.get(kind);
+      if (b === undefined) continue;
+      const pair = (x: number, y: number): string => `${String(x).padStart(3)}->${String(y).padEnd(3)}`;
+      console.log(
+        `${kind.padEnd(8)} ${pair(b.blocked, a.blocked)}    ${perK(b.blocked, b).padStart(6)}->${perK(a.blocked, a).padEnd(6)}  ` +
+          `${pair(b.deaths, a.deaths)}   ${pair(b.deathsByShell, a.deathsByShell)}   ${pair(b.deathsByBlast, a.deathsByBlast)}   ` +
+          `${pair(b.selfKills, a.selfKills)}    ${pair(b.ownMineDeaths, a.ownMineDeaths)}   ${pair(b.alliedKills, a.alliedKills)}`,
+      );
+    }
+
+    // 5. ENCOUNTER DURATION, matched pair by pair. Both arms walk the same (seed, arena)
+    // product in the same order, so index i is the same encounter in each; the check below
+    // makes that an assertion rather than an assumption. A timed-out encounter reads as the
+    // 60s cap, so the mean over ALL encounters understates the difference whenever one arm
+    // times out more -- the per-pair lines are what to read.
+    console.log('\nencounter duration, baseline -> pp1Roles (60s cap; ended = win, lose or timeout)');
+    let baseTicks = 0;
+    let armTicks = 0;
+    for (let i = 0; i < base.encounters.length; i++) {
+      const be = base.encounters[i];
+      const ae = arm.encounters[i];
+      if (ae === undefined || ae.arena !== be.arena || ae.seed !== be.seed) {
+        throw new Error(`encounter ${i} is not matched across arms: ${be.arena}/${be.seed} vs ${ae?.arena}/${ae?.seed}`);
+      }
+      baseTicks += be.ticks;
+      armTicks += ae.ticks;
+      console.log(
+        `  ${be.arena} seed=${be.seed}  ${(be.ticks / TICK_HZ).toFixed(1)}s ${be.ended} -> ${(ae.ticks / TICK_HZ).toFixed(1)}s ${ae.ended}`,
+      );
+    }
+    console.log(
+      `  mean over all ${base.encounters.length}: ${(baseTicks / base.encounters.length / TICK_HZ).toFixed(1)}s -> ` +
+        `${(armTicks / arm.encounters.length / TICK_HZ).toFixed(1)}s`,
     );
     // THREE full arms -- baseline, arm, and the arm again for the determinism check -- over
     // 3 seeds x 4 arenas x 60s each. That is ~17s on this machine against vitest's 5000ms
