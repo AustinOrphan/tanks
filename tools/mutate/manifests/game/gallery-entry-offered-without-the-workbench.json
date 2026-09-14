@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.gallery.test.ts"
   ],
-  "why": "A HUD built without the workbench -- every injected test HUD -- has nothing to mount. Showing the entry there offers a pane that opens empty."
+  "why": "A HUD built without the workbench -- every injected test HUD -- has nothing to mount. Showing the entry there offers a pane that opens empty.",
+  "killedBy": [
+    "the gallery workbench pane (issue #730) is offered in Developer Tools only on a page that binds the workbench"
+  ]
 }

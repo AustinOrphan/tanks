@@ -16,6 +16,10 @@ import {
  * The gallery workbench's shareable selection (issue #730): what `?dev=1&gallery=` carries,
  * and the one reading of it both the pane and a pasted link go through.
  *
+ * THE `gallery` DEVELOPER FLAG IS PERMANENT. It settles no open question, so it has no
+ * ship-or-delete ruling to wait for: it is the workbench's shareable link for as long as the
+ * workbench exists (`.claude/rules/game.md`'s exemption for flags that are not experiments).
+ *
  * PURE, and `game/`-side, because it is the pane's vocabulary rather than the renderer's. The
  * render registries it validates against (`ELEMENTS`, `MOMENTS`, `VIEWS`, the mine-warning
  * styles) arrive as a `GalleryCatalog`, injected from the wiring that may import them -- the

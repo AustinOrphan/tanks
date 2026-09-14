@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.gallery.test.ts"
   ],
-  "why": "The boot open is a developer pane. Without the developer-mode guard, a `?gallery=` link would open it on a player's page."
+  "why": "The boot open is a developer pane. Without the developer-mode guard, a `?gallery=` link would open it on a player's page.",
+  "killedBy": [
+    "openGalleryWorkbench: the boot path for a ?gallery= link (issue #730) opens nothing outside developer mode, or on a page without the workbench"
+  ]
 }

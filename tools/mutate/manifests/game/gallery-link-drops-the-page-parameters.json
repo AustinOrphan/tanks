@@ -7,5 +7,8 @@
   "tests": [
     "src/game/gallery-selection.test.ts"
   ],
-  "why": "Copy Link must keep the page's other parameters -- a seed, a storage namespace, a campaign tag -- so the link reopens the same page and not a bare one."
+  "why": "Copy Link must keep the page's other parameters -- a seed, a storage namespace, a campaign tag -- so the link reopens the same page and not a bare one.",
+  "killedBy": [
+    "gallerySearch (issue #730) sets the gallery parameter with the gate on, keeping every other parameter"
+  ]
 }

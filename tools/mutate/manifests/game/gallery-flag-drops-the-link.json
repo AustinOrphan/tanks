@@ -7,5 +7,8 @@
   "tests": [
     "src/game/devflags.test.ts"
   ],
-  "why": "The gallery flag keeps its raw value so the workbench can report the parts it refuses. A parser that dropped it would leave a pasted link opening nothing at all."
+  "why": "The gallery flag keeps its raw value so the workbench can report the parts it refuses. A parser that dropped it would leave a pasted link opening nothing at all.",
+  "killedBy": [
+    "parseDevFlags: gallery (issue #730) keeps the value it is given, trimmed, so the workbench can report what it refuses"
+  ]
 }

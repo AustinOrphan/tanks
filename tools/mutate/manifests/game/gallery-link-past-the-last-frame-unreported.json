@@ -7,5 +7,8 @@
   "tests": [
     "src/game/gallery-workbench.test.ts"
   ],
-  "why": "An `age` past the subject's last frame is clamped by the handle. Without the report the link silently shows a different frame than it names."
+  "why": "An `age` past the subject's last frame is clamped by the handle. Without the report the link silently shows a different frame than it names.",
+  "killedBy": [
+    "the gallery workbench restores a link, and reports what it could not (issue #730) lists every part it did not honour, on screen"
+  ]
 }
