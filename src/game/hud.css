@@ -1782,6 +1782,106 @@
   display: none;
 }
 
+/* THE GALLERY WORKBENCH (issue #730): the self-test's scrolling page, holding a form, a
+   fixed-buffer canvas scaled to fit, a timeline and a link. */
+.hud-gallery {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
+  overflow-y: auto;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+.hud-gallery--hidden {
+  display: none;
+}
+
+.hud-gallery-line {
+  margin: 0;
+  max-width: 60ch;
+  text-align: center;
+  opacity: 0.9;
+}
+
+.hud-gallery-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--hud-space-3);
+  width: min(100%, 640px);
+}
+
+.hud-gallery-problems {
+  margin: 0;
+  padding: var(--hud-space-2) var(--hud-space-4);
+  border-left: 3px solid currentColor;
+  color: var(--hud-text-danger);
+}
+
+.hud-gallery-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--hud-space-2) var(--hud-space-3);
+}
+
+.hud-gallery-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hud-space-1);
+  font-size: 0.9em;
+}
+
+.hud-gallery-field--check {
+  flex-direction: row;
+  align-items: center;
+}
+
+.hud-gallery-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 640 / 400;
+  border-radius: 6px;
+}
+
+.hud-gallery-timeline,
+.hud-gallery-linkrow {
+  display: flex;
+  align-items: center;
+  gap: var(--hud-space-2);
+}
+
+.hud-gallery-scrub,
+.hud-gallery-link {
+  flex: 1;
+  min-width: 0;
+}
+
+.hud-gallery-frame {
+  min-width: 9ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-gallery-link {
+  font-family: ui-monospace, monospace;
+  resize: none;
+}
+
+/* These set their own display, which would otherwise override the `hidden` attribute the
+   body toggles on them. */
+.hud-gallery-problems[hidden],
+.hud-gallery-linkrow[hidden] {
+  display: none;
+}
+
 .hud-selftest-line {
   margin: 0;
   max-width: 46ch;

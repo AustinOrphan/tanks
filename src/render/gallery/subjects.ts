@@ -459,6 +459,16 @@ export interface GalleryOptions {
    * `frames: 1`), so the by-hand check really does discriminate.
    */
   frames: number | null;
+  /**
+   * A renderer the CALLER owns, drawn with and left alive by `dispose` (issue #730).
+   * Absent -- the capture page and every harness fixture -- builds and disposes its own.
+   *
+   * It exists because a disposed `WebGLRenderer` does not give back what outlives the build:
+   * the programs it compiled and the textures module-level caches uploaded through it stay
+   * in the context. The in-app workbench rebuilds on one canvas at every scene change, and
+   * a renderer per build grew live GL objects on every one (measured in tools/gl/harness.ts).
+   */
+  renderer?: THREE.WebGLRenderer;
 }
 
 export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, opts: GalleryOptions) {
@@ -503,7 +513,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   }
   const debug = createMineDebug(scene, { reach: opts.reach, timer: opts.timer });
   const shellTrail = opts.shellTrail === 'segments' ? createShellTrailSystem(scene) : null;
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  const renderer = opts.renderer ?? new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
 
   const layout = compose(opts.elements, 0);
@@ -540,7 +550,9 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
     views.dispose();
     debug.dispose();
     shellTrail?.dispose();
-    renderer.dispose();
+    ground.geometry.dispose();
+    ground.material.dispose();
+    if (!opts.renderer) renderer.dispose();
   }
   return { draw, frames: opts.frames ?? layout.frames, dispose };
 }

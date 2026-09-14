@@ -50,6 +50,8 @@ export type HudLayerId =
   | 'controller-selftest'
   /** The registry-driven configuration menu, opened from Developer Tools (issue #246). */
   | 'developer-config'
+  /** The gallery workbench, opened from Developer Tools or by a `?gallery=` link (issue #730). */
+  | 'developer-gallery'
   | 'confirm-new-campaign'
   /** A match that failed to start for a transient reason (issue #325). */
   | 'match-failed';
@@ -1054,6 +1056,25 @@ export interface Hud {
   onControllerSelfTestOpen(cb: () => void): void;
   onControllerSelfTestClose(cb: () => void): void;
   /**
+   * The gallery workbench pane's empty body (issue #730). `gallery-workbench.ts` builds into it
+   * on open and empties it on close, driven by `route-ui.ts`, for the reason `previewCanvas` is
+   * handed out: the canvas inside draws through WebGL, and `hud.ts` builds none.
+   */
+  readonly galleryBody: HTMLElement;
+  /**
+   * The workbench just became visible/hidden -- the ONE chokepoint for Back, for a sibling
+   * pane replacing it, and for a surface change closing it outright. `route-ui.ts` mounts a
+   * renderer on open, and a path that hid the pane without firing close would keep it alive.
+   */
+  onGalleryOpen(cb: () => void): void;
+  onGalleryClose(cb: () => void): void;
+  /**
+   * Open the workbench with no control as its opener: the boot path for a `?gallery=` link
+   * (issue #730). `false`, and nothing opens, when the page is not in developer mode or was
+   * built without `galleryWorkbench`, or when the layer stack refuses.
+   */
+  openGalleryWorkbench(): boolean;
+  /**
    * The title screen's Versus button was clicked -- a bare click passthrough, the
    * shape `onNewGame`/`onQuitToTitle` already use, NOT the transition-guarded
    * onCustomizeOpen/onControllersOpen shape. Those two pair with an onClose because an
@@ -1259,6 +1280,7 @@ export type RouteHudKey =
   | 'onControllersOpen' | 'onControllersClose'
   | 'onSettingsOpen' | 'onSettingsClose'
   | 'setPadDiagnostics' | 'onControllerSelfTestOpen' | 'onControllerSelfTestClose'
+  | 'galleryBody' | 'onGalleryOpen' | 'onGalleryClose' | 'openGalleryWorkbench'
   // `setDiagnosticsSource` is the ROUTE's (issue #247) for the same reason the seven
   // gameplay-facing callbacks above are: `route-host.ts` registers it exactly once, as a
   // trampoline into whichever session holds the slot. A session never touches it -- it
@@ -1480,6 +1502,13 @@ export interface HudOptions {
    * no buttons rather than two that would report a page they cannot see.
    */
   readonly developerPage?: DeveloperPage;
+  /**
+   * Whether this page can mount the gallery workbench (issue #730). Its ABSENCE hides the
+   * Developer Tools entry, for the reason `developerPage`'s hides Copy Diagnostics: the pane's
+   * body needs a WebGL scene handle only `createBrowserDeps` binds, so an injected HUD in a
+   * test gets no button rather than one that opens an empty pane.
+   */
+  readonly galleryWorkbench?: boolean;
   /**
    * Which key namespace this page is persisting into (issue #249).
    *
@@ -2246,6 +2275,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <p class="hud-devtools-line hud-devtools-note">It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from the address and reloads.</p>
       <button class="ui-btn ui-btn--slab hud-devcfg-open" type="button">Configuration</button>
       <button class="ui-btn ui-btn--slab hud-selftest-open" type="button">Controller Self-Test</button>
+      <button class="ui-btn ui-btn--slab hud-gallery-open" type="button">Gallery Workbench</button>
       <!-- DIAGNOSTICS (issue #247). Copy states what this session IS; Pin rewrites the URL
            with the seed it is actually running, which is the one fact about an unseeded
            session that cannot be recovered by looking at anything. Pin only ever fills the
@@ -2314,6 +2344,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--slab hud-selftest-copy" type="button">Copy Report</button>
       <textarea class="hud-selftest-report hud-selftest-report--hidden" readonly rows="8" aria-label="Controller compatibility report"></textarea>
       <button class="ui-btn ui-btn--slab hud-selftest-back" type="button">Back</button>
+    </div>
+    <!-- THE GALLERY WORKBENCH (issue #730). Its own layer beside the self-test and the
+         configuration menu, for their reason: a canvas and nine selectors are taller than the
+         shell. The body is built by 'gallery-workbench.ts' into the empty container below and
+         torn down on close, because it holds a WebGL renderer that 'hud.ts' may not build.
+
+         Two ways out, because the layer contract makes panes siblings: Back returns to where
+         the shell was opened from, as it does from the self-test, and Developer Tools returns
+         to the shell itself, which is the route back issue #730 asks for. -->
+    <div class="hud-gallery hud-gallery--hidden" role="region" tabindex="-1" aria-labelledby="hud-gallery-title">
+      <h1 id="hud-gallery-title">Gallery Workbench</h1>
+      <p class="hud-gallery-line">Every registered posed element and moment, drawn by the same builders the capture page uses. A frame draws the same picture however the timeline reached it, and Copy Link reopens exactly this selection.</p>
+      <div class="hud-gallery-body"></div>
+      <button class="ui-btn ui-btn--slab hud-gallery-devtools" type="button">Developer Tools</button>
+      <button class="ui-btn ui-btn--slab hud-gallery-back" type="button">Back</button>
     </div>
     <!-- The persistent DEV indicator (issue #243). On the HUD ROOT rather than in the
          topbar, because the topbar is gameplay-status-only since issue #226 and is hidden
@@ -2508,6 +2553,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const selfTestCopyBtn = el.querySelector('.hud-selftest-copy') as HTMLButtonElement;
   const selfTestReportEl = el.querySelector('.hud-selftest-report') as HTMLTextAreaElement;
   const selfTestBackBtn = el.querySelector('.hud-selftest-back') as HTMLButtonElement;
+  const galleryOpenBtn = el.querySelector('.hud-gallery-open') as HTMLButtonElement;
+  const galleryView = el.querySelector('.hud-gallery') as HTMLElement;
+  const galleryBodyEl = el.querySelector('.hud-gallery-body') as HTMLElement;
+  const galleryDevToolsBtn = el.querySelector('.hud-gallery-devtools') as HTMLButtonElement;
+  const galleryBackBtn = el.querySelector('.hud-gallery-back') as HTMLButtonElement;
   const devBadge = el.querySelector('.hud-devbadge') as HTMLButtonElement;
   const confirmView = el.querySelector('.hud-confirm') as HTMLElement;
   const alertView = el.querySelector('.hud-alert') as HTMLElement;
@@ -2741,6 +2791,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * subscriber callbacks that must not run twice for one transition.
    */
   let selfTestOpen = false;
+  const galleryOpenCbs: Array<() => void> = [];
+  const galleryCloseCbs: Array<() => void> = [];
+  /** Whether the workbench is on screen. Tracked for the self-test's reason: open and close fire once each. */
+  let galleryOpen = false;
   const recordsOpenCbs: Array<() => void> = [];
   let currentAssignment: Assignment = [];
   let currentDetectedPads: readonly DetectedPad[] = [];
@@ -3222,6 +3276,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const DEVTOOLS_SURFACE: Surface = { el: devToolsView, hidden: 'hud-devtools--hidden' };
   const SELFTEST_SURFACE: Surface = { el: selfTestView, hidden: 'hud-selftest--hidden' };
   const DEVCFG_SURFACE: Surface = { el: devCfgView, hidden: 'hud-devcfg--hidden' };
+  const GALLERY_SURFACE: Surface = { el: galleryView, hidden: 'hud-gallery--hidden' };
   const CONFIRM_SURFACE: Surface = { el: confirmView, hidden: 'hud-confirm--hidden' };
   const ALERT_SURFACE: Surface = { el: alertView, hidden: 'hud-alert--hidden' };
   /**
@@ -3260,6 +3315,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     DEVTOOLS_SURFACE,
     SELFTEST_SURFACE,
     DEVCFG_SURFACE,
+    GALLERY_SURFACE,
     CONFIRM_SURFACE,
   ];
 
@@ -3825,6 +3881,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       selfTestReportEl.classList.add('hud-selftest-report--hidden');
       for (const cb of selfTestCloseCbs) cb();
     }
+  }
+
+  /**
+   * The gallery workbench (issue #730). Guarded on the actual transition, like the self-test,
+   * so `route-ui.ts` never mounts twice or disposes a body it has not mounted.
+   */
+  function showGallery(show: boolean): void {
+    if (show === galleryOpen) return;
+    if (show) {
+      galleryOpen = true;
+      swapSurface(openSurface(), GALLERY_SURFACE, () => galleryView.focus());
+      for (const cb of galleryOpenCbs) cb();
+    } else {
+      closeSurface(GALLERY_SURFACE);
+      releaseGallery();
+    }
+  }
+
+  /**
+   * Fire the workbench's close without touching its surface: the half a SIBLING pane replacing
+   * it needs. `openLayer` releases the outgoing layer and lets the incoming one fade it out, so
+   * without this the renderer would outlive a Developer Tools press from inside the pane.
+   */
+  function releaseGallery(): void {
+    if (!galleryOpen) return;
+    galleryOpen = false;
+    for (const cb of galleryCloseCbs) cb();
   }
 
   /**
@@ -4495,6 +4578,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       open: () => showDevConfig(true),
       close: () => showDevConfig(false),
     },
+    'developer-gallery': {
+      container: galleryView,
+      open: () => showGallery(true),
+      close: () => showGallery(false),
+      // Replaced by a sibling (its own Developer Tools button): the incoming pane fades this
+      // one out, and the renderer inside still has to go.
+      release: releaseGallery,
+    },
     'match-failed': {
       container: alertView,
       open: () => showAlert(true),
@@ -4935,6 +5026,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleSelfTestBack = (): void => {
     back();
   };
+  const handleGalleryOpen = (): void => {
+    openLayer('developer-gallery', galleryOpenBtn);
+  };
+  // The shell's own entry control is the opener, so a Back from the shell lands where a Back
+  // from it always has, not on a control inside the pane being left.
+  const handleGalleryDevTools = (): void => {
+    openLayer('developer-tools', devToolsOpenBtn);
+  };
+  const handleGalleryBack = (): void => {
+    back();
+  };
   /*
    * Copy fills the field FROM the last frame's pads and selects it, so the tester can copy
    * with the keyboard even where the async Clipboard API is unavailable -- it is
@@ -5169,6 +5271,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   selfTestOpenBtn.addEventListener('click', blurIfPointer);
   selfTestBackBtn.addEventListener('click', handleSelfTestBack);
   selfTestBackBtn.addEventListener('click', blurIfPointer);
+  galleryOpenBtn.addEventListener('click', handleGalleryOpen);
+  galleryOpenBtn.addEventListener('click', blurIfPointer);
+  galleryDevToolsBtn.addEventListener('click', handleGalleryDevTools);
+  galleryDevToolsBtn.addEventListener('click', blurIfPointer);
+  galleryBackBtn.addEventListener('click', handleGalleryBack);
+  galleryBackBtn.addEventListener('click', blurIfPointer);
   selfTestCopyBtn.addEventListener('click', handleSelfTestCopy);
 
   /*
@@ -5189,6 +5297,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // gets neither button and cannot report a page it cannot see.
   diagCopyBtn.hidden = !opts.developerPage;
   diagPinBtn.hidden = !opts.developerPage;
+  galleryOpenBtn.hidden = !opts.galleryWorkbench;
   // Hidden until a session says otherwise: no port has been registered at construction, so
   // the three actions start unavailable rather than flashing on before the first push.
   refreshDevActions();
@@ -7025,6 +7134,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // surface change goes through its close function rather than the bare class add its
     // siblings use -- `route-ui.ts`'s per-frame poll would otherwise outlive the pane.
     showControllerSelfTest(false);
+    // The workbench for the same reason: its body holds a WebGL renderer `route-ui.ts` must
+    // dispose, and a match starting under the pane would otherwise keep it drawing.
+    showGallery(false);
     cleanupHide(confirmView, 'hud-confirm--hidden');
     cleanupHide(alertView, 'hud-alert--hidden');
     disarmReset();
@@ -7760,6 +7872,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onControllerSelfTestClose(cb: () => void): void {
       selfTestCloseCbs.push(cb);
     },
+    galleryBody: galleryBodyEl,
+    onGalleryOpen(cb: () => void): void {
+      galleryOpenCbs.push(cb);
+    },
+    onGalleryClose(cb: () => void): void {
+      galleryCloseCbs.push(cb);
+    },
+    openGalleryWorkbench(): boolean {
+      if (!developerMode || !opts.galleryWorkbench) return false;
+      return openLayer('developer-gallery', null);
+    },
     onVersusOpen(cb: () => void): void {
       versusOpenCbs.push(cb);
     },
@@ -8006,6 +8129,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       selfTestOpenBtn.removeEventListener('click', blurIfPointer);
       selfTestBackBtn.removeEventListener('click', handleSelfTestBack);
       selfTestBackBtn.removeEventListener('click', blurIfPointer);
+      galleryOpenBtn.removeEventListener('click', handleGalleryOpen);
+      galleryOpenBtn.removeEventListener('click', blurIfPointer);
+      galleryDevToolsBtn.removeEventListener('click', handleGalleryDevTools);
+      galleryDevToolsBtn.removeEventListener('click', blurIfPointer);
+      galleryBackBtn.removeEventListener('click', handleGalleryBack);
+      galleryBackBtn.removeEventListener('click', blurIfPointer);
       selfTestCopyBtn.removeEventListener('click', handleSelfTestCopy);
       statsBackBtn.removeEventListener('click', handleStatsBack);
       statsBackBtn.removeEventListener('click', blurIfPointer);

@@ -770,6 +770,24 @@ export function createRouteHost(
   applyPageSettings();
   const stopPaintingSettings = deps.effectiveSettings.subscribe(applyPageSettings);
 
+  /**
+   * A `?gallery=` link opens the workbench on the page's FIRST arrival at the Main Menu (issue
+   * #730), and never again.
+   *
+   * Not at boot. A browser that has never dismissed Launch -- anyone the link is shared with --
+   * boots onto the splash, and the gesture that dismisses it changes the surface, which closes
+   * every layer. Opened at boot, the pane was gone on the first key press. The HUD still refuses
+   * the open outside developer mode or on a page without the workbench, so the flag alone opens
+   * nothing.
+   */
+  let galleryLinkPending = deps.devFlags.gallery !== null;
+  const openLinkedGallery = (location: typeof sm.location): void => {
+    if (!galleryLinkPending) return;
+    if (location.kind !== 'route' || location.route.kind !== 'main-menu') return;
+    galleryLinkPending = false;
+    hud.openGalleryWorkbench();
+  };
+
   const stopPainting = sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
     // The bed follows the route, and it is the ONLY thing that moves it: a session no
@@ -793,6 +811,9 @@ export function createRouteHost(
       paintContinue();
       paintLevelSelect();
     }
+    // After the surface is painted: `setState` empties the layer stack, so a layer opened
+    // before it would be closed by the arrival it was waiting for.
+    openLinkedGallery(location);
   });
   hud.setState(locationToHudSurface(sm.location));
   // ...and the bed, for the same reason the surface is painted here: the page opens on a
@@ -803,6 +824,8 @@ export function createRouteHost(
   // gesture unlocks the context; setting the suite now is what makes that gesture start
   // the menu bed already in the right world rather than switching on arrival.
   followMusic(sm.location);
+
+  openLinkedGallery(sm.location);
 
   /**
    * Which input the player is using, for the prompts that name a key or a button (issue
@@ -1128,6 +1151,7 @@ export function createRouteHost(
       menuPoller.dispose();
       // The preview then, for the same reason `startGameWith` disposed it before the
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
+      routeUi.disposeGallery();
       routeUi.disposePreview();
       // The page's own subscription, released for the same reason a session releases its
       // own: the machine and this host die together, but a reference kept past teardown

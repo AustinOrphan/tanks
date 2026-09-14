@@ -460,6 +460,20 @@ export interface DevFlags {
    * arm whose name was nearly typed.
    */
   topbar: TopbarTreatment | null;
+  /**
+   * The gallery workbench selection to open when the page loads (issue #730), as the raw
+   * `?gallery=` value, or null when absent or empty.
+   *
+   * A PERMANENT developer tool, not an experiment: it settles no comparison and has nothing
+   * to ship or delete. It is the workbench's shareable link.
+   *
+   * Deliberately NOT reject-to-null. Every other valued flag drops a value it does not know,
+   * which is right for a treatment nobody is told about. A link is the opposite case: its
+   * author needs to hear which part did not survive, so the raw value is kept here and
+   * `gallery-selection.ts` validates it against the registries and lists every part it
+   * refused in the pane.
+   */
+  gallery: string | null;
 }
 
 /**
@@ -477,6 +491,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   blockedFire: null,
   menuTransition: null,
   topbar: null,
+  gallery: null,
   mineReach: false,
   mineTimer: false,
   aiContact: false,
@@ -641,6 +656,17 @@ function asTopbar(params: URLSearchParams): TopbarTreatment | null {
   return isTopbarTreatment(raw) ? raw : null;
 }
 
+/**
+ * The gallery workbench selection, trimmed, or null when absent or empty. Not validated here:
+ * see the `DevFlags.gallery` field for why this one flag keeps what it is given.
+ */
+function asGallery(params: URLSearchParams): string | null {
+  const raw = params.get('gallery');
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
 /** One of the named experimental treatments, or null when absent or unrecognised. */
 function asMineWarn(params: URLSearchParams): MineWarnStyle | null {
   const raw = params.get('mineWarn');
@@ -785,6 +811,7 @@ export function parseDevFlags(search: string): DevFlags {
     blockedFire: asBlockedFireCue(params),
     menuTransition: asMenuTransition(params),
     topbar: asTopbar(params),
+    gallery: asGallery(params),
     mineReach: isOn(params, 'mineReach'),
     mineTimer: isOn(params, 'mineTimer'),
     aiContact: isOn(params, 'aiContact'),
@@ -1273,6 +1300,23 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
         'arm overrides it, not a rule that restates it.',
       'The comparison is settled; these are the alternatives kept selectable, and `full` ' +
         'is how anyone gets the pre-ruling bar back.',
+    ],
+  },
+  gallery: {
+    kind: 'valued',
+    type:
+      'comma-separated parts, each `key:value` or a bare `reach`/`timer`, e.g. ' +
+      '`scene:destroyed,view:low,age:24`',
+    description:
+      'Opens the Developer Tools gallery workbench on this selection when the page loads. ' +
+      'The workbench\'s Copy Link writes it.',
+    notes: [
+      'Keys are the gallery capture page\'s own parameter names: `scene` or `elements`, ' +
+        '`view`, `skin`, `hull`, `accent`, `spawn-anim`, `mineWarn`, `reach`, `timer` and ' +
+        '`age`. `hull` and `accent` take paint-shop ids, not hexes.',
+      'Any non-empty value is kept. The workbench checks each part against the registries ' +
+        'and lists every part it did not honour, rather than dropping it.',
+      'A permanent developer tool: it settles no comparison, so it has no retirement decision.',
     ],
   },
 };

@@ -1,0 +1,14 @@
+{
+  "id": "gallery-body-listeners-outlive-dispose",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "  ): void => target.addEventListener(type, listener, { signal: lifetime.signal });",
+  "replace": "  ): void => target.addEventListener(type, listener);",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Every control listener is registered on the pane's one abort signal. Off that signal, a detached selector still reaches a disposed scene handle after the pane closes.",
+  "killedBy": [
+    "the gallery workbench releases everything it holds (issue #730) adds no listener on scene changes, and removes every one on dispose"
+  ]
+}

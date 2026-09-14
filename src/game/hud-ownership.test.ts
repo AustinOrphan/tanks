@@ -188,7 +188,12 @@ describe('HUD ownership boundary (issue #324)', () => {
     // `setDiagnosticsSource` is: 78 -> 79. It is a second trampoline the host registers once,
     // and its session half could not be an option either -- rebuilding a board is something
     // only whichever session owns the world can do.
-    expect(frame.size + route.size + gameplay.size).toBe(79);
+    //
+    // Issue #730 adds FOUR, all route-owned: `galleryBody`, the `onGalleryOpen`/`Close` pair and
+    // `openGalleryWorkbench`. 79 -> 83. The self-test's reason again: the gallery workbench is a
+    // Developer Tools pane the PAGE owns, `route-ui.ts` mounts its renderer and `route-host.ts`
+    // opens it for a link, and a session must not be able to reach either.
+    expect(frame.size + route.size + gameplay.size).toBe(83);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

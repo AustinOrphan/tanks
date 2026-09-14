@@ -1,0 +1,14 @@
+{
+  "id": "gallery-pane-surface-change-skips-close",
+  "file": "src/game/hud.ts",
+  "find": "    showGallery(false);",
+  "replace": "    cleanupHide(galleryView, 'hud-gallery--hidden');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.gallery.test.ts"
+  ],
+  "why": "A surface change (a match starting) closes every pane. A bare class change for this one hides it without firing close, which leaks the renderer route-ui mounted.",
+  "killedBy": [
+    "the gallery workbench pane (issue #730) a surface change closes it and fires close"
+  ]
+}

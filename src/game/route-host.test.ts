@@ -1492,6 +1492,29 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     ).toEqual([['default']]);
   });
 
+  it('opens the gallery workbench for a ?gallery= link on the Main Menu, and not without one (issue #730)', () => {
+    // The page asks; the HUD decides. Whether developer mode is on and the workbench is bound
+    // is `hud.gallery.test.ts`'s to pin -- here it is only that a link asks, and when.
+    expect(
+      fixture({ launchDismissed: true, devFlags: { gallery: 'scene:fire' } }).hud.argsOf('openGalleryWorkbench'),
+    ).toEqual([[]]);
+    // The negative control: an unconditional call would pass the line above.
+    expect(fixture({ launchDismissed: true }).hud.argsOf('openGalleryWorkbench')).toEqual([]);
+  });
+
+  it('waits out Launch before opening a linked workbench, then never opens it again (issue #730)', () => {
+    // A browser that never dismissed Launch -- anyone a link is shared with -- boots onto the
+    // splash, and dismissing it changes the surface, which closes every layer. Opened at boot,
+    // the pane was gone on the first key press.
+    const f = fixture({ devFlags: { gallery: 'scene:fire' } });
+    expect(f.hud.argsOf('openGalleryWorkbench'), 'asked over Launch, whose dismissal closes it').toEqual([]);
+    f.host.sm.dismissLaunch();
+    expect(f.hud.argsOf('openGalleryWorkbench')).toEqual([[]]);
+    f.host.sm.toRoute('settings');
+    f.host.sm.toMainMenu();
+    expect(f.hud.argsOf('openGalleryWorkbench'), 'a later arrival at the Main Menu asked again').toEqual([[]]);
+  });
+
   it('re-sizes the Levels grid on every arrival at the Main Menu, and only there', () => {
     // A level is cleared mid-match, where the grid is neither shown nor reachable --
     // `hud.ts` puts the Levels button on the Main Menu alone. So the arrival back is both

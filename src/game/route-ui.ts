@@ -1,4 +1,6 @@
 import type { TankPreview } from '../render/preview';
+import { formatGallerySelection } from './gallery-selection';
+import { mountGalleryWorkbench, type GalleryWorkbenchView } from './gallery-workbench';
 import type { SkinId } from '../presentation/customization';
 import type { GameStateMachine } from './state';
 import type { Hud } from './hud';
@@ -77,6 +79,11 @@ export interface RouteUi {
    */
   disposePreview(): void;
   /**
+   * Drop the gallery workbench's body and renderer, if mounted (issue #730). Idempotent, and
+   * called at teardown for `disposePreview`'s reason: the pane can still be open then.
+   */
+  disposeGallery(): void;
+  /**
    * Point the paint shop at a gameplay renderer, or `null` to unpoint it.
    *
    * A sink is how the route UI restyles the tank BEHIND the panel without holding a
@@ -113,6 +120,7 @@ export type RouteUiDeps = Pick<
   | 'createPreview'
   | 'readDetectedPads'
   | 'readPadDiagnostics'
+  | 'galleryWorkbench'
   | 'raf'
   | 'host'
   | 'requestVersusSession'
@@ -392,6 +400,42 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   });
 
   /**
+   * THE GALLERY WORKBENCH (issue #730), held the way the Customize preview is: mounted when
+   * the pane opens, disposed when it closes, and disposed again, harmlessly, at teardown.
+   *
+   * The pane reopens on what it last showed. The first open reads the page's `?gallery=`
+   * value; after that the selection a developer built survives a Back, for the reason the
+   * configuration menu's does -- building it is the slow part. The value kept is the
+   * canonical one, so a report about the page's link is not shown a second time.
+   *
+   * Absent `deps.galleryWorkbench`, nothing mounts. The HUD hides the entry on such a page,
+   * so this is the backstop for a HUD and deps that disagree, not a path a player reaches.
+   */
+  let gallery: GalleryWorkbenchView | null = null;
+  let galleryValue: string | null = deps.galleryWorkbench?.initial ?? null;
+  const disposeGallery = (): void => {
+    if (gallery === null) return;
+    if (deps.galleryWorkbench !== undefined) {
+      galleryValue = formatGallerySelection(gallery.selection, deps.galleryWorkbench.catalog);
+    }
+    gallery.dispose();
+    gallery = null;
+  };
+  hud.onGalleryOpen(() => {
+    const bench = deps.galleryWorkbench;
+    if (bench === undefined) return;
+    disposeGallery();
+    gallery = mountGalleryWorkbench(hud.galleryBody, {
+      catalog: bench.catalog,
+      create: bench.create,
+      raf: deps.raf,
+      initial: galleryValue,
+      linkFor: bench.linkFor,
+    });
+  });
+  hud.onGalleryClose(disposeGallery);
+
+  /**
    * Everything the Records page shows, read from the page's own stores.
    *
    * The stores are current at every instant -- a session records INTO them rather than
@@ -443,6 +487,7 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
       preview?.dispose();
       preview = null;
     },
+    disposeGallery,
     setStyleSink(sink: StyleSink | null): void {
       styleSink = sink;
     },

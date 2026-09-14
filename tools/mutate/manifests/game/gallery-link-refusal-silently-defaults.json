@@ -1,0 +1,24 @@
+{
+  "id": "gallery-link-refusal-silently-defaults",
+  "file": "src/game/gallery-selection.ts",
+  "find": "      problems.push(`\"${value}\" is not a registered ${what}, so the default is shown.`);",
+  "replace": "      void what;",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-selection.test.ts",
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #730 requires an unknown value in a link to be reported rather than silently replaced with a default. Without the report the pane draws the default and says nothing, which reads as the link having worked.",
+  "killedBy": [
+    "parseGallerySelection (issue #730) reports \"scene:explode\" and leaves subject at its default",
+    "parseGallerySelection (issue #730) reports \"elements:tree\" and leaves subject at its default",
+    "parseGallerySelection (issue #730) reports \"view:sideways\" and leaves view at its default",
+    "parseGallerySelection (issue #730) reports \"skin:plaid\" and leaves skin at its default",
+    "parseGallerySelection (issue #730) reports \"hull:#3d7bd6\" and leaves hull at its default",
+    "parseGallerySelection (issue #730) reports \"accent:bronze\" and leaves accent at its default",
+    "parseGallerySelection (issue #730) reports \"spawn-anim:teleport\" and leaves spawnAnim at its default",
+    "parseGallerySelection (issue #730) reports \"mineWarn:spike\" and leaves mineWarn at its default",
+    "the gallery workbench restores a link, and reports what it could not (issue #730) lists every part it did not honour, on screen",
+    "the gallery workbench restores a link, and reports what it could not (issue #730) clears the report once a control changes, because the pane no longer shows that link"
+  ]
+}

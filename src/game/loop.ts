@@ -54,6 +54,7 @@ import {
 } from '../input/assignment';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createTankPreview, type TankPreview } from '../render/preview';
+import { WORKBENCH_CATALOG, createWorkbench, type WorkbenchSceneOptions } from '../render/gallery/workbench-scene';
 import type { AudioEngine } from '../audio/engine';
 import type { StorageNamespace } from './storage';
 import type { SuiteContext } from '../audio/suites';
@@ -112,6 +113,8 @@ import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } from './devflags';
 import { developerExitSearch } from './dev-config';
+import { gallerySearch, type GalleryCatalog } from './gallery-selection';
+import type { GalleryWorkbenchDeps } from './gallery-workbench';
 import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
 import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
@@ -235,6 +238,21 @@ export interface GameDeps {
    * stick. READ-ONLY -- nothing downstream of this writes an assignment or a setting.
    */
   readonly readPadDiagnostics: () => PadDiagnostic[];
+  /**
+   * The Developer Tools gallery workbench (issue #730): the render registries' catalog, the
+   * WebGL scene handle, the page's `?gallery=` value and how to write a link.
+   *
+   * Bound in `createBrowserDeps`, the one place that may import `render/gallery/` (see
+   * GAME_WIRING), and OPTIONAL: absent from every injected deps, which keeps the route tests
+   * off WebGL. `route-ui.ts` mounts the pane only when it is present, and the HUD hides the
+   * entry unless `createBrowserDeps` also tells it the workbench exists.
+   */
+  readonly galleryWorkbench?: {
+    readonly catalog: GalleryCatalog;
+    readonly create: GalleryWorkbenchDeps['create'];
+    readonly initial: string | null;
+    readonly linkFor?: (value: string) => string;
+  };
   readonly createAudio: () => AudioEngine;
   /**
    * Release the engine `createAudio` handed this session, at session teardown.
@@ -1157,6 +1175,17 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
   return {
     createRenderer,
     createPreview: createTankPreview,
+    // Issue #730's workbench. The catalog and the handle are the render layer's own, reached
+    // here because this is the wiring GAME_WIRING lets import them; the pane's body sees only
+    // structural types. The link keeps the page's path, other parameters and hash, for the
+    // reason `applyDeveloperConfig` below does.
+    galleryWorkbench: {
+      catalog: WORKBENCH_CATALOG,
+      create: (canvas, w, h, opts) => createWorkbench(canvas, w, h, opts as WorkbenchSceneOptions),
+      initial: devFlags.gallery,
+      linkFor: (value) =>
+        `${globalThis.location.pathname}${gallerySearch(search, value)}${globalThis.location.hash}`,
+    },
     createInput: createInputController,
     createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
     readDetectedPads: () => readDetectedPads(readNavigatorGamepads),
@@ -1239,6 +1268,8 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // `exitDeveloperMode` above reads -- so the menu carries a deep link or a router's
         // own parameters through Apply instead of dropping them.
         developerSearch: search,
+        // Issue #730: this page binds `galleryWorkbench` above, so the entry can be shown.
+        galleryWorkbench: true,
         // The diagnostics summary's page half (issue #247), bound here for the reason
         // `developerSearch` beside it is: the HUD may not touch `location`, and it may not
         // read `import.meta.env` either. Neither a path, a hash nor a build identity can

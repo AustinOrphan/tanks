@@ -1,0 +1,18 @@
+{
+  "id": "workbench-scrub-back-skips-the-rebuild",
+  "file": "src/render/gallery/workbench-scene.ts",
+  "find": "  return { rebuild: drawn !== null, draws: ages(0, target) };",
+  "replace": "  return { rebuild: false, draws: ages(0, target) };",
+  "expect": "killed",
+  "tests": [
+    "src/render/gallery/workbench-scene.test.ts"
+  ],
+  "why": "The moment builders feed each tick's events once and never rewind. A backward scrub that replays ages 0..N onto the build that already drew past N shows frame N under the later frames' particles, so the same frame position would draw a different picture depending on how it was reached.",
+  "killedBy": [
+    "planSeek (issue #730) appends draws going forward and replays from zero going back",
+    "the workbench reaches a frame the same way however it is asked (issue #730) past it and back: the live build drew 0..12 in order",
+    "the workbench reaches a frame the same way however it is asked (issue #730) to the end, to the start, then there: the live build drew 0..12 in order",
+    "the workbench reaches a frame the same way however it is asked (issue #730) clamps and floors the frame to the subject timeline",
+    "the workbench disposes every build it makes, and its renderer once (issue #730) gives every build the one renderer, and disposes each build exactly once"
+  ]
+}

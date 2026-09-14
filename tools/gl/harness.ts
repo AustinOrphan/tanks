@@ -29,6 +29,7 @@ import { createTankPreview } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subjects';
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
 import { MOMENTS } from '../../src/render/gallery/moments';
+import { createWorkbench, type WorkbenchSceneOptions } from '../../src/render/gallery/workbench-scene';
 import { QUALITY_PRESETS, type MuzzleSmokeQuality, type RenderQuality } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
@@ -1381,6 +1382,109 @@ check('a MOMENT scene honours the arrival language, not just the posed gallery',
   // exactly what `--mineWarn` did in the posed scene for its entire life, undetectably.
   if (moved < 200) {
     return `only ${moved} of ${shipped.length} bytes differ with arrival=opposed -- the language is not reaching the moment scene`;
+  }
+  return null;
+});
+
+// ---------------------------------------------------------------------------
+// src/render/gallery/workbench-scene.ts (issue #730): the in-app workbench's scrub bar.
+//
+// workbench-scene.test.ts pins the draw HISTORY every route to a frame leaves. These two pin
+// what that history is for: the same pixels, and a rebuild on the pane's one canvas that
+// gives back every GL object it took.
+// ---------------------------------------------------------------------------
+
+function workbenchOpts(over: Partial<WorkbenchSceneOptions>): WorkbenchSceneOptions {
+  return {
+    subject: { kind: 'moment', id: 'destroyed' }, view: 'game', skin: 'solid', hull: null,
+    accent: null, spawnAnim: 'warp', mineWarn: null, reach: false, timer: false, ...over,
+  };
+}
+
+check('a workbench frame reached by scrubbing back draws the same pixels as one reached directly', () => {
+  // `destroyed` because its kill lands mid-clip (moments.ts pins tick 18) and the explosion
+  // burst outlives it: a replay that skipped the rebuild would draw the back-scrubbed frame
+  // under a burst that has not happened yet, or has already decayed.
+  const a = galleryCanvas();
+  const b = galleryCanvas();
+  const direct = createWorkbench(a, a.width, a.height, workbenchOpts({}));
+  const scrubbed = createWorkbench(b, b.width, b.height, workbenchOpts({}));
+  const near = 24;
+  const far = direct.frames - 1;
+  direct.seek(near);
+  scrubbed.seek(far);
+  const glB = (b.getContext('webgl2') ?? b.getContext('webgl')) as WebGLRenderingContext;
+  const atFar = grab(glB, b.width, b.height);
+  scrubbed.seek(near);
+  const glA = (a.getContext('webgl2') ?? a.getContext('webgl')) as WebGLRenderingContext;
+  const directPx = grab(glA, a.width, a.height);
+  const scrubbedPx = grab(glB, b.width, b.height);
+  direct.dispose();
+  scrubbed.dispose();
+  a.remove();
+  b.remove();
+  // The CONTROL: the two frames compared must look different, or equality proves nothing.
+  const control = bytesDiffering(atFar, scrubbedPx);
+  if (control < 1000) return `frames ${far} and ${near} differ in only ${control} bytes -- the comparison cannot discriminate`;
+  const differ = bytesDiffering(directPx, scrubbedPx);
+  if (differ !== 0) return `frame ${near} differs in ${differ} of ${directPx.length} bytes when reached from frame ${far}`;
+  return null;
+});
+
+check('repeated workbench scene changes on the SAME canvas keep drawing and grow no live GL objects', () => {
+  // The pane holds one canvas; every selector change and every backward scrub disposes a
+  // build and makes another on it. Counted at the context, by wrapping its create/delete
+  // calls, so what is measured is what the GPU driver was actually asked to hold.
+  //
+  // This failed as first written, when each build made and disposed its own renderer: 13,
+  // 62, 111 live objects after the three passes -- 24 buffers, 5 programs and 20 textures a
+  // pass. That is why the handle owns one renderer and the builders take it.
+  const c = galleryCanvas();
+  const bench = createWorkbench(c, c.width, c.height, workbenchOpts({}));
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as unknown as Record<string, unknown>;
+  const kinds = ['Buffer', 'Texture', 'Framebuffer', 'Renderbuffer', 'Program', 'Shader', 'VertexArray'];
+  let live = 0;
+  const originals: [string, unknown][] = [];
+  for (const kind of kinds) {
+    const create = gl[`create${kind}`];
+    const remove = gl[`delete${kind}`];
+    if (typeof create !== 'function' || typeof remove !== 'function') continue;
+    originals.push([`create${kind}`, create], [`delete${kind}`, remove]);
+    gl[`create${kind}`] = (...args: unknown[]) => {
+      live++;
+      return (create as (...a: unknown[]) => unknown).apply(gl, args);
+    };
+    gl[`delete${kind}`] = (obj: unknown) => {
+      if (obj) live--;
+      return (remove as (o: unknown) => unknown).call(gl, obj);
+    };
+  }
+  const subjects: WorkbenchSceneOptions['subject'][] = [
+    { kind: 'moment', id: 'destroyed' },
+    { kind: 'element', id: 'tank' },
+    { kind: 'moment', id: 'fire' },
+  ];
+  const liveAfter: number[] = [];
+  let failure: string | null = null;
+  try {
+    for (let cycle = 0; cycle < 9; cycle++) {
+      bench.show(workbenchOpts({ subject: subjects[cycle % 3] }));
+      bench.seek(bench.frames - 1);
+      bench.seek(0);
+      const centre = readPixel(gl as unknown as WebGLRenderingContext, Math.floor(c.width / 2), Math.floor(c.height / 2));
+      if (centre[3] < 200) { failure = `cycle ${cycle}: centre alpha ${centre[3]} -- a dead scene on the reused canvas`; break; }
+      if (cycle % 3 === 2) liveAfter.push(live);
+    }
+  } finally {
+    bench.dispose();
+    for (const [name, fn] of originals) gl[name] = fn;
+    c.remove();
+  }
+  if (failure !== null) return failure;
+  // Sampled after each full pass over the three subjects: the first pass may warm caches
+  // that outlive a build (compiled programs keyed by material), the later two must not add.
+  if (liveAfter[1] !== liveAfter[0] || liveAfter[2] !== liveAfter[0]) {
+    return `live GL objects after each pass of three scene changes: ${liveAfter.join(', ')} -- disposal is leaking`;
   }
   return null;
 });

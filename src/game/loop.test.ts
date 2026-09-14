@@ -1391,6 +1391,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onControllerSelfTestClose: (cb: () => void) => {
           onSelfTestClose = cb;
         },
+        // Issue #730's workbench: no session test opens it, so the hooks are inert and the
+        // boot open reports that nothing opened.
+        galleryBody: document.createElement('div'),
+        onGalleryOpen: () => {},
+        onGalleryClose: () => {},
+        openGalleryWorkbench: () => false,
         // Task 5's own wiring, page-owned since issue #427 and reached through the
         // slot since #324's step S5: `route-ui.ts` subscribes both and is the one caller
         // of `showVersusSetup`, for the Versus button and for a finished versus session's

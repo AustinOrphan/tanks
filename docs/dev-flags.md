@@ -55,7 +55,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (21)
+## Valued flags (22)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -65,6 +65,7 @@ Notes:
 | `bench` | `bench` | `versus-bots` | `null` | Records frame times for a named benchmark workload and publishes the report as `__tanks.bench()`: rAF interval and frame-callback time percentiles, long-frame counts, the quality preset, pixel ratio, viewport, build and session. |
 | `blockedFire` | `blockedFire` | `ring`, `muzzle`, `pips`, `hud`, `audio`, `click`, `clunk`, `thunk-soft`, `pitch-empty`, `haptic`, `haptic-tap`, `haptic-double`, `haptic-long`, `haptic-rise`, `haptic-audio`, `ring-audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default adds none of them. |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
+| `gallery` | `gallery` | comma-separated parts, each `key:value` or a bare `reach`/`timer`, e.g. `scene:destroyed,view:low,age:24` | `null` | Opens the Developer Tools gallery workbench on this selection when the page loads. The workbench's Copy Link writes it. |
 | `identityMarker` | `identityMarker` | `arcs`, `shape`, `roof` | `null` | Adds a second, non-colour channel to player identity (issue #630). On the ground ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own outline. On the turret crown instead: 'roof' leaves the ring exactly as shipped and counts the slot in blades, trading the ring's area for a surface nothing can occlude. The shipped default carries identity in hue alone. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `menuTransition` | `menuTransition` | `fade`, `fade-long`, `rise`, `settle` | `null` | Runs a named menu transition between application surfaces (issue #542); `rise` is the shipped 150ms crossfade plus a 16px upward lift, and `fade` is the opacity-only transition that shipped before it. |
@@ -91,6 +92,9 @@ Notes:
 - **bots**: Clamped against the resolved player count, not rejected: `bots=4` with `players=2` claims both slots rather than erroring.
 - **bots**: A bot-claimed slot never builds its slot's real controller -- its own dedicated gamepad reader (`pad[i] -> slot[i]`).
 - **bots**: Not excluded from the sandbox, unlike `players`: the sandbox always resolves to one slot, and `bots=1` there is the same substitution `autoplay=1` already does.
+- **gallery**: Keys are the gallery capture page's own parameter names: `scene` or `elements`, `view`, `skin`, `hull`, `accent`, `spawn-anim`, `mineWarn`, `reach`, `timer` and `age`. `hull` and `accent` take paint-shop ids, not hexes.
+- **gallery**: Any non-empty value is kept. The workbench checks each part against the registries and lists every part it did not honour, rather than dropping it.
+- **gallery**: A permanent developer tool: it settles no comparison, so it has no retirement decision.
 - **level**: A jump does not consume, restore, advance, or complete the active run.
 - **menuTransition**: Read once at HUD construction, so it takes a reload rather than applying mid-session.
 - **menuTransition**: Absent and `rise` are the same path, not merely the same result: the shipped transition adds no class and has no rule of its own.
