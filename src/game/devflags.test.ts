@@ -448,6 +448,43 @@ describe('parseDevFlags: bench (issue #734)', () => {
   });
 });
 
+describe('parseDevFlags: single-setting render overrides (issue #735)', () => {
+  it('reads each override into its own field and changes no other flag -- population: all 4', () => {
+    expect(parseDevFlags('?dev=1&shadowMapSize=1024')).toEqual({ ...DEV_FLAGS_OFF, shadowMapSize: 1024 });
+    expect(parseDevFlags('?dev=1&antialias=off')).toEqual({ ...DEV_FLAGS_OFF, antialias: false });
+    expect(parseDevFlags('?dev=1&antialias=on')).toEqual({ ...DEV_FLAGS_OFF, antialias: true });
+    expect(parseDevFlags('?dev=1&pixelRatioCap=1.5')).toEqual({ ...DEV_FLAGS_OFF, pixelRatioCap: 1.5 });
+    expect(parseDevFlags('?dev=1&fillRimLights=off')).toEqual({ ...DEV_FLAGS_OFF, fillRimLights: false });
+    expect(parseDevFlags('?dev=1&fillRimLights=on')).toEqual({ ...DEV_FLAGS_OFF, fillRimLights: true });
+  });
+
+  it('accepts every documented shadow map size, and both ends of the pixel-ratio range', () => {
+    // Literals, not the registry's own list, so a size dropped from that list fails here.
+    for (const size of [256, 512, 1024, 2048, 4096]) {
+      expect(parseDevFlags(`?dev=1&shadowMapSize=${size}`).shadowMapSize).toBe(size);
+    }
+    expect(parseDevFlags('?dev=1&pixelRatioCap=0.5').pixelRatioCap).toBe(0.5);
+    expect(parseDevFlags('?dev=1&pixelRatioCap=4').pixelRatioCap).toBe(4);
+  });
+
+  it('rejects anything else to null, so the preset keeps its own setting', () => {
+    for (const v of ['', '1000', '128', '8192', '2048px', '-512']) {
+      expect(parseDevFlags(`?dev=1&shadowMapSize=${v}`).shadowMapSize, v).toBeNull();
+    }
+    for (const v of ['', '1', '0', 'true', 'ON', 'no']) {
+      expect(parseDevFlags(`?dev=1&antialias=${v}`).antialias, v).toBeNull();
+      expect(parseDevFlags(`?dev=1&fillRimLights=${v}`).fillRimLights, v).toBeNull();
+    }
+    for (const v of ['', '0', '0.49', '4.01', '-1', '1e0', 'Infinity', '2x', '.5']) {
+      expect(parseDevFlags(`?dev=1&pixelRatioCap=${v}`).pixelRatioCap, v).toBeNull();
+    }
+  });
+
+  it('does nothing without the dev gate', () => {
+    expect(parseDevFlags('?shadowMapSize=512&antialias=off&pixelRatioCap=1&fillRimLights=off')).toEqual(DEV_FLAGS_OFF);
+  });
+});
+
 describe('parseDevFlags: mode (n-player arc PR 4 -- FFA + teams)', () => {
   it('is null without dev mode, whatever the value says', () => {
     expect(parseDevFlags('?mode=ffa').mode).toBeNull();

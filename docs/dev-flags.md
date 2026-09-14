@@ -55,16 +55,18 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (22)
+## Valued flags (26)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
 | `aiPerception` | `aiPerception` | `full`, `los` | `null` | Bounds AI target SELECTION by line of sight (`los`) instead of the shipped full-board default. Selection only -- aiming and firing always require a real line of sight. Measured before the default changed: the bound was never reached by a banking profile and left a non-banking one with no target for most of its life. |
+| `antialias` | `antialias` | `on`, `off` | `null` | Overrides whether the game renderer's WebGL context is created with antialiasing, leaving every other render setting at the preset. |
 | `arrival` | `arrival` | `opposed` | `null` | Speaks an experimental arrival/destruction language (issue #230). The shipped pair both expand a ring and read alike at speed; 'opposed' converges the spawn entrance onto the tank and throws a fat, hard-attacked band outward on death. |
 | `backdrop` | `backdrop` | `felt` | `null` | Draws the application backdrop with a named alternative treatment; the shipped default is the flat application ground. |
 | `bench` | `bench` | `versus-bots`, `preview` | `null` | Records frame times for a named benchmark workload and publishes the report as `__tanks.bench()`: rAF interval and frame-callback time percentiles, long-frame counts, the quality preset, pixel ratio, viewport, build and session. |
 | `blockedFire` | `blockedFire` | `ring`, `muzzle`, `pips`, `hud`, `audio`, `click`, `clunk`, `thunk-soft`, `pitch-empty`, `haptic`, `haptic-tap`, `haptic-double`, `haptic-long`, `haptic-rise`, `haptic-audio`, `ring-audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default adds none of them. |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
+| `fillRimLights` | `fillRimLights` | `on`, `off` | `null` | Overrides whether the scene builds its fill and rim lights (`off` never adds them), leaving every other render setting at the preset. |
 | `gallery` | `gallery` | comma-separated parts, each `key:value` or a bare `reach`/`timer`, e.g. `scene:destroyed,view:low,age:24` | `null` | Opens the Developer Tools gallery workbench on this selection when the page loads. The workbench's Copy Link writes it. |
 | `identityMarker` | `identityMarker` | `arcs`, `shape`, `roof` | `null` | Adds a second, non-colour channel to player identity (issue #630). On the ground ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own outline. On the turret crown instead: 'roof' leaves the ring exactly as shipped and counts the slot in blades, trading the ring's area for a surface nothing can occlude. The shipped default carries identity in hue alone. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
@@ -73,17 +75,22 @@ Notes:
 | `mineWarn` | `mineWarn` | `lance`, `slump`, `spike` | `null` | Draws the mine fuse and proximity warnings with a named experimental treatment (issue #276 playtest round); the shipped default is the glow + illumination pair. |
 | `mode` | `mode` | `ffa`, `teams` | `null` | Sets which versus mode a session builds with -- free-for-all or teams -- instead of the shipped campaign-coop rule (win as every enemy dead, or coop's shared lives). |
 | `outcome` | `outcome` | `mission-clear`, `campaign-over`, `campaign-complete`, `practice-cleared`, `practice-failed` | `null` | Ends the running session on its first simulated frame with the named ending, so the five outcome screens can be photographed. |
+| `pixelRatioCap` | `pixelRatioCap` | a decimal number from 0.5 to 4 | `null` | Overrides the quality preset's pixel-ratio cap for this session, leaving every other render setting at the preset. |
 | `players` | `players` | an integer 1-4 (1 is an explicit no-op; 2-4 add co-players) | `null` | Sets how many player-controlled tanks share the world -- couch co-op, generalized past two. |
 | `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter, and how much muzzle smoke is drawn) for this session, overriding the player's stored Settings choice without changing it. |
 | `sandboxTanks` | `tanks` | a comma-separated multiset (repeats and order kept), each element one of the values below: `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
 | `sandboxWalls` | `walls` | a positive integer, bare or as `random:N` | `null` | Sets how many interior walls the sandbox scatters. |
 | `seed` | `seed` | a positive integer | `null` | Fixes the world's PRNG seed instead of deriving one from the clock, for a reproducible playthrough. |
+| `shadowMapSize` | `shadowMapSize` | one of 256, 512, 1024, 2048, 4096 | `null` | Overrides the quality preset's sun shadow map size for this session, leaving every other render setting at the preset. |
 | `shellTrail` | `shellTrail` | `segments` | `null` | Draws an experimental shell bounce-trail (issue #688). 'segments' puts a row of neutral dashes behind each shell, one more than the ricochets it has left, so a shell on its last flight still shows one. No owner hue; the shipped game shows none. |
 | `topbar` | `topbar` | `full`, `spare`, `mode-chips`, `spare-chips`, `enemies-only`, `denominator-only` | `null` | Renders the gameplay topbar as one of issue #552's alternatives to the shipped bar; `spare-chips` ships, and the others put back the enemy count, the level denominator, or both, and mark Practice alone instead of naming every session kind. `full` is all three together: the bar as it read before the ruling. |
 | `versusActions` | `versusActions` | `header` | `null` | Moves Back out of the pinned action bar and into a compact sticky header beside the pane title (issue #668). The shipped bar carries Start and Back together at the foot, which costs less of a small screen; 'header' keeps the title visible while scrolling, at 49px of permanent chrome. |
 
 Notes:
 
+- **antialias**: Applied on top of the preset `quality` or the stored Settings choice resolves to, for the game renderer only: the Customize preview builds its own renderer and ignores it. Read once, when a session builds its renderer.
+- **antialias**: An unrecognised value is rejected and leaves the preset's own setting. `__tanks.bench()` records every override in effect.
+- **antialias**: Temporary: kept for the device sweep issue #288 runs. Delete it when that sweep concludes, moving any value it settles into the presets.
 - **bench**: It measures and changes nothing else: open the workload's own query so the session is the one it names -- versus-bots is `?dev=1&bench=versus-bots&mode=ffa&players=4&bots=4&seed=7`.
 - **bench**: `preview` (issue #736) measures the Customize panel's tank preview instead, which builds its own renderer and ignores `?quality=`. Open `?dev=1&bench=preview`, open Customize from the Main Menu and pick Flow: the preview repaints only while it animates, and only frames of an unbroken run on a visible page are measured. The report names the preview's own renderer settings and has no session.
 - **bench**: A permanent diagnostic, kept for the device run issue #288 needs, not a flag for an open question.
@@ -93,6 +100,9 @@ Notes:
 - **bots**: Clamped against the resolved player count, not rejected: `bots=4` with `players=2` claims both slots rather than erroring.
 - **bots**: A bot-claimed slot never builds its slot's real controller -- its own dedicated gamepad reader (`pad[i] -> slot[i]`).
 - **bots**: Not excluded from the sandbox, unlike `players`: the sandbox always resolves to one slot, and `bots=1` there is the same substitution `autoplay=1` already does.
+- **fillRimLights**: Applied on top of the preset `quality` or the stored Settings choice resolves to, for the game renderer only: the Customize preview builds its own renderer and ignores it. Read once, when a session builds its renderer.
+- **fillRimLights**: An unrecognised value is rejected and leaves the preset's own setting. `__tanks.bench()` records every override in effect.
+- **fillRimLights**: Temporary: kept for the device sweep issue #288 runs. Delete it when that sweep concludes, moving any value it settles into the presets.
 - **gallery**: Keys are the gallery capture page's own parameter names: `scene` or `elements`, `view`, `skin`, `hull`, `accent`, `spawn-anim`, `mineWarn`, `reach`, `timer` and `age`. `hull` and `accent` take paint-shop ids, not hexes.
 - **gallery**: Any non-empty value is kept. The workbench checks each part against the registries and lists every part it did not honour, rather than dropping it.
 - **gallery**: A permanent developer tool: it settles no comparison, so it has no retirement decision.
@@ -106,6 +116,9 @@ Notes:
 - **outcome**: Evidence about the SCREEN, not about reaching it -- it does not play a match.
 - **outcome**: The session still decides which screen fits: pick the ending to match the session the URL starts, or the panel will describe a session nobody played.
 - **outcome**: Unrecognised or absent leaves the session to end on its own, as it always has.
+- **pixelRatioCap**: Applied on top of the preset `quality` or the stored Settings choice resolves to, for the game renderer only: the Customize preview builds its own renderer and ignores it. Read once, when a session builds its renderer.
+- **pixelRatioCap**: An unrecognised value is rejected and leaves the preset's own setting. `__tanks.bench()` records every override in effect.
+- **pixelRatioCap**: Temporary: kept for the device sweep issue #288 runs. Delete it when that sweep concludes, moving any value it settles into the presets.
 - **players**: Composes freely with `gamepad`: slot 0's optional pad[0] merge and every co-player slot's own dedicated pad index (`pad[i] -> slot[i]`) read different indices of the same pads array, so they never collide.
 - **players**: Named tradeoff: a session's only physical pad (usually browser index 0) now feeds slot 0 (if `gamepad` is on), not slot 1 -- "P1 on keyboard, hand the one pad to P2" has no zero-flag path anymore.
 - **players**: Not part of the playtest bundle.
@@ -117,6 +130,9 @@ Notes:
 - **sandboxTanks**: Only read when `level=sandbox`.
 - **sandboxTanks**: Any unrecognised kind rejects the whole list to null rather than dropping entries.
 - **sandboxWalls**: Only read when `level=sandbox`.
+- **shadowMapSize**: Applied on top of the preset `quality` or the stored Settings choice resolves to, for the game renderer only: the Customize preview builds its own renderer and ignores it. Read once, when a session builds its renderer.
+- **shadowMapSize**: An unrecognised value is rejected and leaves the preset's own setting. `__tanks.bench()` records every override in effect.
+- **shadowMapSize**: Temporary: kept for the device sweep issue #288 runs. Delete it when that sweep concludes, moving any value it settles into the presets.
 - **topbar**: Read once at HUD construction, so it takes a reload rather than applying mid-session.
 - **topbar**: Absent and `spare-chips` are the same path: the shipped bar is what runs when no arm overrides it, not a rule that restates it.
 - **topbar**: The comparison is settled; these are the alternatives kept selectable, and `full` is how anyone gets the pre-ruling bar back.

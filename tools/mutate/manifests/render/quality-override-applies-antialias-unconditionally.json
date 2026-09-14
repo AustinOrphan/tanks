@@ -1,0 +1,17 @@
+{
+  "id": "quality-override-applies-antialias-unconditionally",
+  "file": "src/render/quality.ts",
+  "find": "    antialias: overrides.antialias ?? preset.antialias,",
+  "replace": "    antialias: false,",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #735's acceptance criterion: an override applied whether or not its flag is set. Every session would build its context without antialiasing, including one with no flag at all on the shipped high preset.",
+  "killedBy": [
+    "applyRenderOverrides (issue #735) with no override, resolves to a configuration equal to the preset -- population: all 3 presets",
+    "applyRenderOverrides (issue #735) changes exactly the field an override names -- population: 4 overrides x 3 presets",
+    "startGameWith: dev flags stay off by default applies each single-setting render override on top of the preset, and nothing else (issue #735)"
+  ]
+}
