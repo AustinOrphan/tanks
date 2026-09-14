@@ -1,0 +1,14 @@
+{
+  "id": "route-host-dispose-deletes-a-replaced-entry",
+  "file": "src/game/route-host.ts",
+  "find": "      if (previewDevApi !== null && deps.devConsole[DEV_CONSOLE_KEY] === previewDevApi) {",
+  "replace": "      if (previewDevApi !== null) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Issue #736: page teardown deletes `__tanks` even when another publisher has replaced the preview report there.",
+  "killedBy": [
+    "createRouteHost: the ?bench=preview workload is page-scoped (issue #736) removes its report on dispose, and leaves an entry that replaced it alone"
+  ]
+}

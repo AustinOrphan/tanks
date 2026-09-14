@@ -1,0 +1,14 @@
+{
+  "id": "loop-session-records-the-preview-workload",
+  "file": "src/game/loop.ts",
+  "find": "    deps.devFlags.bench !== null && BENCH_WORKLOADS[deps.devFlags.bench].subject === 'session'",
+  "replace": "    deps.devFlags.bench !== null",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #736: a session opened under ?bench=preview treats the preview workload as its own, times its driver loop and publishes a session report over the page's preview report.",
+  "killedBy": [
+    "startGameWith: the dev console surface leaves the page's preview report in place when a session opens under bench=preview (issue #736)"
+  ]
+}

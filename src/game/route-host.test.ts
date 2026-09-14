@@ -375,11 +375,11 @@ describe('createRouteHost: the ?bench=preview workload is page-scoped (issue #73
     expect([report.session, report.preview]).toEqual([null, { antialias: true, pixelRatioCap: 2, shadowMap: true, keyShadowMapSize: 512 }]);
   });
 
-  it.each([
-    ['with no bench flag', {}],
-    ['for a session workload', { bench: 'versus-bots' as const }],
-  ])('builds the preview with the window scheduler and publishes nothing %s', (_label, devFlags) => {
-    const f = fixture({ devFlags });
+  // A session workload, not an unflagged page: with no flag nothing can instrument the preview
+  // at all, so that case has no mutation that could fail it. A page that instruments whatever
+  // workload it is given (`route-host-instruments-a-session-workload`) fails this one.
+  it('builds the preview with the window scheduler and publishes nothing for a session workload', () => {
+    const f = fixture({ devFlags: { bench: 'versus-bots' } });
     f.hud.fire('onCustomizeOpen');
     expect(f.previewArgs[0]).toHaveLength(3);
     expect(DEV_CONSOLE_KEY in f.devConsole).toBe(false);

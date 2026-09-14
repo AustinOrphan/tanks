@@ -25,7 +25,7 @@ import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
 import { trackById } from '../../src/audio/music-data';
 import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
-import { createTankPreview } from '../../src/render/preview';
+import { createTankPreview, PREVIEW_RENDER_SETTINGS } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subjects';
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
 import { MOMENTS } from '../../src/render/gallery/moments';
@@ -1784,6 +1784,49 @@ await checkAsync('the idle spin stops at the first interaction and does not drif
   c.remove();
   const moved = bytesDiffering(settled, later);
   if (moved !== 0) return `${moved} bytes changed 500ms after a hover -- the spin restarted or never stopped`;
+  return null;
+});
+
+await checkAsync('a preview handed a frame scheduler runs its loop through it (issue #736)', async () => {
+  // `?bench=preview` times the Customize preview by handing `createTankPreview` a scheduler,
+  // and `preview.ts` forwards it to the controls. That forwarding is the one wire vitest
+  // cannot reach -- `createTankPreview` returns null under jsdom -- so it is recorded in the
+  // manifest as a disclosed survivor (`preview-ignores-the-bench-scheduler`) and killed here.
+  // The idle spin runs from construction, so frames must arrive through the scheduler.
+  const c = previewCanvas();
+  let viaScheduler = 0;
+  const preview = createTankPreview(c, undefined, false, {
+    request(cb): number {
+      viaScheduler++;
+      return window.requestAnimationFrame(cb);
+    },
+    cancel(handle): void {
+      window.cancelAnimationFrame(handle);
+    },
+  });
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  await idle(300);
+  preview.dispose();
+  c.remove();
+  if (viaScheduler === 0) return 'the idle spin scheduled 0 frames through the scheduler it was handed';
+  return null;
+});
+
+check('the preview renderer is built with the antialias setting the benchmark report names (issue #736)', () => {
+  // The `?bench=preview` report names `PREVIEW_RENDER_SETTINGS`, and `preview.ts` builds its
+  // renderer from the same constant. This reads the built context back, so a literal written
+  // into the renderer's constructor instead of the constant fails here. Pixel ratio is not
+  // read: this harness runs at a device pixel ratio of 1, under the preview's cap of 2 either way.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const antialias = gl.getContextAttributes()?.antialias;
+  preview.dispose();
+  c.remove();
+  if (antialias !== PREVIEW_RENDER_SETTINGS.antialias) {
+    return `the context reports antialias ${String(antialias)}, the report names ${String(PREVIEW_RENDER_SETTINGS.antialias)}`;
+  }
   return null;
 });
 

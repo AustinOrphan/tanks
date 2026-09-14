@@ -1,0 +1,17 @@
+{
+  "id": "bench-recorder-samples-across-a-restart",
+  "file": "src/game/bench.ts",
+  "find": "      if (!continued) {\n",
+  "replace": "      if (false) {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "tools/bench/preview-workload.test.ts"
+  ],
+  "why": "Issue #736: the recorder samples the frame that restarts a stopped loop, so the preview workload reports the seconds the loop was stopped, hidden or closed as one long frame.",
+  "killedBy": [
+    "createFrameRecorder: one warm-up, one measurement window does not sample a frame that breaks the run, and takes the next interval from it (issue #736)",
+    "createPreviewBench: the preview workload samples unbroken runs on a visible page (issue #736) drops a frame that runs while the page is hidden, and measures the run on either side of it",
+    "the preview benchmark workload (issue #736) measures only frames the preview renders while it is visible and animating"
+  ]
+}

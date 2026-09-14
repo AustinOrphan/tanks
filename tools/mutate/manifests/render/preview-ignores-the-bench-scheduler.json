@@ -1,0 +1,12 @@
+{
+  "id": "preview-ignores-the-bench-scheduler",
+  "file": "src/render/preview.ts",
+  "find": "    ...(frames ? { raf: (cb: (t: number) => void) => frames.request(cb), cancelRaf: (h: number) => frames.cancel(h) } : {}),\n",
+  "replace": "    ...(frames ? {} : {}),\n",
+  "expect": "survives",
+  "expectFailures": 0,
+  "why": "Issue #736. A DISCLOSED SURVIVOR, not an equivalent mutant: dropping the forwarding leaves the ?bench=preview workload with a preview that schedules on the window's own rAF, so the report never receives a frame. It survives because nothing vitest runs reaches this line: createTankPreview builds a WebGLRenderer, which jsdom cannot provide, so preview.test.ts exercises only the null-return branch. The composition test in tools/bench/preview-workload.test.ts drives createPreviewControls directly and so never goes through it either. What kills it is tools/gl/harness.ts's 'a preview handed a frame scheduler runs its loop through it (issue #736)', in a real browser. The replacement keeps `frames` read so the mutation compiles.",
+  "tests": [
+    "src/render/preview.test.ts"
+  ]
+}
