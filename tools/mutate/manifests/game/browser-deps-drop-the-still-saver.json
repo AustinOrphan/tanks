@@ -1,0 +1,14 @@
+{
+  "id": "browser-deps-drop-the-still-saver",
+  "file": "src/game/loop.ts",
+  "find": "      saveStill: downloadCanvasStill,",
+  "replace": "      saveStill: undefined,",
+  "expect": "killed",
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "why": "Issue #731. The browser deps stop binding the still download, so the real page's workbench hides Download Still while every pane and route test, which injects its own saver, still passes.",
+  "killedBy": [
+    "createBrowserDeps: the gallery workbench's still saver (issue #731) binds the download that saves the canvas as a PNG"
+  ]
+}
