@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-misses-overlapping-controls",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "      if (ox > OVERLAP_EPSILON && oy > OVERLAP_EPSILON) {",
+  "replace": "      if (ox > OVERLAP_EPSILON && oy > OVERLAP_EPSILON && false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Never reports an overlap. The cheapest way to give a small control a 44 px target is to grow its box, and growing boxes in a wrapping row or a negative-margin cluster is exactly how two targets come to cover the same pixels. Issue #686 requires that no enlarged target creates ambiguous pointer or touch ownership; without this check, a size fix that did that would pass.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails two controls whose boxes overlap, and not two that only share an edge"
+  ]
+}

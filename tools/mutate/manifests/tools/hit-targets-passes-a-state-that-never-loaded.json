@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-passes-a-state-that-never-loaded",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "  if (run.failed) return [",
+  "replace": "  if (false) return [",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Ignores a reading whose steps never reached their surface. The local sweep for issue #686 hit exactly this: a reset-confirmation state waited 20s for a dialog that does not exist, because Reset stats arms itself in place instead of opening one. Judged on whatever controls were left on screen, that timeout would have reported the wrong surface as checked.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a reading that never reached its surface, instead of passing an empty one"
+  ]
+}

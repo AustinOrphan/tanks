@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-ignores-horizontal-overflow",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "  if (run.overflow.page) failures.push",
+  "replace": "  if (false) failures.push",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Stops failing a page that scrolls sideways. `min-width` on a control in a no-wrap row is how a size floor pushes a 320 px phone layout past the screen edge; issue #686's acceptance criteria name 320x568 and 390x844 as having to stay free of new horizontal overflow, and no per-control size or overlap check can see it.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a page that scrolls horizontally"
+  ]
+}
