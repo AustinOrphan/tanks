@@ -18,8 +18,19 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     },
     // Issue #691: the firing-budget comparison and its leaves, whose bodies declared these
     // parents after the first migration ran.
-    { parent: 358, children: [518] },
+    // #720: split out of #358 by the 2026-09-14 triage (see the block below).
+    { parent: 358, children: [518, 720] },
     { parent: 518, children: [519, 520, 521, 578] },
+    // The 2026-09-14 triage split: each of these issues was split out of its decision issue
+    // and declared `Parent:` in its body, and the audit reported every one as
+    // `declared-parent-missing-native`. The seventh, #720 -> #358, joins #358's existing
+    // group above.
+    { parent: 230, children: [718] },
+    { parent: 359, children: [719] },
+    { parent: 288, children: [721] },
+    { parent: 418, children: [722] },
+    { parent: 635, children: [723] },
+    { parent: 696, children: [724] },
     { parent: 228, children: [260, 261, 267, 268, 269, 278, 279, 280, 281, 282] },
     { parent: 229, children: [270, 271, 272, 273, 274, 425] },
     { parent: 233, children: [275, 276, 277] },
