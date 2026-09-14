@@ -2611,31 +2611,25 @@
  * readings off-screen that were reachable before it -- among them Records' Stats and
  * Achievements tabs at 200% zoom and five Customize accent swatches at 320x568.
  *
- * `overflow-y: auto` with `flex-start` is #642's cure for the centred-overflow clip, but on
- * its own it would also pin every one of these screens -- the Main Menu included -- to the
- * top of the viewport when it fits. The two spacers keep the centred composition instead:
- * they share whatever free space the column has, so content that fits sits exactly where
- * `justify-content: center` put it, and once content overflows they collapse to nothing and
- * the column starts at the scroll origin, where every row can be scrolled to.
+ * `overflow-y: auto` with `flex-start` is #642's cure for the centred-overflow clip, but here
+ * it would also pin every one of these screens -- the Main Menu included -- to the top of the
+ * viewport when it fits. `safe center` is the alignment that says what these panes mean:
+ * centred while the column fits, and start-aligned the moment it overflows, so the overflow
+ * lands below the scroll origin where it can be reached.
+ *
+ * Not the two flex spacers a first draft used. They are flex items, so the column's `gap`
+ * went on either side of them, and a nearly full pane moved down by a gap -- measured 10 px
+ * on Achievements at 320x568 against the same build centred.
+ *
+ * A browser that does not parse `safe` drops this declaration and keeps the base rule's
+ * `center`, which is exactly the clipping these panes had before -- no worse than that.
  */
 .hud-panel,
 .hud-stats,
 .hud-customize,
 .hud-achievements {
-  justify-content: flex-start;
+  justify-content: safe center;
   overflow-y: auto;
-}
-
-.hud-panel::before,
-.hud-panel::after,
-.hud-stats::before,
-.hud-stats::after,
-.hud-customize::before,
-.hud-customize::after,
-.hud-achievements::before,
-.hud-achievements::after {
-  content: '';
-  flex: 1 0 0;
 }
 
 .hud-achievement-list {
