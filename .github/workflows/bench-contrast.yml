@@ -73,6 +73,10 @@ jobs:
           ARMS: ${{ inputs.arms || 'high,low,high+fillRimLights=off' }}
         run: node tools/bench/runs.mjs --dist dist --out bench-out --runs "$RUNS" --arms "$ARMS"
 
+      # The one assertion: low still costs clearly less than high, within this run (tools/bench/contrast.mjs).
+      - name: Check the low and high contrast
+        run: npm run bench:contrast -- bench-out
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v7

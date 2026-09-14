@@ -1,0 +1,15 @@
+{
+  "id": "bench-contrast-always-passes",
+  "file": "tools/bench/contrast.mjs",
+  "find": "    pass: measured >= ratio,",
+  "replace": "    pass: true,",
+  "expect": "killed",
+  "why": "The verdict passes whatever the frame rates are, so a build where low costs as much as high goes green -- the regression issue #738's check exists to catch.",
+  "tests": [
+    "tools/bench/contrast.test.ts"
+  ],
+  "killedBy": [
+    "the render cost contrast check (issue #738) fails when low costs as much as high, as it would with high's settings",
+    "the render cost contrast check (issue #738) holds its ratio: a low arm just over it passes and one just under fails"
+  ]
+}

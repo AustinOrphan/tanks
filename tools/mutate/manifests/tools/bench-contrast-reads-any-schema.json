@@ -1,0 +1,14 @@
+{
+  "id": "bench-contrast-reads-any-schema",
+  "file": "tools/bench/contrast.mjs",
+  "find": "  if (report?.schema !== BENCH_REPORT_SCHEMA) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "why": "A report from another schema version is read as if its frames and window meant what this version's do, instead of being refused.",
+  "tests": [
+    "tools/bench/contrast.test.ts"
+  ],
+  "killedBy": [
+    "the render cost contrast check (issue #738) refuses a stale schema, an open window and a report with no frames"
+  ]
+}
