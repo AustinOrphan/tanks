@@ -261,7 +261,7 @@ export type GameplayStatus = {
 import type { StatCounts } from './stats';
 import type { TypedOutcome, TypedOutcomeKind } from './app-state';
 import type { Assignment, SlotSource } from '../input/assignment';
-import type { DetectedPad } from '../input/gamepad';
+import { unreadablePadIndices, type DetectedPad } from '../input/gamepad';
 import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
 import { isDirection, spatialNext, type Direction, type Rect } from './spatial-focus';
 import { keyHint, type Modality } from './modality';
@@ -6537,7 +6537,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function renderVersusSlotRows(): void {
     const slots = versusConfigState.slots;
-    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));
+    // The SAME unreadable-pad verdict campaign and versus seeding use (issue #713), so the
+    // pane's device column and Start gate cannot bind a pad the session would skip.
+    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex), unreadablePadIndices(currentDetectedPads));
     // The MODE is passed, which is what makes issue #281's team rule reachable at all --
     // `versusSetupProblem` defaults to `'ffa'`, under which it never runs.
     const problem = versusSetupProblem(slots, sources, versusConfigState.mode);

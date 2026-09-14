@@ -40,6 +40,7 @@ import {
   createGamepadInputSource,
   readNavigatorGamepads,
   readDetectedPads,
+  unreadablePadIndices,
   type PlayerInputSource,
   type DetectedPad,
 } from '../input/gamepad';
@@ -634,18 +635,26 @@ export function createBotSources(
  *     devices are re-resolved densely against what is plugged in RIGHT NOW. A human slot
  *     with no pad stays `'none'` so the Start gate can name it instead of rebinding.
  *   - Campaign/dev: the historical positional rule (`pad[i] -> slot[i]`, slot 0 keyboard),
- *     with the `bots` flag claiming the LAST `botCount` slots. Unchanged on purpose --
- *     nothing validates a campaign co-op session, so giving it the VS rule would hand it a
- *     new failure mode for no benefit.
+ *     with the `bots` flag claiming the LAST `botCount` slots. Not given the VS rule --
+ *     nothing validates a campaign co-op session, so VS's `'none'` for a missing pad would
+ *     hand it a new failure mode for no benefit.
+ *
+ * BOTH paths skip a pad Tanks cannot read (issue #713), from the ONE verdict
+ * `unreadablePadIndices` computes here: VS resolves each human slot to the next readable
+ * connected pad, and campaign moves a gamepad slot past an unreadable index. Taking the
+ * detected pads WHOLE, rather than a list of indices the call site had already stripped of
+ * their verdict, is what keeps that decision inside this tested function instead of at a
+ * call site no test reaches.
  */
 export function seedAssignment(
   versusSlots: readonly VersusSlotSetup[] | undefined,
   playerCount: number,
   botCount: number,
-  connectedPads: readonly number[],
+  detectedPads: readonly DetectedPad[],
 ): Assignment {
-  if (versusSlots) return resolveSources(versusSlots, connectedPads);
-  return deriveInitialAssignment(playerCount, botSlotsFor(playerCount, botCount));
+  const unreadable = unreadablePadIndices(detectedPads);
+  if (versusSlots) return resolveSources(versusSlots, detectedPads.map((p) => p.padIndex), unreadable);
+  return deriveInitialAssignment(playerCount, botSlotsFor(playerCount, botCount), unreadable);
 }
 
 export function botSlotsFor(playerCount: number, botCount: number): Set<number> {
@@ -1515,12 +1524,7 @@ export function startGameWith(
   // (the assignment panel's live list), reused rather than adding a second gamepad read
   // path. Read ONCE here, at session start, which is the moment the setup was validated
   // against; hotplug during a match is the panel's business, not this seeding.
-  let assignment: Assignment = seedAssignment(
-    versusSlots,
-    playerCount,
-    botCount,
-    deps.readDetectedPads().map((p) => p.padIndex),
-  );
+  let assignment: Assignment = seedAssignment(versusSlots, playerCount, botCount, deps.readDetectedPads());
 
   /** Which slots `assignment` currently marks `'bot'` -- recomputed, never cached, so a
    *  mid-session reassignment is always reflected. */

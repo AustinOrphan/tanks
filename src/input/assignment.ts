@@ -35,18 +35,40 @@ export type Assignment = SlotSource[];
  * `botSlotsFor`), in which case it is `'bot'` regardless of index. Bots claim their
  * declared slots first; controllers (or keyboard, at slot 0) fill whatever remains --
  * exactly `loop.ts`'s pre-assignment-UI precedence, see its `realSources` doc comment.
+ *
+ * A PAD TANKS CANNOT READ IS SKIPPED (issue #713). `skipPads` names connected pads with an
+ * `unsupported` verdict (`unreadablePadIndices`, gamepad.ts). A gamepad slot never takes
+ * one: it takes the first index at or after its own that is not skipped, and each later
+ * gamepad slot moves past it in turn, so no two slots share a pad. With nothing skipped,
+ * slot i still gets exactly `padIndex: i`.
+ *
+ * An index that is merely ABSENT is not skipped. The positional rule exists so a pad plugged
+ * in after the session starts is picked up at its index, and nothing about an empty index
+ * says Tanks cannot read what arrives there -- so this path never produces `'none'`, which
+ * is the positional rule's existing answer for "no usable pad yet".
  */
 export function deriveInitialAssignment(
   playerCount: number,
   botSlots: ReadonlySet<number>,
+  skipPads: ReadonlySet<number> = new Set(),
 ): Assignment {
   const out: Assignment = [];
+  let nextPad = 1;
   for (let i = 0; i < playerCount; i++) {
     if (botSlots.has(i)) {
       out.push({ kind: 'bot' });
       continue;
     }
-    out.push(i === 0 ? { kind: 'keyboard' } : { kind: 'gamepad', padIndex: i });
+    if (i === 0) {
+      out.push({ kind: 'keyboard' });
+      continue;
+    }
+    // `Math.max(i, ...)` keeps the positional rule when a bot sits BETWEEN gamepad slots:
+    // slot i starts looking at index i, not at the pad after the previous gamepad slot's.
+    let padIndex = Math.max(i, nextPad);
+    while (skipPads.has(padIndex)) padIndex++;
+    out.push({ kind: 'gamepad', padIndex });
+    nextPad = padIndex + 1;
   }
   return out;
 }

@@ -1,0 +1,14 @@
+{
+  "id": "campaign-seeding-packs-pads-past-a-bot",
+  "file": "src/input/assignment.ts",
+  "find": "    let padIndex = Math.max(i, nextPad);\n",
+  "replace": "    let padIndex = nextPad;\n",
+  "expect": "killed",
+  "tests": [
+    "src/input/assignment.test.ts"
+  ],
+  "why": "Issue #713's skip needed a running pad counter, and a counter alone packs pads DENSELY: a gamepad slot after a bot takes the pad after the previous gamepad slot's instead of the one at its own index. That silently changes the positional rule the skip was meant to leave alone when nothing is skipped. `botSlotsFor` only ever claims the LAST slots, so no shipped path reaches it today; `deriveInitialAssignment` accepts any bot set, and the case pins its contract.",
+  "killedBy": [
+    "deriveInitialAssignment a bot BETWEEN gamepad slots leaves the later slot on its own index (the positional rule)"
+  ]
+}

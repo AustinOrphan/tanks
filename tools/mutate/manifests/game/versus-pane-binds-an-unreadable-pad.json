@@ -1,0 +1,14 @@
+{
+  "id": "versus-pane-binds-an-unreadable-pad",
+  "file": "src/game/hud.ts",
+  "find": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex), unreadablePadIndices(currentDetectedPads));\n",
+  "replace": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Issue #713. The Versus Setup pane resolves devices without the unreadable-pad verdict, so its device column names a pad the Controllers pane marks not supported, and Start stays enabled for a slot that would be bound to it. Seeding (loop.ts) skips that pad, so what the pane displayed would not be what launched -- the divergence issue #260 exists to prevent.",
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) skips a pad Tanks cannot read in the device column and the Start gate (issue #713)"
+  ]
+}

@@ -1,8 +1,8 @@
 {
   "id": "versus-slot-seeding-ignores-the-descriptor",
   "file": "src/game/loop.ts",
-  "find": "  if (versusSlots) return resolveSources(versusSlots, connectedPads);",
-  "replace": "  if (versusSlots && false) return resolveSources(versusSlots, connectedPads);",
+  "find": "  if (versusSlots) return resolveSources(versusSlots, detectedPads.map((p) => p.padIndex), unreadable);",
+  "replace": "  if (versusSlots && false) return resolveSources(versusSlots, detectedPads.map((p) => p.padIndex), unreadable);",
   "expect": "killed",
   "tests": [
     "src/game/loop.test.ts"

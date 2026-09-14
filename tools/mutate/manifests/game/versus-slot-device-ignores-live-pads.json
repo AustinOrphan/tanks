@@ -1,7 +1,7 @@
 {
   "id": "versus-slot-device-ignores-live-pads",
   "file": "src/game/hud.ts",
-  "find": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));",
+  "find": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex), unreadablePadIndices(currentDetectedPads));",
   "replace": "    const sources = resolveSources(slots, []);",
   "expect": "killed",
   "why": "Derives every slot's device as if no controller were connected. A second human slot would read 'Unassigned' and refuse Start with a controller plugged in, and -- worse in kind -- the gate would stop reacting to a hotplug at all, which is the criterion about a disconnect disabling Start with an actionable reason.",

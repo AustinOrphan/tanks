@@ -469,6 +469,18 @@ export function readDetectedPads(getGamepads: GetGamepads): DetectedPad[] {
   });
 }
 
+/**
+ * The pad indices automatic assignment must skip: connected, but carrying an `unsupported`
+ * verdict (issue #713). ONE definition, read by both places a session assigns pads on its
+ * own -- `seedAssignment` (campaign and versus seeding, `game/loop.ts`) and the Versus Setup
+ * pane (`game/hud.ts`) -- so the two cannot disagree about which pad is usable. The panel
+ * still LISTS these pads, marked not supported (#597); this only keeps them from being
+ * handed to a slot without anyone choosing it.
+ */
+export function unreadablePadIndices(pads: readonly DetectedPad[]): Set<number> {
+  return new Set(pads.filter((p) => p.unsupported !== undefined).map((p) => p.padIndex));
+}
+
 /** One connected pad paired with the `getGamepads()` index it was found at. */
 export interface ConnectedPad {
   readonly padIndex: number;

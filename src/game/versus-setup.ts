@@ -218,12 +218,20 @@ export function sanitizeSetup(
  * "slot 2 = pad 0" would silently hand slot 2 to a different physical controller than the
  * one the player assigned it to. Re-resolution makes that impossible by construction
  * rather than by a check someone has to remember to run.
+ *
+ * A PAD TANKS CANNOT READ IS SKIPPED (issue #713). `unreadablePads` (from
+ * `unreadablePadIndices`, gamepad.ts) is removed from the connected list before any slot is
+ * resolved, so a human slot takes the next READABLE pad, or resolves to `'none'` when none is
+ * left -- which `versusSetupProblem` then reports as `device-missing`, exactly as for a pad
+ * that is not there. Without it an unreadable pad earlier in the list bound a slot the
+ * reader samples as neutral every tick, and Start was not refused.
  */
 export function resolveSources(
   slots: readonly VersusSlotSetup[],
   connectedPads: readonly number[],
+  unreadablePads: ReadonlySet<number> = new Set(),
 ): SlotSource[] {
-  const pads = [...connectedPads];
+  const pads = connectedPads.filter((padIndex) => !unreadablePads.has(padIndex));
   let nextPad = 0;
   let deviceTaken = false;
   return slots.map((s) => {
