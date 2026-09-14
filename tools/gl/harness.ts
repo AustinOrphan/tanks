@@ -1403,13 +1403,15 @@ function workbenchOpts(over: Partial<WorkbenchSceneOptions>): WorkbenchSceneOpti
 }
 
 await checkAsync('a workbench still is a PNG of the stated pixel size, and not blank (issue #731)', async () => {
-  // What Download Still saves: the pane's canvas, encoded after the drawn frame has been
-  // presented, since the button is pressed in a later frame. The two animation frames stand in
-  // for that presentation; a timer alone does not present, and the buffer would read back intact
-  // whether or not createWorkbenchRenderer preserves it.
+  // What Download Still saves: the pane's canvas, on screen, encoded after the drawn frame has
+  // been presented, since the button is pressed in a later frame. Pinned inside the viewport and
+  // two animation frames on, the canvas is presented as the pane's is; a timer alone, or a canvas
+  // below the fold, is never presented, and its buffer reads back intact whether or not
+  // createWorkbenchRenderer preserves it.
   const c = document.createElement('canvas');
   c.width = GALLERY_STILL.width;
   c.height = GALLERY_STILL.height;
+  c.style.cssText = 'position:fixed;left:0;top:0;z-index:1';
   document.body.appendChild(c);
   const bench = createWorkbench(c, c.width, c.height, workbenchOpts({ subject: { kind: 'moment', id: 'fire' } }));
   bench.seek(10);
