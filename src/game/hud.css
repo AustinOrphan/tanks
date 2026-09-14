@@ -553,6 +553,21 @@
 .hud {
   position: fixed;
   inset: 0;
+  /* Two rows (issue #687): the topbar, exactly as tall as it renders, and the rest of the
+   * screen. The row is the ONE statement of where the topbar ends. The toast rail and the
+   * capacity flash are placed in row 2, so their `top` is a distance below the bar's real
+   * bottom edge -- which moves with the bar's padding, its type, and the top safe-area
+   * inset folded into that padding. They used to carry `top: 64px` and `top: 56px`,
+   * guesses that held with no display cutout and failed with one: measured in Chromium
+   * with a 47px top inset, the bar grew to 74-87px and both landed inside it.
+   *
+   * Nothing else here moves. Every other child is absolutely or fixed positioned with no
+   * grid placement, and such a child's containing block is this element's whole padding
+   * box, grid or not. `minmax(0, 1fr)` stops a topbar row wider than a 320px screen from
+   * widening the column past the viewport. */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   pointer-events: none;
   font-family: var(--hud-font);
   color: #fff;
@@ -560,13 +575,14 @@
 }
 
 .hud-topbar {
-  position: absolute;
+  /* In flow, and row 1 of `.hud`'s grid: its rendered height IS the row. Relative rather
+   * than static only so the z-index below keeps the same positioned-layer meaning it had
+   * as an absolutely positioned bar. */
+  position: relative;
+  grid-row: 1;
   /* Above the stats overlay (.hud-stats z-index 0): mute and volume stay reachable
    * while the stats page is open. */
   z-index: 1;
-  top: 0;
-  left: 0;
-  right: 0;
   display: flex;
   align-items: center;
   gap: var(--hud-space-6);
@@ -2632,12 +2648,23 @@
    * while the win panel is up, and with tree order deciding they landed behind its
    * scrim. Safe to raise because the rail is pointer-events: none. */
   z-index: 2;
-  top: 64px;
+  /* Under the topbar's real bottom edge -- see `.hud`'s two rows. 12px below it is where
+   * the old `top: 64px` sat under the 52px desktop bar, so desktop does not move. */
+  grid-row: 2;
+  top: var(--hud-space-4);
   right: 16px;
   display: flex;
   flex-direction: column;
   gap: var(--hud-space-2);
   pointer-events: none;
+}
+
+/* With the topbar hidden -- Launch and the Main Menu, where the M shortcut still reports
+ * through a toast -- row 1 is empty and row 2 starts at the display edge, so the rail
+ * takes the edge-anchored pattern instead. The inset is counted once either way: here
+ * directly, and under a shown topbar only through that bar's own padding. */
+.hud-topbar--hidden ~ .hud-toasts {
+  top: max(var(--hud-safe-inset), env(safe-area-inset-top));
 }
 
 .hud-toast {
@@ -2771,7 +2798,10 @@
  */
 .hud-capacity {
   position: absolute;
-  top: 56px; /* clear of the topbar row, and well above the arena's centre */
+  /* Just under the topbar's real bottom edge -- see `.hud`'s two rows -- and so well above
+   * the arena's centre. 4px below the 52px desktop bar is where `top: 56px` used to put it. */
+  grid-row: 2;
+  top: 4px;
   left: 0;
   right: 0;
   text-align: center;
