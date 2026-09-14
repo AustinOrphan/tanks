@@ -86,8 +86,14 @@ function createFetch(
 describe('relationship migration plan', () => {
   it('keeps the reviewed repository ledger unambiguous, acyclic, and evidence-complete', () => {
     const expanded = expandRelationshipPlan(RELATIONSHIP_MIGRATION);
-    expect(expanded.parentEdges).toHaveLength(103);
+    expect(expanded.parentEdges).toHaveLength(108);
     expect(expanded.parentEdges).toEqual(expect.arrayContaining([
+      // #721's five leaves, split on 2026-09-14.
+      { parent: 721, child: 734 },
+      { parent: 721, child: 735 },
+      { parent: 721, child: 736 },
+      { parent: 721, child: 737 },
+      { parent: 721, child: 738 },
       // #248's three leaves, split by its 2026-09-14 triage clarification.
       { parent: 248, child: 729 },
       { parent: 248, child: 730 },
@@ -117,8 +123,14 @@ describe('relationship migration plan', () => {
       { parent: 317, child: 429 },
       { parent: 325, child: 470 },
     ]));
-    expect(expanded.dependencyEdges).toHaveLength(158);
+    expect(expanded.dependencyEdges).toHaveLength(164);
     expect(expanded.dependencyEdges).toEqual(expect.arrayContaining([
+      { issue: 735, blocker: 734 },
+      { issue: 736, blocker: 734 },
+      { issue: 737, blocker: 734 },
+      { issue: 737, blocker: 735 },
+      { issue: 738, blocker: 734 },
+      { issue: 738, blocker: 735 },
       { issue: 730, blocker: 729 },
       { issue: 731, blocker: 730 },
       { issue: 243, blocker: 317 },
@@ -168,8 +180,13 @@ describe('relationship migration plan', () => {
     // reads (159 -> 164). It adds 3 new issue numbers (#729-#731; #248 was already a child
     // of #238), 3 parent writes, 2 blocked-by writes and 5 verification reads: initialApply
     // 689 + 5 + 3 + 3 + 2 + 5 = 707, planThenApply 707 + 164 = 871.
+    //
+    // #721's split adds 5 parent edges and 4 blocked issues (#735-#738), so 9 inspection
+    // reads (164 -> 173). It adds 5 new issue numbers (#734-#738; #721 was already a child
+    // of #288), 5 parent writes, 6 blocked-by writes and 9 verification reads: initialApply
+    // 707 + 9 + 5 + 5 + 6 + 9 = 741, planThenApply 741 + 173 = 914.
     expect({ inspectionReads, initialApply, planThenApply: inspectionReads + initialApply })
-      .toEqual({ inspectionReads: 164, initialApply: 707, planThenApply: 871 });
+      .toEqual({ inspectionReads: 173, initialApply: 741, planThenApply: 914 });
   });
 
   it('expands a reviewed plan and rejects ambiguous parents, duplicates, and cycles', () => {
