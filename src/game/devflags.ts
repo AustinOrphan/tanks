@@ -1213,7 +1213,10 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
   },
   shadowMapSize: {
     kind: 'valued',
-    values: [...SHADOW_MAP_SIZES],
+    // A typed value rather than `values`: Developer Tools draws `values` as option buttons, and
+    // five buttons named only "256" to "4096" fail the HUD's bare-digit control-name rule
+    // (hud.a11y.test.ts, issue #629). The parser still accepts exactly these sizes.
+    type: `one of ${SHADOW_MAP_SIZES.join(', ')}`,
     description:
       "Overrides the quality preset's sun shadow map size for this session, leaving every " +
       'other render setting at the preset.',
