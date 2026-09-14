@@ -8,6 +8,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ACCENTS, PALETTE, SKINS, SPAWN_ANIMATIONS } from '../presentation/customization';
 import type { GalleryCatalog } from './gallery-selection';
 import {
+  downloadCanvasStill,
   mountGalleryWorkbench,
   type GalleryWorkbenchDeps,
   type GalleryWorkbenchHandle,
@@ -272,5 +273,94 @@ describe('the gallery workbench releases everything it holds (issue #730)', () =
     expect(r.disposed).toBe(1);
     expect(r.frames().cancel).toBe(1);
     expect(root.childElementCount).toBe(0);
+  });
+});
+
+describe('the gallery workbench offers the command line for its selection (issue #731)', () => {
+  const command = (): string => q<HTMLTextAreaElement>('.hud-gallery-command').value;
+  const recipe = (): HTMLElement => q('.hud-gallery-recipe');
+  const anim = (): HTMLElement => q('.hud-gallery-anim');
+
+  it('shows the gallery command for the selection, and rewrites it when a control changes', () => {
+    mount(rig('scene:fire'));
+    expect(command()).toBe('npm run gallery -- --scene fire --view game --skin solid --w 640 --h 400 --dpr 1');
+    change('view', 'low');
+    expect(command()).toContain('--view low');
+  });
+
+  it('follows the timeline: scrubbing writes the frame on screen as --age', () => {
+    mount(rig('scene:fire'));
+    const scrub = q<HTMLInputElement>('.hud-gallery-scrub');
+    scrub.value = '7';
+    scrub.dispatchEvent(new Event('input'));
+    expect(command().endsWith('--age 7')).toBe(true);
+  });
+
+  it('names the registered capture recipe on an exact match, and not one frame away', () => {
+    mount(rig('scene:fire,age:10'));
+    expect(recipe().hidden).toBe(false);
+    expect(recipe().textContent).toContain('gallery.fire.still');
+    expect(recipe().textContent).toContain('npm run capture -- --recipe gallery.fire.still');
+    document.body.innerHTML = '';
+
+    mount(rig('scene:fire,age:11'));
+    expect(recipe().hidden, 'frame 11 is not the recipe').toBe(true);
+    expect(recipe().textContent).toBe('');
+  });
+
+  it('drops the recipe once a control moves the selection off it', () => {
+    mount(rig('scene:fire,age:10'));
+    change('view', 'low');
+    expect(recipe().hidden).toBe(true);
+  });
+
+  it('offers the animated command only for a subject with more than one frame', () => {
+    mount(rig('scene:fire'));
+    expect(anim().hidden).toBe(false);
+    expect(anim().textContent).toContain('--anim');
+    change('subject', 'elements:mine');
+    expect(anim().hidden, 'a static posed element has nothing to animate').toBe(true);
+  });
+
+  it('Download Still saves the canvas under a name carrying the frame, pixel size and DPR', () => {
+    const r = rig('scene:fire,age:10');
+    const saved: [HTMLCanvasElement, string][] = [];
+    r.deps = { ...r.deps, saveStill: (canvas, name) => saved.push([canvas, name]) };
+    mount(r);
+    expect(q('.hud-gallery-stillrow').hidden).toBe(false);
+    expect(q('.hud-gallery-still-size').textContent).toBe('640 x 400 px, device pixel ratio 1');
+    q<HTMLButtonElement>('.hud-gallery-still').click();
+    expect(saved).toEqual([[q<HTMLCanvasElement>('.hud-gallery-canvas'), 'gallery-fire-frame10-640x400@1x.png']]);
+  });
+
+  it('hides Download Still when nothing can save one', () => {
+    mount(rig('scene:fire'));
+    expect(q('.hud-gallery-stillrow').hidden).toBe(true);
+  });
+});
+
+describe('downloadCanvasStill (issue #731)', () => {
+  it('encodes the canvas as a PNG and downloads it under the given name', () => {
+    const canvas = document.createElement('canvas');
+    const encoded: string[] = [];
+    canvas.toBlob = (cb: BlobCallback, type?: string) => {
+      encoded.push(type ?? '');
+      cb(new Blob(['png'], { type: 'image/png' }));
+    };
+    const created = vi.fn(() => 'blob:still');
+    const originalCreate = URL.createObjectURL;
+    URL.createObjectURL = created;
+    const clicked: { href: string; download: string }[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push({ href: this.href, download: this.download });
+    });
+    try {
+      downloadCanvasStill(canvas, 'gallery-fire-frame10-640x400@1x.png');
+    } finally {
+      click.mockRestore();
+      URL.createObjectURL = originalCreate;
+    }
+    expect(encoded).toEqual(['image/png']);
+    expect(clicked).toEqual([{ href: 'blob:still', download: 'gallery-fire-frame10-640x400@1x.png' }]);
   });
 });

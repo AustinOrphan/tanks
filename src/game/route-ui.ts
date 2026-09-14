@@ -431,6 +431,7 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
       raf: deps.raf,
       initial: galleryValue,
       linkFor: bench.linkFor,
+      saveStill: bench.saveStill,
     });
   });
   hud.onGalleryClose(disposeGallery);

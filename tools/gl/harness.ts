@@ -30,6 +30,7 @@ import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subj
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
 import { MOMENTS } from '../../src/render/gallery/moments';
 import { createWorkbench, type WorkbenchSceneOptions } from '../../src/render/gallery/workbench-scene';
+import { GALLERY_STILL } from '../../src/game/gallery-workbench';
 import { QUALITY_PRESETS, type MuzzleSmokeQuality, type RenderQuality } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
@@ -1400,6 +1401,39 @@ function workbenchOpts(over: Partial<WorkbenchSceneOptions>): WorkbenchSceneOpti
     accent: null, spawnAnim: 'warp', mineWarn: null, reach: false, timer: false, ...over,
   };
 }
+
+await checkAsync('a workbench still is a PNG of the stated pixel size, and not blank (issue #731)', async () => {
+  // What Download Still saves: the pane's canvas, encoded in a later task than the frame was
+  // drawn. That holds the picture only because createWorkbenchRenderer sets
+  // preserveDrawingBuffer; without it the encoded buffer is blank.
+  const c = document.createElement('canvas');
+  c.width = GALLERY_STILL.width;
+  c.height = GALLERY_STILL.height;
+  document.body.appendChild(c);
+  const bench = createWorkbench(c, c.width, c.height, workbenchOpts({ subject: { kind: 'moment', id: 'fire' } }));
+  bench.seek(10);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const blob = await new Promise<Blob | null>((resolve) => c.toBlob(resolve, 'image/png'));
+  bench.dispose();
+  c.remove();
+  if (blob === null) return 'toBlob returned no image';
+  if (blob.type !== 'image/png') return `still is ${blob.type}, want image/png`;
+  const bitmap = await createImageBitmap(blob);
+  if (bitmap.width !== GALLERY_STILL.width || bitmap.height !== GALLERY_STILL.height) {
+    return `still is ${bitmap.width}x${bitmap.height}, want ${GALLERY_STILL.width}x${GALLERY_STILL.height}`;
+  }
+  const flat = document.createElement('canvas');
+  flat.width = bitmap.width;
+  flat.height = bitmap.height;
+  const ctx2d = flat.getContext('2d');
+  if (ctx2d === null) return 'no 2d context to read the still back';
+  ctx2d.drawImage(bitmap, 0, 0);
+  const data = ctx2d.getImageData(0, 0, flat.width, flat.height).data;
+  const colours = new Set<number>();
+  for (let i = 0; i < data.length; i += 4 * 97) colours.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+  if (colours.size < 8) return `still has ${colours.size} distinct sampled colours -- a blank buffer`;
+  return null;
+});
 
 check('a workbench frame reached by scrubbing back draws the same pixels as one reached directly', () => {
   // `destroyed` because its kill lands mid-clip (moments.ts pins tick 18) and the explosion
