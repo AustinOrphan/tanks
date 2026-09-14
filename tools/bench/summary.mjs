@@ -27,11 +27,13 @@ import { BENCH_REPORT_SCHEMA } from '../../src/game/bench';
 /**
  * The query parameters a report may carry beyond its workload's own query: the quality preset
  * and the four single-setting render overrides (`src/game/devflags.ts`, issues #734 and #735).
+ * Restated rather than imported, since the registry module pulls in half the game;
+ * `summary.test.ts` fails if this drifts from `render/quality.ts`'s `NO_RENDER_OVERRIDES`.
  */
 export const ARM_FLAGS = ['quality', 'shadowMapSize', 'antialias', 'pixelRatioCap', 'fillRimLights'];
 
 /** The override fields a session report's `render.overrides` carries, in label order. */
-const OVERRIDE_FIELDS = ['shadowMapSize', 'antialias', 'pixelRatioCap', 'fillRimLights'];
+export const OVERRIDE_FIELDS = ['shadowMapSize', 'antialias', 'pixelRatioCap', 'fillRimLights'];
 
 const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);

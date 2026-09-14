@@ -18,7 +18,19 @@ import {
   type BenchWorkloadId,
   type FrameRecorder,
 } from '../../src/game/bench';
-import { armLabel, lowerMedian, queryMismatches, readReport, runSummarize, sittingMismatches, summarizeRuns } from './summary.mjs';
+import { DEV_FLAGS_OFF } from '../../src/game/devflags';
+import { NO_RENDER_OVERRIDES } from '../../src/render/quality';
+import {
+  ARM_FLAGS,
+  OVERRIDE_FIELDS,
+  armLabel,
+  lowerMedian,
+  queryMismatches,
+  readReport,
+  runSummarize,
+  sittingMismatches,
+  summarizeRuns,
+} from './summary.mjs';
 
 const NO_OVERRIDES: BenchRenderOverrides = { shadowMapSize: null, antialias: null, pixelRatioCap: null, fillRimLights: null };
 
@@ -185,6 +197,16 @@ describe('the benchmark summarizer refuses a report it would misread (issue #737
 });
 
 describe('the benchmark summarizer compares only one device, build and workload (issue #737)', () => {
+  it('names as sweep flags exactly the quality preset and every render override, each a real development flag', () => {
+    // The summarizer restates these names. A fifth override added to `RenderOverrides` would
+    // otherwise be refused as a foreign flag, and left out of every arm label.
+    const overrides = Object.keys(NO_RENDER_OVERRIDES);
+    expect(overrides.length, 'no override found; this test would pass vacuously').toBeGreaterThan(0);
+    expect(OVERRIDE_FIELDS).toEqual(overrides);
+    expect(ARM_FLAGS).toEqual(['quality', ...overrides]);
+    for (const flag of ARM_FLAGS) expect(Object.keys(DEV_FLAGS_OFF), `${flag} is not a development flag`).toContain(flag);
+  });
+
   it('accepts the quality preset and each render override as what a sweep varies', () => {
     expect(queryMismatches(BENCH_WORKLOADS['versus-bots'].query, `${BENCH_WORKLOADS['versus-bots'].query}&quality=low&shadowMapSize=512&antialias=off&pixelRatioCap=1&fillRimLights=off`)).toEqual([]);
   });

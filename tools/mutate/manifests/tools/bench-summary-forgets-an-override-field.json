@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-forgets-an-override-field",
+  "file": "tools/bench/summary.mjs",
+  "find": "export const OVERRIDE_FIELDS = ['shadowMapSize', 'antialias', 'pixelRatioCap', 'fillRimLights'];",
+  "replace": "export const OVERRIDE_FIELDS = ['shadowMapSize', 'antialias', 'pixelRatioCap'];",
+  "expect": "killed",
+  "why": "The restated override fields drop fillRimLights, so an arm with the lights off is labelled as the plain preset and grouped with the baseline. The drift guard against render/quality.ts's NO_RENDER_OVERRIDES fails.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer compares only one device, build and workload (issue #737) names as sweep flags exactly the quality preset and every render override, each a real development flag"
+  ]
+}
