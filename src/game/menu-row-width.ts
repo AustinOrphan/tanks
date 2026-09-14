@@ -22,9 +22,20 @@
  * Viewport size alone does not change a label's width: the menu's type is in px, from a
  * system font stack.
  *
+ * ON THE NEXT FRAME, NEVER INSIDE THE OBSERVER'S CALLBACK. Setting the variable resizes the
+ * very buttons being observed. Done inside the callback, that resize cannot be delivered in
+ * the same frame, and the browser reports it by dispatching "ResizeObserver loop completed
+ * with undelivered notifications" as a window `error` event. The Main Menu survives that;
+ * a running match does not, because boot routes every window `error` during a match to the
+ * match-failed overlay (issue #690). Measured on the built bundle with both changes in: the
+ * utilities row appearing at Pause fired the event, and Pause was never reached. Deferred to
+ * an animation frame, the resize happens before that frame's observations are gathered, so
+ * it is delivered normally.
+ *
  * WHY IT SETTLES. Each run clears the variable, reads the natural widths, and sets the
- * variable again in one synchronous pass, so no frame is painted in between. The observer
- * then sees the same final size it reported last time and does not fire again.
+ * variable again in one synchronous pass, so no frame is painted in between. The resize it
+ * causes arrives once more, the next run sets the same width, and nothing changes after that.
+ * Notifications that arrive while a frame is already requested share it.
  */
 
 /** The custom property a row's buttons read their width from. */
@@ -55,8 +66,19 @@ type ResizeObserverCtor = new (callback: () => void) => {
   disconnect(): void;
 };
 
+/** The page's animation-frame pair, injectable so a test can decide when a frame runs. */
+export interface FrameScheduler {
+  request(callback: () => void): number;
+  cancel(handle: number): void;
+}
+
+const animationFrames: FrameScheduler = {
+  request: (callback) => requestAnimationFrame(callback),
+  cancel: (handle) => cancelAnimationFrame(handle),
+};
+
 /**
- * Equalize `rows` now and whenever any of their buttons changes size.
+ * Equalize `rows` now, and on the frame after any of their buttons changes size.
  *
  * `Observer` defaults to the page's `ResizeObserver`; a page without one (jsdom, and nothing
  * the game supports) gets the single run and no observer.
@@ -64,15 +86,29 @@ type ResizeObserverCtor = new (callback: () => void) => {
 export function equalizeMenuRows(
   rows: readonly HTMLElement[],
   Observer: ResizeObserverCtor | undefined = globalThis.ResizeObserver,
+  frames: FrameScheduler = animationFrames,
 ): { dispose(): void } {
   const run = (): void => {
     for (const row of rows) equalizeRowWidths(row);
   };
   run();
   if (typeof Observer !== 'function') return { dispose() {} };
-  const observer = new Observer(run);
+  let pending: number | null = null;
+  const observer = new Observer(() => {
+    if (pending !== null) return;
+    pending = frames.request(() => {
+      pending = null;
+      run();
+    });
+  });
   for (const row of rows) {
     for (const child of Array.from(row.children)) observer.observe(child);
   }
-  return { dispose: () => observer.disconnect() };
+  return {
+    dispose: () => {
+      observer.disconnect();
+      if (pending !== null) frames.cancel(pending);
+      pending = null;
+    },
+  };
 }

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createHud } from './hud';
-import { equalizeMenuRows, equalizeRowWidths, MENU_COL_VAR } from './menu-row-width';
+import { equalizeMenuRows, equalizeRowWidths, type FrameScheduler, MENU_COL_VAR } from './menu-row-width';
 
 /**
  * Issue #706. jsdom lays nothing out, so each button here reports a width the test controls:
@@ -37,6 +37,25 @@ class FakeObserver {
   }
   disconnect(): void {
     this.disconnected = true;
+  }
+}
+
+/** Animation frames that run only when the test flushes them. */
+class FakeFrames implements FrameScheduler {
+  readonly queued = new Map<number, () => void>();
+  requests = 0;
+  request(callback: () => void): number {
+    this.requests += 1;
+    this.queued.set(this.requests, callback);
+    return this.requests;
+  }
+  cancel(handle: number): void {
+    this.queued.delete(handle);
+  }
+  flush(): void {
+    const callbacks = Array.from(this.queued.values());
+    this.queued.clear();
+    for (const callback of callbacks) callback();
   }
 }
 
@@ -87,18 +106,52 @@ describe('menu-row-width.ts: one width per Main Menu row (issue #706)', () => {
     const playWidths = [89.2, 98.4];
     const play = rowOf(playWidths);
     const utilities = rowOf([115.8, 100, 99.2]);
-    const handle = equalizeMenuRows([play, utilities], FakeObserver);
+    const frames = new FakeFrames();
+    const handle = equalizeMenuRows([play, utilities], FakeObserver, frames);
     const observer = FakeObserver.last!;
     expect(observer.observed).toEqual([...Array.from(play.children), ...Array.from(utilities.children)]);
     expect(utilities.style.getPropertyValue(MENU_COL_VAR)).toBe('116px');
 
-    // Practice hides: the observer fires and the row is measured again.
+    // Practice hides: the observer fires and the row is measured again on the next frame.
     playWidths[1] = 0;
     observer.callback();
+    frames.flush();
     expect(play.style.getPropertyValue(MENU_COL_VAR)).toBe('90px');
 
     handle.dispose();
     expect(observer.disconnected).toBe(true);
+  });
+
+  it('resizes nothing inside the observer callback, only on the frame after it', () => {
+    // A resize made inside a ResizeObserver callback is reported as a window `error` event,
+    // and during a match boot routes that to the match-failed overlay (issue #690).
+    // Negative control: equalizing inside the callback sets 90px before any frame runs.
+    const playWidths = [89.2, 98.4];
+    const play = rowOf(playWidths);
+    const frames = new FakeFrames();
+    equalizeMenuRows([play], FakeObserver, frames);
+    playWidths[1] = 0;
+    FakeObserver.last!.callback();
+    expect(play.style.getPropertyValue(MENU_COL_VAR)).toBe('99px');
+    frames.flush();
+    expect(play.style.getPropertyValue(MENU_COL_VAR)).toBe('90px');
+  });
+
+  it('shares one frame between notifications, and cancels a pending frame when disposed', () => {
+    // Negative controls: requesting a frame per notification makes 2 requests; a dispose
+    // that leaves the frame queued lets it re-measure a row the HUD has already torn down.
+    const playWidths = [89.2, 98.4];
+    const play = rowOf(playWidths);
+    const frames = new FakeFrames();
+    const handle = equalizeMenuRows([play], FakeObserver, frames);
+    const observer = FakeObserver.last!;
+    observer.callback();
+    observer.callback();
+    expect(frames.requests).toBe(1);
+    playWidths[1] = 0;
+    handle.dispose();
+    frames.flush();
+    expect(play.style.getPropertyValue(MENU_COL_VAR)).toBe('99px');
   });
 
   it('is wired into the HUD for the play and utilities rows, and disposed with it', () => {

@@ -1,0 +1,14 @@
+{
+  "id": "menu-row-width-dispose-leaves-the-frame-queued",
+  "file": "src/game/menu-row-width.ts",
+  "find": "      if (pending !== null) frames.cancel(pending);\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/menu-row-width.test.ts"
+  ],
+  "why": "Issue #706. `dispose` disconnects the observer but leaves an already requested frame queued, so a size change reported just before the HUD is torn down still re-measures and restyles its rows afterwards. Killed by the case that disposes with a frame pending and expects the row width unchanged after the frame runs.",
+  "killedBy": [
+    "menu-row-width.ts: one width per Main Menu row (issue #706) shares one frame between notifications, and cancels a pending frame when disposed"
+  ]
+}
