@@ -1,0 +1,14 @@
+{
+  "id": "capacity-flash-spans-the-whole-hud-in-landscape",
+  "file": "src/game/hud.css",
+  "find": "    grid-row: 1 / 2;\n    top: 0;",
+  "replace": "    grid-row: 1;\n    top: 0;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Drops the landscape flash's end grid line. For an absolutely positioned grid child an auto end line is the grid's padding edge, so the flash's area runs from the top of the bar to the bottom of the screen and align-self centres it there. Measured on the built page at 844x390 with this exact rule: flash at y 182-209, on the board; the visual gate failed 4 of 10 clearance cases.",
+  "killedBy": [
+    "hud.css is syntactically whole places the toast rail and capacity flash from the topbar row, not a guessed height"
+  ]
+}

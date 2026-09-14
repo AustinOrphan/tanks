@@ -1,7 +1,7 @@
 {
   "id": "capacity-flash-stays-under-the-bar-in-landscape",
   "file": "src/game/hud.css",
-  "find": "@media (orientation: landscape) {\n  .hud-capacity {\n    grid-row: 1;",
+  "find": "@media (orientation: landscape) {\n  .hud-capacity {\n    grid-row: 1 / 2;",
   "replace": "@media (orientation: landscape) {\n  .hud-capacity {\n    grid-row: 2;",
   "expect": "killed",
   "tests": [

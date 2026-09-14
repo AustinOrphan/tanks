@@ -2054,7 +2054,11 @@ describe('hud.css is syntactically whole', () => {
     // 844x390), so under the bar is on the arena. The flash moves up into the bar's row there.
     const landscape = src.match(/@media \(orientation: landscape\) \{\s*\.hud-capacity \{([^}]*)\}/);
     expect(landscape, 'no landscape rule moves the capacity flash into the topbar row').not.toBeNull();
-    expect(landscape?.[1], 'the landscape flash is not in the topbar row').toMatch(/grid-row:\s*1;/);
+    // Both lines: an absolutely positioned child's `auto` end line is the grid's padding edge,
+    // so `grid-row: 1` alone spans the whole HUD and centres the flash on the board.
+    expect(landscape?.[1], 'the landscape flash is not confined to the topbar row').toMatch(
+      /grid-row:\s*1\s*\/\s*2;/,
+    );
     // With the bar hidden, row 2 starts at the display edge, where a cutout still is.
     expect(rule('.hud-topbar--hidden ~ .hud-toasts')).toMatch(
       /top:\s*max\(var\(--hud-safe-inset\),\s*env\(safe-area-inset-top\)\);/,
