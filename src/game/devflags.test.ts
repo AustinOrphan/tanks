@@ -434,6 +434,20 @@ describe('parseDevFlags: quality', () => {
   });
 });
 
+describe('parseDevFlags: bench (issue #734)', () => {
+  it('selects a named workload and changes no other flag', () => {
+    expect(parseDevFlags('?dev=1&bench=versus-bots')).toEqual({ ...DEV_FLAGS_OFF, bench: 'versus-bots' });
+  });
+
+  it('rejects a workload name it does not define, rather than reporting an undefined one', () => {
+    expect(parseDevFlags('?dev=1&bench=potato').bench).toBeNull();
+  });
+
+  it('does nothing without the dev gate', () => {
+    expect(parseDevFlags('?bench=versus-bots')).toEqual(DEV_FLAGS_OFF);
+  });
+});
+
 describe('parseDevFlags: mode (n-player arc PR 4 -- FFA + teams)', () => {
   it('is null without dev mode, whatever the value says', () => {
     expect(parseDevFlags('?mode=ffa').mode).toBeNull();

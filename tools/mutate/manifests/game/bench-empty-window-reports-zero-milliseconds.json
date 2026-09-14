@@ -1,0 +1,14 @@
+{
+  "id": "bench-empty-window-reports-zero-milliseconds",
+  "file": "src/game/bench.ts",
+  "find": "    return { count: 0, p50: null, p95: null, p99: null, max: null, over16_7: 0, over33_3: 0, over50: 0 };",
+  "replace": "    return { count: 0, p50: 0, p95: 0, p99: 0, max: 0, over16_7: 0, over33_3: 0, over50: 0 };",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "A report taken during warm-up, with no frames measured, would claim 0 ms percentiles -- a perfect run -- instead of saying nothing was measured.",
+  "killedBy": [
+    "summarizeFrames: nearest-rank percentiles and long-frame counts reports nothing measured as nulls and zero counts, not as zero milliseconds"
+  ]
+}

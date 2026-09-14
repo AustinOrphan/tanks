@@ -1,0 +1,14 @@
+{
+  "id": "bench-flag-accepts-any-workload-name",
+  "file": "src/game/devflags.ts",
+  "find": "  return BENCH_WORKLOAD_NAMES.has(raw) ? (raw as BenchWorkloadId) : null;",
+  "replace": "  return raw as BenchWorkloadId;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "An unknown workload name is accepted, and the report then names a workload with no definition -- the reject-to-null idiom every valued flag follows.",
+  "killedBy": [
+    "parseDevFlags: bench (issue #734) rejects a workload name it does not define, rather than reporting an undefined one"
+  ]
+}

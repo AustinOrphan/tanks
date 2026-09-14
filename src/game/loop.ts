@@ -102,6 +102,13 @@ import type { GameplayRouteHost, RouteHostDeps, StartIntent } from './route-host
 import { resolveOwnerColor } from '../presentation/identity';
 import { readPadDiagnostics, type PadDiagnostic } from '../input/gamepad-diagnostics';
 import { createDriver, type RafScheduler } from './driver';
+import {
+  BENCH_WORKLOADS,
+  buildBenchReport,
+  createFrameRecorder,
+  instrumentRaf,
+  type BenchReport,
+} from './bench';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } from './devflags';
@@ -110,7 +117,7 @@ import { gallerySearch, type GalleryCatalog } from './gallery-selection';
 import type { GalleryWorkbenchDeps } from './gallery-workbench';
 import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
-import { readBuildIdentity } from './dev-diagnostics';
+import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
 import { resetDeveloperData, resolveStorage } from './storage';
 
 /**
@@ -511,6 +518,12 @@ export interface DevConsole {
   settings?: SettingsApi;
   /** The input trace for the CURRENT level, replayable through replay.ts. */
   replay?: () => ReplayTrace;
+  /**
+   * The frame-time report for `?dev=1&bench=<workload>` (issue #734), as it stands when
+   * called: during warm-up it has no frames, while measuring it grows, and once the window
+   * has closed it stays put. See bench.ts for what it measures and what it cannot.
+   */
+  bench?: () => BenchReport;
 }
 
 export interface SettingsApi {
@@ -2560,9 +2573,18 @@ export function startGameWith(
     });
   }
 
+  // `?dev=1&bench=<workload>` (issue #734): the driver gets a scheduler that times each frame
+  // callback and hands the recorder the world tick after it. Without the flag the driver gets
+  // `deps.raf` itself, so an unflagged session is not wrapped at all. `driver` is read inside
+  // the callback, which only runs after `driver.start()` below.
+  const benchWorkload = deps.devFlags.bench;
+  const benchRecorder = benchWorkload === null ? null : createFrameRecorder(BENCH_WORKLOADS[benchWorkload]);
+  const driverRaf: RafScheduler = benchRecorder === null
+    ? deps.raf
+    : instrumentRaf(deps.raf, deps.now, (frameTimeMs, workMs) => benchRecorder.frame(frameTimeMs, workMs, driver.world.tick));
   const driver = createDriver({
     now: deps.now,
-    raf: deps.raf,
+    raf: driverRaf,
     input: recorder ?? effectiveInput,
     renderer,
     director,
@@ -3345,14 +3367,16 @@ export function startGameWith(
     },
   });
 
-  slot.provideDiagnostics(() => ({
+  // One snapshot for both readers: the diagnostics summary and the benchmark report.
+  const sessionDiagnostics = (): SessionDiagnostics => ({
     seed: driver.world.seed,
     arenaId: level.arenaId,
     mode: driver.world.rules.mode,
     humanPlayers: playerCount - botCount,
     bots: botCount,
     quality: sessionQuality,
-  }));
+  });
+  slot.provideDiagnostics(sessionDiagnostics);
 
   /**
    * The music is NOT followed here any more (issue #485).
@@ -3566,6 +3590,23 @@ export function startGameWith(
     };
   }
   if (recorder) devApi.replay = (): ReplayTrace => recorder.trace();
+  if (benchWorkload !== null && benchRecorder !== null) {
+    const pixelRatioCap = qualityFor(sessionQuality).pixelRatioCap;
+    devApi.bench = (): BenchReport =>
+      buildBenchReport({
+        workload: benchWorkload,
+        recorder: benchRecorder,
+        session: sessionDiagnostics(),
+        pixelRatioCap,
+        page: {
+          search: globalThis.location?.search ?? '',
+          viewport: { width: deps.host.innerWidth, height: deps.host.innerHeight },
+          devicePixelRatio: globalThis.devicePixelRatio ?? 1,
+          userAgent: globalThis.navigator?.userAgent ?? '',
+        },
+        build: readBuildIdentity(import.meta.env),
+      });
+  }
   const publishedDevApi = Object.keys(devApi).length > 0;
   if (publishedDevApi) deps.devConsole[DEV_CONSOLE_KEY] = devApi;
 

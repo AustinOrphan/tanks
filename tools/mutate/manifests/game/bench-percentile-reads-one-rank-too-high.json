@@ -1,0 +1,15 @@
+{
+  "id": "bench-percentile-reads-one-rank-too-high",
+  "file": "src/game/bench.ts",
+  "find": "  return sorted[Math.max(rank, 1) - 1];",
+  "replace": "  return sorted[Math.min(rank, sorted.length - 1)];",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "Nearest-rank read one place too high: p50 of 1..100 becomes 51. Every percentile the report quotes would be a frame slower than the one the rank names, which on a phone run moves a budget line without anyone seeing why.",
+  "killedBy": [
+    "summarizeFrames: nearest-rank percentiles and long-frame counts takes percentiles by nearest rank from unsorted input: 1..100 gives p50 50, p95 95, p99 99",
+    "buildBenchReport summarizes intervals as frames and callback time as work, never the other way round"
+  ]
+}

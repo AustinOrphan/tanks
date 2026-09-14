@@ -55,13 +55,14 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (21)
+## Valued flags (22)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
 | `aiPerception` | `aiPerception` | `full`, `los` | `null` | Bounds AI target SELECTION by line of sight (`los`) instead of the shipped full-board default. Selection only -- aiming and firing always require a real line of sight. Measured before the default changed: the bound was never reached by a banking profile and left a non-banking one with no target for most of its life. |
 | `arrival` | `arrival` | `opposed` | `null` | Speaks an experimental arrival/destruction language (issue #230). The shipped pair both expand a ring and read alike at speed; 'opposed' converges the spawn entrance onto the tank and throws a fat, hard-attacked band outward on death. |
 | `backdrop` | `backdrop` | `felt` | `null` | Draws the application backdrop with a named alternative treatment; the shipped default is the flat application ground. |
+| `bench` | `bench` | `versus-bots` | `null` | Records frame times for a named benchmark workload and publishes the report as `__tanks.bench()`: rAF interval and frame-callback time percentiles, long-frame counts, the quality preset, pixel ratio, viewport, build and session. |
 | `blockedFire` | `blockedFire` | `ring`, `muzzle`, `pips`, `hud`, `audio`, `click`, `clunk`, `thunk-soft`, `pitch-empty`, `haptic`, `haptic-tap`, `haptic-double`, `haptic-long`, `haptic-rise`, `haptic-audio`, `ring-audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default adds none of them. |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
 | `gallery` | `gallery` | comma-separated parts, each `key:value` or a bare `reach`/`timer`, e.g. `scene:destroyed,view:low,age:24` | `null` | Opens the Developer Tools gallery workbench on this selection when the page loads. The workbench's Copy Link writes it. |
@@ -83,6 +84,8 @@ Notes:
 
 Notes:
 
+- **bench**: It measures and changes nothing else: open the workload's own query so the session is the one it names -- versus-bots is `?dev=1&bench=versus-bots&mode=ffa&players=4&bots=4&seed=7`.
+- **bench**: A permanent diagnostic, kept for the device run issue #288 needs, not a flag for an open question.
 - **blockedFire**: Issue #356 is CLOSED and adopted NONE of these arms. What ships instead is drawn unconditionally and is not reachable through this flag: a refused shot recoils the barrel and puffs burnt muzzle smoke, the same treatment a fired shot gets in a darker colour (render/barrel-recoil.ts, render/muzzle-smoke.ts).
 - **blockedFire**: The arms are retained deliberately, so the comparison can be re-run if the refusal reads as unclear at a real rate of fire. `smoke` is NOT among them: issue #536 retired it from the vocabulary when the effect stopped reading a cue at all (presentation/blocked-fire.ts).
 - **bots**: May equal `players` (including the unflagged default of 1), for a fully autonomous match.

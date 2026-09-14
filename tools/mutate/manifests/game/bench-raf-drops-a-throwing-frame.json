@@ -1,0 +1,14 @@
+{
+  "id": "bench-raf-drops-a-throwing-frame",
+  "file": "src/game/bench.ts",
+  "find": "        try {\n          cb(frameTimeMs);\n        } finally {\n          onFrame(frameTimeMs, now() - start);\n        }",
+  "replace": "        cb(frameTimeMs);\n        onFrame(frameTimeMs, now() - start);",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "A frame whose callback throws is never reported, so the one frame that failed disappears from the measurement.",
+  "killedBy": [
+    "instrumentRaf: times the callback without changing it reports a frame whose callback throws, and still throws"
+  ]
+}

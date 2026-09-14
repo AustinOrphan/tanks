@@ -1,0 +1,14 @@
+{
+  "id": "bench-recorder-window-never-closes",
+  "file": "src/game/bench.ts",
+  "find": "      if (frameTimeMs - windowStart > window.durationMs) {",
+  "replace": "      if (frameTimeMs - windowStart > Infinity) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "The window never closes, so a report read late includes whatever the page did after the workload -- an outcome screen, a backgrounded tab -- under the workload name.",
+  "killedBy": [
+    "createFrameRecorder: one warm-up, one measurement window closes the window on the first frame past its duration, and ignores every frame after"
+  ]
+}
