@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { LABEL_DIMENSIONS } from './metadata.mjs';
 
 const read = (path: string): string =>
   readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -10,17 +11,11 @@ const FORMS = [
   '.github/ISSUE_TEMPLATE/maintenance.yml',
 ];
 
-const AREAS = [
-  'area:repository',
-  'area:ui',
-  'area:ai',
-  'area:versus',
-  'area:rendering',
-  'area:gameplay',
-  'area:developer-tools',
-];
-
-const IMPACTS = ['impact:high', 'impact:medium', 'impact:low'];
+// Read from the audit's own allowlist rather than restated here (issue #691). A copy let
+// `area:input` join the allowlist while every form still omitted it, so an issue filed
+// through a form could not choose the area the audit accepts.
+const AREAS = LABEL_DIMENSIONS.area;
+const IMPACTS = LABEL_DIMENSIONS.impact;
 
 const formProblems = (text: string): string[] => {
   const problems = [];

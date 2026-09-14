@@ -49,6 +49,7 @@ body:
         - area:rendering — Three.js projection, effects, animation, or visual assets
         - area:gameplay — Shared player-facing mechanics outside the other areas
         - area:developer-tools — Gallery, diagnostics, generators, or developer workflows
+        - area:input — Browser gamepads, controller mapping, and input devices
     validations:
       required: true
 
