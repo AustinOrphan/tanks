@@ -1472,6 +1472,24 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
+  it('sizes every Main Menu row button from its row width variable (issue #706)', () => {
+    // `menu-row-width.ts` measures the widest button and sets `--hud-menu-col` on the row;
+    // this is the half that makes the buttons USE it. Read through `resolved()`, because jsdom
+    // reports the literal `var(...)` otherwise. Negative control: without the rule every
+    // button keeps its label's width, which is the ragged row the issue measured.
+    for (const cls of ['hud-menu-play', 'hud-menu-utilities']) {
+      const row = document.createElement('div');
+      row.className = cls;
+      row.style.setProperty('--hud-menu-col', '143px');
+      const button = document.createElement('button');
+      button.className = 'ui-btn ui-btn--slab';
+      row.appendChild(button);
+      document.body.appendChild(row);
+      expect(resolved(button, 'width'), cls).toBe('143px');
+    }
+    document.body.innerHTML = '';
+  });
+
   it('lays out the accent row like its siblings, not as one touching strip', () => {
     // `.hud-accents` shipped with NO layout rule of its own -- `.hud-swatches` and
     // `.hud-skins` both set `display: flex; gap: ...`, but the accent row (a THIRD,

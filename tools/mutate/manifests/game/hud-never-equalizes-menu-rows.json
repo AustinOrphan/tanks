@@ -1,0 +1,14 @@
+{
+  "id": "hud-never-equalizes-menu-rows",
+  "file": "src/game/hud.ts",
+  "find": "  const menuRowWidths = equalizeMenuRows([menuPlayRow, menuUtilitiesRow]);\n",
+  "replace": "  const menuRowWidths = { dispose() {} };\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/menu-row-width.test.ts"
+  ],
+  "why": "Issue #706. The HUD never calls `equalizeMenuRows`, so the module and the stylesheet rule are both correct and nothing on the page uses them: the Main Menu keeps label-sized buttons with every unit test of the equalizer still green. Killed by the wiring case, which builds a real HUD and finds no ResizeObserver.",
+  "killedBy": [
+    "menu-row-width.ts: one width per Main Menu row (issue #706) is wired into the HUD for the play and utilities rows, and disposed with it"
+  ]
+}

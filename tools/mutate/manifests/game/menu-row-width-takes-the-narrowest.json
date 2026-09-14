@@ -1,0 +1,15 @@
+{
+  "id": "menu-row-width-takes-the-narrowest",
+  "file": "src/game/menu-row-width.ts",
+  "find": "    if (width > widest) widest = width;\n",
+  "replace": "    if (width > 0 && (widest === 0 || width < widest)) widest = width;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/menu-row-width.test.ts"
+  ],
+  "why": "Issue #706. The row width becomes its NARROWEST visible button instead of its widest. The row still looks uniform, but every longer label is squeezed into the shortest one's box: Practice (98.4 px) is given Versus's 90 px and wraps or clips. Killed by the widest-sibling case and the observer case, whose utilities row expects Customize's 116 px.",
+  "killedBy": [
+    "menu-row-width.ts: one width per Main Menu row (issue #706) gives every button the widest sibling width, rounded up",
+    "menu-row-width.ts: one width per Main Menu row (issue #706) observes every button in every row, re-equalizes on a size change, and stops when disposed"
+  ]
+}
