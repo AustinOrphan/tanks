@@ -5201,6 +5201,55 @@ describe('startGameWith: a pinned dev seed', () => {
   });
 });
 
+describe("startGameWith: the developer exports' port (issue #254)", () => {
+  const portOf = (h: ReturnType<typeof boot>): DevExportPort => {
+    const getter = h.rec.devExportPorts[0];
+    expect(getter, 'the host must register an export port getter').toBeTruthy();
+    const port = getter?.();
+    expect(port, 'a live session must supply a port').toBeTruthy();
+    return port as DevExportPort;
+  };
+
+  it('reads the round at press time: the tick the world is on now, and the surface', () => {
+    const h = boot();
+    const port = portOf(h);
+    h.setState('playing');
+    h.fireFrame(100); // 6 ticks
+    const tickNow = h.rec.renders[h.rec.renders.length - 1].curr.tick;
+    expect(tickNow).toBeGreaterThan(0);
+    expect(port.round()).toEqual({
+      tick: tickNow,
+      roundStartTick: h.rec.renders[h.rec.renders.length - 1].curr.roundStartTick,
+      surface: 'gameplay/playing',
+    });
+    h.setState('paused');
+    expect(port.round().surface).toBe('gameplay/paused');
+    h.handle.dispose();
+  });
+
+  it('answers null for the replay when the page did not turn recording on', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(portOf(h).replay()).toBeNull();
+    h.handle.dispose();
+  });
+
+  it("hands over the recorder's CURRENT trace with recording on, including after a level switch", () => {
+    const h = boot(makeDeps({ devFlags: { replay: true }, levelCount: 3 }));
+    const port = portOf(h);
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(port.replay()).toEqual((h.devConsole[DEV_CONSOLE_KEY] as DevConsole).replay!());
+    expect(port.replay()?.ticks).toHaveLength(6);
+    h.setState('outcome-win');
+    h.hud.startRestart(); // advance to level 2: the recorder begins a new trace
+    expect(port.replay()?.meta.arenaId).toBe(ARENA_DEFS[1].id);
+    expect(port.replay()?.ticks).toHaveLength(0);
+    h.handle.dispose();
+  });
+});
+
 describe("startGameWith: the developer actions' port (issue #252)", () => {
   /** The port the route host registered, or null before a session holds the slot. */
   const portOf = (h: ReturnType<typeof boot>): DevActionPort => {

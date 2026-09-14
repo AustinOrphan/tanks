@@ -6,6 +6,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createHud, type Hud } from './hud';
 import type { SessionDiagnostics } from './dev-diagnostics';
+import { NO_SESSION_REPLAY_NOTE, type DevExportPort, type RoundDiagnostics } from './dev-exports';
+import { createRecordingInput, replayMetaFor } from './replay';
+import { arenaById, createWorldFor } from '../sim/arena';
 
 let hud: Hud | null = null;
 afterEach(() => {
@@ -392,5 +395,157 @@ describe('the persistence controls (issue #249)', () => {
     const root = mountDev({ developerPage: PAGE, storageNamespace: 'developer' });
     expect(q2(root, '.hud-prodsave').hidden).toBe(true);
     expect(q2(root, '.hud-devreset').hidden).toBe(true);
+  });
+});
+
+describe('the exports (issue #254)', () => {
+  interface Saved {
+    text: string;
+    fileName: string;
+    type: string;
+  }
+  function downloads(): { saved: Saved[]; seam: { saveText(text: string, fileName: string, type: string): void } } {
+    const saved: Saved[] = [];
+    return { saved, seam: { saveText: (text, fileName, type) => void saved.push({ text, fileName, type }) } };
+  }
+  const ROUND: RoundDiagnostics = { tick: 480, roundStartTick: 1, surface: 'gameplay/playing' };
+  const port = (over: Partial<DevExportPort> = {}): DevExportPort => ({
+    round: () => ROUND,
+    replay: () => null,
+    ...over,
+  });
+  const diagBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-diagnostics');
+  const replayBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-replay');
+
+  it('hides both unless the page supplies its facts AND a way to save', () => {
+    const { seam } = downloads();
+    const neither = mountDev();
+    expect([diagBtn(neither).hidden, replayBtn(neither).hidden]).toEqual([true, true]);
+    hud?.dispose();
+    const pageOnly = mountDev({ developerPage: PAGE });
+    expect([diagBtn(pageOnly).hidden, replayBtn(pageOnly).hidden]).toEqual([true, true]);
+    hud?.dispose();
+    const saveOnly = mountDev({ developerDownloads: seam });
+    expect([diagBtn(saveOnly).hidden, replayBtn(saveOnly).hidden]).toEqual([true, true]);
+    hud?.dispose();
+    const both = mountDev({ developerPage: PAGE, developerDownloads: seam });
+    expect([diagBtn(both).hidden, replayBtn(both).hidden]).toEqual([false, false]);
+  });
+
+  it('lives inside Developer Tools, which production UI never opens', () => {
+    // Issue #254: "ordinary production UI exposes none of these actions". The pane's entry is
+    // hidden without developer mode (`hud-devtools-open--hidden`), and these sit inside it.
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, { developerPage: PAGE, developerDownloads: downloads().seam });
+    expect(diagBtn(root).closest('.hud-devtools')).not.toBeNull();
+    expect(replayBtn(root).closest('.hud-devtools')).not.toBeNull();
+    expect(q(root, '.hud-devtools-open').classList.contains('hud-devtools-open--hidden')).toBe(true);
+  });
+
+  it('Download Diagnostics saves one JSON file of the live session and round, and says so', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDiagnosticsSource(() => SESSION);
+    hud!.setDevExportPort(() => port());
+    diagBtn(root).click();
+    expect(d.saved).toHaveLength(1);
+    expect(d.saved[0].fileName).toBe('tanks-diagnostics-seed4242424242-tick480.json');
+    expect(d.saved[0].type).toBe('application/json');
+    const file = JSON.parse(d.saved[0].text);
+    expect(file.session).toEqual(SESSION);
+    expect(file.round).toEqual(ROUND);
+    expect(file.build).toEqual(PAGE.build);
+    expect(out(root).value).toContain(`Saved ${d.saved[0].fileName}`);
+  });
+
+  it('reads the round at press time, not when the port was registered', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDiagnosticsSource(() => SESSION);
+    let tick = 10;
+    hud!.setDevExportPort(() => port({ round: () => ({ ...ROUND, tick }) }));
+    diagBtn(root).click();
+    tick = 99;
+    diagBtn(root).click();
+    expect(d.saved.map((s) => JSON.parse(s.text).round.tick)).toEqual([10, 99]);
+  });
+
+  it('saves a no-session file without a round when nothing is live', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDiagnosticsSource(() => null);
+    hud!.setDevExportPort(() => null);
+    diagBtn(root).click();
+    expect(d.saved.map((s) => s.fileName)).toEqual(['tanks-diagnostics-no-session.json']);
+    expect(JSON.parse(d.saved[0].text).round).toBeNull();
+  });
+
+  it('Download Replay saves NOTHING when recording is off, and says how to turn it on', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDevExportPort(() => port({ replay: () => null }));
+    replayBtn(root).click();
+    expect(d.saved).toEqual([]);
+    expect(out(root).value).toContain('replay=1');
+  });
+
+  it('Download Replay saves nothing with no session, and says so', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDevExportPort(() => null);
+    replayBtn(root).click();
+    expect(d.saved).toEqual([]);
+    expect(out(root).value).toBe(NO_SESSION_REPLAY_NOTE);
+  });
+
+  it('Download Replay saves the recorded trace as it is', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const world = createWorldFor(arenaById('arena-01'), 5, { lives: 3 });
+    const rec = createRecordingInput(
+      { sample: () => [{ move: { x: 1, y: 0 }, aim: { x: 0, y: 1 }, fire: true, mine: false }] },
+      replayMetaFor(world, 'arena-01'),
+    );
+    for (let i = 0; i < 3; i++) rec.sample();
+    hud!.setDevExportPort(() => port({ replay: () => rec.trace() }));
+    replayBtn(root).click();
+    expect(d.saved).toHaveLength(1);
+    expect(JSON.parse(d.saved[0].text)).toEqual(rec.trace());
+    expect(out(root).value).toContain('3 ticks');
+  });
+
+  it('REPORTS a failure in the field instead of throwing, and saves nothing', () => {
+    // Issue #254: "export failures are reported without mutating game or persistence state".
+    // The port has no writer to call; what this pins is that the failure reaches the field and
+    // the click handler does not throw out of the pane.
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDiagnosticsSource(() => SESSION);
+    hud!.setDevExportPort(() =>
+      port({
+        round: () => {
+          throw new Error('round unreadable');
+        },
+      }),
+    );
+    expect(() => diagBtn(root).click()).not.toThrow();
+    expect(d.saved).toEqual([]);
+    expect(out(root).value).toContain('Download Diagnostics failed, so no file was saved: round unreadable');
+  });
+
+  it('reports a download that throws, too', () => {
+    const root = mountDev({
+      developerPage: PAGE,
+      developerDownloads: {
+        saveText: () => {
+          throw new Error('blocked');
+        },
+      },
+    });
+    hud!.setDiagnosticsSource(() => SESSION);
+    hud!.setDevExportPort(() => port());
+    expect(() => diagBtn(root).click()).not.toThrow();
+    expect(out(root).value).toContain('failed, so no file was saved: blocked');
   });
 });
