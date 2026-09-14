@@ -2545,10 +2545,21 @@ describe('hover treatment on the UI kit primitives (issue #392)', () => {
     // added OUTSIDE the media query is exactly the mistake this must catch.
     const outside = src.replace(hoverBlock(), '');
     const stray = [...outside.matchAll(/^[^@}\n][^{\n]*:hover[^{\n]*\{/gm)].map((m) => m[0].trim());
-    // `.hud-rotate-btn:hover` predates #392 and is named in that issue's Boundaries as
-    // out of scope, so it is the one permitted exception -- pinned by name so a SECOND
-    // unguarded rule is a failure rather than joining a growing allowlist.
-    expect(stray.map((s) => s.replace(/\s*\{$/, ''))).toEqual(['.hud-rotate-btn:hover']);
+    // No exceptions. `.hud-rotate-btn:hover` predated #392 and was the one permitted stray
+    // until #633 moved it inside the query; the list is empty now, so any unguarded rule,
+    // including that one returning, is a failure.
+    expect(stray.map((s) => s.replace(/\s*\{$/, ''))).toEqual([]);
+  });
+
+  it('keeps the rotate buttons\' hover behind the pointer query, and their press outside it (issue #633)', () => {
+    // The rotate buttons are hold-to-repeat touch controls, so a hover left unguarded
+    // sticks on the last one tapped. Negative controls: moving the hover rule back out of
+    // the block fails the first assertion; moving `:active` into it fails the second,
+    // and a press would stop showing on touch.
+    const block = hoverBlock();
+    expect(block).toContain('.hud-rotate-btn:hover:not(:disabled)');
+    expect(block).not.toContain('.hud-rotate-btn:active');
+    expect(src.replace(block, '')).toMatch(/\n\.hud-rotate-btn:active \{/);
   });
 
   it('never engages on a disabled control', () => {

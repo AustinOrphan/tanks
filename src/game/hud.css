@@ -410,6 +410,17 @@
   .ui-selectable--on:hover:not(:disabled) {
     box-shadow: 0 0 0 3px rgba(216, 221, 230, 0.25);
   }
+
+  /* The Customize preview's rotate buttons (issue #633). This rule predates #392 and sat
+   * OUTSIDE this query, the one exception its guard pinned by name. It is the control that
+   * guard matters most for: these are hold-to-repeat buttons pressed by a finger on the
+   * preview, so a touch device kept the lifted fill on whichever button was tapped last,
+   * which reads as a hold still running. `:active` stays outside, because a press must
+   * show on touch. */
+  .hud-rotate-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
 }
 
 /* Forced colours (issue #368): what survives when the user agent replaces the palette.
@@ -2530,10 +2541,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.hud-rotate-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-}
+/* Hover lives in the `@media (hover: hover)` block near the top of this file (issue #633). */
 
 /* The pressed state has to be visible while a hold is running: the tank turning is the
  * other half of the feedback, but the button is where the finger is. */
