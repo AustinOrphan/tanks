@@ -16,8 +16,8 @@ reading.
 | State | Source | Lines | UTF-8 bytes |
 | --- | --- | ---: | ---: |
 | Before | `CLAUDE.md` at `844986c` | 1002 | 72393 |
-| After | root `CLAUDE.md` on this branch | 137 | 8244 |
-| Reduction | globally loaded project prose | — | 64149 (88.6%) |
+| After | root `CLAUDE.md` on this branch | 141 | 8554 |
+| Reduction | globally loaded project prose | — | 63839 (88.2%) |
 
 `AGENTS.md` is the same file through a symlink and is retained for non-Claude harnesses.
 No rule under `.claude/rules/` is unscoped, and no on-demand reference is imported by
