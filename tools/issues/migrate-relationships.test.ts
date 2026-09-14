@@ -86,8 +86,18 @@ function createFetch(
 describe('relationship migration plan', () => {
   it('keeps the reviewed repository ledger unambiguous, acyclic, and evidence-complete', () => {
     const expanded = expandRelationshipPlan(RELATIONSHIP_MIGRATION);
-    expect(expanded.parentEdges).toHaveLength(93);
+    expect(expanded.parentEdges).toHaveLength(100);
     expect(expanded.parentEdges).toEqual(expect.arrayContaining([
+      // The 2026-09-14 triage split: seven issues split out of their decision issues, each
+      // declaring `Parent:` in its body and each reported by the audit as
+      // `declared-parent-missing-native`.
+      { parent: 230, child: 718 },
+      { parent: 359, child: 719 },
+      { parent: 358, child: 720 },
+      { parent: 288, child: 721 },
+      { parent: 418, child: 722 },
+      { parent: 635, child: 723 },
+      { parent: 696, child: 724 },
       // Issue #691: six parents that issue bodies declared after the first migration ran,
       // each reported by the audit as `declared-parent-missing-native`.
       { parent: 358, child: 518 },
@@ -142,8 +152,13 @@ describe('relationship migration plan', () => {
     // Issue #691's six parent edges add 6 inspection reads (146 -> 152). They also add 6 new
     // issue numbers (#518-#521, #578 and #616; #358 and #315 were already in the plan), 6
     // writes and 6 verification reads: initialApply 632 + 24 = 656, planThenApply 778 + 30.
+    //
+    // The 2026-09-14 split's seven parent edges add 7 inspection reads (152 -> 159). They add
+    // 12 new issue numbers (#718-#724, and parents #230, #288, #418, #635 and #696; #358 and
+    // #359 were already in the plan), 7 writes and 7 verification reads: initialApply
+    // 656 + 7 + 12 + 7 + 7 = 689, planThenApply 689 + 159 = 848.
     expect({ inspectionReads, initialApply, planThenApply: inspectionReads + initialApply })
-      .toEqual({ inspectionReads: 152, initialApply: 656, planThenApply: 808 });
+      .toEqual({ inspectionReads: 159, initialApply: 689, planThenApply: 848 });
   });
 
   it('expands a reviewed plan and rejects ambiguous parents, duplicates, and cycles', () => {
