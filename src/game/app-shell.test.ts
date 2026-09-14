@@ -125,6 +125,15 @@ describe('createBrowserDeps: the page-owned audio wiring (issue #317)', () => {
   });
 });
 
+describe("createBrowserDeps: the gallery workbench's still saver (issue #731)", () => {
+  it('binds the download that saves the canvas as a PNG', async () => {
+    // The wiring `main.ts` ships. Unbound, the pane hides Download Still on the real page while
+    // every test that injects its own saver still passes.
+    const { downloadCanvasStill } = await import('./gallery-workbench');
+    expect(createBrowserDeps(build().shell).galleryWorkbench?.saveStill).toBe(downloadCanvasStill);
+  });
+});
+
 describe('createBrowserDeps: the storage namespace reaches the save API (issue #250)', () => {
   it('carries the namespace the settings owner resolved, both values', () => {
     // The wiring `main.ts` ships and nothing else enters. A hard-coded 'production' here
