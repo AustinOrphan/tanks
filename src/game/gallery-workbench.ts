@@ -104,10 +104,11 @@ export const GALLERY_STILL: GalleryStillSize = Object.freeze({
 /**
  * Saves `canvas`'s current pixels as a PNG named `fileName` (issue #731).
  *
- * The canvas is read in a later task than the draw. That returns the picture only because the
- * workbench's renderer is created with `preserveDrawingBuffer: true`
+ * The button is pressed after the drawn frame has been presented. That returns the picture only
+ * because the workbench's renderer is created with `preserveDrawingBuffer: true`
  * (`render/gallery/workbench-scene.ts`'s `createWorkbenchRenderer`). Without it the buffer is
- * cleared once the frame is presented, and this would save a blank image.
+ * cleared once the frame is presented, and this would save a blank image; tools/gl/harness.ts's
+ * still check fails with that setting off.
  */
 export function downloadCanvasStill(canvas: HTMLCanvasElement, fileName: string): void {
   canvas.toBlob((blob) => {
