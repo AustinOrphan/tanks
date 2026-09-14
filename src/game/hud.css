@@ -195,6 +195,24 @@
   box-sizing: border-box;
   pointer-events: auto;
   cursor: pointer;
+  /* The FALLBACK padding, for a control that carries no size variant. `.hud-new-game` is
+   * `.ui-btn.ui-btn--primary` in the markup and takes its padding from `--primary`; with a run
+   * active `hud.ts` removes `--primary` for the tertiary "Start New Campaign", and
+   * `.hud-new-game--tertiary` sets only a font size and an opacity. That state had no padding
+   * source at all and fell to the UA default -- invisible at 19px tall, lopsided once the floor
+   * above made the box 44px (measured 158x44: ~6px of horizontal padding against 16 vertical).
+   * Here rather than on the tertiary, because the gap is the primitive's: every other `.ui-btn`
+   * is padded or sized by a rule LATER in this file (`--sm`, `--slab`, `--primary`,
+   * `.hud-skin`, `.hud-versus-option-btn`, `.hud-versus-map-card`, `.hud-controller-source-btn`,
+   * and `.hud-level-btn`'s fixed 44x44), so each of them overrides this and the fallback
+   * reaches only a control that declared none. Slab values, since a variant-less control sits
+   * among slabs.
+   *
+   * DECLARED AFTER `cursor`, not beside `box-sizing` where it reads more naturally: the
+   * mutation entry that pins `box-sizing` spans `box-sizing`/`pointer-events`/`cursor` as one
+   * exact string, and splitting it would have re-pointed a verified entry to make room for a
+   * new one. */
+  padding: 8px 20px;
   border: none;
   border-radius: var(--hud-radius-md);
   font-weight: var(--hud-weight-normal);

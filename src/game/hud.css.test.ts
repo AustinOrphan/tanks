@@ -917,6 +917,26 @@ describe('hud.css is syntactically whole', () => {
     expect(rule('.hud-settings-volume')).toMatch(/height:\s*var\(--hud-control-min\);/);
   });
 
+  it('pads a control that carries no size variant (issue #686)', () => {
+    // `.hud-new-game` is `.ui-btn.ui-btn--primary` in the markup, and `--primary` is where its
+    // padding comes from. With a run active the button becomes the tertiary "Start New
+    // Campaign" and `hud.ts` REMOVES `--primary`; `.hud-new-game--tertiary` sets only a font
+    // size and an opacity. That left the one state with no padding source at all, on the UA
+    // default of about 1px 6px -- which was invisible at 19px tall and lopsided once the floor
+    // made the box 44px: measured 158x44 in Chromium, ~6px of horizontal padding against 16
+    // vertical. Every OTHER `.ui-btn` is padded or sized by a rule later in this file
+    // (`--sm`, `--slab`, `--primary`, `.hud-skin`, `.hud-versus-option-btn`,
+    // `.hud-versus-map-card`, `.hud-controller-source-btn`, and `.hud-level-btn`'s fixed
+    // 44x44), so a base padding on the primitive is overridden by all of them and reaches
+    // only the state that had none.
+    const src = stripComments(css);
+    const at = src.search(/(^|\n)\.ui-btn \{/);
+    const btn = src.slice(at, src.indexOf('}', at));
+    expect(btn, 'the primitive no longer pads a variant-less control').toMatch(
+      /padding:\s*8px\s+20px;/,
+    );
+  });
+
   it('never lets a button fall through to browser default styling', () => {
     // `.hud-achievements-open` shipped with NO rule of its own -- only its `--hidden`
     // modifier -- so on the main menu it rendered as a stock grey browser button
