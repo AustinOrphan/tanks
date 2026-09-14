@@ -1,0 +1,14 @@
+{
+  "id": "unsupported-reason-ignores-its-code",
+  "file": "src/game/hud.ts",
+  "find": "        ? 'it has too few buttons or sticks for Tanks.'\n",
+  "replace": "        ? \"Tanks can't read its buttons in this browser.\"\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Issue #597. Every unsupported pad gets the unknown-mapping sentence, including one whose profile matched but which lacks the controls it needs. That player is told the browser cannot read the pad, when the real fix is a pad with more buttons or sticks. Killed by the insufficient-controls case.",
+  "killedBy": [
+    "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) a pad the browser reports but Tanks cannot read (issue #597) says why in its own words when a profile matched but the pad lacks the controls"
+  ]
+}
