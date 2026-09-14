@@ -1,0 +1,14 @@
+{
+  "id": "devflags-render-switch-reads-any-value-as-off",
+  "file": "src/game/devflags.ts",
+  "find": "  if (raw === 'off') return false;\n  return null;",
+  "replace": "  return raw === null ? null : false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "Reads any present value other than `on` as off, so a mistyped ?antialias=1 or ?fillRimLights=true would silently turn the setting off instead of leaving the preset's own.",
+  "killedBy": [
+    "parseDevFlags: single-setting render overrides (issue #735) rejects anything else to null, so the preset keeps its own setting"
+  ]
+}

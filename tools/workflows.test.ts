@@ -979,3 +979,50 @@ describe('capture.yml: the on-demand capture workflow', () => {
     expect(CAPTURE, 'the workflow drives a browser directly').not.toContain('npx playwright test');
   });
 });
+
+describe('bench-contrast.yml: the on-demand benchmark contrast workflow (issue #738)', () => {
+  const BENCH = read('.github/workflows/bench-contrast.yml');
+
+  it('is dispatch-only, so no required check or pull request waits on a timing measurement', () => {
+    // tools/gl/harness.ts records its timing ratios rather than asserting them, because that
+    // harness runs inside the required `visual` job. This check asserts timing, so it stays off
+    // every automatic trigger.
+    const triggers = BENCH.slice(BENCH.indexOf('\non:'), BENCH.indexOf('\npermissions:'));
+    expect(triggers).toContain('workflow_dispatch:');
+    for (const forbidden of ['pull_request_target:', 'pull_request:', 'push:', 'schedule:', 'workflow_run:']) {
+      expect(triggers, `bench-contrast.yml triggers on ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('grants no write permission and exposes no secret', () => {
+    expect(BENCH).toContain('permissions:\n  contents: read\n');
+    expect(BENCH, 'a write permission appeared').not.toMatch(/:\s*write\b/);
+    expect(BENCH, 'a token was exposed to the run').not.toContain('secrets.');
+  });
+
+  it('passes every input through env rather than into script text', () => {
+    // Both inputs are free strings. Single-line and block `run:` bodies alike are checked.
+    const runLines = BENCH.split('\n').filter((l) => /^\s*run: /.test(l));
+    expect(runLines.length, 'no run steps found; this test would pass vacuously').toBeGreaterThan(3);
+    for (const line of runLines) {
+      expect(line, 'an input is interpolated into a run: script').not.toMatch(/\$\{\{\s*inputs\./);
+      expect(line, 'a github context value is interpolated into a run: script').not.toMatch(/\$\{\{\s*github\./);
+    }
+  });
+
+  it('bounds its runtime and keeps its reports, and pins the browser the visual job pins', () => {
+    expect(BENCH).toMatch(/timeout-minutes: \d+/);
+    expect(BENCH).toContain('retention-days: 14');
+    expect(BENCH).toContain('cancel-in-progress: false');
+    const pin = /playwright@(\d+\.\d+\.\d+)/;
+    const ciPin = CI.match(pin)?.[1];
+    expect(ciPin, 'ci.yml no longer pins playwright').toBeDefined();
+    expect(BENCH.match(pin)?.[1], 'bench-contrast.yml and ci.yml pin different Playwright versions').toBe(ciPin);
+    expect(BENCH).toContain(`playwright-chromium-${ciPin}-`);
+  });
+
+  it('runs the committed runner rather than driving a browser from YAML', () => {
+    expect(BENCH).toContain('node tools/bench/runs.mjs');
+    expect(BENCH, 'the workflow drives a browser directly').not.toContain('npx playwright test');
+  });
+});

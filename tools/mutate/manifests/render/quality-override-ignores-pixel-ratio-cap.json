@@ -1,0 +1,17 @@
+{
+  "id": "quality-override-ignores-pixel-ratio-cap",
+  "file": "src/render/quality.ts",
+  "find": "    pixelRatioCap: overrides.pixelRatioCap ?? preset.pixelRatioCap,",
+  "replace": "    pixelRatioCap: preset.pixelRatioCap,",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #735. Drops the pixelRatioCap override, so the renderer keeps the preset's cap while the report's overrides say the cap was moved.",
+  "killedBy": [
+    "applyRenderOverrides (issue #735) changes exactly the field an override names -- population: 4 overrides x 3 presets",
+    "startGameWith: dev flags stay off by default applies each single-setting render override on top of the preset, and nothing else (issue #735)",
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) records the render overrides in effect and the cap the renderer applied after them (issue #735)"
+  ]
+}

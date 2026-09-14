@@ -323,6 +323,19 @@ export interface BenchPreviewRender {
   readonly keyShadowMapSize: number;
 }
 
+/**
+ * The single-setting render overrides a session ran with (issue #735). The same four fields as
+ * `render/quality.ts`'s `RenderOverrides`, restated because this module is not one of the game
+ * modules allowed to import the renderer; `loop.ts` passes that object here, and the type
+ * checker holds the two shapes together at that call.
+ */
+export interface BenchRenderOverrides {
+  readonly shadowMapSize: number | null;
+  readonly antialias: boolean | null;
+  readonly pixelRatioCap: number | null;
+  readonly fillRimLights: boolean | null;
+}
+
 export interface BenchReport {
   readonly schema: typeof BENCH_REPORT_SCHEMA;
   readonly workload: BenchWorkload;
@@ -335,9 +348,15 @@ export interface BenchReport {
   /** The session measured; `null` for the preview workload, which runs outside any session. */
   readonly session: SessionDiagnostics | null;
   readonly render: {
+    /** The cap the renderer applied, after any `pixelRatioCap` override. */
     readonly pixelRatioCap: number;
     /** What the renderer draws at: the device ratio, capped by the preset (`render/scene.ts`). */
     readonly effectivePixelRatio: number;
+    /**
+     * The single-setting render overrides in effect (issue #735), `null` per field for none;
+     * `null` as a whole for the preview workload, whose renderer ignores them.
+     */
+    readonly overrides: BenchRenderOverrides | null;
   };
   /** The preview's renderer settings for the preview workload; `null` for a session workload. */
   readonly preview: BenchPreviewRender | null;
@@ -350,6 +369,7 @@ export interface BenchReportInput {
   readonly recorder: FrameRecorder;
   readonly session: SessionDiagnostics | null;
   readonly pixelRatioCap: number;
+  readonly renderOverrides: BenchRenderOverrides | null;
   readonly preview: BenchPreviewRender | null;
   readonly page: BenchPage;
   readonly build: BuildIdentity;
@@ -369,6 +389,7 @@ export function buildBenchReport(input: BenchReportInput): BenchReport {
     render: {
       pixelRatioCap: input.pixelRatioCap,
       effectivePixelRatio: Math.min(input.page.devicePixelRatio, input.pixelRatioCap),
+      overrides: input.renderOverrides,
     },
     preview: input.preview,
     page: input.page,

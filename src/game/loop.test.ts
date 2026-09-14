@@ -7,7 +7,7 @@ import { defaultSlots, type VersusSlotSetup } from './versus-setup';
 import { describe, it, expect } from 'vitest';
 import { resolveWorldRules } from '../sim/rules';
 import { DEV_FLAGS_OFF, FLAG_REGISTRY, type DevFlags } from './devflags';
-import { QUALITY_PRESETS } from '../render/quality';
+import { NO_RENDER_OVERRIDES, QUALITY_PRESETS } from '../render/quality';
 import { ZERO_STATS } from './stats';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import type { AchievementContext, AchievementId } from './achievements';
@@ -5110,6 +5110,25 @@ describe('startGameWith: dev flags stay off by default', () => {
     );
     unflagged.handle.dispose();
   });
+
+  it('applies each single-setting render override on top of the preset, and nothing else (issue #735)', () => {
+    // Population: all 4 overrides, each on the stored `low` preset with a value `low` does not
+    // already have, so an override that never arrived would leave `low` and fail.
+    const overrides = [
+      { shadowMapSize: 4096 },
+      { antialias: true },
+      { pixelRatioCap: 3 },
+      { fillRimLights: false },
+    ];
+    for (const override of overrides) {
+      const h = boot(makeDeps({ savedQuality: 'low', devFlags: override }));
+      expect((h.rec.rendererArgs[0][4] as { quality?: unknown }).quality).toEqual({
+        ...QUALITY_PRESETS.low,
+        ...override,
+      });
+      h.handle.dispose();
+    }
+  });
 });
 
 describe('startGameWith: autoplay wiring', () => {
@@ -8230,6 +8249,26 @@ describe('startGameWith: the dev console surface', () => {
       // interval is the 41 ms step and the longest is the 88 ms one.
       expect([report!.frames.p50, report!.frames.max]).toEqual([41, 88]);
       expect(report!.render.pixelRatioCap).toBe(QUALITY_PRESETS.high.pixelRatioCap);
+    });
+
+    it('records the render overrides in effect and the cap the renderer applied after them (issue #735)', () => {
+      const benched = (extra: Record<string, unknown>) => {
+        const h = boot(makeDeps({ devFlags: { seed: 42, bench: 'versus-bots' as const, ...extra } }));
+        const report = api(h).bench!();
+        h.handle.dispose();
+        return report;
+      };
+      const overridden = benched({ pixelRatioCap: 1, fillRimLights: false });
+      expect([overridden.render.pixelRatioCap, overridden.render.overrides]).toEqual([
+        1,
+        { shadowMapSize: null, antialias: null, pixelRatioCap: 1, fillRimLights: false },
+      ]);
+      // NEGATIVE CONTROL: with no override, the preset's cap and an all-null override set.
+      const plain = benched({});
+      expect([plain.render.pixelRatioCap, plain.render.overrides]).toEqual([
+        QUALITY_PRESETS.high.pixelRatioCap,
+        NO_RENDER_OVERRIDES,
+      ]);
     });
   });
 

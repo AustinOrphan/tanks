@@ -488,6 +488,8 @@ export function createRouteHost(
               recorder: previewBench.recorder,
               session: null,
               pixelRatioCap: deps.previewRender.pixelRatioCap,
+              // The preview builds its own renderer, which the render overrides never reach.
+              renderOverrides: null,
               preview: deps.previewRender,
               page: {
                 search: globalThis.location?.search ?? '',

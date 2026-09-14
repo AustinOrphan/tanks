@@ -1,0 +1,14 @@
+{
+  "id": "devflags-pixel-ratio-cap-accepts-any-number-syntax",
+  "file": "src/game/devflags.ts",
+  "find": "  if (raw === null || !/^\\d+(\\.\\d+)?$/.test(raw)) return null;",
+  "replace": "  if (raw === null) return null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "Hands the raw value to Number() without the plain-decimal check, so `1e0` and `.5` become caps of 1 and 0.5.",
+  "killedBy": [
+    "parseDevFlags: single-setting render overrides (issue #735) rejects anything else to null, so the preset keeps its own setting"
+  ]
+}

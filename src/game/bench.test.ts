@@ -231,29 +231,35 @@ describe('buildBenchReport', () => {
   }
 
   it('summarizes intervals as frames and callback time as work, never the other way round', () => {
-    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, preview: null, page: PAGE, build: BUILD });
+    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, renderOverrides: null, preview: null, page: PAGE, build: BUILD });
     expect([report.frames.count, report.frames.max, report.frames.p50]).toEqual([2, 40, 20]);
     expect([report.work.count, report.work.max, report.work.p50]).toEqual([2, 5, 3]);
     expect(report.simulatedTicks).toBe(3);
   });
 
   it('caps the device pixel ratio by the preset, as the renderer does', () => {
-    const capped = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, preview: null, page: PAGE, build: BUILD });
-    expect(capped.render).toEqual({ pixelRatioCap: 2, effectivePixelRatio: 2 });
-    const under = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 4, preview: null, page: PAGE, build: BUILD });
+    const capped = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, renderOverrides: null, preview: null, page: PAGE, build: BUILD });
+    expect(capped.render).toEqual({ pixelRatioCap: 2, effectivePixelRatio: 2, overrides: null });
+    const under = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 4, renderOverrides: null, preview: null, page: PAGE, build: BUILD });
     expect(under.render.effectivePixelRatio).toBe(3);
   });
 
   it('reports the preview workload with no session and the preview renderer it measured (issue #736)', () => {
     const preview = { antialias: true, pixelRatioCap: 2, shadowMap: true, keyShadowMapSize: 512 };
-    const report = buildBenchReport({ workload: 'preview', recorder: recorded(), session: null, pixelRatioCap: preview.pixelRatioCap, preview, page: PAGE, build: BUILD });
+    const report = buildBenchReport({ workload: 'preview', recorder: recorded(), session: null, pixelRatioCap: preview.pixelRatioCap, renderOverrides: null, preview, page: PAGE, build: BUILD });
     expect(report.workload).toBe(BENCH_WORKLOADS.preview);
     expect([report.session, report.preview]).toEqual([null, preview]);
-    expect(report.render).toEqual({ pixelRatioCap: 2, effectivePixelRatio: 2 });
+    expect(report.render).toEqual({ pixelRatioCap: 2, effectivePixelRatio: 2, overrides: null });
+  });
+
+  it('records the render overrides a session ran with, as it was given them (issue #735)', () => {
+    const renderOverrides = { shadowMapSize: 512, antialias: false, pixelRatioCap: 1, fillRimLights: false };
+    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 1, renderOverrides, preview: null, page: PAGE, build: BUILD });
+    expect(report.render).toEqual({ pixelRatioCap: 1, effectivePixelRatio: 1, overrides: renderOverrides });
   });
 
   it('names its schema version and the workload it ran, with the page, session and build', () => {
-    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, preview: null, page: PAGE, build: BUILD });
+    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, renderOverrides: null, preview: null, page: PAGE, build: BUILD });
     expect(report.schema).toBe(BENCH_REPORT_SCHEMA);
     expect(report.workload).toBe(BENCH_WORKLOADS['versus-bots']);
     expect([report.page, report.session, report.build]).toEqual([PAGE, SESSION, BUILD]);

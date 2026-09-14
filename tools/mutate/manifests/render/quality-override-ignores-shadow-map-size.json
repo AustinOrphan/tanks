@@ -1,0 +1,16 @@
+{
+  "id": "quality-override-ignores-shadow-map-size",
+  "file": "src/render/quality.ts",
+  "find": "    shadowMapSize: overrides.shadowMapSize ?? preset.shadowMapSize,",
+  "replace": "    shadowMapSize: preset.shadowMapSize,",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #735. Drops the shadowMapSize override, so ?shadowMapSize= parses, reaches the report, and never changes the renderer: a sweep would record a shadow map size the device never drew.",
+  "killedBy": [
+    "applyRenderOverrides (issue #735) changes exactly the field an override names -- population: 4 overrides x 3 presets",
+    "startGameWith: dev flags stay off by default applies each single-setting render override on top of the preset, and nothing else (issue #735)"
+  ]
+}

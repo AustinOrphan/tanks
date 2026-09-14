@@ -1,0 +1,14 @@
+{
+  "id": "bench-runs-groups-runs-by-arm",
+  "file": "tools/bench/runs.mjs",
+  "find": "  for (let round = 1; round <= runs; round++) for (const arm of arms) order.push({ round, arm });",
+  "replace": "  for (const arm of arms) for (let round = 1; round <= runs; round++) order.push({ round, arm });",
+  "expect": "killed",
+  "why": "Runs are taken arm by arm instead of round by round, so any drift over the sitting (a runner warming, a noisy neighbour) lands on whichever arm runs last and reads as that arm's cost.",
+  "tests": [
+    "tools/bench/runs.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark runner (issue #738) interleaves the arms round by round, so drift over the sitting lands on every arm"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "bench-runs-accepts-any-preset",
+  "file": "tools/bench/runs.mjs",
+  "find": "  if (!/^(low|medium|high)$/.test(quality)) throw",
+  "replace": "  if (false) throw",
+  "expect": "killed",
+  "why": "An arm naming no real preset is accepted, so the page ignores the unknown quality and the run is labelled by a preset it did not use.",
+  "tests": [
+    "tools/bench/runs.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark runner (issue #738) refuses an arm that does not start with a preset, or an override that is not flag=value"
+  ]
+}

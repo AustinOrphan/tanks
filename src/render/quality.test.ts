@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { QUALITY_PRESETS, qualityFor } from './quality';
+import {
+  QUALITY_PRESETS,
+  qualityFor,
+  applyRenderOverrides,
+  NO_RENDER_OVERRIDES,
+  type RenderOverrides,
+  type RenderQuality,
+} from './quality';
 import {
   QUALITY_PRESET_IDS,
   DEFAULT_QUALITY_PRESET,
@@ -39,6 +46,61 @@ describe('QUALITY_PRESETS.high matches scene.ts literals exactly', () => {
   });
   it('shadowType is PCFSoftShadowMap (scene.ts:119)', () => {
     expect(QUALITY_PRESETS.high.shadowType).toBe(THREE.PCFSoftShadowMap);
+  });
+  it('fillRimLights is true (scene.ts built its fill and rim lights unconditionally before #735)', () => {
+    expect(QUALITY_PRESETS.high.fillRimLights).toBe(true);
+  });
+});
+
+describe('no preset drops the fill and rim lights', () => {
+  it('keeps them in every preset -- population: all 3 QualityPreset values', () => {
+    // Issue #735 made them a field so a development flag could take them out; it did not rule
+    // on any preset. A preset turning them off would change what a player on it sees.
+    for (const p of QUALITY_PRESET_IDS) {
+      expect(QUALITY_PRESETS[p].fillRimLights, p).toBe(true);
+    }
+  });
+});
+
+describe('applyRenderOverrides (issue #735)', () => {
+  const FIELDS = ['shadowMapSize', 'antialias', 'pixelRatioCap', 'fillRimLights'] as const;
+
+  /** An override for `field` whose value differs from `preset`'s, whichever preset it is. */
+  function overrideOf(field: (typeof FIELDS)[number], preset: RenderQuality): RenderOverrides {
+    const value =
+      field === 'shadowMapSize' ? 4096
+        : field === 'pixelRatioCap' ? 3
+          : !preset[field];
+    return { ...NO_RENDER_OVERRIDES, [field]: value };
+  }
+
+  it('with no override, resolves to a configuration equal to the preset -- population: all 3 presets', () => {
+    for (const p of QUALITY_PRESET_IDS) {
+      expect(applyRenderOverrides(QUALITY_PRESETS[p], NO_RENDER_OVERRIDES), p).toEqual(QUALITY_PRESETS[p]);
+    }
+  });
+
+  it('changes exactly the field an override names -- population: 4 overrides x 3 presets', () => {
+    for (const p of QUALITY_PRESET_IDS) {
+      const preset = QUALITY_PRESETS[p];
+      for (const field of FIELDS) {
+        const overrides = overrideOf(field, preset);
+        expect(overrides[field], `${p}/${field}: the fixture's value must differ`).not.toBe(preset[field]);
+        const resolved = applyRenderOverrides(preset, overrides);
+        const keys = Object.keys(preset) as (keyof RenderQuality)[];
+        expect(Object.keys(resolved).sort(), `${p}/${field}`).toEqual([...keys].sort());
+        expect(keys.filter((k) => resolved[k] !== preset[k]), `${p}/${field}`).toEqual([field]);
+        expect(resolved[field], `${p}/${field}`).toBe(overrides[field]);
+      }
+    }
+  });
+
+  it('never writes into the shared preset table', () => {
+    const before = structuredClone(QUALITY_PRESETS);
+    for (const p of QUALITY_PRESET_IDS) {
+      for (const field of FIELDS) applyRenderOverrides(QUALITY_PRESETS[p], overrideOf(field, QUALITY_PRESETS[p]));
+    }
+    expect(QUALITY_PRESETS).toEqual(before);
   });
 });
 

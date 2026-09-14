@@ -1,0 +1,14 @@
+{
+  "id": "devflags-shadow-map-size-accepts-any-integer",
+  "file": "src/game/devflags.ts",
+  "find": "  return raw !== null && (SHADOW_MAP_SIZES as readonly string[]).includes(raw) ? Number(raw) : null;",
+  "replace": "  return raw !== null && /^\\d+$/.test(raw) ? Number(raw) : null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "Accepts any integer as a shadow map size, so ?shadowMapSize=1000 or 8192 would reach the renderer instead of being rejected to the preset's size.",
+  "killedBy": [
+    "parseDevFlags: single-setting render overrides (issue #735) rejects anything else to null, so the preset keeps its own setting"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "loop-bench-report-names-the-preset-cap",
+  "file": "src/game/loop.ts",
+  "find": "    const pixelRatioCap = sessionRender.pixelRatioCap;",
+  "replace": "    const pixelRatioCap = qualityFor(sessionQuality).pixelRatioCap;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #735. Reports the preset's pixel-ratio cap instead of the one the renderer applied, so under ?pixelRatioCap=1 the report's cap and effective pixel ratio would name the preset's 2.",
+  "killedBy": [
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) records the render overrides in effect and the cap the renderer applied after them (issue #735)"
+  ]
+}
