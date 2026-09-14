@@ -124,7 +124,7 @@ import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
 import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
 import { surfaceName } from './dev-exports';
-import { downloadText } from './downloads';
+import { downloadCanvas, downloadText } from './downloads';
 import { resetDeveloperData, resolveStorage } from './storage';
 
 /**
@@ -1310,7 +1310,7 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
           build: readBuildIdentity(import.meta.env),
         },
         // Issue #254's exports save files, which is a page act the HUD may not start itself.
-        developerDownloads: { saveText: downloadText },
+        developerDownloads: { saveText: downloadText, saveCanvas: downloadCanvas },
         applyDeveloperConfig: (next: string) => {
           globalThis.location.assign(
             `${globalThis.location.pathname}${next}${globalThis.location.hash}`,
@@ -3419,6 +3419,7 @@ export function startGameWith(
       surface: surfaceName(sm.location),
     }),
     replay: () => (recorder === null ? null : recorder.trace()),
+    captureFrame: () => renderer.captureFrame(),
   });
 
   /**

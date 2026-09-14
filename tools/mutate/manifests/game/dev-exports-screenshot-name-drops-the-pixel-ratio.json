@@ -1,0 +1,16 @@
+{
+  "id": "dev-exports-screenshot-name-drops-the-pixel-ratio",
+  "file": "src/game/dev-exports.ts",
+  "find": "-dpr${capture.pixelRatio}.png`;",
+  "replace": ".png`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-exports.test.ts",
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "screenshotExport names the frame by what it is names the seed, tick, drawing-buffer size and pixel ratio",
+    "the exports (issue #254) Download Screenshot saves the frame the session copied, and says what it is"
+  ],
+  "why": "A screenshot file stops saying which pixel ratio it was drawn at. Issue #254 asks for files with documented dimensions and DPR; two files of the same seed and tick from a 1x and a 2x screen would then differ only in pixel size, with nothing on the file saying why."
+}

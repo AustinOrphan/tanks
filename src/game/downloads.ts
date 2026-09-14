@@ -19,3 +19,22 @@ export function downloadBlob(blob: Blob, fileName: string): void {
 export function downloadText(text: string, fileName: string, type: string): void {
   downloadBlob(new Blob([text], { type }), fileName);
 }
+
+/**
+ * Saves `canvas`'s pixels as a PNG named `fileName`, rejecting when the browser encodes nothing.
+ *
+ * For a canvas whose pixels are already a copy (the renderer's `captureFrame`), so the encoding
+ * running later than this call does not matter.
+ */
+export function downloadCanvas(canvas: HTMLCanvasElement, fileName: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob === null) {
+        reject(new Error('the browser could not encode the canvas as a PNG'));
+        return;
+      }
+      downloadBlob(blob, fileName);
+      resolve();
+    }, 'image/png');
+  });
+}

@@ -6,7 +6,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createHud, type Hud } from './hud';
 import type { SessionDiagnostics } from './dev-diagnostics';
-import { NO_SESSION_REPLAY_NOTE, type DevExportPort, type RoundDiagnostics } from './dev-exports';
+import {
+  NO_SESSION_REPLAY_NOTE,
+  NO_SESSION_SCREENSHOT_NOTE,
+  type DevExportPort,
+  type RoundDiagnostics,
+} from './dev-exports';
 import { createRecordingInput, replayMetaFor } from './replay';
 import { arenaById, createWorldFor } from '../sim/arena';
 
@@ -404,32 +409,109 @@ describe('the exports (issue #254)', () => {
     fileName: string;
     type: string;
   }
-  function downloads(): { saved: Saved[]; seam: { saveText(text: string, fileName: string, type: string): void } } {
+  interface SavedCanvas {
+    image: HTMLCanvasElement;
+    fileName: string;
+  }
+  function downloads(encode: () => Promise<void> = () => Promise.resolve()): {
+    saved: Saved[];
+    canvases: SavedCanvas[];
+    seam: {
+      saveText(text: string, fileName: string, type: string): void;
+      saveCanvas(image: HTMLCanvasElement, fileName: string): Promise<void>;
+    };
+  } {
     const saved: Saved[] = [];
-    return { saved, seam: { saveText: (text, fileName, type) => void saved.push({ text, fileName, type }) } };
+    const canvases: SavedCanvas[] = [];
+    return {
+      saved,
+      canvases,
+      seam: {
+        saveText: (text, fileName, type) => void saved.push({ text, fileName, type }),
+        saveCanvas: (image, fileName) => {
+          canvases.push({ image, fileName });
+          return encode();
+        },
+      },
+    };
   }
   const ROUND: RoundDiagnostics = { tick: 480, roundStartTick: 1, surface: 'gameplay/playing' };
+  const CAPTURE = { image: document.createElement('canvas'), width: 1280, height: 800, pixelRatio: 2 };
   const port = (over: Partial<DevExportPort> = {}): DevExportPort => ({
     round: () => ROUND,
     replay: () => null,
+    captureFrame: () => CAPTURE,
     ...over,
   });
+  const shotBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-screenshot');
   const diagBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-diagnostics');
   const replayBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-replay');
+  const hiddenOf = (root: HTMLElement): boolean[] => [shotBtn(root).hidden, diagBtn(root).hidden, replayBtn(root).hidden];
+  /** Lets a resolved or rejected save settle before asserting on the field. */
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-  it('hides both unless the page supplies its facts AND a way to save', () => {
+  it('hides all three unless the page supplies its facts AND a way to save', () => {
     const { seam } = downloads();
     const neither = mountDev();
-    expect([diagBtn(neither).hidden, replayBtn(neither).hidden]).toEqual([true, true]);
+    expect(hiddenOf(neither)).toEqual([true, true, true]);
     hud?.dispose();
     const pageOnly = mountDev({ developerPage: PAGE });
-    expect([diagBtn(pageOnly).hidden, replayBtn(pageOnly).hidden]).toEqual([true, true]);
+    expect(hiddenOf(pageOnly)).toEqual([true, true, true]);
     hud?.dispose();
     const saveOnly = mountDev({ developerDownloads: seam });
-    expect([diagBtn(saveOnly).hidden, replayBtn(saveOnly).hidden]).toEqual([true, true]);
+    expect(hiddenOf(saveOnly)).toEqual([true, true, true]);
     hud?.dispose();
     const both = mountDev({ developerPage: PAGE, developerDownloads: seam });
-    expect([diagBtn(both).hidden, replayBtn(both).hidden]).toEqual([false, false]);
+    expect(hiddenOf(both)).toEqual([false, false, false]);
+  });
+
+  it('Download Screenshot saves the frame the session copied, and says what it is', async () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDiagnosticsSource(() => SESSION);
+    hud!.setDevExportPort(() => port());
+    shotBtn(root).click();
+    expect(d.canvases).toHaveLength(1);
+    expect(d.canvases[0].image).toBe(CAPTURE.image);
+    expect(d.canvases[0].fileName).toBe('tanks-canvas-seed4242424242-tick480-1280x800-dpr2.png');
+    await settle();
+    expect(out(root).value).toContain('1280x800 pixels at pixel ratio 2');
+    expect(out(root).value).toContain('The HUD is not in it');
+  });
+
+  it('Download Screenshot saves nothing with no session, and says so', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDevExportPort(() => null);
+    shotBtn(root).click();
+    expect(d.canvases).toEqual([]);
+    expect(out(root).value).toBe(NO_SESSION_SCREENSHOT_NOTE);
+  });
+
+  it('Download Screenshot reports a capture that throws, and saves nothing', () => {
+    const d = downloads();
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDevExportPort(() =>
+      port({
+        captureFrame: () => {
+          throw new Error('context lost');
+        },
+      }),
+    );
+    expect(() => shotBtn(root).click()).not.toThrow();
+    expect(d.canvases).toEqual([]);
+    expect(out(root).value).toBe('Download Screenshot failed, so no file was saved: context lost');
+  });
+
+  it('Download Screenshot reports an encoding that fails AFTER the click returned', async () => {
+    // The PNG is encoded asynchronously, so this failure arrives in a later task. A handler that
+    // only caught synchronous throws would leave the field empty, looking like it had worked.
+    const d = downloads(() => Promise.reject(new Error('encode refused')));
+    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    hud!.setDevExportPort(() => port());
+    shotBtn(root).click();
+    await settle();
+    expect(out(root).value).toBe('Download Screenshot failed, so no file was saved: encode refused');
   });
 
   it('lives inside Developer Tools, which production UI never opens', () => {

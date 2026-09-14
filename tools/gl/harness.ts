@@ -1438,6 +1438,43 @@ await checkAsync('a workbench still is a PNG of the stated pixel size, and not b
   return null;
 });
 
+await checkAsync('captureFrame copies the game frame after it was presented, at the drawing-buffer size (issue #254)', async () => {
+  // What Download Screenshot saves. Unlike the workbench, the GAME renderer does not preserve its
+  // drawing buffer, and the button is pressed in a later task than the frame was drawn in. Pinned
+  // inside the viewport and two animation frames on, the drawn frame has been presented, as the
+  // still check above arranges -- so a capture that copied the canvas without drawing first reads
+  // back a cleared buffer here.
+  const c = freshCanvas(640, 400);
+  c.style.cssText = 'position:fixed;left:0;top:0;z-index:1';
+  const r = createRenderer(c, W, H, BOUNDARY);
+  const world = soloTankWorld(W / 2, H / 2);
+  r.render(world, world, 1, [], 1 / 60);
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const buffer = { width: c.width, height: c.height };
+  let shot: ReturnType<typeof r.captureFrame>;
+  try {
+    shot = r.captureFrame();
+  } finally {
+    r.dispose();
+    c.remove();
+  }
+  if (shot.width !== buffer.width || shot.height !== buffer.height) {
+    return `capture is ${shot.width}x${shot.height}, want the drawing buffer's ${buffer.width}x${buffer.height}`;
+  }
+  if (shot.image.width !== shot.width || shot.image.height !== shot.height) {
+    return `capture image is ${shot.image.width}x${shot.image.height}, but reports ${shot.width}x${shot.height}`;
+  }
+  const wantRatio = Math.min(window.devicePixelRatio, QUALITY_PRESETS.high.pixelRatioCap);
+  if (shot.pixelRatio !== wantRatio) return `capture pixel ratio ${shot.pixelRatio}, want ${wantRatio}`;
+  const ctx2d = shot.image.getContext('2d');
+  if (ctx2d === null) return 'no 2d context to read the capture back';
+  const data = ctx2d.getImageData(0, 0, shot.width, shot.height).data;
+  const colours = new Set<number>();
+  for (let i = 0; i < data.length; i += 4 * 97) colours.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+  if (colours.size < 8) return `capture has ${colours.size} distinct sampled colours -- a cleared buffer`;
+  return null;
+});
+
 check('a workbench frame reached by scrubbing back draws the same pixels as one reached directly', () => {
   // `destroyed` because its kill lands mid-clip (moments.ts pins tick 18) and the explosion
   // burst outlives it: a replay that skipped the rebuild would draw the back-scrubbed frame

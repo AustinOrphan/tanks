@@ -1,6 +1,11 @@
 import type { AppLocation } from './app-state';
 import { FLAG_REGISTRY } from './devflags';
-import { diagnosticsReport, type DiagnosticsInput, type DiagnosticsReport } from './dev-diagnostics';
+import {
+  diagnosticsReport,
+  type DiagnosticsInput,
+  type DiagnosticsReport,
+  type SessionDiagnostics,
+} from './dev-diagnostics';
 import { checkTrace, type ReplayTrace } from './replay';
 
 /**
@@ -58,6 +63,43 @@ export function surfaceName(location: AppLocation): string {
 export interface DevExportPort {
   round(): RoundDiagnostics;
   replay(): ReplayTrace | null;
+  /** The game canvas's current frame, copied; see `FrameCapture`. */
+  captureFrame(): FrameCapture;
+}
+
+/**
+ * A copy of the game canvas's frame (issue #254's screenshot), as the renderer's `captureFrame`
+ * returns it.
+ *
+ * THE DRAWING BUFFER, NOTHING ELSE. `width` and `height` are its pixels: the canvas's CSS size
+ * times `pixelRatio`, which is `devicePixelRatio` capped by the quality preset's
+ * `pixelRatioCap`. The HUD is not in it, because the HUD is page markup laid over the canvas
+ * rather than part of the WebGL image.
+ */
+export interface FrameCapture {
+  /** A 2D canvas holding the copied pixels, so encoding it later cannot read a cleared buffer. */
+  readonly image: HTMLCanvasElement;
+  readonly width: number;
+  readonly height: number;
+  readonly pixelRatio: number;
+}
+
+export const NO_SESSION_SCREENSHOT_NOTE =
+  'No session is running, so there is no game canvas to save. Start a round and press this again.';
+
+/** The screenshot's file name and the pane's line, for a frame `capture` of `session` at `round`. */
+export function screenshotExport(
+  session: SessionDiagnostics | null,
+  round: RoundDiagnostics,
+  capture: Pick<FrameCapture, 'width' | 'height' | 'pixelRatio'>,
+): { readonly fileName: string; readonly note: string } {
+  const size = `${capture.width}x${capture.height}`;
+  const seed = session === null ? '' : `-seed${session.seed}`;
+  const fileName = `tanks-canvas${seed}-tick${round.tick}-${size}-dpr${capture.pixelRatio}.png`;
+  return {
+    fileName,
+    note: `Saved ${fileName}: the game canvas only, ${size} pixels at pixel ratio ${capture.pixelRatio} (tick ${round.tick}, ${round.surface}). The HUD is not in it: it is page markup over the canvas, not part of the WebGL image.`,
+  };
 }
 
 /** The diagnostics file: Copy Diagnostics' record, stamped, plus the round. */

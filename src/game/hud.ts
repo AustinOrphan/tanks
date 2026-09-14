@@ -354,8 +354,10 @@ import {
 } from './dev-diagnostics';
 import {
   NO_SESSION_REPLAY_NOTE,
+  NO_SESSION_SCREENSHOT_NOTE,
   diagnosticsExport,
   replayExport,
+  screenshotExport,
   type DevExportPort,
   type ExportResult,
 } from './dev-exports';
@@ -1564,6 +1566,8 @@ export interface DeveloperPage {
 /** The page's download seam for the developer exports (issue #254); see `downloads.ts`. */
 export interface DeveloperDownloads {
   saveText(text: string, fileName: string, type: string): void;
+  /** Encodes `image` as a PNG and saves it; rejects when nothing could be encoded. */
+  saveCanvas(image: HTMLCanvasElement, fileName: string): Promise<void>;
 }
 
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
@@ -2312,6 +2316,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <!-- EXPORTS (issue #254). Each saves a file through the page's download seam, then says
            in the field below what it saved, or why it saved nothing: a replay is never saved
            empty. Hidden without that seam, as the two buttons above are without theirs. -->
+      <button class="ui-btn ui-btn--slab hud-export-screenshot" type="button">Download Screenshot</button>
       <button class="ui-btn ui-btn--slab hud-export-diagnostics" type="button">Download Diagnostics</button>
       <button class="ui-btn ui-btn--slab hud-export-replay" type="button">Download Replay</button>
       <!-- RUNTIME ACTIONS (issue #252). Each rebuilds the board, so each arms first: the
@@ -2566,6 +2571,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const selfTestOpenBtn = el.querySelector('.hud-selftest-open') as HTMLButtonElement;
   const diagCopyBtn = el.querySelector('.hud-diag-copy') as HTMLButtonElement;
   const diagPinBtn = el.querySelector('.hud-diag-pin') as HTMLButtonElement;
+  const exportScreenshotBtn = el.querySelector('.hud-export-screenshot') as HTMLButtonElement;
   const exportDiagnosticsBtn = el.querySelector('.hud-export-diagnostics') as HTMLButtonElement;
   const exportReplayBtn = el.querySelector('.hud-export-replay') as HTMLButtonElement;
   const diagOutEl = el.querySelector('.hud-diag-out') as HTMLTextAreaElement;
@@ -5182,6 +5188,32 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return diagnosticsExport(input, port === null ? null : port.round());
     });
 
+  /*
+   * The screenshot's save is ASYNCHRONOUS (PNG encoding), so a failure can arrive after the click
+   * has returned; both the synchronous and the late failure land in the field. The renderer copied
+   * the pixels before the encoder runs, so a later frame cannot change what is saved.
+   */
+  const handleExportScreenshot = (): void => {
+    const downloads = opts.developerDownloads;
+    if (downloads === undefined || opts.developerPage === undefined) return;
+    const fail = (err: unknown): void => {
+      const reason = err instanceof Error ? err.message : String(err);
+      showExportNote(`Download Screenshot failed, so no file was saved: ${reason}`);
+    };
+    try {
+      const port = devExportPort?.() ?? null;
+      if (port === null) {
+        showExportNote(NO_SESSION_SCREENSHOT_NOTE);
+        return;
+      }
+      const capture = port.captureFrame();
+      const shot = screenshotExport(diagnosticsSource?.() ?? null, port.round(), capture);
+      downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);
+    } catch (err) {
+      fail(err);
+    }
+  };
+
   const handleExportReplay = (): void =>
     runExport('Download Replay', () => {
       const port = devExportPort?.() ?? null;
@@ -5291,6 +5323,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   );
   diagCopyBtn.addEventListener('click', handleDiagCopy);
   diagPinBtn.addEventListener('click', handleDiagPin);
+  exportScreenshotBtn.addEventListener('click', handleExportScreenshot);
   exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
   exportReplayBtn.addEventListener('click', handleExportReplay);
   for (const btn of devActionBtns) {
@@ -5374,7 +5407,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // gets neither button and cannot report a page it cannot see.
   diagCopyBtn.hidden = !opts.developerPage;
   diagPinBtn.hidden = !opts.developerPage;
-  // The exports need the page facts AND a way to save a file; either one missing hides both.
+  // The exports need the page facts AND a way to save a file; either one missing hides all three.
+  exportScreenshotBtn.hidden = !opts.developerPage || !opts.developerDownloads;
   exportDiagnosticsBtn.hidden = !opts.developerPage || !opts.developerDownloads;
   exportReplayBtn.hidden = !opts.developerPage || !opts.developerDownloads;
   galleryOpenBtn.hidden = !opts.galleryWorkbench;

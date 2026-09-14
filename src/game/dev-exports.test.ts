@@ -15,6 +15,7 @@ import {
   DIAGNOSTICS_SCHEMA,
   diagnosticsExport,
   replayExport,
+  screenshotExport,
   surfaceName,
   type RoundDiagnostics,
 } from './dev-exports';
@@ -149,6 +150,24 @@ describe('diagnosticsExport', () => {
     const file = diagnosticsExport(input({ build: { commit: '', known: false } }), ROUND);
     expect(JSON.parse(file.text).build).toEqual({ commit: '', known: false });
     expect(file.note).toContain('build unknown (not a deployed build)');
+  });
+});
+
+describe('screenshotExport names the frame by what it is', () => {
+  const CAPTURE = { width: 1280, height: 800, pixelRatio: 2 };
+
+  it('names the seed, tick, drawing-buffer size and pixel ratio', () => {
+    expect(screenshotExport(SESSION, ROUND, CAPTURE).fileName).toBe(
+      'tanks-canvas-seed918273645-tick480-1280x800-dpr2.png',
+    );
+    expect(screenshotExport(null, ROUND, CAPTURE).fileName).toBe('tanks-canvas-tick480-1280x800-dpr2.png');
+  });
+
+  it('says it is the canvas only, at what size, and that the HUD is not in it', () => {
+    // Issue #254: "obvious HUD semantics" and documented dimensions and DPR.
+    const { note } = screenshotExport(SESSION, ROUND, { width: 960, height: 600, pixelRatio: 1.5 });
+    expect(note).toContain('the game canvas only, 960x600 pixels at pixel ratio 1.5');
+    expect(note).toContain('The HUD is not in it');
   });
 });
 

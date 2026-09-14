@@ -1,0 +1,14 @@
+{
+  "id": "loop-export-port-captures-nothing",
+  "file": "src/game/loop.ts",
+  "find": "    captureFrame: () => renderer.captureFrame(),",
+  "replace": "    captureFrame: () => ({ image: {} as HTMLCanvasElement, width: 640, height: 400, pixelRatio: 1 }),",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer exports' port (issue #254) captures the frame through the renderer this session built, only when asked"
+  ],
+  "why": "The session's port answers with a frame that never came from its renderer. The replacement returns the harness renderer's own stand-in size, so a test that checked only the shape would pass; the killing test counts the renderer's captures."
+}

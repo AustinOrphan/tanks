@@ -414,6 +414,8 @@ interface Recorder {
   devActionPorts: ((() => DevActionPort | null) | null)[];
   /** Every export-port getter the host registered (issue #254). */
   devExportPorts: ((() => DevExportPort | null) | null)[];
+  /** How many times the renderer's captureFrame ran (issue #254). */
+  frameCaptures: number;
   /** Every value passed to hud.setPadDiagnostics, in order (each a snapshot copy). */
   padDiagnosticsPushes: PadDiagnostic[][];
 }
@@ -638,6 +640,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     diagnosticsSources: [],
     devActionPorts: [],
     devExportPorts: [],
+    frameCaptures: 0,
     padDiagnosticsPushes: [],
   };
 
@@ -905,6 +908,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setReducedMotion(on: boolean): void {
           rec.rendererReducedMotion.push(on);
+        },
+        // Issue #254's screenshot. A stand-in image: this harness has no canvas to copy, and what
+        // is pinned here is only that the session's port reaches the renderer it built.
+        captureFrame() {
+          rec.frameCaptures += 1;
+          return { image: {} as HTMLCanvasElement, width: 640, height: 400, pixelRatio: 1 };
         },
         dispose(): void {
           rec.disposed.push('renderer');
@@ -5224,6 +5233,15 @@ describe("startGameWith: the developer exports' port (issue #254)", () => {
     });
     h.setState('paused');
     expect(port.round().surface).toBe('gameplay/paused');
+    h.handle.dispose();
+  });
+
+  it('captures the frame through the renderer this session built, only when asked', () => {
+    const h = boot();
+    const port = portOf(h);
+    expect(h.rec.frameCaptures).toBe(0);
+    expect(port.captureFrame()).toMatchObject({ width: 640, height: 400, pixelRatio: 1 });
+    expect(h.rec.frameCaptures).toBe(1);
     h.handle.dispose();
   });
 

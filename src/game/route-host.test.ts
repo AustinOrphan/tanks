@@ -503,7 +503,11 @@ describe('createRouteHost: the developer-export trampoline (issue #254)', () => 
     const source = registered(f);
     expect(source()).toBeNull();
     const slot = f.host.attach(CAMPAIGN);
-    const port = { round: () => ({ tick: 1, roundStartTick: 1, surface: 'gameplay/playing' }), replay: () => null };
+    const port = {
+      round: () => ({ tick: 1, roundStartTick: 1, surface: 'gameplay/playing' }),
+      replay: () => null,
+      captureFrame: () => ({ image: {} as HTMLCanvasElement, width: 1, height: 1, pixelRatio: 1 }),
+    };
     slot.provideExports(port);
     expect(source()).toBe(port);
     slot.detach();
