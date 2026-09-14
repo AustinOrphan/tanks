@@ -45,6 +45,7 @@ mutate --only some-id                     # named entries: repeatable, and `--on
 mutate --jobs auto                        # the worktree pool: N serial harnesses, one per detached worktree
 mutate --report out.json                  # per-entry outcomes and failed test names, for tooling
 mutate --changed origin/main [--list]     # only the entries the diff since that ref can affect (--list: show, do not run)
+mutate --shard 2/4                        # the second of four cost-balanced shards of whatever was selected
 mutate --root /path/to/checkout           # explicit project root (default: process.cwd())
 ```
 
@@ -103,7 +104,8 @@ cannot see, a test reading a file through `fs`. A change under `tools/mutate/` (
 than the manifests), to `vite.config.*`, `package.json`, `package-lock.json`,
 `tsconfig*.json`, or to the two workflows that run the manifest (`ci.yml`,
 `mutation-floor.yml`) runs everything. `--list` prints the selection
-without running it. Pull-request CI uses this; pushes to `main` run the complete set.
+without running it (the whole selection: `--list` stops before `--shard` cuts it).
+Pull-request CI uses this; pushes to `main` run the complete set.
 
 ## The worktree pool (`--jobs`)
 
@@ -125,6 +127,22 @@ and refuses to start with any tracked file dirty -- stricter than the serial pat
 checks only the files it mutates. Interrupting the pool is safe: the worktrees are
 throwaways, and the checkout itself is never mutated.
 
+## Sharding across machines (`--shard`)
+
+`--shard i/n` runs the `i`th of `n` shards (1-based) of whatever `--only` and `--changed`
+selected, so `n` machines running the same command with `i` from 1 to `n` run every
+selected entry exactly once between them (issue #724). The cut is the pool's: scopes
+are dealt costliest-first by `scope-costs.json` onto the lightest shard, and a scope is
+never split. Two things differ from `--jobs`. There are always exactly `n` shards, so a
+shard can be EMPTY -- fewer affected scopes than shards -- and an empty shard prints
+that it ran nothing and exits 0, rather than disappearing and leaving a required CI
+job with no result. And the cut is taken after selection, so every shard must see the
+same selection: the manifest is read in sorted file order, the cost file is committed,
+and `--changed` diffs from the merge base, which a later push to `main` does not move.
+
+A shard composes with `--jobs`: CI runs `--jobs auto --shard i/4`, one pool per shard
+machine.
+
 ## Repository CI use
 
 The root `npm run mutate:smoke` script selects
@@ -136,8 +154,9 @@ byte-verified restoration. The normal unit suite separately runs the harness's o
 fake-dependency and real-subprocess tests in `orchestrate.test.ts`.
 
 This is representative compatibility coverage, not a claim that normal floor CI ran
-every manifest entry. `verify (current)` runs the complete manifest under Node 24 on
-pull requests and pushes to `main`. `.github/workflows/mutation-floor.yml` runs the
+every manifest entry. `verify (current)` requires the affected entries on pull requests
+and the complete manifest on pushes to `main`, both under Node 24 and both split across
+four `--shard i/4` jobs. `.github/workflows/mutation-floor.yml` runs the
 complete manifest under exact Node 22.13.0 daily against `main` and on manual dispatch;
 that complementary workflow is not a required pull-request check. A red scheduled run
 is a floor-runtime or manifest-contract failure that requires investigation in GitHub

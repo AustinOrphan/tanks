@@ -112,14 +112,31 @@ worktree. Do not discard or stash unrelated work merely to satisfy the preflight
 ### CI and merge verification
 
 CI is authoritative for repository-wide verification. On pull requests and pushes to
-`main`, `verify (current)` runs the mutation manifest under Node 24 through the worktree
-pool (`--jobs auto`, issue #502): on a pull request only the entries the diff can affect
-(`--changed origin/main`, issue #506), on `main` the complete set. The exact
-Node 22.13.0 `verify (floor)` lane runs typecheck, unit tests, build, portability,
-production audit, and `npm run mutate:smoke`: one representative real manifest entry,
-not the complete manifest. `visual` remains a required independent browser/rendering
-gate, so the required context names remain `verify (floor)`, `verify (current)`, and
-`visual`.
+`main`, `verify (current)` runs the mutation manifest under Node 24 through four
+`mutation (shard i/4)` jobs it waits for (issue #724):
+on a pull request only the entries the diff can affect (`--changed origin/main`,
+issue #506), on `main` the complete set. Each job runs `--shard i/4` of that one
+selection — scope-atomic, cost-balanced slices that between them run every selected
+entry exactly once (`tools/mutate/README.md`) — through the worktree pool
+(`--jobs auto`, issue #502). The Node 24 typecheck, unit, build, portability and audit
+steps run as `checks (current)`.
+
+The required `verify (current)` context is the `verify-current` fan-in job. It needs the
+`verify` job and all four shards, runs under `if: ${{ !cancelled() }}`, and passes only
+when both results are `success`. The condition is what keeps the gate closed: under the
+default `if`, a job whose needs failed is skipped, and GitHub documents that a skipped job
+reports success to a required check, so a failed shard would otherwise leave the context
+green. `needs.verify.result` covers both matrix lanes, so a floor failure turns it red
+too. The exact Node 22.13.0 `verify (floor)` lane runs typecheck, unit tests, build,
+portability, production audit, and `npm run mutate:smoke`: one representative real
+manifest entry, not the complete manifest. `visual` remains a required independent
+browser/rendering gate, so the required context names remain `verify (floor)`,
+`verify (current)`, and `visual`, and the ruleset needed no change.
+
+Before sharding, the one-job affected-entries step took 14 s on a tools-only pull request
+(#739), 3 s on a simulation-leaf one (#726) and 43 min 51 s on a HUD-touching one (#716),
+read from `gh run view --json jobs`. The same three shapes are to be re-measured on pull
+requests opened after this change (issue #724).
 
 The separate `Mutation floor` workflow runs the complete manifest under exact Node
 22.13.0 daily at 07:23 UTC against the latest `main`, and `workflow_dispatch` can run it
@@ -330,21 +347,24 @@ went red before assuming the deploy is broken.
 
 **`workflow_dispatch` is the ungated path, and it stays that way** — it exists to
 re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
-`ci.yml`'s 12 checking steps** (`verify`: 8, `visual`: 4), **not the `visual` job and not
-any mutation step**, so a manual deploy can still publish a render regression that only
-`tools/gl/` and `tools/visual/` catch, and a stale `tools/mutate/manifests/`. Those
-five steps are duplicated work on the automatic path; they are kept because deleting them
-would leave the manual path checking nothing. (Denominator: the named steps of both
-`ci.yml` jobs that check something — that can fail because of the tree — rather than set
-up the runner, so `checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`Install
-Playwright` and `Install chromium` are separate named steps), the browser cache and
-`Upload screenshots` are all excluded. `verify` contributes 8: Typecheck, Test, Mutation
-harness smoke, the affected-entries and the full Mutation manifest (a pull request runs
-the first and a push the second, but each is its own named check), Build, portability,
-audit. `visual` contributes 5 — Build, GL tests, Baseline trace, Visual check, Session
-lifecycle round trip — but its `Build` runs the same `npm run build` already counted, so
-it adds 4, for 12 distinct. The deploy runs 5 of them, all from `verify`: Typecheck, Test,
-Build, portability, audit.) The construction is written out, and since issue #693
+`ci.yml`'s 12 checking steps** (`verify`: 6, `mutation`: 2, `visual`: 4), **not the
+`visual` job and not any mutation step**, so a manual deploy can still publish a render
+regression that only `tools/gl/` and `tools/visual/` catch, and a stale
+`tools/mutate/manifests/`. Those five steps are duplicated work on the automatic path;
+they are kept because deleting them would leave the manual path checking nothing.
+(Denominator: the named steps of `ci.yml`'s three checking jobs that check something —
+that can fail because of the tree — rather than set up the runner, so `checkout`,
+`setup-node`, `npm ci`, BOTH Playwright steps (`Install Playwright` and `Install
+chromium` are separate named steps), the browser cache and `Upload screenshots` are all
+excluded. `verify` contributes 6: Typecheck, Test, Mutation harness smoke, Build,
+portability, audit. `mutation` contributes 2: the affected-entries and the full Mutation
+manifest (a pull request runs the first and a push the second, but each is its own named
+check; the job runs four times, as shards, and each step is still one check). `visual`
+contributes 5 — Build, GL tests, Baseline trace, Visual check, Session lifecycle round
+trip — but its `Build` runs the same `npm run build` already counted, so it adds 4, for 12
+distinct. The `verify-current` fan-in's one step reads the other jobs' results and checks
+nothing in the tree, so it is not counted. The deploy runs 5 of them, all from `verify`:
+Typecheck, Test, Build, portability, audit.) The construction is written out, and since issue #693
 recomputed from the workflow files by `tools/workflows.test.ts`, because the bare number
 kept going stale unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule
 over that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest`
@@ -363,8 +383,8 @@ empty `bypass_actors` list — nobody can bypass it, including the repository ow
 carries five rules: `deletion`, `non_fast_forward`, `required_linear_history`,
 `pull_request` (squash the ONLY allowed merge method, `required_approving_review_count` 0,
 but `required_review_thread_resolution` true) and `required_status_checks` on exactly three
-contexts — **`verify (floor)`, `verify (current)` and `visual`**, the same three jobs
-`ci.yml` defines. The semantic verify names stay stable when their Node versions advance.
+contexts — **`verify (floor)`, `verify (current)` and `visual`**, the three contexts
+`ci.yml` reports (`verify (current)` from the `verify-current` fan-in job since issue #724). The semantic verify names stay stable when their Node versions advance.
 
 Three consequences that invert what earlier repository guidance said. Work **is** forced through a PR
 and a direct push to `main` is refused. A red commit **cannot** land on `main` any more —

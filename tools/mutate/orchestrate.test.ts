@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries, mergeManifestFiles } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
-import { staleWorkerWorktrees, legacyWorkerWorktrees, pidIsAlive, parseArgs, parseJobs, partitionByScope, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, formatRunSummary, formatSelectionEcho, selectOnly, missingOnlyReport, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest, baseManifestById } from './run.mjs';
+import { staleWorkerWorktrees, legacyWorkerWorktrees, pidIsAlive, parseArgs, parseJobs, partitionByScope, parseShard, shardByScope, formatShardEcho, scopeCostLookup, readScopeCosts, aggregateExitCodes, formatResult, formatRunSummary, formatSelectionEcho, selectOnly, missingOnlyReport, dirtyReport, unreachableReport, resolveManifestPath, classifySubprocessFailure, failedTestNames, readManifestFiles, readManifest, baseManifestById } from './run.mjs';
 import { scopeCosts } from './scope-costs.mjs';
 import { selectAffected, entryText, ALWAYS_RUN_PATTERNS } from './select.mjs';
 import type { ManifestEntry } from './lib.mjs';
@@ -852,12 +852,12 @@ describe('computeExitCode', () => {
 
 describe('parseArgs', () => {
   it('defaults to the shipped manifest, no --only filter, and root = process.cwd()', () => {
-    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifests', only: [], root: process.cwd(), jobs: 1, report: null, changed: null, list: false });
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifests', only: [], root: process.cwd(), jobs: 1, report: null, changed: null, list: false, shard: null });
   });
 
   it('accepts --manifest, --only and --root overrides', () => {
-    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3', '--report', 'out.json', '--changed', 'origin/main', '--list']))
-      .toEqual({ manifest: 'x.json', only: ['my-id'], root: '/elsewhere', jobs: 3, report: 'out.json', changed: 'origin/main', list: true });
+    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere', '--jobs', '3', '--report', 'out.json', '--changed', 'origin/main', '--list', '--shard', '2/4']))
+      .toEqual({ manifest: 'x.json', only: ['my-id'], root: '/elsewhere', jobs: 3, report: 'out.json', changed: 'origin/main', list: true, shard: { index: 2, count: 4 } });
   });
 
   it('ACCUMULATES repeated --only instead of keeping the last one (issue #529)', () => {
@@ -894,7 +894,7 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--bogus'])).toThrow(/unknown argument/);
     // A value-taking flag with no value, or followed by another flag, is refused by name
     // instead of leaving `undefined` to fail later somewhere that cannot say which flag.
-    for (const flag of ['--manifest', '--only', '--root', '--jobs', '--report', '--changed']) {
+    for (const flag of ['--manifest', '--only', '--root', '--jobs', '--report', '--changed', '--shard']) {
       expect(() => parseArgs([flag]), flag).toThrow(new RegExp(`${flag} needs a value`));
       expect(() => parseArgs([flag, '--jobs', '2']), `${flag} before another flag`).toThrow(/needs a value/);
     }
@@ -1229,6 +1229,66 @@ describe('partitionByScope', () => {
     expect(partitionByScope(entries, 8)).toHaveLength(3);
     expect(partitionByScope(entries, 1).map((s) => s.map((e) => e.id))).toEqual([entries.map((e) => e.id)]);
     expect(partitionByScope([], 3)).toEqual([]);
+  });
+});
+
+describe('--shard (issue #724)', () => {
+  const entry = (id: string, ...tests: string[]): { id: string; tests: string[] } => ({ id, tests });
+  // Five scopes, so four shards all have work. The costly scope has FEWER entries than
+  // the loop scope, so a count deal and a cost deal cut differently.
+  const scopes = [['hud.test.ts'], ['loop.test.ts'], ['sim.test.ts'], ['audio.test.ts'], ['a.test.ts', 'b.test.ts']];
+  const entries = [
+    entry('h1', ...scopes[0]), entry('l1', ...scopes[1]), entry('s1', ...scopes[2]), entry('h2', ...scopes[0]),
+    entry('a1', ...scopes[3]), entry('x1', ...scopes[4]), entry('l2', ...scopes[1]),
+    entry('s2', ...scopes[2]), entry('x2', ...scopes[4]), entry('a2', ...scopes[3]), entry('l3', ...scopes[1]),
+  ];
+  const cost = (tests: readonly string[]) => (tests[0] === 'hud.test.ts' ? 40 : tests[0] === 'loop.test.ts' ? 10 : 3);
+  const ids = (slice: { id: string }[]) => slice.map((e) => e.id);
+  // Each shard computed by its OWN call, the way four CI machines compute them.
+  const shards = (list: typeof entries, n = 4) => Array.from({ length: n }, (_, i) => shardByScope(list, { index: i + 1, count: n }, cost));
+
+  it('runs every selected entry exactly once across the shards, and never splits a scope', () => {
+    const all = shards(entries);
+    expect(all.flat().map((e) => e.id).sort(), 'complete and non-overlapping').toEqual(ids(entries).sort());
+    for (const [i, shard] of all.entries()) {
+      for (const e of shard) {
+        const elsewhere = all.filter((other, j) => j !== i && other.some((o) => JSON.stringify(o.tests) === JSON.stringify(e.tests)));
+        expect(elsewhere, `${e.id}'s scope was split`).toHaveLength(0);
+      }
+    }
+  });
+
+  it('is the same cut on every call, balanced by cost with the costliest scope alone', () => {
+    expect(shards(entries).map(ids)).toEqual(shards(entries).map(ids));
+    // hud 2 x 40 = 80 and loop 3 x 10 = 30 take a shard each; sim, audio and the pair cost
+    // 6 each, so sim and audio fill the last two and the pair joins sim, the first of the
+    // two lightest. Within a shard, manifest order.
+    expect(shards(entries).map(ids)).toEqual([['h1', 'h2'], ['l1', 'l2', 'l3'], ['s1', 'x1', 's2', 'x2'], ['a1', 'a2']]);
+    // Negative control: by count alone (no cost) the three-entry loop scope goes first and
+    // the two-entry hud scope shares its shard with the pair.
+    const byCount = Array.from({ length: 4 }, (_, i) => ids(shardByScope(entries, { index: i + 1, count: 4 })));
+    expect(byCount).toEqual([['l1', 'l2', 'l3'], ['h1', 'h2', 'x1', 'x2'], ['s1', 's2'], ['a1', 'a2']]);
+  });
+
+  it('keeps an EMPTY shard when fewer scopes than shards were selected, unlike the pool', () => {
+    const two = entries.filter((e) => e.tests[0] === 'hud.test.ts' || e.tests[0] === 'loop.test.ts');
+    expect(shards(two).map(ids)).toEqual([['h1', 'h2'], ['l1', 'l2', 'l3'], [], []]);
+    // Negative control: the pool's partition over the same deal drops those two slots.
+    expect(partitionByScope(two, 4, cost)).toHaveLength(2);
+    expect(shards([]).map(ids)).toEqual([[], [], [], []]);
+  });
+
+  it('parses i/n and refuses a shard outside 1..n instead of running nothing', () => {
+    expect(parseShard('1/4')).toEqual({ index: 1, count: 4 });
+    expect(parseShard('4/4'), 'the last shard is a real shard').toEqual({ index: 4, count: 4 });
+    for (const bad of ['0/4', '5/4', '1/0', '4', '/4', 'a/b', '1/4x', '-1/4', '1.5/4']) {
+      expect(() => parseShard(bad), bad).toThrow(/--shard must be i\/n/);
+    }
+  });
+
+  it('echoes how many of the selected entries a shard took, and says so when it took none', () => {
+    expect(formatShardEcho({ index: 2, count: 4 }, 3, 12)).toBe('[shard] 2/4: 3 of 12 selected entries');
+    expect(formatShardEcho({ index: 4, count: 4 }, 0, 1)).toBe('[shard] 4/4: 0 of 1 selected entry -- nothing to run, every selected scope is dealt to another shard');
   });
 });
 

@@ -1,0 +1,14 @@
+{
+  "id": "mutate-shard-accepts-a-shard-past-the-last",
+  "file": "tools/mutate/run.mjs",
+  "find": "  if (!match || count < 1 || index < 1 || index > count) {",
+  "replace": "  if (!match || count < 1 || index < 1) {",
+  "why": "Without the upper bound `--shard 5/4` parses, selects an empty slot and exits 0 -- a workflow typo in a shard matrix would then pass while its entries ran nowhere. The refusal sweep's `5/4` case is the kill.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "--shard (issue #724) parses i/n and refuses a shard outside 1..n instead of running nothing"
+  ]
+}

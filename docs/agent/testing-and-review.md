@@ -307,10 +307,13 @@ CI is the authoritative repository-wide merge gate:
   the entry's file or scoped tests changed, its text changed, a scoped test imports a
   changed module, or a declared `reads` file changed; a change to the harness, the
   runner config, the dependency set or a workflow runs everything) and the complete
-  mutation manifest under Node 24 on pushes to `main`, over the worktree pool
-  (`--jobs auto`, issue #502): the same entries and outcomes as a serial run, three at a
-  time. `main`'s run is the repository-wide authority; a dependency neither the module
-  graph nor a `reads` declaration captures is caught there and fixed forward
+  mutation manifest under Node 24 on pushes to `main`. The entries run in four
+  `mutation (shard i/4)` jobs that cut the one selection into scope-atomic,
+  cost-balanced shards (issue #724), each over the worktree pool (`--jobs auto`,
+  issue #502): the same entries and outcomes as a serial run. The context itself is a
+  fan-in job that passes only when every shard and the `verify` job passed.
+  `main`'s run is the repository-wide authority; a dependency neither the module graph
+  nor a `reads` declaration captures is caught there and fixed forward
 - `verify (floor)` runs the normal typecheck, unit, build, portability, and production
   audit checks under exact Node 22.13.0 plus `npm run mutate:smoke`, one representative
   real mutation-harness path; it does not run every manifest entry on each change

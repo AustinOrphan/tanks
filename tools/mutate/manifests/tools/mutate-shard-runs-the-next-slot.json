@@ -1,0 +1,14 @@
+{
+  "id": "mutate-shard-runs-the-next-slot",
+  "file": "tools/mutate/run.mjs",
+  "find": "  return dealByScope(entries, shard.count, costOf)[shard.index - 1];",
+  "replace": "  return dealByScope(entries, shard.count, costOf)[shard.index] ?? [];",
+  "why": "Shard i running slot i+1 leaves slot 1 run by no machine and the last shard empty, and every shard job still exits green -- in CI, the costliest scope's entries silently skipped on every pull request. The completeness assertion over four independently computed shards is the case.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "--shard (issue #724) runs every selected entry exactly once across the shards, and never splits a scope"
+  ]
+}

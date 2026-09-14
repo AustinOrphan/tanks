@@ -46,6 +46,7 @@
  *   npm run mutate
  *   npm run mutate -- --manifest tools/mutate/manifests        # a directory: every *.json in it, by name
  *   npm run mutate -- --changed origin/main [--list]           # only the entries the diff since that ref can affect
+ *   npm run mutate -- --changed origin/main --shard 2/4        # the second of four cost-balanced shards of that selection
  *   npm run mutate -- --only skins-min-accent-delta-200
  *   npm run mutate -- --only a-first-id --only a-second-id      # repeatable, and `--only a,b` is the same thing
  *   npm run mutate -- --root /path/to/checkout
@@ -123,10 +124,10 @@ const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
 const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.meta.url));
 
 /** @param {string[]} argv
- * @returns {{ manifest: string, only: string[], root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
+ * @returns {{ manifest: string, only: string[], root: string, jobs: number, report: string | null, changed: string | null, list: boolean, shard: Shard | null }} */
 export function parseArgs(argv) {
-  /** @type {{ manifest: string, only: string[], root: string, jobs: number, report: string | null, changed: string | null, list: boolean }} */
-  const args = { manifest: 'tools/mutate/manifests', only: [], root: process.cwd(), jobs: 1, report: null, changed: null, list: false };
+  /** @type {{ manifest: string, only: string[], root: string, jobs: number, report: string | null, changed: string | null, list: boolean, shard: Shard | null }} */
+  const args = { manifest: 'tools/mutate/manifests', only: [], root: process.cwd(), jobs: 1, report: null, changed: null, list: false, shard: null };
   // Every flag EXCEPT `--list` takes a value; one at the end of the line, or followed by
   // another flag, is refused by name rather than read as `undefined` and failed later
   // somewhere that cannot say which flag was short. `--list` is a bare boolean and does
@@ -143,6 +144,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--jobs') args.jobs = parseJobs(value(i++));
     else if (argv[i] === '--report') args.report = value(i++);
     else if (argv[i] === '--changed') args.changed = value(i++);
+    else if (argv[i] === '--shard') args.shard = parseShard(value(i++));
     else if (argv[i] === '--list') args.list = true;
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
@@ -340,6 +342,21 @@ export function vitestWorkersPerJob(jobs, cores) {
  * @returns {T[][]}
  */
 export function partitionByScope(entries, jobs, costOf = () => 1) {
+  return dealByScope(entries, jobs, costOf).filter((slice) => slice.length > 0);
+}
+
+/**
+ * The deal both `partitionByScope` and `shardByScope` cut from: EXACTLY `slots` slices
+ * (at least one), empty ones kept, so slice `i` means the same thing however many of the
+ * others are empty. Deterministic for the same entries and costs -- the scope sort is
+ * stable over first-seen order and the lightest slot is the first of equal cost -- which
+ * is what lets separate machines each compute only their own shard.
+ * @template {{ tests: string[] }} T
+ * @param {readonly T[]} entries @param {number} slots
+ * @param {(tests: readonly string[]) => number} costOf
+ * @returns {T[][]}
+ */
+function dealByScope(entries, slots, costOf) {
   /** @type {Map<string, T[]>} */
   const byScope = new Map();
   for (const entry of entries) {
@@ -351,7 +368,7 @@ export function partitionByScope(entries, jobs, costOf = () => 1) {
   const costOfGroup = (/** @type {T[]} */ group) => group.length * costOf(group[0].tests);
   const scopes = [...byScope.values()].sort((a, b) => costOfGroup(b) - costOfGroup(a) || b.length - a.length);
   /** @type {{ entries: T[], cost: number }[]} */
-  const slices = Array.from({ length: Math.max(1, jobs) }, () => ({ entries: [], cost: 0 }));
+  const slices = Array.from({ length: Math.max(1, slots) }, () => ({ entries: [], cost: 0 }));
   for (const group of scopes) {
     let lightest = slices[0];
     for (const slice of slices) if (slice.cost < lightest.cost) lightest = slice;
@@ -359,9 +376,51 @@ export function partitionByScope(entries, jobs, costOf = () => 1) {
     lightest.cost += costOfGroup(group);
   }
   const order = new Map(entries.map((e, i) => [e, i]));
-  return slices
-    .filter((slice) => slice.entries.length > 0)
-    .map((slice) => slice.entries.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)));
+  return slices.map((slice) => slice.entries.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)));
+}
+
+/** @typedef {{ index: number, count: number }} Shard */
+
+/**
+ * `--shard i/n`: run the `i`th of `n` shards, 1-based (issue #724). Refused unless both
+ * are whole numbers with 1 <= i <= n -- a `0/4` or a `5/4` would otherwise select an
+ * empty shard and pass, which in CI is an entry quietly run by nobody.
+ * @param {string} raw @returns {Shard}
+ */
+export function parseShard(raw) {
+  const match = /^(\d+)\/(\d+)$/.exec(raw.trim());
+  const index = Number(match?.[1]);
+  const count = Number(match?.[2]);
+  if (!match || count < 1 || index < 1 || index > count) {
+    throw new Error(`--shard must be i/n with 1 <= i <= n, got ${JSON.stringify(raw)}`);
+  }
+  return { index, count };
+}
+
+/**
+ * The entries shard `shard.index` of `shard.count` runs: the pool's scope-atomic,
+ * costliest-first deal over exactly `count` slots, so the `count` shards between them
+ * run every entry exactly once. Unlike `partitionByScope` an empty slot is KEPT and
+ * returned as `[]`: a CI shard with nothing to do still has to finish green, or its
+ * required fan-in never gets a result.
+ * @template {{ tests: string[] }} T
+ * @param {readonly T[]} entries @param {Shard} shard
+ * @param {(tests: readonly string[]) => number} [costOf] Seconds per run of a scope; 1 when absent.
+ * @returns {T[]}
+ */
+export function shardByScope(entries, shard, costOf = () => 1) {
+  return dealByScope(entries, shard.count, costOf)[shard.index - 1];
+}
+
+/**
+ * The line each shard prints before running: how many of the selected entries it took.
+ * Summed over the shards of one CI run, the first numbers equal the second, which is
+ * the check that nothing was dropped between machines.
+ * @param {Shard} shard @param {number} ran @param {number} selected @returns {string}
+ */
+export function formatShardEcho(shard, ran, selected) {
+  const head = `[shard] ${shard.index}/${shard.count}: ${ran} of ${selected} selected entr${selected === 1 ? 'y' : 'ies'}`;
+  return ran === 0 ? `${head} -- nothing to run, every selected scope is dealt to another shard` : head;
 }
 
 /**
@@ -1207,6 +1266,15 @@ async function run() {
       console.log('[select] nothing to run: the change cannot affect any manifest entry');
       return;
     }
+  }
+  // Cut LAST, after every narrowing, so each shard slices the same population. An empty
+  // shard is a clean exit 0 that says so: a CI shard job has to finish green either way.
+  if (args.shard !== null) {
+    const selected = entries.length;
+    const costOf = scopeCostLookup(readScopeCosts(join(root, 'tools/mutate/scope-costs.json'), (msg) => console.error(msg)));
+    entries = shardByScope(entries, args.shard, costOf);
+    console.log(formatShardEcho(args.shard, entries.length, selected));
+    if (entries.length === 0) return;
   }
 
   // Every `tests` path too, not just `file`: a dirty-but-passing test file would

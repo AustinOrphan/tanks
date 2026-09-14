@@ -1,0 +1,14 @@
+{
+  "id": "mutate-shard-echo-hides-the-selection",
+  "file": "tools/mutate/run.mjs",
+  "find": "  const head = `[shard] ${shard.index}/${shard.count}: ${ran} of ${selected} selected entr${selected === 1 ? 'y' : 'ies'}`;",
+  "replace": "  const head = `[shard] ${shard.index}/${shard.count}: ${ran} entr${ran === 1 ? 'y' : 'ies'}`;",
+  "why": "The shard line is the only place a CI run can be checked for a dropped entry: the four shards' taken counts must sum to the selected count they each print. Dropping the denominator leaves four counts with nothing to sum them against.",
+  "tests": [
+    "tools/mutate/orchestrate.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "--shard (issue #724) echoes how many of the selected entries a shard took, and says so when it took none"
+  ]
+}
