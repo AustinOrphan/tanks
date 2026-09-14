@@ -165,22 +165,29 @@
  * it. `.ui-btn` in particular is deliberately SIZELESS: `.hud-level-btn` is a fixed
  * 44x44 box with no padding of its own, so a padding here would inflate it.
  *
- * The 44 CSS px touch floor is NOT imposed here, and the omission is deliberate. Ruling
- * on #321: the floor governs the new primitives, while raising an existing control
- * relayouts the pane around it -- a visual change that owes its own evidence, which is
- * exactly what this commit is arranged not to owe. `.ui-btn` is therefore sizeless and
- * every control keeps the size it had. Exactly three controls declare a height that meets
- * the floor -- `.hud-level-btn`, `.hud-swatch` and, since issue #352, `.hud-rotate-btn`,
- * all `var(--hud-control-min)`; every other control here is sized by padding and its
- * inherited font size, and whether that clears 44 px is a rendered measurement rather than
- * something this file states. Establishing it is #290's control-scale work.
- * A test cannot stand in for that here: jsdom does no layout, so the rendered height of a
- * padded button is not measurable in this suite at all -- it needs the real browser those
- * issues already require. */
+ * The 44 CSS px touch floor was first left OFF `.ui-btn`, on #321's ruling that raising an
+ * existing control relayouts the pane around it and owes its own evidence. Issue #686 is
+ * that evidence, and the floor now lives on `.ui-btn` as `min-height`/`min-width`. Measured
+ * in Chromium on the tree before it: 41 of 51 visible control classes rendered under 44 px
+ * across every player-facing screen state, `--sm` at 27 px tall and `--slab` at 31-33 px.
+ * `.hud-level-btn`, `.hud-swatch` and `.hud-rotate-btn` still size themselves with
+ * `var(--hud-control-min)`; they were already at the floor.
+ * A jsdom test cannot stand in for the measurement: it does no layout, so a padded button's
+ * rendered height is not observable in this suite at all. The browser check is. */
 
 /* The quiet control: the HUD's default button surface, and what eight separate rules
  * declared before it had a name. */
 .ui-btn {
+  /* The 44 CSS px touch floor (issue #686), on the primitive so a control cannot be added
+   * below it. MIN, not a fixed size: a primary slab stays 47px and a map card 80-122px, and
+   * a control already taller than the floor keeps the size its content gives it. No
+   * `(pointer: coarse)` gate either -- the UI/UX direction (section 7) says a pointer does
+   * not reduce controller or touch target size. `display` is left as the button's own: a
+   * <button> already centres its content in a box taller than its text, and turning every
+   * control into a flex container would split a toggle's label and value into separate
+   * flex items and trim the space between them. */
+  min-height: var(--hud-control-min);
+  min-width: var(--hud-control-min);
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -2731,6 +2738,11 @@
 .hud-settings-volume {
   pointer-events: auto;
   width: 140px;
+  /* The only interactive control on a menu surface that is not a `.ui-btn` and was under
+   * the 44 px floor (issue #686): 140x16 as rendered. A range input takes a press anywhere in
+   * its box and moves the thumb there, so a taller box is a taller target; the track and
+   * thumb stay centred in it. */
+  height: var(--hud-control-min);
 }
 
 /* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */
