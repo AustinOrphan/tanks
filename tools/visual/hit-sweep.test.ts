@@ -26,12 +26,16 @@ const EXCLUDED = {
   ],
   'the no-script page: the collector runs as page script': ['screen.no-script'],
   'the match failure overlay, owned by its own capture': ['screen.startup.match-failed'],
+  'a played ending, whose panel its pushed-outcome state already sweeps': [
+    'screen.ending.mission-clear.played',
+    'screen.ending.campaign-over.played',
+  ],
 };
 
 describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
-  it('excludes exactly the developer, startup-failure, no-script and match-failure states, each for its rule', () => {
-    // Negative controls, one per rule: deleting any of the four clauses in hitSweepExclusion
-    // lets that rule's states through -- 7, 2, 1 and 1 -- and this map no longer matches.
+  it('excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule', () => {
+    // Negative controls, one per rule: deleting any of the five clauses in hitSweepExclusion
+    // lets that rule's states through -- 7, 2, 1, 1 and 2 -- and this map no longer matches.
     const actual: Record<string, string[]> = {};
     for (const state of SCREEN_STATES) {
       const reason = hitSweepExclusion(state);

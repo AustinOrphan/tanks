@@ -59,6 +59,8 @@ describe('capture recipe schema', () => {
       'screen.pause.campaign',
       'screen.ending.mission-clear',
       'screen.ending.campaign-over',
+      'screen.ending.mission-clear.played',
+      'screen.ending.campaign-over.played',
       'screen.ending.campaign-complete',
       'screen.ending.practice-cleared',
       'screen.ending.practice-failed',

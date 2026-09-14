@@ -134,7 +134,13 @@ async function main() {
     }
     await page.goto(url, { waitUntil: 'load' });
 
-    for (const step of state.steps) await runStep(page, step, timeout);
+    // What each `{ playUntil }` step cost (issue #617): simulated ticks and wall-clock, kept
+    // in the report so a played capture's price is recorded every time it runs, not once.
+    const played = [];
+    for (const step of state.steps) {
+      const result = await runStep(page, step, timeout);
+      if (result !== undefined) played.push(result);
+    }
     // One settle after the last step, at the reduced-motion duration, so a crossfade that
     // has been asked to be instant has still had a frame to become instant in.
     await page.waitForTimeout(250);
@@ -154,6 +160,7 @@ async function main() {
           javascript: state.javascript,
           measurements,
           pageErrors,
+          played,
         },
       }, null, 2)}\n`,
     );

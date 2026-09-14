@@ -83,6 +83,11 @@ export function hitSweepExclusion(state) {
   if (state.webgl !== 'ok') return 'a startup failure page, which has no menu to press';
   if (state.javascript === 'off') return 'the no-script page: the collector runs as page script';
   if (state.steps.some((step) => 'breakWebgl' in step)) return 'the match failure overlay, owned by its own capture';
+  // Issue #617. A played ending is tens of seconds of software-GL play before its panel
+  // shows, inside a required check. The panel it reaches is the one the pushed-outcome state
+  // of the same ending already puts in front of this sweep, so sweeping it again buys no
+  // new control to press.
+  if (state.steps.some((step) => 'playUntil' in step)) return 'a played ending, whose panel its pushed-outcome state already sweeps';
   return null;
 }
 

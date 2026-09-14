@@ -110,7 +110,95 @@ const goneIn = (sel) => `(() => {
   return getComputedStyle(el).display === 'none' || el.classList.contains('hud-splash--hidden');
 })()`;
 
-/** Run one declarative step. An unknown kind is an error, never a skipped line. */
+/**
+ * One poll of a `{ playUntil }` step, read in the page: whether the target is visible, and
+ * the current level's simulated tick count from the replay surface (`null` when that surface
+ * is absent, which is a recipe error rather than a slow game).
+ */
+const playSampleIn = (sel, textSel) => `(() => {
+  const el = document.querySelector(${JSON.stringify(sel)});
+  const cs = el === null ? null : getComputedStyle(el);
+  const visible = el !== null && cs.display !== 'none' && cs.visibility !== 'hidden' && el.getBoundingClientRect().width > 0;
+  const textEl = ${JSON.stringify(textSel ?? null)} === null ? null : document.querySelector(${JSON.stringify(textSel ?? '')});
+  const text = textEl === null ? null : (textEl.textContent ?? '').trim();
+  const replay = globalThis.__tanks && globalThis.__tanks.replay;
+  if (typeof replay !== 'function') return { visible, text, ticks: null, truncated: false };
+  const trace = replay();
+  return { visible, text, ticks: trace.ticks.length, truncated: trace.truncated === true };
+})()`;
+
+/** A `{ playUntil }` step's running state before its first poll. */
+export const PLAY_START = Object.freeze({ total: 0, last: 0, lastChangeMs: null });
+
+/**
+ * Advance a `{ playUntil }` step by one poll, and decide it (issue #617). Pure, so every way
+ * a played capture can end is testable without a browser.
+ *
+ * TICKS ARE SUMMED ACROSS WORLD REBUILDS. The replay surface counts the CURRENT level's
+ * ticks, and a new level or a retry after a lost life starts a new trace at 0. A sample
+ * lower than the previous one therefore means a new world: the previous world's count is
+ * banked. A poll every quarter second sees at most 15 ticks of a new world, far fewer than
+ * any world lasts, so a rebuild cannot hide between two polls.
+ *
+ * THE ENDING IT REACHED IS CHECKED, not just that one was reached. `expect: { selector,
+ * text }` names what the screen must say once the target shows. Without it a campaign-over
+ * capture whose autoplay happened to WIN would photograph Mission Clear under the Game Over
+ * id and pass, since both panels show the same primary action.
+ *
+ * Returns `{ state, reached, error }`: `reached` when the target is visible and says what
+ * it should; otherwise `error` names why the step can never succeed, or both are unset and
+ * polling continues.
+ */
+export function advancePlay(state, sample, { visible, maxTicks, expect }, nowMs, stallMs) {
+  if (sample.ticks === null) {
+    return { state, reached: false, error: `playUntil: there is no replay surface (__tanks.replay), so there is no tick budget to play within -- the state's query needs dev=1&replay=1` };
+  }
+  const banked = sample.ticks < state.last ? state.total + state.last : state.total;
+  const total = banked + sample.ticks;
+  const changed = state.lastChangeMs === null || sample.ticks !== state.last;
+  const next = { total: banked, last: sample.ticks, lastChangeMs: changed ? nowMs : state.lastChangeMs };
+  if (sample.visible) {
+    if (expect !== undefined && sample.text !== expect.text) {
+      return { state: next, reached: false, error: `playUntil: the game ended, but '${expect.selector}' reads ${JSON.stringify(sample.text)} rather than ${JSON.stringify(expect.text)}, after ${total} simulated ticks` };
+    }
+    return { state: next, reached: true, error: null, ticks: total };
+  }
+  if (total > maxTicks) {
+    return { state: next, reached: false, error: `playUntil: the game did not end -- '${visible}' was not visible after ${total} simulated ticks (budget ${maxTicks})` };
+  }
+  if (sample.truncated) {
+    return { state: next, reached: false, error: `playUntil: the game did not end -- the replay trace truncated at ${sample.ticks} ticks in one world before '${visible}' was visible` };
+  }
+  if (nowMs - next.lastChangeMs > stallMs) {
+    return { state: next, reached: false, error: `playUntil: the simulation stopped advancing at ${total} ticks for ${stallMs} ms before '${visible}' was visible` };
+  }
+  return { state: next, reached: false, error: null, ticks: total };
+}
+
+/** Poll interval and stall limit for `{ playUntil }`, in wall-clock milliseconds. */
+export const PLAY_POLL_MS = 250;
+export const PLAY_STALL_MS = 15000;
+
+async function playUntil(page, target) {
+  const started = Date.now();
+  let state = PLAY_START;
+  for (;;) {
+    const sample = await page.evaluate(playSampleIn(target.visible, target.expect?.selector));
+    const now = Date.now();
+    const verdict = advancePlay(state, sample, target, now, PLAY_STALL_MS);
+    if (verdict.error) throw new Error(verdict.error);
+    state = verdict.state;
+    if (verdict.reached) return { kind: 'playUntil', visible: target.visible, maxTicks: target.maxTicks, ticks: verdict.ticks, wallMs: now - started };
+    await page.waitForTimeout(PLAY_POLL_MS);
+  }
+}
+
+/**
+ * Run one declarative step. An unknown kind is an error, never a skipped line.
+ *
+ * Returns nothing, except for `{ playUntil }`, which returns what it cost -- simulated ticks
+ * and wall-clock -- so the runner can record it in the report (issue #617's measured cost).
+ */
 export async function runStep(page, step, timeout) {
   const kinds = Object.keys(step).filter((k) => STEP_KINDS.includes(k));
   if (kinds.length !== 1) {
@@ -118,6 +206,9 @@ export async function runStep(page, step, timeout) {
   }
   const [kind] = kinds;
   if (kind === 'press') return void (await page.keyboard.press(step.press));
+  // Its own budget in simulated ticks, not `timeout`: a played match is minutes of wall-clock
+  // on software GL, and a wall-clock timeout would read as a broken selector.
+  if (kind === 'playUntil') return playUntil(page, step.playUntil);
   if (kind === 'waitVisible') return void (await page.waitForFunction(visibleIn(step.waitVisible), undefined, { timeout }));
   if (kind === 'waitHidden') return void (await page.waitForFunction(goneIn(step.waitHidden), undefined, { timeout }));
   if (kind === 'breakWebgl') {

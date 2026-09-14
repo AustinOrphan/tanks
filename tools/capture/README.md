@@ -81,6 +81,8 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.pause.campaign` | `screen.pause.campaign` | `capture.png` | still |
 | `screen.ending.mission-clear` | `screen.ending.mission-clear` | `capture.png` | still |
 | `screen.ending.campaign-over` | `screen.ending.campaign-over` | `capture.png` | still |
+| `screen.ending.mission-clear.played` | `screen.ending.mission-clear.played` | `capture.png` | still |
+| `screen.ending.campaign-over.played` | `screen.ending.campaign-over.played` | `capture.png` | still |
 | `screen.ending.campaign-complete` | `screen.ending.campaign-complete` | `capture.png` | still |
 | `screen.ending.practice-cleared` | `screen.ending.practice-cleared` | `capture.png` | still |
 | `screen.ending.practice-failed` | `screen.ending.practice-failed` | `capture.png` | still |
