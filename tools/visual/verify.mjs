@@ -21,6 +21,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
+import { clearanceFailures, insetLabel } from './clearance.mjs';
 
 /**
  * Playwright is NOT a dependency of this repo: the package downloads browsers
@@ -86,6 +87,153 @@ const VIEWPORTS = [
   { name: '390x844-phone', width: 390, height: 844 },
   { name: '1560x520-ultrawide', width: 1560, height: 520 },
 ];
+
+/**
+ * Issue #687's matrix: where the toast rail and the capacity flash have to clear the topbar.
+ * A separate list from VIEWPORTS because nothing here is a board metric, and adding these
+ * shapes there would put them under board thresholds calibrated for four other viewports.
+ *
+ * - 320x568 and 390x844 are the two phone breakpoints `hud.css` retunes the topbar at, and
+ *   844x390 is a phone in landscape, the shape with the least height to spare.
+ * - `1280x800@200%` is browser zoom, emulated the way zoom lays a page out: half the CSS
+ *   viewport at twice the device pixel ratio. The topbar's type is in `px`, so a text-size
+ *   setting that scales only `rem`/`em` does not move it, and is not a separate case.
+ * - 1920x1080 at DPR 2 stands in for a TV.
+ *
+ * Every shape runs with no inset and with the inset a phone held that way reports. Portrait
+ * gets a 59px top inset, the Dynamic Island's. Landscape gets 59px on the left and 21px on the
+ * right, the notch and the rounded corner opposite it, and no top inset, because a phone
+ * turned sideways reports its notch as a side inset. Before this check existed, the no-inset
+ * column passed everywhere and the top-inset column failed everywhere, so that inset is what
+ * makes the topbar-height half discriminate. The side insets move no bar edge vertically;
+ * they are there so the flash's right-hand landscape placement is judged against the housing.
+ *
+ * The flash is also judged against the DRAWN BOARD, read from a screenshot with the HUD
+ * hidden, the same way the board checks above read it. In landscape the board starts under
+ * the bar (issue #702: board top 48 under a 52px bar at 844x390), which is where "clear of
+ * the bar" alone passed a flash drawn on the enemy tanks.
+ */
+const CLEARANCE_VIEWPORTS = [
+  { name: '320x568', width: 320, height: 568, dpr: 2 },
+  { name: '390x844', width: 390, height: 844, dpr: 3 },
+  { name: '844x390', width: 844, height: 390, dpr: 3 },
+  { name: '1280x800@200%', width: 640, height: 400, dpr: 2 },
+  { name: '1920x1080-tv', width: 1920, height: 1080, dpr: 2 },
+];
+const NO_INSET = { top: 0, left: 0, right: 0 };
+const clearanceInsets = (vp) =>
+  vp.width > vp.height ? [NO_INSET, { top: 0, left: 59, right: 21 }] : [NO_INSET, { top: 59, left: 0, right: 0 }];
+
+/**
+ * The boxes `clearanceFailures` judges, read in the page. With `stage` set, the capacity flash
+ * is first given the text it shows at the roster cap and held at its visible keyframe: between
+ * refusals its box is empty and transparent, so there is nothing to judge. The chips are read
+ * on both sides of that, so a flash that takes room in the bar shows as chips that moved.
+ */
+const MEASURE_CLEARANCE = (stage) => {
+  const edges = (el) => {
+    const r = el.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+  };
+  const box = (sel) => {
+    const el = document.querySelector(sel);
+    const cs = getComputedStyle(el);
+    return {
+      ...edges(el),
+      display: cs.display,
+      paddingTop: cs.paddingTop,
+      paddingLeft: cs.paddingLeft,
+      paddingRight: cs.paddingRight,
+    };
+  };
+  const chips = () =>
+    [...document.querySelector('.hud-topbar').children]
+      .filter((el) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0)
+      .map(edges);
+  const before = chips();
+  if (stage) {
+    const flash = document.querySelector('.hud-capacity');
+    flash.textContent = 'shells 5/5';
+    flash.style.animation = 'none';
+    flash.style.opacity = '1';
+  }
+  return {
+    topbar: box('.hud-topbar'),
+    toasts: box('.hud-toasts'),
+    capacity: box('.hud-capacity'),
+    chips: before,
+    chipsStaged: chips(),
+  };
+};
+
+/**
+ * One viewport at one inset: the menu, with no topbar, then a match, with one, then that
+ * match's board with the HUD hidden.
+ *
+ * Headless Chromium reports every `env(safe-area-inset-*)` as 0, so the inset comes from
+ * DevTools' `Emulation.setSafeAreaInsetsOverride`. Whether that override landed is checked
+ * by the verdict, through the topbar's padding, and not assumed.
+ */
+async function measureClearance(browser, base, vp, inset) {
+  let reading = null;
+  // One retry, for the same cold-runner context loss the board loop retries: a match that
+  // never showed its topbar is re-measured on a fresh page before it is reported.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const context = await browser.newContext({
+      viewport: { width: vp.width, height: vp.height },
+      deviceScaleFactor: vp.dpr,
+    });
+    try {
+      const page = await context.newPage();
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setSafeAreaInsetsOverride', {
+        insets: {
+          top: inset.top,
+          topMax: inset.top,
+          left: inset.left,
+          leftMax: inset.left,
+          right: inset.right,
+          rightMax: inset.right,
+        },
+      });
+      await page.goto(base, { waitUntil: 'load' });
+      await dismissSplash(page);
+      const menu = await page.evaluate(MEASURE_CLEARANCE, false);
+      await startMatch(page);
+      await page
+        .waitForFunction(
+          () => getComputedStyle(document.querySelector('.hud-topbar')).display !== 'none',
+          undefined,
+          { timeout: 20000 },
+        )
+        .catch(() => {});
+      await settle(page);
+      const match = await page.evaluate(MEASURE_CLEARANCE, true);
+      // The board, exactly as the board checks isolate it: everything in the root but the
+      // canvas hidden. The screenshot is in device pixels and the rects above are CSS pixels.
+      await page.evaluate(() => {
+        for (const el of Array.from(document.getElementById('app')?.children ?? [])) {
+          if (el.tagName !== 'CANVAS') el.style.display = 'none';
+        }
+      });
+      const { boardBox } = await measureScreenshot(page, await page.screenshot({ type: 'png' }));
+      const board =
+        boardBox.maxY < 0
+          ? null
+          : {
+              left: boardBox.minX / vp.dpr,
+              top: boardBox.minY / vp.dpr,
+              right: (boardBox.maxX + 1) / vp.dpr,
+              bottom: (boardBox.maxY + 1) / vp.dpr,
+            };
+      reading = { viewport: vp.name, inset, width: vp.width, height: vp.height, menu, match, board };
+    } finally {
+      await context.close();
+    }
+    if (reading.match.topbar.display !== 'none') break;
+  }
+  return reading;
+}
 
 const MIME = {
   '.html': 'text/html',
@@ -563,6 +711,7 @@ async function main() {
   });
 
   const results = [];
+  const clearance = [];
   try {
     for (const vp of VIEWPORTS) {
       // A cold runner loses the GL context on the FIRST page often enough to
@@ -644,12 +793,18 @@ async function main() {
       });
       await page.close();
     }
+
+    for (const vp of CLEARANCE_VIEWPORTS) {
+      for (const inset of clearanceInsets(vp)) {
+        clearance.push(await measureClearance(browser, base, vp, inset));
+      }
+    }
   } finally {
     await browser.close();
     server.close();
   }
 
-  const report = { label, dist, generatedFrom: 'playwright screenshot buffer', results };
+  const report = { label, dist, generatedFrom: 'playwright screenshot buffer', results, clearance };
   await writeFile(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 
   for (const r of results) {
@@ -666,7 +821,22 @@ async function main() {
 
   if (rest.includes('--check')) {
     console.log('\nchecks:');
-    const failed = runChecks(results);
+    let failed = runChecks(results);
+    // Issue #687. One line per viewport and inset, with the three edges it was judged on, so
+    // a failure says which overlay moved and by how much rather than only that one did.
+    for (const r of clearance) {
+      const lines = clearanceFailures(r);
+      if (lines.length > 0) failed++;
+      const { topbar, toasts, capacity } = r.match;
+      const at = (n) => Math.round(n);
+      console.log(
+        `  ${lines.length === 0 ? 'PASS' : 'FAIL'}  ${`${r.viewport} inset=${insetLabel(r.inset)}`.padEnd(38)} overlays clear the topbar and board -- ` +
+          `bar bottom ${topbar.bottom}, toasts ${toasts.top}, ` +
+          `flash ${at(capacity.left)},${at(capacity.top)} to ${at(capacity.right)},${at(capacity.bottom)}, ` +
+          `board top ${r.board ? at(r.board.top) : 'none'}; menu toasts ${r.menu.toasts.top}`,
+      );
+      for (const line of lines) console.log(`          ${line}`);
+    }
     console.log(failed === 0 ? '\nall checks passed' : `\n${failed} check(s) FAILED`);
     if (failed > 0) process.exitCode = 1;
   }

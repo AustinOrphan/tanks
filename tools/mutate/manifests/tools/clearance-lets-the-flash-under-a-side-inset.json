@@ -1,0 +1,14 @@
+{
+  "id": "clearance-lets-the-flash-under-a-side-inset",
+  "file": "tools/visual/clearance.mjs",
+  "find": "      capacity.right > m.width - m.inset.right",
+  "replace": "      capacity.right > m.width",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Only fails a flash past the viewport edge, not one under the right-hand safe-area inset. The landscape flash is right-aligned in the topbar row, which on a phone held sideways is where the notch or camera housing can be, so this bound is what keeps it readable there.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails a flash under a side inset, where the camera housing is"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "clearance-lets-the-capacity-flash-cover-the-board",
+  "file": "tools/visual/clearance.mjs",
+  "find": "    } else if (overlaps(capacity, m.board)) {",
+  "replace": "    } else if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Stops judging the capacity flash against the drawn board. Issue #702's defect passed the gate exactly this way: at 844x390 the board's top edge is at y 48, under the 52px topbar, so a flash placed just below the bar cleared the bar and was drawn on the enemy tank row. The old stand-in, 'above the viewport centre', passed it too.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails the capacity flash drawn on the board -- 844x390 just under the bar, issue #702"
+  ]
+}

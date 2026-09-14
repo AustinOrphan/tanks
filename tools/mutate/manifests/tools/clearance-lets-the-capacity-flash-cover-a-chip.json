@@ -1,0 +1,14 @@
+{
+  "id": "clearance-lets-the-capacity-flash-cover-a-chip",
+  "file": "tools/visual/clearance.mjs",
+  "find": "      if (overlaps(capacity, chip)) {",
+  "replace": "      if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Stops judging the capacity flash against the topbar's chips. In landscape the flash sits in the bar's own row, so this is the only check between it and Lives, Level or a versus stock readout; it is also what catches issue #687's original shape, a fixed 56px flash drawn over a bar that a top inset grew to 77px.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails the capacity flash inside the bar on top of a chip -- the shipped 56px under a 77px bar"
+  ]
+}

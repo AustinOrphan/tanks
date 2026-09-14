@@ -1,0 +1,14 @@
+{
+  "id": "clearance-trusts-an-inset-that-never-landed",
+  "file": "tools/visual/clearance.mjs",
+  "find": "    if (m.inset[side] > 0 && px(padding) < m.inset[side]) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Drops the check that the DevTools safe-area override reached the page, for the top and side insets alike. Headless Chromium reports every env(safe-area-inset-*) as 0, and the no-inset half of issue #687's matrix passed on the unfixed tree at every viewport -- so an override that silently stopped applying would turn the discriminating half into a second copy of the half that proves nothing, and the gate would stay green.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails an inset the page never applied, rather than passing a 0px inset as a real one"
+  ]
+}

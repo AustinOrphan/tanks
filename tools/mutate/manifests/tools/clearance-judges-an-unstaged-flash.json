@@ -1,0 +1,14 @@
+{
+  "id": "clearance-judges-an-unstaged-flash",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  if (capacity.right - capacity.left < 1 || capacity.bottom - capacity.top < 1) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Judges a capacity flash whose box is empty. Between refusals the flash has no text, and a zero-area box overlaps nothing, so a probe whose staging silently stopped working would pass every overlap check while measuring no flash at all.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) fails a flash with no box, instead of judging text that was never staged"
+  ]
+}

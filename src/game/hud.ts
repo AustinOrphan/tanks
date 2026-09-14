@@ -1607,7 +1607,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     </div>
     <div class="hud-count hud-count--hidden"></div>
     <!-- The blocked-fire capacity flash (issue #516's hud arm). Absolutely positioned
-         under the topbar rather than placed IN it, on purpose: a chip in the topbar flow
+         under the topbar, or over the free end of its row in landscape, rather than placed
+         IN its flow, on purpose: a chip in the topbar flow
          would reserve its width for the rest of the session after the first refusal,
          which is the permanent ammunition counter #356 rules out. Nothing here until
          signalShellCapacity fires, and nothing left of it afterwards. aria-hidden because

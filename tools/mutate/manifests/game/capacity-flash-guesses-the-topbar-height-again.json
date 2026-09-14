@@ -1,0 +1,14 @@
+{
+  "id": "capacity-flash-guesses-the-topbar-height-again",
+  "file": "src/game/hud.css",
+  "find": "  grid-row: 2;\n  top: 4px;",
+  "replace": "  top: 56px;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Restores issue #687's capacity-flash rule: a fixed 56px from the top of the HUD instead of 4px below the topbar row. The flash is the player's only cue that a shot was refused, and at 56px it is drawn under a topbar grown by a top safe-area inset -- measured 86-99px tall with a 59px inset at all five clearance viewports. jsdom lays nothing out, so this entry kills on the structural assertion; the geometry itself is the visual gate's clearance pass.",
+  "killedBy": [
+    "hud.css is syntactically whole places the toast rail and capacity flash from the topbar row, not a guessed height"
+  ]
+}

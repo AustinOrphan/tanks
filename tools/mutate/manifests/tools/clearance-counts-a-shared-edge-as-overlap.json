@@ -1,0 +1,14 @@
+{
+  "id": "clearance-counts-a-shared-edge-as-overlap",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  Math.min(a.right, b.right) - Math.max(a.left, b.left) > EPSILON &&",
+  "replace": "  Math.min(a.right, b.right) - Math.max(a.left, b.left) >= 0 &&",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "why": "Counts two rects that only share a vertical edge as overlapping. Every rect here comes from getBoundingClientRect in fractional CSS pixels, so a flash laid out flush against a chip or the board would fail on rounding alone; without the slack the verdict fails layouts that draw nothing on top of anything.",
+  "killedBy": [
+    "topbar clearance verdict (issue #687) passes a flash that only shares an edge with a chip or the board"
+  ]
+}

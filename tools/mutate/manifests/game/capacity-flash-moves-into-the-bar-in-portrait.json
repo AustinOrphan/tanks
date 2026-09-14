@@ -1,0 +1,14 @@
+{
+  "id": "capacity-flash-moves-into-the-bar-in-portrait",
+  "file": "src/game/hud.css",
+  "find": "@media (orientation: landscape) {\n  .hud-capacity {",
+  "replace": "@media (orientation: portrait) {\n  .hud-capacity {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Swaps which orientation gets the bar-row placement. Portrait is where the board is width-bound and starts far below the bar (y 189 at 320x568), and where the bar is narrowest; landscape is where the board starts under it. Swapped, the flash lands on the arena in landscape and crowds a 320px bar in portrait.",
+  "killedBy": [
+    "hud.css is syntactically whole places the toast rail and capacity flash from the topbar row, not a guessed height"
+  ]
+}

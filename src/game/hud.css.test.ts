@@ -2035,6 +2035,43 @@ describe('hud.css is syntactically whole', () => {
       expect(block(overlay), overlay).toContain('z-index: 0'); // under the topbar
     }
   });
+
+  it('places the toast rail and capacity flash from the topbar row, not a guessed height', () => {
+    // Issue #687. jsdom lays nothing out, so where these land is measured in a real browser:
+    // `tools/visual/verify.mjs`'s clearance pass, five viewports with and without a 59px top
+    // inset, which failed all five inset cases against the old `top: 64px` / `top: 56px`.
+    // What this guards is the structure that pass relies on, in the file a CSS edit touches:
+    // take any of these away and an overlay's `top` stops being a distance below the bar.
+    const src = stripComments(css);
+    const rule = (sel: string): string => {
+      const at = src.search(new RegExp(`(^|\\n)${sel.replace(/[.~]/g, '\\$&')} \\{`));
+      expect(at, `no ${sel} rule`).toBeGreaterThan(-1);
+      return src.slice(at, src.indexOf('}', at));
+    };
+    const hud = rule('.hud');
+    expect(hud, 'the HUD root is not a grid').toMatch(/display:\s*grid;/);
+    expect(hud, 'the topbar row is not sized by the topbar').toMatch(/grid-template-rows:\s*auto\s/);
+    const topbar = rule('.hud-topbar');
+    expect(topbar).toMatch(/grid-row:\s*1;/);
+    // An absolutely positioned bar leaves row 1 empty, and both overlays slide under it.
+    expect(topbar, 'the topbar is out of flow, so it sizes no row').not.toMatch(/position:\s*absolute/);
+    for (const overlay of ['.hud-toasts', '.hud-capacity']) {
+      expect(rule(overlay), `${overlay} is not placed under the topbar row`).toMatch(/grid-row:\s*2;/);
+    }
+    // Issue #702: in landscape the board starts under the bar (y 48 under a 52px bar at
+    // 844x390), so under the bar is on the arena. The flash moves up into the bar's row there.
+    const landscape = src.match(/@media \(orientation: landscape\) \{\s*\.hud-capacity \{([^}]*)\}/);
+    expect(landscape, 'no landscape rule moves the capacity flash into the topbar row').not.toBeNull();
+    // Both lines: an absolutely positioned child's `auto` end line is the grid's padding edge,
+    // so `grid-row: 1` alone spans the whole HUD and centres the flash on the board.
+    expect(landscape?.[1], 'the landscape flash is not confined to the topbar row').toMatch(
+      /grid-row:\s*1\s*\/\s*2;/,
+    );
+    // With the bar hidden, row 2 starts at the display edge, where a cutout still is.
+    expect(rule('.hud-topbar--hidden ~ .hud-toasts')).toMatch(
+      /top:\s*max\(var\(--hud-safe-inset\),\s*env\(safe-area-inset-top\)\);/,
+    );
+  });
 });
 
 /*

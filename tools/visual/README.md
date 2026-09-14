@@ -72,6 +72,65 @@ What does separate them is that the sliver puts green felt below the lowest grey
 platform pixel. Measured mean colour of the board's bottom rows: **(21,42,33)**
 with the sliver, **(30,33,38)** without, consistent across all four viewports.
 
+## Topbar clearance (issue #687)
+
+A second pass, after the board checks, asks a layout question rather than a pixel one. The
+verdict is `clearance.mjs`, which has its own unit tests and mutation entries. `verify.mjs`
+only supplies the rects.
+
+- **Toast rail:** it must start at or below the topbar's rendered bottom edge.
+- **Shell-capacity flash:** its text is staged at the roster cap, `shells 5/5`, and held
+  visible. It must not overlap a topbar chip or the drawn board, and must stay inside the
+  safe area. The chips are read before and after it shows and must not move, because a
+  flash that takes room in the bar is the permanent counter issue #356 rules out.
+- **The board** is read the way the board checks read it, from a screenshot with the HUD
+  hidden, then divided by the device pixel ratio. That check exists because of
+  issue #702: in landscape the board starts under the bar (top 48 under a 52px bar at
+  844x390), so a flash that only cleared the bar was drawn on the arena.
+
+| viewport | inset case | why it is in the matrix |
+|---|---|---|
+| 320x568, 390x844 | 59px top | the two breakpoints `hud.css` retunes the topbar at; the top inset grows the bar, which is what discriminates the topbar-height half |
+| 844x390 | 59px left, 21px right | a phone in landscape, where the board starts under the bar |
+| 1280x800@200% | 59px left, 21px right | browser zoom: a 640x400 CSS viewport at DPR 2, landscape |
+| 1920x1080-tv | 59px left, 21px right | DPR 2, standing in for a TV |
+
+Each also runs with no inset. Landscape shapes get side insets, because a phone held
+sideways reports its notch as a left or right inset. Those do not grow the bar; they check
+that the flash's right-hand placement stays clear of the housing. Headless Chromium reports
+every `env(safe-area-inset-*)` as 0, so the insets come from DevTools'
+`Emulation.setSafeAreaInsetsOverride`. The verdict fails, rather than passes, if the topbar's
+padding shows that the override never landed.
+
+It also fails, rather than passes, a match whose topbar never showed, a flash with no box,
+and a board the screenshot did not find. It checks the Main Menu too, where the bar is
+hidden and the rail has to clear the top inset on its own.
+
+Proved in both directions, against builds of `origin/main` at `86e3fa9` and of this change:
+
+```
+before (top: 64px / top: 56px)   exit 1: 5 of 10 clearance cases FAILED -- all 5 with the inset
+after  (topbar grid row)         exit 0: 10 of 10 clearance cases pass
+```
+
+The no-inset column passed on the old build too. The inset is what makes this discriminate.
+
+The board and chip checks were added by issue #702 and proved the same way, the current
+`verify.mjs` against a build of the first placement (`f4aedcf`, flash just under the bar at
+every size) and of the bar-row placement:
+
+```
+before (flash under the bar)   exit 1: 5 of 10 FAILED -- 844x390 and 1280x800@200% with no inset
+                                        too, flash 56-83 and 42-69 over board tops 48 and 49
+after  (landscape bar row)     exit 0: 10 of 10 pass -- landscape flash at y 6-40, above boards
+                                        starting at 48, 49 and 133
+```
+
+One of the 5 before failures (1920x1080-tv with side insets) is the safe-area check alone: the
+portrait placement's box spans the full row width, so it reaches under a side inset even where
+its centred text does not. No portrait case gets a side inset, so the after build never meets
+that shape.
+
 ## Validation
 
 The gate is proved in both directions, which is the only thing that makes it

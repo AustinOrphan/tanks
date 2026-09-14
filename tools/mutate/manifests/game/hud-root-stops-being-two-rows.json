@@ -1,0 +1,14 @@
+{
+  "id": "hud-root-stops-being-two-rows",
+  "file": "src/game/hud.css",
+  "find": "  display: grid;\n  grid-template-rows: auto minmax(0, 1fr);",
+  "replace": "  display: block;\n  grid-template-rows: auto minmax(0, 1fr);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Turns the HUD root back into a block. Every grid property stays written, and all of them stop meaning anything: `grid-row: 2` on the toast rail and capacity flash is ignored, their containing block becomes the whole HUD, and `top: 12px` / `top: 4px` put both at the top of the screen under the topbar at every viewport, not just a notched one. Nothing in either overlay's own rule changes, which is why the guard reads the root.",
+  "killedBy": [
+    "hud.css is syntactically whole places the toast rail and capacity flash from the topbar row, not a guessed height"
+  ]
+}

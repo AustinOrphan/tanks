@@ -553,6 +553,21 @@
 .hud {
   position: fixed;
   inset: 0;
+  /* Two rows (issue #687): the topbar, exactly as tall as it renders, and the rest of the
+   * screen. The row is the ONE statement of where the topbar ends. The toast rail and the
+   * capacity flash are placed in row 2, so their `top` is a distance below the bar's real
+   * bottom edge -- which moves with the bar's padding, its type, and the top safe-area
+   * inset folded into that padding. They used to carry `top: 64px` and `top: 56px`,
+   * guesses that held with no display cutout and failed with one: measured in Chromium
+   * with a 47px top inset, the bar grew to 74-87px and both landed inside it.
+   *
+   * Nothing else here moves. Every other child is absolutely or fixed positioned with no
+   * grid placement, and such a child's containing block is this element's whole padding
+   * box, grid or not. `minmax(0, 1fr)` stops a topbar row wider than a 320px screen from
+   * widening the column past the viewport. */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   pointer-events: none;
   font-family: var(--hud-font);
   color: #fff;
@@ -560,13 +575,14 @@
 }
 
 .hud-topbar {
-  position: absolute;
+  /* In flow, and row 1 of `.hud`'s grid: its rendered height IS the row. Relative rather
+   * than static only so the z-index below keeps the same positioned-layer meaning it had
+   * as an absolutely positioned bar. */
+  position: relative;
+  grid-row: 1;
   /* Above the stats overlay (.hud-stats z-index 0): mute and volume stay reachable
    * while the stats page is open. */
   z-index: 1;
-  top: 0;
-  left: 0;
-  right: 0;
   display: flex;
   align-items: center;
   gap: var(--hud-space-6);
@@ -2639,12 +2655,23 @@
    * while the win panel is up, and with tree order deciding they landed behind its
    * scrim. Safe to raise because the rail is pointer-events: none. */
   z-index: 2;
-  top: 64px;
+  /* Under the topbar's real bottom edge -- see `.hud`'s two rows. 12px below it is where
+   * the old `top: 64px` sat under the 52px desktop bar, so desktop does not move. */
+  grid-row: 2;
+  top: var(--hud-space-4);
   right: 16px;
   display: flex;
   flex-direction: column;
   gap: var(--hud-space-2);
   pointer-events: none;
+}
+
+/* With the topbar hidden -- Launch and the Main Menu, where the M shortcut still reports
+ * through a toast -- row 1 is empty and row 2 starts at the display edge, so the rail
+ * takes the edge-anchored pattern instead. The inset is counted once either way: here
+ * directly, and under a shown topbar only through that bar's own padding. */
+.hud-topbar--hidden ~ .hud-toasts {
+  top: max(var(--hud-safe-inset), env(safe-area-inset-top));
 }
 
 .hud-toast {
@@ -2766,8 +2793,8 @@
 
 /*
  * The TRANSIENT half of the shell-capacity question, and deliberately not a second
- * `.hud-shells`. It is absolutely positioned just under the topbar instead of sitting in
- * it: a chip in that flex row would claim its width permanently from the first refusal
+ * `.hud-shells`. It is absolutely positioned -- just under the topbar, or over the free end
+ * of its row in landscape -- instead of sitting in its flex row: a chip in that row would claim its width permanently from the first refusal
  * onward, which is the permanent ammunition counter issue #356 puts out of scope. Here it
  * costs no layout at all, appears only while its animation runs, and leaves nothing
  * behind -- `opacity: 0` is the base state, exactly as .hud-count's is between pops.
@@ -2778,7 +2805,10 @@
  */
 .hud-capacity {
   position: absolute;
-  top: 56px; /* clear of the topbar row, and well above the arena's centre */
+  /* Just under the topbar's real bottom edge -- see `.hud`'s two rows -- and so well above
+   * the arena's centre. 4px below the 52px desktop bar is where `top: 56px` used to put it. */
+  grid-row: 2;
+  top: 4px;
   left: 0;
   right: 0;
   text-align: center;
@@ -2790,6 +2820,39 @@
   letter-spacing: 0.08em;
   color: var(--hud-text-danger);
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
+}
+
+/* In LANDSCAPE the flash moves up into the topbar's own row, at its right-hand end. The
+ * board is fitted to the viewport, so in a wide screen it is height-bound and starts close to
+ * the top: measured with the HUD hidden, its top edge is at y 48 under a 52px bar at 844x390
+ * and at y 39 under a 38px bar at 568x320. "Just below the bar" is on the arena there. In
+ * portrait and square screens the board is width-bound and starts far lower (y 189 at
+ * 320x568, 184 at 800x800), so the row-2 placement above stays.
+ *
+ * Still NOT a chip. It stays absolutely positioned, so the flex row lays out exactly as if it
+ * were not there -- no width claimed on the first refusal or after it, which is what the
+ * comment above and issue #356 require. The chips are packed from the left, and the widest
+ * bar measured, a four-player teams match, ends at x 292, so the right-hand end of the row is
+ * free at every landscape width swept. `tools/visual/verify.mjs`'s clearance pass fails the
+ * flash overlapping a chip, the board, or the side insets, and fails it moving a chip.
+ *
+ * `grid-row: 1 / 2`, with BOTH lines: for an absolutely positioned child an `auto` end line
+ * is the grid's padding edge, so `grid-row: 1` alone spans the whole HUD, and the flash was
+ * centred on the board (measured at y 182-209 of a 390px viewport). Row 2 above needs no end
+ * line, because it runs to that same edge anyway and is placed by `top`. `top: 0; bottom: 0`
+ * spans the row, `align-self: center` centres the text's own box in it, and the top margin
+ * keeps a top inset, which grows the row, out of the centring. */
+@media (orientation: landscape) {
+  .hud-capacity {
+    grid-row: 1 / 2;
+    top: 0;
+    bottom: 0;
+    align-self: center;
+    margin-top: env(safe-area-inset-top, 0px);
+    left: auto;
+    right: max(var(--hud-space-4), env(safe-area-inset-right));
+    text-align: right;
+  }
 }
 
 .hud-capacity--flash {
