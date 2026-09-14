@@ -1,0 +1,14 @@
+{
+  "id": "driver-keeps-looping-after-a-frame-throws",
+  "file": "src/game/driver.ts",
+  "find": "      running = false;\n      deps.raf.cancel(handle);\n      throw err;",
+  "replace": "      throw err;",
+  "why": "Rethrows without stopping, which is the defect issue #690 describes: the frame requests its successor before doing its work, so a throw leaves that frame queued and the loop keeps running -- throwing identically every frame when the cause persists, or silently carrying on past a failure the page has just been told about when it does not.",
+  "tests": [
+    "src/game/driver.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "driver: lifecycle a frame that throws stops the loop, so the throw surfaces once rather than every frame (#690)"
+  ]
+}

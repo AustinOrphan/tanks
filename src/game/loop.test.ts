@@ -9346,13 +9346,19 @@ function bootPageOn(
         intent,
       );
     },
+    // `pagehide` only. Boot also registers its match-error listeners here (issue #690); this
+    // harness fires `pagehideFns` as page teardown, and calling those with a pagehide event
+    // would be a fixture defect, not a test of either.
     host: {
-      addEventListener: (_t, fn) => pagehideFns.push(fn),
-      removeEventListener: (_t, fn) => {
-        const i = pagehideFns.indexOf(fn);
+      addEventListener: (type: string, fn: (e: never) => void) => {
+        if (type === 'pagehide') pagehideFns.push(fn as (e: { persisted: boolean }) => void);
+      },
+      removeEventListener: (type: string, fn: (e: never) => void) => {
+        if (type !== 'pagehide') return;
+        const i = pagehideFns.indexOf(fn as (e: { persisted: boolean }) => void);
         if (i >= 0) pagehideFns.splice(i, 1);
       },
-    },
+    } as Parameters<typeof bootPage>[0]['host'],
     reportError: (err) => {
       throw err;
     },

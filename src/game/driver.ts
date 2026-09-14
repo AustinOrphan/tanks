@@ -134,6 +134,21 @@ export function createDriver(deps: DriverDeps): Driver {
     if (!running) return;
     handle = deps.raf.request(frame);
 
+    // A frame that THROWS stops the loop (issue #690). The next frame is requested above,
+    // before the work, so without this a throw from input sampling, a sim step or a render
+    // left that frame queued and it threw identically on every later frame -- the last pose
+    // frozen on screen and nothing shown. Stopping cancels the frame this one just queued;
+    // rethrowing lets the failure reach the page's error listener (`boot.ts`) exactly once.
+    try {
+      runFrame(now);
+    } catch (err) {
+      running = false;
+      deps.raf.cancel(handle);
+      throw err;
+    }
+  };
+
+  const runFrame = (now: number): void => {
     const plan = planFrame(acc, (now - last) / 1000);
     last = now;
     acc = plan.acc;

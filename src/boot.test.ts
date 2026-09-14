@@ -86,10 +86,26 @@ function harness(
   canvasRoots: HTMLElement[];
   canvases: HTMLCanvasElement[];
   firePagehide(persisted?: boolean): void;
+  /** Every `error` / `unhandledrejection` listener boot registered, and removed (issue #690). */
+  errorListeners: Array<(e: { error?: unknown; message?: string }) => void>;
+  rejectionListeners: Array<(e: { reason?: unknown }) => void>;
+  removedErrorListeners: Array<(e: { error?: unknown; message?: string }) => void>;
+  removedRejectionListeners: Array<(e: { reason?: unknown }) => void>;
+  /** Dispatch an uncaught `error` to every listener, as the window would. */
+  fireError(e: { error?: unknown; message?: string }): void;
+  /** Dispatch an `unhandledrejection` to every listener, as the window would. */
+  fireRejection(reason: unknown): void;
 } {
   const root = document.createElement('div');
   const pagehide: Array<(e: { persisted: boolean }) => void> = [];
   const removed: Array<(e: { persisted: boolean }) => void> = [];
+  // Recorded BY TYPE (issue #690). The fake used to push every listener into `pagehide`
+  // whatever its type, which was harmless while `pagehide` was the only one boot added; with
+  // the match-error listeners beside it, `firePagehide` would have called them too.
+  const errorListeners: Array<(e: { error?: unknown; message?: string }) => void> = [];
+  const rejectionListeners: Array<(e: { reason?: unknown }) => void> = [];
+  const removedErrorListeners: Array<(e: { error?: unknown; message?: string }) => void> = [];
+  const removedRejectionListeners: Array<(e: { reason?: unknown }) => void> = [];
   const errors: unknown[] = [];
   const startArgs: StartArgs[] = [];
   const canvasRoots: HTMLElement[] = [];
@@ -203,13 +219,19 @@ function harness(
       };
     },
     host: {
-      addEventListener(_type, fn): void {
-        pagehide.push(fn);
+      addEventListener(type: string, fn: (e: never) => void): void {
+        if (type === 'pagehide') pagehide.push(fn as (e: { persisted: boolean }) => void);
+        else if (type === 'error') errorListeners.push(fn as (e: { error?: unknown }) => void);
+        else if (type === 'unhandledrejection') rejectionListeners.push(fn as (e: { reason?: unknown }) => void);
+        else throw new Error(`boot registered an unexpected ${type} listener`);
       },
-      removeEventListener(_type, fn): void {
-        removed.push(fn);
+      removeEventListener(type: string, fn: (e: never) => void): void {
+        if (type === 'pagehide') removed.push(fn as (e: { persisted: boolean }) => void);
+        else if (type === 'error') removedErrorListeners.push(fn as (e: { error?: unknown }) => void);
+        else if (type === 'unhandledrejection') removedRejectionListeners.push(fn as (e: { reason?: unknown }) => void);
+        else throw new Error(`boot removed an unexpected ${type} listener`);
       },
-    },
+    } as BootDeps['host'],
     reportError: (e) => errors.push(e),
   };
 
@@ -252,6 +274,16 @@ function harness(
     canvases,
     firePagehide(persisted = false): void {
       for (const p of pagehide) p({ persisted });
+    },
+    errorListeners,
+    rejectionListeners,
+    removedErrorListeners,
+    removedRejectionListeners,
+    fireError(e): void {
+      for (const l of errorListeners) l(e);
+    },
+    fireRejection(reason): void {
+      for (const l of rejectionListeners) l({ reason });
     },
   };
 }
@@ -1499,5 +1531,87 @@ describe('boot: a session replacement that fails to start (issue #685)', () => {
     expect(h.enteredIds).toEqual([0, 1]);
     expect(h.root.querySelectorAll('canvas')).toHaveLength(1);
     expect(h.errors).toHaveLength(1);
+  });
+});
+
+describe('boot: an uncaught error during a running match (issue #690)', () => {
+  it('stops the session and draws the match-failed overlay, reporting the error once', () => {
+    const boom = new Error('input sampling threw mid-match');
+    const h = harness();
+    bootAndStart(h);
+    expect(h.errorListeners, 'boot registered no error listener').toHaveLength(1);
+
+    h.fireError({ error: boom, message: boom.message });
+
+    expect(h.overlays.map((o) => o.title)).toEqual([STARTUP_FAILURES['match-failed'].title]);
+    expect(h.errors, 'the failure was not reported exactly once').toEqual([boom]);
+    expect(h.disposedIds, 'the running session was not stopped').toEqual([0]);
+    expect(h.root.querySelectorAll('canvas'), 'the frozen canvas was left under the overlay').toHaveLength(0);
+    expect(h.routeHostDisposals, 'the working shell was torn down to show an error').toBe(0);
+    expect(h.retries, 'a running match has no descriptor to retry').toEqual([undefined]);
+  });
+
+  it('routes an unhandled rejection the same way', () => {
+    const reason = new Error('a promise rejected mid-match');
+    const h = harness();
+    bootAndStart(h);
+    expect(h.rejectionListeners, 'boot registered no unhandledrejection listener').toHaveLength(1);
+
+    h.fireRejection(reason);
+
+    expect(h.overlays.map((o) => o.title)).toEqual([STARTUP_FAILURES['match-failed'].title]);
+    expect(h.errors).toEqual([reason]);
+    expect(h.disposedIds).toEqual([0]);
+  });
+
+  it('reads the message when the error itself is missing, as for a cross-origin script error', () => {
+    const h = harness();
+    bootAndStart(h);
+    h.fireError({ error: null, message: 'Script error.' });
+    expect(h.errors).toEqual(['Script error.']);
+    expect(h.overlays).toHaveLength(1);
+  });
+
+  it('reports a failure once, however many events it raises, and nothing with no session running', () => {
+    const h = harness();
+    boot(h.deps);
+    h.fireError({ error: new Error('before any match') });
+    expect(h.errors, 'an error with no session running was routed').toEqual([]);
+    expect(h.overlays).toEqual([]);
+
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+    const boom = new Error('mid-match');
+    h.fireError({ error: boom });
+    h.fireRejection(boom);
+    h.fireError({ error: boom });
+    expect(h.errors, 'one failure was reported more than once').toEqual([boom]);
+    expect(h.overlays).toHaveLength(1);
+    expect(h.disposedIds).toEqual([0]);
+  });
+
+  it('does not report again a failed start that boot already handled', () => {
+    const boom = new Error('renderer failed to initialise');
+    const h = harness({ throwOnStartCall: { index: 0, error: boom } });
+    boot(h.deps);
+    h.sessionRequests[0].requestStart({ kind: 'campaign-continue' });
+    expect(h.errors).toEqual([boom]);
+
+    // The same throw, had it also reached the window: the start path already showed it and
+    // left the host empty, so the page listener must not show it a second time.
+    h.fireError({ error: boom });
+    h.fireRejection(boom);
+    expect(h.errors, 'a handled start failure was reported twice').toEqual([boom]);
+    expect(h.overlays).toHaveLength(1);
+  });
+
+  it('removes both listeners on page teardown, and not on a back/forward cache entry', () => {
+    const h = harness();
+    bootAndStart(h);
+    h.firePagehide(true);
+    expect(h.removedErrorListeners).toEqual([]);
+    expect(h.removedRejectionListeners).toEqual([]);
+    h.firePagehide(false);
+    expect(h.removedErrorListeners).toEqual(h.errorListeners);
+    expect(h.removedRejectionListeners).toEqual(h.rejectionListeners);
   });
 });
