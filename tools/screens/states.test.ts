@@ -54,7 +54,7 @@ describe('the screen-state catalogue', () => {
 
   it('names a known gamepad fixture on every step that installs one', () => {
     // `GAMEPAD_FIXTURES` is the contract between this pure-data module and the runner that
-    // holds the pad VALUES (`tools/screens/run.mjs`, which throws on an unknown fixture).
+    // holds the pad VALUES (`tools/screens/steps.mjs`, which throws on an unknown fixture).
     // Without this the two could only disagree at capture time, in a browser, on a machine
     // that may not be the one that edited the state -- and an export nothing checks is an
     // export nothing keeps true.
