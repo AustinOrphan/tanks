@@ -369,28 +369,32 @@ check('an antialias override creates the WebGL context without antialiasing (iss
 check('a pixelRatioCap override sizes the drawing buffer by its cap, not the preset\'s (issue #735)', () => {
   // devicePixelRatio stubbed to 3, above both caps: at this harness's real ratio of 1, a cap of
   // 1.5 and high's 2 would both draw at 1 and the check could not fail.
+  //
+  // The canvas gets a fixed CSS width. Without one its clientWidth IS its drawing-buffer width,
+  // which createScene's resize has just multiplied by the ratio, so a width read back after
+  // construction measures the buffer against itself.
+  const CSS_WIDTH = 640;
   const original = window.devicePixelRatio;
   Object.defineProperty(window, 'devicePixelRatio', { value: 3, configurable: true });
-  const measure = (quality: RenderQuality): { got: number; cssWidth: number } => {
+  const measure = (quality: RenderQuality): number => {
     const canvas = freshCanvas();
+    canvas.style.width = `${CSS_WIDTH}px`;
+    canvas.style.height = `${CSS_WIDTH * (H / W)}px`;
     const ctx = createScene(canvas, W, H, BOUNDARY, quality);
-    const got = ctx.renderer.getContext().drawingBufferWidth;
-    const cssWidth = canvas.clientWidth || window.innerWidth;
+    const width = ctx.renderer.getContext().drawingBufferWidth;
     ctx.dispose();
-    return { got, cssWidth };
+    return width;
   };
-  let plain: { got: number; cssWidth: number };
-  let capped: { got: number; cssWidth: number };
+  let plain: number;
+  let capped: number;
   try {
     plain = measure(QUALITY_PRESETS.high);
     capped = measure(highWith({ pixelRatioCap: 1.5 }));
   } finally {
     Object.defineProperty(window, 'devicePixelRatio', { value: original, configurable: true });
   }
-  const wantPlain = Math.floor(plain.cssWidth * 2);
-  const wantCapped = Math.floor(capped.cssWidth * 1.5);
-  if (plain.got !== wantPlain) return `high's drawing buffer is ${plain.got} wide, want ${wantPlain}`;
-  if (capped.got !== wantCapped) return `the overridden drawing buffer is ${capped.got} wide, want ${wantCapped}`;
+  if (plain !== CSS_WIDTH * 2) return `high's drawing buffer is ${plain} wide, want ${CSS_WIDTH * 2}`;
+  if (capped !== CSS_WIDTH * 1.5) return `the overridden drawing buffer is ${capped} wide, want ${CSS_WIDTH * 1.5}`;
   return null;
 });
 
