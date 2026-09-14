@@ -1,0 +1,12 @@
+{
+  "id": "gallery-link-refusal-silently-defaults",
+  "file": "src/game/gallery-selection.ts",
+  "find": "      problems.push(`\"${value}\" is not a registered ${what}, so the default is shown.`);",
+  "replace": "      void what;",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-selection.test.ts",
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #730 requires an unknown value in a link to be reported rather than silently replaced with a default. Without the report the pane draws the default and says nothing, which reads as the link having worked."
+}

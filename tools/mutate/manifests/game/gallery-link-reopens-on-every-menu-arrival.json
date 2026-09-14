@@ -1,0 +1,11 @@
+{
+  "id": "gallery-link-reopens-on-every-menu-arrival",
+  "file": "src/game/route-host.ts",
+  "find": "    galleryLinkPending = false;",
+  "replace": "    void galleryLinkPending;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The link is honoured once. Left pending, every return to the Main Menu -- quitting a match, leaving Settings -- would throw the developer back into the workbench."
+}

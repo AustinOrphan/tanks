@@ -1,0 +1,11 @@
+{
+  "id": "gallery-boot-opens-without-a-link",
+  "file": "src/game/route-host.ts",
+  "find": "  let galleryLinkPending = deps.devFlags.gallery !== null;",
+  "replace": "  let galleryLinkPending = true;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Only a `?gallery=` link opens the workbench on arrival. Unconditionally, every developer page would land in the gallery instead of on its first screen."
+}

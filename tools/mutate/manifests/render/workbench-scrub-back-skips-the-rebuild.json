@@ -1,0 +1,11 @@
+{
+  "id": "workbench-scrub-back-skips-the-rebuild",
+  "file": "src/render/gallery/workbench-scene.ts",
+  "find": "  return { rebuild: drawn !== null, draws: ages(0, target) };",
+  "replace": "  return { rebuild: false, draws: ages(0, target) };",
+  "expect": "killed",
+  "tests": [
+    "src/render/gallery/workbench-scene.test.ts"
+  ],
+  "why": "The moment builders feed each tick's events once and never rewind. A backward scrub that replays ages 0..N onto the build that already drew past N shows frame N under the later frames' particles, so the same frame position would draw a different picture depending on how it was reached."
+}

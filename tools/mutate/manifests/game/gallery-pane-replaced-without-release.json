@@ -1,0 +1,11 @@
+{
+  "id": "gallery-pane-replaced-without-release",
+  "file": "src/game/hud.ts",
+  "find": "      release: releaseGallery,",
+  "replace": "      release: undefined,",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.gallery.test.ts"
+  ],
+  "why": "The pane's Developer Tools button replaces it through openLayer, which releases the outgoing layer rather than closing it. With no release the close hook never fires and route-ui keeps the renderer drawing behind the shell."
+}

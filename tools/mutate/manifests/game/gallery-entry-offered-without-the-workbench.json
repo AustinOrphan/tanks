@@ -1,0 +1,11 @@
+{
+  "id": "gallery-entry-offered-without-the-workbench",
+  "file": "src/game/hud.ts",
+  "find": "  galleryOpenBtn.hidden = !opts.galleryWorkbench;",
+  "replace": "  galleryOpenBtn.hidden = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.gallery.test.ts"
+  ],
+  "why": "A HUD built without the workbench -- every injected test HUD -- has nothing to mount. Showing the entry there offers a pane that opens empty."
+}

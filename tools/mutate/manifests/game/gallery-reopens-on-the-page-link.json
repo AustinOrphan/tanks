@@ -1,0 +1,11 @@
+{
+  "id": "gallery-reopens-on-the-page-link",
+  "file": "src/game/route-ui.ts",
+  "find": "      galleryValue = formatGallerySelection(gallery.selection, deps.galleryWorkbench.catalog);",
+  "replace": "      void formatGallerySelection;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "why": "The pane reopens on the selection it last showed. Re-reading the page link on every open throws away a selection built by hand whenever Back is pressed."
+}

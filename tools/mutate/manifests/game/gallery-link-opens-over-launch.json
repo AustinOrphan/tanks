@@ -1,0 +1,11 @@
+{
+  "id": "gallery-link-opens-over-launch",
+  "file": "src/game/route-host.ts",
+  "find": "    if (location.kind !== 'route' || location.route.kind !== 'main-menu') return;",
+  "replace": "    void location;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "A browser that has never dismissed Launch boots onto the splash, and the gesture that dismisses it changes the surface, which closes every layer. Opened over Launch, a shared workbench link shows the pane and loses it on the first key press."
+}

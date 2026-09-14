@@ -1,0 +1,11 @@
+{
+  "id": "workbench-renderer-never-disposed",
+  "file": "src/render/gallery/workbench-scene.ts",
+  "find": "      renderer.dispose();",
+  "replace": "      void renderer;",
+  "expect": "killed",
+  "tests": [
+    "src/render/gallery/workbench-scene.test.ts"
+  ],
+  "why": "The handle owns the one renderer every build shares. Leaving the pane without disposing it keeps its programs and render lists alive for the life of the page."
+}

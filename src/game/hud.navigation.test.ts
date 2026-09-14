@@ -968,7 +968,8 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       'alert, which is an OVERLAY rather than a route but takes focus the same way), and ' +
       'issue #599 the 13th -- the controller self-test, its own layer inside the developer ' +
       'shell rather than more of that pane, and issue #246 the 14th -- the configuration ' +
-      'menu, its own layer for the same reason').toBe(14);
+      'menu, its own layer for the same reason, and issue #730 the 15th -- the gallery ' +
+      'workbench, its own layer for the same reason').toBe(15);
     for (const c of containers) {
       const ref = c.getAttribute('aria-labelledby');
       expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();

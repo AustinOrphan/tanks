@@ -1,0 +1,11 @@
+{
+  "id": "gallery-link-opens-outside-developer-mode",
+  "file": "src/game/hud.ts",
+  "find": "      if (!developerMode || !opts.galleryWorkbench) return false;",
+  "replace": "      if (!opts.galleryWorkbench) return false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.gallery.test.ts"
+  ],
+  "why": "The boot open is a developer pane. Without the developer-mode guard, a `?gallery=` link would open it on a player's page."
+}

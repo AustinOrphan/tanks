@@ -1,0 +1,11 @@
+{
+  "id": "gallery-link-past-the-last-frame-unreported",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "  if (handle.frame !== selection.frame) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "An `age` past the subject's last frame is clamped by the handle. Without the report the link silently shows a different frame than it names."
+}

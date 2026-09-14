@@ -1,0 +1,12 @@
+{
+  "id": "gallery-body-keeps-the-renderer",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "      handle.dispose();",
+  "replace": "      void handle;",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts",
+    "src/game/route-ui.test.ts"
+  ],
+  "why": "Closing the workbench must dispose its scene handle. Otherwise the WebGL renderer and its last build stay alive over a pane that is gone, once per visit."
+}
