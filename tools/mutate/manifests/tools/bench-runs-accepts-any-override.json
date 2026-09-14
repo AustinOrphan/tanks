@@ -1,0 +1,14 @@
+{
+  "id": "bench-runs-accepts-any-override",
+  "file": "tools/bench/runs.mjs",
+  "find": "    if (!/^[A-Za-z]+=[A-Za-z0-9.]+$/.test(o)) throw",
+  "replace": "    if (false) throw",
+  "expect": "killed",
+  "why": "An override that is not one flag=value passes, so an arm can smuggle extra query parameters (seed=7&bots=0) into the workload's URL and measure a different session.",
+  "tests": [
+    "tools/bench/runs.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark runner (issue #738) refuses an arm that does not start with a preset, or an override that is not flag=value"
+  ]
+}
