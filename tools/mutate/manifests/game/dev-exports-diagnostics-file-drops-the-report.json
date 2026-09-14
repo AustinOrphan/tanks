@@ -1,0 +1,16 @@
+{
+  "id": "dev-exports-diagnostics-file-drops-the-report",
+  "file": "src/game/dev-exports.ts",
+  "find": "  return { format: DIAGNOSTICS_FORMAT, schema: DIAGNOSTICS_SCHEMA, ...diagnosticsReport(input), round };",
+  "replace": "  return { format: DIAGNOSTICS_FORMAT, schema: DIAGNOSTICS_SCHEMA, round } as DiagnosticsFile;",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-exports.test.ts",
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "diagnosticsExport saves Copy Diagnostics' own record, stamped, plus the round",
+    "the exports (issue #254) Download Diagnostics saves one JSON file of the live session and round, and says so"
+  ],
+  "why": "The diagnostics file keeps its stamp and round but loses every field Copy Diagnostics prints: URL, build, session, flags, notes and unknown parameters. Issue #254 requires the file to 'match Copy Diagnostics fields', and a file without them still saves, still parses and still carries a plausible name, so nothing but a field-for-field comparison notices."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "loop-export-port-reports-tick-zero",
+  "file": "src/game/loop.ts",
+  "find": "      tick: driver.world.tick,",
+  "replace": "      tick: 0,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer exports' port (issue #254) reads the round at press time: the tick the world is on now, and the surface"
+  ],
+  "why": "Every diagnostics file names tick 0, in its name and its round, whatever tick the world is on. Issue #254 lists tick state among a file's reproduction data, and a constant is indistinguishable from a file saved at the start of a round."
+}

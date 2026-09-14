@@ -1,0 +1,15 @@
+{
+  "id": "route-host-never-registers-the-export-port",
+  "file": "src/game/route-host.ts",
+  "find": "  hud.setDevExportPort(() => live?.exports ?? null);",
+  "replace": "  void live;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: the developer-export trampoline (issue #254) registers exactly ONE getter for the life of the page, not one per session",
+    "createRouteHost: the developer-export trampoline (issue #254) answers null with no session, the port with one, and null again after detach"
+  ],
+  "why": "The host never tells the HUD where the exports read the session, so Download Replay always reports no session and Download Diagnostics always saves `round: null`, on every page. Each HUD test drives a fake port directly, so only the host's own registration test sees this."
+}

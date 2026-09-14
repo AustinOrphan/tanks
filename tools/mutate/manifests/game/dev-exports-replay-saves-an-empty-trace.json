@@ -1,0 +1,14 @@
+{
+  "id": "dev-exports-replay-saves-an-empty-trace",
+  "file": "src/game/dev-exports.ts",
+  "find": "  if (trace.ticks.length === 0) {",
+  "replace": "  if (trace.ticks.length < 0) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-exports.test.ts"
+  ],
+  "killedBy": [
+    "replayExport saves a replay only when there is one to replay saves nothing when recording is on but no tick has been simulated"
+  ],
+  "why": "Saves a well-formed trace of zero ticks when recording is on but the world has not simulated yet, which is the pane's usual state at a title screen. That is the 'misleading empty replay' issue #254 names: the file passes checkTrace and replays into an untouched world, so it reads as a recording of nothing having happened rather than as no recording."
+}
