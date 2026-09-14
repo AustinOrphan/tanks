@@ -120,6 +120,20 @@ describe('resolveSources: devices are re-resolved, never restored', () => {
     ]);
   });
 
+  it('skips a pad Tanks cannot read: the next readable pad, or none (issue #713)', () => {
+    // A mixed list, unreadable pad FIRST. Negative control: resolving against the raw
+    // connected list binds slot 1 to pad 0, which the reader samples as neutral every tick.
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'human' }];
+    expect(resolveSources(slots, [0, 1], new Set([0]))).toEqual([
+      { kind: 'keyboard' }, { kind: 'gamepad', padIndex: 1 },
+    ]);
+    // Only the unreadable pad connected: the slot has no usable device, and the Start gate
+    // names it exactly as it would a missing pad.
+    const onlyUnreadable = resolveSources(slots, [0], new Set([0]));
+    expect(onlyUnreadable).toEqual([{ kind: 'keyboard' }, { kind: 'none' }]);
+    expect(versusSetupProblem(slots, onlyUnreadable)).toEqual({ kind: 'device-missing', slot: 1 });
+  });
+
   it('gives THIS DEVICE to the first human slot even when it is not slot 0', () => {
     // A bot in slot 0 must not strand the keyboard: the device follows the first human,
     // not the index. Otherwise a player who bots slot 0 loses their own controls.

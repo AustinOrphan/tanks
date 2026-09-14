@@ -1,0 +1,15 @@
+{
+  "id": "seeding-drops-the-unreadable-verdict",
+  "file": "src/game/loop.ts",
+  "find": "  const unreadable = unreadablePadIndices(detectedPads);\n",
+  "replace": "  const unreadable = new Set<number>();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #713. `seedAssignment` stops passing the unreadable-pad verdict to either path, so a session started from campaign or from Versus Setup binds a slot to a pad Tanks cannot read, even though the Versus Setup pane (which computes its own copy) showed that slot on a readable pad or refused Start. Both seeding paths lose it together, so each path's case fails.",
+  "killedBy": [
+    "seedAssignment: the two entry paths (issue #260) VS: never binds a human slot to a pad Tanks cannot read (issue #713)",
+    "seedAssignment: the two entry paths (issue #260) campaign/dev: never binds a gamepad slot to a pad Tanks cannot read (issue #713)"
+  ]
+}

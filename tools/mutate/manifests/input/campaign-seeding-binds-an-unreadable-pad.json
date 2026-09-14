@@ -1,0 +1,14 @@
+{
+  "id": "campaign-seeding-binds-an-unreadable-pad",
+  "file": "src/input/assignment.ts",
+  "find": "    while (skipPads.has(padIndex)) padIndex++;\n",
+  "replace": "    while (false && skipPads.has(padIndex)) padIndex++;\n",
+  "expect": "killed",
+  "tests": [
+    "src/input/assignment.test.ts"
+  ],
+  "why": "Issue #713. The positional rule ignores `skipPads`, so a campaign or co-op gamepad slot is bound to the pad at its own index even when that pad is connected and unreadable. The player in that slot gets a tank that never moves, and nothing says why until they open Pause.",
+  "killedBy": [
+    "deriveInitialAssignment skips a pad Tanks cannot read, and every later gamepad slot moves past it (issue #713)"
+  ]
+}

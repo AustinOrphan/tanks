@@ -4,6 +4,7 @@ import {
   createGamepadReader,
   createGamepadInputSource,
   readDetectedPads,
+  unreadablePadIndices,
   GAMEPAD_DEADZONE,
   GAMEPAD_FIRE_BUTTON,
   GAMEPAD_MINE_BUTTON,
@@ -590,6 +591,22 @@ describe('createGamepadInputSource: padIndex (controllers 1-4, PR3)', () => {
     present = false;
     expect(src.sample().move).toEqual({ x: 0, y: 0 });
     expect(src.gamepadConnected()).toBe(false);
+  });
+});
+
+describe('unreadablePadIndices: the one verdict automatic assignment skips (issue #713)', () => {
+  it('names exactly the detected pads carrying an unsupported reason', () => {
+    // Negative controls: a filter that ignores the verdict returns every index (or none), and
+    // one that keys on position (say, "the first N pads") disagrees on this fixture, where
+    // the readable pad sits BETWEEN the two unreadable ones.
+    const reason = { code: 'unknown-mapping' as const, mapping: '', id: 'HuiJia USB GamePad' };
+    const pads = [
+      { padIndex: 0, id: 'HuiJia USB GamePad', unsupported: reason },
+      { padIndex: 1, id: 'Xbox Wireless Controller' },
+      { padIndex: 3, id: 'HuiJia USB GamePad', unsupported: reason },
+    ];
+    expect([...unreadablePadIndices(pads)].sort()).toEqual([0, 3]);
+    expect(unreadablePadIndices([]).size).toBe(0);
   });
 });
 

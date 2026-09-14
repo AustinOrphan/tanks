@@ -43,6 +43,32 @@ describe('deriveInitialAssignment', () => {
       { kind: 'bot' },
     ]);
   });
+
+  it('a bot BETWEEN gamepad slots leaves the later slot on its own index (the positional rule)', () => {
+    // Negative control: starting each gamepad slot at the pad after the previous one's,
+    // instead of at `max(i, ...)`, hands slot 2 pad 1 here.
+    expect(deriveInitialAssignment(3, new Set([1]))).toEqual<Assignment>([
+      { kind: 'keyboard' },
+      { kind: 'bot' },
+      { kind: 'gamepad', padIndex: 2 },
+    ]);
+  });
+
+  it('skips a pad Tanks cannot read, and every later gamepad slot moves past it (issue #713)', () => {
+    // Pad 1 is connected but unreadable. Slot 1 takes pad 2 instead, and slot 2 then takes
+    // pad 3 rather than sharing pad 2. Negative control: ignoring `skipPads` binds slot 1
+    // to pad 1, the pad the reader samples as neutral every tick.
+    expect(deriveInitialAssignment(3, new Set(), new Set([1]))).toEqual<Assignment>([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 2 },
+      { kind: 'gamepad', padIndex: 3 },
+    ]);
+    // An unreadable pad at an index no slot would take changes nothing.
+    expect(deriveInitialAssignment(2, new Set(), new Set([0]))).toEqual<Assignment>([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 1 },
+    ]);
+  });
 });
 
 describe('reassign: exclusivity-bounce cases', () => {

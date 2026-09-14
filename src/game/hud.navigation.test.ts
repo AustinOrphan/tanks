@@ -518,6 +518,32 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     ).toBe('Unassigned');
   });
 
+  it('skips a pad Tanks cannot read in the device column and the Start gate (issue #713)', () => {
+    // The Controllers pane marks such a pad "not supported" (#597); this pane must not bind
+    // a slot to it and then accept Start. Negative control: resolving against the raw pad
+    // list shows "HuiJia USB GamePad (index 0)" for slot 1 and leaves Start enabled in the
+    // second half.
+    const unreadable = {
+      padIndex: 0,
+      id: 'HuiJia USB GamePad',
+      unsupported: { code: 'unknown-mapping' as const, mapping: '', id: 'HuiJia USB GamePad' },
+    };
+    const { hud: h, root } = mount();
+    h.setDetectedPads([unreadable, { padIndex: 1, id: 'Pad One' }]);
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+    expect(slotDevice(root, 1).textContent, 'the next readable pad, not the first detected').toBe('Pad One (index 1)');
+    expect(startBtn(root).disabled).toBe(false);
+
+    h.setDetectedPads([unreadable]); // the readable pad unplugged; only the unreadable one left
+    expect(slotDevice(root, 1).textContent).toBe('Unassigned');
+    expect(startBtn(root).disabled, 'an unreadable pad is not a device for Start').toBe(true);
+    expect(slotReason(root, 1).textContent).toBe(
+      'Player 2 is Human but no device is free. Connect a controller, or choose Bot.',
+    );
+  });
+
   it('refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one', () => {
     // "Never accept Start with an inert required slot", plus the deliberate
     // first-problem-only choice `versusSetupProblem` makes: two simultaneous refusals

@@ -1,0 +1,14 @@
+{
+  "id": "unreadable-pad-indices-ignores-the-verdict",
+  "file": "src/input/gamepad.ts",
+  "find": "  return new Set(pads.filter((p) => p.unsupported !== undefined).map((p) => p.padIndex));\n",
+  "replace": "  return new Set<number>();\n",
+  "expect": "killed",
+  "tests": [
+    "src/input/gamepad.test.ts"
+  ],
+  "why": "Issue #713. The one verdict both automatic-assignment sites read comes back empty, so campaign seeding and the Versus Setup pane both bind a slot to a pad the reader samples as neutral every tick, and Start is not refused. The seeding and pane suites pass their own pads through this function, so they would fail too; this entry scopes the helper's own case, which is the one that names the verdict directly.",
+  "killedBy": [
+    "unreadablePadIndices: the one verdict automatic assignment skips (issue #713) names exactly the detected pads carrying an unsupported reason"
+  ]
+}

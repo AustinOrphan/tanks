@@ -1,0 +1,14 @@
+{
+  "id": "versus-resolve-binds-an-unreadable-pad",
+  "file": "src/game/versus-setup.ts",
+  "find": "  const pads = connectedPads.filter((padIndex) => !unreadablePads.has(padIndex));\n",
+  "replace": "  const pads = [...connectedPads];\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-setup.test.ts"
+  ],
+  "why": "Issue #713. `resolveSources` resolves human slots against the raw connected list, so an unreadable pad earlier in the list binds a human slot. The slot reads as ready, the reader samples it as neutral every tick, and `versusSetupProblem` does not refuse Start, because the slot is not `none`.",
+  "killedBy": [
+    "resolveSources: devices are re-resolved, never restored skips a pad Tanks cannot read: the next readable pad, or none (issue #713)"
+  ]
+}

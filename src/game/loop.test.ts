@@ -7696,12 +7696,21 @@ describe('seedAssignment: the two entry paths (issue #260)', () => {
   // back to the derived count SURVIVED the entire suite. The seam was extracted so the
   // decision could be reached at all; these are the assertions that kill that survivor.
 
+  /** Readable detected pads at these indices, as `readDetectedPads` lists them. */
+  const pads = (...indices: number[]) => indices.map((padIndex) => ({ padIndex, id: `Pad ${padIndex}` }));
+  /** A detected pad Tanks will not read (issue #597's verdict), at `padIndex`. */
+  const unreadablePad = (padIndex: number) => ({
+    padIndex,
+    id: 'HuiJia USB GamePad',
+    unsupported: { code: 'unknown-mapping' as const, mapping: '', id: 'HuiJia USB GamePad' },
+  });
+
   it('VS: takes the roles from the descriptor, at the positions the player chose', () => {
     // The discriminating fixture: a bot in slot 0, NOT at the end. `botSlotsFor` puts bots
     // in the LAST botCount slots, so with one bot it would claim slot 2 and this fails --
     // which is exactly the survivor's behaviour.
     const slots: VersusSlotSetup[] = [{ role: 'bot' }, { role: 'human' }, { role: 'human' }];
-    const out = seedAssignment(slots, 3, 1, [0]);
+    const out = seedAssignment(slots, 3, 1, pads(0));
     expect(out[0]).toEqual({ kind: 'bot' });
     expect(out[1]).toEqual({ kind: 'keyboard' });
     expect(out[2]).toEqual({ kind: 'gamepad', padIndex: 0 });
@@ -7716,14 +7725,14 @@ describe('seedAssignment: the two entry paths (issue #260)', () => {
     // Belt and braces on the precedence rule: even handed a contradictory botCount, the
     // descriptor wins. If this ever starts failing, the two sources are competing again.
     const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'human' }];
-    const out = seedAssignment(slots, 2, 2, [3]);
+    const out = seedAssignment(slots, 2, 2, pads(3));
     expect(out.some((sourceEntry) => sourceEntry.kind === 'bot')).toBe(false);
   });
 
   it('campaign/dev: keeps the historical positional rule when there is no descriptor', () => {
     // The other half: nothing validates a campaign co-op session, so it must NOT acquire
     // the VS resolution rule. Bots claim the LAST slots; pads map positionally.
-    const out = seedAssignment(undefined, 3, 1, [0, 1]);
+    const out = seedAssignment(undefined, 3, 1, pads(0, 1));
     expect(out[0]).toEqual({ kind: 'keyboard' });
     expect(out[1]).toEqual({ kind: 'gamepad', padIndex: 1 });
     expect(out[2]).toEqual({ kind: 'bot' });
@@ -7732,6 +7741,27 @@ describe('seedAssignment: the two entry paths (issue #260)', () => {
   it('campaign/dev: a zero bot count leaves every slot to hardware', () => {
     const out = seedAssignment(undefined, 2, 0, []);
     expect(out.some((sourceEntry) => sourceEntry.kind === 'bot')).toBe(false);
+  });
+
+  it('VS: never binds a human slot to a pad Tanks cannot read (issue #713)', () => {
+    // A mixed list with the unreadable pad FIRST, as a HuiJia adapter plugged in before an
+    // Xbox pad would be. Negative control: dropping the verdict at this seam binds slot 1
+    // to pad 0.
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'human' }];
+    expect(seedAssignment(slots, 2, 0, [unreadablePad(0), ...pads(1)])).toEqual([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 1 },
+    ]);
+  });
+
+  it('campaign/dev: never binds a gamepad slot to a pad Tanks cannot read (issue #713)', () => {
+    // Pad 1 is the unreadable one, at the index the positional rule would give slot 1.
+    // The same verdict moves slot 1 to pad 2. Negative control: dropping the verdict at this
+    // seam binds slot 1 to pad 1.
+    expect(seedAssignment(undefined, 2, 0, [...pads(0), unreadablePad(1), ...pads(2)])).toEqual([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 2 },
+    ]);
   });
 });
 
