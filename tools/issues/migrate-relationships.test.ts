@@ -86,8 +86,12 @@ function createFetch(
 describe('relationship migration plan', () => {
   it('keeps the reviewed repository ledger unambiguous, acyclic, and evidence-complete', () => {
     const expanded = expandRelationshipPlan(RELATIONSHIP_MIGRATION);
-    expect(expanded.parentEdges).toHaveLength(100);
+    expect(expanded.parentEdges).toHaveLength(103);
     expect(expanded.parentEdges).toEqual(expect.arrayContaining([
+      // #248's three leaves, split by its 2026-09-14 triage clarification.
+      { parent: 248, child: 729 },
+      { parent: 248, child: 730 },
+      { parent: 248, child: 731 },
       // The 2026-09-14 triage split: seven issues split out of their decision issues, each
       // declaring `Parent:` in its body and each reported by the audit as
       // `declared-parent-missing-native`.
@@ -113,8 +117,10 @@ describe('relationship migration plan', () => {
       { parent: 317, child: 429 },
       { parent: 325, child: 470 },
     ]));
-    expect(expanded.dependencyEdges).toHaveLength(156);
+    expect(expanded.dependencyEdges).toHaveLength(158);
     expect(expanded.dependencyEdges).toEqual(expect.arrayContaining([
+      { issue: 730, blocker: 729 },
+      { issue: 731, blocker: 730 },
       { issue: 243, blocker: 317 },
       { issue: 243, blocker: 318 },
       { issue: 243, blocker: 319 },
@@ -157,8 +163,13 @@ describe('relationship migration plan', () => {
     // 12 new issue numbers (#718-#724, and parents #230, #288, #418, #635 and #696; #358 and
     // #359 were already in the plan), 7 writes and 7 verification reads: initialApply
     // 656 + 7 + 12 + 7 + 7 = 689, planThenApply 689 + 159 = 848.
+    //
+    // #248's split adds 3 parent edges and 2 blocked issues (#730, #731), so 5 inspection
+    // reads (159 -> 164). It adds 3 new issue numbers (#729-#731; #248 was already a child
+    // of #238), 3 parent writes, 2 blocked-by writes and 5 verification reads: initialApply
+    // 689 + 5 + 3 + 3 + 2 + 5 = 707, planThenApply 707 + 164 = 871.
     expect({ inspectionReads, initialApply, planThenApply: inspectionReads + initialApply })
-      .toEqual({ inspectionReads: 159, initialApply: 689, planThenApply: 848 });
+      .toEqual({ inspectionReads: 164, initialApply: 707, planThenApply: 871 });
   });
 
   it('expands a reviewed plan and rejects ambiguous parents, duplicates, and cycles', () => {
