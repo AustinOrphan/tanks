@@ -115,6 +115,22 @@ after  (topbar grid row)         exit 0: 10 of 10 clearance cases pass
 
 The no-inset column passed on the old build too. The inset is what makes this discriminate.
 
+The board and chip checks were added by issue #702 and proved the same way, the current
+`verify.mjs` against a build of the first placement (`f4aedcf`, flash just under the bar at
+every size) and of the bar-row placement:
+
+```
+before (flash under the bar)   exit 1: 5 of 10 FAILED -- 844x390 and 1280x800@200% with no inset
+                                        too, flash 56-83 and 42-69 over board tops 48 and 49
+after  (landscape bar row)     exit 0: 10 of 10 pass -- landscape flash at y 6-40, above boards
+                                        starting at 48, 49 and 133
+```
+
+One of the 5 before failures (1920x1080-tv with side insets) is the safe-area check alone: the
+portrait placement's box spans the full row width, so it reaches under a side inset even where
+its centred text does not. No portrait case gets a side inset, so the after build never meets
+that shape.
+
 ## Validation
 
 The gate is proved in both directions, which is the only thing that makes it
