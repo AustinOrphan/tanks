@@ -4934,7 +4934,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     // catches a NEW overlay flag shipped defaulting to on. Adding a flag should make you
     // come here and write `false`.
     const off = boot();
-    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, arrival: null });
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null });
     off.handle.dispose();
   });
 
@@ -4942,19 +4942,19 @@ describe('startGameWith: dev flags stay off by default', () => {
     // One at a time, so a wiring that turns them all on together -- or crosses two of
     // them -- fails rather than passing on the aggregate.
     const ray = boot(makeDeps({ devFlags: { aimRay: true } }));
-    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, arrival: null });
+    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null });
     ray.handle.dispose();
 
     const reach = boot(makeDeps({ devFlags: { mineReach: true } }));
-    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, arrival: null });
+    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null });
     reach.handle.dispose();
 
     const timer = boot(makeDeps({ devFlags: { mineTimer: true } }));
-    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, arrival: null });
+    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null });
     timer.handle.dispose();
 
     const contact = boot(makeDeps({ devFlags: { aiContact: true } }));
-    expect(contact.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: true, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, arrival: null });
+    expect(contact.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: true, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null });
     contact.handle.dispose();
   });
 
@@ -4989,6 +4989,20 @@ describe('startGameWith: dev flags stay off by default', () => {
     // candidate ships as the shipped rendering until it is played and chosen.
     const off = boot();
     expect((off.rec.rendererArgs[0][4] as { identityMarker?: string | null }).identityMarker).toBeNull();
+    off.handle.dispose();
+  });
+
+  it('threads the shellTrail dev flag through to the renderer (issue #688)', () => {
+    // The experiment's whole value is being turned on and compared, so a flag that parses and
+    // reports as accepted while the renderer never hears of it would read as "the trail does
+    // not help" rather than "it never drew". The renderer builds the system only for this
+    // exact value, so the value itself is asserted, not just its presence.
+    const h = boot(makeDeps({ devFlags: { shellTrail: 'segments' } }));
+    expect((h.rec.rendererArgs[0][4] as { shellTrail?: string | null }).shellTrail).toBe('segments');
+    h.handle.dispose();
+
+    const off = boot();
+    expect((off.rec.rendererArgs[0][4] as { shellTrail?: string | null }).shellTrail).toBeNull();
     off.handle.dispose();
   });
 
