@@ -48,6 +48,17 @@
 //   delete an issue-metadata trigger              -> issue-metadata trigger assertion
 //   grant write access to the audit job           -> issue-metadata permission assertion
 //   invoke the issue tool directly in workflow    -> canonical command assertion
+//   drop pull_request_target or a PR event type   -> issue-metadata trigger assertion
+//   cron back to weekly                           -> issue-metadata trigger assertion
+//   drop pull-requests: read from reconcile       -> issue-metadata permission assertion
+//   delete the reconcile concurrency group        -> reconcile job assertion
+//   cancel-in-progress: true on reconcile         -> reconcile job assertion
+//   run reconcile on a merged PR's closed event   -> reconcile job assertion
+//   drop the `!` that negates the merged-PR clause -> reconcile job assertion
+//   `&&` -> `||` inside the merged-PR clause       -> reconcile job assertion
+//   pass a secrets.* token to reconcile           -> reconcile job assertion
+//   add ref: to any checkout                      -> pull_request_target safety assertion
+//   audit needs: [maintain] again / PR-gated audit -> audit wiring assertion
 //
 // The three `push:` spellings are there because review DEFEATED the first version of that
 // assertion, which required `push:` to be followed immediately by a newline. A trailing
@@ -91,6 +102,7 @@ const ATOMIC = {
   'audit:prod': 'node tools/audit/prod.mjs',
   'issues:audit': 'node tools/issues/run.mjs audit',
   'issues:maintain': 'node tools/issues/run.mjs event',
+  'issues:reconcile': 'node tools/issues/run.mjs reconcile',
   'issues:relationships': 'node tools/issues/migrate-relationships.mjs',
 } as const;
 
@@ -577,33 +589,83 @@ describe('canonical verification commands in workflows', () => {
 
 describe('issue backlog contract automation', () => {
   const maintain = jobBlock(ISSUE_METADATA, 'maintain');
+  const reconcile = jobBlock(ISSUE_METADATA, 'reconcile');
   const audit = jobBlock(ISSUE_METADATA, 'audit');
 
   it('loads substantive workflow and package-command inputs', () => {
     expect(ISSUE_METADATA.length).toBeGreaterThan(1000);
     expect(maintain).not.toBe('');
+    expect(reconcile).not.toBe('');
     expect(audit).not.toBe('');
     expect(SCRIPTS['issues:audit']).toBe('node tools/issues/run.mjs audit');
     expect(SCRIPTS['issues:maintain']).toBe('node tools/issues/run.mjs event');
+    expect(SCRIPTS['issues:reconcile']).toBe('node tools/issues/run.mjs reconcile');
   });
 
-  it('runs on relevant issue changes, manual dispatch, and a fallback schedule only', () => {
+  it('runs on issue and pull-request changes, manual dispatch, and a daily safety net only', () => {
     expect(ISSUE_METADATA).toMatch(/^on:\n/m);
+    // deleted and transferred free a Now slot without any label event; the rest are the
+    // original triggers.
     expect(ISSUE_METADATA).toContain(
-      'types: [opened, edited, reopened, labeled, unlabeled, closed]',
+      'types: [opened, edited, deleted, transferred, reopened, labeled, unlabeled, closed]',
     );
-    expect(ISSUE_METADATA).toContain("cron: '17 13 * * 1'");
+    // A PR opening or closing starts or ends in-flight work; edited covers a body that
+    // gains or loses a closing reference. Draft transitions are absent on purpose: a
+    // draft and a ready PR are both in flight.
+    expect(ISSUE_METADATA).toMatch(
+      /^  pull_request_target:\n    types: \[opened, reopened, edited, closed\]$/m,
+    );
+    expect(ISSUE_METADATA).not.toMatch(/^\s*pull_request:/m);
+    // Daily, not weekly: a blocked-by edge removed by hand and a Development-sidebar link
+    // fire no event, so the schedule is the only thing that picks them up.
+    expect(ISSUE_METADATA).toContain("cron: '17 13 * * *'");
     expect(ISSUE_METADATA).toMatch(/^\s*workflow_dispatch:\s*$/m);
-    expect(ISSUE_METADATA).not.toMatch(/^\s*pull_request(?:_target)?:/m);
   });
 
-  it('isolates write access to deterministic event maintenance', () => {
+  it('isolates write access to deterministic event maintenance and queue reconciliation', () => {
     expect(ISSUE_METADATA).toContain('permissions: {}');
     expect(maintain).toContain('contents: read');
     expect(maintain).toContain('issues: write');
+    expect(reconcile).toContain('contents: read');
+    expect(reconcile).toContain('issues: write');
+    expect(reconcile).toContain('pull-requests: read');
     expect(audit).toContain('contents: read');
     expect(audit).toContain('issues: read');
+    expect(audit).toContain('pull-requests: read');
     expect(audit).not.toContain('issues: write');
+    expect(ISSUE_METADATA).not.toContain('pull-requests: write');
+    expect(ISSUE_METADATA).not.toContain('contents: write');
+  });
+
+  it('reconciles the Now queue after maintenance, serialized, with the workflow token only', () => {
+    expect(reconcile).toContain('needs: [maintain]');
+    // A merged PR's queue effects all arrive through the issues.closed events GitHub fires
+    // for its linked issues; reconciling on the PR event as well only races that run's
+    // label cleanup. An unmerged close (abandoned PR) frees the issue and does run. The
+    // condition is pinned as ONE exact block: checking its clauses separately let the
+    // negating `!` be dropped -- which turns "skip merged-PR closes" into "run ONLY on
+    // merged-PR closes" -- with every clause still present.
+    expect(reconcile).toContain([
+      '    if: >-',
+      '      always() &&',
+      "      !(github.event_name == 'pull_request_target' &&",
+      "        github.event.action == 'closed' &&",
+      '        github.event.pull_request.merged == true)',
+    ].join('\n'));
+    expect(reconcile).toContain('group: issue-queue-reconcile-${{ github.repository }}');
+    expect(reconcile).toContain('cancel-in-progress: false');
+    expect(reconcile).toContain('timeout-minutes: 15');
+    expect(namedStep(reconcile, 'Reconcile the Now queue')).toContain('run: npm run issues:reconcile');
+    expect(namedStep(reconcile, 'Reconcile the Now queue')).toContain('GITHUB_TOKEN: ${{ github.token }}');
+    // Label writes made with the workflow token never start another run; a PAT's would.
+    expect(ISSUE_METADATA).not.toContain('secrets.');
+  });
+
+  it('never checks out or executes pull-request content under pull_request_target', () => {
+    expect(ISSUE_METADATA).not.toMatch(/^\s*ref:/m);
+    expect(ISSUE_METADATA).not.toContain('github.event.pull_request.head');
+    expect(ISSUE_METADATA).not.toContain('npm ci');
+    expect(ISSUE_METADATA).not.toMatch(/^\s*cache:/m);
   });
 
   it('maintains only opened, edited, reopened, and closed issue events', () => {
@@ -617,9 +679,14 @@ describe('issue backlog contract automation', () => {
     );
   });
 
-  it('always audits after the optional maintenance job through the package command', () => {
-    expect(audit).toContain('needs: [maintain]');
-    expect(audit).toContain('if: ${{ always() }}');
+  it('audits after reconciliation on every non-PR event, serialized, through the package command', () => {
+    expect(audit).toContain('needs: [reconcile]');
+    // The audit exits non-zero on any standing backlog error, and a pull_request_target run
+    // is attached to the PR's checks: gating it keeps unrelated backlog debt off every PR.
+    expect(audit).toContain("if: ${{ always() && github.event_name != 'pull_request_target' }}");
+    expect(audit).toContain('group: issue-audit-${{ github.repository }}');
+    expect(audit).toContain('cancel-in-progress: false');
+    expect(audit).toContain('timeout-minutes: 15');
     expect(namedStep(audit, 'Audit open issue metadata and relationships')).toContain(
       'run: npm run issues:audit',
     );

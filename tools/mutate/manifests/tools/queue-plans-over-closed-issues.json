@@ -1,0 +1,14 @@
+{
+  "id": "queue-plans-over-closed-issues",
+  "file": "tools/issues/queue.mjs",
+  "find": "    .filter((issue) => issue?.state !== 'closed' && issue?.pull_request === undefined)",
+  "replace": "    .filter(() => true)",
+  "expect": "killed",
+  "why": "Closed issues and pull requests enter the plan. The list endpoint is state=open so the live path rarely sees this, but the planner is a pure function others may feed, and a closed priority:now issue would then hold a slot.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "queue reconciliation planning ignores closed issues and pull requests in the input"
+  ]
+}

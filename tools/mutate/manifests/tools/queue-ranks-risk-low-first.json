@@ -1,0 +1,14 @@
+{
+  "id": "queue-ranks-risk-low-first",
+  "file": "tools/issues/queue.mjs",
+  "find": "    risk: risk === undefined ? undefined : LABEL_DIMENSIONS.risk.length - 1 - risk,",
+  "replace": "    risk,",
+  "expect": "killed",
+  "why": "LABEL_DIMENSIONS.risk runs low -> high, so the raw index ranks risk:low first -- the opposite of the owner's risk-reduction tie-break. The fixture is supplied low, medium, high so a stable sort cannot hide it.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "candidate ranking breaks remaining ties with risk high, medium, low"
+  ]
+}

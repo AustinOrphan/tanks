@@ -1,0 +1,16 @@
+{
+  "id": "audit-accepts-needs-split-in-now",
+  "file": "tools/issues/metadata.mjs",
+  "find": "  if (labels.includes('needs-split')) reasons.push('needs-split');",
+  "replace": "  // needs-split is not a Now rule",
+  "expect": "killed",
+  "why": "Same shape as the human-required entry for the other explicit exclusion: an issue still awaiting decomposition can hold a Now slot and can be promoted.",
+  "tests": [
+    "tools/issues/metadata.test.ts",
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "Now queue invariants beyond readiness and blockers rejects a Now issue that still needs splitting",
+    "promotion candidacy excludes a needs-split candidate"
+  ]
+}

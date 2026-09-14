@@ -197,9 +197,38 @@ GitHub summaries report none, except `agent-ready` and `priority:now` issues, wh
 always inspected — so the report states the inspected population beside its native-blocked
 count instead of presenting it as a backlog-wide census. Contract violations exit non-zero
 with issue-specific remediation; explicitly uncertain
-dependency or decision wording is reported as a warning. `npm run issues:maintain` is the
-workflow-only event handler that applies allowlisted area/impact choices from issue forms and
-cleans transient labels from closed issues.
+dependency or decision wording is reported as a warning. With a token the audit also reads
+every open pull request's closing references once through GraphQL, so a `priority:now` issue
+an open or draft pull request already implements is a `now-in-flight` error, a Now issue
+carrying `human-required` or `needs-split` is an error, and a queue below capacity while
+eligible `priority:next` candidates exist is a warning; the report's header states whether
+that linkage was inspected, because the anonymous path cannot read it. `npm run
+issues:maintain` is the workflow-only event handler that applies allowlisted area/impact
+choices from issue forms and cleans transient labels from closed issues.
+
+`npm run issues:reconcile [--dry-run]` refills the Now queue from `priority:next` under the
+policy in [task sizing](task-sizing.md#now-queue-automation): one state-based, idempotent
+pass that demotes in-flight Now issues, ranks eligible candidates deterministically, and
+promotes only into vacancies below `MAX_NOW_ISSUES`. It needs `GH_TOKEN`/`GITHUB_TOKEN`
+(linkage is a GraphQL read). It reads relationships only for Now items and label-shaped
+candidates, so a run costs roughly a dozen reads plus two writes per change instead of the
+audit's ninety-odd; every write is preceded by a re-read of that issue and skipped if the
+issue closed or its labels moved since the plan was computed, and additions land before
+removals so an interrupted run leaves a duplicate horizon (an audit `duplicate-priority`
+error for a person to clear; automation never strips a second horizon because that state is
+indistinguishable from a hand demotion in progress), never an issue with no horizon.
+`--dry-run` prints the plan without writing; the plan is also appended to the Actions step
+summary. A `reconcile` run that dies on the token budget shows as a failed check on any
+pull request whose event started it; the check is informational, not required, and the next
+run reconciles the same state. In the `Issue backlog contract` workflow the
+`reconcile` job runs after `maintain` on every issue event, on `pull_request_target` opened,
+reopened, edited, and unmerged closed events (never checking out or executing pull-request
+content), on manual dispatch, and on the daily schedule; it and the `audit` job each carry a
+`cancel-in-progress: false` concurrency group, so a burst of label events collapses to one
+running plus one pending run instead of a run per event, which is the pattern that
+exhausted the token's 1,000-request hourly budget and failed most of a day's audits. A
+sustained trickle of events spaced wider than a job still costs a full audit each, and the
+per-event cost is higher than before by the reconcile job's reads.
 
 `npm run issues:relationships` is the reviewed, additive migration from issue-body hierarchy
 and hard-prerequisite statements to GitHub's native parent/sub-issue and blocked-by fields. It is

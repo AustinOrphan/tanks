@@ -1,0 +1,15 @@
+{
+  "id": "queue-promotes-issues-the-audit-rejects",
+  "file": "tools/issues/queue.mjs",
+  "find": "  if (number !== null && metadataErrors.some((problem) => problemNames(problem, number))) {\n    reasons.push('metadata-errors');\n  }",
+  "replace": "  // metadata errors do not matter",
+  "expect": "killed",
+  "why": "The metadata gate is gone, so an issue the audit rejects (missing risk, a parent mismatch, a dependency cycle) enters Now. Both the unit test on the reasons and the plan-level test through auditOpenIssues fail.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "promotion candidacy excludes a candidate named by any metadata error except the queue-wide now-limit",
+    "queue reconciliation planning keeps a candidate out when the audit reports a metadata error on it"
+  ]
+}

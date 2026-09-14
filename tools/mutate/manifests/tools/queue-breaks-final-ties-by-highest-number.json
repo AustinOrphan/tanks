@@ -1,0 +1,14 @@
+{
+  "id": "queue-breaks-final-ties-by-highest-number",
+  "file": "tools/issues/queue.mjs",
+  "find": "    return a.keys.number - b.keys.number;",
+  "replace": "    return b.keys.number - a.keys.number;",
+  "expect": "killed",
+  "why": "The final tie-break prefers the newest issue instead of the oldest. Three otherwise identical candidates are supplied in three orders; the mutant returns them descending every time, so the assertion fails on all three.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "candidate ranking falls back to the lowest issue number, independent of input order"
+  ]
+}

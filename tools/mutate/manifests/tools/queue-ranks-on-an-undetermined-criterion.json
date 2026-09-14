@@ -1,0 +1,14 @@
+{
+  "id": "queue-ranks-on-an-undetermined-criterion",
+  "file": "tools/issues/queue.mjs",
+  "find": "    if (keyed.some(({ keys }) => keys[criterion] === undefined)) skipped.add(criterion);",
+  "replace": "    // criteria are never skipped",
+  "expect": "killed",
+  "why": "A criterion undetermined for one candidate is compared anyway: `undefined - 4` is NaN, the comparator returns NaN, and the order depends on the engine's sort rather than the policy. The test expects the criterion named in skippedCriteria and the risk tie-break to decide instead.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "candidate ranking skips a criterion for the whole ranking when it cannot be determined for every candidate"
+  ]
+}

@@ -58,9 +58,9 @@ Planning horizon describes when work belongs in the execution queue, not how val
 
 | Label | Use it when |
 | --- | --- |
-| `priority:now` | A bounded, unblocked leaf selected for the active queue. Keep no more than eight open Now issues. |
-| `priority:next` | Expected after the current queue or after named blockers clear. |
-| `priority:later` | Intentionally deferred. |
+| `priority:now` | A bounded, unblocked leaf selected for the active queue. Keep no more than eight open Now issues; automation refills vacancies from Next (see [Now queue automation](#now-queue-automation)). |
+| `priority:next` | Expected after the current queue or after named blockers clear. This is the pool automation refills Now from, and where an in-flight Now issue returns while its pull request is open. |
+| `priority:later` | Intentionally deferred. Automation never promotes from Later. |
 
 Only an `agent-ready` `size:xs`, `size:s`, or `size:m` leaf may be `priority:now`.
 Roll-up epics stay Next or Later and are completed through their linked children.
@@ -93,6 +93,11 @@ Add `agent-ready` only when all of these are true:
 Remove `agent-ready` if a new blocker appears or the scope grows. Do not use it as a priority
 label.
 
+Add `human-required` when finishing the issue needs a person: a sign-off, a device session, a
+product decision, or work an agent must not do alone. It can sit beside `agent-ready` on an
+issue whose remaining work is mixed, but it keeps the issue out of the Now queue and out of
+automatic promotion until it is removed.
+
 Use `needs-split` for a `size:l` implementation issue or a `size:xl` proposal that does not
 yet have a complete child breakdown. Remove it once the children cover the parent outcome and
 acceptance criteria. A completed roll-up epic remains `size:xl` but is not `agent-ready`.
@@ -100,6 +105,68 @@ acceptance criteria. A completed roll-up epic remains `size:xl` but is not `agen
 When an issue closes, automation removes `agent-ready` and every `priority:*` label. Size,
 risk, area, and impact remain as durable history. Reopening does not restore priority or
 readiness; triage the issue again against its current scope and blockers.
+
+## Now queue automation
+
+`priority:now` is capacity-limited executable work and `priority:next` is the approved pool
+it refills from. The `Issue backlog contract` workflow reconciles the queue
+(`npm run issues:reconcile`, `tools/issues/queue.mjs`) from one snapshot of open-issue state,
+idempotently: running it twice against unchanged state writes nothing. The capacity is
+`MAX_NOW_ISSUES` in `tools/issues/metadata.mjs`, currently eight. Eight is a ceiling and the
+desired size when enough valid work exists; the queue stays below it rather than admit
+unsuitable work. Automation performs queue mechanics only. It never invents product
+priority, and a valid Now item is never moved because a newer candidate outranks it.
+
+**Now versus In Progress.** Now is the queue of work to pick up; an issue an open or draft
+pull request already implements is in progress, not queued. In-flight detection is exactly
+"an open pull request in this repository whose closing references name the issue" (GitHub's
+own linkage: a `Closes #N` keyword or a Development-sidebar link, fork pull requests
+included). A branch without a pull request, or a pull request that merely mentions the
+issue, is not detected; nothing is inferred from titles. When a Now issue becomes in flight,
+reconciliation removes `priority:now`, adds `priority:next` if no other `priority:*` label
+remains so the issue keeps exactly one horizon, and refills the slot. The in-flight rule
+keeps it out of Now while the pull request is open; if the pull request closes unmerged it
+is a candidate again, and if its closing reference is edited away it can be re-promoted.
+
+**Eligibility.** A Next issue may enter Now automatically only when all of these hold: it is
+an open issue, not a pull request; it carries `priority:next` and `agent-ready`; it carries
+neither `human-required` nor `needs-split`; its size is `size:xs`, `size:s`, or `size:m`; it
+has no open native blocked-by dependency; no open or draft pull request implements it; it
+has no native sub-issues; and the audit reports no metadata error against it (the heuristic
+readiness-marker warnings do not exclude). The sub-issue rule is the conservative reading of
+"a concrete leaf, not a roll-up" pending a decision on whether an XS-M issue with a sign-off
+child counts as a leaf; such issues are listed in the reconciliation summary as held, never
+promoted silently.
+
+**Ranking.** Candidates are ordered deterministically: Public Prototype 1.0 relevance first
+(membership in the milestone of that exact title); then `impact:high`, `impact:medium`,
+`impact:low`; then greater dependency leverage, the count of open issues the candidate
+natively blocks; then `risk:high`, `risk:medium`, `risk:low` as a risk-reduction tie-break;
+then `size:xs`, `size:s`, `size:m`; then the lowest issue number. A criterion that cannot
+be determined for every candidate is skipped for the whole ranking and named in the summary
+rather than guessed. Ranking chooses what enters a vacancy and nothing else.
+
+**What leaves Now.** A valid Now item stays until it closes (label cleanup), becomes in
+flight (automatic demotion), or a human moves it. A Now item that loses `agent-ready`, gains
+`human-required` or `needs-split`, is re-sized to L/XL, or acquires an open native blocker
+is an audit error that keeps its slot until a person resolves it; automation does not demote
+for those, because reconciliation runs on every label event and a human who adds
+`priority:now` and then `agent-ready` in two clicks must not have the first event bounce the
+issue back to Next. For the same reason a Now item that carries a second `priority:*` label
+is left exactly as it is: it may be an interrupted promotion or a person half way through a
+hand demotion, and the audit's `duplicate-priority` error names it either way. The audit also
+warns when Now is below capacity while eligible candidates exist. An over-full queue is
+likewise a human decision: automation promotes nothing into it and never demotes a valid
+item to make room. Because a freed slot is refilled on the next event, swap by hand by
+adding the replacement to Now first and removing the outgoing item second.
+
+**Triggers.** Reconciliation runs on every issue event the workflow receives (opened,
+edited, deleted, transferred, reopened, labeled, unlabeled, closed), on pull requests being
+opened, reopened, edited, or closed unmerged, on manual dispatch, and daily. A merged pull
+request's close is skipped because its linked issues' own closed events carry the effect. A
+blocked-by edge removed by hand or a Development-sidebar link fires no event and waits for
+the next event or the daily run. Label writes use the workflow token, whose events never
+start another run, and the plan is a fixed point, so the workflow cannot loop on itself.
 
 ## Triage workflow
 

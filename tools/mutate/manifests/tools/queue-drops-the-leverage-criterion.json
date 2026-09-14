@@ -1,0 +1,15 @@
+{
+  "id": "queue-drops-the-leverage-criterion",
+  "file": "tools/issues/queue.mjs",
+  "find": "    leverage: summary !== null && typeof summary === 'object'\n      ? -nonNegativeCount(summary.blocking)\n      : undefined,",
+  "replace": "    leverage: 0,",
+  "expect": "killed",
+  "why": "Dependency leverage becomes a constant, so an issue that unblocks five open issues no longer outranks one that unblocks none, and a payload without a summary is no longer reported as undetermined. Both tests fail: the leverage order and the criterion-skip report.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "candidate ranking prefers the candidate whose completion unblocks more open work",
+    "candidate ranking skips a criterion for the whole ranking when it cannot be determined for every candidate"
+  ]
+}

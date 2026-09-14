@@ -1,0 +1,16 @@
+{
+  "id": "audit-accepts-in-flight-now-items",
+  "file": "tools/issues/metadata.mjs",
+  "find": "  if (openLinkedPullRequests(issue).length > 0) reasons.push('in-flight');",
+  "replace": "  // linkage is not a Now rule",
+  "expect": "killed",
+  "why": "Linkage stops mattering: a Now issue whose pull request is open is not an error and a Next issue already being implemented is promoted. Now and In Progress become the same thing.",
+  "tests": [
+    "tools/issues/metadata.test.ts",
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "Now queue invariants beyond readiness and blockers rejects a Now issue that an open pull request already implements, when linkage was inspected",
+    "promotion candidacy excludes a candidate that an open or draft pull request already implements"
+  ]
+}

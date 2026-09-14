@@ -1,0 +1,14 @@
+{
+  "id": "queue-ranks-size-large-first",
+  "file": "tools/issues/queue.mjs",
+  "find": "    size: singleLabelIndex(LABEL_DIMENSIONS.size, labels),",
+  "replace": "    size: -(singleLabelIndex(LABEL_DIMENSIONS.size, labels) ?? 0),",
+  "expect": "killed",
+  "why": "Size ranks M before XS. Supplied m, s, xs so the stable sort would otherwise return the fixture untouched.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "candidate ranking then prefers smaller work: XS, S, M"
+  ]
+}

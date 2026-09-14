@@ -1,0 +1,14 @@
+{
+  "id": "queue-drops-the-impact-criterion",
+  "file": "tools/issues/queue.mjs",
+  "find": "const CRITERIA = /** @type {const} */ (['release', 'impact', 'leverage', 'risk', 'size']);",
+  "replace": "const CRITERIA = /** @type {const} */ (['release', 'leverage', 'risk', 'size']);",
+  "expect": "killed",
+  "why": "Impact leaves the criteria list. The fixture is supplied low, medium, high on purpose: Array.prototype.sort is stable, so a fixture already in expected order would come back unchanged and this would survive. Reversed, the mutant returns number order.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "candidate ranking orders impact high, medium, low"
+  ]
+}

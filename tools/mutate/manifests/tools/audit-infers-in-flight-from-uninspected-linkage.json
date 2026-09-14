@@ -1,0 +1,17 @@
+{
+  "id": "audit-infers-in-flight-from-uninspected-linkage",
+  "file": "tools/issues/metadata.mjs",
+  "find": "  if (linkage?.loaded !== true) return [];",
+  "replace": "  if (linkage === undefined) return [];",
+  "expect": "killed",
+  "why": "A linkage record marked not loaded is read anyway. Loaded is false exactly when the read never happened (the anonymous audit), so whatever stale or fixture data sits in `open` becomes an in-flight verdict. Absence of data must never be a finding.",
+  "tests": [
+    "tools/issues/metadata.test.ts",
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "Now eligibility reasons cannot report native-blocked or in-flight from data that was never loaded",
+    "Now queue invariants beyond readiness and blockers does not invent an in-flight error when linkage was not inspected",
+    "promotion candidacy cannot call a candidate in flight when pull-request linkage was not inspected"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "queue-fills-past-the-now-limit",
+  "file": "tools/issues/queue.mjs",
+  "find": "  const vacancies = Math.max(0, maxNow - retained.length);",
+  "replace": "  const vacancies = maxNow;",
+  "expect": "killed",
+  "why": "Vacancies stop subtracting the retained Now items, so a partially full queue is topped up by the whole capacity and ends over the limit. This is the one arithmetic line the owner's 'never exceed the Now limit' rule rests on; with it mutated the six-plus-twelve fixture promotes eight into six occupied slots.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "queue reconciliation planning never exceeds the Now maximum, whatever the candidate supply"
+  ]
+}

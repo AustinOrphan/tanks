@@ -1,0 +1,14 @@
+{
+  "id": "queue-warns-below-capacity-without-candidates",
+  "file": "tools/issues/queue.mjs",
+  "find": "  if (promoted.length > 0) {",
+  "replace": "  if (true) {",
+  "expect": "killed",
+  "why": "The below-capacity warning fires on every audit, including a full queue and a queue with no eligible candidate, naming nobody. A warning that is always present is one nobody reads.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "queue reconciliation planning emits no capacity warning when the queue is full or no valid candidate exists"
+  ]
+}

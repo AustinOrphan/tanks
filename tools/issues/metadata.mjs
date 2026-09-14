@@ -23,6 +23,14 @@
  *   blocking?: GhRef[],
  *   subIssues?: GhRef[],
  * }} NativeRelationships
+ *
+ * Open pull requests whose closing references name the issue -- GitHub's own linkage, the
+ * field behind the Development sidebar, so a keyword in the body and a manual link look the
+ * same here. `loaded` is false when the linkage was never read (the anonymous audit cannot:
+ * GraphQL needs a token), and every consumer treats that as "unknown", never as "none".
+ *
+ * @typedef {{ number?: number, isDraft?: boolean }} LinkedPullRequest
+ * @typedef {{ loaded?: boolean, open?: LinkedPullRequest[] }} LinkedPullRequests
  * @typedef {{
  *   number?: number,
  *   issue_number?: number,
@@ -30,8 +38,10 @@
  *   title?: string,
  *   body?: string,
  *   labels?: GhLabel[],
+ *   milestone?: { number?: number, title?: string } | null,
  *   pull_request?: unknown,
  *   nativeRelationships?: NativeRelationships,
+ *   linkedPullRequests?: LinkedPullRequests,
  *   issue_dependencies_summary?: {
  *     blocked_by?: number,
  *     total_blocked_by?: number,
@@ -90,7 +100,7 @@ const DIMENSION_PREFIXES = Object.freeze({
   priority: 'priority:',
 });
 
-const READY_SIZES = new Set(['size:xs', 'size:s', 'size:m']);
+export const READY_SIZES = new Set(['size:xs', 'size:s', 'size:m']);
 /** @type {ReadonlyArray<{ dimension: LabelDimension, heading: string }>} */
 const FORM_SELECTIONS = Object.freeze([
   { dimension: 'area', heading: 'Primary area' },
@@ -370,12 +380,39 @@ function unresolvedReadinessMarkers(issue) {
 }
 
 /** @param {GhIssue} issue @returns {GhRef[]} */
-const openNativeBlockers = (issue) => {
+export const openNativeBlockers = (issue) => {
   const relationships = issue?.nativeRelationships;
   if (relationships?.loaded !== true) return [];
   return (Array.isArray(relationships.blockedBy) ? relationships.blockedBy : [])
     .filter((blocker) => blocker?.state !== 'closed');
 };
+
+/** @param {GhIssue} issue @returns {LinkedPullRequest[]} */
+export const openLinkedPullRequests = (issue) => {
+  const linkage = issue?.linkedPullRequests;
+  if (linkage?.loaded !== true) return [];
+  return Array.isArray(linkage.open) ? linkage.open : [];
+};
+
+// The hard rules an issue must satisfy to hold a Now slot, as reason codes. The audit maps
+// them to its error codes and the queue planner reads them directly, so the two can never
+// disagree about what a valid Now item is. A rule that depends on data that was never
+// loaded (`native-blocked` needs the blocked-by edges, `in-flight` needs the pull-request
+// linkage) is silent rather than guessed, which is why the helpers above return [] for
+// `loaded !== true`.
+/** @param {GhIssue} issue @returns {string[]} */
+export function nowIneligibilityReasons(issue) {
+  const labels = issueLabelNames(issue);
+  const size = LABEL_DIMENSIONS.size.find((label) => labels.includes(label));
+  const reasons = [];
+  if (!labels.includes('agent-ready')) reasons.push('not-agent-ready');
+  if (!READY_SIZES.has(size ?? '')) reasons.push('size');
+  if (labels.includes('human-required')) reasons.push('human-required');
+  if (labels.includes('needs-split')) reasons.push('needs-split');
+  if (openNativeBlockers(issue).length > 0) reasons.push('native-blocked');
+  if (openLinkedPullRequests(issue).length > 0) reasons.push('in-flight');
+  return reasons;
+}
 
 /** @param {GhIssue} issue @returns {boolean} */
 const hasImplementationBreakdown = (issue) =>
@@ -436,11 +473,14 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
   const issues = (Array.isArray(inputIssues) ? inputIssues : [])
     .filter((issue) => issue?.state !== 'closed' && issue?.pull_request === undefined)
     .sort((a, b) => (issueNumber(a) ?? 0) - (issueNumber(b) ?? 0));
+  /** @type {AuditProblem[]} */
   const errors = [];
+  /** @type {AuditProblem[]} */
   const warnings = [];
   const nowIssues = [];
   let blockedCount = 0;
   let blockerInspectedCount = 0;
+  let pullRequestInspectedCount = 0;
 
   for (const issue of issues) {
     const labels = issueLabelNames(issue);
@@ -483,6 +523,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
     const agentReady = labels.includes('agent-ready');
     const nativeBlockers = openNativeBlockers(issue);
     if (issue?.nativeRelationships?.blockersLoaded === true) blockerInspectedCount += 1;
+    if (issue?.linkedPullRequests?.loaded === true) pullRequestInspectedCount += 1;
     if (nativeBlockers.length > 0) blockedCount += 1;
 
     if (issue?.nativeRelationships?.loaded === true) {
@@ -556,7 +597,10 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
 
     if (priority === 'priority:now') {
       nowIssues.push(issue);
-      if (!agentReady || !READY_SIZES.has(size ?? '')) {
+      // One reason code per hard rule, from the same predicate the queue planner uses. The
+      // first two codes predate the planner and keep their names and order.
+      const reasons = nowIneligibilityReasons(issue);
+      if (reasons.includes('not-agent-ready') || reasons.includes('size')) {
         errors.push(issueProblem(
           issue,
           'invalid-now-item',
@@ -564,12 +608,39 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
           'Move it to priority:next/later, or finish triage and decomposition before returning it to Now.',
         ));
       }
-      if (nativeBlockers.length > 0) {
+      if (reasons.includes('native-blocked')) {
         errors.push(issueProblem(
           issue,
           'now-native-blocked',
           `is in Now while blocked by open ${nativeBlockers.map((blocker) => `#${blocker.number}`).join(', ')}`,
           'Move the issue out of Now until its native blockers are complete, or correct stale blocker edges.',
+        ));
+      }
+      if (reasons.includes('human-required')) {
+        errors.push(issueProblem(
+          issue,
+          'now-human-required',
+          'is in Now while human-required',
+          'Move it to priority:next until the human work is done, or remove human-required if the issue is agent work.',
+        ));
+      }
+      if (reasons.includes('needs-split')) {
+        errors.push(issueProblem(
+          issue,
+          'now-needs-split',
+          'is in Now while it still needs splitting',
+          'Split it into bounded child issues and move the parent to priority:next/later.',
+        ));
+      }
+      if (reasons.includes('in-flight')) {
+        const pulls = openLinkedPullRequests(issue)
+          .map((pull) => `#${pull.number}${pull.isDraft ? ' (draft)' : ''}`)
+          .join(', ');
+        errors.push(issueProblem(
+          issue,
+          'now-in-flight',
+          `is in Now while open pull request ${pulls} already implements it; Now and In Progress are distinct`,
+          'Move it to priority:next; the queue reconciliation does this automatically when it has write access.',
         ));
       }
     }
@@ -610,6 +681,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
     nowCount: nowIssues.length,
     blockedCount,
     blockerInspectedCount,
+    pullRequestInspectedCount,
     maxNow,
     errors,
     warnings,
@@ -637,6 +709,10 @@ export function renderAuditReport(result) {
     `Native-blocked open issues: ${result.blockedCount ?? 0} of `
       + `${result.blockerInspectedCount ?? 0} inspected for native blockers `
       + `(${result.issueCount} audited).`,
+    (result.pullRequestInspectedCount ?? 0) > 0
+      ? `Linked pull requests: inspected for ${result.pullRequestInspectedCount} of `
+        + `${result.issueCount} audited issues.`
+      : 'Linked pull requests: not inspected (no token); in-flight work cannot be detected.',
     '',
   ];
 

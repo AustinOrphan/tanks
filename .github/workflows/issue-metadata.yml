@@ -2,13 +2,25 @@ name: Issue backlog contract
 
 on:
   issues:
-    types: [opened, edited, reopened, labeled, unlabeled, closed]
+    # deleted and transferred free a Now slot without any label event.
+    types: [opened, edited, deleted, transferred, reopened, labeled, unlabeled, closed]
+  # A pull request opening or closing starts or ends in-flight work; edited covers a body
+  # that gains or loses a closing reference. Draft transitions are absent on purpose: a
+  # draft and a ready pull request are both in flight. pull_request_target runs this
+  # file from the base branch with a write token and NEVER checks out or executes the
+  # pull request's own content: no checkout ref, no dependency install, and no
+  # PR-controlled input reaches a shell; the reconciliation reads everything it needs
+  # back from the API.
+  pull_request_target:
+    types: [opened, reopened, edited, closed]
   schedule:
-    - cron: '17 13 * * 1'
+    # Daily safety net: a blocked-by edge removed by hand and a Development-sidebar link
+    # fire no event, so the schedule is what picks those up.
+    - cron: '17 13 * * *'
   workflow_dispatch:
 
-# Deny everything by default. Only the event-maintenance job can mutate labels; the
-# recurring/manual audit is read-only.
+# Deny everything by default. Only the event-maintenance and queue-reconciliation jobs can
+# mutate labels; the recurring/manual audit is read-only.
 permissions: {}
 
 jobs:
@@ -38,16 +50,66 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+  reconcile:
+    name: reconcile the Now queue
+    needs: [maintain]
+    # Runs after maintenance whether or not it ran, on every event except a MERGED pull
+    # request's close: that merge's queue effects all arrive through the issues.closed
+    # events GitHub fires for its linked issues, and reconciling here as well would only
+    # race that run's label cleanup. An unmerged close (an abandoned PR) frees its issue
+    # and does run.
+    if: >-
+      always() &&
+      !(github.event_name == 'pull_request_target' &&
+        github.event.action == 'closed' &&
+        github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # One reconciliation at a time, and a burst of events collapses to one running plus
+    # one pending run: two runs reading the same vacancy would both fill it. The pending
+    # run always reconciles the latest state, so a superseded (cancelled) one loses
+    # nothing.
+    concurrency:
+      group: issue-queue-reconcile-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      # State-based and idempotent: lists open issues, reads native blockers for Now
+      # items and candidates, reads open pull requests' closing references, demotes
+      # in-flight Now items, and promotes ranked priority:next candidates into the
+      # vacancies. Label writes use the workflow token, whose events never start another
+      # run, so the workflow cannot re-trigger itself.
+      - name: Reconcile the Now queue
+        run: npm run issues:reconcile
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   audit:
     name: audit issue metadata and relationships
-    needs: [maintain]
-    # A skipped maintenance job is normal for schedule, dispatch, labeled, and unlabeled.
-    # Audit anyway, and also report the backlog if maintenance itself failed.
-    if: ${{ always() }}
+    needs: [reconcile]
+    # A skipped or superseded reconciliation is normal; audit anyway, and also report the
+    # backlog if reconciliation itself failed. Not on pull_request_target: that run is
+    # attached to the pull request's checks, and this audit exits non-zero on any
+    # standing backlog error, which would paint unrelated backlog debt on every PR.
+    if: ${{ always() && github.event_name != 'pull_request_target' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: issue-audit-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
 
@@ -56,10 +118,11 @@ jobs:
           node-version: '24'
 
       # The same read-only token loads native parents, sub-issues, and blocked-by
-      # edges when the issue summaries say they are relevant. The relationship
-      # checks assume the one-time native relationship migration has already been
-      # applied; against an unpopulated graph they correctly report every mirrored
-      # parent as missing.
+      # edges when the issue summaries say they are relevant, plus open pull requests'
+      # closing references so an in-flight issue holding a Now slot is an error. The
+      # relationship checks assume the one-time native relationship migration has
+      # already been applied; against an unpopulated graph they correctly report every
+      # mirrored parent as missing.
       - name: Audit open issue metadata and relationships
         run: npm run issues:audit
         env:

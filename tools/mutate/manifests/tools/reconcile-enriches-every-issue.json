@@ -1,0 +1,14 @@
+{
+  "id": "reconcile-enriches-every-issue",
+  "file": "tools/issues/run.mjs",
+  "find": "  const relevant = issues.filter((issue) => {\n    const labels = issueLabelNames(issue);\n    return labels.includes('priority:now')\n      || (labels.includes('priority:next') && labels.includes('agent-ready'));\n  });",
+  "replace": "  const relevant = issues;",
+  "expect": "killed",
+  "why": "Reconciliation reads relationships for every open issue, the audit's full ninety-odd requests, on a token budget that already fails under bursts. The targeted read set is the budget contract.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "queue-relevant relationship retrieval reads relationships only for Now items and label-shaped candidates, marking the rest uninspected"
+  ]
+}

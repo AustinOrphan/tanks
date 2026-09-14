@@ -1,0 +1,14 @@
+{
+  "id": "queue-promotes-issues-with-native-sub-issues",
+  "file": "tools/issues/queue.mjs",
+  "find": "  if (nonNegativeCount(issue?.sub_issues_summary?.total) > 0) reasons.push('native-sub-issues');",
+  "replace": "  // sub-issues do not matter",
+  "expect": "killed",
+  "why": "The conservative leaf rule disappears: an XS-M issue that is a native parent is promoted as if it were a leaf. Live case #359 with its sign-off child #719. The hold is reported, and this pins that it exists at all.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "promotion candidacy holds back a candidate that has native sub-issues (leaf policy pending an owner decision)"
+  ]
+}

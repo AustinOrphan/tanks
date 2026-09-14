@@ -1,0 +1,14 @@
+{
+  "id": "queue-demotes-every-invalid-now-item",
+  "file": "tools/issues/queue.mjs",
+  "find": "    if (reasons.some((reason) => AUTOMATIC_DEMOTION_REASONS.includes(reason))) {",
+  "replace": "    if (reasons.length > 0) {",
+  "expect": "killed",
+  "why": "Automation demotes for every ineligibility reason, not only the in-flight one it owns. That is the two-click race: a human adds priority:now, the label event's reconciliation sees no agent-ready yet and bounces the issue to Next, then the human adds agent-ready. The fixture's five human-placed invalid items must stay retained and listed as invalid.",
+  "tests": [
+    "tools/issues/queue.test.ts"
+  ],
+  "killedBy": [
+    "queue reconciliation planning only demotes for the reasons automation owns; other invalid Now items hold their slot for a human"
+  ]
+}
