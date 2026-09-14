@@ -55,12 +55,12 @@ the stock PR -- also struck below, same idiom.
    shown in the pane (reusing the Controllers panel's row renderer) but do NOT carry
    through Start: the rows edit only the running session's assignment, which Start
    disposes, so a pane-chosen Bot slot never reaches the next match, and the pane offers
-   no Bot option at all before any versus session has run -- open as issue #260 (#228
-   AC2), not shipped by this PR. This PR is "Part of #228" (the tracking issue for
-   shipping versus to a real player), not a close of it: the assignment/bot-fill gap
-   above (issue #260, AC2); Quit landing on the versus-kind title instead of the pane,
+   no Bot option at all before any versus session has run -- ~~open as issue #260 (#228
+   AC2), not shipped by this PR~~. This PR is "Part of #228" (the tracking issue for
+   shipping versus to a real player), not a close of it: ~~the assignment/bot-fill gap
+   above (issue #260, AC2)~~; ~~Quit landing on the versus-kind title instead of the pane,
    plus every reboot (including every rematch) showing a second "press any key" splash
-   before play (issue #261, AC5); ~~per-slot bot difficulty~~; ~~a match-rules table for
+   before play (issue #261, AC5)~~; ~~per-slot bot difficulty~~; ~~a match-rules table for
    sim-enforced shell/mine caps~~; invalid-combination explanations; pad/touch
    keyboard-navigation validation of the pane; and the persistence ruling (session-only
    vs. `localStorage`) remain open there. **Two of those have since closed, struck above
