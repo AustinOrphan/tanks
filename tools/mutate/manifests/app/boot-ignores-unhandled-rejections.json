@@ -2,7 +2,7 @@
   "id": "boot-ignores-unhandled-rejections",
   "file": "src/boot.ts",
   "find": "    deps.host.addEventListener('unhandledrejection', onRejection);\n",
-  "replace": "",
+  "replace": "    void onRejection;\n",
   "why": "Issue #690 names both uncaught paths. An async failure during a match -- a rejected audio or asset promise -- reaches the page as an `unhandledrejection`, not an `error`, and without this listener it is invisible to the player exactly as an uncaught throw was before the fix.",
   "tests": [
     "src/boot.test.ts"

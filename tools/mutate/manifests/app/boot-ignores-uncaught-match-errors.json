@@ -2,7 +2,7 @@
   "id": "boot-ignores-uncaught-match-errors",
   "file": "src/boot.ts",
   "find": "    deps.host.addEventListener('error', onError);\n",
-  "replace": "",
+  "replace": "    void onError;\n",
   "why": "Issue #690: nothing routed a throw during a running match to the player. Without the page's `error` listener a throw from input sampling, a sim step or a render escapes the frame to the window and nothing is shown -- the driver stops its loop, so the last pose simply freezes under a Main Menu-less screen. The exactly-once and already-handled cases still pass through the `unhandledrejection` half, so only the cases that dispatch an `error` or read its registration can see this.",
   "tests": [
     "src/boot.test.ts"
