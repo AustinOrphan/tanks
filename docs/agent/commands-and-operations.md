@@ -216,7 +216,7 @@ it refuses to start if the target file is already dirty. `--scene game --slowmo 
 to catch a sub-second moment (a shell leaving the muzzle) that a still would miss.
 `--spawn-anim <warp|rise|beacon>` dresses the entrance variant a spawn/respawn plays,
 through the same `setPlayerStyle` call `--skin`/`--hull`/`--accent` use. `--scene
-<moment>` swaps the posed gallery for one of `tools/gallery/moments.ts`'s scripted
+<moment>` swaps the posed gallery for one of `src/render/gallery/moments.ts`'s scripted
 timelines (`fire`, `destroyed`, `respawn`, `ricochet`, `wall-break`, `mine-cycle`,
 `drive`, `pivot`, `traverse`, `trail-stop`, `trail-cross`, `trail-skins`, `ai-tracking`) — a moment is
 deterministic and scripted end to end, so its frame count comes from the moment itself;

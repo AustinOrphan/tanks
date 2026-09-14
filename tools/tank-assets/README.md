@@ -65,7 +65,7 @@ npm run gallery -- --elements tank --view quarter
 ```
 
 `top`, `headon`, `behind`, `game`, `low` and `close` predate this work; `side`, `quarter`
-and `quarter-rear` were added for it (`tools/gallery/subjects.ts`, `VIEWS`).
+and `quarter-rear` were added for it (`src/render/gallery/subjects.ts`, `VIEWS`).
 
 ## Known gaps
 

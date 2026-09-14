@@ -104,7 +104,7 @@ the idle search sweep. It is the only recipe shot from the `top` view rather tha
 camera, because its whole content is where a turret points relative to a target it cannot
 see and the game camera's oblique angle foreshortens exactly that bearing. It is evidence
 for a judgement, not a measurement; what is measurable about the moment is pinned in
-`tools/gallery/moments.test.ts`.
+`src/render/gallery/moments.test.ts`.
 
 At least two recipes per media kind, on different scenarios, is deliberate rather than a
 coincidence of what was needed first: with one of each, "the still path works" and "this one

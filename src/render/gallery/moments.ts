@@ -1,9 +1,9 @@
-import { createWorld, step, stepInputs } from '../../src/sim/world';
-import type { World } from '../../src/sim/world';
-import type { SimEvent } from '../../src/sim/events';
-import type { ArenaGeometry, InputState, Wall } from '../../src/sim/types';
-import { bulletConfig, RESPAWN_DELAY_TICKS } from '../../src/sim/constants';
-import { configFor } from '../../src/sim/config/roster';
+import { createWorld, step, stepInputs } from '../../sim/world';
+import type { World } from '../../sim/world';
+import type { SimEvent } from '../../sim/events';
+import type { ArenaGeometry, InputState, Wall } from '../../sim/types';
+import { bulletConfig, RESPAWN_DELAY_TICKS } from '../../sim/constants';
+import { configFor } from '../../sim/config/roster';
 
 const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
 

@@ -26,9 +26,9 @@ import { createMusicBed } from '../../src/audio/music';
 import { trackById } from '../../src/audio/music-data';
 import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createTankPreview } from '../../src/render/preview';
-import { buildGallery, type GalleryOptions } from '../gallery/subjects';
-import { buildMomentScene } from '../gallery/moment-scene';
-import { MOMENTS } from '../gallery/moments';
+import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subjects';
+import { buildMomentScene } from '../../src/render/gallery/moment-scene';
+import { MOMENTS } from '../../src/render/gallery/moments';
 import { QUALITY_PRESETS, type MuzzleSmokeQuality, type RenderQuality } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
@@ -1267,7 +1267,7 @@ check('a disposed preview stops listening to the canvas it no longer owns', () =
 });
 
 // ---------------------------------------------------------------------------
-// tools/gallery/subjects.ts: that the gallery can show a SKIN, and an animated one.
+// src/render/gallery/subjects.ts: that the gallery can show a SKIN, and an animated one.
 //
 // Here rather than in vitest for the usual reason -- `buildGallery` constructs a
 // WebGLRenderer -- and worth having at all because the gallery is what every future
@@ -2200,7 +2200,7 @@ function recoilFrame(
   frames: number,
 ): Uint8Array {
   const real = Math.random;
-  // mulberry32 on a fixed seed -- the same generator tools/gallery/moment-scene.ts uses
+  // mulberry32 on a fixed seed -- the same generator src/render/gallery/moment-scene.ts uses
   // for the same reason, kept local rather than imported because harness.ts runs in the
   // browser against src/ only.
   let a = 0x9e3779b9;

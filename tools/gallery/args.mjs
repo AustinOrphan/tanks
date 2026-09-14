@@ -142,7 +142,7 @@ export const SPAWN_ANIM_IDS = ['warp', 'rise', 'beacon'];
 
 /**
  * The scripted moment timelines `--scene` accepts beyond `'gallery'` and `'game'`,
- * duplicated from `tools/gallery/moments.ts`'s `MOMENTS` for the same reason
+ * duplicated from `src/render/gallery/moments.ts`'s `MOMENTS` for the same reason
  * SKIN_IDS/SPAWN_ANIM_IDS are: this file is loaded by node with no build step and
  * cannot import the TS moment definitions.
  *

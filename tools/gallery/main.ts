@@ -1,6 +1,6 @@
-import { buildGallery } from './subjects';
-import { buildMomentScene } from './moment-scene';
-import { MOMENTS } from './moments';
+import { buildGallery } from '../../src/render/gallery/subjects';
+import { buildMomentScene } from '../../src/render/gallery/moment-scene';
+import { MOMENTS } from '../../src/render/gallery/moments';
 import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
 import { DEFAULT_SPAWN_ANIM } from '../../src/presentation/customization';
 

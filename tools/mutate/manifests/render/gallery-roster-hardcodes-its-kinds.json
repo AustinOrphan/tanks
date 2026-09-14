@@ -1,11 +1,11 @@
 {
   "id": "gallery-roster-hardcodes-its-kinds",
-  "file": "tools/gallery/subjects.ts",
+  "file": "src/render/gallery/subjects.ts",
   "find": "export const ENEMY_KINDS = TANK_KINDS.filter((k) => k !== 'player');",
   "replace": "export const ENEMY_KINDS = ['brown', 'grey', 'teal', 'olive', 'green'] as const;",
   "expect": "killed",
   "tests": [
-    "tools/gallery/subjects.test.ts"
+    "src/render/gallery/subjects.test.ts"
   ],
   "why": "The derivation replaced by the list an author would write from memory -- and the omission is the real one: `yellow` is a full entry in tank-defs.json with its own arena letter that is placed in NO shipped arena, so nobody who learned the roster by playing would think to include it. The capture then looks complete, shows five kinds, and is used to decide a grammar that has to cover six.",
   "killedBy": [
