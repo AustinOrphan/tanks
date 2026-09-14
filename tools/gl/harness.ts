@@ -29,7 +29,7 @@ import { createTankPreview } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subjects';
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
 import { MOMENTS } from '../../src/render/gallery/moments';
-import { createWorkbenchScene, type WorkbenchSceneOptions } from '../../src/render/gallery/workbench-scene';
+import { createWorkbench, type WorkbenchSceneOptions } from '../../src/render/gallery/workbench-scene';
 import { QUALITY_PRESETS, type MuzzleSmokeQuality, type RenderQuality } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
@@ -1407,8 +1407,8 @@ check('a workbench frame reached by scrubbing back draws the same pixels as one 
   // under a burst that has not happened yet, or has already decayed.
   const a = galleryCanvas();
   const b = galleryCanvas();
-  const direct = createWorkbenchScene(a, a.width, a.height, workbenchOpts({}));
-  const scrubbed = createWorkbenchScene(b, b.width, b.height, workbenchOpts({}));
+  const direct = createWorkbench(a, a.width, a.height, workbenchOpts({}));
+  const scrubbed = createWorkbench(b, b.width, b.height, workbenchOpts({}));
   const near = 24;
   const far = direct.frames - 1;
   direct.seek(near);
@@ -1435,8 +1435,12 @@ check('repeated workbench scene changes on the SAME canvas keep drawing and grow
   // The pane holds one canvas; every selector change and every backward scrub disposes a
   // build and makes another on it. Counted at the context, by wrapping its create/delete
   // calls, so what is measured is what the GPU driver was actually asked to hold.
+  //
+  // This failed as first written, when each build made and disposed its own renderer: 13,
+  // 62, 111 live objects after the three passes -- 24 buffers, 5 programs and 20 textures a
+  // pass. That is why the handle owns one renderer and the builders take it.
   const c = galleryCanvas();
-  let scene = createWorkbenchScene(c, c.width, c.height, workbenchOpts({}));
+  const bench = createWorkbench(c, c.width, c.height, workbenchOpts({}));
   const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as unknown as Record<string, unknown>;
   const kinds = ['Buffer', 'Texture', 'Framebuffer', 'Renderbuffer', 'Program', 'Shader', 'VertexArray'];
   let live = 0;
@@ -1464,16 +1468,15 @@ check('repeated workbench scene changes on the SAME canvas keep drawing and grow
   let failure: string | null = null;
   try {
     for (let cycle = 0; cycle < 9; cycle++) {
-      scene.dispose();
-      scene = createWorkbenchScene(c, c.width, c.height, workbenchOpts({ subject: subjects[cycle % 3] }));
-      scene.seek(scene.frames - 1);
-      scene.seek(0);
+      bench.show(workbenchOpts({ subject: subjects[cycle % 3] }));
+      bench.seek(bench.frames - 1);
+      bench.seek(0);
       const centre = readPixel(gl as unknown as WebGLRenderingContext, Math.floor(c.width / 2), Math.floor(c.height / 2));
       if (centre[3] < 200) { failure = `cycle ${cycle}: centre alpha ${centre[3]} -- a dead scene on the reused canvas`; break; }
       if (cycle % 3 === 2) liveAfter.push(live);
     }
   } finally {
-    scene.dispose();
+    bench.dispose();
     for (const [name, fn] of originals) gl[name] = fn;
     c.remove();
   }

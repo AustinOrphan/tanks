@@ -1,6 +1,6 @@
 /**
- * The gallery workbench's scene handle (issue #730): one registered subject, drawn onto one
- * canvas, at a chosen frame.
+ * The gallery workbench's scene handle (issue #730): one registered subject at a time, drawn
+ * onto one canvas, at a chosen frame.
  *
  * WHY A HANDLE AND NOT THE BUILDERS DIRECTLY. `buildGallery` and `buildMomentScene` are
  * forward-only. A moment feeds each tick's events to its particle and pulse systems exactly
@@ -11,15 +11,20 @@
  *
  * So the one rule this module keeps: THE SCENE ON SCREEN IS ALWAYS A FRESH BUILD FOLLOWED BY
  * `draw(0, 0)`, `draw(1, 0)`, ..., `draw(frame, 0)`, IN ORDER. Moving forward appends draws.
- * Moving backward disposes the build and replays from zero. `planSeek` is that rule as a pure
- * function; `workbench-scene.test.ts` pins that every route to a frame leaves the same draw
- * history, and `tools/gl/harness.ts` pins that it leaves the same pixels.
+ * Moving backward, or choosing another subject, disposes the build and starts again from zero.
+ * `planSeek` is that rule as a pure function; `workbench-scene.test.ts` pins that every route
+ * to a frame leaves the same draw history, and `tools/gl/harness.ts` pins that it leaves the
+ * same pixels.
  *
- * ONE CANVAS FOR THE PANE'S LIFETIME. A rebuild constructs a new `WebGLRenderer` on the SAME
- * canvas after the old one is disposed, without `forceContextLoss()` -- the path
- * `render/preview.ts` measured: a force-lost context does not come back on the same element,
- * and a plain dispose leaves the context live for the next renderer to reuse.
+ * ONE RENDERER PER HANDLE, SHARED BY EVERY BUILD. A build that makes and disposes its own
+ * `WebGLRenderer` leaves behind what the renderer does not own -- compiled programs, and
+ * textures that module-level caches uploaded through it. Rebuilt on one canvas at every scene
+ * change, that grew live GL objects on every change (measured in tools/gl/harness.ts before
+ * this handle took the renderer over). The renderer is disposed with the handle, without
+ * `forceContextLoss()`: the pane keeps one canvas, and `render/preview.ts` measured that a
+ * force-lost context does not come back on the same element.
  */
+import * as THREE from 'three';
 import { buildGallery, ELEMENTS, VIEWS } from './subjects';
 import { buildMomentScene } from './moment-scene';
 import { MOMENTS } from './moments';
@@ -83,6 +88,7 @@ export type SceneBuilder = (
   w: number,
   h: number,
   opts: WorkbenchSceneOptions,
+  renderer: THREE.WebGLRenderer,
 ) => BuiltScene;
 
 /**
@@ -92,7 +98,7 @@ export type SceneBuilder = (
  * player tank only when something is being styled, so passing the default would draw a
  * different tank than the capture of the same selection.
  */
-export const buildWorkbenchSubject: SceneBuilder = (canvas, w, h, opts) =>
+export const buildWorkbenchSubject: SceneBuilder = (canvas, w, h, opts, renderer) =>
   opts.subject.kind === 'moment'
     ? buildMomentScene(canvas, w, h, {
         moment: opts.subject.id,
@@ -102,6 +108,7 @@ export const buildWorkbenchSubject: SceneBuilder = (canvas, w, h, opts) =>
         accent: opts.accent,
         spawnAnim: opts.spawnAnim,
         mineWarn: opts.mineWarn,
+        renderer,
       })
     : buildGallery(canvas, w, h, {
         elements: [opts.subject.id],
@@ -115,7 +122,13 @@ export const buildWorkbenchSubject: SceneBuilder = (canvas, w, h, opts) =>
         spawnAnim: opts.spawnAnim === DEFAULT_SPAWN_ANIM ? undefined : opts.spawnAnim,
         frames: null,
         mineWarn: opts.mineWarn,
+        renderer,
       });
+
+/** The same construction both builders use when they own their renderer. */
+export function createWorkbenchRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
+  return new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+}
 
 export interface SeekPlan {
   /** Dispose the current build and start a new one before drawing. */
@@ -141,31 +154,41 @@ function ages(from: number, to: number): number[] {
   return out;
 }
 
-export interface WorkbenchScene {
-  /** Frames on the subject's timeline; 1 for a static posed element. */
+export interface Workbench {
+  /** Frames on the shown subject's timeline; 1 for a static posed element. */
   readonly frames: number;
   /** The frame on screen. */
   readonly frame: number;
+  /** Replace the shown subject and draw its first frame. Does nothing after `dispose`. */
+  show(opts: WorkbenchSceneOptions): void;
   /** Draw `frame`, clamped to `[0, frames)` and floored. Does nothing after `dispose`. */
   seek(frame: number): void;
-  /** Releases the live build. Safe to call twice. */
+  /** Releases the live build, then the renderer. Safe to call twice. */
   dispose(): void;
 }
 
+export interface WorkbenchDeps {
+  readonly build?: SceneBuilder;
+  readonly createRenderer?: (canvas: HTMLCanvasElement) => THREE.WebGLRenderer;
+}
+
 /**
- * Build `opts.subject` on `canvas` and draw its first frame.
+ * Build `initial.subject` on `canvas` and draw its first frame.
  *
- * @param build injectable for the node tests; production passes nothing.
+ * @param deps injectable for the node tests; production passes nothing.
  */
-export function createWorkbenchScene(
+export function createWorkbench(
   canvas: HTMLCanvasElement,
   w: number,
   h: number,
-  opts: WorkbenchSceneOptions,
-  build: SceneBuilder = buildWorkbenchSubject,
-): WorkbenchScene {
-  let live = build(canvas, w, h, opts);
-  const frames = Math.max(1, live.frames);
+  initial: WorkbenchSceneOptions,
+  deps: WorkbenchDeps = {},
+): Workbench {
+  const build = deps.build ?? buildWorkbenchSubject;
+  const renderer = (deps.createRenderer ?? createWorkbenchRenderer)(canvas);
+  let opts = initial;
+  let live = build(canvas, w, h, opts, renderer);
+  let frames = Math.max(1, live.frames);
   let drawn: number | null = null;
   let disposed = false;
 
@@ -176,7 +199,7 @@ export function createWorkbenchScene(
     const plan = planSeek(drawn, target);
     if (plan.rebuild) {
       live.dispose();
-      live = build(canvas, w, h, opts);
+      live = build(canvas, w, h, opts, renderer);
     }
     for (const age of plan.draws) live.draw(age, 0);
     drawn = target;
@@ -184,15 +207,27 @@ export function createWorkbenchScene(
 
   seek(0);
   return {
-    frames,
+    get frames(): number {
+      return frames;
+    },
     get frame(): number {
       return drawn ?? 0;
+    },
+    show(next: WorkbenchSceneOptions): void {
+      if (disposed) return;
+      live.dispose();
+      opts = next;
+      live = build(canvas, w, h, opts, renderer);
+      frames = Math.max(1, live.frames);
+      drawn = null;
+      seek(0);
     },
     seek,
     dispose(): void {
       if (disposed) return;
       disposed = true;
       live.dispose();
+      renderer.dispose();
     },
   };
 }

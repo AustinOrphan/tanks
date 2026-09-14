@@ -101,6 +101,11 @@ export interface MomentSceneOptions {
    * PARTICLES in it, so it is where the calmed burst is photographable at all.
    */
   motion?: 'full' | 'reduced';
+  /**
+   * A renderer the CALLER owns, drawn with and left alive by `dispose` (issue #730); absent
+   * builds and disposes its own. The reason is on `GalleryOptions.renderer` in subjects.ts.
+   */
+  renderer?: THREE.WebGLRenderer;
 }
 
 export interface MomentProducerReport {
@@ -239,7 +244,7 @@ export function buildMomentScene(
   const barrelRecoil = createBarrelRecoilSystem(views);
   const muzzleSmoke = createMuzzleSmokeSystem(scene);
   const blockedFirePips = cue === 'pips' ? createBlockedFirePipsSystem(scene) : null;
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  const renderer = opts.renderer ?? new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
 
   const v = VIEWS[opts.view] ?? VIEWS.game;
@@ -335,7 +340,9 @@ export function buildMomentScene(
     barrelRecoil.dispose();
     muzzleSmoke.dispose();
     blockedFirePips?.dispose();
-    renderer.dispose();
+    ground.geometry.dispose();
+    ground.material.dispose();
+    if (!opts.renderer) renderer.dispose();
   }
 
   // `def.ticks` -- NOT `tl.worlds.length` (one longer). The runner loops `age` in
