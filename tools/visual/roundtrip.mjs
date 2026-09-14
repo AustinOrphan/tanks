@@ -28,13 +28,11 @@
  *
  * Usage: node tools/visual/roundtrip.mjs <dist-dir> [--cycles N]
  */
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
-import { createRequire } from 'node:module';
+import { join, resolve } from 'node:path';
 
-import { resolveRequestPath } from './serve-path.mjs';
+import { loadChromium } from '../shared/playwright.mjs';
+import { serveStatic } from './static-server.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 
 const TYPES = {
@@ -47,40 +45,7 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json',
 };
 
-async function loadChromium() {
-  const require = createRequire(import.meta.url);
-  const candidates = [process.env.PLAYWRIGHT_MODULE, 'playwright'].filter(Boolean);
-  for (const c of candidates) {
-    try {
-      return (await import(c.startsWith('/') ? `${c}/index.mjs` : c)).chromium;
-    } catch {
-      try {
-        return require(c).chromium;
-      } catch {
-        /* try the next candidate */
-      }
-    }
-  }
-  throw new Error('playwright not resolvable; set PLAYWRIGHT_MODULE');
-}
-
-function serve(dist) {
-  const server = createServer(async (req, res) => {
-    const file = resolveRequestPath(dist, req.url);
-    if (file === null) {
-      res.writeHead(400).end('bad request');
-      return;
-    }
-    try {
-      const body = await readFile(file);
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-      res.end(body);
-    } catch {
-      res.writeHead(404).end('not found');
-    }
-  });
-  return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
-}
+const serve = (dist) => serveStatic(dist, TYPES);
 
 /**
  * What the document is holding right now.

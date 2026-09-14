@@ -16,47 +16,14 @@
  * Usage:
  *   node tools/visual/verify.mjs <dist-dir> [--label NAME] [--out DIR]
  */
-import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 import { clearanceFailures, insetLabel } from './clearance.mjs';
+import { loadChromium } from '../shared/playwright.mjs';
+import { serveStatic } from './static-server.mjs';
 
-/**
- * Playwright is NOT a dependency of this repo: the package downloads browsers
- * on install, which would slow every CI run for a tool that is not wired into
- * CI. Resolve it from the environment instead, in order of preference.
- *
- * Two candidates, and there used to be a third: an absolute path into one agent
- * session's scratch directory on one machine. That session is long gone and the
- * directory with it -- verified absent, and that host no longer even uses the id format
- * the path was built from -- so the entry could never resolve. Not restated literally
- * here, because a dead machine-specific path is the thing being removed. It
- * was harmless only because it sat third: CI installs playwright with `--no-save` and
- * hits the bare specifier, and a local override has `PLAYWRIGHT_MODULE`. Removed rather
- * than refreshed, because the machine it pointed at is not a location this repo can
- * depend on; point `PLAYWRIGHT_MODULE` at a checkout instead.
- */
-async function loadChromium() {
-  const candidates = [
-    process.env.PLAYWRIGHT_MODULE,
-    'playwright',
-  ].filter(Boolean);
-  const tried = [];
-  for (const spec of candidates) {
-    try {
-      const mod = await import(spec);
-      if (mod.chromium) return mod.chromium;
-      tried.push(`${spec}: no chromium export`);
-    } catch (e) {
-      tried.push(`${spec}: ${e.code ?? e.message}`);
-    }
-  }
-  throw new Error(
-    `playwright not found. Set PLAYWRIGHT_MODULE, or npm i -D playwright.\nTried:\n  ${tried.join('\n  ')}`,
-  );
-}
 
 /** scene.ts: renderer.setClearColor(0x14161c, 1) */
 export const CLEAR = { r: 0x14, g: 0x16, b: 0x1c };
@@ -246,24 +213,7 @@ const MIME = {
   '.wav': 'audio/wav',
 };
 
-function serve(root) {
-  const server = createServer(async (req, res) => {
-    const url = decodeURIComponent(req.url.split('?')[0]);
-    const path = join(root, url === '/' ? 'index.html' : url);
-    if (!path.startsWith(root) || !existsSync(path)) {
-      res.writeHead(404).end('not found');
-      return;
-    }
-    try {
-      const body = await readFile(path);
-      res.writeHead(200, { 'Content-Type': MIME[extname(path)] ?? 'application/octet-stream' });
-      res.end(body);
-    } catch {
-      res.writeHead(500).end('error');
-    }
-  });
-  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(server)));
-}
+const serve = (root) => serveStatic(root, MIME);
 
 /**
  * Decode a PNG inside the page and measure it.

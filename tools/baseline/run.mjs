@@ -43,6 +43,7 @@ import {
   waitForBeaconReport,
   waitForVite,
 } from './harness.mjs';
+import { importPlaywright } from '../shared/playwright.mjs';
 
 let opts;
 try {
@@ -58,24 +59,6 @@ const BASE = `http://localhost:${opts.port}/`;
 // browser leg makes on it. Split into two literals, the tighter one silently governed the
 // whole compute -- see the call sites in the browser loop.
 const PAGE_BUDGET_MS = 180_000;
-
-async function loadPlaywright() {
-  const tried = [];
-  for (const spec of [
-    process.env.PLAYWRIGHT_MODULE,
-    'playwright',
-    '/home/dev/.claude/jobs/17681316/tmp/pw/node_modules/playwright/index.mjs',
-  ].filter(Boolean)) {
-    try {
-      const m = await import(spec);
-      if (m.chromium) return m;
-      tried.push(`${spec}: no chromium export`);
-    } catch (e) {
-      tried.push(`${spec}: ${e.code ?? e.message}`);
-    }
-  }
-  throw new Error(`playwright not found. Tried:\n  ${tried.join('\n  ')}`);
-}
 
 function findLanIPv4() {
   for (const ifaces of Object.values(networkInterfaces())) {
@@ -193,7 +176,7 @@ async function runPlaywrightMode(opts) {
     await waitForVite(BASE, vite);
     await verifyServedMarker(BASE);
 
-    const playwright = await loadPlaywright();
+    const playwright = await importPlaywright();
 
     for (const name of opts.browsers) {
       let browser;

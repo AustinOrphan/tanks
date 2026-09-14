@@ -44,10 +44,10 @@ import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync
 import { execFileSync } from 'node:child_process';
 import { parseArgs, safeLabel, gridShape, DEFAULTS } from './args.mjs';
 import { enterGameplay, GAME_CANVAS } from './enter-gameplay.mjs';
+import { loadChromium } from '../shared/playwright.mjs';
 
 const PORT = 5599;
 const ROOT = new URL('../../', import.meta.url).pathname;
-const PW = process.env.PLAYWRIGHT_MODULE ?? 'playwright';
 
 const args = parseArgs(process.argv.slice(2));
 const outDir = args.out.endsWith('.gif') || args.out.endsWith('.png')
@@ -118,7 +118,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  const { chromium } = await import(PW);
+  const chromium = await loadChromium();
   const browser = await chromium.launch({
     ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }

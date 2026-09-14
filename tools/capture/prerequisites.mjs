@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findCancellation, throwIfAborted } from './cancellation.mjs';
 import { runProcess } from './process.mjs';
+import { playwrightCandidates } from '../shared/playwright.mjs';
 
 const require = createRequire(import.meta.url);
 const CI_WORKFLOW = new URL('../../.github/workflows/ci.yml', import.meta.url);
@@ -47,7 +48,7 @@ async function packageVersionFor(specifier) {
 
 export async function loadPlaywright(env = process.env, options = {}) {
   throwIfAborted(options.signal);
-  const candidates = [...new Set([env.PLAYWRIGHT_MODULE, 'playwright'].filter(Boolean))];
+  const candidates = playwrightCandidates(env);
   const tried = [];
   for (const specifier of candidates) {
     try {
