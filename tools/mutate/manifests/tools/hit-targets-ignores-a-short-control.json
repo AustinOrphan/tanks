@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-ignores-a-short-control",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "    if (c.w < HIT_FLOOR || c.h < HIT_FLOOR) {",
+  "replace": "    if (c.w < HIT_FLOOR) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Checks only width. Height is the dimension issue #686 exists for: before the floor, every `--sm` button rendered 27 px tall and every `--slab` 31-33 px, while almost all of them were far wider than 44 px. A width-only check would have passed 39 of the 41 control classes that were under the floor.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a control under the floor in height -- the shipped 27px --sm toggle"
+  ]
+}

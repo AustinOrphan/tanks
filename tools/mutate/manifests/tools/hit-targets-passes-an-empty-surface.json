@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-passes-an-empty-surface",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "  if (run.controls.length === 0) return [",
+  "replace": "  if (false) return [",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Lets a reading with no controls pass. A collector selector that stopped matching, or a state that landed on a blank frame, would produce an empty list, and an empty list has no control under the floor -- the check would go green by measuring nothing, the same vacuous pass the clearance verdict refuses.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a reading that never reached its surface, instead of passing an empty one"
+  ]
+}

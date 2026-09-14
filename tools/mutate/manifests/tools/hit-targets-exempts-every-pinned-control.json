@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-exempts-every-pinned-control",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "      if (Boolean(a.pinned) !== Boolean(b.pinned)) continue;",
+  "replace": "      if (a.pinned || b.pinned) continue;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Skips any pair with a pinned control in it, rather than only a pinned control against scrolling content. The pinned bar is exactly where the floor is most likely to make controls collide: it lays Start and Back out in one wrapping row at the foot of a narrow pane. Two of its own buttons overlapping is a real ownership defect, and this exemption would hide it.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) does not fail scrolled content passing under a pinned action bar, but fails two pinned controls that overlap"
+  ]
+}

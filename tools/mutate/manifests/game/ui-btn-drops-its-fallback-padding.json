@@ -1,0 +1,14 @@
+{
+  "id": "ui-btn-drops-its-fallback-padding",
+  "file": "src/game/hud.css",
+  "find": "  padding: 8px 20px;\n  border: none;",
+  "replace": "  border: none;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The fallback padding on `.ui-btn` is the only padding source for a control that carries no size variant. Today that is exactly one state: `hud.ts` removes `ui-btn--primary` from `.hud-new-game` for the tertiary \"Start New Campaign\", and `.hud-new-game--tertiary` sets only a font size and an opacity. Dropping this declaration puts that button back on the UA default, which rendered 158x44 with about 6px of horizontal padding against 16 vertical once issue #686's 44px floor made the box tall -- the lopsided edges the floor exposed. Nothing else moves, because every other `.ui-btn` is padded or sized by a later rule, which is exactly why a reviewer could delete this line and see the rest of the suite stay green.",
+  "killedBy": [
+    "hud.css is syntactically whole pads a control that carries no size variant (issue #686)"
+  ]
+}

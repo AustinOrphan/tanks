@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-counts-a-shared-edge-as-overlap",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "const OVERLAP_EPSILON = 0.5;",
+  "replace": "const OVERLAP_EPSILON = -1;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Treats two boxes that only share an edge as overlapping. Stacked 44 px buttons in a column with no gap touch exactly, and a verdict that failed them would push every fix toward adding margins that were never needed -- or toward loosening the check until it stopped catching real overlaps.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails two controls whose boxes overlap, and not two that only share an edge"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-ignores-a-narrow-control",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "    if (c.w < HIT_FLOOR || c.h < HIT_FLOOR) {",
+  "replace": "    if (c.h < HIT_FLOOR) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Checks only height. Issue #686's floor is 44 CSS px in BOTH dimensions, and width is where two real controls failed: the versus player-count button measured 39.4 px wide and the team button 41.6 px, both at a height a height-only check reads as fine once the floor raises it. A narrow target is as hard to hit with a thumb as a short one.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a control under the floor in width alone -- the 39.4px player-count button"
+  ]
+}

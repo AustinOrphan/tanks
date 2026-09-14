@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-trusts-an-unreachable-control",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "    if (!c.reachable) failures.push",
+  "replace": "    if (false) failures.push",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Stops failing a control the player cannot scroll to. Raising every menu control to 44 px makes each pane taller -- Versus Setup under Teams has 44 controls -- and the acceptance criterion is that primary actions stay reachable. A floor that pushed Start past the end of its scroll container would satisfy every size check and leave the pane unusable.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a control a player cannot scroll to"
+  ]
+}
