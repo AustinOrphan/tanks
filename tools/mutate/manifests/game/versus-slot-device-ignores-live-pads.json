@@ -10,6 +10,7 @@
   ],
   "killedBy": [
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) a Human slot left without a device refuses Start with the device-missing reason, not the off one",
-    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) derives the device column from the live pads rather than storing one, and never honours a stale index"
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) derives the device column from the live pads rather than storing one, and never honours a stale index",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) skips a pad Tanks cannot read in the device column and the Start gate (issue #713)"
   ]
 }
