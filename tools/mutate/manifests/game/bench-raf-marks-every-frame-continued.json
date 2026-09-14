@@ -1,0 +1,17 @@
+{
+  "id": "bench-raf-marks-every-frame-continued",
+  "file": "src/game/bench.ts",
+  "find": "      const continued = inCallback;\n",
+  "replace": "      const continued = true;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "tools/bench/preview-workload.test.ts"
+  ],
+  "why": "Issue #736: the scheduler reports a restart from outside a callback as continuing the run, so the gap before it is measured as a frame time.",
+  "killedBy": [
+    "instrumentRaf: times the callback without changing it marks a frame continued only when the previous callback requested it (issue #736)",
+    "instrumentRaf: times the callback without changing it does not mark the next start continued after a callback threw (issue #736)",
+    "the preview benchmark workload (issue #736) measures only frames the preview renders while it is visible and animating"
+  ]
+}

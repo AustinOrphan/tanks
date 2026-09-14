@@ -1,0 +1,14 @@
+{
+  "id": "route-host-preview-built-without-the-bench-scheduler",
+  "file": "src/game/route-host.ts",
+  "find": "deps.createPreview(canvas, rotateButtons, reducedMotion, previewBench.raf)",
+  "replace": "deps.createPreview(canvas, rotateButtons, reducedMotion)",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Issue #736: under ?bench=preview the page builds the preview on the window's own rAF, so the published report never receives a frame.",
+  "killedBy": [
+    "createRouteHost: the ?bench=preview workload is page-scoped (issue #736) hands the preview a timing scheduler, and publishes a report of the frames it ran with no session"
+  ]
+}

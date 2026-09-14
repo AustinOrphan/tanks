@@ -1133,6 +1133,12 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     notes: [
       'It measures and changes nothing else: open the workload\'s own query so the session ' +
         `is the one it names -- versus-bots is \`${BENCH_WORKLOADS['versus-bots'].query}\`.`,
+      `\`preview\` (issue #736) measures the Customize panel's tank preview instead, which builds ` +
+        'its own renderer and ignores `?quality=`. Open ' +
+        `\`${BENCH_WORKLOADS.preview.query}\`, open Customize from the Main Menu and pick Flow: ` +
+        'the preview repaints only while it animates, and only frames of an unbroken run on a ' +
+        'visible page are measured. The report names the preview\'s own renderer settings and ' +
+        'has no session.',
       'A permanent diagnostic, kept for the device run issue #288 needs, not a flag for an ' +
         'open question.',
     ],

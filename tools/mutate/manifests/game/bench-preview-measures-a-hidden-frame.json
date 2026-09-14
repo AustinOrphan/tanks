@@ -1,0 +1,16 @@
+{
+  "id": "bench-preview-measures-a-hidden-frame",
+  "file": "src/game/bench.ts",
+  "find": "recorder.frame(frameTimeMs, workMs, 0, continued && visible());",
+  "replace": "recorder.frame(frameTimeMs, workMs, 0, continued);",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "tools/bench/preview-workload.test.ts"
+  ],
+  "why": "Issue #736: the preview workload measures a callback that was already in flight when the page was hidden, a frame the preview did not draw.",
+  "killedBy": [
+    "createPreviewBench: the preview workload samples unbroken runs on a visible page (issue #736) drops a frame that runs while the page is hidden, and measures the run on either side of it",
+    "the preview benchmark workload (issue #736) measures only frames the preview renders while it is visible and animating"
+  ]
+}

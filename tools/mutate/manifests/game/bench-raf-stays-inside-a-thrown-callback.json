@@ -1,0 +1,17 @@
+{
+  "id": "bench-raf-stays-inside-a-thrown-callback",
+  "file": "src/game/bench.ts",
+  "find": "          inCallback = false;\n          onFrame(",
+  "replace": "          onFrame(",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "tools/bench/preview-workload.test.ts"
+  ],
+  "why": "Issue #736: the scheduler never leaves its in-callback state, so every later start of the loop, including one after a throw, is reported as continuing the run.",
+  "killedBy": [
+    "instrumentRaf: times the callback without changing it marks a frame continued only when the previous callback requested it (issue #736)",
+    "instrumentRaf: times the callback without changing it does not mark the next start continued after a callback threw (issue #736)",
+    "the preview benchmark workload (issue #736) measures only frames the preview renders while it is visible and animating"
+  ]
+}
