@@ -1,0 +1,14 @@
+{
+  "id": "bench-contrast-takes-the-fastest-low-run",
+  "file": "tools/bench/contrast.mjs",
+  "find": "  const lowSlowest = Math.min(...low);",
+  "replace": "  const lowSlowest = Math.max(...low);",
+  "expect": "killed",
+  "why": "The low arm is judged by its best run instead of its worst, so one lucky low run carries a verdict its other runs do not support.",
+  "tests": [
+    "tools/bench/contrast.test.ts"
+  ],
+  "killedBy": [
+    "the render cost contrast check (issue #738) compares the slowest low run with the fastest high run, so one run cannot carry it"
+  ]
+}

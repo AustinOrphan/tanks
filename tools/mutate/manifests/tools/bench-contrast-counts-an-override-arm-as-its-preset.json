@@ -1,0 +1,14 @@
+{
+  "id": "bench-contrast-counts-an-override-arm-as-its-preset",
+  "file": "tools/bench/contrast.mjs",
+  "find": "  return [report.session.quality, ...set].join('+');",
+  "replace": "  return report.session.quality;",
+  "expect": "killed",
+  "why": "An override arm is named by its preset alone, so a high+fillRimLights=off run is counted as a high run and can become the fastest high run the rule compares against.",
+  "tests": [
+    "tools/bench/contrast.test.ts"
+  ],
+  "killedBy": [
+    "the render cost contrast check (issue #738) names an override arm by its overrides, so it is never counted as a plain preset"
+  ]
+}
