@@ -21,6 +21,8 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 import { clearanceFailures, insetLabel } from './clearance.mjs';
+import { hitTargetFailures } from './hit-targets.mjs';
+import { HIT_VIEWPORTS, hitSweepStates, measureHitTargets } from './hit-sweep.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from './static-server.mjs';
 
@@ -662,6 +664,7 @@ async function main() {
 
   const results = [];
   const clearance = [];
+  const hitTargets = [];
   try {
     for (const vp of VIEWPORTS) {
       // A cold runner loses the GL context on the FIRST page often enough to
@@ -749,12 +752,20 @@ async function main() {
         clearance.push(await measureClearance(browser, base, vp, inset));
       }
     }
+
+    // Issue #710: every player-facing menu surface at each of #686's viewports, one fresh
+    // context per reading. See tools/visual/hit-sweep.mjs.
+    for (const state of hitSweepStates()) {
+      for (const vp of HIT_VIEWPORTS) {
+        hitTargets.push(await measureHitTargets(browser, base, state, vp));
+      }
+    }
   } finally {
     await browser.close();
     server.close();
   }
 
-  const report = { label, dist, generatedFrom: 'playwright screenshot buffer', results, clearance };
+  const report = { label, dist, generatedFrom: 'playwright screenshot buffer', results, clearance, hitTargets };
   await writeFile(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 
   for (const r of results) {
@@ -787,6 +798,18 @@ async function main() {
       );
       for (const line of lines) console.log(`          ${line}`);
     }
+    // Issue #710. One summary line and then only the failing lines: 96 readings, printed one
+    // per line, would bury the one that failed. Each failing reading counts as one check.
+    const hitLines = hitTargets.map((r) => hitTargetFailures(r));
+    const failingReadings = hitLines.filter((lines) => lines.length > 0).length;
+    failed += failingReadings;
+    const surfaces = new Set(hitTargets.map((r) => r.state)).size;
+    const controls = hitTargets.reduce((n, r) => n + (r.controls?.length ?? 0), 0);
+    console.log(
+      `  ${failingReadings === 0 ? 'PASS' : 'FAIL'}  menu hit targets -- ${hitTargets.length} readings ` +
+        `(${surfaces} surfaces x ${HIT_VIEWPORTS.length} viewports), ${controls} controls, ${failingReadings} failing`,
+    );
+    for (const line of hitLines.flat()) console.log(`          ${line}`);
     console.log(failed === 0 ? '\nall checks passed' : `\n${failed} check(s) FAILED`);
     if (failed > 0) process.exitCode = 1;
   }
