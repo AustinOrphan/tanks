@@ -1,0 +1,79 @@
+name: Benchmark contrast
+
+# Issue #738: runs the versus-bots benchmark workload on the built page under software GL,
+# several times per arm, and uploads every report. A contrast measured within one run on one
+# runner, never an absolute frame time, and nothing about a real device (#288 owns that).
+#
+# TEMPORARY `pull_request` trigger while the runner's run-to-run spread is measured: a
+# workflow_dispatch workflow can only be dispatched once its file is on the default branch, and a
+# pull_request run uses the branch's own workflow files. It is removed before this is marked ready.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/bench-contrast.yml
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Runs per arm
+        required: false
+        default: '5'
+        type: string
+      arms:
+        description: Comma-separated arms, e.g. high,low,high+fillRimLights=off
+        required: false
+        default: 'high,low,high+fillRimLights=off'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-contrast-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contrast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # The same pinned install as ci.yml's `visual` job, for the reasons given there: a pinned
+      # version keys the browser cache, and NOT --with-deps, whose apt-get step once took ten minutes.
+      - name: Install Playwright
+        run: npm i --no-save playwright@1.62.0
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1.62.0-${{ runner.os }}
+
+      - name: Install chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+
+      - name: Build
+        run: npm run build
+
+      - name: Run the benchmark arms
+        env:
+          RUNS: ${{ inputs.runs || '5' }}
+          ARMS: ${{ inputs.arms || 'high,low,high+fillRimLights=off' }}
+        run: node tools/bench/runs.mjs --dist dist --out bench-out --runs "$RUNS" --arms "$ARMS"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-contrast-reports
+          path: bench-out/
+          retention-days: 14
