@@ -27,8 +27,10 @@
  * where x/y/w/h are CSS px from getBoundingClientRect; `reachable` says the control's
  * bottom edge is within its scroll container's scrollHeight (measured from the container's
  * padding box), or within the viewport when it has none; and `pinned` names the sticky or
- * fixed ancestor the control is drawn in, or is null. The on-screen driving controls (`.hud-touch`) are not menu targets and are left
- * out by the collector; they are sized by `--hud-control-touch`, 56 px.
+ * fixed ancestor the control is drawn in, or is null.
+ *
+ * The on-screen driving controls (`.hud-touch`) are not menu targets and are left out by the
+ * collector; they are sized by `--hud-control-touch`, 56 px.
  */
 
 export const HIT_FLOOR = 44;
