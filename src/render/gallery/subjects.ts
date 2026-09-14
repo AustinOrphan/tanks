@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { createWorld } from '../../src/sim/world';
-import type { World } from '../../src/sim/world';
-import { createEntityViews, BULLET_Y } from '../../src/render/entities';
-import type { MineWarnStyle } from '../../src/render/mine-warning';
-import type { IdentityMarkerStyle } from '../../src/presentation/identity-marker';
-import { createMineDebug } from '../../src/render/minedebug';
-import { createShellTrailSystem } from '../../src/render/shell-trail';
+import { createWorld } from '../../sim/world';
+import type { World } from '../../sim/world';
+import { createEntityViews, BULLET_Y } from '../../render/entities';
+import type { MineWarnStyle } from '../../render/mine-warning';
+import type { IdentityMarkerStyle } from '../../presentation/identity-marker';
+import { createMineDebug } from '../../render/minedebug';
+import { createShellTrailSystem } from '../../render/shell-trail';
 import {
   DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
-} from '../../src/sim/constants';
-import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
-import { TANK_KINDS } from '../../src/sim/config/validate';
+} from '../../sim/constants';
+import type { SkinId, SpawnAnimId } from '../../presentation/customization';
+import { TANK_KINDS } from '../../sim/config/validate';
 
 export const BLAST_LIFE = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS;
 
@@ -380,7 +380,7 @@ export const VIEWS: Record<string, { dir: [number, number, number]; up?: [number
  *   its own, so it stays a pure function of the timeline the runner walks -- which is
  *   what keeps a still reproducible and a sweep comparable. The first draw has no
  *   predecessor and so gets `dt = 0`; a still shows the tile at offset 0.
- * - Playback is slow motion, and already was. `run.mjs` writes `--subdiv` frames per
+ * - Playback is slow motion, and already was. `tools/gallery/run.mjs` writes `--subdiv` frames per
  *   age step and assembles them at `--fps` (3 and 20 by default), so 60 ticks -- one
  *   second of game -- plays back over 9 seconds of gif. `flow` scrolls 0.08 of a tile
  *   per second, so a one-second animation drifts 0.08 of a tile however long the gif
@@ -400,7 +400,7 @@ export interface GalleryOptions {
   /**
    * RENDER-VARIANT FLAGS, forwarded to `createEntityViews`.
    *
-   * These were silently dropped until issue #637's follow-up. `main.ts` had read
+   * These were silently dropped until issue #637's follow-up. `tools/gallery/main.ts` had read
    * `?mineWarn=` off the URL since the flag existed and handed it to `buildMomentScene`
    * only; the posed gallery below called `createEntityViews(scene)` bare, so
    * `npm run gallery -- --mineWarn <style>` produced the SHIPPED treatment and reported
@@ -413,7 +413,7 @@ export interface GalleryOptions {
   mineWarn?: MineWarnStyle | null;
   identityMarker?: IdentityMarkerStyle | null;
   /** Experimental shell bounce-trail (issue #688); absent = none, the shipped render. */
-  shellTrail?: import('../../src/presentation/shell-trail').ShellTrailStyle | null;
+  shellTrail?: import('../../presentation/shell-trail').ShellTrailStyle | null;
   /**
    * The resolved motion policy (issue #651). Absent means the shipped default, full motion,
    * on the same contract as the two above.
@@ -436,7 +436,7 @@ export interface GalleryOptions {
   /**
    * Which spawn-entrance/invincibility animator the player tank plays, passed through to
    * `setPlayerStyle`'s 5th argument (the render seam #201 adds). Optional -- callers built
-   * before #201 (main.ts's URL parsing, tools/gl/harness.ts's fixtures) do not set it, and
+   * before #201 (tools/gallery/main.ts's URL parsing, tools/gl/harness.ts's fixtures) do not set it, and
    * `setPlayerStyle`'s own default parameter resolves `undefined` to `DEFAULT_SPAWN_ANIM`
    * the same way it always has for the 4-arg call shape.
    */
@@ -451,7 +451,7 @@ export interface GalleryOptions {
    * `frames: layout.frames`) passes 1741 of 1743 vitest cases (2 skipped) and 50 of 50
    * GL checks --
    * measured, both. `--frames N` would silently do nothing and only the runner would
-   * show it. It is not killed here because the only observer is `run.mjs`, which writes
+   * show it. It is not killed here because the only observer is `tools/gallery/run.mjs`, which writes
    * files from a real browser; nothing under `npm test` or `npm run test:gl` reads the
    * returned `frames`. Verified by hand instead, WITH its control: `--elements tank
    * --view low --skin flow --anim --frames 8 --subdiv 1` writes 8 frames with 8 distinct
@@ -497,7 +497,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   // setPlayerStyle at all, so the 5th argument never reaches entities.ts and the option
   // silently does nothing -- the exact failure mode #201's own deferral was about, one
   // layer up. `opts.spawnAnim` is a string when set, so this stays falsy when callers
-  // (main.ts, and every pre-#201 harness fixture) never pass it.
+  // (tools/gallery/main.ts, and every pre-#201 harness fixture) never pass it.
   if (opts.skin !== 'solid' || opts.hull || opts.accent || opts.spawnAnim) {
     views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null, 0, opts.spawnAnim);
   }

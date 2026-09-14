@@ -1,11 +1,11 @@
 {
   "id": "gallery-roster-poses-mixed-angles",
-  "file": "tools/gallery/subjects.ts",
+  "file": "src/render/gallery/subjects.ts",
   "find": "          bodyAngle: ROSTER_ANGLE,\n          turretAngle: ROSTER_ANGLE,",
   "replace": "          bodyAngle: ROSTER_ANGLE * i,\n          turretAngle: ROSTER_ANGLE * i,",
   "expect": "killed",
   "tests": [
-    "tools/gallery/subjects.test.ts"
+    "src/render/gallery/subjects.test.ts"
   ],
   "why": "Each tank posed at its own angle, which looks like richer coverage and destroys what the subject is for. The row exists to leave HUE as the only variable, so that 'these kinds differ by colour alone' can be shown or refuted from one frame; with the pose varying per position, a reader cannot tell a geometry difference from a facing difference, and the capture quietly stops being evidence for either answer.",
   "killedBy": [

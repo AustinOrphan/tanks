@@ -716,7 +716,7 @@ const FORBIDDEN_FIXTURES: Fixture[] = [
   {
     rule: 'an import that climbs out of src/',
     path: './game/loop.ts',
-    src: `import { x } from '../../tools/gallery/subjects';\nexport const y = x;\n`,
+    src: `import { x } from '../../tools/gallery/args.mjs';\nexport const y = x;\n`,
     expect: 'escapes src/',
   },
   {

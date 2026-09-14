@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { createEntityViews } from '../../src/render/entities';
-import { createParticleSystem } from '../../src/render/particles';
-import { createDeathPulseSystem } from '../../src/render/death-pulse';
-import { createTreadTrailSystem } from '../../src/render/tread-trails';
-import { createShellTrailSystem } from '../../src/render/shell-trail';
-import { createBlockedFireRingSystem } from '../../src/render/blocked-fire-ring';
-import { createBlockedFireMuzzleSystem } from '../../src/render/blocked-fire-muzzle';
-import { createMuzzleSmokeSystem } from '../../src/render/muzzle-smoke';
-import { createBarrelRecoilSystem } from '../../src/render/barrel-recoil';
-import { createBlockedFirePipsSystem } from '../../src/render/blocked-fire-pips';
-import type { BlockedFireCue } from '../../src/presentation/blocked-fire';
-import type { SkinId, SpawnAnimId } from '../../src/presentation/customization';
+import { createEntityViews } from '../../render/entities';
+import { createParticleSystem } from '../../render/particles';
+import { createDeathPulseSystem } from '../../render/death-pulse';
+import { createTreadTrailSystem } from '../../render/tread-trails';
+import { createShellTrailSystem } from '../../render/shell-trail';
+import { createBlockedFireRingSystem } from '../../render/blocked-fire-ring';
+import { createBlockedFireMuzzleSystem } from '../../render/blocked-fire-muzzle';
+import { createMuzzleSmokeSystem } from '../../render/muzzle-smoke';
+import { createBarrelRecoilSystem } from '../../render/barrel-recoil';
+import { createBlockedFirePipsSystem } from '../../render/blocked-fire-pips';
+import type { BlockedFireCue } from '../../presentation/blocked-fire';
+import type { SkinId, SpawnAnimId } from '../../presentation/customization';
 import { MOMENTS, simulateMoment } from './moments';
 import { VIEWS, timelineDt } from './subjects';
 
@@ -47,7 +47,7 @@ export interface MomentSceneOptions {
   hull: string | null;
   accent: string | null;
   /** Experimental mine-warning treatment (issue #276 playtest round); null = default. */
-  mineWarn?: import('../../src/render/mine-warning').MineWarnStyle | null;
+  mineWarn?: import('../../render/mine-warning').MineWarnStyle | null;
   /**
    * Experimental arrival/destruction language (issue #230); null = the shipped pair.
    * Forwarded to BOTH systems that speak it -- the entrance ring lives in entities.ts and
@@ -55,13 +55,13 @@ export interface MomentSceneOptions {
    * the two events are told apart, and a capture that changed only one of them would be
    * evidence for a comparison nobody is making.
    */
-  arrival?: import('../../src/presentation/arrival-language').ArrivalLanguage | null;
+  arrival?: import('../../presentation/arrival-language').ArrivalLanguage | null;
   /**
    * Experimental shell bounce-trail (issue #688); null = none, the shipped render. Built by
    * the same flag-to-system mapping as renderer.ts, so a moment that fires (`fire`,
    * `ricochet`) shows the count change at the bounce under real timeline motion.
    */
-  shellTrail?: import('../../src/presentation/shell-trail').ShellTrailStyle | null;
+  shellTrail?: import('../../presentation/shell-trail').ShellTrailStyle | null;
   /**
    * Dressing for the entrance the moment stages -- required here, unlike
    * `GalleryOptions.spawnAnim` (subjects.ts), which is optional and only reaches
@@ -85,10 +85,10 @@ export interface MomentSceneOptions {
    * Only the three remaining visual arms render. The audio and haptic arms have nothing to
    * draw, and `hud` draws into the DOM HUD, which no gallery scene builds -- ask for one of
    * those and the cue-to-system mapping below matches nothing, so you get a tank wearing
-   * only the unconditional effects. The CLI refuses them for that reason (`args.mjs`), and
+   * only the unconditional effects. The CLI refuses them for that reason (`tools/gallery/args.mjs`), and
    * it refuses a cue paired with any other moment, which is where a caller can be stopped
    * before a browser is even launched. This field itself stays permissive, the same way
-   * `main.ts` reads `?skin=`/`?scene=` unvalidated so a hand-typed dev-server URL behaves
+   * `tools/gallery/main.ts` reads `?skin=`/`?scene=` unvalidated so a hand-typed dev-server URL behaves
    * predictably.
    *
    * "Unadorned" is no longer available at all, and that is the point of #526 and #536: a
@@ -268,7 +268,7 @@ export function buildMomentScene(
   //
   // DISCLOSED LIMITATION: this only walks forward. A rewind (`GALLERY_DRAW(0, 0)`
   // called again after the timeline has already advanced) does not replay ticks
-  // 0..fed-1's events -- `fed` never resets. run.mjs's runner only walks ages forward,
+  // 0..fed-1's events -- `fed` never resets. tools/gallery/run.mjs's runner only walks ages forward,
   // so this is unreached from `npm run gallery`, but a hand-driven rewind through the
   // dev server would silently miss those bursts. The FORWARD counterpart of the same
   // limitation is the ordinary case, not an edge one: a hand-typed `?age=N` for N > 0

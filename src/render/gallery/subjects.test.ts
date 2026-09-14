@@ -4,9 +4,9 @@
 //
 // No `@vitest-environment` pragma: node, like the rest of the sim-adjacent tests.
 import { describe, it, expect } from 'vitest';
-import { DT } from '../../src/sim/constants';
+import { DT } from '../../sim/constants';
 import { compose, timelineDt, ELEMENTS, ENEMY_KINDS } from './subjects';
-import { TANK_KINDS } from '../../src/sim/config/validate';
+import { TANK_KINDS } from '../../sim/config/validate';
 
 describe('timelineDt: the gallery animation clock', () => {
   it('turns a whole age step into exactly one sim tick of seconds', () => {

@@ -8,8 +8,8 @@ import {
   GALLERY_VIEW_IDS,
 } from './args.mjs';
 import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/presentation/customization';
-import { MOMENTS, simulateMoment } from './moments';
-import { ELEMENTS, VIEWS, compose } from './subjects';
+import { MOMENTS, simulateMoment } from '../../src/render/gallery/moments';
+import { ELEMENTS, VIEWS, compose } from '../../src/render/gallery/subjects';
 import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
 import { ARRIVAL_LANGUAGES } from '../../src/presentation/arrival-language';
 import { SHELL_TRAIL_STYLES } from '../../src/presentation/shell-trail';

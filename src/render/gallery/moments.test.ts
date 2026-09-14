@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from './moments';
-import type { World } from '../../src/sim/world';
+import type { World } from '../../sim/world';
 import {
   RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ, TANK_RADIUS,
   AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, AI_LAST_SEEN_TICKS, AI_TARGET_SWITCH_MARGIN,
-} from '../../src/sim/constants';
-import { step } from '../../src/sim/world';
-import { lineOfSight } from '../../src/sim/ai/targeting';
-import { EMIT_SPACING } from '../../src/render/tread-trails';
+} from '../../sim/constants';
+import { step } from '../../sim/world';
+import { lineOfSight } from '../../sim/ai/targeting';
+import { EMIT_SPACING } from '../../render/tread-trails';
 
 describe('every moment pins its events to exact ticks', () => {
   for (const [name, def] of Object.entries(MOMENTS)) {

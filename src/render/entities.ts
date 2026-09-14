@@ -149,7 +149,7 @@ function tankColor(kind: TankKind): number {
  * exactly. INNER_R clears it with margin (rather than sitting flush) so the ring never
  * hides under the hull's rounded-corner geometry or the tracks' TRACK_OVERHANG from
  * directly overhead; OUTER_R is thick enough to read as a band rather than a hairline
- * at the game's own camera distance (VIEWS.game in tools/gallery/subjects.ts). Both are
+ * at the game's own camera distance (VIEWS.game in src/render/gallery/subjects.ts). Both are
  * exported so entities.test.ts can pin the "outside the hull" invariant directly rather
  * than trusting the multiplier.
  */
