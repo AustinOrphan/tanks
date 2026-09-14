@@ -61,7 +61,10 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium
 
+      # The commit stamped into every report, as pages.yml does, so a report names its build.
       - name: Build
+        env:
+          VITE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run build
 
       - name: Run the benchmark arms
