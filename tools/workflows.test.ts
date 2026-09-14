@@ -379,7 +379,7 @@ describe('canonical verification commands in workflows', () => {
   const pagesBuild = jobBlock(PAGES, 'build');
 
   it('keeps required jobs, scheduled floor verification, and the Pages build available to inspect', () => {
-    expect(ciVerify).toContain('name: verify (${{ matrix.label }})');
+    expect(ciVerify).toContain('name: ${{ matrix.check }}');
     expect(ciVisual).not.toBe('');
     expect(fullFloor).toContain('name: mutation manifest (floor)');
     expect(pagesBuild).not.toBe('');
@@ -390,7 +390,6 @@ describe('canonical verification commands in workflows', () => {
       Typecheck: 'npm run typecheck',
       Test: 'npm run test:unit',
       'Mutation harness smoke (floor)': 'npm run mutate:smoke',
-      'Mutation manifest (full, current)': 'npm run mutate',
       Build: 'npm run build',
       'Assert the build is subpath-portable': 'npm run portability',
       'Audit production dependencies': 'npm run audit:prod',
@@ -399,10 +398,10 @@ describe('canonical verification commands in workflows', () => {
       expect(namedStep(ciVerify, name), name).toContain(`run: ${command}`);
     }
     expect(namedStep(ciVerify, 'Mutation harness smoke (floor)')).toContain("if: matrix.label == 'floor'");
-    expect(namedStep(ciVerify, 'Mutation manifest (full, current)')).toContain("if: matrix.label == 'current'");
+    expect(ciVerify, 'the manifest runs in the shard jobs, not in a verify lane').not.toContain('npm run mutate --');
     expect(ciVerify).not.toContain("matrix.node == '24' || github.event_name == 'push'");
-    expect(ciVerify).toContain("- label: floor\n            node: '22.13.0'");
-    expect(ciVerify).toContain("- label: current\n            node: '24'");
+    expect(ciVerify).toContain("- label: floor\n            node: '22.13.0'\n            check: verify (floor)");
+    expect(ciVerify).toContain("- label: current\n            node: '24'\n            check: checks (current)");
 
     const visualExpected = {
       Build: 'npm run build',
@@ -416,27 +415,60 @@ describe('canonical verification commands in workflows', () => {
     }
   });
 
+  it('shards the mutation manifest four ways behind a verify (current) fan-in that fails closed (issue #724)', () => {
+    const ciMutation = jobBlock(CI, 'mutation');
+    const fanIn = jobBlock(CI, 'verify-current');
+    expect(ciMutation).toContain('name: mutation (shard ${{ matrix.shard }}/4)');
+    // The matrix and the `/4` in every command have to agree, or a shard runs nowhere.
+    expect(ciMutation).toContain('shard: [1, 2, 3, 4]');
+    expect(ciMutation).toContain("node-version: '24'");
+    expect(ciMutation).toContain('fetch-depth: 0');
+    const affected = namedStep(ciMutation, 'Mutation manifest (affected, current)');
+    const full = namedStep(ciMutation, 'Mutation manifest (full, current)');
+    expect(affected).toContain("if: github.event_name == 'pull_request'");
+    expect(affected).toContain('run: npm run mutate -- --jobs auto --changed origin/main --shard ${{ matrix.shard }}/4');
+    expect(full).toContain("if: github.event_name != 'pull_request'");
+    expect(full).toContain('run: npm run mutate -- --jobs auto --shard ${{ matrix.shard }}/4');
+
+    // THE REQUIRED CONTEXT. One job reports it, and it is the fan-in.
+    expect(CI.match(/^ {4}name: verify \(current\)$/gm), 'exactly one job is named verify (current)').toHaveLength(1);
+    expect(fanIn).toContain('name: verify (current)');
+    expect(fanIn).toContain('needs: [verify, mutation]');
+    // Under the default `if` a failed shard SKIPS this job, and a skipped job satisfies a
+    // required check. `always()` would also run it, but on a cancelled run as well.
+    expect(fanIn).toContain('if: ${{ !cancelled() }}');
+    expect(fanIn).toContain('CHECKS: ${{ needs.verify.result }}');
+    expect(fanIn).toContain('MUTATION: ${{ needs.mutation.result }}');
+    expect(fanIn).toContain('test "$CHECKS" = success && test "$MUTATION" = success');
+  });
+
   it('keeps the deploy-path checking-step tally recomputed from the workflows (issue #693)', () => {
     // commands-and-operations.md states how many of ci.yml's checking steps a manual
     // deploy re-runs, and that bare number went stale unnoticed more than once. Recomputed
-    // here by the doc's own stated rule: every named step of the two ci.yml jobs except
-    // the runner set-up and artefact steps, counted once per distinct `run:` command.
+    // here by the doc's own stated rule: every named step of ci.yml's three checking jobs
+    // except the runner set-up and artefact steps, counted once per distinct `run:` command.
     const NOT_CHECKS = ['Install Playwright', 'Cache Playwright browsers', 'Install chromium', 'Upload screenshots'];
     const checks = (job: string): string[] =>
       [...job.matchAll(/^ {6}- name: (.+)$/gm)].map((m) => m[1]).filter((name) => !NOT_CHECKS.includes(name));
     const runOf = (job: string, name: string): string => /^\s+run: (.+)$/m.exec(namedStep(job, name))?.[1] ?? name;
+    const ciMutation = jobBlock(CI, 'mutation');
 
     const verify = checks(ciVerify);
+    const mutation = checks(ciMutation);
     const verifyRuns = new Set(verify.map((name) => runOf(ciVerify, name)));
     const visualAdds = checks(ciVisual).filter((name) => !verifyRuns.has(runOf(ciVisual, name)));
     const deploy = checks(pagesBuild).filter((name) => verifyRuns.has(runOf(pagesBuild, name)));
 
     expect(verify.length, 'the verify job has no named checks -- the step regex is not matching').toBeGreaterThan(0);
+    expect(mutation.length, 'the mutation job has no named checks').toBeGreaterThan(0);
+    // The fan-in's one step reads other jobs' results and checks nothing in the tree, so it
+    // is not counted. A checking step added to that job would have to be, and fails here.
+    expect(checks(jobBlock(CI, 'verify-current'))).toEqual(['Require the current lane and every mutation shard']);
     expect(deploy.length, 'a deploy step no longer matches a verify step').toBe(checks(pagesBuild).length);
     const doc = read('docs/agent/commands-and-operations.md').replace(/\s+/g, ' ');
     expect(doc).toContain(
-      `**${deploy.length} of \`ci.yml\`'s ${verify.length + visualAdds.length} checking steps** `
-      + `(\`verify\`: ${verify.length}, \`visual\`: ${visualAdds.length})`,
+      `**${deploy.length} of \`ci.yml\`'s ${verify.length + mutation.length + visualAdds.length} checking steps** `
+      + `(\`verify\`: ${verify.length}, \`mutation\`: ${mutation.length}, \`visual\`: ${visualAdds.length})`,
     );
   });
 

@@ -16,8 +16,11 @@ permissions:
 jobs:
   verify:
     # Semantic names keep the required-check contexts stable when supported Node
-    # versions advance; the ruleset should require verify (floor) and verify (current).
-    name: verify (${{ matrix.label }})
+    # versions advance; the ruleset requires verify (floor) and verify (current). The floor
+    # lane IS `verify (floor)`. The current lane is `checks (current)`, and the
+    # `verify (current)` context is the `verify-current` fan-in below, which passes only
+    # when this job and all four mutation shards have (issue #724).
+    name: ${{ matrix.check }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -28,8 +31,10 @@ jobs:
         include:
           - label: floor
             node: '22.13.0'
+            check: verify (floor)
           - label: current
             node: '24'
+            check: checks (current)
 
     steps:
       - uses: actions/checkout@v7
@@ -65,25 +70,8 @@ jobs:
         if: matrix.label == 'floor'
         run: npm run mutate:smoke
 
-      # tools/mutate/manifests/*.json are hand-verified against a specific commit, and this
-      # repo's own history has that go stale: a rebase onto a later main left two `find`
-      # strings no longer matching and one declared outcome flipped. Node 24 is the
-      # authoritative per-change full-manifest lane; mutation-floor.yml separately runs
-      # the same complete manifest daily and on request under exact Node 22.13.0.
-      # `--jobs auto` is the worktree pool (issue #502): one serial harness per detached
-      # worktree, three at a time on this four-core runner, same outcomes as serial.
-      # A pull request runs only the entries its diff can affect (issue #506: the
-      # entry's file or tests changed, its text changed, a scoped test imports a changed
-      # module, or a declared `reads` file changed; harness, runner-config, dependency
-      # and workflow changes run everything); a push to main runs the complete set and
-      # is the repository-wide authority.
-      - name: Mutation manifest (affected, current)
-        if: matrix.label == 'current' && github.event_name == 'pull_request'
-        run: npm run mutate -- --jobs auto --changed origin/main
-
-      - name: Mutation manifest (full, current)
-        if: matrix.label == 'current' && github.event_name != 'pull_request'
-        run: npm run mutate -- --jobs auto
+      # The mutation manifest is not a step here: it runs in the four `mutation` shard
+      # jobs below, and `verify (current)` waits for them (issue #724).
 
       - name: Build
         run: npm run build
@@ -108,6 +96,79 @@ jobs:
       # bundle, so gating on them would be a permanent, non-actionable red.
       - name: Audit production dependencies
         run: npm run audit:prod
+
+  # The mutation manifest, cut into four shards run on four machines (issue #724).
+  #
+  # tools/mutate/manifests/*.json are hand-verified against a specific commit, and this
+  # repo's own history has that go stale: a rebase onto a later main left two `find`
+  # strings no longer matching and one declared outcome flipped. Node 24 is the
+  # authoritative per-change lane; mutation-floor.yml separately runs the complete
+  # manifest daily and on request under exact Node 22.13.0, unsharded.
+  #
+  # A pull request selects only the entries its diff can affect (issue #506: the entry's
+  # file or tests changed, its text changed, a scoped test imports a changed module, or
+  # a declared `reads` file changed; harness, runner-config, dependency and workflow
+  # changes select everything); a push to main selects the complete set, which is the
+  # repository-wide authority. Every shard computes the same selection -- `--changed`
+  # diffs from the merge base, which a later push to main does not move -- and
+  # `--shard i/4` keeps the i-th of four scope-atomic, cost-balanced slices of it, so the
+  # four run each selected entry exactly once. A shard dealt nothing exits 0 and says so.
+  # Within a shard, `--jobs auto` is the worktree pool (issue #502): one serial harness
+  # per detached worktree, three at a time on this four-core runner.
+  mutation:
+    name: mutation (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The full history: `--changed` needs the merge base with origin/main reachable.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Mutation manifest (affected, current)
+        if: github.event_name == 'pull_request'
+        run: npm run mutate -- --jobs auto --changed origin/main --shard ${{ matrix.shard }}/4
+
+      - name: Mutation manifest (full, current)
+        if: github.event_name != 'pull_request'
+        run: npm run mutate -- --jobs auto --shard ${{ matrix.shard }}/4
+
+  # The required `verify (current)` context: green only when the Node 24 checks and all
+  # four shards are. The ruleset names contexts, so this keeps the three it requires.
+  #
+  # `if: !cancelled()` is the load-bearing line. Under the default `if`, a job whose
+  # needs failed is SKIPPED, and GitHub documents that a skipped job reports success to
+  # a required status check -- a failed shard would leave this context green and the
+  # pull request mergeable. Running on failure and testing each result closes that; a
+  # cancelled run still produces no context, which blocks the merge as it should.
+  #
+  # `needs.verify.result` is one result for the whole matrix job, so a floor-lane failure
+  # turns this red as well; the step prints both results so the log says which job failed.
+  verify-current:
+    name: verify (current)
+    needs: [verify, mutation]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the current lane and every mutation shard
+        env:
+          CHECKS: ${{ needs.verify.result }}
+          MUTATION: ${{ needs.mutation.result }}
+        run: |
+          echo "verify (floor and checks (current)): $CHECKS"
+          echo "mutation (all four shards): $MUTATION"
+          test "$CHECKS" = success && test "$MUTATION" = success
 
   # The visual check runs as its own job, not as a step in `verify`.
   #
