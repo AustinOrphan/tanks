@@ -1,0 +1,14 @@
+{
+  "id": "loop-render-overrides-never-reach-the-renderer",
+  "file": "src/game/loop.ts",
+  "find": "    quality: sessionRender,",
+  "replace": "    quality: qualityFor(sessionQuality),",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #735. Builds the renderer from the bare preset while the benchmark report still records the overrides and the overridden cap, so a sweep's report would describe settings the renderer never had.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default applies each single-setting render override on top of the preset, and nothing else (issue #735)"
+  ]
+}

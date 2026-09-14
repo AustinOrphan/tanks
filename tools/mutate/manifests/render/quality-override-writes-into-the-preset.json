@@ -1,0 +1,15 @@
+{
+  "id": "quality-override-writes-into-the-preset",
+  "file": "src/render/quality.ts",
+  "find": "  return {\n    ...preset,\n    shadowMapSize: overrides.shadowMapSize ?? preset.shadowMapSize,\n    antialias: overrides.antialias ?? preset.antialias,\n    pixelRatioCap: overrides.pixelRatioCap ?? preset.pixelRatioCap,\n    fillRimLights: overrides.fillRimLights ?? preset.fillRimLights,\n  };",
+  "replace": "  return Object.assign(preset, {\n    shadowMapSize: overrides.shadowMapSize ?? preset.shadowMapSize,\n    antialias: overrides.antialias ?? preset.antialias,\n    pixelRatioCap: overrides.pixelRatioCap ?? preset.pixelRatioCap,\n    fillRimLights: overrides.fillRimLights ?? preset.fillRimLights,\n  });",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts"
+  ],
+  "why": "Writes the overrides into the shared QUALITY_PRESETS entry instead of a fresh object. One session's ?antialias=off would then reach every later session on the page built on the same preset, with no override in its URL.",
+  "killedBy": [
+    "applyRenderOverrides (issue #735) changes exactly the field an override names -- population: 4 overrides x 3 presets",
+    "applyRenderOverrides (issue #735) never writes into the shared preset table"
+  ]
+}

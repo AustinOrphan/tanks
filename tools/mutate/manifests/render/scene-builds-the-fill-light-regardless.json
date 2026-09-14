@@ -1,0 +1,12 @@
+{
+  "id": "scene-builds-the-fill-light-regardless",
+  "file": "src/render/scene.ts",
+  "find": "  const fill = quality.fillRimLights ? new THREE.DirectionalLight(0xbcd0ff, 0.55) : null;",
+  "replace": "  const fill = new THREE.DirectionalLight(0xbcd0ff, 0.55) as THREE.DirectionalLight | null;",
+  "expect": "survives",
+  "expectFailures": 0,
+  "why": "Issue #735. A DISCLOSED SURVIVOR, not an equivalent mutant: the fill light is built even under ?fillRimLights=off, so the override removes only the rim and a sweep measures a scene with one extra light it believes absent. It survives because nothing vitest runs reaches createScene past its WebGLRenderer, which jsdom cannot provide; `.claude/rules/rendering.md` puts scene.ts under the real-browser GL harness instead. What kills it is tools/gl/harness.ts's 'a fillRimLights override builds the sun and the ambient light and nothing else (issue #735)'. The cast keeps `if (fill)` below type-correct.",
+  "tests": [
+    "src/render/scene.test.ts"
+  ]
+}

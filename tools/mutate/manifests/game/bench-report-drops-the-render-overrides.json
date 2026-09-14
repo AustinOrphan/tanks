@@ -1,0 +1,16 @@
+{
+  "id": "bench-report-drops-the-render-overrides",
+  "file": "src/game/bench.ts",
+  "find": "      overrides: input.renderOverrides,",
+  "replace": "      overrides: null,",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #735. The report stops recording the overrides in effect, so two runs of one preset, one with ?shadowMapSize=512, would read as the same configuration.",
+  "killedBy": [
+    "buildBenchReport records the render overrides a session ran with, as it was given them (issue #735)",
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) records the render overrides in effect and the cap the renderer applied after them (issue #735)"
+  ]
+}

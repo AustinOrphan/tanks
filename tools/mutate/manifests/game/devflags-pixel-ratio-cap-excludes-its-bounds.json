@@ -1,0 +1,14 @@
+{
+  "id": "devflags-pixel-ratio-cap-excludes-its-bounds",
+  "file": "src/game/devflags.ts",
+  "find": "  return cap >= PIXEL_RATIO_CAP_MIN && cap <= PIXEL_RATIO_CAP_MAX ? cap : null;",
+  "replace": "  return cap > PIXEL_RATIO_CAP_MIN && cap < PIXEL_RATIO_CAP_MAX ? cap : null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "Rejects the two ends of the documented range, so ?pixelRatioCap=0.5 and ?pixelRatioCap=4 would leave the preset's cap while the flag's own help text says they are accepted.",
+  "killedBy": [
+    "parseDevFlags: single-setting render overrides (issue #735) accepts every documented shadow map size, and both ends of the pixel-ratio range"
+  ]
+}
