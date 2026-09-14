@@ -1,0 +1,14 @@
+{
+  "id": "shell-trail-flag-accepts-any-value",
+  "file": "src/game/devflags.ts",
+  "find": "  return isShellTrailStyle(raw) ? raw : null;",
+  "replace": "  return raw as ShellTrailStyle;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "Passes any ?shellTrail= value through unvalidated. The renderer builds the trail only for 'segments', so a typo would reach it as a truthy unknown style and silently draw nothing while the Developer panel reported the flag as set -- the flag-that-does-nothing failure the gallery refusals were written against.",
+  "killedBy": [
+    "parseDevFlags: shellTrail (issue #688 -- remaining bounces without hue) accepts the one built treatment and nothing else"
+  ]
+}

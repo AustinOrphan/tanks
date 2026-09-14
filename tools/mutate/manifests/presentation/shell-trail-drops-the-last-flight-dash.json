@@ -1,0 +1,15 @@
+{
+  "id": "shell-trail-drops-the-last-flight-dash",
+  "file": "src/presentation/shell-trail.ts",
+  "find": "  const n = Math.floor(bouncesLeft) + 1;",
+  "replace": "  const n = Math.floor(bouncesLeft);",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/shell-trail.test.ts"
+  ],
+  "why": "Draws as many dashes as bounces left, instead of one more. Issue #688 names the zero-bounce shell -- the one the next wall stops -- as a state the cue must show; the 1-dash floor still keeps it visible, but a normal shell with one bounce left then reads exactly like it, and the three shipped starting budgets (normal 1, fast 0, ricochet 2) collapse to 1, 1, 2, so a fresh fast shell and a fresh normal one would carry the same mark.",
+  "killedBy": [
+    "shell bounce-trail vocabulary (issue #688) draws one more dash than the bounces left, so a last-flight shell still has one",
+    "shell bounce-trail vocabulary (issue #688) gives each shipped starting budget its own count"
+  ]
+}

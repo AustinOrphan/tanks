@@ -11,6 +11,9 @@ import {
   readlinkSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createMemoryStorage, createStores } from '../src/game/storage';
+import { SAVE_KEYS } from '../src/game/save';
+import { VERSUS_SETUP_KEY } from '../src/game/versus-setup-store';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -174,6 +177,49 @@ describe('the instruction files', () => {
     expect(measurement).toContain(
       `| After | root \`CLAUDE.md\` on this branch | ${lines} | ${Buffer.byteLength(text, 'utf8')} |`,
     );
+  });
+
+  it('keeps every context-budget row recomputed from the files it measures (issue #693)', () => {
+    // Only the After row was asserted, and the rule table beside it drifted: testing.md was
+    // recorded at 41 / 2275 against a file of 47 / 2772, and the Reduction row still
+    // subtracted a root size two measurements old. Every derived figure is checked here.
+    const measurement = readFileSync(CONTEXT_BUDGET, 'utf8');
+    const measure = (text: string) => ({
+      lines: text.split(/\r?\n/).length - (text.endsWith('\n') ? 1 : 0),
+      bytes: Buffer.byteLength(text, 'utf8'),
+    });
+    let total = 0;
+    for (const name of REQUIRED_RULES) {
+      const { lines, bytes } = measure(readFileSync(`${RULES_DIR}${name}`, 'utf8'));
+      total += bytes;
+      expect(measurement, name).toContain(`| \`.claude/rules/${name}\` | ${lines} | ${bytes} |`);
+    }
+    expect(measurement).toContain(`| **Total conditional rules** | — | **${total}** |`);
+
+    const BEFORE_BYTES = 72393; // `CLAUDE.md` at 844986c, the fixed historical reading
+    const reduction = BEFORE_BYTES - measure(readFileSync(CLAUDE, 'utf8')).bytes;
+    expect(measurement).toContain(
+      `| Reduction | globally loaded project prose | — | ${reduction} (${((reduction / BEFORE_BYTES) * 100).toFixed(1)}%) |`,
+    );
+  });
+
+  it('keeps the persistence counts in the agent docs recomputed from the stores (issue #693)', () => {
+    // Both documents said "six" stores and keys after a seventh store and an eighth key had
+    // landed. The numbers are now read from the code that defines them.
+    const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+    const stores = Object.keys(createStores(createMemoryStorage())).length;
+    const architecture = readFileSync(rootPath('docs/agent/architecture.md'), 'utf8').replace(/\s+/g, ' ');
+    expect(architecture).toContain(`All ${WORDS[stores]} stores in \`GameStores\``);
+    expect(architecture).toContain(`gives all ${WORDS[stores]} the SAME one`);
+    expect(architecture).toContain(`serialises the ${WORDS[SAVE_KEYS.length]} keys on \`SAVE_KEYS\``);
+
+    const operations = readFileSync(COMMANDS_AND_OPERATIONS, 'utf8').replace(/\s+/g, ' ');
+    expect(operations).toContain(`the ${WORDS[SAVE_KEYS.length]} on \`SAVE_KEYS\``);
+    for (const key of SAVE_KEYS) {
+      const short = key.replace(/^tanks\./, '').replace(/\.v\d+$/, '');
+      expect(operations, key).toContain(`\`${short}\``);
+    }
+    expect(operations).toContain(`\`${VERSUS_SETUP_KEY}\``);
   });
 
   it('keeps AGENTS.md as the tracked symlink to CLAUDE.md', () => {

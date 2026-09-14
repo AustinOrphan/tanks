@@ -1,0 +1,14 @@
+{
+  "id": "ui-btn-loses-its-width-floor",
+  "file": "src/game/hud.css",
+  "find": "  min-width: var(--hud-control-min);\n  /* So the floor",
+  "replace": "  /* So the floor",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Drops the width floor from the button primitive and keeps the height. Two control classes failed issue #686's floor on width alone: the versus player-count button at 39.4 px and the team button at 41.6 px. A height-only floor leaves both narrower than a thumb while every size in the stylesheet looks addressed.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps every menu control at the 44px touch floor (issue #686)"
+  ]
+}

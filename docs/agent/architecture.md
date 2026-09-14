@@ -101,15 +101,16 @@ world throws. The golden trace is unmoved
 (`8584bf34…`, 7 of 7 at the landing tree): every shipped world resolves to the same defaults
 it carried before.
 
-**Persistence is one seam, `src/game/storage.ts`.** All six stores take an injected
-`Storage`; `resolveStorage()` picks the browser's or a complete in-memory shim (the old
-inline stand-in was `{getItem, setItem}` cast to `Storage`, so `removeItem`/`clear`/`key`
-were TypeErrors waiting), and `createStores(storage)` gives all six the SAME one **by
+**Persistence is one seam, `src/game/storage.ts`.** All seven stores in `GameStores` take an
+injected `Storage`; `resolveStorage()` picks the browser's or a complete in-memory shim (the
+old inline stand-in was `{getItem, setItem}` cast to `Storage`, so `removeItem`/`clear`/`key`
+were TypeErrors waiting), and `createStores(storage)` gives all seven the SAME one **by
 signature** — resolving per store was harmless only because localStorage returns the same
 object every time, and would have given each store a private namespace under the shim.
 Pointing the game at Capacitor Preferences or a file-backed desktop shim is a one-file
-change with a test that can fail. `src/game/save.ts` serialises those six keys as one
-blob at the RAW key/value layer, deliberately not through the typed stores: they validate
+change with a test that can fail. `src/game/save.ts` serialises the seven keys on
+`SAVE_KEYS` — every key the stores write except the versus setup's `tanks.versus.v1` — as
+one blob at the RAW key/value layer, deliberately not through the typed stores: they validate
 on read and drop what they do not recognise, which is exactly the data an export exists to
 preserve. Import writes only keys on the `SAVE_IMPORT_KEYS` allow-list — the origin is
 shared, so a pasted blob must not be able to set a neighbour's key — and an imported save

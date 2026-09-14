@@ -1,0 +1,14 @@
+{
+  "id": "scrolling-panes-clip-their-overflow-again",
+  "file": "src/game/hud.css",
+  "find": "  justify-content: safe center;\n  overflow-y: auto;",
+  "replace": "  justify-content: safe center;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Takes the scroller back off the Main Menu/pause panel, Records, Customize and Achievements. Those panes are `position: absolute; inset: 0` inside a fixed HUD, so without it their overflow is simply cut off. Measured in Chromium, the 44 px floor alone pushed 11 control readings off them that were reachable before it -- five Customize accent swatches at 320x568 among them -- and this change brought that to 0.",
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ]
+}

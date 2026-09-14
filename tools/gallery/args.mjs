@@ -68,6 +68,12 @@ export const DEFAULTS = {
   mineWarn: null,
   identityMarker: null,
   /**
+   * Which experimental shell bounce-trail to draw (issue #688), matching the game's own
+   * `?dev=1&shellTrail=<style>`. Only meaningful where a shell is in the frame -- see the
+   * refusal in parseArgs.
+   */
+  shellTrail: null,
+  /**
    * Which arrival/destruction language the moment plays (issue #230), matching the
    * game's own `?dev=1&arrival=<language>`. Only meaningful on the two moments that
    * actually stage one of those events -- see the refusal in parseArgs.
@@ -251,12 +257,38 @@ export function parseArgs(argv) {
     // ordinary frame with no marker in it and report success. That silent no-op is the
     // bug this whole change exists to end; reintroducing it for a sibling flag would be
     // an odd way to celebrate.
-    const withRings = ['coop', 'identity'];
+    const withRings = ['coop', 'identity', 'shelltrail'];
     const chosen = out.elements.split(',').map((e) => e.trim()).filter(Boolean);
     if (!chosen.some((e) => withRings.includes(e))) {
       throw new Error(
         `--identityMarker needs an element set that poses two or more player tanks `
         + `(${withRings.join(' or ')}), got --elements '${out.elements}'`,
+      );
+    }
+  }
+
+  if (out.shellTrail !== null) {
+    // Hardcoded for --identityMarker's reason: SHELL_TRAIL_STYLES
+    // (src/presentation/shell-trail.ts) is the source of truth, and args.test.ts pins the two.
+    const styles = ['segments'];
+    if (!styles.includes(out.shellTrail)) {
+      throw new Error(`--shellTrail must be one of ${styles.join('|')}, got '${out.shellTrail}'`);
+    }
+    // REFUSE a frame with no shell in it, the --identityMarker call: a trail flag on a lone
+    // tank renders an ordinary frame and would report success. `game` is refused too, because
+    // captureGame builds its own URL from --query; the flag belongs there as
+    // `--query 'dev=1&shellTrail=segments'`.
+    const shellElements = ['coop', 'shell', 'shellring', 'shelltrail'];
+    const shellMoments = ['fire', 'ricochet'];
+    const chosen = out.elements.split(',').map((e) => e.trim()).filter(Boolean);
+    const ok = out.scene === 'gallery'
+      ? chosen.some((e) => shellElements.includes(e))
+      : shellMoments.includes(out.scene);
+    if (!ok) {
+      throw new Error(
+        `--shellTrail needs a shell in the frame (--elements ${shellElements.join(' or ')}, `
+        + `or --scene ${shellMoments.join(' or ')}; for --scene game pass it in --query), `
+        + `got --scene '${out.scene}' --elements '${out.elements}'`,
       );
     }
   }

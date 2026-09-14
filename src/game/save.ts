@@ -44,7 +44,7 @@ export const SAVE_VERSION = 1;
 /**
  * Every key an export carries, in a fixed order.
  *
- * Sourced from the six store modules rather than retyped, so a renamed key
+ * Sourced from the store modules that own each key rather than retyped, so a renamed key
  * cannot leave this list pointing at a key nothing writes. The order is fixed so
  * two exports of the same state are byte-identical and diffable.
  *

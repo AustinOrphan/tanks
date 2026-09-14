@@ -165,24 +165,54 @@
  * it. `.ui-btn` in particular is deliberately SIZELESS: `.hud-level-btn` is a fixed
  * 44x44 box with no padding of its own, so a padding here would inflate it.
  *
- * The 44 CSS px touch floor is NOT imposed here, and the omission is deliberate. Ruling
- * on #321: the floor governs the new primitives, while raising an existing control
- * relayouts the pane around it -- a visual change that owes its own evidence, which is
- * exactly what this commit is arranged not to owe. `.ui-btn` is therefore sizeless and
- * every control keeps the size it had. Exactly three controls declare a height that meets
- * the floor -- `.hud-level-btn`, `.hud-swatch` and, since issue #352, `.hud-rotate-btn`,
- * all `var(--hud-control-min)`; every other control here is sized by padding and its
- * inherited font size, and whether that clears 44 px is a rendered measurement rather than
- * something this file states. Establishing it is #290's control-scale work.
- * A test cannot stand in for that here: jsdom does no layout, so the rendered height of a
- * padded button is not measurable in this suite at all -- it needs the real browser those
- * issues already require. */
+ * The 44 CSS px touch floor was first left OFF `.ui-btn`, on #321's ruling that raising an
+ * existing control relayouts the pane around it and owes its own evidence. Issue #686 is
+ * that evidence, and the floor now lives on `.ui-btn` as `min-height`/`min-width`. Measured
+ * in Chromium on the tree before it, over 24 player-facing surfaces at four viewports: 764 of
+ * 1016 control readings, in 44 of 54 control classes, rendered under 44 px -- `--sm` at 27 px
+ * tall and `--slab` at 31-33 px.
+ * `.hud-level-btn`, `.hud-swatch` and `.hud-rotate-btn` still size themselves with
+ * `var(--hud-control-min)`; they were already at the floor.
+ * A jsdom test cannot stand in for the measurement: it does no layout, so a padded button's
+ * rendered height is not observable in this suite at all. The browser check is. */
 
 /* The quiet control: the HUD's default button surface, and what eight separate rules
  * declared before it had a name. */
 .ui-btn {
+  /* The 44 CSS px touch floor (issue #686), on the primitive so a control cannot be added
+   * below it. MIN, not a fixed size: a primary slab stays 47px and a map card 80-122px, and
+   * a control already taller than the floor keeps the size its content gives it. No
+   * `(pointer: coarse)` gate either -- the UI/UX direction (section 7) says a pointer does
+   * not reduce controller or touch target size. `display` is left as the button's own: a
+   * <button> already centres its content in a box taller than its text, and turning every
+   * control into a flex container would split a toggle's label and value into separate
+   * flex items and trim the space between them. */
+  min-height: var(--hud-control-min);
+  min-width: var(--hud-control-min);
+  /* So the floor is the OUTER size on every element carrying the primitive. A <button> is
+   * already border-box in Chromium; the two `<a class="ui-btn">` links in About & Legal are
+   * not, and without this their padding went on top of the 44 px -- measured 48 -> 56 px. */
+  box-sizing: border-box;
   pointer-events: auto;
   cursor: pointer;
+  /* The FALLBACK padding, for a control that carries no size variant. `.hud-new-game` is
+   * `.ui-btn.ui-btn--primary` in the markup and takes its padding from `--primary`; with a run
+   * active `hud.ts` removes `--primary` for the tertiary "Start New Campaign", and
+   * `.hud-new-game--tertiary` sets only a font size and an opacity. That state had no padding
+   * source at all and fell to the UA default -- invisible at 19px tall, lopsided once the floor
+   * above made the box 44px (measured 158x44: ~6px of horizontal padding against 16 vertical).
+   * Here rather than on the tertiary, because the gap is the primitive's: every other `.ui-btn`
+   * is padded or sized by a rule LATER in this file (`--sm`, `--slab`, `--primary`,
+   * `.hud-skin`, `.hud-versus-option-btn`, `.hud-versus-map-card`, `.hud-controller-source-btn`,
+   * and `.hud-level-btn`'s fixed 44x44), so each of them overrides this and the fallback
+   * reaches only a control that declared none. Slab values, since a variant-less control sits
+   * among slabs.
+   *
+   * DECLARED AFTER `cursor`, not beside `box-sizing` where it reads more naturally: the
+   * mutation entry that pins `box-sizing` spans `box-sizing`/`pointer-events`/`cursor` as one
+   * exact string, and splitting it would have re-pointed a verified entry to make room for a
+   * new one. */
+  padding: 8px 20px;
   border: none;
   border-radius: var(--hud-radius-md);
   font-weight: var(--hud-weight-normal);
@@ -2613,6 +2643,36 @@
   display: none;
 }
 
+/*
+ * FOUR MORE PANES THAT SCROLL (issue #686).
+ *
+ * These were the last full-screen panes still centring their column with no scroller, so
+ * content taller than the viewport was clipped at BOTH ends with nothing to reach it by.
+ * The 44 px control floor made them taller, and measured in Chromium that pushed 11 control
+ * readings off-screen that were reachable before it -- among them Records' Stats and
+ * Achievements tabs at 200% zoom and five Customize accent swatches at 320x568.
+ *
+ * `overflow-y: auto` with `flex-start` is #642's cure for the centred-overflow clip, but here
+ * it would also pin every one of these screens -- the Main Menu included -- to the top of the
+ * viewport when it fits. `safe center` is the alignment that says what these panes mean:
+ * centred while the column fits, and start-aligned the moment it overflows, so the overflow
+ * lands below the scroll origin where it can be reached.
+ *
+ * Not the two flex spacers a first draft used. They are flex items, so the column's `gap`
+ * went on either side of them, and a nearly full pane moved down by a gap -- measured 10 px
+ * on Achievements at 320x568 against the same build centred.
+ *
+ * A browser that does not parse `safe` drops this declaration and keeps the base rule's
+ * `center`, which is exactly the clipping these panes had before -- no worse than that.
+ */
+.hud-panel,
+.hud-stats,
+.hud-customize,
+.hud-achievements {
+  justify-content: safe center;
+  overflow-y: auto;
+}
+
 .hud-achievement-list {
   display: flex;
   flex-direction: column;
@@ -2765,6 +2825,11 @@
 .hud-settings-volume {
   pointer-events: auto;
   width: 140px;
+  /* The only interactive control on a menu surface that is not a `.ui-btn` and was under
+   * the 44 px floor (issue #686): 140x16 as rendered. A range input takes a press anywhere in
+   * its box and moves the thumb there, so a taller box is a taller target; the track and
+   * thumb stay centred in it. */
+  height: var(--hud-control-min);
 }
 
 /* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */

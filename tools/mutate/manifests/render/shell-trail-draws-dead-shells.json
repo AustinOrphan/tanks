@@ -1,0 +1,14 @@
+{
+  "id": "shell-trail-draws-dead-shells",
+  "file": "src/render/shell-trail.ts",
+  "find": "      if (!b.alive) continue;",
+  "replace": "      if (false) continue;",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "why": "Draws a trail for a shell the sim has already stopped. entities.ts removes the shell's own mesh when it dies, so the row would hang in the air where a spent shell was, reading as a live shot with bounces to come.",
+  "killedBy": [
+    "shell bounce-trail system (issue #688) draws nothing for a dead shell, and forgets a shell that has left the world"
+  ]
+}

@@ -330,24 +330,27 @@ went red before assuming the deploy is broken.
 
 **`workflow_dispatch` is the ungated path, and it stays that way** — it exists to
 re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
-`ci.yml`'s 10 checking steps** (`verify`: 7, `visual`: 3), **not the `visual` job and not
-either mutation step**, so a manual deploy can still publish a render regression that only
+`ci.yml`'s 12 checking steps** (`verify`: 8, `visual`: 4), **not the `visual` job and not
+any mutation step**, so a manual deploy can still publish a render regression that only
 `tools/gl/` and `tools/visual/` catch, and a stale `tools/mutate/manifests/`. Those
 five steps are duplicated work on the automatic path; they are kept because deleting them
 would leave the manual path checking nothing. (Denominator: the named steps of both
 `ci.yml` jobs that check something — that can fail because of the tree — rather than set
 up the runner, so `checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`Install
 Playwright` and `Install chromium` are separate named steps), the browser cache and
-`upload-artifact` are all excluded. `verify` contributes 7: Typecheck, Test, Mutation
-harness smoke, full Mutation manifest, Build, portability, audit. `visual` contributes 4 —
-Build, GL tests, Baseline trace, Visual check — but its `Build` is the same `npm run build`
-already counted, so it adds 3, for 10 distinct. The deploy runs 5 of them, all from
-`verify`: Typecheck, Test, Build, portability, audit.) The construction is written out
-because the bare number went stale twice unnoticed: `5 of 7` was **correct when #80 wrote
-it** — the same rule over
-that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest` (→ 8)
-and #128 added `Baseline trace (chromium)` (→ 9); splitting floor smoke from current full
-adds the tenth distinct named check. **`main` IS
+`Upload screenshots` are all excluded. `verify` contributes 8: Typecheck, Test, Mutation
+harness smoke, the affected-entries and the full Mutation manifest (a pull request runs
+the first and a push the second, but each is its own named check), Build, portability,
+audit. `visual` contributes 5 — Build, GL tests, Baseline trace, Visual check, Session
+lifecycle round trip — but its `Build` runs the same `npm run build` already counted, so
+it adds 4, for 12 distinct. The deploy runs 5 of them, all from `verify`: Typecheck, Test,
+Build, portability, audit.) The construction is written out, and since issue #693
+recomputed from the workflow files by `tools/workflows.test.ts`, because the bare number
+kept going stale unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule
+over that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest`
+(→ 8) and #128 added `Baseline trace (chromium)` (→ 9); splitting floor smoke from current
+full added the tenth; the affected-entries manifest step (issue #506) and #481's
+`Session lifecycle round trip` made twelve while this sentence still said ten. **`main` IS
 protected now, by a REPOSITORY RULESET rather than classic branch protection** — which is
 why `GET /repos/:owner/:repo/branches/main/protection` still answers 404, and why the
 sentence this replaces ("no branch protection and no ruleset — nothing forces work through
@@ -373,10 +376,12 @@ merge" message that a red check does — `gh pr checks` will look green while th
 stays blocked. **`gh pr merge` reports that message for any ruleset violation**, so
 diagnose with `gh pr checks` AND the thread state before assuming CI is the cause. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
-one localStorage namespace (the game's **six** keys are all `tanks.*`-prefixed —
-`progress`, `touch`, `stats`, `custom`, `achievements`, `run`; five stay `.v1`, and
-`run` is `.v2` since issue #154 gave `currentLevelId` real campaign-level ids instead
-of a stringified `ARENAS` index — this sentence said "four" until the mobile-release
-investigation counted them, and "five" until the campaign-run model added a sixth), and the
+one localStorage namespace (every key the game writes is `tanks.*`-prefixed: the seven on
+`SAVE_KEYS` — `progress`, `stats`, `stats.run`, `custom`, `settings`, `achievements` and
+`run`, which is `.v2` since issue #154 gave `currentLevelId` real campaign-level ids
+instead of a stringified `ARENAS` index while the rest stay `.v1` — plus the versus
+setup's `tanks.versus.v1`, which saves do not carry, and the legacy `tanks.touch.v1`, which
+is only migrated from and imported; this sentence said "four", "five" and then "six" as
+keys were added, and since issue #693 `tools/instructions.test.ts` recomputes it), and the
 portfolio's root-scoped `/sw.js` service worker controls `/tanks/` and deletes every
 CacheStorage entry it does not own — so an offline feature here needs coordination first.

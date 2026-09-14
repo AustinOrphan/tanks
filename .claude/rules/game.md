@@ -26,8 +26,11 @@ paths:
   fingerprint does not prove code compatibility.
 - Keep both `sm.state` reads in the driver and keep `world`/`prevWorld` as getters; those
   apparently tidy refactors change behavior without a type error.
-- Runtime development flags require `dev=1`, stay out of `src/sim/`, and must be temporary.
-  Update `FLAG_REGISTRY` and regenerate `docs/dev-flags.md` with `npm run devflags:doc`.
+- Runtime development flags require `dev=1` and stay out of `src/sim/`. A flag for an open
+  question is temporary: once ruled, delete it or make the winner unconditional. A flag
+  kept as a permanent rollback lever (`topbar`, `menuTransition`) is exempt and must say so
+  in its own module header. Update `FLAG_REGISTRY` and regenerate `docs/dev-flags.md` with
+  `npm run devflags:doc`.
 - For CSS, preserve the raw-content test setup and structural guards; Vitest can otherwise
   stub a stylesheet to an empty string and make assertions vacuous.
 - HUD design tokens live in `hud.css`'s `:root` block. Tokenise a value only where it is a

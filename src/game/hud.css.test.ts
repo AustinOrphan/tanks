@@ -839,21 +839,27 @@ describe('hud.css is syntactically whole', () => {
     // comment this replaces named six scrollers, and there are eight -- `.hud-devcfg` and
     // `.hud-controller-rows` arrived after it was written, and `> 3` could not notice.
     //
-    // EIGHT is also every `overflow-y: auto` rule in hud.css, counted with
-    // `grep -nE 'overflow(-y)?: *auto' src/game/hud.css`: .hud-settings, .hud-about,
-    // .hud-devtools, .hud-devcfg, .hud-selftest, .hud-achievement-list,
-    // .hud-controller-rows, .hud-versus-setup. That equality is what lets this guard claim
-    // no scrolling PANE centres its axis rather than only the ones the fixture happens to
-    // build -- and if a ninth rule is added to a surface `mountEveryButton` does not mount,
-    // the two populations part and this comment is the thing that has gone stale.
+    // EIGHT was every `overflow-y: auto` rule in hud.css until issue #686 added a ninth that
+    // covers four panes at once, counted with `grep -nE 'overflow(-y)?: *auto' src/game/hud.css`:
+    // .hud-settings, .hud-about, .hud-devtools, .hud-devcfg, .hud-selftest,
+    // .hud-achievement-list, .hud-controller-rows, .hud-versus-setup, and the shared
+    // `.hud-panel, .hud-stats, .hud-customize, .hud-achievements` rule -- twelve panes in
+    // nine rules. That equality is what lets this guard claim no scrolling PANE centres its
+    // axis rather than only the ones the fixture happens to build -- and if another rule is
+    // added to a surface `mountEveryButton` does not mount, the two populations part and this
+    // comment is the thing that has gone stale.
     expect([...new Set(scrollers.map((el) => el.className.split(' ')[0]))].sort()).toEqual([
       'hud-about',
       'hud-achievement-list',
+      'hud-achievements',
       'hud-controller-rows',
+      'hud-customize',
       'hud-devcfg',
       'hud-devtools',
+      'hud-panel',
       'hud-selftest',
       'hud-settings',
+      'hud-stats',
       'hud-versus-setup',
     ]);
     const centred = scrollers
@@ -886,6 +892,49 @@ describe('hud.css is syntactically whole', () => {
     }
 
     dispose();
+  });
+
+  it('keeps every menu control at the 44px touch floor (issue #686)', () => {
+    // jsdom lays nothing out, so whether a control RENDERS at 44 px is measured in Chromium, by
+    // `tools/visual/hit-targets.mjs` over every player-facing surface. What this pins is the
+    // contract that measurement depends on, in the file an edit to it touches: take any of
+    // these declarations away and a control can render under the floor again with every
+    // other test here still green. Before the floor, 764 of 1016 control readings were under
+    // 44 px in that sweep.
+    const src = stripComments(css);
+    const rule = (sel: string): string => {
+      const at = src.search(new RegExp(`(^|\\n)${sel.replace(/[.]/g, '\\$&')} \\{`));
+      expect(at, `no ${sel} rule`).toBeGreaterThan(-1);
+      return src.slice(at, src.indexOf('}', at));
+    };
+    const btn = rule('.ui-btn');
+    expect(btn, 'the primitive no longer floors its height').toMatch(/min-height:\s*var\(--hud-control-min\);/);
+    expect(btn, 'the primitive no longer floors its width').toMatch(/min-width:\s*var\(--hud-control-min\);/);
+    // Without it the two <a class="ui-btn"> links put their padding ON TOP of the floor:
+    // measured 48 -> 56 px, a control grown past its design rather than raised to the floor.
+    expect(btn, 'the floor is no longer the outer size').toMatch(/box-sizing:\s*border-box;/);
+    // The one menu control that is not a `.ui-btn`, measured 140x16 before.
+    expect(rule('.hud-settings-volume')).toMatch(/height:\s*var\(--hud-control-min\);/);
+  });
+
+  it('pads a control that carries no size variant (issue #686)', () => {
+    // `.hud-new-game` is `.ui-btn.ui-btn--primary` in the markup, and `--primary` is where its
+    // padding comes from. With a run active the button becomes the tertiary "Start New
+    // Campaign" and `hud.ts` REMOVES `--primary`; `.hud-new-game--tertiary` sets only a font
+    // size and an opacity. That left the one state with no padding source at all, on the UA
+    // default of about 1px 6px -- which was invisible at 19px tall and lopsided once the floor
+    // made the box 44px: measured 158x44 in Chromium, ~6px of horizontal padding against 16
+    // vertical. Every OTHER `.ui-btn` is padded or sized by a rule later in this file
+    // (`--sm`, `--slab`, `--primary`, `.hud-skin`, `.hud-versus-option-btn`,
+    // `.hud-versus-map-card`, `.hud-controller-source-btn`, and `.hud-level-btn`'s fixed
+    // 44x44), so a base padding on the primitive is overridden by all of them and reaches
+    // only the state that had none.
+    const src = stripComments(css);
+    const at = src.search(/(^|\n)\.ui-btn \{/);
+    const btn = src.slice(at, src.indexOf('}', at));
+    expect(btn, 'the primitive no longer pads a variant-less control').toMatch(
+      /padding:\s*8px\s+20px;/,
+    );
   });
 
   it('never lets a button fall through to browser default styling', () => {

@@ -1,0 +1,14 @@
+{
+  "id": "ui-btn-loses-its-height-floor",
+  "file": "src/game/hud.css",
+  "find": "  min-height: var(--hud-control-min);\n  min-width: var(--hud-control-min);\n  /* So the floor",
+  "replace": "  min-width: var(--hud-control-min);\n  /* So the floor",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Drops the height floor from the button primitive (issue #686). Height is the dimension the issue exists for: measured in Chromium before the floor, `--sm` buttons rendered 27 px tall and `--slab` 31-33 px across every player-facing surface, and nothing else in the stylesheet raises them. jsdom lays nothing out, so this entry kills on the structural assertion; the rendered size is the Chromium sweep's.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps every menu control at the 44px touch floor (issue #686)"
+  ]
+}
