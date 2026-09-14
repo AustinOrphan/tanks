@@ -1,0 +1,14 @@
+{
+  "id": "hud-retry-runs-before-the-alert-closes",
+  "file": "src/game/hud.ts",
+  "find": "    back();\n    retry();",
+  "replace": "    retry();\n    back();",
+  "why": "Issue #685: a retry that fails again reopens the alert from inside the retry. Popping the layer AFTER the retry pops the reopened alert instead of the one pressed, so the second failure vanishes and the player is left with nothing on screen.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: the match-failure alert offers Retry only when it can (issue #685) a retry that fails AGAIN leaves the new alert open, not closed by the old one"
+  ]
+}

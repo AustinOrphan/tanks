@@ -162,7 +162,7 @@ export function boot(deps: BootDeps): void {
    */
   let overlayHost: Pick<Hud, 'showMatchFailure'> | null = null;
 
-  const showFailure = (err: unknown, at: FailurePoint = 'boot'): void => {
+  const showFailure = (err: unknown, at: FailurePoint = 'boot', retry?: () => void): void => {
     const state = classifyStartupFailure(err, at);
 
     // OVERLAY OR PAGE, decided by the classified state rather than by this call site
@@ -176,7 +176,9 @@ export function boot(deps: BootDeps): void {
     // `const` assigned further down that this closure reads only when a click runs. The
     // page path is the safe fallback in both senses -- it needs nothing but the root.
     if (state.presentation === 'overlay' && overlayHost !== null) {
-      overlayHost.showMatchFailure(state);
+      // `retry` travels only on this path (issue #685). A page state is FATAL or has no
+      // shell to return to, so it has nothing to retry against and keeps its one Reload.
+      overlayHost.showMatchFailure(state, retry);
       // Reported on BOTH paths, and last on both, for the same reason: the player-facing
       // copy says nothing technical, so this is the only place the cause survives.
       deps.reportError(err);
@@ -235,11 +237,10 @@ export function boot(deps: BootDeps): void {
   // does not cover: `createAppShell` resolving storage, or a `WebGLRenderer` that gets its
   // context and then fails initialising on it.
   //
-  // A REPLACEMENT that throws does NOT arrive here -- it is raised inside a HUD click
-  // handler, long after boot() returned. That is a real hole in the recovery story,
-  // measured and left alone: "unrecoverable session creation failure" is issue #325's
-  // scope, and what the player should see when a rematch fails to start is a product
-  // decision, not a refactor's to make.
+  // A START that throws does not arrive here either, and no longer needs to. Every start --
+  // the four menu gestures and a session's own Rematch -- goes through the session host's
+  // `replace`, which cleans up and hands the throw to `onStartFailure` below (issue #685).
+  // This comment used to record the Rematch half of that as an open hole.
   try {
     // Built once, before the first session, and handed to every session after it.
     // See `BootDeps.startGame`'s own comment for why "once" is the whole point.
@@ -305,17 +306,13 @@ export function boot(deps: BootDeps): void {
       // it is closed here rather than left. WHAT the player should see when a match fails
       // to start is still issue #325's to design -- this only guarantees they see
       // something, and that it is the same something a failed boot has always shown.
-      requestStart: (intent) => {
-        try {
-          sessions?.start(intent);
-        } catch (err) {
-          // 'match' rather than the default: the game is UP. Reporting "Tanks! could not
-          // start" over a Main Menu the player can see working would read as the message
-          // being broken rather than the match. Issue #325's own scope names this case
-          // separately, and `boot.ts` recorded it as a hole when #428 created it.
-          showFailure(err, 'match');
-        }
-      },
+      //
+      // NO catch here any more (issue #685). The host now catches a start that throws and
+      // reports it through `onStartFailure`, for this path and for a session's Rematch
+      // alike, so a second catch here could only ever see a throw from DISPOSING the
+      // outgoing session -- a broken release path, which is a defect to surface for the
+      // same reason `requestStop` below is unguarded.
+      requestStart: (intent) => sessions?.start(intent),
       requestVersusSession: (config) => sessions?.requestVersusSession(config),
       requestCampaignSession: () => sessions?.requestCampaignSession(),
       // Returning to an application route (issue #429). Unguarded by a try/catch, unlike
@@ -356,6 +353,12 @@ export function boot(deps: BootDeps): void {
       startGame: deps.startGame,
       shell,
       routeHost,
+      // THE ONE PLACE a failed start is shown (issue #685). 'match' rather than the default
+      // because the game is UP: reporting "Tanks! could not start" over a Main Menu the
+      // player can see working would read as the message being broken rather than the
+      // match. Retry reruns the SAME descriptor through the same boundary, on a fresh
+      // canvas, so a retry that fails again lands right back here.
+      onStartFailure: (err, intent) => showFailure(err, 'match', () => sessions?.start(intent)),
     } satisfies GameSessionHostDeps);
     // Assigned to the `let` declared above the route host, which is what closes the loop:
     // from here on, a Versus Start click reaches this host. Every later read of

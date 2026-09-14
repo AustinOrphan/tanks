@@ -33,6 +33,9 @@ export interface GameSessionHost {
    * the host inside its try/catch, and a `WebGLRenderer` that fails to initialise throws
    * out of `startGame`, so the throw has to happen at a call rather than at construction.
    * Since #470 the ordinary no-WebGL case is answered before any of this.
+   *
+   * A start that throws is REPORTED, not rethrown (issue #685): see
+   * `GameSessionHostDeps.onStartFailure`.
    */
   start(intent: StartIntent): void;
   /**
@@ -129,6 +132,22 @@ export interface GameSessionHostDeps {
    * application-route state rather than a blank page.
    */
   readonly routeHost: RouteHost;
+  /**
+   * Where a start that THROWS goes (issue #685), instead of out of the call.
+   *
+   * Every path into a session reaches the host's one `replace`: the four menu gestures
+   * through `start`, and a session's own Rematch through `requestVersusSession`. Only the
+   * first of those ever passed through a guard. A Rematch that failed threw straight out of
+   * the session's HUD handler, after the outgoing session had been disposed and a fresh
+   * canvas appended, which left a canvas that never initialised and nothing the player
+   * could press.
+   *
+   * The host CLEANS UP and HANDS OVER; it does not classify and does not report. Deciding
+   * fatal against transient is `classifyStartupFailure`'s, and `reportError` belongs to
+   * whoever draws the failure, so a second reporter here would report the same throw twice.
+   * `intent` is the exact descriptor that failed, so a Retry can run it again unchanged.
+   */
+  readonly onStartFailure: (err: unknown, intent: StartIntent) => void;
 }
 
 export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHost {
@@ -192,7 +211,19 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
     if (spent) return;
     stop();
     canvas?.remove();
-    create(intent);
+    try {
+      create(intent);
+    } catch (err) {
+      // TWO throw sites, one cleanup (issue #685). `startGame` throwing leaves `handle` null
+      // but the fresh canvas already appended by `bootCanvas`. `enterGameplay` throwing
+      // leaves a LIVE handle, so removing only the canvas would leak the session's loop,
+      // listeners and GL context. `stopSession`'s three steps cover both and land the host
+      // in the same empty state a return to the menu does.
+      stop();
+      canvas?.remove();
+      canvas = null;
+      deps.onStartFailure(err, intent);
+    }
   };
 
   function stop(): void {
