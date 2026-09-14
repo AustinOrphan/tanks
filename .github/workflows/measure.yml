@@ -1,6 +1,6 @@
 name: Measurement harness
 
-# Manual only. These are the three describe.skip-turned-VITE_RUN_MEASURE-gated harnesses under
+# Manual only. These are the six describe.skip-turned-VITE_RUN_MEASURE-gated harnesses under
 # src/sim/ai/*.measure.test.ts -- multi-minute, multi-seed sweeps that produce a console
 # table for tuning AI constants, not a pass/fail gate (see each file's header comment).
 # Previously the only way to run one meant hand-flipping describe.skip to describe on a
@@ -18,6 +18,9 @@ on:
           - engagement
           - commitment
           - evasion
+          - bot-difficulty
+          - hazard-perception
+          - target-commitment
       testTimeout:
         description: >-
           vitest --testTimeout in ms. Seed counts and sweep sizes are constants inside
@@ -61,6 +64,9 @@ jobs:
             engagement) echo "path=src/sim/ai/engagement.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
             commitment) echo "path=src/sim/ai/commitment.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
             evasion) echo "path=src/sim/ai/evasion.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
+            bot-difficulty) echo "path=src/sim/ai/bot-difficulty.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
+            hazard-perception) echo "path=src/sim/ai/hazard-perception.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
+            target-commitment) echo "path=src/sim/ai/target-commitment.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
             *) echo "Unknown harness: $HARNESS" >&2; exit 1 ;;
           esac
 

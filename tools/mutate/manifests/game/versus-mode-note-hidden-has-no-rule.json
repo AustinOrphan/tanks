@@ -1,0 +1,15 @@
+{
+  "id": "versus-mode-note-hidden-has-no-rule",
+  "file": "src/game/hud.css",
+  "find": ".hud-versus-mode-note--hidden,",
+  "replace": ".hud-versus-mode-note--unused,",
+  "why": "Issue #694: hud.ts toggles the mode note's --hidden modifier whenever Teams is offered. With no rule behind the class, the empty note keeps its paragraph margins in the mode row, and the stylesheet-derived --hidden sweep cannot see a class the stylesheet never names.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud.css is syntactically whole declares every --hidden modifier hud.ts writes, so a toggled class cannot hide nothing",
+    "hud.css is syntactically whole hides the Versus mode note while Teams is offered, through the real HUD and stylesheet"
+  ]
+}

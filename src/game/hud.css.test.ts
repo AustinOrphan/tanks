@@ -636,6 +636,9 @@ describe('hud.css is syntactically whole', () => {
       '.hud-versus-open--hidden', '.hud-versus-setup', '.hud-versus-setup--hidden',
       '.hud-versus-row', '.hud-versus-mode-row', '.hud-versus-players-row',
       '.hud-versus-map-row', '.hud-versus-stock-row', '.hud-versus-option-btn',
+      // issue #694: the mode note is hidden whenever Teams is offered; without its rule the
+      // empty paragraph kept `.ui-hint`'s margins in the mode row.
+      '.hud-versus-mode-note--hidden',
       // `.hud-versus-assignment-note` is deliberately ABSENT from this list as of issue
       // #260, and both of its rules are gone from the stylesheet. It was listed for its
       // `--hidden` modifier, which was the only rule it ever had of its own; the note is
@@ -750,6 +753,47 @@ describe('hud.css is syntactically whole', () => {
       el.remove();
     }
     expect(visible, 'a --hidden modifier that leaves its element on screen').toEqual([]);
+  });
+
+  it('declares every --hidden modifier hud.ts writes, so a toggled class cannot hide nothing', () => {
+    // The sweep above takes its list from the STYLESHEET, so a modifier that hud.ts toggles
+    // but hud.css never declares is invisible to it. That is exactly what
+    // `.hud-versus-mode-note--hidden` was (issue #694): toggled on whenever Teams is offered,
+    // with no rule anywhere, so the empty note's paragraph margins stayed in the mode row.
+    // This derives the list the other way round, from hud.ts's own text.
+    const declared = new Set([...stripComments(css).matchAll(/\.([a-z0-9-]+--hidden)\b/g)].map((m) => m[1]));
+    const written = [...new Set([...hudSource.matchAll(/['"`\s]([a-z][a-z0-9-]*--hidden)\b/g)].map((m) => m[1]))];
+    expect(written.length, 'the scan found almost nothing; this test would pass vacuously').toBeGreaterThan(40);
+    expect(
+      written.filter((cls) => !declared.has(cls)),
+      'a --hidden modifier hud.ts writes that hud.css never declares',
+    ).toEqual([]);
+  });
+
+  it('hides the Versus mode note while Teams is offered, through the real HUD and stylesheet', () => {
+    // The sweeps above prove a rule exists and hides a bare element. This proves the note
+    // itself, in the pane that toggles it, resolves to `display: none` once Teams is
+    // offered at three players, and stays on screen while Teams is still refused at two.
+    // Without the second half, a rule that hid the note unconditionally would also pass.
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const hud = createHud(root);
+    try {
+      hud.setState('main-menu');
+      hud.showVersusSetup(true);
+      const note = root.querySelector('#hud-versus-mode-note') as HTMLElement;
+      const players = (n: number): HTMLButtonElement =>
+        root.querySelector(`.hud-versus-players-row [data-players="${n}"]`) as HTMLButtonElement;
+      players(2).click();
+      expect(note.textContent, 'Teams is refused at two players, so the note says why').not.toBe('');
+      expect(getComputedStyle(note).display, 'the refusal note is hidden while it is the refusal').not.toBe('none');
+      players(3).click();
+      expect(note.textContent, 'Teams is offered at three players').toBe('');
+      expect(getComputedStyle(note).display, 'the empty note still occupies the mode row').toBe('none');
+    } finally {
+      hud.dispose();
+      document.body.innerHTML = '';
+    }
   });
 
   it('hides a collapsed legal document with display, not with a class that does nothing', () => {

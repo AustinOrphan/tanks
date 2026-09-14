@@ -3446,6 +3446,11 @@
 
 .hud-versus-start-reason--hidden,
 .hud-versus-slot-reason--hidden,
+/* The Teams refusal note under the Mode row (issue #694), hidden whenever Teams is offered.
+ * Grouped here for the same reason as the dropped-map notice below. Before this selector the
+ * class toggled with no rule behind it, and the empty note kept its paragraph margins in the
+ * row. */
+.hud-versus-mode-note--hidden,
 /* The dropped-map notice (issue #274). Grouped with the refusals rather than given its own
  * rule because it needs exactly what they need -- `.ui-hint` for the look, `display: none`
  * for the hiding -- and a fourth near-identical rule is what this group exists to avoid.

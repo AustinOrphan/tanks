@@ -60,11 +60,30 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     // and raised rather than sampled: the denominator in the title IS the assertion.
   }, 30_000);
 
-  it('versusCatalogFailures sweeps the whole shipped catalog to the same answer', () => {
-    expect(versusCatalogFailures()).toEqual([]);
-    // Same reasoning and the same measurement as the sweep above: 3.2s locally at seven
-    // boards, which is not a safe margin against a 5s default on slower hardware.
-  }, 30_000);
+  it('versusCatalogFailures is every entry\'s failures concatenated in order, over the shipped catalog by default', () => {
+    // Issue #694: this used to rerun the real-geometry sweep above, the same answer at the
+    // same cost, a second time. The wrapper's body is one flatMap, so what it needs proving
+    // is the CONCATENATION and the DEFAULT, not the geometry again. Both are proven here
+    // against a 10x10 open room injected through `arenaFor`. Nothing in it hides a spawn, so
+    // each entry fails with its own id, and the real boards' geometry is never loaded.
+    const room: Arena = {
+      cols: 10, rows: 10, cellSize: 1, legend: {},
+      grid: Array.from({ length: 10 }, (_, r) => (r === 0 ? 'P.........' : '..........')),
+    };
+    const opts = { arenaFor: arenaFor(room) };
+    const entries = [
+      fixtureEntry({ id: 'vs-a', players: [4] }),
+      fixtureEntry({ id: 'vs-b', players: [3, 4], modes: ['ffa'] }),
+      fixtureEntry({ id: 'vs-c', players: [4], modes: ['teams'] }),
+    ];
+    const perEntry = entries.map((e) => versusCatalogEntryFailures(e, opts));
+    expect(perEntry.map((f) => f.length > 0), 'a fixture entry that fails nothing cannot show concatenation').toEqual([true, true, true]);
+    expect(versusCatalogFailures(entries, opts)).toEqual(perEntry.flat());
+
+    // The default: every shipped id reports, in catalog order.
+    const ids = versusCatalogFailures(undefined, opts).map((f) => f.slice(0, f.indexOf(' ')));
+    expect([...new Set(ids)]).toEqual(VERSUS_CATALOG.map((e) => e.id));
+  });
 });
 
 // ---------------------------------------------------------------------------

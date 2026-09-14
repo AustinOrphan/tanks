@@ -1,0 +1,14 @@
+{
+  "id": "versus-catalog-failures-drops-an-entry",
+  "file": "src/sim/versus-catalog-rules.ts",
+  "find": "  return entries.flatMap((e) => versusCatalogEntryFailures(e, opts));",
+  "replace": "  return entries.slice(1).flatMap((e) => versusCatalogEntryFailures(e, opts));",
+  "why": "The wrapper must report every entry's failures, not most of them. Against the shipped catalog, which is clean, a dropped entry changes nothing, so only fixture entries that each fail can catch it (issue #694).",
+  "tests": [
+    "src/sim/versus-catalog-rules.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "versus catalog sweep: shipped declarations hold versusCatalogFailures is every entry's failures concatenated in order, over the shipped catalog by default"
+  ]
+}

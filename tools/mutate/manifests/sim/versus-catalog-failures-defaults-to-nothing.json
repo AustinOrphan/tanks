@@ -1,0 +1,14 @@
+{
+  "id": "versus-catalog-failures-defaults-to-nothing",
+  "file": "src/sim/versus-catalog-rules.ts",
+  "find": "  entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,",
+  "replace": "  entries: readonly VersusCatalogEntry[] = [],",
+  "why": "Issue #694 replaced the second real-catalog sweep with fixtures. What that sweep also proved was the wrapper's DEFAULT, and a default that sweeps nothing reports a clean catalog for every board.",
+  "tests": [
+    "src/sim/versus-catalog-rules.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "versus catalog sweep: shipped declarations hold versusCatalogFailures is every entry's failures concatenated in order, over the shipped catalog by default"
+  ]
+}
