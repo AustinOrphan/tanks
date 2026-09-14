@@ -30,7 +30,14 @@ import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subj
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
 import { MOMENTS } from '../../src/render/gallery/moments';
 import { createWorkbench, type WorkbenchSceneOptions } from '../../src/render/gallery/workbench-scene';
-import { QUALITY_PRESETS, type MuzzleSmokeQuality, type RenderQuality } from '../../src/render/quality';
+import {
+  QUALITY_PRESETS,
+  applyRenderOverrides,
+  NO_RENDER_OVERRIDES,
+  type MuzzleSmokeQuality,
+  type RenderOverrides,
+  type RenderQuality,
+} from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
@@ -327,6 +334,96 @@ check('the `low` quality preset disables antialiasing on the WebGL context', () 
   if (highAA !== true) return `high preset: context antialias attribute is ${highAA}, want true`;
   if (lowAA !== false) return `low preset: context antialias attribute is ${lowAA}, want false`;
   return null;
+});
+
+// ---------------------------------------------------------------------------
+// render/quality.ts's single-setting overrides (issue #735), applied. quality.test.ts proves
+// `applyRenderOverrides` changes exactly the field an override names; these read the built
+// renderer's state back, so each override is shown to reach construction. Every one is applied
+// to `high` with a value `high` does not have, one setting per check for the masking reason
+// above.
+// ---------------------------------------------------------------------------
+
+function highWith(overrides: Partial<RenderOverrides>): RenderQuality {
+  return applyRenderOverrides(QUALITY_PRESETS.high, { ...NO_RENDER_OVERRIDES, ...overrides });
+}
+
+check('a shadowMapSize override sets the sun\'s shadow map size (issue #735)', () => {
+  const ctx = createScene(freshCanvas(), W, H, BOUNDARY, highWith({ shadowMapSize: 1024 }));
+  const sun = sunOf(ctx);
+  const mapSize = sun?.shadow.mapSize.width;
+  ctx.dispose();
+  if (!sun) return 'no shadow-casting sun found';
+  return mapSize === 1024 ? null : `sun.shadow.mapSize.width is ${mapSize}, want the override's 1024 (high's is 2048)`;
+});
+
+check('an antialias override creates the WebGL context without antialiasing (issue #735)', () => {
+  // The context attribute records what was requested when the context was created, which is
+  // the setting this override moves.
+  const ctx = createScene(freshCanvas(), W, H, BOUNDARY, highWith({ antialias: false }));
+  const aa = ctx.renderer.getContext().getContextAttributes()?.antialias;
+  ctx.dispose();
+  return aa === false ? null : `context antialias attribute is ${aa}, want false (high requests true)`;
+});
+
+check('a pixelRatioCap override sizes the drawing buffer by its cap, not the preset\'s (issue #735)', () => {
+  // devicePixelRatio stubbed to 3, above both caps: at this harness's real ratio of 1, a cap of
+  // 1.5 and high's 2 would both draw at 1 and the check could not fail.
+  const original = window.devicePixelRatio;
+  Object.defineProperty(window, 'devicePixelRatio', { value: 3, configurable: true });
+  const measure = (quality: RenderQuality): { got: number; cssWidth: number } => {
+    const canvas = freshCanvas();
+    const ctx = createScene(canvas, W, H, BOUNDARY, quality);
+    const got = ctx.renderer.getContext().drawingBufferWidth;
+    const cssWidth = canvas.clientWidth || window.innerWidth;
+    ctx.dispose();
+    return { got, cssWidth };
+  };
+  let plain: { got: number; cssWidth: number };
+  let capped: { got: number; cssWidth: number };
+  try {
+    plain = measure(QUALITY_PRESETS.high);
+    capped = measure(highWith({ pixelRatioCap: 1.5 }));
+  } finally {
+    Object.defineProperty(window, 'devicePixelRatio', { value: original, configurable: true });
+  }
+  const wantPlain = Math.floor(plain.cssWidth * 2);
+  const wantCapped = Math.floor(capped.cssWidth * 1.5);
+  if (plain.got !== wantPlain) return `high's drawing buffer is ${plain.got} wide, want ${wantPlain}`;
+  if (capped.got !== wantCapped) return `the overridden drawing buffer is ${capped.got} wide, want ${wantCapped}`;
+  return null;
+});
+
+function lightCounts(ctx: ReturnType<typeof createScene>): { directional: number; ambient: number } {
+  let directional = 0;
+  let ambient = 0;
+  ctx.scene.traverse((o) => {
+    if ((o as THREE.DirectionalLight).isDirectionalLight) directional++;
+    if ((o as THREE.AmbientLight).isAmbientLight) ambient++;
+  });
+  return { directional, ambient };
+}
+
+check('a fillRimLights override builds the sun and the ambient light and nothing else (issue #735)', () => {
+  const ctx = createScene(freshCanvas(), W, H, BOUNDARY, highWith({ fillRimLights: false }));
+  const { directional, ambient } = lightCounts(ctx);
+  const sun = sunOf(ctx);
+  ctx.dispose();
+  if (!sun) return 'no shadow-casting sun found';
+  if (directional !== 1 || ambient !== 1) {
+    return `found ${directional} directional and ${ambient} ambient lights, want 1 and 1 (high builds 3 and 1)`;
+  }
+  return null;
+});
+
+check('dispose detaches every light when the fill and rim lights were never built (issue #735)', () => {
+  const ctx = createScene(freshCanvas(), W, H, BOUNDARY, highWith({ fillRimLights: false }));
+  ctx.dispose();
+  let lights = 0;
+  ctx.scene.traverse((o) => {
+    if ((o as THREE.Light).isLight) lights++;
+  });
+  return lights === 0 ? null : `${lights} light(s) still attached after dispose`;
 });
 
 check('omitting the quality argument reproduces the `high` preset\'s shadowMap.type', () => {

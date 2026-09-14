@@ -121,7 +121,12 @@ import { developerExitSearch } from './dev-config';
 import { gallerySearch, type GalleryCatalog } from './gallery-selection';
 import type { GalleryWorkbenchDeps } from './gallery-workbench';
 import { configFor } from '../sim/config';
-import { qualityFor, type RenderQuality } from '../render/quality';
+import {
+  applyRenderOverrides,
+  qualityFor,
+  type RenderOverrides,
+  type RenderQuality,
+} from '../render/quality';
 import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
 import { resetDeveloperData, resolveStorage } from './storage';
 
@@ -1909,6 +1914,17 @@ export function startGameWith(
    */
   const sessionQuality = deps.devFlags.quality ?? deps.effectiveSettings.current().quality;
 
+  // One renderer setting at a time on top of that preset (issue #735), for a device sweep. Held
+  // beside the resolved configuration because the benchmark report records both: the
+  // overrides say which settings were moved, the configuration what the renderer applied.
+  const renderOverrides: RenderOverrides = {
+    shadowMapSize: deps.devFlags.shadowMapSize,
+    antialias: deps.devFlags.antialias,
+    pixelRatioCap: deps.devFlags.pixelRatioCap,
+    fillRimLights: deps.devFlags.fillRimLights,
+  };
+  const sessionRender = applyRenderOverrides(qualityFor(sessionQuality), renderOverrides);
+
   // The STARTED level's board, not a fixed arena and not the level system's own
   // `start`: the renderer must be born fitting the board `level` names by the time the
   // START BOUNDARY above has run. Those two used to be the same level, because a session
@@ -1953,7 +1969,8 @@ export function startGameWith(
     // `low` decides whether the muzzle-smoke system was constructed at all), so it applies
     // from the next match. That is also why the whole preset is applied at one moment
     // instead of half of it live -- see hud.ts's `QUALITY_TIMING`, which tells the player.
-    quality: qualityFor(sessionQuality),
+    // The single-setting overrides above are already applied to it.
+    quality: sessionRender,
     // `?dev=1&enemyDeathPulse=1` (issue #200): player deaths always ring; this only
     // gates non-player ones. See death-pulse.ts's own doc comment.
     enemyDeathPulse: deps.devFlags.enemyDeathPulse,
@@ -3612,13 +3629,14 @@ export function startGameWith(
   }
   if (recorder) devApi.replay = (): ReplayTrace => recorder.trace();
   if (benchWorkload !== null && benchRecorder !== null) {
-    const pixelRatioCap = qualityFor(sessionQuality).pixelRatioCap;
+    const pixelRatioCap = sessionRender.pixelRatioCap;
     devApi.bench = (): BenchReport =>
       buildBenchReport({
         workload: benchWorkload,
         recorder: benchRecorder,
         session: sessionDiagnostics(),
         pixelRatioCap,
+        renderOverrides,
         preview: null,
         page: {
           search: globalThis.location?.search ?? '',

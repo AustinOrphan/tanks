@@ -214,16 +214,18 @@ export function createScene(
   // surface facing away from it fell to flat ambient, so the near faces of every wall
   // were one dead tone. This gives them a gradient without pretending to be a second sun:
   // no shadows, low intensity, and tinted toward sky blue so it reads as bounce.
-  const fill = new THREE.DirectionalLight(0xbcd0ff, 0.55);
-  scene.add(fill);
-  scene.add(fill.target);
+  //
+  // It and the rim below exist only while the preset keeps them (`fillRimLights`, which
+  // issue #735's development flag can turn off). Off means never added, so `fit` and
+  // `dispose` below take either light as possibly absent.
+  const fill = quality.fillRimLights ? new THREE.DirectionalLight(0xbcd0ff, 0.55) : null;
+  if (fill) scene.add(fill, fill.target);
 
   // A low warm rim from behind the board, to separate wall tops and turret edges from
   // the dark background. Almost horizontal on purpose -- it should catch edges, not
   // light faces.
-  const rim = new THREE.DirectionalLight(0xffd9a8, 0.4);
-  scene.add(rim);
-  scene.add(rim.target);
+  const rim = quality.fillRimLights ? new THREE.DirectionalLight(0xffd9a8, 0.4) : null;
+  if (rim) scene.add(rim, rim.target);
 
   // Ambient drops now that fill and rim carry the shaded side. Left at 0.45 the three
   // together washed the shadows out, which is the thing the sun is here to draw.
@@ -299,10 +301,10 @@ export function createScene(
     shadowCam.far = span * 4;
     shadowCam.updateProjectionMatrix();
 
-    fill.position.set(cx + w * 0.7, span * 0.6, cz + h * 0.5);
-    fill.target.position.set(cx, 0, cz);
-    rim.position.set(cx, span * 0.18, cz - h * 1.1);
-    rim.target.position.set(cx, 0, cz);
+    fill?.position.set(cx + w * 0.7, span * 0.6, cz + h * 0.5);
+    fill?.target.position.set(cx, 0, cz);
+    rim?.position.set(cx, span * 0.18, cz - h * 1.1);
+    rim?.target.position.set(cx, 0, cz);
   }
   fit(worldWidth, worldHeight, boundary);
 
@@ -343,7 +345,9 @@ export function createScene(
   function dispose(): void {
     // main.ts now wires this to pagehide, so it is a live path rather than
     // dead code -- detach the scene graph as well as freeing the GPU handles.
-    scene.remove(ground, sun, sun.target, fill, fill.target, rim, rim.target, ambient);
+    scene.remove(ground, sun, sun.target, ambient);
+    if (fill) scene.remove(fill, fill.target);
+    if (rim) scene.remove(rim, rim.target);
     groundGeo.dispose();
     groundMat.dispose();
     // Light.dispose() -> shadow.dispose() frees BOTH shadow render targets:
@@ -355,8 +359,8 @@ export function createScene(
     // anyway: the cost is nothing and the alternative is a leak the day someone gives
     // one of them castShadow, which is exactly how the sun's own shadow targets were
     // nearly missed.
-    fill.dispose();
-    rim.dispose();
+    fill?.dispose();
+    rim?.dispose();
     textures.dispose();
     envMap.dispose();
     scene.environment = null;

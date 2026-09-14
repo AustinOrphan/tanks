@@ -274,6 +274,21 @@ export interface DevFlags {
    */
   bench: BenchWorkloadId | null;
   /**
+   * The four single-setting render overrides (issue #735), each applied on top of the session's
+   * resolved `quality` preset by `render/quality.ts`'s `applyRenderOverrides`, so a device sweep
+   * can move ONE renderer setting and hold the rest. `null` when absent or unrecognised leaves
+   * the preset's own value, the same reject-to-null idiom as `quality`.
+   *
+   * `shadowMapSize`: the sun's shadow map edge, one of 256, 512, 1024, 2048 or 4096.
+   */
+  shadowMapSize: number | null;
+  /** `on` or `off`: whether the game renderer's WebGL context is created with antialiasing. */
+  antialias: boolean | null;
+  /** The pixel-ratio cap, a decimal number from 0.5 to 4. */
+  pixelRatioCap: number | null;
+  /** `on` or `off`: whether the scene builds its fill and rim lights. */
+  fillRimLights: boolean | null;
+  /**
    * AI target-SELECTION perception. Null (the default) leaves `WorldRules.aiTargetPerception`
    * at `'full'` -- the AI may pick any live opponent, exactly as the player can see any tank
    * on the board. `los` restores the bound issue #359 shipped and the owner then superseded.
@@ -513,6 +528,10 @@ export const DEV_FLAGS_OFF: DevFlags = {
   coopPool: false,
   quality: null,
   bench: null,
+  shadowMapSize: null,
+  antialias: null,
+  pixelRatioCap: null,
+  fillRimLights: null,
   bots: null,
   mode: null,
   outcome: null,
@@ -547,6 +566,40 @@ function asBench(params: URLSearchParams): BenchWorkloadId | null {
   const raw = params.get('bench');
   if (raw === null) return null;
   return BENCH_WORKLOAD_NAMES.has(raw) ? (raw as BenchWorkloadId) : null;
+}
+
+/** The accepted `?shadowMapSize=` values: the powers of two from a quarter of `medium`'s to
+ * twice `high`'s. */
+const SHADOW_MAP_SIZES = ['256', '512', '1024', '2048', '4096'] as const;
+
+/** The two words a render on/off override accepts. Exactly these, lower case: `?antialias=1`
+ * is rejected to null rather than read the way a boolean flag's `1` is. */
+const RENDER_SWITCH_VALUES = ['on', 'off'] as const;
+
+const PIXEL_RATIO_CAP_MIN = 0.5;
+const PIXEL_RATIO_CAP_MAX = 4;
+
+/** A shadow map size from SHADOW_MAP_SIZES, or null -- see `asQuality`. */
+function asShadowMapSize(params: URLSearchParams): number | null {
+  const raw = params.get('shadowMapSize');
+  return raw !== null && (SHADOW_MAP_SIZES as readonly string[]).includes(raw) ? Number(raw) : null;
+}
+
+/** `on` is true, `off` is false, and anything else, absence included, is null. */
+function asRenderSwitch(params: URLSearchParams, name: string): boolean | null {
+  const raw = params.get(name);
+  if (raw === 'on') return true;
+  if (raw === 'off') return false;
+  return null;
+}
+
+/** A plain decimal from PIXEL_RATIO_CAP_MIN to PIXEL_RATIO_CAP_MAX, or null. Not clamped: an
+ * out-of-range cap is rejected rather than moved to a value nobody asked for. */
+function asPixelRatioCap(params: URLSearchParams): number | null {
+  const raw = params.get('pixelRatioCap');
+  if (raw === null || !/^\d+(\.\d+)?$/.test(raw)) return null;
+  const cap = Number(raw);
+  return cap >= PIXEL_RATIO_CAP_MIN && cap <= PIXEL_RATIO_CAP_MAX ? cap : null;
 }
 
 const VERSUS_MODE_NAMES = new Set(['ffa', 'teams']);
@@ -832,6 +885,10 @@ export function parseDevFlags(search: string): DevFlags {
     coopPool: isOn(params, 'coopPool'),
     quality: asQuality(params),
     bench: asBench(params),
+    shadowMapSize: asShadowMapSize(params),
+    antialias: asRenderSwitch(params, 'antialias'),
+    pixelRatioCap: asPixelRatioCap(params),
+    fillRimLights: asRenderSwitch(params, 'fillRimLights'),
     aiPerception: asAiPerception(params),
     bots: asBots(params),
     mode: asMode(params),
@@ -936,6 +993,17 @@ export const PLAYTEST_BUNDLE: BundleSpec = {
       'excludes it from ever being listed here.',
   ],
 };
+
+/** Shared by the four single-setting render overrides (issue #735). */
+const RENDER_OVERRIDE_NOTES: readonly string[] = [
+  'Applied on top of the preset `quality` or the stored Settings choice resolves to, for the ' +
+    'game renderer only: the Customize preview builds its own renderer and ignores it. Read ' +
+    'once, when a session builds its renderer.',
+  'An unrecognised value is rejected and leaves the preset\'s own setting. `__tanks.bench()` ' +
+    'records every override in effect.',
+  'Temporary: kept for the device sweep issue #288 runs. Delete it when that sweep concludes, ' +
+    'moving any value it settles into the presets.',
+];
 
 export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
   aimRay: {
@@ -1142,6 +1210,38 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'A permanent diagnostic, kept for the device run issue #288 needs, not a flag for an ' +
         'open question.',
     ],
+  },
+  shadowMapSize: {
+    kind: 'valued',
+    values: [...SHADOW_MAP_SIZES],
+    description:
+      "Overrides the quality preset's sun shadow map size for this session, leaving every " +
+      'other render setting at the preset.',
+    notes: RENDER_OVERRIDE_NOTES,
+  },
+  antialias: {
+    kind: 'valued',
+    values: [...RENDER_SWITCH_VALUES],
+    description:
+      "Overrides whether the game renderer's WebGL context is created with antialiasing, " +
+      'leaving every other render setting at the preset.',
+    notes: RENDER_OVERRIDE_NOTES,
+  },
+  pixelRatioCap: {
+    kind: 'valued',
+    type: `a decimal number from ${PIXEL_RATIO_CAP_MIN} to ${PIXEL_RATIO_CAP_MAX}`,
+    description:
+      "Overrides the quality preset's pixel-ratio cap for this session, leaving every other " +
+      'render setting at the preset.',
+    notes: RENDER_OVERRIDE_NOTES,
+  },
+  fillRimLights: {
+    kind: 'valued',
+    values: [...RENDER_SWITCH_VALUES],
+    description:
+      'Overrides whether the scene builds its fill and rim lights (`off` never adds them), ' +
+      'leaving every other render setting at the preset.',
+    notes: RENDER_OVERRIDE_NOTES,
   },
   bots: {
     kind: 'valued',

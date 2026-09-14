@@ -58,6 +58,14 @@ export interface RenderQuality {
   readonly shadowMapSize: number;
   readonly shadowType: THREE.ShadowMapType;
   /**
+   * Whether `createScene` builds its cool fill and warm rim directional lights. True in every
+   * preset, so `high` still reproduces the shipped scene; it is a field so the `fillRimLights`
+   * development flag (issue #735) can take them out for a device sweep. False means the two
+   * lights are never added, not added at zero intensity: a light at zero still costs its share
+   * of every lit material's shader, which is the cost that sweep measures.
+   */
+  readonly fillRimLights: boolean;
+  /**
    * `null` means the muzzle-smoke system is NOT CONSTRUCTED -- see `createRenderer`. A
    * system built but told to draw nothing would still pay its `spawn`/`update` every
    * frame and still hold its pooled sprites in the scene, and the ruling for `low` was
@@ -133,6 +141,7 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
     pixelRatioCap: 2, // scene.ts:117 & :293 `Math.min(window.devicePixelRatio, 2)`
     shadowMapSize: 2048, // scene.ts:168 `sun.shadow.mapSize.set(2048, 2048)`
     shadowType: THREE.PCFSoftShadowMap, // scene.ts:119 `renderer.shadowMap.type = THREE.PCFSoftShadowMap`
+    fillRimLights: true, // scene.ts's `fill` and `rim` DirectionalLights, added unconditionally before #735
     muzzleSmoke: FULL_MUZZLE_SMOKE, // every billow of muzzle-smoke.ts's table, at its own ceiling
   },
   /**
@@ -150,6 +159,7 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
     pixelRatioCap: 1.5,
     shadowMapSize: 1024,
     shadowType: THREE.PCFShadowMap,
+    fillRimLights: true,
     muzzleSmoke: CHEAP_MUZZLE_SMOKE,
   },
   /**
@@ -168,6 +178,7 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
     pixelRatioCap: 1,
     shadowMapSize: 512,
     shadowType: THREE.BasicShadowMap,
+    fillRimLights: true,
     muzzleSmoke: null,
   },
 };
@@ -176,4 +187,39 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
  * null) resolves to the default preset -- never to a guess at what was meant. */
 export function qualityFor(preset: QualityPreset | null): RenderQuality {
   return QUALITY_PRESETS[preset ?? DEFAULT_QUALITY_PRESET];
+}
+
+/**
+ * One renderer setting at a time, on top of a resolved preset (issue #735), from the
+ * `shadowMapSize`, `antialias`, `pixelRatioCap` and `fillRimLights` development flags. `null`
+ * leaves the preset's own value, so a session with no override resolves to a configuration
+ * equal to its preset.
+ */
+export interface RenderOverrides {
+  readonly shadowMapSize: number | null;
+  readonly antialias: boolean | null;
+  readonly pixelRatioCap: number | null;
+  readonly fillRimLights: boolean | null;
+}
+
+export const NO_RENDER_OVERRIDES: RenderOverrides = {
+  shadowMapSize: null,
+  antialias: null,
+  pixelRatioCap: null,
+  fillRimLights: null,
+};
+
+/**
+ * The preset with each non-null override applied. Always a fresh object: `QUALITY_PRESETS` is
+ * one table for the whole page, so a write into it would carry one session's override into
+ * every later session built on the same preset.
+ */
+export function applyRenderOverrides(preset: RenderQuality, overrides: RenderOverrides): RenderQuality {
+  return {
+    ...preset,
+    shadowMapSize: overrides.shadowMapSize ?? preset.shadowMapSize,
+    antialias: overrides.antialias ?? preset.antialias,
+    pixelRatioCap: overrides.pixelRatioCap ?? preset.pixelRatioCap,
+    fillRimLights: overrides.fillRimLights ?? preset.fillRimLights,
+  };
 }
