@@ -28,25 +28,12 @@
  *
  * Reported as JSON plus a readable summary. Nothing in CI runs it.
  */
-import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
-async function loadChromium() {
-  const candidates = [process.env.PLAYWRIGHT_MODULE, 'playwright'].filter(Boolean);
-  const tried = [];
-  for (const spec of candidates) {
-    try {
-      const mod = await import(spec);
-      if (mod.chromium) return mod.chromium;
-      tried.push(`${spec}: no chromium export`);
-    } catch (e) {
-      tried.push(`${spec}: ${e.code ?? e.message}`);
-    }
-  }
-  throw new Error(`playwright not found. Set PLAYWRIGHT_MODULE.\nTried:\n  ${tried.join('\n  ')}`);
-}
+import { loadChromium } from '../shared/playwright.mjs';
+import { serveStatic } from '../visual/static-server.mjs';
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
@@ -54,19 +41,9 @@ const MIME = {
   '.wav': 'audio/wav', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon',
 };
 
-function serve(root) {
-  const server = createServer(async (req, res) => {
-    const url = decodeURIComponent(req.url.split('?')[0]);
-    const path = join(root, url === '/' ? 'index.html' : url);
-    if (!path.startsWith(root) || !existsSync(path)) return void res.writeHead(404).end('not found');
-    try {
-      res.writeHead(200, { 'Content-Type': MIME[extname(path)] ?? 'application/octet-stream' });
-      res.end(await readFile(path));
-    } catch {
-      res.writeHead(500).end('error');
-    }
-  });
-  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok({ server, port: server.address().port })));
+async function serve(root) {
+  const server = await serveStatic(root, MIME);
+  return { server, port: server.address().port };
 }
 
 /**

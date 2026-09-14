@@ -11,8 +11,8 @@
  * A standalone CLI writing one frame and one report, which is the shape
  * `tools/capture/gallery-adapter.mjs` already established for the `moment` producer -- the
  * adapter shells out, reads `producer.json` back, and validates it. Playwright arrives
- * through `PLAYWRIGHT_MODULE`, resolved once by the capture framework's prerequisites
- * check, so this file never has to hunt for it.
+ * through `PLAYWRIGHT_MODULE`, checked once by the capture framework's prerequisites, and is
+ * loaded here through the tools family's shared loader (`tools/shared/playwright.mjs`).
  *
  * WHY EVERY SHOT IS ALSO MEASURED. A screenshot named `records.stats` proves the page did
  * not crash and nothing else; two states that render identically produce two files a
@@ -24,11 +24,11 @@
  *
  * NOT A GATE, and that is argued rather than assumed. See tools/screens/README.md.
  */
-import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, dirname, resolve } from 'node:path';
-import { resolveRequestPath } from '../visual/serve-path.mjs';
+import { dirname, resolve } from 'node:path';
+import { loadChromium } from '../shared/playwright.mjs';
+import { serveStatic } from '../visual/static-server.mjs';
 import { findScreenState, SCREEN_STATE_IDS, STEP_KINDS, WEBGL_MODES } from './states.mjs';
 import { screenCapturePaths } from './paths.mjs';
 
@@ -39,26 +39,15 @@ const MIME = {
 };
 
 /**
- * The static server, rooted at `dist` and sharing `roundtrip.mjs`'s path resolver.
+ * The static server, rooted at `dist`: `tools/visual/static-server.mjs`, which serves through
+ * `serve-path.mjs`'s resolver.
  *
  * REUSED rather than rewritten: `resolveRequestPath` already refuses malformed
  * percent-encoding and directory traversal, both of which were real failures found against
  * that probe, and both of which every ad-hoc capture script in this repository's history
  * has quietly reintroduced.
  */
-function serve(dist) {
-  const server = createServer(async (req, res) => {
-    const file = resolveRequestPath(dist, req.url);
-    if (file === null || !existsSync(file)) return void res.writeHead(404).end('not found');
-    try {
-      res.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream' });
-      res.end(await readFile(file));
-    } catch {
-      res.writeHead(500).end('error');
-    }
-  });
-  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(server)));
-}
+const serve = (dist) => serveStatic(dist, MIME);
 
 /**
  * The page-side WebGL override, as a source string for `addInitScript`.
@@ -246,7 +235,7 @@ async function main() {
   const timeout = Number(arg('timeout', 20000));
   if (!existsSync(resolve(dist, 'index.html'))) throw new Error(`no index.html under ${dist}`);
 
-  const chromium = (await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright')).chromium;
+  const chromium = await loadChromium();
   const server = await serve(dist);
   const base = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({
