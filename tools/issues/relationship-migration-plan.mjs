@@ -31,6 +31,9 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     { parent: 418, children: [722] },
     { parent: 635, children: [723] },
     { parent: 696, children: [724] },
+    // The in-app gallery workbench (#248), split into leaves by its 2026-09-14 triage
+    // clarification. #248 itself stays under #238 below.
+    { parent: 248, children: [729, 730, 731] },
     { parent: 228, children: [260, 261, 267, 268, 269, 278, 279, 280, 281, 282] },
     { parent: 229, children: [270, 271, 272, 273, 274, 425] },
     { parent: 233, children: [275, 276, 277] },
@@ -111,5 +114,9 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     { issue: 468, blockers: [427] },
     { issue: 428, blockers: [468, 470] },
     { issue: 429, blockers: [427, 428] },
+    // #248's leaves: the workbench route needs the registries under src/, and the command
+    // and still download need the route.
+    { issue: 730, blockers: [729] },
+    { issue: 731, blockers: [730] },
   ]),
 });
