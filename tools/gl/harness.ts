@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { createScene } from '../../src/render/scene';
 import { createRenderer } from '../../src/render/renderer';
 import { createAimRay } from '../../src/render/aimray';
+import { createShellTrailSystem } from '../../src/render/shell-trail';
 import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { createWorld } from '../../src/sim/world';
@@ -2776,6 +2777,82 @@ check('the quality preset decides how much muzzle smoke a frame draws, and `low`
     return null;
   } finally {
     for (const rig of Object.values(arms)) rig.dispose();
+  }
+});
+
+check('the posed gallery and a moment both draw the shell bounce-trail when asked (issue #688)', () => {
+  // The forwarding regression the two checks above record, for this flag: `main.ts` hands it
+  // to buildGallery AND buildMomentScene, so each branch is compared shipped-vs-flagged, each
+  // behind a same-flag control that must be byte-identical first.
+  const posed = (shellTrail: 'segments' | null) => {
+    const c = galleryCanvas();
+    const g = buildGallery(c, c.width, c.height, galleryOpts({ elements: ['shelltrail'], view: 'top', shellTrail }));
+    g.draw(0, 0);
+    const pixels = grab((c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext, c.width, c.height);
+    g.dispose();
+    c.remove();
+    return pixels;
+  };
+  // Tick 30 of `ricochet`: the shell fired at tick 10 and has not reached the wall (tick 36).
+  const moment = (shellTrail: 'segments' | null) => {
+    const c = galleryCanvas();
+    const g = buildMomentScene(c, c.width, c.height, {
+      moment: 'ricochet', view: 'top', skin: 'solid', hull: null, accent: null, spawnAnim: 'warp', shellTrail,
+    });
+    g.draw(30, 0);
+    const pixels = grab((c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext, c.width, c.height);
+    g.dispose();
+    c.remove();
+    return pixels;
+  };
+  for (const [name, render] of [['posed shelltrail', posed], ['moment ricochet', moment]] as const) {
+    const shipped = render(null);
+    const control = bytesDiffering(shipped, render(null));
+    if (control !== 0) return `${name}: control failed, two shipped renders differ by ${control} bytes`;
+    const moved = bytesDiffering(shipped, render('segments'));
+    if (moved < 200) return `${name}: only ${moved} of ${shipped.length} bytes differ with shellTrail=segments -- the flag is not reaching the scene`;
+  }
+  return null;
+});
+
+check('the shell bounce-trail costs one draw call however many shells are live (issue #688)', () => {
+  // The issue's renderer-cost criterion, asserted as a COUNT for the reason the cloud check
+  // above gives: the lever is draw calls, and wall-clock under swiftshader is noise. Every
+  // dash is one instance of one InstancedMesh, so 1 shell and 64 shells (the buffer's full
+  // 192 dashes) must both be exactly one call, and the triangle count must follow the
+  // dashes -- two per quad -- which is what shows the instances really were submitted.
+  const canvas = galleryCanvas(320, 240);
+  const renderer = new THREE.WebGLRenderer({ canvas });
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 320 / 240, 0.1, 200);
+  camera.position.set(0, 30, 0.01);
+  camera.lookAt(0, 0, 0);
+  const trail = createShellTrailSystem(scene);
+  const worldOf = (n: number) => {
+    const w = createWorld({ walls: [], tanks: [], spawns: [], lives: 3 });
+    w.bullets = Array.from({ length: n }, (_, i) => ({
+      id: i + 1, ownerId: 1, type: 'ricochet' as const, bouncesLeft: 2, alive: true,
+      pos: { x: -8 + (i % 8) * 2, y: -8 + Math.floor(i / 8) * 2 }, vel: { x: 4, y: 0 },
+    }));
+    return w;
+  };
+  try {
+    const readings: string[] = [];
+    for (const n of [1, 64]) {
+      const w = worldOf(n);
+      trail.sync(w, w, 0);
+      renderer.render(scene, camera);
+      const { calls, triangles } = renderer.info.render;
+      readings.push(`${n} shells: ${calls} calls, ${triangles} triangles, ${trail.drawnDashes()} dashes`);
+      if (calls !== 1 || triangles !== 2 * trail.drawnDashes() || trail.drawnDashes() !== 3 * n) {
+        return `expected 1 call and 2 triangles per dash, got ${readings.join('; ')}`;
+      }
+    }
+    return null;
+  } finally {
+    trail.dispose();
+    renderer.dispose();
+    canvas.remove();
   }
 });
 

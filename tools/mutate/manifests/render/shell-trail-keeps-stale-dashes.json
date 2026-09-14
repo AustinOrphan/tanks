@@ -1,0 +1,15 @@
+{
+  "id": "shell-trail-keeps-stale-dashes",
+  "file": "src/render/shell-trail.ts",
+  "find": "    mesh.count = n;",
+  "replace": "    mesh.count = Math.max(mesh.count, n);",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "why": "Never lowers the instance count, so dashes from an earlier frame keep drawing after a shell bounces (its row shortens) or leaves the board. The cue exists to show the count DROPPING at a ricochet; stale instances left at their old matrices would show the old count, floating where the shell used to be.",
+  "killedBy": [
+    "shell bounce-trail system (issue #688) turns the row with the shell the frame its heading turns",
+    "shell bounce-trail system (issue #688) draws nothing for a dead shell, and forgets a shell that has left the world"
+  ]
+}

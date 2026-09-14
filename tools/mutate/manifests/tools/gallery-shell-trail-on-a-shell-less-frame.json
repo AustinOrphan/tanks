@@ -1,0 +1,14 @@
+{
+  "id": "gallery-shell-trail-on-a-shell-less-frame",
+  "file": "tools/gallery/args.mjs",
+  "find": "    if (!ok) {\n      throw new Error(\n        `--shellTrail needs a shell in the frame",
+  "replace": "    if (false) {\n      throw new Error(\n        `--shellTrail needs a shell in the frame",
+  "expect": "killed",
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "Accepts --shellTrail on a frame with no shell in it. The capture then renders an ordinary frame and exits 0 -- evidence of the shipped default labelled as the experiment, the failure issue #637 was filed about -- and on --scene game the flag would be dropped outright, because that capture builds its URL from --query.",
+  "killedBy": [
+    "gallery args refuses --shellTrail where no shell is in the frame"
+  ]
+}
