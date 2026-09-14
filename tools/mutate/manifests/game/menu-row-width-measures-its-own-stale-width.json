@@ -1,0 +1,15 @@
+{
+  "id": "menu-row-width-measures-its-own-stale-width",
+  "file": "src/game/menu-row-width.ts",
+  "find": "  row.style.removeProperty(MENU_COL_VAR);\n",
+  "replace": "  // measured without clearing the width it set last time\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/menu-row-width.test.ts"
+  ],
+  "why": "Issue #706. The equalizer stops clearing `--hud-menu-col` before it measures, so each button reports the width it was last given rather than the width its label needs. A row can then only grow: at Pause, Settings alone keeps the 143 px Developer Tools width from the Main Menu a moment before, and a row with nothing visible keeps its stale width. Killed by the stale-width case and the nothing-visible case.",
+  "killedBy": [
+    "menu-row-width.ts: one width per Main Menu row (issue #706) measures the labels, not the width it gave them last time",
+    "menu-row-width.ts: one width per Main Menu row (issue #706) clears the width when nothing in the row is visible"
+  ]
+}

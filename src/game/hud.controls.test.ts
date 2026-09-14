@@ -681,6 +681,105 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     expect(calls).toEqual([[1, { kind: 'bot' }], [0, { kind: 'gamepad', padIndex: 3 }]]);
   });
 
+  describe('a pad the browser reports but Tanks cannot read (issue #597)', () => {
+    const unmapped = {
+      padIndex: 1,
+      id: 'HuiJia USB GamePad',
+      unsupported: { code: 'unknown-mapping', mapping: '', id: 'HuiJia USB GamePad' },
+    } as const;
+    const reasonLine = (root: HTMLElement): HTMLElement =>
+      view(root).querySelector('.hud-controllers-unsupported') as HTMLElement;
+    const helpLine = (root: HTMLElement): HTMLElement =>
+      view(root).querySelector('.hud-controllers-help') as HTMLElement;
+
+    it('is a DISABLED candidate, labelled as unsupported, pointing at a visible reason', () => {
+      // Negative controls: offering it as an ordinary choice leaves it enabled and unlabelled;
+      // never showing the reason leaves the line hidden and the pointer dangling.
+      const { hud: h, root } = mount();
+      h.setDetectedPads([{ padIndex: 0, id: 'Xbox Wireless Controller' }, unmapped]);
+      h.setControllers([{ kind: 'keyboard' }]);
+      h.setState('main-menu');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      const btns = candidateButtons(rows(root)[0]);
+      expect(btns.map((b) => b.textContent)).toEqual([
+        'Keyboard',
+        'None',
+        'Xbox Wireless Controller (index 0)',
+        'HuiJia USB GamePad (index 1) — not supported',
+      ]);
+      expect(btns.map((b) => b.disabled)).toEqual([false, false, false, true]);
+      expect(btns.map((b) => b.getAttribute('aria-describedby'))).toEqual([null, null, null, 'hud-controllers-unsupported']);
+      expect(reasonLine(root).classList.contains('hud-controllers-unsupported--hidden')).toBe(false);
+      expect(reasonLine(root).id).toBe('hud-controllers-unsupported');
+      expect(reasonLine(root).textContent).toBe(
+        "HuiJia USB GamePad (index 1) isn't supported: Tanks can't read its buttons in this browser.",
+      );
+    });
+
+    it('cannot be chosen: pressing its candidate reassigns nothing', () => {
+      // Negative control: wiring the reassign listener onto every candidate lets a
+      // synthetic click through and assigns a pad that reads no input.
+      const { hud: h, root } = mount();
+      h.setDetectedPads([unmapped]);
+      h.setControllers([{ kind: 'keyboard' }]);
+      h.setState('main-menu');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      const calls: unknown[] = [];
+      h.onReassignSlot((slot, source) => calls.push([slot, source]));
+      const btns = candidateButtons(rows(root)[0]);
+      btns[btns.length - 1].dispatchEvent(new MouseEvent('click'));
+      expect(calls).toEqual([]);
+    });
+
+    it('says why in its own words when a profile matched but the pad lacks the controls', () => {
+      const { hud: h, root } = mount();
+      h.setDetectedPads([
+        {
+          padIndex: 2,
+          id: '',
+          unsupported: { code: 'insufficient-controls', profileId: 'p', axes: 2, buttons: 4, requiredAxes: 4, requiredButtons: 16 },
+        },
+      ]);
+      h.setControllers([{ kind: 'keyboard' }]);
+      h.setState('main-menu');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      expect(reasonLine(root).textContent).toBe(
+        "Controller 2 (index 2) isn't supported: it has too few buttons or sticks for Tanks.",
+      );
+    });
+
+    it('marks a slot whose ASSIGNED pad cannot be read, rather than showing it as working', () => {
+      // Negative control: the current-source label without the unsupported check reads
+      // "HuiJia USB GamePad (index 1)", the same as a pad that works.
+      const { hud: h, root } = mount();
+      h.setDetectedPads([unmapped]);
+      h.setControllers([{ kind: 'gamepad', padIndex: 1 }]);
+      h.setState('main-menu');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      expect(currentOf(rows(root)[0]).textContent).toBe('HuiJia USB GamePad (index 1) — not supported');
+    });
+
+    it('shows no unsupported line when every listed pad is readable, and the help line always', () => {
+      // Negative control: a reason line shown unconditionally is a persistent warning for
+      // players with nothing wrong, which the issue rules out.
+      const { hud: h, root } = mount();
+      h.setDetectedPads([{ padIndex: 0, id: 'Xbox Wireless Controller' }]);
+      h.setControllers([{ kind: 'keyboard' }]);
+      h.setState('main-menu');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      expect(reasonLine(root).classList.contains('hud-controllers-unsupported--hidden')).toBe(true);
+      expect(candidateButtons(rows(root)[0]).some((b) => b.disabled)).toBe(false);
+      expect(helpLine(root).textContent).toBe(
+        'Only controllers your browser reports appear here. Not listed? Press a button on it, or reconnect it.',
+      );
+      // Unplugging the unreadable pad clears the line on the next detection push.
+      h.setDetectedPads([unmapped]);
+      expect(reasonLine(root).classList.contains('hud-controllers-unsupported--hidden')).toBe(false);
+      h.setDetectedPads([]);
+      expect(reasonLine(root).classList.contains('hud-controllers-unsupported--hidden')).toBe(true);
+    });
+  });
+
   it('re-rendering (setControllers/setDetectedPads) REPLACES rows, never appends', () => {
     const { hud: h, root } = mount();
     h.setControllers([{ kind: 'keyboard' }]);

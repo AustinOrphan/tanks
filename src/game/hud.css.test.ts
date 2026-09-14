@@ -635,6 +635,9 @@ describe('hud.css is syntactically whole', () => {
       '.hud-controller-rows', '.hud-controller-row', '.hud-controller-row-label',
       '.hud-controller-row-current', '.hud-controller-row-current--disconnected',
       '.hud-controller-source-btn',
+      // issue #597: the browser-boundary help line, the unsupported-pad reason line, and the
+      // rule that hides the reason while every listed pad is readable
+      '.hud-controllers-help', '.hud-controllers-unsupported', '.hud-controllers-unsupported--hidden',
       // versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
       // design.md): hidden rules, the row/option-button layout, and the friendly-fire
       // toggle.
@@ -1471,6 +1474,24 @@ describe('hud.css is syntactically whole', () => {
       row.className = cls;
       document.body.appendChild(row);
       expect(getComputedStyle(row).flexWrap, cls).toBe('wrap');
+    }
+    document.body.innerHTML = '';
+  });
+
+  it('sizes every Main Menu row button from its row width variable (issue #706)', () => {
+    // `menu-row-width.ts` measures the widest button and sets `--hud-menu-col` on the row;
+    // this is the half that makes the buttons USE it. Read through `resolved()`, because jsdom
+    // reports the literal `var(...)` otherwise. Negative control: without the rule every
+    // button keeps its label's width, which is the ragged row the issue measured.
+    for (const cls of ['hud-menu-play', 'hud-menu-utilities']) {
+      const row = document.createElement('div');
+      row.className = cls;
+      row.style.setProperty('--hud-menu-col', '143px');
+      const button = document.createElement('button');
+      button.className = 'ui-btn ui-btn--slab';
+      row.appendChild(button);
+      document.body.appendChild(row);
+      expect(resolved(button, 'width'), cls).toBe('143px');
     }
     document.body.innerHTML = '';
   });
@@ -2527,10 +2548,21 @@ describe('hover treatment on the UI kit primitives (issue #392)', () => {
     // added OUTSIDE the media query is exactly the mistake this must catch.
     const outside = src.replace(hoverBlock(), '');
     const stray = [...outside.matchAll(/^[^@}\n][^{\n]*:hover[^{\n]*\{/gm)].map((m) => m[0].trim());
-    // `.hud-rotate-btn:hover` predates #392 and is named in that issue's Boundaries as
-    // out of scope, so it is the one permitted exception -- pinned by name so a SECOND
-    // unguarded rule is a failure rather than joining a growing allowlist.
-    expect(stray.map((s) => s.replace(/\s*\{$/, ''))).toEqual(['.hud-rotate-btn:hover']);
+    // No exceptions. `.hud-rotate-btn:hover` predated #392 and was the one permitted stray
+    // until #633 moved it inside the query; the list is empty now, so any unguarded rule,
+    // including that one returning, is a failure.
+    expect(stray.map((s) => s.replace(/\s*\{$/, ''))).toEqual([]);
+  });
+
+  it('keeps the rotate buttons\' hover behind the pointer query, and their press outside it (issue #633)', () => {
+    // The rotate buttons are hold-to-repeat touch controls, so a hover left unguarded
+    // sticks on the last one tapped. Negative controls: moving the hover rule back out of
+    // the block fails the first assertion; moving `:active` into it fails the second,
+    // and a press would stop showing on touch.
+    const block = hoverBlock();
+    expect(block).toContain('.hud-rotate-btn:hover:not(:disabled)');
+    expect(block).not.toContain('.hud-rotate-btn:active');
+    expect(src.replace(block, '')).toMatch(/\n\.hud-rotate-btn:active \{/);
   });
 
   it('never engages on a disabled control', () => {

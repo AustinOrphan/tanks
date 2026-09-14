@@ -1,0 +1,14 @@
+{
+  "id": "menu-row-width-resizes-inside-the-observer-callback",
+  "file": "src/game/menu-row-width.ts",
+  "find": "  const observer = new Observer(() => {\n    if (pending !== null) return;\n",
+  "replace": "  const observer = new Observer(() => {\n    if (pending !== null) return;\n    run();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/menu-row-width.test.ts"
+  ],
+  "why": "Issue #706, found by the visual gate's hit-target sweep (#711) once #690's match-error routing was merged. The rows are re-equalized INSIDE the ResizeObserver callback, as the first version of this module did. Setting the width resizes the observed buttons, the browser reports the undeliverable resize as a window `error` event, and during a match boot routes that to the match-failed overlay, so Pause is never reached. Killed by the case that expects no resize before the frame runs.",
+  "killedBy": [
+    "menu-row-width.ts: one width per Main Menu row (issue #706) resizes nothing inside the observer callback, only on the frame after it"
+  ]
+}

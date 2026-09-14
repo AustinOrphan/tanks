@@ -31,11 +31,25 @@
  *                       state with different advice: a browser that could not be ASKED is
  *                       usually being blocked by something the player can switch off.
  *
- * The two are separated here for the same reason `STARTUP_FAILURES` separates them: the
- * screens differ, so a capture set that could only produce one of them would be evidence
+ *  - `match-build-fails` -- `getContext` is left alone, so the renderer IS constructed; the
+ *                       context's first `createFramebuffer` call then throws an untyped
+ *                       Error. Meant for `{ breakWebgl }` after boot: it is the one mode that
+ *                       reaches the RECOVERABLE match-failure overlay (issue #700).
+ *
+ * The first two are separated here for the same reason `STARTUP_FAILURES` separates them:
+ * the screens differ, so a capture set that could only produce one of them would be evidence
  * for half the contract.
+ *
+ * WHY A THIRD FAILURE MODE (issue #700). `screen.startup.match-failed` used to break the
+ * context with `probe-blocked` after boot. Since #669, a throw from `new THREE.WebGLRenderer`
+ * is a typed `RenderContextUnavailableError`, which `classifyStartupFailure` correctly calls
+ * FATAL, so that step now lands on the full-page "This browser cannot run Tanks!" state
+ * (measured on `073f2aa`) and the overlay is never reached. The fatal page keeps its capture
+ * in `screen.startup.unsupported-render`. Only an UNTYPED failure after the context exists is
+ * transient, which is what this mode produces, without weakening either #669's typing or the
+ * classifier.
  */
-export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked']);
+export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked', 'match-build-fails']);
 
 /**
  * Steps, in order. Each is a single-key record so an unknown step is a loud failure in the
@@ -625,24 +639,28 @@ export const SCREEN_STATES = Object.freeze([
     id: 'screen.startup.match-failed',
     title: 'A match could not start',
     description:
-      'The probe passed and the menu came up; the renderer fails when a match starts. Since '
-      + "issue #325's 2026-09-11 ruling this is an OVERLAY over the working Main Menu rather "
-      + 'than a replacement for the page: the shell behind it is intact, so the recovery is '
-      + 'Back to menu rather than Reload. It deliberately does not vouch for the rest.',
+      'The probe passed and the menu came up; building the match then fails for a reason the '
+      + "game cannot name. Since issue #325's 2026-09-11 ruling this is an OVERLAY over the "
+      + 'working Main Menu rather than a replacement for the page, and since #685 it offers '
+      + 'Retry beside Back to menu. It deliberately does not vouch for the rest.',
     steps: [
       ...PAST_SPLASH,
-      { breakWebgl: 'probe-blocked' },
+      // `match-build-fails`, NOT `probe-blocked` (issue #700). Breaking the context itself is
+      // a typed, FATAL failure since #669 and lands on the full page instead of this overlay.
+      { breakWebgl: 'match-build-fails' },
       { click: '.hud-new-game' },
       // `.hud-alert`, not `[role="alertdialog"]`: the replace-run confirmation declares the
       // same role, and a selector that could match either would pass on the wrong dialog.
       { waitVisible: '.hud-alert' },
+      // ...and Retry, which is what distinguishes this overlay from the one #685 extended.
+      { waitVisible: '.hud-alert-retry' },
     ],
     // `.hud-panel` is measured EXPECTING it to be hidden, which is why this state reports
     // 3 of 4 visible rather than 4 of 4. The layer stack swaps surfaces, so the menu is not
     // drawn behind the alert; its 0x0 box is the record of that, and an earlier draft of
     // this feature claimed the opposite in player-facing copy. Remove it here and the next
     // reader has to rediscover the fact by hand.
-    measure: ['.hud-alert', '.hud-alert-body', '.hud-alert-dismiss', '.hud-panel'],
+    measure: ['.hud-alert', '.hud-alert-body', '.hud-alert-retry', '.hud-alert-dismiss', '.hud-panel'],
   }),
   state({
     id: 'screen.no-script',

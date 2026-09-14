@@ -77,6 +77,20 @@ describe('the screen-state catalogue', () => {
     }
   });
 
+  it('reaches the RECOVERABLE match-failure overlay through a transient failure, not a fatal one (issue #700)', () => {
+    // Since #669, breaking the context after boot (`probe-blocked`) is a typed, FATAL failure
+    // and lands on the full page, so a state that waited for `.hud-alert` behind it timed out.
+    // Negative controls: restoring `probe-blocked` fails the mode assertion, and dropping the
+    // Retry wait lets a capture of the pre-#685 overlay pass as this one.
+    const state = findScreenState('screen.startup.match-failed')!;
+    const breaks = state.steps.filter((s: any) => 'breakWebgl' in s).map((s: any) => s.breakWebgl);
+    expect(breaks).toEqual(['match-build-fails']);
+    const waits = state.steps.filter((s: any) => 'waitVisible' in s).map((s: any) => s.waitVisible);
+    expect(waits).toContain('.hud-alert');
+    expect(waits).toContain('.hud-alert-retry');
+    expect(state.measure).toContain('.hud-alert-retry');
+  });
+
   it('measures something on every state, and never an empty selector', () => {
     // A capture with nothing measured is a picture with no caption: it proves the page did
     // not crash and nothing else. The measurement half is the part that has actually

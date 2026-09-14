@@ -24,6 +24,20 @@ import { STEP_KINDS, WEBGL_MODES } from './states.mjs';
  */
 export function webglOverrideSource(mode) {
   if (!WEBGL_MODES.includes(mode)) throw new Error(`unknown webgl mode '${mode}'`);
+  if (mode === 'match-build-fails') {
+    // The context is left alone, so the renderer is constructed and #669's typed context
+    // failure never fires. The FIRST framebuffer allocation after it -- the environment map
+    // `createScene` builds right after the renderer -- then throws an untyped Error, which
+    // `classifyStartupFailure` reads as "we do not know" at the match boundary: the
+    // recoverable overlay (issue #700). Measured before choosing it: createFramebuffer,
+    // framebufferTexture2D, linkProgram and drawElements each reached `.hud-alert` with Retry
+    // and Back to menu, and each was called exactly once. The earliest of the four is used.
+    return `(() => {
+    WebGL2RenderingContext.prototype.createFramebuffer = function () {
+      throw new Error('capture: building the match failed after the context was created');
+    };
+  })()`;
+  }
   return `(() => {
     const real = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (id, ...rest) {

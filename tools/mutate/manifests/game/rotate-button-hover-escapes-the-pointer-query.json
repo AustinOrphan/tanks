@@ -1,0 +1,15 @@
+{
+  "id": "rotate-button-hover-escapes-the-pointer-query",
+  "file": "src/game/hud.css",
+  "find": "  .hud-rotate-btn:hover:not(:disabled) {\n    background: rgba(255, 255, 255, 0.14);\n    color: #fff;\n  }\n}",
+  "replace": "}\n\n.hud-rotate-btn:hover {\n  background: rgba(255, 255, 255, 0.14);\n  color: #fff;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #633. The rotate buttons' hover rule sits outside `@media (hover: hover)` again, where it was until this change. They are hold-to-repeat buttons pressed on a touch screen, and a touch device reports a tap as a hover and holds it, so the last button tapped keeps its lifted fill as if a hold were still running. The mutation closes the query early and restores the old top-level rule. Killed by the whole-file stray-hover case, whose exception list is now empty, and by the rotate-button case.",
+  "killedBy": [
+    "hover treatment on the UI kit primitives (issue #392) scopes EVERY hover rule behind the pointer query, so a tap cannot stick",
+    "hover treatment on the UI kit primitives (issue #392) keeps the rotate buttons' hover behind the pointer query, and their press outside it (issue #633)"
+  ]
+}

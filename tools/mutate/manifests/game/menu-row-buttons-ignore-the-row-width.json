@@ -1,0 +1,14 @@
+{
+  "id": "menu-row-buttons-ignore-the-row-width",
+  "file": "src/game/hud.css",
+  "find": ".hud-menu-play > .ui-btn,\n.hud-menu-utilities > .ui-btn {\n  width: var(--hud-menu-col, auto);\n}\n",
+  "replace": "/* the row width is measured but never applied */\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #706. The rule that makes a Main Menu row's buttons read `--hud-menu-col` is removed. The equalizer still measures and sets the variable, so every script-side test passes, but no button uses it and each stays its label's width: Versus 89 beside Practice 98, Customize 116 beside Records 100. Killed by the structural case that resolves a row button's width through the variable.",
+  "killedBy": [
+    "hud.css is syntactically whole sizes every Main Menu row button from its row width variable (issue #706)"
+  ]
+}

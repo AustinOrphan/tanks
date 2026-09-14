@@ -270,6 +270,7 @@ import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
+import { equalizeMenuRows } from './menu-row-width';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
@@ -1715,6 +1716,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <!-- REPLACE, never append -- rebuilt on open and on every detection refresh, same
            convention setLevelSelect already uses for .hud-levels. -->
       <div class="hud-controller-rows"></div>
+      <!-- Issue #597. The help line is constant: it describes the list (only pads the
+           browser reports can appear), so it is not a warning a keyboard or touch player
+           has to dismiss. The unsupported line shows only while a listed pad cannot be
+           read, and is the reason its disabled candidates point at. -->
+      <p class="ui-hint hud-controllers-help">Only controllers your browser reports appear here. Not listed? Press a button on it, or reconnect it.</p>
+      <p class="ui-hint hud-controllers-unsupported hud-controllers-unsupported--hidden" id="hud-controllers-unsupported" role="status"></p>
       <button class="ui-btn ui-btn--slab hud-controllers-back" type="button">Back</button>
     </div>
     <!-- The versus setup pane (docs/superpowers/plans/2026-08-21-versus-setup-menu.md,
@@ -2364,6 +2371,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const menuPlayRow = el.querySelector('.hud-menu-play') as HTMLElement;
   const menuUtilitiesRow = el.querySelector('.hud-menu-utilities') as HTMLElement;
   const menuFooterRow = el.querySelector('.hud-menu-footer') as HTMLElement;
+  // One width per row (issue #706), kept current by a ResizeObserver on every button in
+  // both rows -- see menu-row-width.ts for why that and not a call from setState.
+  const menuRowWidths = equalizeMenuRows([menuPlayRow, menuUtilitiesRow]);
   const recordsOpenBtn = el.querySelector('.hud-records-open') as HTMLButtonElement;
   const statsView = el.querySelector('.hud-stats') as HTMLElement;
   const statsTable = el.querySelector('.hud-stats-table') as HTMLElement;
@@ -2396,6 +2406,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const controllersView = el.querySelector('.hud-controllers') as HTMLElement;
   const controllersTitleEl = el.querySelector('.hud-controllers-title') as HTMLElement;
   const controllerRowsEl = el.querySelector('.hud-controllers .hud-controller-rows') as HTMLElement;
+  const controllersUnsupportedEl = el.querySelector('.hud-controllers-unsupported') as HTMLElement;
   const controllersBackBtn = el.querySelector('.hud-controllers-back') as HTMLButtonElement;
   const versusOpenBtn = el.querySelector('.hud-versus-open') as HTMLButtonElement;
   const campaignOpenBtn = el.querySelector('.hud-campaign-open') as HTMLButtonElement;
@@ -3940,6 +3951,29 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     };
   }
 
+  /** The suffix both a refused candidate and a slot's current source carry (issue #597). */
+  const NOT_SUPPORTED = ' — not supported';
+
+  /** Whether the live list holds `padIndex` as a pad Tanks will not read. */
+  function unsupportedPad(padIndex: number): boolean {
+    return currentDetectedPads.some((p) => p.padIndex === padIndex && p.unsupported !== undefined);
+  }
+
+  /**
+   * One pad's reason, in the player's words (issue #597). `gamepad-diagnostics.ts`'s
+   * `describeSupport` is the DEVELOPER line for the same verdict and says so; this is the
+   * sentence the issue assigns to the assignment panel, keyed off the structured code so the
+   * input layer stays free of copy.
+   */
+  function unsupportedSentence(pad: DetectedPad): string {
+    const name = slotSourceLabel({ kind: 'gamepad', padIndex: pad.padIndex });
+    const why =
+      pad.unsupported?.code === 'insufficient-controls'
+        ? 'it has too few buttons or sticks for Tanks.'
+        : "Tanks can't read its buttons in this browser.";
+    return `${name} isn't supported: ${why}`;
+  }
+
   function renderControllerRowsInto(container: HTMLElement, assignment: Assignment): void {
     const restoreFocus = captureFocus(container);
     container.replaceChildren();
@@ -3960,6 +3994,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         source.kind === 'gamepad' && !currentDetectedPads.some((p) => p.padIndex === source.padIndex);
       current.classList.toggle('hud-controller-row-current--disconnected', disconnected);
       if (disconnected) current.textContent += ' — disconnected';
+      // An assigned pad Tanks cannot read (issue #597) is present, so it is not
+      // "disconnected", and without this it reads exactly like a pad that works.
+      if (source.kind === 'gamepad' && unsupportedPad(source.padIndex)) current.textContent += NOT_SUPPORTED;
 
       row.append(label, current);
 
@@ -3980,6 +4017,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         btn.textContent = candidateLabel(candidate);
         btn.dataset.candidate = candidate.kind === 'gamepad' ? `gamepad-${candidate.padIndex}` : candidate.kind;
         setSelected(btn, sameSource(candidate, source));
+        // A pad Tanks cannot read is SHOWN, refused, and pointed at its reason (issue #597):
+        // listing it is what separates "your browser reports it but the game cannot use it"
+        // from "nothing was detected". It gets no reassign listener, so a synthetic click
+        // cannot assign a pad the reader would sample as neutral every tick.
+        if (candidate.kind === 'gamepad' && unsupportedPad(candidate.padIndex)) {
+          btn.textContent += NOT_SUPPORTED;
+          btn.disabled = true;
+          describeDisabledReason(btn, controllersUnsupportedEl.id);
+          row.appendChild(btn);
+          continue;
+        }
         const forSlot = slot; // captured per-iteration, not the loop's shared binding
         btn.addEventListener('click', () => {
           for (const cb of reassignSlotCbs) cb(forSlot, candidate);
@@ -3988,6 +4036,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       }
       container.appendChild(row);
     }
+    const unreadable = currentDetectedPads.filter((p) => p.unsupported !== undefined);
+    controllersUnsupportedEl.textContent = unreadable.map(unsupportedSentence).join(' ');
+    controllersUnsupportedEl.classList.toggle('hud-controllers-unsupported--hidden', unreadable.length === 0);
     restoreFocus();
   }
 
@@ -7835,6 +7886,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // live timer pointing at elements this teardown is about to discard, which is the
       // exact leak issue #364's sixth criterion asks to be asserted rather than observed.
       transitions.dispose();
+      menuRowWidths.dispose(); // the row-width ResizeObserver
       disarmReset(); // a pending confirm timer must not outlive the HUD
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();

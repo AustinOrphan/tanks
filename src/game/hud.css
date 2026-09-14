@@ -410,6 +410,17 @@
   .ui-selectable--on:hover:not(:disabled) {
     box-shadow: 0 0 0 3px rgba(216, 221, 230, 0.25);
   }
+
+  /* The Customize preview's rotate buttons (issue #633). This rule predates #392 and sat
+   * OUTSIDE this query, the one exception its guard pinned by name. It is the control that
+   * guard matters most for: these are hold-to-repeat buttons pressed by a finger on the
+   * preview, so a touch device kept the lifted fill on whichever button was tapped last,
+   * which reads as a hold still running. `:active` stays outside, because a press must
+   * show on touch. */
+  .hud-rotate-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
 }
 
 /* Forced colours (issue #368): what survives when the user agent replaces the palette.
@@ -1245,6 +1256,25 @@
 /* Quieter than the play row above it by distance, not by a second colour. */
 .hud-menu-utilities {
   margin-top: 14px;
+}
+
+/*
+ * ONE WIDTH PER ROW (issue #706). `--hud-menu-col` is the row's widest visible button,
+ * measured by `menu-row-width.ts`, because CSS cannot say "as wide as the widest sibling" and
+ * still wrap. Before it, on the built bundle, each button was its label's width: Versus 89 and
+ * Practice 98; Customize 116, Records 100 and Settings 99 (CSS px, the same at 320, 390 and
+ * 1280 wide).
+ *
+ * THE ROWS STILL WRAP, and slab padding is unchanged. Measured before this change, the
+ * utilities row already folded onto two lines at 320x568, and a developer-mode fourth button
+ * (Developer Tools, 143) folded it at 390x844 as well. At equal widths the same folds hold,
+ * which is what keeps this from re-flowing the menu vertically.
+ *
+ * Unset until a visible row has been measured, when each button falls back to its own width.
+ */
+.hud-menu-play > .ui-btn,
+.hud-menu-utilities > .ui-btn {
+  width: var(--hud-menu-col, auto);
 }
 
 /* The footer is the quietest thing on the screen -- pushed away from the utilities and
@@ -2511,10 +2541,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.hud-rotate-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-}
+/* Hover lives in the `@media (hover: hover)` block near the top of this file (issue #633). */
 
 /* The pressed state has to be visible while a hold is running: the tank turning is the
  * other half of the feedback, but the button is where the finger is. */
@@ -3313,6 +3340,28 @@
  * ruling), and reassigning away from it is still one click away in the same row. */
 .hud-controller-row-current--disconnected {
   opacity: 0.45;
+}
+
+/*
+ * THE BROWSER BOUNDARY, said on the pane itself (issue #597). A controller the browser has
+ * not reported cannot be listed, and without this line a missing one looks like the game
+ * failing to detect it. Constant, not a warning: it describes the list, so it reads the same
+ * to a keyboard or touch player who never wanted a pad.
+ *
+ * The unsupported line is the other half: it names each pad the browser DOES report but
+ * Tanks cannot read, and it is the visible reason its disabled candidate points at. Visible
+ * rather than only `aria-describedby`, because roving focus skips a disabled button, so a
+ * controller player never lands on the control the attribute hangs from.
+ */
+.hud-controllers-help,
+.hud-controllers-unsupported {
+  max-width: 36ch;
+  margin: 0;
+  text-align: center;
+}
+
+.hud-controllers-unsupported--hidden {
+  display: none;
 }
 
 /* One button per candidate source (Keyboard / Bot / None / one per detected pad
