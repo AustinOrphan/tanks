@@ -1,0 +1,14 @@
+{
+  "id": "bench-raf-swallows-cancel",
+  "file": "src/game/bench.ts",
+  "find": "      raf.cancel(handle);",
+  "replace": "      void handle;",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "The wrapped scheduler ignores cancel, so a stopped or disposed benchmarked session keeps its frame callback scheduled.",
+  "killedBy": [
+    "instrumentRaf: times the callback without changing it passes cancel through to the real scheduler"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "bench-report-swaps-frames-and-work",
+  "file": "src/game/bench.ts",
+  "find": "    frames: summarizeFrames(samples.map((s) => s.intervalMs)),",
+  "replace": "    frames: summarizeFrames(samples.map((s) => s.workMs)),",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Reports callback time as the frame interval. Main-thread work is usually far shorter than the frame, so a device that drops frames would read as smooth.",
+  "killedBy": [
+    "buildBenchReport summarizes intervals as frames and callback time as work, never the other way round",
+    "startGameWith: the dev console surface the benchmark measures a session without changing what it simulates (issue #734) reports the session it measured, the rAF intervals the frames were fired at, and the preset cap"
+  ]
+}

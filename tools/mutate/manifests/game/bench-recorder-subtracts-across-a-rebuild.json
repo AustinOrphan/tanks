@@ -1,0 +1,14 @@
+{
+  "id": "bench-recorder-subtracts-across-a-rebuild",
+  "file": "src/game/bench.ts",
+  "find": "      simulatedTicks += tick >= lastTick ? tick - lastTick : tick;",
+  "replace": "      simulatedTicks += tick - lastTick;",
+  "expect": "killed",
+  "tests": [
+    "src/game/bench.test.ts"
+  ],
+  "why": "A new round restarts the tick at 0, and plain subtraction then takes ticks away. The simulated-tick count is what says how much gameplay a report measured.",
+  "killedBy": [
+    "createFrameRecorder: one warm-up, one measurement window sums simulated ticks across a world rebuild, where the tick restarts at 0"
+  ]
+}
