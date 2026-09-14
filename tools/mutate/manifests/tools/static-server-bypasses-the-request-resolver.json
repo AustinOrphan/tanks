@@ -1,0 +1,17 @@
+{
+  "id": "static-server-bypasses-the-request-resolver",
+  "file": "tools/visual/static-server.mjs",
+  "find": "    const file = resolveRequestPath(dist, req.url);\n",
+  "replace": "    const file = dist + decodeURIComponent(req.url.split('?')[0]);\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/static-server.test.ts"
+  ],
+  "why": "Issue #692. The handler builds the path from the raw URL with no resolver at all, as verify.mjs and both uikit scripts did before they served through this module. A raw `GET /../dist-evil/secret.txt` or `GET /../outside.txt` is then answered 200 with a file outside dist, `GET /%` rejects, and `/` names the directory itself and fails its read with 500. The traversal cases drive the handler with the raw URL because a normalising client collapses `..` before sending. Killed by the root, malformed-encoding, sibling-prefix and literal-escape cases; the missing-file case and the listening case pass under it.",
+  "killedBy": [
+    "static-server.mjs: staticHandler serves the root as index.html with its content type",
+    "static-server.mjs: staticHandler answers 404 instead of rejecting on malformed percent-encoding",
+    "static-server.mjs: staticHandler refuses a sibling directory whose name begins with dist",
+    "static-server.mjs: staticHandler refuses a literal .. escape out of dist"
+  ]
+}

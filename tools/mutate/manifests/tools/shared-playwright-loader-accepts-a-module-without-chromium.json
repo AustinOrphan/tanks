@@ -1,0 +1,14 @@
+{
+  "id": "shared-playwright-loader-accepts-a-module-without-chromium",
+  "file": "tools/shared/playwright.mjs",
+  "find": "        if (module.chromium) return module;\n",
+  "replace": "        return module;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/shared/playwright.test.ts"
+  ],
+  "why": "Issue #692. The loader returns the first module that imports, whether or not it exports `chromium`. Every tool then calls `chromium.launch` on undefined and dies with a TypeError far from the cause, instead of the loader moving on to the next candidate and, failing that, naming what it tried. Of the 11 copies this loader replaced, 7 carried the check (gl/run, gl/idle-cost, baseline/beacon-check, baseline/run, visual/verify and both uikit scripts); audio/render, visual/roundtrip, gallery/run and screens/run did not, so for those four this is a behaviour gained, not kept. Killed by the aggregate-error case, whose firefox-only package now resolves at its second attempt.",
+  "killedBy": [
+    "shared playwright loader skips a module with no chromium export and names every attempt in the error"
+  ]
+}

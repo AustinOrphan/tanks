@@ -1,0 +1,16 @@
+{
+  "id": "shared-playwright-loader-drops-the-directory-form",
+  "file": "tools/shared/playwright.mjs",
+  "find": "  if (!isAbsolute(candidate) || /\\.[cm]?js$/.test(candidate)) return [candidate];\n",
+  "replace": "  return [candidate];\n",
+  "expect": "killed",
+  "tests": [
+    "tools/shared/playwright.test.ts"
+  ],
+  "why": "Issue #692. The loader tries only the candidate itself, never `<dir>/index.mjs`, which is the form tools/visual/roundtrip.mjs alone used to accept and every tool now does. Plain Node refuses a directory import with ERR_UNSUPPORTED_DIR_IMPORT, so a PLAYWRIGHT_MODULE pointing at a package root falls through to the bare specifier, and on a machine without an ambient install the tool reports Playwright missing while it sits at the named path. The directory case runs in a real `node` subprocess because vitest's module runner resolves a directory import to its index.mjs by itself: the first draft of that case ran in-process and passed with this exact mutation's behaviour. Killed by the directory case (the load rejects), the fall-through case (the importer is never asked for `/missing/playwright/index.mjs`) and the aggregate-error case (its `index.mjs` line is missing).",
+  "killedBy": [
+    "shared playwright loader loads an absolute package directory through its index.mjs",
+    "shared playwright loader falls through a PLAYWRIGHT_MODULE that does not load to the bare specifier",
+    "shared playwright loader skips a module with no chromium export and names every attempt in the error"
+  ]
+}

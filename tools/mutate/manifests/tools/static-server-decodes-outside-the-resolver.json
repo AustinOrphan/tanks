@@ -1,0 +1,14 @@
+{
+  "id": "static-server-decodes-outside-the-resolver",
+  "file": "tools/visual/static-server.mjs",
+  "find": "    const file = resolveRequestPath(dist, req.url);\n",
+  "replace": "    const file = resolveRequestPath(dist, decodeURIComponent(req.url));\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/static-server.test.ts"
+  ],
+  "why": "Issue #692. The handler decodes the URL itself before the resolver sees it, which puts `decodeURIComponent` back outside any try: the first of the two defects serve-path.mjs was extracted for. `GET /%` then throws URIError out of an async request handler nothing awaits, and in verify.mjs (the required `visual` job) or either uikit script that is an unhandled rejection ending the run. Killed by the malformed-percent-encoding case, whose handler promise now rejects.",
+  "killedBy": [
+    "static-server.mjs: staticHandler answers 404 instead of rejecting on malformed percent-encoding"
+  ]
+}
