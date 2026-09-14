@@ -1,0 +1,16 @@
+{
+  "id": "gallery-command-states-the-default-spawn-animation",
+  "file": "src/game/gallery-command.ts",
+  "find": "  if (input.spawnAnim !== DEFAULT_SPAWN_ANIM) args.push('--spawn-anim', input.spawnAnim);",
+  "replace": "  args.push('--spawn-anim', input.spawnAnim);",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-command.test.ts",
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Writes --spawn-anim warp for every selection. For a posed element the capture page then styles the player tank, which the workbench does not, so the command draws a different tank than the pane shows.",
+  "killedBy": [
+    "galleryCommandArgs (issue #731) states a spawn animation only when it is not the default",
+    "the gallery workbench offers the command line for its selection (issue #731) shows the gallery command for the selection, and rewrites it when a control changes"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "gallery-command-states-the-wrong-height",
+  "file": "src/game/gallery-command.ts",
+  "find": "'--h', String(size.height)",
+  "replace": "'--h', String(size.width)",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-command.test.ts",
+    "tools/gallery/command-roundtrip.test.ts"
+  ],
+  "why": "Issue #731. States the canvas width as its height, so the command renders 640x640 and frames the subject differently from the workbench's 640x400 canvas.",
+  "killedBy": [
+    "galleryCommandArgs (issue #731) writes a moment at its frame, at the size it is given",
+    "every workbench selector round-trips through the gallery runner (issue #731) reads back the selection for every frame value"
+  ]
+}

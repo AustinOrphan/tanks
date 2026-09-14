@@ -1,6 +1,16 @@
 import { ACCENTS, PALETTE, SKINS, SPAWN_ANIMATIONS } from '../presentation/customization';
 import type { RafScheduler } from './driver';
 import {
+  captureCommand,
+  galleryAnimArgs,
+  galleryCommand,
+  galleryCommandArgs,
+  matchingCaptureStill,
+  stillFileName,
+  type GalleryCommandInput,
+  type GalleryStillSize,
+} from './gallery-command';
+import {
   formatGallerySelection,
   parseGallerySelection,
   defaultGallerySelection,
@@ -63,6 +73,12 @@ export interface GalleryWorkbenchDeps {
   readonly initial: string | null;
   /** The full link for a selection value. Absent hides Copy Link: a HUD that cannot see the page cannot write one. */
   readonly linkFor?: (value: string) => string;
+  /**
+   * Saves the canvas's current frame as an image file of the given name (issue #731).
+   * `createBrowserDeps` binds `downloadCanvasStill`. Absent hides Download Still, as an absent
+   * `linkFor` hides Copy Link.
+   */
+  readonly saveStill?: (canvas: HTMLCanvasElement, fileName: string) => void;
 }
 
 export interface GalleryWorkbenchView {
@@ -73,6 +89,38 @@ export interface GalleryWorkbenchView {
 
 /** The drawing buffer. Fixed, so a frame position is the same picture on every screen. */
 export const GALLERY_CANVAS = { width: 640, height: 400 } as const;
+
+/**
+ * What a still of the canvas is: the drawing buffer's own pixels, which is the size at device
+ * pixel ratio 1 (issue #731). The CSS scales the canvas to fit the pane, but a still and the
+ * command both describe the buffer, so neither depends on the screen it was made on.
+ */
+export const GALLERY_STILL: GalleryStillSize = Object.freeze({
+  width: GALLERY_CANVAS.width,
+  height: GALLERY_CANVAS.height,
+  dpr: 1,
+});
+
+/**
+ * Saves `canvas`'s current pixels as a PNG named `fileName` (issue #731).
+ *
+ * The button is pressed after the drawn frame has been presented. That returns the picture only
+ * because the workbench's renderer is created with `preserveDrawingBuffer: true`
+ * (`render/gallery/workbench-scene.ts`'s `createWorkbenchRenderer`). Without it the buffer is
+ * cleared once the frame is presented, and this would save a blank image; tools/gl/harness.ts's
+ * still check fails with that setting off.
+ */
+export function downloadCanvasStill(canvas: HTMLCanvasElement, fileName: string): void {
+  canvas.toBlob((blob) => {
+    if (blob === null) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, 'image/png');
+}
 
 export function sceneOptionsFor(selection: GallerySelection): GalleryWorkbenchSceneOptions {
   return {
@@ -200,7 +248,38 @@ export function mountGalleryWorkbench(container: HTMLElement, deps: GalleryWorkb
   linkRow.append(linkField, copyBtn);
   linkRow.hidden = deps.linkFor === undefined;
 
-  container.replaceChildren(problemList, form, canvas, timeline, linkRow);
+  // The same selection from the command line (issue #731): the gallery command, the registered
+  // capture recipe when one captures exactly this, and the animated form the browser does not
+  // assemble. Then a still of the frame on screen, at the size it states.
+  const commandRow = document.createElement('div');
+  commandRow.className = 'hud-gallery-commandrow';
+  const commandField = document.createElement('textarea');
+  commandField.className = 'hud-gallery-command';
+  commandField.readOnly = true;
+  commandField.rows = 2;
+  commandField.setAttribute('aria-label', 'Gallery command');
+  const copyCommandBtn = document.createElement('button');
+  copyCommandBtn.type = 'button';
+  copyCommandBtn.className = 'ui-btn hud-gallery-copy-command';
+  copyCommandBtn.textContent = 'Copy Command';
+  commandRow.append(commandField, copyCommandBtn);
+  const recipeLine = document.createElement('p');
+  recipeLine.className = 'hud-gallery-note hud-gallery-recipe';
+  const animLine = document.createElement('p');
+  animLine.className = 'hud-gallery-note hud-gallery-anim';
+  const stillRow = document.createElement('div');
+  stillRow.className = 'hud-gallery-stillrow';
+  const stillBtn = document.createElement('button');
+  stillBtn.type = 'button';
+  stillBtn.className = 'ui-btn hud-gallery-still';
+  stillBtn.textContent = 'Download Still';
+  const stillSize = document.createElement('span');
+  stillSize.className = 'hud-gallery-still-size';
+  stillSize.textContent = `${GALLERY_STILL.width} x ${GALLERY_STILL.height} px, device pixel ratio ${GALLERY_STILL.dpr}`;
+  stillRow.append(stillBtn, stillSize);
+  stillRow.hidden = deps.saveStill === undefined;
+
+  container.replaceChildren(problemList, form, canvas, timeline, linkRow, commandRow, recipeLine, animLine, stillRow);
 
   // ---- the scene ----
   const handle = deps.create(canvas, canvas.width, canvas.height, sceneOptionsFor(selection));
@@ -250,6 +329,22 @@ export function mountGalleryWorkbench(container: HTMLElement, deps: GalleryWorkb
   const paintLink = (): void => {
     if (deps.linkFor !== undefined) linkField.value = deps.linkFor(formatGallerySelection(selection, catalog));
   };
+  const commandInput = (): GalleryCommandInput => ({ ...sceneOptionsFor(selection), frame: selection.frame });
+  const paintCommand = (): void => {
+    const input = commandInput();
+    commandField.value = galleryCommand(galleryCommandArgs(input, GALLERY_STILL));
+    const still = matchingCaptureStill(input);
+    recipeLine.hidden = still === null;
+    recipeLine.textContent =
+      still === null
+        ? ''
+        : `Registered capture recipe ${still.id}, captured at ${still.viewport.width} x ${still.viewport.height} px: ${captureCommand(still.id)}`;
+    const animated = handle.frames > 1;
+    animLine.hidden = !animated;
+    animLine.textContent = animated
+      ? `As an animated GIF, which only the command line assembles: ${galleryCommand(galleryAnimArgs(input, GALLERY_STILL))}`
+      : '';
+  };
 
   // ---- playback: one timeline frame per animation frame, stopping at the last ----
   let playing = false;
@@ -262,6 +357,7 @@ export function mountGalleryWorkbench(container: HTMLElement, deps: GalleryWorkb
     selection = { ...selection, frame: handle.frame };
     paintTimeline();
     paintLink();
+    paintCommand();
   };
   const setPlaying = (next: boolean): void => {
     playing = next;
@@ -334,12 +430,21 @@ export function mountGalleryWorkbench(container: HTMLElement, deps: GalleryWorkb
     linkField.select();
     globalThis.navigator?.clipboard?.writeText(linkField.value).catch(() => undefined);
   });
+  on(copyCommandBtn, 'click', () => {
+    commandField.focus();
+    commandField.select();
+    globalThis.navigator?.clipboard?.writeText(commandField.value).catch(() => undefined);
+  });
+  on(stillBtn, 'click', () => {
+    deps.saveStill?.(canvas, stillFileName(commandInput(), GALLERY_STILL));
+  });
 
   paintForm();
   paintProblems();
   paintPlay();
   paintTimeline();
   paintLink();
+  paintCommand();
 
   let disposed = false;
   return {

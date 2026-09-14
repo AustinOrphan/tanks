@@ -1,0 +1,16 @@
+{
+  "id": "gallery-command-still-table-drifts-from-the-registry",
+  "file": "src/game/gallery-command.ts",
+  "find": "    tick: 10,",
+  "replace": "    tick: 11,",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-command.test.ts",
+    "tools/gallery/command-roundtrip.test.ts"
+  ],
+  "why": "Issue #731. The restated recipe table stops agreeing with tools/capture/recipes.json in one field, so the pane names a recipe for a frame the recipe does not capture.",
+  "killedBy": [
+    "GALLERY_CAPTURE_STILLS restates the registered moment stills (issue #731) holds exactly the moment still recipes the registry holds, field for field and in order",
+    "matchingCaptureStill (issue #731) names the registered still a selection reproduces exactly"
+  ]
+}
