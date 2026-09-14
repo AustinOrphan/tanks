@@ -32,6 +32,9 @@ import { createLevelSystem } from './levels';
 import { DEV_FLAGS_OFF } from './devflags';
 import type { VersusConfig } from './versus-config';
 import type { TankPreview } from '../render/preview';
+import { WORKBENCH_CATALOG } from '../render/gallery/workbench-scene';
+import { defaultGallerySelection, formatGallerySelection, parseGallerySelection } from './gallery-selection';
+import type { GalleryWorkbenchSceneOptions } from './gallery-workbench';
 
 type Triple = [string, string, string | null];
 
@@ -54,12 +57,14 @@ function recordingHud(): {
   const calls: string[] = [];
   const args: Array<[string, unknown[]]> = [];
   const previewCanvas = document.createElement('canvas');
+  const galleryBody = document.createElement('div');
   const hud = new Proxy(
     {},
     {
       get(_t, prop: string) {
         if (prop === 'previewCanvas') return previewCanvas;
         if (prop === 'previewRotateButtons') return [];
+        if (prop === 'galleryBody') return galleryBody;
         return (...argv: unknown[]): unknown => {
           if (prop.startsWith('on') && typeof argv[0] === 'function') {
             handlers.set(prop, argv[0] as (...a: unknown[]) => unknown);
@@ -117,7 +122,9 @@ interface Fixture {
   storageSnapshot: () => Record<string, string>;
 }
 
-function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
+function fixture(
+  opts: { withStyleSink?: boolean; galleryWorkbench?: RouteUiDeps['galleryWorkbench'] } = {},
+): Fixture {
   const storage = createMemoryStorage();
   // Declared before `createAppSettings`, which probes once at construction -- `box` below
   // does not exist yet at that moment.
@@ -230,6 +237,7 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
       box.campaignRequests += 1;
     },
     initialVersusConfig: null,
+    ...(opts.galleryWorkbench === undefined ? {} : { galleryWorkbench: opts.galleryWorkbench }),
   };
 
   const routeUi = createRouteUi(hud, sm, deps);
@@ -311,6 +319,7 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllerRumbleChange', 'onControllerSelfTestClose',
   'onControllerSelfTestOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
+  'onGalleryClose', 'onGalleryOpen',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
   'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin', 'onQualityChange',
   'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onSettingsClose', 'onSettingsOpen',
@@ -692,6 +701,102 @@ describe('the application routes work with no gameplay session behind them', () 
     const after = f.deps.settings.snapshot().input;
     expect(after.controllerRumble).toBe(false);
     expect(after.deviceHaptics, 'device haptics must not have moved').toBe(before.deviceHaptics);
+  });
+});
+
+describe('the gallery workbench is mounted with its pane and released with it (issue #730)', () => {
+  /** A recorder in the WebGL handle's place, over the REAL registry catalog. */
+  function bench(initial: string | null) {
+    const rec = { built: [] as GalleryWorkbenchSceneOptions[], shown: [] as GalleryWorkbenchSceneOptions[], disposed: 0 };
+    const value: NonNullable<RouteUiDeps['galleryWorkbench']> = {
+      catalog: WORKBENCH_CATALOG,
+      initial,
+      linkFor: (v) => `?dev=1&gallery=${v}`,
+      create: (_canvas, _w, _h, opts) => {
+        rec.built.push(opts);
+        let frame = 0;
+        return {
+          frames: 30,
+          get frame() {
+            return frame;
+          },
+          show: (next) => {
+            rec.shown.push(next);
+            frame = 0;
+          },
+          seek: (f) => {
+            frame = Math.min(Math.max(0, Math.floor(f)), 29);
+          },
+          dispose: () => {
+            rec.disposed += 1;
+          },
+        };
+      },
+    };
+    return { rec, value };
+  }
+  const link = (f: Fixture): string =>
+    f.hud.galleryBody.querySelector<HTMLTextAreaElement>('.hud-gallery-link')?.value ?? '';
+
+  it('mounts from the page link on open, and disposes the handle and empties the body on close', () => {
+    const { rec, value } = bench('scene:destroyed,view:low,age:4');
+    const f = fixture({ galleryWorkbench: value });
+    expect(rec.built, 'nothing is built before the pane opens').toEqual([]);
+    f.fire('onGalleryOpen');
+    expect(rec.built).toHaveLength(1);
+    expect(rec.built[0]).toMatchObject({ subject: { kind: 'moment', id: 'destroyed' }, view: 'low' });
+    expect(link(f)).toBe('?dev=1&gallery=scene:destroyed,view:low,age:4');
+    f.fire('onGalleryClose');
+    expect(rec.disposed).toBe(1);
+    expect(f.hud.galleryBody.childElementCount).toBe(0);
+  });
+
+  it('reopens on the selection it last showed, not on the page link', () => {
+    // Would catch: every open re-reading `initial`, which throws away a selection built by hand.
+    const { rec, value } = bench('scene:destroyed');
+    const f = fixture({ galleryWorkbench: value });
+    f.fire('onGalleryOpen');
+    const view = f.hud.galleryBody.querySelector<HTMLSelectElement>('[data-field="view"]');
+    if (view === null) throw new Error('the body built no view selector');
+    view.value = 'low';
+    view.dispatchEvent(new Event('change'));
+    f.fire('onGalleryClose');
+    f.fire('onGalleryOpen');
+    expect(rec.built.at(-1)).toMatchObject({ subject: { kind: 'moment', id: 'destroyed' }, view: 'low' });
+    expect(link(f)).toBe('?dev=1&gallery=scene:destroyed,view:low');
+  });
+
+  it('teardown disposes a pane that is still open, once', () => {
+    const { rec, value } = bench(null);
+    const f = fixture({ galleryWorkbench: value });
+    f.fire('onGalleryOpen');
+    f.routeUi.disposeGallery();
+    f.routeUi.disposeGallery();
+    f.fire('onGalleryClose');
+    expect(rec.disposed).toBe(1);
+  });
+
+  it('mounts nothing on a page without the workbench', () => {
+    const f = fixture();
+    f.fire('onGalleryOpen');
+    expect(f.hud.galleryBody.childElementCount).toBe(0);
+    f.routeUi.disposeGallery();
+  });
+
+  it('every registered subject survives the link codec against the real registries', () => {
+    // Population: every key of ELEMENTS and MOMENTS, through WORKBENCH_CATALOG. A registry id the
+    // grammar could not carry -- one containing `,` or `:` -- would fail here, not in a pasted link.
+    const base = defaultGallerySelection(WORKBENCH_CATALOG);
+    const subjects = [
+      ...WORKBENCH_CATALOG.elements.map((id) => ({ kind: 'element' as const, id })),
+      ...WORKBENCH_CATALOG.moments.map((id) => ({ kind: 'moment' as const, id })),
+    ];
+    expect(subjects.length).toBeGreaterThan(10);
+    for (const subject of subjects) {
+      const selection = { ...base, subject };
+      const raw = formatGallerySelection(selection, WORKBENCH_CATALOG);
+      expect(parseGallerySelection(raw, WORKBENCH_CATALOG), raw).toEqual({ selection, problems: [] });
+    }
   });
 });
 

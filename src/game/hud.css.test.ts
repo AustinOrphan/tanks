@@ -863,6 +863,7 @@ describe('hud.css is syntactically whole', () => {
       'hud-customize',
       'hud-devcfg',
       'hud-devtools',
+      'hud-gallery',
       'hud-panel',
       'hud-selftest',
       'hud-settings',
@@ -1156,7 +1157,12 @@ describe('hud.css is syntactically whole', () => {
     // Issue #685 adds ONE: the match-failure alert's Retry. 142 -> 143. Static markup rendered unconditionally
     // at construction, hidden by `.hud-alert-retry--hidden` until a caller hands over a retry, and
     // `hidden` is not what this sweep filters on. It carries `.ui-btn--slab`, so `unstyled` stays empty.
-    expect(buttons.length).toBe(143 + 2 + devMenuButtons());
+    // Issue #730 adds THREE: Developer Tools' Gallery Workbench entry and the workbench pane's
+    // Developer Tools and Back. 143 -> 146. Static markup, counted whether or not the page binds the
+    // workbench -- the entry's `hidden` tracks that, and `hidden` is not what this sweep filters on.
+    // All three carry `.ui-btn--slab`, so `unstyled` stays empty. The pane BODY's Play and Copy Link
+    // are built by `gallery-workbench.ts` only while the pane is open, so this fixture never sees them.
+    expect(buttons.length).toBe(146 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1270,7 +1276,9 @@ describe('hud.css is syntactically whole', () => {
     // Issue #685 adds ONE: the match-failure alert's Retry. 126 -> 127. Static markup rendered unconditionally
     // at construction, hidden by `.hud-alert-retry--hidden` until a caller hands over a retry, and
     // `hidden` is not what this sweep filters on. It carries `.ui-btn--slab`, so `unstyled` stays empty.
-    expect(controls.length).toBe(127 + 2 + devMenuButtons());
+    // Issue #730 adds THREE, the same three as the button sweep above: 127 -> 130, each sized by
+    // `.ui-btn--slab`.
+    expect(controls.length).toBe(130 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

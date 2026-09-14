@@ -1492,6 +1492,14 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     ).toEqual([['default']]);
   });
 
+  it('opens the gallery workbench once for a ?gallery= link, and not without one (issue #730)', () => {
+    // The page asks; the HUD decides. Whether developer mode is on and the workbench is bound
+    // is `hud.gallery.test.ts`'s to pin -- here it is only that a link asks exactly once.
+    expect(fixture({ devFlags: { gallery: 'scene:fire' } }).hud.argsOf('openGalleryWorkbench')).toEqual([[]]);
+    // The negative control: an unconditional call would pass the line above.
+    expect(fixture().hud.argsOf('openGalleryWorkbench')).toEqual([]);
+  });
+
   it('re-sizes the Levels grid on every arrival at the Main Menu, and only there', () => {
     // A level is cleared mid-match, where the grid is neither shown nor reachable --
     // `hud.ts` puts the Levels button on the Main Menu alone. So the arrival back is both
