@@ -748,7 +748,11 @@ export interface Hud {
    * (issue #325). Only ever called for a failure whose `presentation` is `'overlay'`;
    * `boot.ts` replaces the page for the rest, because there is nothing to draw over.
    */
-  showMatchFailure(failure: { title: string; detail: string; action: string }): void;
+  /**
+   * Show the match-failure alert. `retry`, when given, adds a Retry action beside the
+   * failure's own (issue #685): the caller holds the descriptor that failed, the HUD does not.
+   */
+  showMatchFailure(failure: { title: string; detail: string; action: string }, retry?: () => void): void;
   onQuitToTitle(cb: () => void): void;
   /**
    * The touch-only pause button. Separate from the keyboard hotkey because it is an
@@ -2207,6 +2211,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     <div class="hud-alert hud-alert--hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="hud-alert-title" aria-describedby="hud-alert-body">
       <h1 id="hud-alert-title" class="hud-alert-title"></h1>
       <p class="hud-alert-body" id="hud-alert-body"></p>
+      <!-- RETRY (issue #685), offered only when the caller can rerun the descriptor that
+           failed. Before the dismiss in DOM order, so it is the first thing focus reaches:
+           a player whose Rematch just failed most likely wants the Rematch. -->
+      <button class="ui-btn ui-btn--slab hud-alert-retry hud-alert-retry--hidden" type="button">Retry</button>
       <button class="ui-btn ui-btn--slab hud-alert-dismiss" type="button"></button>
     </div>
     <!-- DEVELOPER TOOLS (issue #243), the shell only: entering, recognising, reopening and
@@ -2483,6 +2491,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const alertTitleEl = el.querySelector('.hud-alert-title') as HTMLElement;
   const alertBodyEl = el.querySelector('.hud-alert-body') as HTMLElement;
   const alertDismissBtn = el.querySelector('.hud-alert-dismiss') as HTMLButtonElement;
+  const alertRetryBtn = el.querySelector('.hud-alert-retry') as HTMLButtonElement;
   const confirmBodyEl = el.querySelector('.hud-confirm-body') as HTMLElement;
   const confirmAcceptBtn = el.querySelector('.hud-confirm-accept') as HTMLButtonElement;
   const confirmCancelBtn = el.querySelector('.hud-confirm-cancel') as HTMLButtonElement;
@@ -3815,6 +3824,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * documents for its own live region.
    */
   let pendingAlert: { title: string; detail: string; action: string } | null = null;
+  /**
+   * The Retry the CURRENT alert was opened with, or null (issue #685). Replaced on every
+   * open, so a retry from an earlier alert can never run from a later one.
+   */
+  let pendingRetry: (() => void) | null = null;
 
   function showAlert(show: boolean): void {
     if (show) {
@@ -3824,6 +3838,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
           alertBodyEl.textContent = pendingAlert.detail;
           alertDismissBtn.textContent = pendingAlert.action;
         }
+        alertRetryBtn.classList.toggle('hud-alert-retry--hidden', pendingRetry === null);
         alertView.focus();
       });
     } else {
@@ -4700,6 +4715,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     back();
   };
 
+  /**
+   * Retry (issue #685). CLOSED FIRST, then run: a retry that fails again reopens the alert
+   * through `showMatchFailure`, which would otherwise be answering a layer still on top.
+   * The retry is taken out of `pendingRetry` before it runs, so a double press cannot start
+   * the same match twice.
+   */
+  const handleAlertRetry = (): void => {
+    const retry = pendingRetry;
+    if (retry === null) return;
+    pendingRetry = null;
+    back();
+    retry();
+  };
+
   const handleAboutBack = (): void => {
     back();
   };
@@ -5049,6 +5078,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   aboutOpenBtn.addEventListener('click', blurIfPointer);
   alertDismissBtn.addEventListener('click', handleAlertDismiss);
   alertDismissBtn.addEventListener('click', blurIfPointer);
+  alertRetryBtn.addEventListener('click', handleAlertRetry);
+  alertRetryBtn.addEventListener('click', blurIfPointer);
   aboutBackBtn.addEventListener('click', handleAboutBack);
   aboutBackBtn.addEventListener('click', blurIfPointer);
   devToolsOpenBtn.addEventListener('click', handleDevToolsOpen);
@@ -7490,8 +7521,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onStartRestart(cb: () => void): void {
       startRestartCbs.push(cb);
     },
-    showMatchFailure(failure: { title: string; detail: string; action: string }): void {
+    showMatchFailure(failure: { title: string; detail: string; action: string }, retry?: () => void): void {
       pendingAlert = failure;
+      pendingRetry = retry ?? null;
       // Opened with NO opener element: there is no button that "led here" -- the player
       // pressed Start and the match failed -- so `restoreFocus` falls through to the
       // surface's own container focus, which is what `openLayer` already does for a
@@ -7880,6 +7912,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       aboutOpenBtn.removeEventListener('click', blurIfPointer);
       alertDismissBtn.removeEventListener('click', handleAlertDismiss);
       alertDismissBtn.removeEventListener('click', blurIfPointer);
+      alertRetryBtn.removeEventListener('click', handleAlertRetry);
+      alertRetryBtn.removeEventListener('click', blurIfPointer);
       aboutBackBtn.removeEventListener('click', handleAboutBack);
       aboutBackBtn.removeEventListener('click', blurIfPointer);
       devToolsOpenBtn.removeEventListener('click', handleDevToolsOpen);

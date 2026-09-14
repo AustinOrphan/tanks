@@ -1,0 +1,14 @@
+{
+  "id": "session-host-rethrows-a-failed-start",
+  "file": "src/game/session-host.ts",
+  "find": "      deps.onStartFailure(err, intent);",
+  "replace": "      throw err;",
+  "why": "Issue #685: a session's Rematch reaches the host through its own reboot seam, which nothing in boot.ts guards. A host that rethrows sends the failure out of a HUD click handler, where nobody shows it and the player is left on a dead screen.",
+  "tests": [
+    "src/game/session-host.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "createGameSessionHost: a start that fails (issue #685) a REPLACEMENT that throws leaves no canvas and no session, and reports once with its intent"
+  ]
+}

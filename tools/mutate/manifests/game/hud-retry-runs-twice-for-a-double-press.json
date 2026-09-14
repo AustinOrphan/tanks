@@ -1,0 +1,14 @@
+{
+  "id": "hud-retry-runs-twice-for-a-double-press",
+  "file": "src/game/hud.ts",
+  "find": "    if (retry === null) return;\n    pendingRetry = null;\n    back();",
+  "replace": "    if (retry === null) return;\n    back();",
+  "why": "Issue #685: the alert's close is a fade, so Retry stays pressable while it runs. Without consuming the pending retry, a double press starts the same match twice, and the second start disposes the first.",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud: the match-failure alert offers Retry only when it can (issue #685) shows Retry for a retryable failure, and runs it once"
+  ]
+}

@@ -78,15 +78,20 @@ export interface StartupFailure {
   /** One or two sentences: what it means, and what to try. */
   readonly detail: string;
   /**
-   * The recovery action, as a label.
+   * The state's own recovery action, as a label.
    *
-   * ALWAYS present, and always exactly one, because at this boundary exactly one thing is
-   * genuinely available. For a `page` state the page has been replaced, so there is no
+   * ALWAYS present, and exactly one per state, because each state has exactly one recovery
+   * that is ALWAYS valid. For a `page` state the page has been replaced, so there is no
    * Main Menu to go Back to and no Settings to open, and Reloading is the only real
    * recovery. For the `overlay` state the opposite holds: the menu is still there and
    * intact, so Reload would be the wrong advice -- it would throw away a working shell to
    * recover from a match that failed. Issue #325 asks for "only relevant recovery
    * actions", and which actions are relevant is decided by `presentation`.
+   *
+   * RETRY IS NOT HERE, deliberately (issue #685). Whether a retry exists depends on the
+   * CALLER holding the descriptor that failed, not on the kind of failure, so the shell adds
+   * it beside this action when `onStartFailure` hands one over. A `page` state never gets
+   * one: it is fatal, or there is no shell to retry from.
    */
   readonly action: string;
   /**
@@ -180,8 +185,9 @@ export const STARTUP_FAILURES: Readonly<Record<StartupFailureKind, StartupFailur
       // route may never be pushed over one, not visual stacking. Measured: with the alert
       // open, `.hud-panel` reports a 0x0 box. The claim to make is about the button, which
       // returns to the menu in one press and without a reload.
+      // Offers both routes since issue #685, which added Retry beside Back to menu.
       detail:
-        'Something went wrong while loading the match. Go back to the menu and try again.',
+        'Something went wrong while loading the match. Try again, or go back to the menu.',
       action: 'Back to menu',
       // The ONE overlay state. Reached only when the shell is up AND the cause is not the
       // renderer being unavailable -- see `classifyStartupFailure`, which checks the cause

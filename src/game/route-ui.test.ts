@@ -570,6 +570,12 @@ describe('the application routes work with no gameplay session behind them', () 
       // The page's route UI. `{}` for the same reason `shell` is: an empty host
       // touches neither, and a host that DID reach into one would throw here.
       routeHost: {} as never,
+      // RETHROWN, not swallowed (issue #685). The host now catches a start that throws and
+      // reports it here, so a no-op would turn the two throws above -- this test's whole
+      // detector for a session coming into existence -- into a silent pass.
+      onStartFailure: (err) => {
+        throw err;
+      },
     });
 
     expect(host.hasSession()).toBe(false);
