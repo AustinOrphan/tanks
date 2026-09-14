@@ -1,0 +1,15 @@
+{
+  "id": "hit-sweep-drives-played-endings",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  if (state.steps.some((step) => 'playUntil' in step)) return 'a played ending, whose panel its pushed-outcome state already sweeps';\n",
+  "replace": "  if (false) return 'a played ending, whose panel its pushed-outcome state already sweeps';\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Issue #617. The required `visual` check's hit-target sweep drives the two played ending states, each tens of seconds of software-GL play before its panel shows, to press controls the pushed-outcome state of the same ending already puts in front of the sweep.",
+  "killedBy": [
+    "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule",
+    "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the two extra surfaces"
+  ]
+}

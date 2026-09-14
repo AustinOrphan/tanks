@@ -602,7 +602,8 @@ export const SCREEN_STATES = Object.freeze([
     steps: [
       ...PAST_SPLASH,
       { click: '.hud-continue' },
-      { playUntil: { visible: '.hud-action', maxTicks: 36000, expect: { selector: '.hud-title', text: 'Level 3 cleared!' } } },
+      // Budget: twice the 1035 simulated ticks this match took on each of 2 runs (issue #617).
+      { playUntil: { visible: '.hud-action', maxTicks: 2070, expect: { selector: '.hud-title', text: 'Level 3 cleared!' } } },
     ],
     measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
   }),
@@ -615,7 +616,8 @@ export const SCREEN_STATES = Object.freeze([
     steps: [
       ...PAST_SPLASH,
       { click: '.hud-continue' },
-      { playUntil: { visible: '.hud-action', maxTicks: 36000, expect: { selector: '.hud-title', text: 'Game Over' } } },
+      // Budget: twice the 2190 simulated ticks this match took on each of 2 runs (issue #617).
+      { playUntil: { visible: '.hud-action', maxTicks: 4380, expect: { selector: '.hud-title', text: 'Game Over' } } },
     ],
     measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
   }),
