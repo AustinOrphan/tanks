@@ -168,8 +168,9 @@
  * The 44 CSS px touch floor was first left OFF `.ui-btn`, on #321's ruling that raising an
  * existing control relayouts the pane around it and owes its own evidence. Issue #686 is
  * that evidence, and the floor now lives on `.ui-btn` as `min-height`/`min-width`. Measured
- * in Chromium on the tree before it: 41 of 51 visible control classes rendered under 44 px
- * across every player-facing screen state, `--sm` at 27 px tall and `--slab` at 31-33 px.
+ * in Chromium on the tree before it, over 24 player-facing surfaces at four viewports: 764 of
+ * 1016 control readings, in 44 of 54 control classes, rendered under 44 px -- `--sm` at 27 px
+ * tall and `--slab` at 31-33 px.
  * `.hud-level-btn`, `.hud-swatch` and `.hud-rotate-btn` still size themselves with
  * `var(--hud-control-min)`; they were already at the floor.
  * A jsdom test cannot stand in for the measurement: it does no layout, so a padded button's

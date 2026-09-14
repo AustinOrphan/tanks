@@ -6,10 +6,11 @@
  * (docs/superpowers/specs/2026-08-23-ui-ux-direction.md, "Control height"), which also says a
  * pointer does not reduce controller or touch target size -- so there is no desktop exemption.
  *
- * Measured in Chromium before the floor existed, across 22 player-facing screen states at four
- * viewports: 708 of 960 control readings, in 41 of 51 control classes, were under it. `--sm`
- * buttons rendered 27 px tall and `--slab` 31-33 px, at every viewport alike, because nothing
- * about their size depended on the viewport.
+ * Measured in Chromium before the floor existed, across 24 player-facing surfaces (the 22
+ * screen states in `tools/screens/states.mjs` a player can reach, plus the Controllers pane and
+ * Settings with a reset armed) at four viewports: 764 of 1016 control readings, in 44 of 54
+ * control classes, were under it. `--sm` buttons rendered 27 px tall and `--slab` 31-33 px,
+ * at every viewport alike, because nothing about their size depended on the viewport.
  *
  * A bigger target is only a fix if it does not create a new failure, so the same verdict also
  * fails:
