@@ -8,6 +8,8 @@
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import { loadChromium } from '../shared/playwright.mjs';
+
 const PORT = Number(process.env.GL_TEST_PORT ?? 5178);
 const BASE = `http://localhost:${PORT}/`;
 
@@ -18,24 +20,6 @@ async function respondsOn(url, ms = 1000) {
   } catch {
     return false;
   }
-}
-
-async function loadChromium() {
-  const tried = [];
-  for (const spec of [
-    process.env.PLAYWRIGHT_MODULE,
-    'playwright',
-    '/home/dev/.claude/jobs/17681316/tmp/pw/node_modules/playwright/index.mjs',
-  ].filter(Boolean)) {
-    try {
-      const m = await import(spec);
-      if (m.chromium) return m.chromium;
-      tried.push(`${spec}: no chromium export`);
-    } catch (e) {
-      tried.push(`${spec}: ${e.code ?? e.message}`);
-    }
-  }
-  throw new Error(`playwright not found. Tried:\n  ${tried.join('\n  ')}`);
 }
 
 if (await respondsOn(BASE)) {

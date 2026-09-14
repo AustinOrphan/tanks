@@ -11,8 +11,8 @@
  * A standalone CLI writing one frame and one report, which is the shape
  * `tools/capture/gallery-adapter.mjs` already established for the `moment` producer -- the
  * adapter shells out, reads `producer.json` back, and validates it. Playwright arrives
- * through `PLAYWRIGHT_MODULE`, resolved once by the capture framework's prerequisites
- * check, so this file never has to hunt for it.
+ * through `PLAYWRIGHT_MODULE`, checked once by the capture framework's prerequisites, and is
+ * loaded here through the tools family's shared loader (`tools/shared/playwright.mjs`).
  *
  * WHY EVERY SHOT IS ALSO MEASURED. A screenshot named `records.stats` proves the page did
  * not crash and nothing else; two states that render identically produce two files a
@@ -24,12 +24,13 @@
  *
  * NOT A GATE, and that is argued rather than assumed. See tools/screens/README.md.
  */
-import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, dirname, resolve } from 'node:path';
-import { resolveRequestPath } from '../visual/serve-path.mjs';
-import { findScreenState, SCREEN_STATE_IDS, STEP_KINDS, WEBGL_MODES } from './states.mjs';
+import { dirname, resolve } from 'node:path';
+import { loadChromium } from '../shared/playwright.mjs';
+import { serveStatic } from '../visual/static-server.mjs';
+import { findScreenState, SCREEN_STATE_IDS } from './states.mjs';
+import { runStep, webglOverrideSource } from './steps.mjs';
 import { screenCapturePaths } from './paths.mjs';
 
 const MIME = {
@@ -39,99 +40,15 @@ const MIME = {
 };
 
 /**
- * The static server, rooted at `dist` and sharing `roundtrip.mjs`'s path resolver.
+ * The static server, rooted at `dist`: `tools/visual/static-server.mjs`, which serves through
+ * `serve-path.mjs`'s resolver.
  *
  * REUSED rather than rewritten: `resolveRequestPath` already refuses malformed
  * percent-encoding and directory traversal, both of which were real failures found against
  * that probe, and both of which every ad-hoc capture script in this repository's history
  * has quietly reintroduced.
  */
-function serve(dist) {
-  const server = createServer(async (req, res) => {
-    const file = resolveRequestPath(dist, req.url);
-    if (file === null || !existsSync(file)) return void res.writeHead(404).end('not found');
-    try {
-      res.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream' });
-      res.end(await readFile(file));
-    } catch {
-      res.writeHead(500).end('error');
-    }
-  });
-  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(server)));
-}
-
-/**
- * The page-side WebGL override, as a source string for `addInitScript`.
- *
- * Patches `HTMLCanvasElement.prototype.getContext` rather than stubbing a module, so the
- * REAL probe in `render-capability.ts` runs and takes its real branch -- returning null is
- * `no-webgl2`, throwing is `probe-failed`, and those select two different branded screens.
- * A capture that injected the screen's markup instead would evidence nothing.
- *
- * Only `webgl2` is intercepted. The HUD's Customize preview and the 2D contexts the page
- * uses elsewhere keep working, so a failure state still renders the rest of the page the
- * way a player would meet it.
- */
-function webglOverrideSource(mode) {
-  if (!WEBGL_MODES.includes(mode)) throw new Error(`unknown webgl mode '${mode}'`);
-  return `(() => {
-    const real = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (id, ...rest) {
-      if (String(id).toLowerCase() !== 'webgl2') return real.call(this, id, ...rest);
-      ${mode === 'probe-blocked'
-        ? "throw new Error('capture: webgl2 blocked');"
-        : 'return null;'}
-    };
-  })()`;
-}
-
-/**
- * The synthetic pads `{ fakeGamepads }` installs (issue #599).
- *
- * A headless browser has no controller, and a browser reports no pad until one has been
- * ACTUATED, so without this the controller self-test photographs its empty state on every
- * capture machine -- true, and evidence for nothing the pane does.
- *
- * Overriding `navigator.getGamepads` is not a back door: it is the SAME seam production
- * reads through (`readNavigatorGamepads` in src/input/gamepad.ts) and the same one every
- * unit test in that directory injects. Nothing downstream can tell these from real pads,
- * which is exactly what makes the picture evidence.
- *
- * The two disagree about mapping, axis count, button count and which button is down, so
- * one frame carries both rendering paths and a filled bar rather than seventeen zeroes.
- */
-const GAMEPAD_FIXTURE_PADS = {
-  none: null,
-  mixed: [
-    {
-      index: 0,
-      id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)',
-      mapping: 'standard',
-      axes: [0.62, -0.41, 0, 0],
-      buttons: Array.from({ length: 17 }, (_, i) => ({
-        pressed: i === 7,
-        value: i === 7 ? 1 : i === 6 ? 0.35 : 0,
-      })),
-    },
-    {
-      index: 1,
-      id: 'HuiJia  USB GamePad',
-      mapping: '',
-      axes: [0.05, -0.98, 0, 0, 1, -1],
-      buttons: Array.from({ length: 12 }, (_, i) => ({ pressed: i === 3, value: i === 3 ? 1 : 0 })),
-    },
-  ],
-};
-
-function gamepadOverrideSource(fixture) {
-  const pads = GAMEPAD_FIXTURE_PADS[fixture];
-  if (pads === undefined) throw new Error(`unknown gamepad fixture '${fixture}'`);
-  if (pads === null) return '(() => {})()';
-  return `(() => {
-    const pads = ${JSON.stringify(pads)};
-    navigator.getGamepads = () => pads;
-  })()`;
-}
+const serve = (dist) => serveStatic(dist, MIME);
 
 /** The properties a measurement records beside the box, chosen to catch layout drift. */
 const WATCHED = ['display', 'opacity', 'color', 'background-color', 'font-size', 'margin-top', 'margin-bottom'];
@@ -158,72 +75,6 @@ async function measure(page, selectors) {
   );
 }
 
-const visibleIn = (sel) => `(() => {
-  const el = document.querySelector(${JSON.stringify(sel)});
-  if (el === null) return false;
-  const cs = getComputedStyle(el);
-  return cs.display !== 'none' && cs.visibility !== 'hidden' && el.getBoundingClientRect().width > 0;
-})()`;
-
-const goneIn = (sel) => `(() => {
-  const el = document.querySelector(${JSON.stringify(sel)});
-  if (el === null) return true;
-  return getComputedStyle(el).display === 'none' || el.classList.contains('hud-splash--hidden');
-})()`;
-
-/** Run one declarative step. An unknown kind is an error, never a skipped line. */
-async function runStep(page, step, timeout) {
-  const kinds = Object.keys(step).filter((k) => STEP_KINDS.includes(k));
-  if (kinds.length !== 1) {
-    throw new Error(`each step needs exactly one known key, got ${JSON.stringify(step)}`);
-  }
-  const [kind] = kinds;
-  if (kind === 'press') return void (await page.keyboard.press(step.press));
-  if (kind === 'waitVisible') return void (await page.waitForFunction(visibleIn(step.waitVisible), undefined, { timeout }));
-  if (kind === 'waitHidden') return void (await page.waitForFunction(goneIn(step.waitHidden), undefined, { timeout }));
-  if (kind === 'breakWebgl') {
-    // Applied to the LIVE page, not as an init script: the point of this step is that boot
-    // already succeeded. `addInitScript` would run before the probe and produce a boot
-    // failure instead, which is a different screen.
-    return void (await page.evaluate(webglOverrideSource(step.breakWebgl)));
-  }
-  if (kind === 'scroll') {
-    const { selector, to } = step.scroll;
-    await page.waitForFunction(visibleIn(to), undefined, { timeout });
-    // `scrollIntoView` on the TARGET rather than a pixel offset on the container: a pixel
-    // offset is a number that goes stale the moment anything above it changes height, and
-    // this pane's height is a property of the flag registry.
-    await page.evaluate(
-      ([containerSel, targetSel]) => {
-        const container = document.querySelector(containerSel);
-        const target = document.querySelector(targetSel);
-        if (!container || !target) throw new Error(`scroll: ${containerSel} -> ${targetSel}`);
-        container.scrollTop =
-          target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
-      },
-      [selector, to],
-    );
-    return;
-  }
-  if (kind === 'fakeGamepads') {
-    // Applied to the LIVE page like `breakWebgl`, not as an init script: the self-test
-    // reads `navigator.getGamepads` on every frame while its pane is open, so the override
-    // only has to be in place before the pane is, and boot must be left alone.
-    return void (await page.evaluate(gamepadOverrideSource(step.fakeGamepads)));
-  }
-  await page.waitForFunction(
-    `(() => {
-      const el = document.querySelector(${JSON.stringify(step.click)});
-      if (el === null || el.disabled) return false;
-      const cs = getComputedStyle(el);
-      return cs.display !== 'none' && el.getBoundingClientRect().width > 0;
-    })()`,
-    undefined,
-    { timeout },
-  );
-  await page.click(step.click);
-}
-
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
   return i > -1 ? process.argv[i + 1] : fallback;
@@ -246,7 +97,7 @@ async function main() {
   const timeout = Number(arg('timeout', 20000));
   if (!existsSync(resolve(dist, 'index.html'))) throw new Error(`no index.html under ${dist}`);
 
-  const chromium = (await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright')).chromium;
+  const chromium = await loadChromium();
   const server = await serve(dist);
   const base = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({

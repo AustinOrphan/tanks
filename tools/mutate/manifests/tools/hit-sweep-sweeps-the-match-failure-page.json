@@ -1,0 +1,15 @@
+{
+  "id": "hit-sweep-sweeps-the-match-failure-page",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  if (state.steps.some((step) => 'breakWebgl' in step)) return 'the match failure overlay, owned by its own capture';\n",
+  "replace": "  // this exclusion removed\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Issue #710. The sweep stops excluding the state that breaks WebGL after boot, so the gate starts a match it deliberately fails. The screen-state capture cannot currently reach that overlay (issue #700, open), so sweeping it would fail the required job on a known capture defect rather than a hit target. Killed by the exclusion-map case and the swept-list case (1 more id).",
+  "killedBy": [
+    "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, startup-failure, no-script and match-failure states, each for its rule",
+    "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the two extra surfaces"
+  ]
+}

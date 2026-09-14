@@ -16,47 +16,16 @@
  * Usage:
  *   node tools/visual/verify.mjs <dist-dir> [--label NAME] [--out DIR]
  */
-import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 import { clearanceFailures, insetLabel } from './clearance.mjs';
+import { hitTargetFailures } from './hit-targets.mjs';
+import { HIT_VIEWPORTS, hitSweepStates, measureHitTargets } from './hit-sweep.mjs';
+import { loadChromium } from '../shared/playwright.mjs';
+import { serveStatic } from './static-server.mjs';
 
-/**
- * Playwright is NOT a dependency of this repo: the package downloads browsers
- * on install, which would slow every CI run for a tool that is not wired into
- * CI. Resolve it from the environment instead, in order of preference.
- *
- * Two candidates, and there used to be a third: an absolute path into one agent
- * session's scratch directory on one machine. That session is long gone and the
- * directory with it -- verified absent, and that host no longer even uses the id format
- * the path was built from -- so the entry could never resolve. Not restated literally
- * here, because a dead machine-specific path is the thing being removed. It
- * was harmless only because it sat third: CI installs playwright with `--no-save` and
- * hits the bare specifier, and a local override has `PLAYWRIGHT_MODULE`. Removed rather
- * than refreshed, because the machine it pointed at is not a location this repo can
- * depend on; point `PLAYWRIGHT_MODULE` at a checkout instead.
- */
-async function loadChromium() {
-  const candidates = [
-    process.env.PLAYWRIGHT_MODULE,
-    'playwright',
-  ].filter(Boolean);
-  const tried = [];
-  for (const spec of candidates) {
-    try {
-      const mod = await import(spec);
-      if (mod.chromium) return mod.chromium;
-      tried.push(`${spec}: no chromium export`);
-    } catch (e) {
-      tried.push(`${spec}: ${e.code ?? e.message}`);
-    }
-  }
-  throw new Error(
-    `playwright not found. Set PLAYWRIGHT_MODULE, or npm i -D playwright.\nTried:\n  ${tried.join('\n  ')}`,
-  );
-}
 
 /** scene.ts: renderer.setClearColor(0x14161c, 1) */
 export const CLEAR = { r: 0x14, g: 0x16, b: 0x1c };
@@ -246,24 +215,7 @@ const MIME = {
   '.wav': 'audio/wav',
 };
 
-function serve(root) {
-  const server = createServer(async (req, res) => {
-    const url = decodeURIComponent(req.url.split('?')[0]);
-    const path = join(root, url === '/' ? 'index.html' : url);
-    if (!path.startsWith(root) || !existsSync(path)) {
-      res.writeHead(404).end('not found');
-      return;
-    }
-    try {
-      const body = await readFile(path);
-      res.writeHead(200, { 'Content-Type': MIME[extname(path)] ?? 'application/octet-stream' });
-      res.end(body);
-    } catch {
-      res.writeHead(500).end('error');
-    }
-  });
-  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(server)));
-}
+const serve = (root) => serveStatic(root, MIME);
 
 /**
  * Decode a PNG inside the page and measure it.
@@ -712,6 +664,7 @@ async function main() {
 
   const results = [];
   const clearance = [];
+  const hitTargets = [];
   try {
     for (const vp of VIEWPORTS) {
       // A cold runner loses the GL context on the FIRST page often enough to
@@ -799,12 +752,20 @@ async function main() {
         clearance.push(await measureClearance(browser, base, vp, inset));
       }
     }
+
+    // Issue #710: every player-facing menu surface at each of #686's viewports, one fresh
+    // context per reading. See tools/visual/hit-sweep.mjs.
+    for (const state of hitSweepStates()) {
+      for (const vp of HIT_VIEWPORTS) {
+        hitTargets.push(await measureHitTargets(browser, base, state, vp));
+      }
+    }
   } finally {
     await browser.close();
     server.close();
   }
 
-  const report = { label, dist, generatedFrom: 'playwright screenshot buffer', results, clearance };
+  const report = { label, dist, generatedFrom: 'playwright screenshot buffer', results, clearance, hitTargets };
   await writeFile(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 
   for (const r of results) {
@@ -837,6 +798,18 @@ async function main() {
       );
       for (const line of lines) console.log(`          ${line}`);
     }
+    // Issue #710. One summary line and then only the failing lines: 96 readings, printed one
+    // per line, would bury the one that failed. Each failing reading counts as one check.
+    const hitLines = hitTargets.map((r) => hitTargetFailures(r));
+    const failingReadings = hitLines.filter((lines) => lines.length > 0).length;
+    failed += failingReadings;
+    const surfaces = new Set(hitTargets.map((r) => r.state)).size;
+    const controls = hitTargets.reduce((n, r) => n + (r.controls?.length ?? 0), 0);
+    console.log(
+      `  ${failingReadings === 0 ? 'PASS' : 'FAIL'}  menu hit targets -- ${hitTargets.length} readings ` +
+        `(${surfaces} surfaces x ${HIT_VIEWPORTS.length} viewports), ${controls} controls, ${failingReadings} failing`,
+    );
+    for (const line of hitLines.flat()) console.log(`          ${line}`);
     console.log(failed === 0 ? '\nall checks passed' : `\n${failed} check(s) FAILED`);
     if (failed > 0) process.exitCode = 1;
   }

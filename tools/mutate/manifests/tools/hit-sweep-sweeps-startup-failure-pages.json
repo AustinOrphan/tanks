@@ -1,0 +1,15 @@
+{
+  "id": "hit-sweep-sweeps-startup-failure-pages",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  if (state.webgl !== 'ok') return 'a startup failure page, which has no menu to press';\n",
+  "replace": "  // this exclusion removed\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Issue #710. The sweep stops excluding states that break WebGL before boot, so the gate drives the two branded startup failure pages. Killed by the exclusion-map case and the swept-list case (2 more ids).",
+  "killedBy": [
+    "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, startup-failure, no-script and match-failure states, each for its rule",
+    "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the two extra surfaces"
+  ]
+}

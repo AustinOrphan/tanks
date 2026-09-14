@@ -178,7 +178,7 @@ function buildKillWorld(): World {
 function buildSoloWorld(walls: Wall[] = []): World {
   const w = createWorld({
     walls,
-    spawns: [{ pos: { x: 0, y: 0 }, angle: 0 }],
+    spawns: [{ kind: 'player', pos: { x: 0, y: 0 }, angle: 0 }],
     lives: 3,
     tanks: [{
       id: 1, kind: 'player',
@@ -255,7 +255,7 @@ export const MOMENTS: Record<string, MomentDef> = {
     focus: [0, 0.3, 0], span: 3,
     build: () => {
       const w = createWorld({
-        walls: [], spawns: [{ pos: { x: 0, y: 0 }, angle: 0 }], lives: 3,
+        walls: [], spawns: [{ kind: 'player', pos: { x: 0, y: 0 }, angle: 0 }], lives: 3,
         tanks: [{
           id: 1, kind: 'player',
           pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
@@ -504,7 +504,7 @@ export const MOMENTS: Record<string, MomentDef> = {
       focus: [-0.8, 0.3, 0], span: 4.5,
       build: () => {
         const w = createWorld({
-          walls: [], spawns: [{ pos: { x: -2.4, y: 0 }, angle: 0 }], lives: 3,
+          walls: [], spawns: [{ kind: 'player', pos: { x: -2.4, y: 0 }, angle: 0 }], lives: 3,
           tanks: [{
             id: 1, kind: 'player',
             pos: { x: -2.4, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
@@ -738,7 +738,7 @@ export const MOMENTS: Record<string, MomentDef> = {
       const BANGLE = Math.PI / 2;
       const w = createWorld({
         walls: [],
-        spawns: [{ pos: { x: 0, y: 0 }, angle: 0 }, { pos: { x: BX, y: BY0 }, angle: BANGLE }],
+        spawns: [{ kind: 'player', pos: { x: 0, y: 0 }, angle: 0 }, { kind: 'player', pos: { x: BX, y: BY0 }, angle: BANGLE }],
         lives: 3,
         tanks: [
           {
@@ -812,7 +812,7 @@ export const MOMENTS: Record<string, MomentDef> = {
       const LANE = 0.75;
       const w = createWorld({
         walls: [],
-        spawns: [{ pos: { x: 0, y: LANE }, angle: 0 }, { pos: { x: 0, y: -LANE }, angle: 0 }],
+        spawns: [{ kind: 'player', pos: { x: 0, y: LANE }, angle: 0 }, { kind: 'player', pos: { x: 0, y: -LANE }, angle: 0 }],
         lives: 3,
         tanks: [
           {

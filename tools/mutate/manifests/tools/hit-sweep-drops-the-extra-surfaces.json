@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-drops-the-extra-surfaces",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  return [...states.filter((state) => hitSweepExclusion(state) === null), ...HIT_EXTRA_STATES];\n",
+  "replace": "  return states.filter((state) => hitSweepExclusion(state) === null);\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Issue #710. The sweep drops the two surfaces no screen state reaches: the Controllers pane, whose open button shows only while a match is paused, and Settings with Reset stats armed, whose relabelled button is the one a player presses a second time. #686 measured both; without them the gate stops covering them. Killed by the swept-list case (the last two ids go missing).",
+  "killedBy": [
+    "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the two extra surfaces"
+  ]
+}

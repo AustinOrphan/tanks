@@ -297,7 +297,7 @@ export const ELEMENTS: Record<string, ElementDef> = {
   blast: {
     width: 5.4, frames: BLAST_LIFE, focusY: 0.6,
     place: (w, x, age) => {
-      if (age >= 0 && age < BLAST_LIFE) w.blasts.push({ id: 900 + w.blasts.length, ownerId: 1, pos: { x, y: 0 }, age });
+      if (age >= 0 && age < BLAST_LIFE) w.blasts.push({ id: 900 + w.blasts.length, ownerId: 1, credit: { source: 'blast', ownerId: 1 }, pos: { x, y: 0 }, age });
     },
   },
 };

@@ -96,6 +96,8 @@ function harness(
     world?: World;
     /** Mirrors the real machine: onEvents can flip `playing` -> `outcome`. */
     endOnEvents?: DriverState;
+    /** Throw this from the FIRST `input.sample()` only, and sample normally after (issue #690). */
+    throwOnFirstSample?: unknown;
   } = {},
 ): {
   driver: Driver;
@@ -129,6 +131,7 @@ function harness(
     input: {
       sample(): InputState[] {
         box.samples += 1;
+        if (box.samples === 1 && 'throwOnFirstSample' in opts) throw opts.throwOnFirstSample;
         return opts.inputs ?? [opts.input ?? IDLE];
       },
     },
@@ -593,6 +596,27 @@ describe('driver: lifecycle', () => {
     queued(40); // the browser had already committed to this callback
     expect(h.driver.world.tick).toBe(before);
     expect(h.renders).toHaveLength(1);
+  });
+
+  it('a frame that throws stops the loop, so the throw surfaces once rather than every frame (#690)', () => {
+    // The frame requests its successor BEFORE doing its work. A throw after that request
+    // used to leave the next frame queued, and it threw identically forever. Sampling throws
+    // only once here, so a loop that kept running would sample again and quietly succeed --
+    // which is why "no second sample" is asserted, not just "no second throw".
+    const boom = new Error('input sampling threw');
+    const h = harness({ throwOnFirstSample: boom });
+    h.driver.start();
+
+    expect(() => h.raf.fire(20)).toThrow(boom);
+    const queuedByTheThrowingFrame = h.raf.issued[h.raf.issued.length - 1];
+    expect(h.raf.cancelled, 'the frame queued before the throw was not cancelled').toContain(queuedByTheThrowingFrame);
+
+    // The browser may already have committed to that callback; it must now do nothing.
+    const queued = h.raf.last();
+    expect(() => queued(40)).not.toThrow();
+    expect(h.samples, 'the loop kept running after the throw').toBe(1);
+    expect(h.renders).toHaveLength(0);
+    expect(h.raf.issued, 'the stopped loop requested another frame').toHaveLength(2);
   });
 
   it('reset() replaces the world and drops carried time', () => {

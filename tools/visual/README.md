@@ -131,6 +131,33 @@ portrait placement's box spans the full row width, so it reaches under a side in
 its centred text does not. No portrait case gets a side inset, so the after build never meets
 that shape.
 
+## Menu hit targets (issues #686, #710)
+
+`--check` also sweeps every player-facing menu surface for the 44 CSS px hit-target floor.
+The sweep has three parts:
+
+- **Surfaces** — `tools/visual/hit-sweep.mjs` decides these. It takes the screen-state
+  catalogue, minus developer panes, startup failure pages, the no-script page and the match
+  failure overlay. It adds the Controllers pane and Settings with Reset stats armed.
+- **Viewports** — each surface is read at 320x568, 390x844, 1280x800 and 1280x800 at 200%,
+  one fresh context per reading.
+- **Driving** — `tools/screens/steps.mjs` runs each state's steps, the same runner
+  `npm run screens` uses.
+
+The verdict is `hit-targets.mjs`. A reading fails on any of these:
+
+- a control under 44 px in either dimension;
+- two controls on the same layer that overlap;
+- a control that cannot be scrolled to;
+- a page that scrolls horizontally;
+- a state that never reached its surface.
+
+The check prints one summary line, then only the failing lines. The report's `hitTargets`
+array holds every reading.
+
+Which surfaces are swept is unit-tested and has mutation entries (`hit-sweep-*`). The in-page
+collector is not: it runs only in the browser, so the gate itself is its test.
+
 ## Validation
 
 The gate is proved in both directions, which is the only thing that makes it

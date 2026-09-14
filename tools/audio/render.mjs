@@ -21,6 +21,8 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
+import { loadChromium } from '../shared/playwright.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PORT = Number(process.env.AUDIO_TOOL_PORT ?? 5210);
 const OUT_DIR = resolve(ROOT, 'audio-out');
@@ -69,21 +71,6 @@ async function respondsOn(url) {
   } catch {
     return false;
   }
-}
-
-// Same resolution order as tools/gl/run.mjs: an explicit module, then whatever
-// npm has installed.
-async function loadChromium() {
-  const tried = [];
-  for (const spec of [process.env.PLAYWRIGHT_MODULE, 'playwright'].filter(Boolean)) {
-    try {
-      return (await import(spec)).chromium;
-    } catch (e) {
-      tried.push(`${spec}: ${e.message}`);
-    }
-  }
-  console.error(`could not load playwright.\n${tried.join('\n')}`);
-  process.exit(1);
 }
 
 const base = `http://localhost:${PORT}/`;
