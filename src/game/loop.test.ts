@@ -875,6 +875,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   // harness holds the intersection for the same reason `createBrowserDeps` returns it --
   // production builds one page's wiring and hands each consumer the part it may see.
   const deps: BrowserPageDeps = {
+    // The preview's renderer settings the page's `?bench=preview` report names (issue #736).
+    previewRender: { antialias: true, pixelRatioCap: 2, shadowMap: true, keyShadowMapSize: 512 },
     createRenderer: (canvas, w, h, boundary, options) => {
       rec.rendererArgs.push([canvas, w, h, boundary, options]);
       return {
@@ -8081,6 +8083,17 @@ describe('startGameWith: the dev console surface', () => {
     const b = boot(makeDeps({ devFlags: { bench: 'versus-bots' } }));
     expect(Object.keys(api(b)).sort()).toEqual(['bench']);
     expect(api(b).bench!().workload.id).toBe('versus-bots');
+    b.handle.dispose();
+  });
+
+  it('leaves the page\'s preview report in place when a session opens under bench=preview (issue #736)', () => {
+    // The preview workload is the route host's (route-host.ts), and this harness builds the real
+    // one on the same dev console. A session that treated `preview` as its own workload would
+    // publish a session report over it: a report with a session, and no preview renderer.
+    const b = boot(makeDeps({ devFlags: { bench: 'preview' } }));
+    const report = api(b).bench!();
+    expect(report.workload.id).toBe('preview');
+    expect([report.session, report.preview?.pixelRatioCap]).toEqual([null, 2]);
     b.handle.dispose();
   });
 

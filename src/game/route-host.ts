@@ -3,7 +3,21 @@ import { createOutcomeClassifier, type GameStateMachine, type OutcomeContext } f
 import { versusDraw, type AppLocation } from './app-state';
 import type { GameplayHud, Hud } from './hud';
 import type { RelaunchTarget } from './session-intent';
-import { isMuteHotkey, locationToHudSurface, musicContextFor, type GameDeps } from './loop';
+import {
+  DEV_CONSOLE_KEY,
+  isMuteHotkey,
+  locationToHudSurface,
+  musicContextFor,
+  type DevConsole,
+  type GameDeps,
+} from './loop';
+import {
+  BENCH_WORKLOADS,
+  buildBenchReport,
+  createPreviewBench,
+  type BenchPreviewRender,
+  type BenchReport,
+} from './bench';
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
 import { settingRelevance } from './control-relevance';
 import type { GetGamepads } from '../input/gamepad';
@@ -11,7 +25,7 @@ import type { UiAction } from '../input/ui-actions';
 import { createModalityTracker, type Modality } from './modality';
 import type { VersusConfig } from './versus-config';
 import type { Assignment, SlotSource } from '../input/assignment';
-import type { SessionDiagnostics } from './dev-diagnostics';
+import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
 import type { DevActionPort } from './dev-actions';
 
 /**
@@ -49,7 +63,7 @@ import type { DevActionPort } from './dev-actions';
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
 export type RouteHostDeps = RouteUiDeps &
-  Pick<GameDeps, 'createStateMachine' | 'launchGate' | 'run' | 'devFlags' | 'createAudio'> & {
+  Pick<GameDeps, 'createStateMachine' | 'launchGate' | 'run' | 'devFlags' | 'createAudio' | 'devConsole'> & {
     /**
      * The page's ONE HUD factory.
      *
@@ -78,6 +92,12 @@ export type RouteHostDeps = RouteUiDeps &
      * by hand so the threshold under test is the one the assertion names.
      */
     readonly now: () => number;
+    /**
+     * The Customize preview's renderer settings, named in the `?bench=preview` report (issue
+     * #736). `createBrowserDeps` binds `render/preview.ts`'s own constant, which this module
+     * may not import (dependency-direction.test.ts).
+     */
+    readonly previewRender: BenchPreviewRender;
   };
 
 /**
@@ -375,8 +395,31 @@ export function createRouteHost(
    *    grid was sized from the versus arena list. Sizing it from the campaign sequence
    *    regardless of what is being played is the behaviour this hoist makes true.
    */
+  /**
+   * The `?dev=1&bench=preview` workload (issue #736), page-scoped for the reason `bench.ts`
+   * gives: the Customize panel opens from the Main Menu with no session running, so a
+   * recorder a session owned would miss the ordinary case. One recorder for the page, fed by
+   * every preview the panel builds. The only thing that changes about the preview is the
+   * scheduler its loop is handed.
+   */
+  const benchFlag = deps.devFlags.bench;
+  const previewBench =
+    benchFlag !== null && BENCH_WORKLOADS[benchFlag].subject === 'preview'
+      ? createPreviewBench(
+          BENCH_WORKLOADS[benchFlag],
+          deps.raf,
+          deps.now,
+          () => typeof document === 'undefined' || document.visibilityState !== 'hidden',
+        )
+      : null;
+
   const routeDeps: RouteUiDeps = {
     ...deps,
+    createPreview:
+      previewBench === null
+        ? deps.createPreview
+        : (canvas, rotateButtons, reducedMotion) =>
+            deps.createPreview(canvas, rotateButtons, reducedMotion, previewBench.raf),
     // Versus Start goes through the SAME start boundary as the other three (issue #428);
     // `requestVersusSession` is kept on the seam because a session's own Rematch still
     // reboots through it, and #429 owns collapsing the two.
@@ -416,6 +459,38 @@ export function createRouteHost(
    * convention `startGameWith` had to remember.
    */
   const routeUi = createRouteUi(hud, sm, routeDeps);
+
+  /**
+   * The preview workload's report, as `__tanks.bench()` (issue #736).
+   *
+   * Published for the life of the page. A session publishes its own `__tanks` object only when
+   * one of ITS flags asks for one, and a `?bench=preview` session does not. So a page opened
+   * with exactly the workload's query keeps this report through any match started from it,
+   * while a page that also carries a session flag such as `saveIo` has this entry replaced
+   * while that session runs. Removed on dispose only if it is still this object, so a
+   * teardown cannot delete someone else's entry.
+   */
+  const previewDevApi: DevConsole | null =
+    previewBench === null || benchFlag === null
+      ? null
+      : {
+          bench: (): BenchReport =>
+            buildBenchReport({
+              workload: benchFlag,
+              recorder: previewBench.recorder,
+              session: null,
+              pixelRatioCap: deps.previewRender.pixelRatioCap,
+              preview: deps.previewRender,
+              page: {
+                search: globalThis.location?.search ?? '',
+                viewport: { width: deps.host.innerWidth, height: deps.host.innerHeight },
+                devicePixelRatio: globalThis.devicePixelRatio ?? 1,
+                userAgent: globalThis.navigator?.userAgent ?? '',
+              },
+              build: readBuildIdentity(import.meta.env),
+            }),
+        };
+  if (previewDevApi !== null) deps.devConsole[DEV_CONSOLE_KEY] = previewDevApi;
 
   // The seven gameplay-facing handlers, registered ONCE. Each is a trampoline: it reads
   // the slot at CLICK time, so it dispatches to whichever session is live and does
@@ -1153,6 +1228,9 @@ export function createRouteHost(
       // HUD: it is a second WebGL context hanging off an element the HUD owns.
       routeUi.disposeGallery();
       routeUi.disposePreview();
+      if (previewDevApi !== null && deps.devConsole[DEV_CONSOLE_KEY] === previewDevApi) {
+        delete deps.devConsole[DEV_CONSOLE_KEY];
+      }
       // The page's own subscription, released for the same reason a session releases its
       // own: the machine and this host die together, but a reference kept past teardown
       // must not keep painting a disposed HUD.

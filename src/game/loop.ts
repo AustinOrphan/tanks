@@ -53,7 +53,12 @@ import {
   type SlotSource,
 } from '../input/assignment';
 import { createRenderer, type Renderer3D } from '../render/renderer';
-import { createTankPreview, type TankPreview } from '../render/preview';
+import {
+  createTankPreview,
+  PREVIEW_RENDER_SETTINGS,
+  type PreviewFrameScheduler,
+  type TankPreview,
+} from '../render/preview';
 import { WORKBENCH_CATALOG, createWorkbench, type WorkbenchSceneOptions } from '../render/gallery/workbench-scene';
 import type { AudioEngine } from '../audio/engine';
 import type { StorageNamespace } from './storage';
@@ -196,6 +201,11 @@ export interface GameDeps {
     rotateButtons: readonly HTMLElement[],
     /** The resolved reduced-motion policy (effective-settings.ts), never a media query. */
     reducedMotion: boolean,
+    /**
+     * What the preview's loop schedules frames through, when it must not be the window's own
+     * rAF: `route-host.ts` passes the `?bench=preview` workload's timing scheduler (issue #736).
+     */
+    frames?: PreviewFrameScheduler,
   ) => TankPreview | null;
   readonly createInput: (
     target: HTMLElement,
@@ -1115,7 +1125,7 @@ function versusStocksOf(world: World): VersusStock[] | null {
  * `startGameWith` could have built itself a whole second `Hud` -- Settings sliders, Levels
  * grid and all -- out of the bag of seams it takes for building worlds.
  */
-export type BrowserPageDeps = GameDeps & Pick<RouteHostDeps, 'createHud'>;
+export type BrowserPageDeps = GameDeps & Pick<RouteHostDeps, 'createHud' | 'previewRender'>;
 
 /**
  * A FUNCTION, not an exported const.
@@ -1175,6 +1185,10 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
   return {
     createRenderer,
     createPreview: createTankPreview,
+    // The settings `createTankPreview` builds its renderer with, for the `?bench=preview`
+    // report (issue #736). Bound here because the route host that publishes the report may not
+    // import the render layer (dependency-direction.test.ts); this file is its wiring.
+    previewRender: PREVIEW_RENDER_SETTINGS,
     // Issue #730's workbench. The catalog and the handle are the render layer's own, reached
     // here because this is the wiring GAME_WIRING lets import them; the pane's body sees only
     // structural types. The link keeps the page's path, other parameters and hash, for the
@@ -2577,7 +2591,14 @@ export function startGameWith(
   // callback and hands the recorder the world tick after it. Without the flag the driver gets
   // `deps.raf` itself, so an unflagged session is not wrapped at all. `driver` is read inside
   // the callback, which only runs after `driver.start()` below.
-  const benchWorkload = deps.devFlags.bench;
+  //
+  // Session workloads only. `?bench=preview` measures the Customize preview, which the page's
+  // route host owns and instruments (issue #736); a session opened under that flag records
+  // nothing and publishes no report of its own.
+  const benchWorkload =
+    deps.devFlags.bench !== null && BENCH_WORKLOADS[deps.devFlags.bench].subject === 'session'
+      ? deps.devFlags.bench
+      : null;
   const benchRecorder = benchWorkload === null ? null : createFrameRecorder(BENCH_WORKLOADS[benchWorkload]);
   const driverRaf: RafScheduler = benchRecorder === null
     ? deps.raf
@@ -3598,6 +3619,7 @@ export function startGameWith(
         recorder: benchRecorder,
         session: sessionDiagnostics(),
         pixelRatioCap,
+        preview: null,
         page: {
           search: globalThis.location?.search ?? '',
           viewport: { width: deps.host.innerWidth, height: deps.host.innerHeight },

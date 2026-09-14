@@ -207,6 +207,26 @@ export function previewWorld(): World {
 }
 
 /**
+ * The preview's own renderer settings (issue #736). Hardcoded rather than taken from the
+ * quality preset -- `?quality=` deliberately does not reach this panel -- and exported so the
+ * benchmark report names the values `createTankPreview` is actually built with, instead of a
+ * copy that could drift from them. `tools/gl/harness.ts` reads the built renderer back
+ * against these.
+ */
+export const PREVIEW_RENDER_SETTINGS = {
+  antialias: true,
+  pixelRatioCap: 2,
+  shadowMap: true,
+  keyShadowMapSize: 512,
+} as const;
+
+/** A frame scheduler the preview's loop can be handed in place of `window.requestAnimationFrame`. */
+export interface PreviewFrameScheduler {
+  request(cb: (now: number) => void): number;
+  cancel(handle: number): void;
+}
+
+/**
  * @param rotateButtons The HUD's four rotate buttons, in any order. Optional, and the
  * preview is fully usable without them -- the drag, hover-aim and keyboard schemes are
  * on the canvas. They are passed in rather than looked up here because hud.ts owns the
@@ -228,19 +248,24 @@ export function previewWorld(): World {
  * the Customize panel is open, so a change taking effect on the next open is soon enough,
  * and this file owning a subscription would be one more listener to leak. The SOURCE is
  * live (capabilities.ts) even though this consumer samples it.
+ *
+ * @param frames what the preview's frame loop schedules through, handed to the controls as
+ * their `raf`/`cancelRaf`. Optional, defaulting to `window.requestAnimationFrame`; the
+ * `?bench=preview` workload (issue #736) passes a scheduler that times each frame.
  */
 export function createTankPreview(
   canvas: HTMLCanvasElement,
   rotateButtons?: Iterable<HTMLElement>,
   reducedMotion = false,
+  frames?: PreviewFrameScheduler,
 ): TankPreview | null {
   let renderer: THREE.WebGLRenderer;
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: PREVIEW_RENDER_SETTINGS.antialias, alpha: true });
   } catch {
     return null;
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, PREVIEW_RENDER_SETTINGS.pixelRatioCap));
   // Transparent clear: the panel already paints its own backdrop (hud.css
   // .hud-customize), so the preview blends into it rather than fighting it with a
   // second background colour.
@@ -250,7 +275,7 @@ export function createTankPreview(
   // which is exactly the "depiction, not the tank" drift this module exists to avoid.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.35;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = PREVIEW_RENDER_SETTINGS.shadowMap;
 
   const scene = new THREE.Scene();
   const envMap = createEnvironmentMap(renderer);
@@ -261,7 +286,7 @@ export function createTankPreview(
   key.position.set(-1.6, 2.4, 1.9);
   key.target.position.set(0, 0, 0);
   key.castShadow = true;
-  key.shadow.mapSize.set(512, 512);
+  key.shadow.mapSize.set(PREVIEW_RENDER_SETTINGS.keyShadowMapSize, PREVIEW_RENDER_SETTINGS.keyShadowMapSize);
   const shadowCam = key.shadow.camera as THREE.OrthographicCamera;
   shadowCam.left = -1.6;
   shadowCam.right = 1.6;
@@ -302,7 +327,7 @@ export function createTankPreview(
   function fit(): void {
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, PREVIEW_RENDER_SETTINGS.pixelRatioCap));
     renderer.setSize(w, h, false);
     fitPreviewCamera(camera, h === 0 ? 1 : w / h);
   }
@@ -334,6 +359,7 @@ export function createTankPreview(
     initialPose: INITIAL_PREVIEW_POSE,
     reducedMotion,
     rotateButtons,
+    ...(frames ? { raf: (cb: (t: number) => void) => frames.request(cb), cancelRaf: (h: number) => frames.cancel(h) } : {}),
     onPose(pose): void {
       applyPose(world, pose);
       draw();

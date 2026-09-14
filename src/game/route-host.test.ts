@@ -24,6 +24,7 @@ import type { RouteUiDeps } from './route-ui';
 import type { GamepadLike } from '../input/gamepad';
 import type { SlotSource } from '../input/assignment';
 import { MODALITY_SWITCH_MS } from './modality';
+import { DEV_CONSOLE_KEY, type DevConsole } from './loop';
 
 /**
  * Issue #468's coverage, and the shape of it is the point.
@@ -136,6 +137,10 @@ interface Fixture {
   advance: (ms: number) => void;
   fireHost: (type: string, event: Event) => void;
   dismissLaunch(): void;
+  /** The dev console target, every `createPreview` argument list, and the queued route UI frames (issue #736). */
+  devConsole: Record<string, unknown>;
+  previewArgs: unknown[][];
+  rafQueue: Array<(now: number) => void>;
 }
 
 function fixture(
@@ -188,6 +193,12 @@ function fixture(
     audioCalls: [] as string[],
     /** How many engines `createAudio` minted. The page must take exactly one. */
     audioBuilds: 0,
+    /** The dev console target the page publishes to (issue #736). */
+    devConsole: {} as Record<string, unknown>,
+    /** Every argument list `createPreview` was called with, in order (issue #736). */
+    previewArgs: [] as unknown[][],
+    /** Frames requested through the route UI's `raf`, oldest first (issue #736). */
+    rafQueue: [] as Array<(now: number) => void>,
   };
 
   /**
@@ -214,7 +225,15 @@ function fixture(
 
   const routeUiDeps: RouteUiDeps = {
     readPadDiagnostics: () => [],
-    raf: { request: () => 0, cancel: () => {} },
+    // Queued rather than dropped, so the `?bench=preview` cases can run the frames a preview's
+    // loop requests through the page's scheduler (issue #736).
+    raf: {
+      request: (cb) => {
+        box.rafQueue.push(cb);
+        return box.rafQueue.length;
+      },
+      cancel: () => {},
+    },
     settings: stores.settings,
     stats: stores.stats,
     progress: stores.progress,
@@ -222,8 +241,8 @@ function fixture(
     customization: stores.customization,
     levels: createLevelSystem(DEV_FLAGS_OFF, stores.run),
     effectiveSettings: appSettings.effective,
-    createPreview: (): TankPreview | null =>
-      ({
+    createPreview: (...args): TankPreview | null =>
+      (box.previewArgs.push(args), {
         setStyle: () => {},
         resize: () => {},
         dispose: () => {
@@ -279,6 +298,9 @@ function fixture(
       return pageAudio;
     },
     createHud: opts.realHud ? (r) => createHud(r) : () => hud.hud,
+    // Where `?bench=preview` publishes its report (issue #736), and the preview settings it names.
+    devConsole: box.devConsole,
+    previewRender: { antialias: true, pixelRatioCap: 2, shadowMap: true, keyShadowMapSize: 512 },
     // The REAL state machine. A fake over a surface variable cannot show that a
     // page-scoped machine resets its route on attach, which is one of this file's claims.
     createStateMachine: createGameStateMachine,
@@ -325,8 +347,57 @@ function fixture(
     dismissLaunch: () => {
       box.launchDismissed = true;
     },
+    devConsole: box.devConsole,
+    previewArgs: box.previewArgs,
+    rafQueue: box.rafQueue,
   };
 }
+
+describe('createRouteHost: the ?bench=preview workload is page-scoped (issue #736)', () => {
+  type Scheduler = { request(cb: (now: number) => void): number; cancel(handle: number): void };
+
+  it('hands the preview a timing scheduler, and publishes a report of the frames it ran with no session', () => {
+    const f = fixture({ devFlags: { bench: 'preview' } });
+    f.hud.fire('onCustomizeOpen');
+    expect(f.previewArgs).toHaveLength(1);
+    const frames = f.previewArgs[0][3] as Scheduler | undefined;
+    expect(frames, 'the preview was built without the benchmark scheduler').toBeDefined();
+    // The preview's loop, rescheduling itself through what it was handed. The page's own
+    // scheduler receives the request, which is what a real preview's frames go through.
+    const loop = (): void => {
+      frames!.request(loop);
+    };
+    frames!.request(loop);
+    for (const t of [0, 2_000, 2_016, 2_032]) f.rafQueue.shift()!(t);
+    const report = (f.devConsole[DEV_CONSOLE_KEY] as DevConsole).bench!();
+    expect(report.workload.id).toBe('preview');
+    expect([report.frames.count, report.frames.p50]).toEqual([2, 16]);
+    expect([report.session, report.preview]).toEqual([null, { antialias: true, pixelRatioCap: 2, shadowMap: true, keyShadowMapSize: 512 }]);
+  });
+
+  it.each([
+    ['with no bench flag', {}],
+    ['for a session workload', { bench: 'versus-bots' as const }],
+  ])('builds the preview with the window scheduler and publishes nothing %s', (_label, devFlags) => {
+    const f = fixture({ devFlags });
+    f.hud.fire('onCustomizeOpen');
+    expect(f.previewArgs[0]).toHaveLength(3);
+    expect(DEV_CONSOLE_KEY in f.devConsole).toBe(false);
+  });
+
+  it('removes its report on dispose, and leaves an entry that replaced it alone', () => {
+    const own = fixture({ devFlags: { bench: 'preview' } });
+    expect(DEV_CONSOLE_KEY in own.devConsole).toBe(true);
+    own.host.dispose();
+    expect(DEV_CONSOLE_KEY in own.devConsole).toBe(false);
+
+    const replaced = fixture({ devFlags: { bench: 'preview' } });
+    const session = { replay: () => null };
+    replaced.devConsole[DEV_CONSOLE_KEY] = session;
+    replaced.host.dispose();
+    expect(replaced.devConsole[DEV_CONSOLE_KEY]).toBe(session);
+  });
+});
 
 /** The seven handlers a session holds, and the HUD name each is dispatched from. */
 const GAMEPLAY_HANDLERS = [

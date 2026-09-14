@@ -4,6 +4,7 @@ import {
   BENCH_WORKLOADS,
   buildBenchReport,
   createFrameRecorder,
+  createPreviewBench,
   instrumentRaf,
   summarizeFrames,
 } from './bench';
@@ -72,6 +73,22 @@ describe('createFrameRecorder: one warm-up, one measurement window', () => {
     expect(r.simulatedTicks).toBe(6);
   });
 
+  it('does not sample a frame that breaks the run, and takes the next interval from it (issue #736)', () => {
+    // A loop that stopped for five seconds and started again: the restart frame's interval is
+    // the gap, not a frame time, and the frame after it is an ordinary 16 ms frame.
+    const r = createFrameRecorder({ warmupMs: 0, durationMs: 10_000 });
+    r.frame(0, 1, 0);
+    r.frame(10, 1, 0);
+    r.frame(26, 2, 0);
+    r.frame(5_000, 3, 0, false);
+    r.frame(5_016, 4, 0);
+    expect(r.samples()).toEqual([
+      { intervalMs: 16, workMs: 2 },
+      { intervalMs: 16, workMs: 4 },
+    ]);
+    expect(r.measuredMs).toBe(5_006);
+  });
+
   it('sums simulated ticks across a world rebuild, where the tick restarts at 0', () => {
     const r = createFrameRecorder({ warmupMs: 0, durationMs: 1000 });
     r.frame(0, 1, 40);
@@ -130,6 +147,77 @@ describe('instrumentRaf: times the callback without changing it', () => {
     instrumentRaf(raf, () => 0, () => {}).cancel(7);
     expect(raf.cancelled).toEqual([7]);
   });
+
+  it('marks a frame continued only when the previous callback requested it (issue #736)', () => {
+    // A loop that runs three frames and stops, then is started again from outside a callback,
+    // the way the preview restarts on setAnimating, visibilitychange or a resume timer.
+    const raf = fakeRaf();
+    const seen: boolean[] = [];
+    const wrapped = instrumentRaf(raf, () => 0, (_t, _work, continued) => seen.push(continued));
+    let runs = 0;
+    const loop = (): void => {
+      runs += 1;
+      if (runs < 3) wrapped.request(loop);
+    };
+    wrapped.request(loop);
+    raf.fire(0);
+    raf.fire(16);
+    raf.fire(32);
+    wrapped.request(() => {});
+    raf.fire(900);
+    expect(seen).toEqual([false, true, true, false]);
+  });
+
+  it('does not mark the next start continued after a callback threw (issue #736)', () => {
+    const raf = fakeRaf();
+    const seen: boolean[] = [];
+    const wrapped = instrumentRaf(raf, () => 0, (_t, _work, continued) => seen.push(continued));
+    wrapped.request(() => { throw new Error('boom'); });
+    expect(() => raf.fire(0)).toThrow('boom');
+    wrapped.request(() => {});
+    raf.fire(16);
+    expect(seen).toEqual([false, false]);
+  });
+});
+
+describe('createPreviewBench: the preview workload samples unbroken runs on a visible page (issue #736)', () => {
+  it('drops a frame that runs while the page is hidden, and measures the run on either side of it', () => {
+    let pending: ((t: number) => void) | null = null;
+    const raf: RafScheduler = {
+      request(cb): number {
+        pending = cb;
+        return 1;
+      },
+      cancel(): void {},
+    };
+    const fire = (t: number): void => {
+      const cb = pending;
+      pending = null;
+      cb?.(t);
+    };
+    let visible = true;
+    const bench = createPreviewBench({ ...BENCH_WORKLOADS.preview, warmupMs: 0 }, raf, () => 0, () => visible);
+    const loop = (): void => {
+      bench.raf.request(loop);
+    };
+    bench.raf.request(loop);
+    fire(0);
+    fire(10);
+    fire(26);
+    // A callback already in flight when the page was hidden.
+    visible = false;
+    fire(42);
+    visible = true;
+    fire(58);
+    expect(bench.recorder.samples().map((s) => s.intervalMs)).toEqual([16, 16]);
+  });
+});
+
+describe('BENCH_WORKLOADS: which loop each workload measures (issue #736)', () => {
+  it('measures a session for versus-bots and the Customize preview for preview', () => {
+    expect([BENCH_WORKLOADS['versus-bots'].subject, BENCH_WORKLOADS.preview.subject]).toEqual(['session', 'preview']);
+    expect(BENCH_WORKLOADS.preview.query).toBe('?dev=1&bench=preview');
+  });
 });
 
 describe('buildBenchReport', () => {
@@ -143,21 +231,29 @@ describe('buildBenchReport', () => {
   }
 
   it('summarizes intervals as frames and callback time as work, never the other way round', () => {
-    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, page: PAGE, build: BUILD });
+    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, preview: null, page: PAGE, build: BUILD });
     expect([report.frames.count, report.frames.max, report.frames.p50]).toEqual([2, 40, 20]);
     expect([report.work.count, report.work.max, report.work.p50]).toEqual([2, 5, 3]);
     expect(report.simulatedTicks).toBe(3);
   });
 
   it('caps the device pixel ratio by the preset, as the renderer does', () => {
-    const capped = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, page: PAGE, build: BUILD });
+    const capped = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, preview: null, page: PAGE, build: BUILD });
     expect(capped.render).toEqual({ pixelRatioCap: 2, effectivePixelRatio: 2 });
-    const under = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 4, page: PAGE, build: BUILD });
+    const under = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 4, preview: null, page: PAGE, build: BUILD });
     expect(under.render.effectivePixelRatio).toBe(3);
   });
 
+  it('reports the preview workload with no session and the preview renderer it measured (issue #736)', () => {
+    const preview = { antialias: true, pixelRatioCap: 2, shadowMap: true, keyShadowMapSize: 512 };
+    const report = buildBenchReport({ workload: 'preview', recorder: recorded(), session: null, pixelRatioCap: preview.pixelRatioCap, preview, page: PAGE, build: BUILD });
+    expect(report.workload).toBe(BENCH_WORKLOADS.preview);
+    expect([report.session, report.preview]).toEqual([null, preview]);
+    expect(report.render).toEqual({ pixelRatioCap: 2, effectivePixelRatio: 2 });
+  });
+
   it('names its schema version and the workload it ran, with the page, session and build', () => {
-    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, page: PAGE, build: BUILD });
+    const report = buildBenchReport({ workload: 'versus-bots', recorder: recorded(), session: SESSION, pixelRatioCap: 2, preview: null, page: PAGE, build: BUILD });
     expect(report.schema).toBe(BENCH_REPORT_SCHEMA);
     expect(report.workload).toBe(BENCH_WORKLOADS['versus-bots']);
     expect([report.page, report.session, report.build]).toEqual([PAGE, SESSION, BUILD]);
