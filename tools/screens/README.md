@@ -60,9 +60,17 @@ runs and takes its real branch: returning null is `no-webgl2`, throwing is `prob
 and those select two different branded screens with different advice. A capture that
 injected the screen's markup would be evidence of nothing.
 
-`screen.startup.match-failed` applies the same override **after** boot, so the probe has
-already passed and the menu is up. That is a different screen from a boot failure and says
-so — "That match could not start."
+`screen.startup.match-failed` reaches the **recoverable** overlay, "That match could not
+start.", with Retry beside Back to menu. It applies a WebGL override **after** boot, so the
+probe has already passed and the menu is up. The override is `match-build-fails`: the context
+is left alone so the renderer is built, and the context's first `createFramebuffer` then
+throws an untyped error, which `classifyStartupFailure` treats as transient at the match
+boundary (issue #700).
+
+It used to break the context itself with `probe-blocked`. Since #669 that throw arrives as a
+typed `RenderContextUnavailableError`, which is correctly **fatal**, so the step produced the
+full-page "This browser cannot run Tanks!" state and the overlay was never reached. That
+fatal page is the same screen `screen.startup.unsupported-render` already captures.
 
 ## Why every shot is also measured
 
