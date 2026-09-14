@@ -1,0 +1,14 @@
+{
+  "id": "match-failed-capture-skips-the-retry-wait",
+  "file": "tools/screens/states.mjs",
+  "find": "      { waitVisible: '.hud-alert-retry' },\n",
+  "replace": "",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "why": "Issue #700. The state stops waiting for `.hud-alert-retry` and captures as soon as any `.hud-alert` shows. An overlay without #685's Retry, which is the thing the issue asks this capture to evidence, would then pass as this screen. Killed by the case that requires the Retry wait.",
+  "killedBy": [
+    "the screen-state catalogue reaches the RECOVERABLE match-failure overlay through a transient failure, not a fatal one (issue #700)"
+  ]
+}

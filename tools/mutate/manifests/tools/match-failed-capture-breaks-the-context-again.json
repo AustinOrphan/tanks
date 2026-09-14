@@ -1,0 +1,14 @@
+{
+  "id": "match-failed-capture-breaks-the-context-again",
+  "file": "tools/screens/states.mjs",
+  "find": "      { breakWebgl: 'match-build-fails' },\n",
+  "replace": "      { breakWebgl: 'probe-blocked' },\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "why": "Issue #700. `screen.startup.match-failed` breaks the WebGL context itself again after boot. Since #669 that throw is a typed RenderContextUnavailableError, which `classifyStartupFailure` correctly calls fatal, so the page shows the full 'This browser cannot run Tanks!' state and the state's wait for `.hud-alert` times out: measured on main at 073f2aa. The recoverable overlay and its Retry lose their only real-browser capture. Killed by the case that pins the state to the transient mode.",
+  "killedBy": [
+    "the screen-state catalogue reaches the RECOVERABLE match-failure overlay through a transient failure, not a fatal one (issue #700)"
+  ]
+}
