@@ -1,0 +1,14 @@
+{
+  "id": "rotate-button-press-hidden-from-touch",
+  "file": "src/game/hud.css",
+  "find": "  .hud-rotate-btn:hover:not(:disabled) {\n",
+  "replace": "  .hud-rotate-btn:hover:not(:disabled),\n  .hud-rotate-btn:active {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #633. The over-correction: the rotate buttons' PRESS styling is pulled into `@media (hover: hover)` along with their hover. A touch device matches no hovering pointer, so a finger holding a rotate button would get no pressed treatment inside the query, which is exactly where a hold needs visible feedback. Killed by the rotate-button case's assertion that `:active` is not in the hover block.",
+  "killedBy": [
+    "hover treatment on the UI kit primitives (issue #392) keeps the rotate buttons' hover behind the pointer query, and their press outside it (issue #633)"
+  ]
+}
