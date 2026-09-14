@@ -1,0 +1,15 @@
+{
+  "id": "gallery-workbench-command-stale-after-a-change",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "    paintLink();\n    paintCommand();\n  };",
+  "replace": "    paintLink();\n  };",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Paints the command only at mount, so after any control change, scrub or playback the pane offers a command for a selection it no longer shows.",
+  "killedBy": [
+    "the gallery workbench offers the command line for its selection (issue #731) shows the gallery command for the selection, and rewrites it when a control changes",
+    "the gallery workbench offers the command line for its selection (issue #731) follows the timeline: scrubbing writes the frame on screen as --age"
+  ]
+}

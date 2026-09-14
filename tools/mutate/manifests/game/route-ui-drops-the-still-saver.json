@@ -1,0 +1,14 @@
+{
+  "id": "route-ui-drops-the-still-saver",
+  "file": "src/game/route-ui.ts",
+  "find": "      saveStill: bench.saveStill,",
+  "replace": "      saveStill: undefined,",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "why": "Issue #731. Mounts the pane without the page's still saver, which hides Download Still on the real page although createBrowserDeps binds one.",
+  "killedBy": [
+    "the gallery workbench is mounted with its pane and released with it (issue #730) hands the bound still saver to the pane, so Download Still reaches it (issue #731)"
+  ]
+}

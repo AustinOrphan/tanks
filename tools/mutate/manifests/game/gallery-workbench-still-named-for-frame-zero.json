@@ -1,0 +1,14 @@
+{
+  "id": "gallery-workbench-still-named-for-frame-zero",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "    deps.saveStill?.(canvas, stillFileName(commandInput(), GALLERY_STILL));",
+  "replace": "    deps.saveStill?.(canvas, stillFileName({ ...commandInput(), frame: 0 }, GALLERY_STILL));",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Names every still for frame 0, so stills of different frames overwrite each other and none says which frame it is.",
+  "killedBy": [
+    "the gallery workbench offers the command line for its selection (issue #731) Download Still saves the canvas under a name carrying the frame, pixel size and DPR"
+  ]
+}

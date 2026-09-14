@@ -347,20 +347,32 @@ describe('downloadCanvasStill (issue #731)', () => {
       encoded.push(type ?? '');
       cb(new Blob(['png'], { type: 'image/png' }));
     };
-    const created = vi.fn(() => 'blob:still');
+    // jsdom implements neither half of the object-URL pair, so both are stood in for, and the
+    // deferred revoke is run here rather than left to fire after the stand-ins are gone.
     const originalCreate = URL.createObjectURL;
-    URL.createObjectURL = created;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:still');
+    const revoked: string[] = [];
+    URL.revokeObjectURL = (url: string) => revoked.push(url);
     const clicked: { href: string; download: string }[] = [];
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       clicked.push({ href: this.href, download: this.download });
     });
+    vi.useFakeTimers();
+    let revokedBeforeTimers: string[] = [];
     try {
       downloadCanvasStill(canvas, 'gallery-fire-frame10-640x400@1x.png');
+      revokedBeforeTimers = [...revoked];
+      vi.runAllTimers();
     } finally {
+      vi.useRealTimers();
       click.mockRestore();
       URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
     }
     expect(encoded).toEqual(['image/png']);
     expect(clicked).toEqual([{ href: 'blob:still', download: 'gallery-fire-frame10-640x400@1x.png' }]);
+    // Released, but only after the click: revoking first would cancel the download it names.
+    expect([revokedBeforeTimers, revoked]).toEqual([[], ['blob:still']]);
   });
 });

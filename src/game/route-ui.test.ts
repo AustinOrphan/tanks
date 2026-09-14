@@ -751,6 +751,19 @@ describe('the gallery workbench is mounted with its pane and released with it (i
     expect(f.hud.galleryBody.childElementCount).toBe(0);
   });
 
+  it('hands the bound still saver to the pane, so Download Still reaches it (issue #731)', () => {
+    // Would catch: the pane mounted without `saveStill`, which hides the button on the real page.
+    const { value } = bench('scene:destroyed');
+    const saved: string[] = [];
+    const f = fixture({ galleryWorkbench: { ...value, saveStill: (_canvas, name) => saved.push(name) } });
+    f.fire('onGalleryOpen');
+    const button = f.hud.galleryBody.querySelector<HTMLButtonElement>('.hud-gallery-still');
+    if (button === null) throw new Error('the body built no Download Still button');
+    expect(button.closest<HTMLElement>('.hud-gallery-stillrow')?.hidden).toBe(false);
+    button.click();
+    expect(saved).toEqual(['gallery-destroyed-frame0-640x400@1x.png']);
+  });
+
   it('reopens on the selection it last showed, not on the page link', () => {
     // Would catch: every open re-reading `initial`, which throws away a selection built by hand.
     const { rec, value } = bench('scene:destroyed');

@@ -1,0 +1,14 @@
+{
+  "id": "gallery-workbench-offers-a-still-without-a-saver",
+  "file": "src/game/gallery-workbench.ts",
+  "find": "  stillRow.hidden = deps.saveStill === undefined;",
+  "replace": "  stillRow.hidden = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-workbench.test.ts"
+  ],
+  "why": "Issue #731. Shows Download Still on a pane nothing can save from, a button that does nothing when pressed.",
+  "killedBy": [
+    "the gallery workbench offers the command line for its selection (issue #731) hides Download Still when nothing can save one"
+  ]
+}

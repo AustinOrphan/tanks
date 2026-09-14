@@ -1,0 +1,16 @@
+{
+  "id": "gallery-command-writes-overlays-for-a-moment",
+  "file": "src/game/gallery-command.ts",
+  "find": "  if (input.subject.kind === 'element') {",
+  "replace": "  if (input.subject.kind === 'element' || input.reach || input.timer) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/gallery-command.test.ts",
+    "tools/gallery/command-roundtrip.test.ts"
+  ],
+  "why": "Issue #731. Writes --reach and --timer for a moment a link carried them on, although a moment scene draws neither overlay, so the command names settings the picture does not have.",
+  "killedBy": [
+    "galleryCommandArgs (issue #731) writes the mine overlays for a posed element and never for a moment",
+    "every workbench selector round-trips through the gallery runner (issue #731) reads back the selection for every overlays value"
+  ]
+}
