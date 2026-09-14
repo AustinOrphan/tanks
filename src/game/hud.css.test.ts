@@ -632,6 +632,9 @@ describe('hud.css is syntactically whole', () => {
       '.hud-controller-rows', '.hud-controller-row', '.hud-controller-row-label',
       '.hud-controller-row-current', '.hud-controller-row-current--disconnected',
       '.hud-controller-source-btn',
+      // issue #597: the browser-boundary help line, the unsupported-pad reason line, and the
+      // rule that hides the reason while every listed pad is readable
+      '.hud-controllers-help', '.hud-controllers-unsupported', '.hud-controllers-unsupported--hidden',
       // versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
       // design.md): hidden rules, the row/option-button layout, and the friendly-fire
       // toggle.

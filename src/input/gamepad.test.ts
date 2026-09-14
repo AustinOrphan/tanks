@@ -602,6 +602,19 @@ describe('readDetectedPads: the controller assignment panel\'s live list', () =>
     ]);
   });
 
+  it('lists a pad Tanks will not read WITH its reason, and leaves a readable pad unmarked (issue #597)', () => {
+    // Negative control: listing pads without classifying them leaves the unmapped pad with no
+    // reason, so the assignment panel offers it as an ordinary choice that reads no input.
+    const unmapped = { ...fakePad(), mapping: '', id: 'HuiJia  USB GamePad' };
+    const detected = readDetectedPads(() => [fakePad(), unmapped]);
+    expect('unsupported' in detected[0]).toBe(false);
+    expect(detected[1]).toEqual({
+      padIndex: 1,
+      id: 'HuiJia  USB GamePad',
+      unsupported: { code: 'unknown-mapping', mapping: '', id: 'HuiJia  USB GamePad' },
+    });
+  });
+
   it('is empty when nothing is connected', () => {
     expect(readDetectedPads(() => [])).toEqual([]);
     expect(readDetectedPads(() => [null, undefined])).toEqual([]);
