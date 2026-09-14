@@ -72,6 +72,37 @@ What does separate them is that the sliver puts green felt below the lowest grey
 platform pixel. Measured mean colour of the board's bottom rows: **(21,42,33)**
 with the sliver, **(30,33,38)** without, consistent across all four viewports.
 
+## Topbar clearance (issue #687)
+
+A second pass, after the board checks, asks a layout question rather than a pixel one:
+does the toast rail, and the shell-capacity flash, start at or below the topbar's
+rendered bottom edge? The verdict is `clearance.mjs`, which has its own unit tests and
+mutation entries. `verify.mjs` only supplies the rects.
+
+| viewport | why it is in the matrix |
+|---|---|
+| 320x568, 390x844 | the two breakpoints `hud.css` retunes the topbar at |
+| 844x390 | a phone in landscape, with the least height to spare |
+| 1280x800@200% | browser zoom: a 640x400 CSS viewport at DPR 2 |
+| 1920x1080-tv | DPR 2, standing in for a TV |
+
+Each runs with no inset and with a 59px top inset. Headless Chromium reports every
+`env(safe-area-inset-*)` as 0, so the inset comes from DevTools'
+`Emulation.setSafeAreaInsetsOverride`. The verdict fails, rather than passes, if the
+topbar's padding shows that the override never landed.
+
+It also fails, rather than passes, a match whose topbar never showed. It checks the
+Main Menu too, where the bar is hidden and the rail has to clear the inset on its own.
+
+Proved in both directions, against builds of `origin/main` at `86e3fa9` and of this change:
+
+```
+before (top: 64px / top: 56px)   exit 1: 5 of 10 clearance cases FAILED -- all 5 with the inset
+after  (topbar grid row)         exit 0: 10 of 10 clearance cases pass
+```
+
+The no-inset column passed on the old build too. The inset is what makes this discriminate.
+
 ## Validation
 
 The gate is proved in both directions, which is the only thing that makes it
