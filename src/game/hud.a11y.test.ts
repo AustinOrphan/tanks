@@ -209,16 +209,14 @@ describe('HUD achievement list (issue #629)', () => {
     const locked = rows.find((r) => (r as HTMLElement).dataset.achievement !== first.id)!;
     expect(earned.textContent).toMatch(/Earned/);
     expect(locked.textContent).toMatch(/Locked/);
-    // ONE state word per row (issue #630 made #629's node visible instead of adding a
-    // second marker). Negative control: keeping a `.ui-sr-only` copy beside the visible word
+    // ONE state word per row: issue #630's on-screen marker is a shape, not a second copy
+    // of the word. Negative control: a visible "Locked" label beside the sr-only one
     // announces the state twice, and this count reads 2.
     expect(earned.textContent!.match(/Earned/g)).toHaveLength(1);
     expect(locked.textContent!.match(/Locked/g)).toHaveLength(1);
   });
 
-  it('shows earned or locked as a visible word, not only a dimming and a border hue (issue #630)', () => {
-    // Negative control: rendering the state word `.ui-sr-only` again hides it from sight,
-    // leaving `opacity: 0.45` and a gold border as the only on-screen difference.
+  it('marks a locked achievement with a padlock, not only a dimming and a border hue (issue #630)', () => {
     const { hud: h, root } = mount();
     const first = ACHIEVEMENTS[0];
     h.setAchievements(new Set([first.id]));
@@ -228,17 +226,28 @@ describe('HUD achievement list (issue #629)', () => {
 
     const rows = Array.from(root.querySelectorAll<HTMLElement>('.hud-achievement'));
     const earned = rows.find((r) => r.dataset.achievement === first.id)!;
-    const locked = rows.find((r) => r.dataset.achievement !== first.id)!;
-    const stateOf = (row: HTMLElement): HTMLElement => row.querySelector('.hud-achievement-state') as HTMLElement;
-    expect(stateOf(earned).textContent).toBe('Earned');
-    expect(stateOf(locked).textContent).toBe('Locked');
-    for (const row of [earned, locked]) {
-      expect(stateOf(row).classList.contains('ui-sr-only')).toBe(false);
-      expect(stateOf(row).closest('.ui-sr-only')).toBeNull();
+    const lockedRows = rows.filter((r) => r.dataset.achievement !== first.id);
+    expect(lockedRows.length).toBe(ACHIEVEMENTS.length - 1);
+    // Every locked row: the lock sits in the slot before the name, and is hidden from the
+    // accessibility tree. Negative controls: not inserting the svg fails the first
+    // expectation; dropping its `aria-hidden` fails the second.
+    for (const row of lockedRows) {
+      const lock = row.querySelector('.hud-achievement-head > .hud-achievement-icon > svg.hud-achievement-lock');
+      expect(lock).not.toBeNull();
+      expect(lock!.getAttribute('aria-hidden')).toBe('true');
     }
-    // The shape half: only the earned chip carries the filled modifier.
-    expect(stateOf(earned).classList.contains('hud-achievement-state--earned')).toBe(true);
-    expect(stateOf(locked).classList.contains('hud-achievement-state--earned')).toBe(false);
+    // The earned row: the slot is there, EMPTY, first on the name's line, so the title lines
+    // up with the locked ones. Negative controls: a lock on earned rows too fails the
+    // emptiness check; appending the slot only on locked rows fails the first-child check.
+    const earnedHead = earned.querySelector('.hud-achievement-head')!;
+    expect(earnedHead.firstElementChild?.className).toBe('hud-achievement-icon');
+    expect(earnedHead.firstElementChild!.childElementCount).toBe(0);
+    // The word stays for screen readers only; the shape is the on-screen mark. Negative
+    // control: dropping `ui-sr-only` puts "Earned. " back on screen beside the lock.
+    for (const row of [earned, lockedRows[0]]) {
+      const word = Array.from(row.children).find((c) => /^(Earned|Locked)\. $/.test(c.textContent ?? ''));
+      expect(word?.classList.contains('ui-sr-only')).toBe(true);
+    }
   });
 });
 

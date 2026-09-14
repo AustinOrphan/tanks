@@ -1,0 +1,14 @@
+{
+  "id": "achievement-state-word-shown-beside-the-lock",
+  "file": "src/game/hud.ts",
+  "find": "      state.className = 'ui-sr-only';\n",
+  "replace": "      state.className = '';\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #630. The 'Earned. ' / 'Locked. ' word loses `.ui-sr-only` and renders as an unstyled line above every name, next to the padlock that already marks the state. A screen reader hears nothing different, so the #629 words-not-a-class case still passes; the #630 case reads the word's class.",
+  "killedBy": [
+    "HUD achievement list (issue #629) marks a locked achievement with a padlock, not only a dimming and a border hue (issue #630)"
+  ]
+}

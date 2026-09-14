@@ -1370,6 +1370,17 @@ const ROTATE_ICON = {
 };
 
 /**
+ * The padlock on a locked achievement (issue #630). Same construction as the rotate icons:
+ * `currentColor` strokes, so the row's dimming and forced colours both carry it, and
+ * `aria-hidden` because the state is already a text node in the row.
+ */
+const ACHIEVEMENT_LOCK_ICON =
+  '<svg class="hud-achievement-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+  '<rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>' +
+  '<path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+  '</svg>';
+
+/**
  * What `createHud` may be handed besides its root. Optional as a whole and optional
  * field by field, because `createHud(root)` is the shape ~200 existing tests call and
  * a required dependency would have made this change a rewrite of all of them rather
@@ -3631,24 +3642,30 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // Locked entries keep their criteria visible: the list doubles as the
       // to-do, and later as the place unlock gating is explained.
       desc.textContent = a.description;
-      // EARNED STATE, IN WORDS, ON SCREEN (issues #629 and #630). #629 put the state in a
-      // text node, because it lived only in `--earned` and a screen reader announced an
-      // earned row and a locked row identically; a text node rather than `aria-label`,
-      // because a `listitem` is announced from its CONTENTS in browse mode. That node was
-      // `.ui-sr-only`, and on screen the difference stayed `opacity: 0.45` plus a gold
-      // border -- a hue and a dimming, which forced colours and a greyscale screenshot
-      // both flatten.
+      // EARNED STATE, IN WORDS (issue #629). It lived only in `--earned`, which is a
+      // class: the row read "Name. Description." whether or not it had been earned, so
+      // the single fact this whole pane exists to report was the one thing a screen
+      // reader could not get. A text node rather than `aria-label` on the row, because a
+      // `listitem` is announced from its CONTENTS in browse mode and a label on it is
+      // unreliable; `.ui-sr-only` keeps it out of the visual design.
+      const state = document.createElement('span');
+      state.className = 'ui-sr-only';
+      state.textContent = got ? 'Earned. ' : 'Locked. ';
+      // EARNED STATE, IN A SHAPE (issue #630). On screen the difference was `opacity: 0.45`
+      // plus a gold border, a dimming and a hue that forced colours and a greyscale
+      // screenshot both flatten. A locked row now shows a padlock before its name; an
+      // earned row shows nothing there. That mark is `aria-hidden`: the word above is
+      // what a screen reader gets, once.
       //
-      // #630 makes the SAME node visible rather than adding a second marker beside it, as
-      // #629's comment here asked: one word, read once by a screen reader and seen once by
-      // everyone else. It sits on the label's line, so the row still reads name first.
+      // The slot exists on EARNED rows too, empty, so every name starts at the same x.
+      // Without it an earned title sits one icon-width left of the locked ones below it.
       const head = document.createElement('span');
       head.className = 'hud-achievement-head';
-      const state = document.createElement('span');
-      state.className = got ? 'hud-achievement-state hud-achievement-state--earned' : 'hud-achievement-state';
-      state.textContent = got ? 'Earned' : 'Locked';
-      head.append(name, state);
-      row.append(head, desc);
+      const icon = document.createElement('span');
+      icon.className = 'hud-achievement-icon';
+      if (!got) icon.innerHTML = ACHIEVEMENT_LOCK_ICON;
+      head.append(icon, name);
+      row.append(state, head, desc);
       achListEl.appendChild(row);
     }
     achCountEl.textContent = `${earnedIds.size} of ${ACHIEVEMENTS.length} earned`;

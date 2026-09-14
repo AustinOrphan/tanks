@@ -1,0 +1,14 @@
+{
+  "id": "achievement-earned-row-loses-icon-slot",
+  "file": "src/game/hud.ts",
+  "find": "      head.append(icon, name);\n",
+  "replace": "      head.append(...(got ? [] : [icon]), name);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #630. Earned rows get no icon slot, only locked rows do, so an earned title starts one icon-width left of every locked title below it. Each locked row still has its padlock, so a check on locked rows alone passes; the case requires the earned row's name line to start with the empty slot.",
+  "killedBy": [
+    "HUD achievement list (issue #629) marks a locked achievement with a padlock, not only a dimming and a border hue (issue #630)"
+  ]
+}

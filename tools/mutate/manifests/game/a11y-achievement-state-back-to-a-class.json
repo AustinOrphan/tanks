@@ -1,12 +1,12 @@
 {
   "id": "a11y-achievement-state-back-to-a-class",
   "file": "src/game/hud.ts",
-  "find": "      state.textContent = got ? 'Earned' : 'Locked';",
+  "find": "      state.textContent = got ? 'Earned. ' : 'Locked. ';",
   "replace": "      state.textContent = '';",
   "expect": "killed",
   "expectFailures": 2,
   "tests": [
     "src/game/hud.a11y.test.ts"
   ],
-  "why": "Returns earned state to living only in the `--earned` class, so an earned row and a locked row are announced identically and the single fact the Records pane exists to report is the one thing a screen reader cannot get. The span survives, so a structural check for `.ui-sr-only` still passes -- the assertion has to read its CONTENT, and does. COUNT RE-MEASURED for issue #630, 1 -> 2 of 23 in hud.a11y.test.ts: #630 made the state word visible and added 'shows earned or locked as a visible word, not only a dimming and a border hue (issue #630)', which also fails when the word is emptied. The pre-existing failure, 'says earned or locked in words, not only in a class', is unchanged."
+  "why": "Returns earned state to living only in the `--earned` class, so an earned row and a locked row are announced identically and the single fact the Records pane exists to report is the one thing a screen reader cannot get. The span survives, so a structural check for `.ui-sr-only` still passes -- the assertion has to read its CONTENT, and does. COUNT RE-MEASURED for issue #630, 1 -> 2 of 23 in hud.a11y.test.ts: #630 added 'marks a locked achievement with a padlock, not only a dimming and a border hue (issue #630)', which finds the sr-only word by its text and so also fails when the word is emptied. The pre-existing failure, 'says earned or locked in words, not only in a class', is unchanged."
 }

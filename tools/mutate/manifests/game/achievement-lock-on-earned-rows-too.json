@@ -1,0 +1,14 @@
+{
+  "id": "achievement-lock-on-earned-rows-too",
+  "file": "src/game/hud.ts",
+  "find": "      if (!got) icon.innerHTML = ACHIEVEMENT_LOCK_ICON;\n",
+  "replace": "      icon.innerHTML = ACHIEVEMENT_LOCK_ICON;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #630. Every row shows the padlock, earned ones included, so the shape stops telling the two states apart and the page claims nothing has been earned. The locked rows still pass their own check; the case has to look at the earned row's slot and require it empty.",
+  "killedBy": [
+    "HUD achievement list (issue #629) marks a locked achievement with a padlock, not only a dimming and a border hue (issue #630)"
+  ]
+}

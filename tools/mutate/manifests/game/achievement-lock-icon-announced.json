@@ -1,0 +1,14 @@
+{
+  "id": "achievement-lock-icon-announced",
+  "file": "src/game/hud.ts",
+  "find": "  '<svg class=\"hud-achievement-lock\" viewBox=\"0 0 24 24\" aria-hidden=\"true\" focusable=\"false\">' +\n",
+  "replace": "  '<svg class=\"hud-achievement-lock\" viewBox=\"0 0 24 24\" focusable=\"false\">' +\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #630. The padlock stops being `aria-hidden`, so a screen reader can meet an unnamed graphic in every locked row beside the 'Locked.' word that already says the same thing.",
+  "killedBy": [
+    "HUD achievement list (issue #629) marks a locked achievement with a padlock, not only a dimming and a border hue (issue #630)"
+  ]
+}
