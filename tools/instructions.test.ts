@@ -452,4 +452,24 @@ describe('the instruction files', () => {
     expect(readFileSync(CLAUDE, 'utf8')).toContain('docs/superpowers/backlog.md');
     expect(existsSync(BACKLOG)).toBe(true);
   });
+
+  it('states the JS/TS line-width convention as guidance with no formatter behind it (issue #723)', () => {
+    // #635's binding decision: a documented ~100-character convention, not a hard limit, no
+    // formatter, no reformat, and no instruction to run lint or format scripts the repository
+    // does not have. Each clause is pinned separately, so dropping one fails by name.
+    const root = readFileSync(CLAUDE, 'utf8');
+    const requirements: Array<[string, RegExp]> = [
+      ['a ~100-character JS/TS target that follows the surrounding code',
+        /Wrap JS\/TS near 100 characters, matching the surrounding code/],
+      ['guidance with clarity and meaningful-literal exceptions',
+        /guidance, not\s+a maximum: keep a longer line where wrapping would harm clarity or split a meaningful\s+literal/],
+      ['no formatter, no reformat of untouched code, existing verification commands',
+        /No formatter or width lint exists; do not reformat untouched code, and verify with\s+the existing `verify:\*` commands/],
+    ];
+    for (const [name, pattern] of requirements) {
+      expect(root, name).toMatch(pattern);
+      expect(root.replace(pattern, '[required policy removed]'), name).not.toMatch(pattern);
+    }
+    expect(root, 'no instruction to run a lint or format script the repository lacks').not.toMatch(/npm run (lint|format)\b/);
+  });
 });

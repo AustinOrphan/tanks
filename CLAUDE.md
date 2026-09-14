@@ -59,6 +59,10 @@ Command behavior and CI/deployment details are in
   after the final tree changes.
 - Inspect every consumer when changing a shared type or event.
 - Generated documents are updated through their generators, never by hand.
+- Wrap JS/TS near 100 characters, matching the surrounding code. The width is guidance, not
+  a maximum: keep a longer line where wrapping would harm clarity or split a meaningful
+  literal. No formatter or width lint exists; do not reformat untouched code, and verify with
+  the existing `verify:*` commands.
 - Deferred implementation work belongs in `docs/superpowers/backlog.md` only when it
   requires a decision or measurement before a PR can close it. Otherwise file an issue.
 - When closing backlog work, remove or narrow its entry in the same PR.
