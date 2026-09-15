@@ -596,6 +596,35 @@ describe('parseDevFlags: arrival (issue #230 -- spawn and death told apart)', ()
   });
 });
 
+describe('parseDevFlags: stockCue (issue #230 -- the versus stock-loss cue arms)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?stockCue=badge').stockCue).toBeNull();
+  });
+
+  it('is null when absent -- the shipped strip draws no cue', () => {
+    expect(parseDevFlags('?dev=1').stockCue).toBeNull();
+  });
+
+  it('accepts each arm -- population: the 3 named arms this build carries', () => {
+    for (const v of ['pips', 'strike', 'badge'] as const) {
+      expect(parseDevFlags(`?dev=1&stockCue=${v}`).stockCue).toBe(v);
+    }
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 8 forms below', () => {
+    // `chip` is the mockup that was dropped, and `pip`, `knockout`, `−1` and `minus` are the
+    // near-misses someone who read the mockups would type. Accepting any of them would select
+    // an arm under a name the flag does not document.
+    for (const v of ['', 'BADGE', 'pip', 'knockout', 'chip', '−1', 'minus', 'default']) {
+      expect(parseDevFlags(`?dev=1&stockCue=${encodeURIComponent(v)}`).stockCue).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&stockCue=strike')).toEqual({ ...DEV_FLAGS_OFF, stockCue: 'strike' });
+  });
+});
+
 describe('registryKeyMismatch: proven against synthetic fixtures first', () => {
   // The point of factoring this out: a check written directly against FLAG_REGISTRY can
   // never fail while `Record<keyof DevFlags, FlagSpec>` stands (a missing or extra key is

@@ -3135,6 +3135,114 @@
   display: none;
 }
 
+/* ---- Stock-loss cue arms (issue #230, `?dev=1&stockCue=`) ------------------------- */
+
+/* A TEMPORARY OPEN-QUESTION ARM SET: one of these three ships unconditionally once chosen, and
+ * the other two and this banner are deleted. With no flag none of the classes below is ever
+ * rendered, so the shipped strip is untouched by construction.
+ *
+ * Every cue runs for `--hud-duration-slow`, the life-loss pulse's length, and hud.ts re-attaches
+ * a cue still running after the strip is rebuilt with a negative `animation-delay`. Fill mode
+ * `both` is what makes that resume land on the right frame instead of replaying from 0%.
+ *
+ * STATE LIVES IN BORDERS AND TEXT, NEVER `background`. Forced colours drops a background, which
+ * in the #230 mockups made a filled pip identical to a hollow one and erased a strike line drawn
+ * as a fill. A filled pip here is a border as wide as its radius; a hollow one is a thin border. */
+.hud-versus-stock-entry {
+  /* The positioned ancestor the badge and the struck digit hang from. */
+  position: relative;
+}
+
+.hud-stock-count {
+  display: inline-block;
+}
+
+/* D. The "−1" badge: an outlined pill under the entry, drifting down as it fades. */
+.hud-stock-cue--badge {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 16px;
+  pointer-events: none;
+  animation: hud-stock-badge var(--hud-duration-slow) ease-out 1 both;
+}
+
+@keyframes hud-stock-badge {
+  0% { opacity: 0; transform: translate(-50%, 0); }
+  15% { opacity: 1; transform: translate(-50%, 2px); }
+  100% { opacity: 0; transform: translate(-50%, 14px); }
+}
+
+/* B. The struck-out digit: the old number, struck through, lifting away above the new one. */
+.hud-stock-cue--struck {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  pointer-events: none;
+  animation: hud-stock-struck var(--hud-duration-slow) ease-out 1 both;
+}
+
+@keyframes hud-stock-struck {
+  0% { opacity: 1; transform: translateY(12px); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
+/* A. Pips: one per starting stock. The pip just lost swells, bursts a ring, and empties. */
+.hud-stock-pips {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.hud-stock-pip {
+  position: relative;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 5px solid currentColor;
+  border-radius: 50%;
+}
+
+.hud-stock-pip--lost {
+  border-width: 2px;
+}
+
+.hud-stock-pip.hud-stock-cue {
+  animation: hud-stock-pip-empty var(--hud-duration-slow) ease-out 1 both;
+}
+
+/* The burst ring. `animation-delay` is not inherited by default, so a resumed cue's negative
+ * delay would reach the pip and not its ring without the `inherit` below. */
+.hud-stock-pip.hud-stock-cue::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: hud-stock-pip-burst var(--hud-duration-slow) ease-out 1 both;
+  animation-delay: inherit;
+}
+
+@keyframes hud-stock-pip-empty {
+  0% { border-width: 5px; transform: scale(1); }
+  30% { border-width: 5px; transform: scale(1.6); }
+  100% { border-width: 2px; transform: scale(1); }
+}
+
+@keyframes hud-stock-pip-burst {
+  0%, 25% { opacity: 0; transform: scale(1); }
+  35% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2.2); }
+}
+
 /* ---- Round-start countdown ------------------------------------------------- */
 
 /* Level chip: hidden until the loop reports a multi-level sequence. Without this rule
@@ -3365,6 +3473,48 @@
 
 .hud--reduced-motion .hud-lives--hit {
   animation-name: hud-lives-pulse--still;
+}
+
+/*
+ * Issue #230's stock-loss cue arms: the information stays and the movement goes. The badge holds
+ * in place and fades; the struck number sits above the new one and fades; the pip still empties
+ * and its ring still shows, but neither swells. None of them depends on a hue, so unlike the
+ * life-loss pulse above, reduced motion plus forced colours still leaves a cue.
+ */
+@keyframes hud-stock-badge--still {
+  0%, 70% { opacity: 1; transform: translate(-50%, 2px); }
+  100% { opacity: 0; transform: translate(-50%, 2px); }
+}
+
+.hud--reduced-motion .hud-stock-cue--badge {
+  animation-name: hud-stock-badge--still;
+}
+
+@keyframes hud-stock-struck--still {
+  0%, 70% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+
+.hud--reduced-motion .hud-stock-cue--struck {
+  animation-name: hud-stock-struck--still;
+}
+
+@keyframes hud-stock-pip-empty--still {
+  0%, 50% { border-width: 5px; transform: none; }
+  100% { border-width: 2px; transform: none; }
+}
+
+@keyframes hud-stock-pip-burst--still {
+  0%, 70% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+
+.hud--reduced-motion .hud-stock-pip.hud-stock-cue {
+  animation-name: hud-stock-pip-empty--still;
+}
+
+.hud--reduced-motion .hud-stock-pip.hud-stock-cue::after {
+  animation-name: hud-stock-pip-burst--still;
 }
 
 /*

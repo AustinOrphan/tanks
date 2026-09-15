@@ -55,7 +55,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (26)
+## Valued flags (27)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ Notes:
 | `seed` | `seed` | a positive integer | `null` | Fixes the world's PRNG seed instead of deriving one from the clock, for a reproducible playthrough. |
 | `shadowMapSize` | `shadowMapSize` | one of 256, 512, 1024, 2048, 4096 | `null` | Overrides the quality preset's sun shadow map size for this session, leaving every other render setting at the preset. |
 | `shellTrail` | `shellTrail` | `segments` | `null` | Draws an experimental shell bounce-trail (issue #688). 'segments' puts a row of neutral dashes behind each shell, one more than the ricochets it has left, so a shell on its last flight still shows one. No owner hue; the shipped game shows none. |
+| `stockCue` | `stockCue` | `pips`, `strike`, `badge` | `null` | Marks a lost versus stock on the stock strip (issue #230), one of three shortlisted arms: 'pips' turns the count into pips that empty, 'strike' lifts the old number away struck through, and 'badge' drops a "−1" under the entry. The shipped strip only changes the digit. Temporary: deleted once an arm is chosen. |
 | `topbar` | `topbar` | `full`, `spare`, `mode-chips`, `spare-chips`, `enemies-only`, `denominator-only` | `null` | Renders the gameplay topbar as one of issue #552's alternatives to the shipped bar; `spare-chips` ships, and the others put back the enemy count, the level denominator, or both, and mark Practice alone instead of naming every session kind. `full` is all three together: the bar as it read before the ruling. |
 | `versusActions` | `versusActions` | `header` | `null` | Moves Back out of the pinned action bar and into a compact sticky header beside the pane title (issue #668). The shipped bar carries Start and Back together at the foot, which costs less of a small screen; 'header' keeps the title visible while scrolling, at 49px of permanent chrome. |
 
