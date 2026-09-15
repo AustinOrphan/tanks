@@ -1,0 +1,15 @@
+{
+  "id": "loop-step-hotkey-never-steps",
+  "file": "src/game/loop.ts",
+  "find": "    if (deps.developerMode && isStepHotkey(e)) driver.advanceOneTick();",
+  "replace": "    if (deps.developerMode && isStepHotkey(e)) void driver.world;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer single-tick step (issue #253) Period advances exactly one tick while paused, in developer mode",
+    "startGameWith: the developer single-tick step (issue #253) records exactly one replay tick per step"
+  ],
+  "why": "The hotkey is recognised and does nothing. The driver's own tests still pass, because they call `advanceOneTick` directly; only a session test that presses the key sees the step never reach the driver."
+}

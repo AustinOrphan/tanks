@@ -1,0 +1,14 @@
+{
+  "id": "state-settle-stepped-tick-accepts-playing",
+  "file": "src/game/state.ts",
+  "find": "      if (current.phase.kind !== 'paused') return;\n      const outcome = classify(events, current.session);",
+  "replace": "      if (current.phase.kind === 'outcome') return;\n      const outcome = classify(events, current.session);",
+  "expect": "killed",
+  "tests": [
+    "src/game/state.test.ts"
+  ],
+  "killedBy": [
+    "settleSteppedTick -- a developer-stepped tick, taken while paused (issue #253) does nothing from a playing session or a route"
+  ],
+  "why": "The paused-only entry also finishes a PLAYING session. That is a second, unguarded way to end a live match beside `onEvents`, reachable from anything that calls it -- the legality `onEvents` and `finishWith` deliberately duplicate rather than share."
+}

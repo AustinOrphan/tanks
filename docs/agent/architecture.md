@@ -394,6 +394,18 @@ consequence of the non-playing branch dropping the accumulator but still forward
 the driver applies it, the same split `renderAlpha` has. It must stay out of `src/sim/`:
 a wall clock there would break replay.
 
+**A DEVELOPER STEP IS ONE TICK FROM A PAUSED BOARD, AND THE GAME STAYS PAUSED** (issue #253).
+`Driver.advanceOneTick()` acts only while the state machine is `paused`, which is the game's own
+pause: there is no second developer pause for readers of `isPaused` to miss. Each step is one
+`input.sample()` and one `stepInputs`, so the replay recorder records one tick per step; its events
+reach the director, haptics and `onFrameEvents` as a simulating frame's do; and it renders once, at
+alpha 1 and animation dt 0, so render effects stay frozen and the music stays ducked. It touches
+neither the accumulator nor `last`, so Resume neither repeats a step nor repays the paused time. A
+round that ENDS on a stepped tick reaches the state machine through `settleSteppedTick`, not
+`onEvents`: `onEvents` ignores a paused session, and `stepInputs` resolves a status only while it
+is `playing`, so that ending is emitted once and would otherwise be lost with the session stranded
+paused. Period triggers it in developer mode (`isStepHotkey`, `loop.ts`).
+
 **A SKIN'S UV MAPPING IS DECIDED PER PART, and the three parts disagree on purpose.**
 `entities.ts` is the only place this lives, and each rule exists because a render was
 wrong in a way no numeric probe caught.

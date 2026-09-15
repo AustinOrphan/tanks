@@ -1,0 +1,15 @@
+{
+  "id": "state-settle-stepped-tick-never-finishes",
+  "file": "src/game/state.ts",
+  "find": "      if (current.phase.kind !== 'paused') return;\n      const outcome = classify(events, current.session);\n      if (outcome === null) return;\n      setLocation(locationInGameplay(current.session, outcomePhase(outcome)));",
+  "replace": "      if (current.phase.kind !== 'paused') return;\n      const outcome = classify(events, current.session);\n      if (outcome === null) return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/state.test.ts"
+  ],
+  "killedBy": [
+    "settleSteppedTick -- a developer-stepped tick, taken while paused (issue #253) moves paused -> outcome when the stepped tick ended the round",
+    "settleSteppedTick -- a developer-stepped tick, taken while paused (issue #253) classifies as onEvents does: a win is the same outcome either way"
+  ],
+  "why": "The stepped tick's ending is classified and then dropped: the session stays paused on a world whose round is over. It is the stranding the entry exists to prevent, reached through the entry itself rather than around it."
+}

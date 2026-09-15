@@ -268,6 +268,59 @@ describe('pause / resume -- phase transitions', () => {
   });
 });
 
+describe('settleSteppedTick -- a developer-stepped tick, taken while paused (issue #253)', () => {
+  it('moves paused -> outcome when the stepped tick ended the round', () => {
+    // The case `onEvents` cannot serve: it ignores a paused session (pinned just above), and the
+    // sim never emits this `lose` again, so without this entry the round could never end.
+    const sm = makeMachine();
+    sm.toMainMenu();
+    sm.enterGameplay(buildCampaignSession());
+    sm.pause();
+    sm.settleSteppedTick([{ type: 'lose' }]);
+    expect(sm.hasOutcome).toBe(true);
+    expect(sm.outcome?.kind).toBe('campaign-over');
+  });
+
+  it('classifies as onEvents does: a win is the same outcome either way', () => {
+    const viaStep = makeMachine();
+    viaStep.toMainMenu();
+    viaStep.enterGameplay(buildCampaignSession());
+    viaStep.pause();
+    viaStep.settleSteppedTick([{ type: 'win' }]);
+    const viaPlay = makeMachine();
+    viaPlay.toMainMenu();
+    viaPlay.enterGameplay(buildCampaignSession());
+    viaPlay.onEvents([{ type: 'win' }]);
+    expect(viaStep.outcome).toEqual(viaPlay.outcome);
+  });
+
+  it('leaves the session paused when the stepped tick did not end the round', () => {
+    const sm = makeMachine();
+    sm.toMainMenu();
+    sm.enterGameplay(buildCampaignSession());
+    sm.pause();
+    sm.settleSteppedTick([]);
+    expect(sm.isPaused).toBe(true);
+    expect(sm.hasOutcome).toBe(false);
+  });
+
+  it('does nothing from a playing session or a route', () => {
+    // A live match's endings go through onEvents; accepting them here too would give a second,
+    // unguarded way to finish from `playing`.
+    const playing = makeMachine();
+    playing.toMainMenu();
+    playing.enterGameplay(buildCampaignSession());
+    playing.settleSteppedTick([{ type: 'lose' }]);
+    expect(playing.isPlaying).toBe(true);
+    expect(playing.hasOutcome).toBe(false);
+
+    const menu = makeMachine();
+    menu.toMainMenu();
+    menu.settleSteppedTick([{ type: 'lose' }]);
+    expect(menu.atMainMenu).toBe(true);
+  });
+});
+
 describe('onEvents -- typed outcome classification', () => {
   it('reacts only to the first terminal event in a batch', () => {
     const sm = makeMachine();

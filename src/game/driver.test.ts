@@ -107,6 +107,8 @@ function harness(
   directed: SimEvent[][];
   hapticsSaw: SimEvent[][];
   machineSaw: SimEvent[][];
+  /** Every batch routed through `settleSteppedTick` (issue #253), apart from `onEvents`'. */
+  settled: SimEvent[][];
   simulated: World[];
   framed: SimEvent[][];
   samples: number;
@@ -120,6 +122,7 @@ function harness(
   const directed: SimEvent[][] = [];
   const hapticsSaw: SimEvent[][] = [];
   const machineSaw: SimEvent[][] = [];
+  const settled: SimEvent[][] = [];
   const simulated: World[] = [];
   const framed: SimEvent[][] = [];
   let state: DriverState = opts.state ?? 'playing';
@@ -169,6 +172,9 @@ function harness(
         // driver's two reads of `isSimulating`/`isPaused`.
         if (opts.endOnEvents) state = opts.endOnEvents;
       },
+      settleSteppedTick(events): void {
+        settled.push(events);
+      },
     },
     world: opts.world ?? createArenaWorld(1),
     onFrameEvents(evs): void {
@@ -187,6 +193,7 @@ function harness(
     directed,
     hapticsSaw,
     machineSaw,
+    settled,
     simulated,
     framed,
     get samples(): number {
@@ -555,6 +562,140 @@ describe('driver: the render animation clock', () => {
     },
   );
 });
+
+describe('driver: the developer single-tick step (issue #253)', () => {
+  /** A fresh arena world whose enemies are already dead, so the next simulated tick decides the round. */
+  function worldWonOnNextTick(): World {
+    const w = createArenaWorld(1);
+    for (const t of w.tanks) if (t.kind !== 'player') t.alive = false;
+    return w;
+  }
+
+  it.each(['playing', 'launch', 'main-menu', 'outcome'] as const)(
+    'refuses while %s, without sampling, stepping or rendering',
+    (state) => {
+      // The gate is PAUSED, not "not simulating": a step from a live match would hand out a
+      // tick the frame loop is also about to take, and one from a menu or an ended round would
+      // move a world nobody is playing.
+      const h = harness({ state });
+      h.driver.start();
+      expect(h.driver.advanceOneTick()).toBe(false);
+      expect(h.samples).toBe(0);
+      expect(h.renders).toHaveLength(0);
+      expect(h.driver.world.tick).toBe(0);
+    },
+  );
+
+  it('advances exactly one tick from one sample, and renders it whole with effects frozen', () => {
+    const h = harness({ state: 'paused' });
+    h.driver.start();
+    h.raf.fire(100); // a paused frame: renders, steps nothing
+    expect(h.driver.world.tick).toBe(0);
+    const before = h.driver.world;
+    expect(h.driver.advanceOneTick()).toBe(true);
+    expect(h.driver.world.tick).toBe(1);
+    expect(h.samples).toBe(1);
+    expect(h.simulated).toEqual([h.driver.world]);
+    const frame = h.renders[h.renders.length - 1];
+    expect(h.renders).toHaveLength(2);
+    expect(frame.prev).toBe(before);
+    expect(frame.curr).toBe(h.driver.world);
+    // Alpha 1: the stepped pose whole. Dt 0: paused, so debris and animated skins hold still.
+    expect(frame.alpha).toBe(1);
+    expect(frame.dt).toBe(0);
+  });
+
+  it('advances exactly N ticks for N steps, one sample each', () => {
+    const h = harness({ state: 'paused' });
+    h.driver.start();
+    for (let i = 0; i < 5; i++) h.driver.advanceOneTick();
+    expect(h.driver.world.tick).toBe(5);
+    expect(h.samples).toBe(5);
+    expect(h.renders).toHaveLength(5);
+    expect(h.renders.map((r) => r.curr.tick)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('equals the same number of stepInputs calls on the same inputs, tick for tick', () => {
+    // The determinism trace: stepping is the sim's own step, not an approximation of one.
+    const inputs: InputState[] = [
+      { move: { x: 1, y: 0 }, aim: { x: 3, y: 2 }, fire: false, mine: false },
+      { move: { x: 0, y: -1 }, aim: { x: -2, y: 5 }, fire: true, mine: false },
+      { move: { x: -1, y: 1 }, aim: { x: 7, y: -1 }, fire: false, mine: true },
+    ];
+    const TICKS = 200;
+    const start = createWorldFor(arenaById('arena-01'), 321, {});
+    let expected = start;
+    for (let tick = 0; tick < TICKS; tick++) expected = step(expected, inputs[tick % inputs.length]).world;
+
+    const stepped = harnessWithScript(start, inputs);
+    for (let i = 0; i < TICKS; i++) stepped.driver.advanceOneTick();
+    expect(stepped.driver.world).toEqual(expected);
+
+    // The negative control: one step fewer lands somewhere else, so the equality above can see a
+    // single tick. Without it a comparison of two worlds that never diverge would pass anything.
+    const short = harnessWithScript(start, inputs);
+    for (let i = 0; i < TICKS - 1; i++) short.driver.advanceOneTick();
+    expect(short.driver.world).not.toEqual(expected);
+  });
+
+  it('RESUMING after steps neither repeats them nor catches up the paused time', () => {
+    // The same shape as reset()'s carried-time test. The paused frame at 25 anchors `last`; three
+    // steps later, Resume and a frame 14ms on (under DT) must run no tick, and a frame 17ms after
+    // that must run exactly one. A step that left time owed, or re-ran itself, moves the tick.
+    const h = harness({ state: 'paused' });
+    h.driver.start();
+    h.raf.fire(25);
+    for (let i = 0; i < 3; i++) h.driver.advanceOneTick();
+    expect(h.driver.world.tick).toBe(3);
+    h.setState('playing');
+    h.raf.fire(39);
+    expect(h.driver.world.tick).toBe(3);
+    h.raf.fire(56);
+    expect(h.driver.world.tick).toBe(4);
+  });
+
+  it("routes a stepped tick's events as a simulating frame does, and its round ending through settleSteppedTick", () => {
+    const h = harness({ state: 'paused', world: worldWonOnNextTick() });
+    h.driver.start();
+    h.driver.advanceOneTick();
+    const win = [{ type: 'win', tick: 1 }];
+    expect(h.directed).toEqual([win]);
+    expect(h.hapticsSaw).toEqual([win]);
+    expect(h.framed).toEqual([win]);
+    expect(h.settled).toEqual([win]);
+    // NOT onEvents: the real machine ignores a paused session there, and the sim never emits
+    // this `win` again, so the round would never end.
+    expect(h.machineSaw).toEqual([]);
+  });
+
+  it('a simulating frame never routes through settleSteppedTick', () => {
+    // Negative control for the over-correction: sending every frame's events to the paused-only
+    // entry would pass the case above and silently drop every ending in a live match.
+    const h = harness({ state: 'playing', world: worldWonOnNextTick() });
+    h.driver.start();
+    h.raf.fire(25);
+    expect(h.machineSaw).toEqual([[{ type: 'win', tick: 1 }]]);
+    expect(h.settled).toEqual([]);
+  });
+});
+
+/** A paused driver whose input plays `inputs` in turn, one per sample. */
+function harnessWithScript(world: World, inputs: InputState[]): { driver: Driver } {
+  let i = 0;
+  const driver = createDriver({
+    now: () => 0,
+    raf: fakeRaf().scheduler,
+    input: { sample: () => [inputs[i++ % inputs.length]] },
+    renderer: { render: () => {}, worldReplaced: () => {} },
+    director: { handle: () => {} },
+    haptics: { handle: () => {} },
+    stateMachine: { isSimulating: false, isPaused: true, onEvents: () => {}, settleSteppedTick: () => {} },
+    world,
+    onFrameEvents: () => {},
+    onSimulated: () => {},
+  });
+  return { driver };
+}
 
 describe('driver: lifecycle', () => {
   it('schedules nothing until start(), then schedules the first frame', () => {
