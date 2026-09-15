@@ -1,0 +1,12 @@
+{
+  "id": "customize-choices-pointer-pick-keeps-focus",
+  "file": "src/game/customize-choices.ts",
+  "find": "      for (const cb of pickSkinCbs) cb(skin.id);\n      if ((e as MouseEvent).detail > 0) b.blur();",
+  "replace": "      for (const cb of pickSkinCbs) cb(skin.id);",
+  "expect": "killed",
+  "tests": ["src/game/customize-choices.test.ts"],
+  "why": "The other direction of the same guard: a skin button clicked with a pointer keeps focus, so its focus ring stays drawn after a mouse pick. Under this mutation all 116 tests in hud.controls.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open).",
+  "killedBy": [
+    "renderCustomizeChoices (issue #556) a button in the skin row keeps focus when the keyboard presses it, and lets go after a pointer click"
+  ]
+}

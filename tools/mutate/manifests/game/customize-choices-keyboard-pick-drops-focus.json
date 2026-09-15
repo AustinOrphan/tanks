@@ -1,0 +1,12 @@
+{
+  "id": "customize-choices-keyboard-pick-drops-focus",
+  "file": "src/game/customize-choices.ts",
+  "find": "      for (const cb of pickHullCbs) cb(swatch.id);\n      if ((e as MouseEvent).detail > 0) b.blur();",
+  "replace": "      for (const cb of pickHullCbs) cb(swatch.id);\n      b.blur();",
+  "expect": "killed",
+  "tests": ["src/game/customize-choices.test.ts"],
+  "why": "A hull pick blurs unconditionally, so a keyboard or controller player who presses Enter on a swatch loses their place in the pane's roving focus. The `detail > 0` guard is what tells a pointer click from a keyboard activation. Under this mutation all 116 tests in hud.controls.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open).",
+  "killedBy": [
+    "renderCustomizeChoices (issue #556) a button in the hull row keeps focus when the keyboard presses it, and lets go after a pointer click"
+  ]
+}

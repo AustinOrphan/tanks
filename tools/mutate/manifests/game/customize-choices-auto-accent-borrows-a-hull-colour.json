@@ -1,0 +1,12 @@
+{
+  "id": "customize-choices-auto-accent-borrows-a-hull-colour",
+  "file": "src/game/customize-choices.ts",
+  "find": "accentSwatch.hex ?? '#4a4f58'",
+  "replace": "accentSwatch.hex ?? '#3d7bd6'",
+  "expect": "killed",
+  "tests": ["src/game/customize-choices.test.ts"],
+  "why": "`auto` has no colour of its own, so its swatch is painted a fixed neutral. Painted Classic blue instead, it reads as a real colour choice that duplicates the first hull swatch. Under this mutation all 116 tests in hud.controls.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open).",
+  "killedBy": [
+    "renderCustomizeChoices (issue #556) gives `auto` a neutral fill of its own, not any hull or accent colour"
+  ]
+}

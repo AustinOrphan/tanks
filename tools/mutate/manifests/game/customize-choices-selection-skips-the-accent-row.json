@@ -1,0 +1,12 @@
+{
+  "id": "customize-choices-selection-skips-the-accent-row",
+  "file": "src/game/customize-choices.ts",
+  "find": "      renderSkinSelection();\n      renderAccentSelection();\n    },",
+  "replace": "      renderSkinSelection();\n    },",
+  "expect": "killed",
+  "tests": ["src/game/customize-choices.test.ts"],
+  "why": "Opening Customize repaints the rings through `renderSelection`, and before any choice is stored that is the only thing that marks a row at all. Dropping the accent row leaves it with no ring. Every `hud.controls.test.ts` Customize case stores a choice first, and a store repaints its own row, so under this mutation all 116 tests in hud.controls.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open). The direct case asks for the default ring in every row.",
+  "killedBy": [
+    "renderCustomizeChoices (issue #556) renderSelection marks the first entry of EVERY row when nothing has been stored"
+  ]
+}
