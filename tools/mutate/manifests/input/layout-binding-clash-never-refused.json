@@ -1,10 +1,10 @@
 {
   "id": "layout-binding-clash-never-refused",
   "file": "src/input/gamepad-profile.ts",
-  "find": "    if (clashing.length > 0) continue;",
-  "replace": "    if (clashing.length < 0) continue;",
+  "find": "    const clashing = [...pending.keys()].filter((action) =>",
+  "replace": "    const clashing = [...pending.keys()].filter((action) => false &&",
   "expect": "killed",
-  "why": "A binding onto another action's button must be returned to the profile's own button; letting it stand puts two actions on one button, and Fire on Confirm's button is the #494 leak.",
+  "why": "A binding onto another action's button must be returned to the profile's own button; detecting no clash lets it stand, putting two actions on one button, and Fire on Confirm's button is the #494 leak. Cut at clash DETECTION rather than at the re-check loop: skipping only the re-check still removes the one clashing binding and returns the untouched profile, which the single-binding test cannot tell apart.",
   "tests": [
     "src/input/gamepad-profile.test.ts"
   ],
