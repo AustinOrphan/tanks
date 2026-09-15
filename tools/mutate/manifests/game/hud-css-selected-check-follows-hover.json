@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-selected-check-follows-hover",
+  "file": "src/game/hud.css",
+  "find": ".ui-selectable--on:hover:not(:disabled) {",
+  "replace": ".ui-selectable--on:hover:not(:disabled)::after, .ui-selectable--on:hover:not(:disabled) {",
+  "expect": "killed",
+  "why": "A hover rule reaches into the selected check's glyph layer. Issue #630's ruling keeps the check \"distinct from focus/hover\", and #392's contract keeps hover, focus and selected on separate properties; a pointer resting on the chosen control would now repaint the check itself. Killed by the guard that no rule keys a selectable's pseudo-element on :hover or :focus.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the selected check (issue #630) never keys the check on hover or focus, which keep their own properties"
+  ]
+}

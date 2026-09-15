@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-map-card-check-protrudes-above-the-card",
+  "file": "src/game/hud.css",
+  "find": "  top: 4px;\n  right: 4px;",
+  "replace": "  top: -8px;\n  right: 4px;",
+  "expect": "killed",
+  "why": "The map card's check goes back to protruding 8px above the card -- the placement the owner rejected on issue #630 (\"Do not retain the 8px top protrusion on map cards\"). Measured before the ruling: with the disc outside the card, it was clipped at the scroll pane's top edge on all 7 cards across 6 renderings. Killed by the guard that both offsets of the map-card rule are non-negative.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the selected check (issue #630) insets a map card's check on both axes, where every other control carries it outside"
+  ]
+}

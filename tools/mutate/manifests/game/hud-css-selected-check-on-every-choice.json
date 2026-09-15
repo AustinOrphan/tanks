@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-selected-check-on-every-choice",
+  "file": "src/game/hud.css",
+  "find": ".ui-selectable--on::before,\n.ui-selectable--on::after {\n  content: '';",
+  "replace": ".ui-selectable::before,\n.ui-selectable::after {\n  content: '';",
+  "expect": "killed",
+  "why": "The selected check keyed on `.ui-selectable` instead of `.ui-selectable--on`: every choice in every row carries a check, which reads as all of them chosen -- the opposite of the signal issue #630 adds. Nothing in jsdom computes pseudo-element styles, so the guard reads the stylesheet text: every pseudo-element selector on a selectable must name the chosen modifier.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the selected check (issue #630) draws the check on the CHOSEN control only"
+  ]
+}

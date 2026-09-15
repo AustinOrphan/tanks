@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-selected-check-takes-the-pointer",
+  "file": "src/game/hud.css",
+  "find": "  height: 20px;\n  pointer-events: none;\n}",
+  "replace": "  height: 20px;\n}",
+  "expect": "killed",
+  "why": "The check disc takes pointer events. It overhangs the chosen control's corner by 8px, into the gap and onto a neighbour, so a press on that neighbour's corner lands on the chosen control's pseudo-element and selects the wrong thing -- and a hover there shows on the wrong control. Issue #630's approved treatment reserves nothing and must change no hit target.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the selected check (issue #630) is a real layer that takes no pointer, with the check cut from a mask"
+  ]
+}

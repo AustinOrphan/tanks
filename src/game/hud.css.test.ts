@@ -2687,18 +2687,46 @@ describe('forced-colors conformance (issue #368)', () => {
     expect(offBody.includes('dotted') && onBody.includes('dotted')).toBe(false);
   });
 
-  it('opts out of colour forcing in exactly ONE place, and says why', () => {
+  it('opts out of colour forcing only on the swatch and the selected check\'s two layers', () => {
     // Criterion 5: `forced-color-adjust` is a scoped semantic necessity, never a wholesale
-    // opt-out. Asserted over the WHOLE file rather than the block, because a second use
-    // added anywhere else is exactly the drift this must catch -- and `none` applied to a
+    // opt-out. Asserted over the WHOLE file rather than the block, because a use added
+    // anywhere else is exactly the drift this must catch -- and `none` applied to a
     // container would silently take every descendant out of forcing with it.
+    //
+    // Named, not counted. Three uses, each with its reason in the stylesheet: the swatch,
+    // whose colour IS the content, and the selected check's disc and glyph (issue #630),
+    // which must be opaque where the forced Highlight carries an alpha. The two check layers
+    // are pseudo-elements, so they have no descendants to take out of forcing.
     const uses = [...src.matchAll(/forced-color-adjust\s*:\s*([a-z-]+)/g)].map((m) => m[1]);
-    expect(uses, 'forced-color-adjust is used more than once').toEqual(['none']);
+    expect(uses, 'forced-color-adjust must only ever be none').toEqual(['none', 'none', 'none']);
     const block = forcedBlock();
-    const at = block.indexOf('forced-color-adjust');
-    const rule = block.lastIndexOf('{', at);
-    const selector = block.slice(block.lastIndexOf('}', rule) + 1, rule).trim();
-    expect(selector, 'the opt-out must be on the swatch alone').toBe('.hud-swatch');
+    const selectors: string[] = [];
+    for (let at = block.indexOf('forced-color-adjust'); at > -1; at = block.indexOf('forced-color-adjust', at + 1)) {
+      const rule = block.lastIndexOf('{', at);
+      selectors.push(block.slice(block.lastIndexOf('}', rule) + 1, rule).trim());
+    }
+    expect(selectors, 'an opt-out is on something other than the swatch and the check').toEqual([
+      '.ui-selectable--on::before',
+      '.ui-selectable--on::after',
+      '.hud-swatch',
+    ]);
+  });
+
+  it('paints the selected check\'s disc OPAQUE, keeping plain Highlight only as the fallback', () => {
+    // Issue #630. The emulated forced Highlight carries an alpha (measured 0.8 in both schemes),
+    // and a disc painted with it let the control show through -- the owner's "translucent
+    // check". Relative colour syntax with the alpha omitted INHERITS the origin's alpha, so the
+    // `/ 1` is the load-bearing part; the plain keyword must come first, as the fallback an
+    // engine without relative colour syntax keeps.
+    const block = forcedBlock();
+    const at = block.indexOf('.ui-selectable--on::before {');
+    expect(at, 'the forced disc rule is missing').toBeGreaterThan(-1);
+    const body = block.slice(at, block.indexOf('}', at));
+    const opaque = body.indexOf('rgb(from Highlight r g b / 1)');
+    expect(opaque, 'the disc is not forced opaque').toBeGreaterThan(-1);
+    const fallback = body.indexOf('background: Highlight;');
+    expect(fallback, 'no plain Highlight fallback').toBeGreaterThan(-1);
+    expect(fallback, 'the fallback must come before the opaque value it falls back from').toBeLessThan(opaque);
   });
 
   it('gives the opted-out swatch a boundary the opt-out cannot take away', () => {
@@ -2739,6 +2767,75 @@ describe('forced-colors conformance (issue #368)', () => {
     const block = forcedBlock();
     expect(block).not.toContain('outline');
     expect(block).not.toContain(':focus');
+  });
+});
+
+/*
+ * Issue #630's selected check: a disc with a check at the chosen control's corner, so the current
+ * choice no longer rests on a 2px ring alone. jsdom computes no pseudo-element styles, so these
+ * read the stylesheet TEXT, and the pixels are evidenced in a real browser on the PR.
+ */
+describe('hud.css: the selected check (issue #630)', () => {
+  const src = stripComments(css);
+  /** Every innermost rule in `text` as [selectors, body], selectors split on commas. */
+  const rulesIn = (text: string): Array<[string[], string]> =>
+    [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [
+      m[1].split(',').map((s) => s.trim()),
+      m[2],
+    ]);
+  const bodiesFor = (selector: string): string[] =>
+    rulesIn(src).filter(([sels]) => sels.includes(selector)).map(([, body]) => body);
+  const px = (body: string, property: string): number => {
+    const m = body.match(new RegExp(`(?:^|[;\\s])${property}:\\s*(-?[\\d.]+)px`));
+    expect(m, `no ${property} in px`).not.toBeNull();
+    return Number(m![1]);
+  };
+
+  it('draws the check on the CHOSEN control only', () => {
+    // A pseudo-element on `.ui-selectable` without `--on` would put a check on every choice in
+    // every row, which reads as "all selected" -- the failure the check exists to prevent.
+    const pseudoSelectors = rulesIn(src)
+      .flatMap(([sels]) => sels)
+      .filter((s) => s.includes('ui-selectable') && /::(before|after)/.test(s));
+    expect(pseudoSelectors.length, 'no selected-check pseudo-elements found').toBeGreaterThanOrEqual(2);
+    for (const s of pseudoSelectors) {
+      expect(s, `${s} draws a check on a control that is not chosen`).toContain('.ui-selectable--on');
+    }
+  });
+
+  it('is a real layer that takes no pointer, with the check cut from a mask', () => {
+    const disc = bodiesFor('.ui-selectable--on::before').join(';');
+    expect(disc).toMatch(/content:\s*''/);
+    expect(disc).toMatch(/position:\s*absolute/);
+    // The disc overhangs its neighbour by 8px; if it took pointer events it would swallow the
+    // press meant for that neighbour's corner.
+    expect(disc, 'the disc would take clicks meant for the control or its neighbour').toMatch(
+      /pointer-events:\s*none/,
+    );
+    const glyph = bodiesFor('.ui-selectable--on::after').join(';');
+    expect(glyph).toMatch(/(^|[;\s])mask:\s*url\(/);
+  });
+
+  it('never keys the check on hover or focus, which keep their own properties', () => {
+    const keyed = rulesIn(src)
+      .flatMap(([sels]) => sels)
+      .filter((s) => /::(before|after)/.test(s) && s.includes('ui-selectable') && /:(hover|focus)/.test(s));
+    expect(keyed).toEqual([]);
+  });
+
+  it('insets a map card\'s check on both axes, where every other control carries it outside', () => {
+    // A map card meets its scroll pane's edges; outside the corner the disc was clipped at the
+    // pane's top on all 7 cards, and the owner ruled for "entirely inset ... both horizontally
+    // and vertically". Negative offsets are the rejected placement.
+    for (const layer of ['::before', '::after']) {
+      const body = bodiesFor(`.hud-versus-map-card.ui-selectable--on${layer}`).join(';');
+      expect(px(body, 'top'), `map card ${layer} protrudes above the card`).toBeGreaterThanOrEqual(0);
+      expect(px(body, 'right'), `map card ${layer} protrudes past the card's right edge`).toBeGreaterThanOrEqual(0);
+    }
+    // ...and the default really is outside the corner, so the map-card rule is an exception and
+    // not a restatement.
+    const base = bodiesFor('.ui-selectable--on::before').join(';');
+    expect(px(base, 'top')).toBeLessThan(0);
   });
 });
 
