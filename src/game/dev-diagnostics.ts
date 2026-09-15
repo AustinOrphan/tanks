@@ -20,9 +20,8 @@ import { canonicalDevSearch, explainDevConfig, type DevConfigNote } from './dev-
  * file and its schema; this is the "concise enough for a GitHub issue" half issue #247 asks
  * for. The controller self-test's `formatPadReport` is the precedent this follows -- a
  * developer-facing formatter with its own tests -- and is deliberately NOT absorbed here:
- * that is #241's job, not this one's. Nothing is exported ahead of a consumer either: the
- * record the text is built from stays module-private until something outside actually reads
- * it.
+ * that is #241's job, not this one's. The record the text is built from is exported for the
+ * one consumer outside that reads it, issue #254's diagnostics file in `dev-exports.ts`.
  *
  * SECRETS AND UNRELATED BROWSER DATA ARE ABSENT BY CONSTRUCTION rather than by filtering.
  * Nothing in this module can reach a store, a cookie or a header; every field is named
@@ -106,13 +105,11 @@ export interface DiagnosticsInput {
 /**
  * Everything the text is rendered from, in one record.
  *
- * MODULE-PRIVATE, and it was exported in a first draft "so issue #241's export can consume a
- * record rather than parse prose". Nothing consumes it, and a seam built for a consumer that
- * does not exist yet is the dead-export shape this repository keeps paying for -- most
- * recently one PR ago, where a `support()` accessor and an `isSupported` predicate were cut
- * from `src/input/` for exactly this. #241 can export it the day #241 is written.
+ * EXPORTED for issue #254's diagnostics file (`dev-exports.ts`), the consumer issue #241's
+ * export was left private for. The file is this record plus a format stamp and the round, so
+ * its fields are the ones Copy Diagnostics prints by construction, not a second derivation.
  */
-interface DiagnosticsReport {
+export interface DiagnosticsReport {
   readonly canonicalUrl: string;
   readonly build: BuildIdentity;
   readonly session: SessionDiagnostics | null;
@@ -163,7 +160,7 @@ export function pinnedSeedUrl(input: DiagnosticsInput): string | null {
   return canonicalUrl(input.path, `?${params.toString()}`, input.hash);
 }
 
-function diagnosticsReport(input: DiagnosticsInput): DiagnosticsReport {
+export function diagnosticsReport(input: DiagnosticsInput): DiagnosticsReport {
   const state = explainDevConfig(input.search);
   return {
     canonicalUrl: canonicalUrl(input.path, input.search, input.hash),

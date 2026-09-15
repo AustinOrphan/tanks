@@ -1,0 +1,14 @@
+{
+  "id": "hud-export-screenshot-late-failure-unreported",
+  "file": "src/game/hud.ts",
+  "find": "      downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);",
+  "replace": "      downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), () => {});",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the exports (issue #254) Download Screenshot reports an encoding that fails AFTER the click returned"
+  ],
+  "why": "A PNG encoding that fails after the click has returned is swallowed. The synchronous try/catch cannot see it, so the pane says nothing and the developer is left to assume the file saved, against issue #254's 'export failures are reported'."
+}

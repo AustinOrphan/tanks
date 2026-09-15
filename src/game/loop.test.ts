@@ -13,6 +13,7 @@ import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId }
 import type { AchievementContext, AchievementId } from './achievements';
 import type { SessionDiagnostics } from './dev-diagnostics';
 import type { DevActionPort } from './dev-actions';
+import type { DevExportPort } from './dev-exports';
 import { TANK_KINDS, configFor } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
@@ -411,6 +412,10 @@ interface Recorder {
   diagnosticsSources: ((() => SessionDiagnostics | null) | null)[];
   /** Every port registered through hud.setDevActionPort, in order (issue #252). */
   devActionPorts: ((() => DevActionPort | null) | null)[];
+  /** Every export-port getter the host registered (issue #254). */
+  devExportPorts: ((() => DevExportPort | null) | null)[];
+  /** How many times the renderer's captureFrame ran (issue #254). */
+  frameCaptures: number;
   /** Every value passed to hud.setPadDiagnostics, in order (each a snapshot copy). */
   padDiagnosticsPushes: PadDiagnostic[][];
 }
@@ -634,6 +639,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     relevancePushes: [],
     diagnosticsSources: [],
     devActionPorts: [],
+    devExportPorts: [],
+    frameCaptures: 0,
     padDiagnosticsPushes: [],
   };
 
@@ -901,6 +908,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setReducedMotion(on: boolean): void {
           rec.rendererReducedMotion.push(on);
+        },
+        // Issue #254's screenshot. A stand-in image: this harness has no canvas to copy, and what
+        // is pinned here is only that the session's port reaches the renderer it built.
+        captureFrame() {
+          rec.frameCaptures += 1;
+          return { image: {} as HTMLCanvasElement, width: 640, height: 400, pixelRatio: 1 };
         },
         dispose(): void {
           rec.disposed.push('renderer');
@@ -1380,6 +1393,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // no-op stub would let the registration disappear silently.
         setDevActionPort: (source: (() => DevActionPort | null) | null) => {
           rec.devActionPorts.push(source);
+        },
+        setDevExportPort: (source: (() => DevExportPort | null) | null) => {
+          rec.devExportPorts.push(source);
         },
         onControllersOpen: (cb: () => void) => {
           onControllersOpen = cb;
@@ -5209,6 +5225,64 @@ describe('startGameWith: a pinned dev seed', () => {
   it('falls back to the clock when unpinned', () => {
     const h = boot(makeDeps({ wallMs: 1000 }));
     expect(h.rec.seeds[0]).toBe(deriveSeed(1000));
+    h.handle.dispose();
+  });
+});
+
+describe("startGameWith: the developer exports' port (issue #254)", () => {
+  const portOf = (h: ReturnType<typeof boot>): DevExportPort => {
+    const getter = h.rec.devExportPorts[0];
+    expect(getter, 'the host must register an export port getter').toBeTruthy();
+    const port = getter?.();
+    expect(port, 'a live session must supply a port').toBeTruthy();
+    return port as DevExportPort;
+  };
+
+  it('reads the round at press time: the tick the world is on now, and the surface', () => {
+    const h = boot();
+    const port = portOf(h);
+    h.setState('playing');
+    h.fireFrame(100); // 6 ticks
+    const tickNow = h.rec.renders[h.rec.renders.length - 1].curr.tick;
+    expect(tickNow).toBeGreaterThan(0);
+    expect(port.round()).toEqual({
+      tick: tickNow,
+      roundStartTick: h.rec.renders[h.rec.renders.length - 1].curr.roundStartTick,
+      surface: 'gameplay/playing',
+    });
+    h.setState('paused');
+    expect(port.round().surface).toBe('gameplay/paused');
+    h.handle.dispose();
+  });
+
+  it('captures the frame through the renderer this session built, only when asked', () => {
+    const h = boot();
+    const port = portOf(h);
+    expect(h.rec.frameCaptures).toBe(0);
+    expect(port.captureFrame()).toMatchObject({ width: 640, height: 400, pixelRatio: 1 });
+    expect(h.rec.frameCaptures).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('answers null for the replay when the page did not turn recording on', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(portOf(h).replay()).toBeNull();
+    h.handle.dispose();
+  });
+
+  it("hands over the recorder's CURRENT trace with recording on, including after a level switch", () => {
+    const h = boot(makeDeps({ devFlags: { replay: true }, levelCount: 3 }));
+    const port = portOf(h);
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(port.replay()).toEqual((h.devConsole[DEV_CONSOLE_KEY] as DevConsole).replay!());
+    expect(port.replay()?.ticks).toHaveLength(6);
+    h.setState('outcome-win');
+    h.hud.startRestart(); // advance to level 2: the recorder begins a new trace
+    expect(port.replay()?.meta.arenaId).toBe(ARENA_DEFS[1].id);
+    expect(port.replay()?.ticks).toHaveLength(0);
     h.handle.dispose();
   });
 });

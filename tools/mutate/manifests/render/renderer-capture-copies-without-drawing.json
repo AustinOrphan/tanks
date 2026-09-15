@@ -1,0 +1,11 @@
+{
+  "id": "renderer-capture-copies-without-drawing",
+  "file": "src/render/renderer.ts",
+  "find": "  function captureFrame(): FrameCapture {\n    ctx.renderer.render(ctx.scene, ctx.camera);\n",
+  "replace": "  function captureFrame(): FrameCapture {\n",
+  "expect": "survives",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "DISCLOSED SURVIVOR. captureFrame copies the canvas without drawing first, so a press in a later task than the frame reads the cleared buffer of a renderer created without preserveDrawingBuffer, and the screenshot is blank. Vitest cannot reach createRenderer past its WebGLRenderer (rendering.md: renderer.ts is covered through the real-browser GL harness), so no Vitest test can kill it. tools/gl/harness.ts's 'captureFrame copies the game frame after it was presented, at the drawing-buffer size (issue #254)' check does: its canvas is presented before the capture."
+}

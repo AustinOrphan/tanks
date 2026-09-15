@@ -1,0 +1,14 @@
+{
+  "id": "loop-export-port-never-hands-over-the-replay",
+  "file": "src/game/loop.ts",
+  "find": "    replay: () => (recorder === null ? null : recorder.trace()),",
+  "replace": "    replay: () => null,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer exports' port (issue #254) hands over the recorder's CURRENT trace with recording on, including after a level switch"
+  ],
+  "why": "The session tells the pane that recording is off even when the page opened with `replay=1`, so Download Replay explains how to turn on something already on and never saves the trace `__tanks.replay()` holds. The HUD and pure-module tests pass a port or a trace in directly, so only the session's own port test sees it."
+}

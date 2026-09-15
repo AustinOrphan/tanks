@@ -1,0 +1,15 @@
+{
+  "id": "hud-export-failure-escapes-the-pane",
+  "file": "src/game/hud.ts",
+  "find": "    } catch (err) {\n      const reason = err instanceof Error ? err.message : String(err);\n      showExportNote(`${label} failed, so no file was saved: ${reason}`);\n      return;\n    }",
+  "replace": "    } catch (err) {\n      throw err;\n    }",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the exports (issue #254) REPORTS a failure in the field instead of throwing, and saves nothing",
+    "the exports (issue #254) reports a download that throws, too"
+  ],
+  "why": "An export that fails throws out of the click handler instead of saying so in the pane. Issue #254 requires export failures to be reported; with this the field keeps whatever it said before, so the developer reads a stale line as the result of the press."
+}

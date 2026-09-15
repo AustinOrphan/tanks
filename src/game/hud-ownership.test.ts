@@ -193,7 +193,12 @@ describe('HUD ownership boundary (issue #324)', () => {
     // `openGalleryWorkbench`. 79 -> 83. The self-test's reason again: the gallery workbench is a
     // Developer Tools pane the PAGE owns, `route-ui.ts` mounts its renderer and `route-host.ts`
     // opens it for a link, and a session must not be able to reach either.
-    expect(frame.size + route.size + gameplay.size).toBe(83);
+    //
+    // Issue #254 adds ONE, `setDevExportPort`, route-owned for the reason `setDevActionPort` is:
+    // 83 -> 84. It is the third trampoline the host registers once, and its session half (the
+    // round, the replay trace, a copy of the frame) exists only inside whichever session is live.
+    // Its page half, the download seam, is an OPTION, `developerDownloads`, like `developerPage`.
+    expect(frame.size + route.size + gameplay.size).toBe(84);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

@@ -128,6 +128,8 @@ import {
   type RenderQuality,
 } from '../render/quality';
 import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
+import { surfaceName } from './dev-exports';
+import { downloadCanvas, downloadText } from './downloads';
 import { resetDeveloperData, resolveStorage } from './storage';
 
 /**
@@ -1312,6 +1314,8 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
           hash: globalThis.location.hash,
           build: readBuildIdentity(import.meta.env),
         },
+        // Issue #254's exports save files, which is a page act the HUD may not start itself.
+        developerDownloads: { saveText: downloadText, saveCanvas: downloadCanvas },
         applyDeveloperConfig: (next: string) => {
           globalThis.location.assign(
             `${globalThis.location.pathname}${next}${globalThis.location.hash}`,
@@ -3417,6 +3421,23 @@ export function startGameWith(
     quality: sessionQuality,
   });
   slot.provideDiagnostics(sessionDiagnostics);
+
+  /*
+   * THE EXPORTS' PORT (issue #254): two readers, read at press time for the reason the
+   * diagnostics source is. `driver.world` is a getter replaced on every rebuild, and `recorder`
+   * restarts its trace on every level switch, so a value captured here would describe the
+   * session's first world. `replay` is `null` exactly when the page was opened without the
+   * `replay` flag, which the pane explains instead of saving an empty trace.
+   */
+  slot.provideExports({
+    round: () => ({
+      tick: driver.world.tick,
+      roundStartTick: driver.world.roundStartTick,
+      surface: surfaceName(sm.location),
+    }),
+    replay: () => (recorder === null ? null : recorder.trace()),
+    captureFrame: () => renderer.captureFrame(),
+  });
 
   /**
    * The music is NOT followed here any more (issue #485).

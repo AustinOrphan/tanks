@@ -483,6 +483,38 @@ describe('createRouteHost: the developer-action trampoline (issue #252)', () => 
   });
 });
 
+describe('createRouteHost: the developer-export trampoline (issue #254)', () => {
+  const registered = (f: ReturnType<typeof fixture>): (() => unknown) => {
+    const calls = f.hud.argsOf('setDevExportPort');
+    expect(calls, 'the host must register exactly one export port getter').toHaveLength(1);
+    return calls[0][0] as () => unknown;
+  };
+
+  it('registers exactly ONE getter for the life of the page, not one per session', () => {
+    const f = fixture();
+    f.host.attach(CAMPAIGN).detach();
+    f.host.attach(CAMPAIGN).detach();
+    expect(f.hud.argsOf('setDevExportPort')).toHaveLength(1);
+  });
+
+  it('answers null with no session, the port with one, and null again after detach', () => {
+    // A latched trampoline would save a replay or a tick from a world that has ended.
+    const f = fixture();
+    const source = registered(f);
+    expect(source()).toBeNull();
+    const slot = f.host.attach(CAMPAIGN);
+    const port = {
+      round: () => ({ tick: 1, roundStartTick: 1, surface: 'gameplay/playing' }),
+      replay: () => null,
+      captureFrame: () => ({ image: {} as HTMLCanvasElement, width: 1, height: 1, pixelRatio: 1 }),
+    };
+    slot.provideExports(port);
+    expect(source()).toBe(port);
+    slot.detach();
+    expect(source()).toBeNull();
+  });
+});
+
 /** Fill every gameplay handler on a slot, recording which fired and with what. */
 function fillSlot(host: RouteHost): { fired: Array<[string, unknown[]]>; slot: ReturnType<RouteHost['attach']> } {
   const slot = host.attach(CAMPAIGN);

@@ -1,0 +1,16 @@
+{
+  "id": "dev-exports-replay-drops-a-tick",
+  "file": "src/game/dev-exports.ts",
+  "find": "    text: `${JSON.stringify(trace)}\\n`,",
+  "replace": "    text: `${JSON.stringify({ ...trace, ticks: trace.ticks.slice(1) })}\\n`,",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-exports.test.ts",
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "replayExport saves a replay only when there is one to replay ROUND-TRIPS: the saved text parses into a trace that replays the recorded run",
+    "the exports (issue #254) Download Replay saves the recorded trace as it is"
+  ],
+  "why": "The saved file loses the first recorded tick. It still parses, still passes checkTrace and still names the right seed and arena, so only replaying it and comparing against the live run shows the break in issue #254's 'round-trips through existing replay tooling'."
+}

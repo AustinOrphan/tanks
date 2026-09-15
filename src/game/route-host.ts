@@ -27,6 +27,7 @@ import type { VersusConfig } from './versus-config';
 import type { Assignment, SlotSource } from '../input/assignment';
 import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
 import type { DevActionPort } from './dev-actions';
+import type { DevExportPort } from './dev-exports';
 
 /**
  * The PAGE's application-route UI, owned above every gameplay session (issue #468).
@@ -203,6 +204,11 @@ export interface GameplaySlot {
    */
   provideActions(port: DevActionPort): void;
   /**
+   * Hand over what the developer exports read from the session (issue #254): where the round
+   * stands and, when recording is on, the replay. Registered the same way as the two above.
+   */
+  provideExports(port: DevExportPort): void;
+  /**
    * This session's gameplay hotkeys -- mute, pause, the developer keys.
    *
    * On the SLOT rather than on the host directly (issue #428) because the page has to see
@@ -354,6 +360,8 @@ interface SlotState {
   diagnostics?: () => SessionDiagnostics | null;
   /** How the live session rebuilds its own board, for issue #252's developer actions. */
   actions?: DevActionPort;
+  /** What the live session reads out for issue #254's developer exports. */
+  exports?: DevExportPort;
   outcome?: OutcomeContext;
   style?: StyleSink;
 }
@@ -576,6 +584,12 @@ export function createRouteHost(
    * menu rather than present and inert.
    */
   hud.setDevActionPort(() => live?.actions ?? null);
+  /*
+   * The third, for issue #254's exports, registered once for the same reason. `null` when
+   * nothing holds the slot, which the pane reports as "no session" rather than saving a replay
+   * or a round from a world that has ended.
+   */
+  hud.setDevExportPort(() => live?.exports ?? null);
 
   /**
    * THE LAUNCH GESTURE, moved to the page by issue #428.
@@ -1162,6 +1176,9 @@ export function createRouteHost(
         },
         provideActions(port): void {
           if (current()) state.actions = port;
+        },
+        provideExports(port): void {
+          if (current()) state.exports = port;
         },
         onKey(cb): void {
           if (current()) state.key = cb;

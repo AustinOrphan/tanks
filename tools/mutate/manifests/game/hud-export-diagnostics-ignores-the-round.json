@@ -1,0 +1,15 @@
+{
+  "id": "hud-export-diagnostics-ignores-the-round",
+  "file": "src/game/hud.ts",
+  "find": "      return diagnosticsExport(input, port === null ? null : port.round());",
+  "replace": "      return diagnosticsExport(input, null);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the exports (issue #254) Download Diagnostics saves one JSON file of the live session and round, and says so",
+    "the exports (issue #254) reads the round at press time, not when the port was registered"
+  ],
+  "why": "Download Diagnostics never asks the session where its round stands, so every file says `round: null` and loses the tick and surface issue #254 lists among its reproduction data. The file is otherwise complete, so nothing but the round field shows it."
+}
