@@ -1,0 +1,14 @@
+{
+  "id": "hud-layout-escape-leaves-mid-capture",
+  "file": "src/game/hud.ts",
+  "find": "      if (cancelLayoutCapture()) return;",
+  "replace": "      void cancelLayoutCapture;",
+  "expect": "killed",
+  "why": "Escape while a capture waits stops the capture and keeps the Controller Layout pane. Without it the key a keyboard player reaches for to abandon one rebind throws them out of the pane.",
+  "tests": [
+    "src/game/hud.controller-layout.test.ts"
+  ],
+  "killedBy": [
+    "the controller layout pane (issue #754) Escape while a capture waits cancels it and keeps the pane"
+  ]
+}

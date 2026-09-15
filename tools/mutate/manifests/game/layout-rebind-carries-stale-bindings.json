@@ -1,0 +1,14 @@
+{
+  "id": "layout-rebind-carries-stale-bindings",
+  "file": "src/game/controller-layout.ts",
+  "find": "    if (bound !== undefined && !stale.has(other)) bindings[other] = bound;",
+  "replace": "    if (bound !== undefined) bindings[other] = bound;",
+  "expect": "killed",
+  "why": "A stored binding the profile refuses (a control id it does not list) is dropped on the next rebind. Carried forward, it makes every later layout carry a refusal, so every capture reports the chosen button as unusable until the player finds Reset.",
+  "tests": [
+    "src/game/controller-layout.test.ts"
+  ],
+  "killedBy": [
+    "rebind (issue #754) drops a stale stored binding instead of letting it refuse every later rebind"
+  ]
+}

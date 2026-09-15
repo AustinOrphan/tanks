@@ -1,0 +1,15 @@
+{
+  "id": "layout-rebind-keeps-redundant-bindings",
+  "file": "src/game/controller-layout.ts",
+  "find": "      delete bindings[other];",
+  "replace": "      void other;",
+  "expect": "killed",
+  "why": "A binding naming the action's own shipped button says nothing, and is dropped. Kept, a player who moves Fire away and back is left with a stored layout that reads exactly as Recommended while Reset to Recommended stays lit.",
+  "tests": [
+    "src/game/controller-layout.test.ts"
+  ],
+  "killedBy": [
+    "rebind (issue #754) drops a binding that names the action's own button, so moving away and back leaves nothing to reset",
+    "rebind (issue #754) a swapped pair swapped back is empty too"
+  ]
+}

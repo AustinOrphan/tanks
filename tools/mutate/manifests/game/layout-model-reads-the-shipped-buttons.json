@@ -1,0 +1,16 @@
+{
+  "id": "layout-model-reads-the-shipped-buttons",
+  "file": "src/game/controller-layout.ts",
+  "find": "    controlName: controlName(profile.id, controlIdAt(profile, effective.profile.buttons[action])),",
+  "replace": "    controlName: controlName(profile.id, controlIdAt(profile, profile.buttons[action])),",
+  "expect": "killed",
+  "why": "Each row names the button its action reads NOW, after the layout. Naming the profile's shipped button instead would show Recommended forever, so a rebind that took effect would look as if it had not.",
+  "tests": [
+    "src/game/controller-layout.test.ts",
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "layoutModel (issue #754) shows where each action reads AFTER the layout, and that there is something to reset",
+    "the controller layout pane is painted, written and captured for by the page (issue #754) captures the next NEW press and stores both halves of the swap it makes"
+  ]
+}

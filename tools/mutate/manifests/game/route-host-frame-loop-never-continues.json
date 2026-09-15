@@ -1,12 +1,12 @@
 {
   "id": "route-host-frame-loop-never-continues",
   "file": "src/game/route-host.ts",
-  "find": "    menuPoller.poll(now);\n    if (polling) cancelFrame = deps.requestFrame(pollFrame);",
-  "replace": "    menuPoller.poll(now);",
+  "find": "    routeUi.pollBindingCapture();\n    if (polling) cancelFrame = deps.requestFrame(pollFrame);",
+  "replace": "    routeUi.pollBindingCapture();",
   "tests": [
     "src/game/route-host.test.ts"
   ],
-  "why": "Each frame must queue its successor; a poller that reads once at construction never sees a pad.",
+  "why": "Each frame must queue its successor; a poller that reads once at construction never sees a pad. RE-ANCHORED (issue #754): the frame now polls a Controller Layout capture after the menu poller, so the find string is cut on that call, which the replacement keeps; the entry still removes only the successor request.",
   "expect": "killed",
   "killedBy": [
     "createRouteHost: the gamepad menu poller (issue #494) Back at Pause with nothing open resumes; with a pane open it pops the pane and leaves the round paused",

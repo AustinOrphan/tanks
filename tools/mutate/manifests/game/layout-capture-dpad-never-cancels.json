@@ -1,0 +1,16 @@
+{
+  "id": "layout-capture-dpad-never-cancels",
+  "file": "src/game/controller-layout.ts",
+  "find": "        for (const index of directions) if (isNew(index)) cancel = true;",
+  "replace": "        for (const index of directions) isNew(index);",
+  "expect": "killed",
+  "why": "The D-pad is the controller's way out of a capture, and the only one that cannot also be the choice: it is never bindable, while Back's own button is. A capture it cannot cancel leaves a controller-only player able to stop waiting only by binding something.",
+  "tests": [
+    "src/game/controller-layout.test.ts",
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "createBindingCapture (issue #754) cancels on a new D-pad press, even with a button pressed on the same frame",
+    "the controller layout pane is painted, written and captured for by the page (issue #754) a new D-pad press cancels and stores nothing"
+  ]
+}

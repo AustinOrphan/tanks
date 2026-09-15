@@ -1,0 +1,14 @@
+{
+  "id": "route-ui-layout-close-keeps-a-hotplug-listener",
+  "file": "src/game/route-ui.ts",
+  "find": "    deps.host.removeEventListener('gamepaddisconnected', paintLayout);",
+  "replace": "    void paintLayout;",
+  "expect": "killed",
+  "why": "The Controller Layout pane listens for hotplug only while it is open. A close that left the disconnect listener attached would keep it for the life of the page, and add another on every visit.",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the controller layout pane is painted, written and captured for by the page (issue #754) close ends the capture, the settings subscription and both hotplug listeners"
+  ]
+}

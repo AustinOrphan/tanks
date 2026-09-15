@@ -1,0 +1,16 @@
+{
+  "id": "control-id-at-names-the-first-control",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "  return (profile.bindable ?? []).find((control) => control.index === index)?.id ?? null;",
+  "replace": "  return (profile.bindable ?? [])[0]?.id ?? null;",
+  "expect": "killed",
+  "why": "`controlIdAt` is how an index becomes a name without the number reaching a player. Answering the profile's first control for every index would name every button A / Cross, and would give the D-pad a control id it does not have.",
+  "tests": [
+    "src/input/gamepad-profile.test.ts",
+    "src/game/controller-layout.test.ts"
+  ],
+  "killedBy": [
+    "controlIdAt (issue #754) names the control at every standard bindable index, the reverse of the list it reads",
+    "controlIdAt (issue #754) names nothing where the profile lists no bindable control: the D-pad, Home, or a bare profile"
+  ]
+}
