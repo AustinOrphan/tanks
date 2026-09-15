@@ -12,6 +12,7 @@ import {
   type FireMode,
 } from './touch';
 import { createGamepadReader, readNavigatorGamepads, type GamepadReader, type GetGamepads } from './gamepad';
+import type { LayoutLookup } from './gamepad-profile';
 import { consumesKey } from './ui-actions';
 export type { TouchIndicator, TouchScheme, FireMode } from './touch';
 
@@ -86,7 +87,7 @@ export interface InputController {
 export function createInputController(
   target: HTMLElement,
   screenToGround: (clientX: number, clientY: number) => Vec2,
-  options: { gamepad?: boolean; getGamepads?: GetGamepads } = {},
+  options: { gamepad?: boolean; getGamepads?: GetGamepads; layoutFor?: LayoutLookup } = {},
 ): InputController {
   const keys = new Set<string>();
   let aim: Vec2 = { x: 0, y: 0 };
@@ -99,7 +100,7 @@ export function createInputController(
    * discarded.
    */
   const gamepadReader: GamepadReader | null = options.gamepad
-    ? createGamepadReader(options.getGamepads ?? readNavigatorGamepads)
+    ? createGamepadReader(options.getGamepads ?? readNavigatorGamepads, 0, options.layoutFor)
     : null;
 
   // Keydown is bound at the window, so it also sees events bubbling out of the

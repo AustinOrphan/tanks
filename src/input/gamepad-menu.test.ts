@@ -10,6 +10,7 @@ import {
 } from './gamepad-menu';
 import { GAMEPAD_FIRE_BUTTON, GAMEPAD_MINE_BUTTON, type GamepadLike, type GetGamepads } from './gamepad';
 import { UI_ACTIONS, type UiAction } from './ui-actions';
+import type { ControlLayout, LayoutLookup } from './gamepad-profile';
 
 /**
  * Standard-mapping D-pad indices, in the mapping's up/down/left/right order. Module-private
@@ -421,5 +422,56 @@ describe('createGamepadMenuPoller: emission order', () => {
     const emitted = s.drain();
     expect(emitted).toEqual([...UI_ACTIONS]);
     expect(emitted).not.toEqual([...UI_ACTIONS].reverse()); // the press order, as a named control
+  });
+});
+
+describe("createGamepadMenuPoller: the player's layout (issue #754)", () => {
+  it('reads Confirm from its bound control, and the old button no longer confirms', () => {
+    const asked: string[] = [];
+    const bound: ControlLayout = { preset: 'recommended', bindings: { confirm: 'face-left' } };
+    const lookup: LayoutLookup = (id) => {
+      asked.push(id);
+      return bound;
+    };
+    const p = fakePad();
+    const emitted: UiAction[] = [];
+    const poller = createGamepadMenuPoller(() => [p.pad], (a) => emitted.push(a), lookup);
+
+    p.press(MENU_CONFIRM_BUTTON);
+    poller.poll(0);
+    expect(emitted).toEqual([]);
+    p.release(MENU_CONFIRM_BUTTON);
+    poller.poll(1);
+    p.press(2); // face-left
+    poller.poll(2);
+    expect(emitted).toEqual(['confirm']);
+    expect(asked).toContain('standard');
+
+    // Control: with no lookup, face-left is no menu action at all.
+    const control = single();
+    control.press(2);
+    control.poller.poll(0);
+    expect(control.drain()).toEqual([]);
+  });
+
+  it('moves stick navigation to the right stick under Southpaw, and leaves the D-pad where it is', () => {
+    const southpaw: ControlLayout = { preset: 'southpaw', bindings: {} };
+    const p = fakePad();
+    const axes = p.pad.axes as number[];
+    const emitted: UiAction[] = [];
+    const poller = createGamepadMenuPoller(() => [p.pad], (a) => emitted.push(a), () => southpaw);
+
+    p.stick(1, 0); // the left stick, which Southpaw makes the aim stick
+    poller.poll(0);
+    expect(emitted).toEqual([]);
+    p.stick(0, 0);
+    axes[2] = 1; // the right stick, which Southpaw makes the movement stick
+    poller.poll(1);
+    expect(emitted).toEqual(['right']);
+    axes[2] = 0;
+    poller.poll(2);
+    p.press(DPAD_UP);
+    poller.poll(3);
+    expect(emitted).toEqual(['right', 'up']);
   });
 });

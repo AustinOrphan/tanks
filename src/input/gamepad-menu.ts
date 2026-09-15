@@ -15,7 +15,15 @@
  * and two players both pressing Down should move focus once, not twice.
  */
 import type { GetGamepads, GamepadLike } from './gamepad';
-import { STANDARD_PROFILE, classifyPad, profileFor, type ControlProfile } from './gamepad-profile';
+import {
+  STANDARD_PROFILE,
+  classifyPad,
+  createEffectiveProfileReader,
+  profileFor,
+  recommendedLayouts,
+  type ControlProfile,
+  type LayoutLookup,
+} from './gamepad-profile';
 import { UI_ACTIONS, type UiAction } from './ui-actions';
 
 /**
@@ -99,11 +107,17 @@ function actionsDown(pad: GamepadLike, profile: ControlProfile, into: Set<UiActi
 /**
  * @param getGamepads Injected like every other reader here, so jsdom tests drive menus
  * through a fake and the one production site passes `readNavigatorGamepads`.
+ * @param layoutFor The player's layout for a profile id (issue #754). Confirm, Back and Pause
+ * follow its bindings, and the navigation stick follows the movement stick, so Southpaw moves
+ * menu navigation to the stick that drives the tank. The D-pad never moves. Defaults to every
+ * profile as it ships.
  */
 export function createGamepadMenuPoller(
   getGamepads: GetGamepads,
   onAction: (action: UiAction) => void,
+  layoutFor: LayoutLookup = recommendedLayouts,
 ): GamepadMenuPoller {
+  const effective = createEffectiveProfileReader(layoutFor);
   /** Actions currently held across the union of pads, with the time their next repeat is due. */
   const held = new Map<UiAction, number>();
   let cachedConnected = false;
@@ -133,7 +147,7 @@ export function createGamepadMenuPoller(
         any = true;
         const profile = profileFor(classifyPad(pad));
         if (profile === null) continue;
-        actionsDown(pad, profile, down);
+        actionsDown(pad, effective(profile), down);
       }
       cachedConnected = any;
       for (const action of UI_ACTIONS) {

@@ -6,6 +6,14 @@ import {
   type QualityPreset,
 } from '../presentation/quality';
 import { TOUCH_SETTINGS_KEY, readLegacyTouchSettings } from './touch-settings';
+import {
+  BINDABLE_ACTIONS,
+  LAYOUT_PRESETS,
+  RECOMMENDED_LAYOUT,
+  type BindableAction,
+  type ControlLayout,
+  type LayoutPreset,
+} from '../input/gamepad-profile';
 
 /**
  * The ONE store every durable player preference lives in (issue #320).
@@ -39,6 +47,7 @@ import { TOUCH_SETTINGS_KEY, readLegacyTouchSettings } from './touch-settings';
  * | `input.fireMode` | `'tap'` | `FIRE_MODES` | default | refused |
  * | `input.deviceHaptics` | `true` | boolean | default | -- |
  * | `input.controllerRumble` | `true` | boolean | default | -- |
+ * | `input.controllerLayouts` | `{}` | profile id -> `{ preset, bindings }`: a preset from `LAYOUT_PRESETS`, and bindings from `BINDABLE_ACTIONS` to control ids | per entry: an off-list preset reads as `recommended`, a malformed id or unknown action is dropped, and an entry left as Recommended with no bindings is dropped | refused |
  * | `presentation.motion` | `'system'` | `MOTION_PREFERENCES` | default | refused |
  * | `presentation.uiScale` | `100` | `UI_SCALES` (100/125/150 percent) | default | refused |
  * | `presentation.quality` | `DEFAULT_QUALITY_PRESET` (`'high'`) | `QUALITY_PRESET_IDS` | default | refused |
@@ -114,6 +123,8 @@ export const DEFAULT_DEVICE_HAPTICS = true;
  * deliver it, because the effective rule gates both on their own capability.
  */
 export const DEFAULT_CONTROLLER_RUMBLE = true;
+/** No profile customised. */
+export const DEFAULT_CONTROLLER_LAYOUTS: Readonly<Record<string, ControlLayout>> = Object.freeze({});
 export const DEFAULT_MOTION: MotionPreference = 'system';
 export const DEFAULT_UI_SCALE: UiScale = 100;
 /**
@@ -139,6 +150,13 @@ export interface InputSettings {
   readonly deviceHaptics: boolean;
   /** Gamepad actuator rumble. NEVER delivered through `navigator.vibrate`. */
   readonly controllerRumble: boolean;
+  /**
+   * The player's controller layout per LOGICAL profile id (issue #754): `standard` for every
+   * browser-remapped pad, a catalogue id for a recognized non-standard one. Never a browser
+   * gamepad index, which is transient, and never a player slot. A profile with no entry
+   * reads as it ships, which is also what Reset leaves behind.
+   */
+  readonly controllerLayouts: Readonly<Record<string, ControlLayout>>;
 }
 
 export interface PresentationSettings {
@@ -168,6 +186,7 @@ export const DEFAULT_SETTINGS: PlayerSettings = Object.freeze({
     fireMode: DEFAULT_FIRE_MODE,
     deviceHaptics: DEFAULT_DEVICE_HAPTICS,
     controllerRumble: DEFAULT_CONTROLLER_RUMBLE,
+    controllerLayouts: DEFAULT_CONTROLLER_LAYOUTS,
   }),
   presentation: Object.freeze({
     motion: DEFAULT_MOTION,
@@ -268,6 +287,14 @@ export interface PlayerSettingsStore {
   setFireMode(id: FireMode): void;
   setDeviceHaptics(v: boolean): void;
   setControllerRumble(v: boolean): void;
+  /**
+   * Store one profile's layout (issue #754). Refused, with nothing changed, for a malformed
+   * profile id or a layout `isAcceptableLayout` rejects. A layout equal to Recommended with no
+   * bindings removes the entry, so it reads exactly as Reset does.
+   */
+  setControllerLayout(profileId: string, layout: ControlLayout): void;
+  /** Reset to Recommended for one profile: its entry is removed. Other profiles keep theirs. */
+  resetControllerLayout(profileId: string): void;
   setMotion(p: MotionPreference): void;
   setUiScale(s: UiScale): void;
   setQuality(q: QualityPreset): void;
@@ -309,6 +336,76 @@ function acceptedBoolean(v: unknown, fallback: boolean): boolean {
 
 function acceptedFrom<T extends string>(v: unknown, ids: ReadonlySet<string>, fallback: T): T {
   return typeof v === 'string' && ids.has(v) ? (v as T) : fallback;
+}
+
+/**
+ * A profile or control id: short lowercase ASCII. It cannot spell `__proto__`, so a stored
+ * key can never reach an object's prototype.
+ */
+const LAYOUT_ID = /^[a-z0-9][a-z0-9._:-]{0,63}$/;
+const LAYOUT_PRESET_IDS = new Set<string>(LAYOUT_PRESETS);
+const BINDABLE_ACTION_IDS = new Set<string>(BINDABLE_ACTIONS);
+
+/**
+ * One stored layout, or null when it holds nothing a player chose: not an object, or
+ * Recommended with no bindings.
+ *
+ * SYNTAX ONLY. Whether `face-left` is a control this pad's profile has, and whether two
+ * bindings share a button, is decided when a reader resolves the layout against the pad's
+ * actual profile (`resolveEffectiveProfile`). A profile can gain or lose controls between
+ * builds, and a binding judged here would be judged against a profile this module cannot
+ * see -- so a stale binding is kept on disk and refused at read, not erased on load.
+ */
+function acceptedLayout(raw: unknown): ControlLayout | null {
+  if (!isRecord(raw)) return null;
+  const preset = acceptedFrom<LayoutPreset>(raw.preset, LAYOUT_PRESET_IDS, 'recommended');
+  const stored = isRecord(raw.bindings) ? raw.bindings : {};
+  const bindings: Partial<Record<BindableAction, string>> = {};
+  for (const action of BINDABLE_ACTIONS) {
+    const control = stored[action];
+    if (typeof control === 'string' && LAYOUT_ID.test(control)) bindings[action] = control;
+  }
+  if (preset === 'recommended' && Object.keys(bindings).length === 0) return null;
+  return Object.freeze({ preset, bindings: Object.freeze(bindings) });
+}
+
+/** Every stored layout, each validated on its own: junk in one profile's entry never costs another's. */
+function acceptedLayouts(raw: unknown): Readonly<Record<string, ControlLayout>> {
+  if (!isRecord(raw)) return DEFAULT_CONTROLLER_LAYOUTS;
+  const out: Record<string, ControlLayout> = {};
+  for (const [profileId, entry] of Object.entries(raw)) {
+    if (!LAYOUT_ID.test(profileId)) continue;
+    const layout = acceptedLayout(entry);
+    if (layout !== null) out[profileId] = layout;
+  }
+  return Object.freeze(out);
+}
+
+/**
+ * Whether a SETTER argument is a layout this store accepts as given. Stricter than loading,
+ * as every setter here is: an off-list preset, an unknown action or a malformed control id is
+ * refused outright rather than quietly trimmed, because a caller that sent one has a bug.
+ */
+function isAcceptableLayout(layout: unknown): layout is ControlLayout {
+  if (!isRecord(layout) || typeof layout.preset !== 'string' || !LAYOUT_PRESET_IDS.has(layout.preset)) {
+    return false;
+  }
+  if (!isRecord(layout.bindings)) return false;
+  return Object.entries(layout.bindings).every(
+    ([action, control]) =>
+      BINDABLE_ACTION_IDS.has(action) && typeof control === 'string' && LAYOUT_ID.test(control),
+  );
+}
+
+/**
+ * The layout stored for one profile, or Recommended when there is none. Returns the SAME
+ * object for an unchanged layout: the gamepad readers cache their resolution on that identity.
+ */
+export function controllerLayoutFor(
+  layouts: Readonly<Record<string, ControlLayout>>,
+  profileId: string,
+): ControlLayout {
+  return Object.hasOwn(layouts, profileId) ? layouts[profileId] : RECOMMENDED_LAYOUT;
 }
 
 function freezeSettings(s: PlayerSettings): PlayerSettings {
@@ -367,6 +464,7 @@ export function parseSettingsPayload(raw: string | null): ParsedPayload {
         fireMode: acceptedFrom(input.fireMode, FIRE_MODE_IDS, DEFAULT_FIRE_MODE),
         deviceHaptics: acceptedBoolean(input.deviceHaptics, DEFAULT_DEVICE_HAPTICS),
         controllerRumble: acceptedBoolean(input.controllerRumble, DEFAULT_CONTROLLER_RUMBLE),
+        controllerLayouts: acceptedLayouts(input.controllerLayouts),
       },
       presentation: {
         motion: acceptedFrom(presentation.motion, MOTION_IDS, DEFAULT_MOTION),
@@ -390,6 +488,7 @@ export function serializeSettings(settings: PlayerSettings): string {
       fireMode: settings.input.fireMode,
       deviceHaptics: settings.input.deviceHaptics,
       controllerRumble: settings.input.controllerRumble,
+      controllerLayouts: settings.input.controllerLayouts,
     },
     presentation: {
       motion: settings.presentation.motion,
@@ -508,6 +607,7 @@ export function createPlayerSettingsStore(
           deviceHaptics: legacy.haptics ?? DEFAULT_DEVICE_HAPTICS,
           // Not a legacy field: `tanks.touch.v1` never had one.
           controllerRumble: DEFAULT_CONTROLLER_RUMBLE,
+          controllerLayouts: DEFAULT_CONTROLLER_LAYOUTS,
         },
         presentation: DEFAULT_SETTINGS.presentation,
       });
@@ -554,6 +654,21 @@ export function createPlayerSettingsStore(
     },
     setControllerRumble(v: boolean): void {
       commit({ ...shadow, input: { ...shadow.input, controllerRumble: v } });
+    },
+    setControllerLayout(profileId: string, layout: ControlLayout): void {
+      if (typeof profileId !== 'string' || !LAYOUT_ID.test(profileId)) return;
+      if (!isAcceptableLayout(layout)) return;
+      const next: Record<string, ControlLayout> = { ...shadow.input.controllerLayouts };
+      const accepted = acceptedLayout(layout);
+      if (accepted === null) delete next[profileId];
+      else next[profileId] = accepted;
+      commit({ ...shadow, input: { ...shadow.input, controllerLayouts: Object.freeze(next) } });
+    },
+    resetControllerLayout(profileId: string): void {
+      if (!Object.hasOwn(shadow.input.controllerLayouts, profileId)) return;
+      const next: Record<string, ControlLayout> = { ...shadow.input.controllerLayouts };
+      delete next[profileId];
+      commit({ ...shadow, input: { ...shadow.input, controllerLayouts: Object.freeze(next) } });
     },
     setMotion(p: MotionPreference): void {
       if (!MOTION_IDS.has(p)) return;

@@ -19,6 +19,7 @@ import {
   type BenchReport,
 } from './bench';
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
+import { controllerLayoutFor } from './settings';
 import { settingRelevance } from './control-relevance';
 import type { GetGamepads } from '../input/gamepad';
 import type { UiAction } from '../input/ui-actions';
@@ -847,6 +848,13 @@ export function createRouteHost(
   };
 
   /**
+   * The player's controller layouts (issue #754), for the menu poller. Kept current by the
+   * page's one settings subscription below, so the poller reads a variable every frame rather
+   * than re-resolving settings, which `effectiveSettings.current()` recomputes on each call.
+   */
+  let controllerLayouts = deps.effectiveSettings.current().controllerLayouts;
+
+  /**
    * Painted and applied ONCE at construction, then on every effective-settings change,
    * through ONE subscription for the document.
    *
@@ -857,6 +865,7 @@ export function createRouteHost(
   const applyPageSettings = (): void => {
     paintSettingsControls();
     applyAudioSettings();
+    controllerLayouts = deps.effectiveSettings.current().controllerLayouts;
   };
   applyPageSettings();
   const stopPaintingSettings = deps.effectiveSettings.subscribe(applyPageSettings);
@@ -1022,7 +1031,9 @@ export function createRouteHost(
     // Back with nothing open: at Pause it is Resume, the same meaning Escape has there.
     if (action === 'back' && sm.isPaused) sm.resume();
   };
-  const menuPoller = createGamepadMenuPoller(deps.menuGamepads, onMenuAction);
+  const menuPoller = createGamepadMenuPoller(deps.menuGamepads, onMenuAction, (profileId) =>
+    controllerLayoutFor(controllerLayouts, profileId),
+  );
   let cancelFrame: (() => void) | null = null;
   let polling = true;
   const pollFrame = (now: number): void => {
