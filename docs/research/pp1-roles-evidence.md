@@ -233,8 +233,15 @@ condition #358's human review names.
 
 ## Playing the matched pair
 
-Developer flags work in any build, including the published one: `parseDevFlags` reads the
-query string whenever `dev=1` is present.
+**No build gate was found on developer flags,** so these URLs should work in a production
+build as well as under `npm run dev`:
+- `createBrowserDeps` in `src/game/loop.ts` passes the page's own `location.search` to
+  `parseDevFlags`.
+- Neither `parseDevFlags` nor `vite.config.ts` checks the build environment.
+- Not tried against the published site.
+
+**`level` is 1-based.** The level system's `start` getter returns
+`campaignLevels[min(level - 1, last)]`, and `campaign.json` maps level-0N to arena-0N.
 
 | Level (arena) | Baseline | Experiment arm |
 | --- | --- | --- |
@@ -262,10 +269,21 @@ in Developer Tools cancels the pin for the rest of the session.
 A page session on seed 1 and arena-01 is therefore a matched baseline-and-arm pair in its own
 right, not a replay of the harness's `arena-01 seed=1` row.
 
-**A saved replay does not record the arm.** The replay format's `ReplayMeta`
-(`src/game/replay.ts`) carries the arena, seed, lives, invincibility and seven world rules. It
-has no `pp1Roles` field, so nothing in the saved file says which arm it came from. Keep the
-page's full URL beside any saved replay.
+**A saved replay does not record the arm, and nothing flags the gap.** This was read in the
+code, not run:
+- **No field for it:** the replay format's `ReplayMeta` (`src/game/replay.ts`) carries the
+  arena, seed, lives, invincibility and seven world rules, but no `pp1Roles`.
+- **The validity check can't see it:** `checkTrace` compares only the trace's format, its
+  schema, and a fingerprint of four data files (balance, tank definitions, AI profiles,
+  arenas). The arm's values live in `src/sim/config/pp1-roles.ts`, outside that fingerprint.
+  So a trace recorded under the arm passes the check.
+- **The rebuild runs the baseline:** the only code that rebuilds a world from `ReplayMeta` is
+  two test helpers (`worldFor` in `replay.test.ts` and `dev-exports.test.ts`). Neither passes
+  `pp1Roles`, so an arm trace rebuilt that way would replay its inputs at shipped caps: a
+  different run, reported as valid.
+
+Keep the page's full URL beside any saved replay, and pass `pp1Roles` yourself when
+re-simulating one.
 
 **Build identity:** record the commit alongside each session, from the diagnostics report in
 Developer Tools. Its `commit` comes from `VITE_BUILD_SHA`, which `.github/workflows/pages.yml`
@@ -305,4 +323,5 @@ different question from what they do to a person.
   see [Playing the matched pair](#playing-the-matched-pair).
 - **No normal-speed clip exists,** for the reasons in
   [Normal-speed captures](#normal-speed-captures).
-- **A saved replay does not identify its arm.**
+- **A saved replay does not identify its arm,** and the trace validity check would accept one
+  rebuilt at shipped caps.
