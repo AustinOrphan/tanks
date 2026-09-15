@@ -48,6 +48,8 @@ export type HudLayerId =
   | 'developer-tools'
   /** The controller compatibility self-test, opened from Developer Tools (issue #599). */
   | 'controller-selftest'
+  /** The controller layout, opened from Settings -> Controls (issue #754). */
+  | 'controller-layout'
   /** The registry-driven configuration menu, opened from Developer Tools (issue #246). */
   | 'developer-config'
   /** The gallery workbench, opened from Developer Tools or by a `?gallery=` link (issue #730). */
@@ -293,6 +295,12 @@ import {
   renderControllerSelfTest,
   type ControllerSelfTestView,
 } from './controller-selftest';
+import {
+  renderControllerLayout,
+  type ControllerLayoutModel,
+  type ControllerLayoutView,
+  type LayoutRequest,
+} from './controller-layout';
 import { renderDevConfigMenu, type DevConfigMenuView } from './devtools-menu';
 import {
   devMenuView,
@@ -1072,6 +1080,25 @@ export interface Hud {
   onControllerSelfTestOpen(cb: () => void): void;
   onControllerSelfTestClose(cb: () => void): void;
   /**
+   * The controller layout pane's contents (issue #754), painted by `route-ui.ts` on open, on
+   * every settings change and hotplug while it is open, and after every request it handles.
+   * Names only: the model carries no raw index (see `controller-layout.ts`).
+   */
+  setControllerLayout(model: ControllerLayoutModel): void;
+  /**
+   * A press in the layout pane: a preset, a row to capture, Cancel or Reset -- and Escape while
+   * a capture waits, which cancels it rather than leaving the pane. The page decides what each
+   * does; the pane only reports it.
+   */
+  onControllerLayoutRequest(cb: (request: LayoutRequest) => void): void;
+  /**
+   * The layout pane just became visible/hidden, the self-test's shape and reason: `route-ui.ts`
+   * holds hotplug listeners, a settings subscription and any capture in progress for exactly as
+   * long as the pane is up.
+   */
+  onControllerLayoutOpen(cb: () => void): void;
+  onControllerLayoutClose(cb: () => void): void;
+  /**
    * The gallery workbench pane's empty body (issue #730). `gallery-workbench.ts` builds into it
    * on open and empties it on close, driven by `route-ui.ts`, for the reason `previewCanvas` is
    * handed out: the canvas inside draws through WebGL, and `hud.ts` builds none.
@@ -1296,6 +1323,7 @@ export type RouteHudKey =
   | 'onControllersOpen' | 'onControllersClose'
   | 'onSettingsOpen' | 'onSettingsClose'
   | 'setPadDiagnostics' | 'onControllerSelfTestOpen' | 'onControllerSelfTestClose'
+  | 'setControllerLayout' | 'onControllerLayoutRequest' | 'onControllerLayoutOpen' | 'onControllerLayoutClose'
   | 'galleryBody' | 'onGalleryOpen' | 'onGalleryClose' | 'openGalleryWorkbench'
   // `setDiagnosticsSource` is the ROUTE's (issue #247) for the same reason the seven
   // gameplay-facing callbacks above are: `route-host.ts` registers it exactly once, as a
@@ -2183,6 +2211,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
           <button class="ui-btn ui-btn--sm hud-rumble-toggle" type="button"></button>
           <!-- The durable Controllers entry the Main Menu gave up. -->
           <button class="ui-btn ui-btn--sm hud-settings-controllers" type="button">Controllers</button>
+          <!-- Which button does what on a controller (issue #754). Always offered, like
+               Controllers beside it: with no controller connected the pane explains how to
+               make one visible rather than the entry disappearing until one is. -->
+          <button class="ui-btn ui-btn--sm hud-settings-layout" type="button">Controller Layout</button>
         </div>
         <!-- Why rumble is refused, when it is. Same shape as the versus pane's mode note
              (issue #260): a visible sentence that 'describeDisabledReason' also points the
@@ -2385,6 +2417,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--slab hud-selftest-copy" type="button">Copy Report</button>
       <textarea class="hud-selftest-report hud-selftest-report--hidden" readonly rows="8" aria-label="Controller compatibility report"></textarea>
       <button class="ui-btn ui-btn--slab hud-selftest-back" type="button">Back</button>
+    </div>
+    <!-- THE CONTROLLER LAYOUT (issue #754). Opened from Settings -> Controls, and its own
+         layer for the self-test's reason: a preset, five bindings, Cancel, Reset and a status
+         line are more than the Controls section's row of toggles. The body is built by
+         'controller-layout.ts' into the empty container below, from a profile's bindable
+         controls and the stored layout, neither of which 'hud.ts' models. -->
+    <div class="hud-layout hud-layout--hidden" role="region" tabindex="-1" aria-labelledby="hud-layout-title">
+      <h1 id="hud-layout-title">Controller Layout</h1>
+      <p class="hud-layout-line">Choose an action, then press the controller button you want for it. A button another action uses swaps with it.</p>
+      <div class="hud-layout-body"></div>
+      <button class="ui-btn ui-btn--slab hud-layout-back" type="button">Back</button>
     </div>
     <!-- THE GALLERY WORKBENCH (issue #730). Its own layer beside the self-test and the
          configuration menu, for their reason: a canvas and nine selectors are taller than the
@@ -2597,6 +2640,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const selfTestCopyBtn = el.querySelector('.hud-selftest-copy') as HTMLButtonElement;
   const selfTestReportEl = el.querySelector('.hud-selftest-report') as HTMLTextAreaElement;
   const selfTestBackBtn = el.querySelector('.hud-selftest-back') as HTMLButtonElement;
+  const settingsLayoutBtn = el.querySelector('.hud-settings-layout') as HTMLButtonElement;
+  const layoutView = el.querySelector('.hud-layout') as HTMLElement;
+  const layoutBodyEl = el.querySelector('.hud-layout-body') as HTMLElement;
+  const layoutBackBtn = el.querySelector('.hud-layout-back') as HTMLButtonElement;
   const galleryOpenBtn = el.querySelector('.hud-gallery-open') as HTMLButtonElement;
   const galleryView = el.querySelector('.hud-gallery') as HTMLElement;
   const galleryBodyEl = el.querySelector('.hud-gallery-body') as HTMLElement;
@@ -2783,6 +2830,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * subscriber callbacks that must not run twice for one transition.
    */
   let selfTestOpen = false;
+  const layoutOpenCbs: Array<() => void> = [];
+  const layoutCloseCbs: Array<() => void> = [];
+  const layoutRequestCbs: Array<(request: LayoutRequest) => void> = [];
+  /** Whether the controller layout pane is on screen. Tracked for the self-test's reason: open and close fire once each. */
+  let layoutOpen = false;
   const galleryOpenCbs: Array<() => void> = [];
   const galleryCloseCbs: Array<() => void> = [];
   /** Whether the workbench is on screen. Tracked for the self-test's reason: open and close fire once each. */
@@ -3352,6 +3404,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const ABOUT_SURFACE: Surface = { el: aboutView, hidden: 'hud-about--hidden' };
   const DEVTOOLS_SURFACE: Surface = { el: devToolsView, hidden: 'hud-devtools--hidden' };
   const SELFTEST_SURFACE: Surface = { el: selfTestView, hidden: 'hud-selftest--hidden' };
+  const LAYOUT_SURFACE: Surface = { el: layoutView, hidden: 'hud-layout--hidden' };
   const DEVCFG_SURFACE: Surface = { el: devCfgView, hidden: 'hud-devcfg--hidden' };
   const GALLERY_SURFACE: Surface = { el: galleryView, hidden: 'hud-gallery--hidden' };
   const CONFIRM_SURFACE: Surface = { el: confirmView, hidden: 'hud-confirm--hidden' };
@@ -3379,6 +3432,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     VERSUS_SETUP_SURFACE,
     SETTINGS_SURFACE,
     ABOUT_SURFACE,
+    LAYOUT_SURFACE,
     /*
      * THE DEVELOPER SHELL IS A PANEL TOO (issue #599). It was left out when issue #243
      * added it, and that was invisible for as long as Back was the only way out of it:
@@ -3959,6 +4013,37 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
+   * The controller layout (issue #754). Open and close are a chokepoint with subscribers, the
+   * self-test's shape: `route-ui.ts` holds hotplug listeners, a settings subscription and any
+   * capture in progress, and every exit -- the Back button, `back()`, a sibling replacing the
+   * pane, and `setState`'s unconditional close -- runs through here or `release`.
+   */
+  function showControllerLayout(show: boolean): void {
+    if (show === layoutOpen) return;
+    layoutOpen = show;
+    if (show) {
+      swapSurface(openSurface(), LAYOUT_SURFACE, () => layoutView.focus());
+      for (const cb of layoutOpenCbs) cb();
+    } else {
+      closeSurface(LAYOUT_SURFACE);
+      for (const cb of layoutCloseCbs) cb();
+    }
+  }
+
+  /**
+   * Escape while a capture waits stops the capture and keeps the pane (issue #754), so the key
+   * a keyboard player reaches for to abandon one rebind does not also throw them out of the
+   * pane. Returns whether it did. A controller's Back never needs this: `route-host.ts` drops
+   * every pad action while a capture waits, because Back's own button is a choice a player
+   * may be making.
+   */
+  function cancelLayoutCapture(): boolean {
+    if (!layoutOpen || layoutBody.model.capturing === null) return false;
+    for (const cb of layoutRequestCbs) cb({ kind: 'cancel' });
+    return true;
+  }
+
+  /**
    * The gallery workbench (issue #730). Guarded on the actual transition, like the self-test,
    * so `route-ui.ts` never mounts twice or disposes a body it has not mounted.
    */
@@ -4307,6 +4392,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       versusSetupView,
       settingsView,
       aboutView,
+      layoutView,
       devToolsView,
       selfTestView,
       devCfgView,
@@ -4478,6 +4564,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       disarm();
       e.preventDefault();
       e.stopPropagation();
+      if (cancelLayoutCapture()) return;
       back();
       return;
     }
@@ -4647,6 +4734,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       container: selfTestView,
       open: () => showControllerSelfTest(true),
       close: () => showControllerSelfTest(false),
+    },
+    'controller-layout': {
+      container: layoutView,
+      open: () => showControllerLayout(true),
+      close: () => showControllerLayout(false),
+      // Replaced by a sibling: the incoming pane fades this one out, and the subscribers still
+      // hold a capture, a settings subscription and hotplug listeners that must end now.
+      release: () => {
+        if (!layoutOpen) return;
+        layoutOpen = false;
+        for (const cb of layoutCloseCbs) cb();
+      },
     },
     'developer-config': {
       container: devCfgView,
@@ -5060,6 +5159,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   );
 
   const selfTest: ControllerSelfTestView = renderControllerSelfTest(selfTestListEl);
+  const layoutBody: ControllerLayoutView = renderControllerLayout(layoutBodyEl);
+  layoutBody.onRequest((request) => {
+    for (const cb of layoutRequestCbs) cb(request);
+  });
   const legalDisclosures = renderLegalDocuments(legalListEl);
   renderLegalLinks(aboutLinksEl);
   for (const disclosure of legalDisclosures) {
@@ -5099,6 +5202,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     openLayer('controller-selftest', selfTestOpenBtn);
   };
   const handleSelfTestBack = (): void => {
+    back();
+  };
+  // Replaces Settings rather than covering it, as Controllers beside it does, so Back returns
+  // to the surface Settings was opened over.
+  const handleSettingsLayoutOpen = (): void => {
+    openLayer('controller-layout', settingsLayoutBtn);
+  };
+  // The Back BUTTON leaves even mid-capture: closing the pane ends the capture with it.
+  const handleLayoutBack = (): void => {
     back();
   };
   const handleGalleryOpen = (): void => {
@@ -5420,6 +5532,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   selfTestOpenBtn.addEventListener('click', blurIfPointer);
   selfTestBackBtn.addEventListener('click', handleSelfTestBack);
   selfTestBackBtn.addEventListener('click', blurIfPointer);
+  settingsLayoutBtn.addEventListener('click', handleSettingsLayoutOpen);
+  settingsLayoutBtn.addEventListener('click', blurIfPointer);
+  layoutBackBtn.addEventListener('click', handleLayoutBack);
+  layoutBackBtn.addEventListener('click', blurIfPointer);
   galleryOpenBtn.addEventListener('click', handleGalleryOpen);
   galleryOpenBtn.addEventListener('click', blurIfPointer);
   galleryDevToolsBtn.addEventListener('click', handleGalleryDevTools);
@@ -8027,6 +8143,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onControllerSelfTestClose(cb: () => void): void {
       selfTestCloseCbs.push(cb);
     },
+    setControllerLayout(model: ControllerLayoutModel): void {
+      layoutBody.update(model);
+    },
+    onControllerLayoutRequest(cb: (request: LayoutRequest) => void): void {
+      layoutRequestCbs.push(cb);
+    },
+    onControllerLayoutOpen(cb: () => void): void {
+      layoutOpenCbs.push(cb);
+    },
+    onControllerLayoutClose(cb: () => void): void {
+      layoutCloseCbs.push(cb);
+    },
     galleryBody: galleryBodyEl,
     onGalleryOpen(cb: () => void): void {
       galleryOpenCbs.push(cb);
@@ -8284,6 +8412,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       selfTestOpenBtn.removeEventListener('click', blurIfPointer);
       selfTestBackBtn.removeEventListener('click', handleSelfTestBack);
       selfTestBackBtn.removeEventListener('click', blurIfPointer);
+      settingsLayoutBtn.removeEventListener('click', handleSettingsLayoutOpen);
+      settingsLayoutBtn.removeEventListener('click', blurIfPointer);
+      layoutBackBtn.removeEventListener('click', handleLayoutBack);
+      layoutBackBtn.removeEventListener('click', blurIfPointer);
+      layoutBody.dispose();
       galleryOpenBtn.removeEventListener('click', handleGalleryOpen);
       galleryOpenBtn.removeEventListener('click', blurIfPointer);
       galleryDevToolsBtn.removeEventListener('click', handleGalleryDevTools);

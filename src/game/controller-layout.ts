@@ -358,6 +358,9 @@ export function renderControllerLayout(container: HTMLElement): ControllerLayout
     const item = document.createElement('li');
     const rowBtn = button('hud-layout-bind');
     rowBtn.dataset.action = action;
+    // Named from construction, not only once a controller is painted: a control with no name is
+    // one a screen reader cannot announce, whether or not it is on screen yet.
+    rowBtn.textContent = ACTION_NAMES[action];
     item.appendChild(rowBtn);
     list.appendChild(item);
     rowButtons.set(action, rowBtn);
@@ -368,12 +371,10 @@ export function renderControllerLayout(container: HTMLElement): ControllerLayout
   resetBtn.textContent = 'Reset to Recommended';
   controls.append(presetBtn, list, cancelBtn, resetBtn);
 
-  // A live region, because the result of a capture arrives from a controller press with focus
-  // still on the row: without an announcement a screen-reader player hears nothing happen.
+  // NOT a live region. The HUD keeps exactly one, the toasts (`hud.a11y.test.ts` says why), so
+  // the page announces a finished capture there; this line is what stays on screen after.
   const statusEl = document.createElement('p');
   statusEl.className = 'hud-layout-status';
-  statusEl.setAttribute('role', 'status');
-  statusEl.setAttribute('aria-live', 'polite');
 
   container.append(profileEl, emptyEl, controls, statusEl);
 

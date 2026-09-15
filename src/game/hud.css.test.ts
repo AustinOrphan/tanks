@@ -865,6 +865,7 @@ describe('hud.css is syntactically whole', () => {
       'hud-devcfg',
       'hud-devtools',
       'hud-gallery',
+      'hud-layout',
       'hud-panel',
       'hud-selftest',
       'hud-settings',
@@ -1167,7 +1168,13 @@ describe('hud.css is syntactically whole', () => {
     // Replay. 146 -> 149. Static markup, counted whether or not the page binds `developerDownloads`
     // -- their `hidden` tracks that, and `hidden` is not what this sweep filters on. All three carry
     // `.ui-btn--slab`, so `unstyled` stays empty.
-    expect(buttons.length).toBe(149 + 2 + devMenuButtons());
+    // Issue #754 adds TEN: Settings' Controller Layout entry and the layout pane's Back in the
+    // markup, and the eight `controller-layout.ts` builds into the pane body AT CONSTRUCTION --
+    // Sticks, the five action rows, Cancel and Reset to Recommended. 149 -> 159. Counted whether or
+    // not a controller is painted; the body's `hidden` tracks that, and `hidden` is not what this
+    // sweep filters on. The entry and the eight carry `.ui-btn--sm` and Back `.ui-btn--slab`, so
+    // `unstyled` stays empty.
+    expect(buttons.length).toBe(159 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1285,7 +1292,9 @@ describe('hud.css is syntactically whole', () => {
     // `.ui-btn--slab`.
     // Issue #254 adds THREE, the same three as the button sweep above: 130 -> 133, each sized by
     // `.ui-btn--slab`.
-    expect(controls.length).toBe(133 + 2 + devMenuButtons());
+    // Issue #754 adds TEN, the same ten as the button sweep above: 133 -> 143, nine sized by
+    // `.ui-btn--sm` and the pane's Back by `.ui-btn--slab`.
+    expect(controls.length).toBe(143 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

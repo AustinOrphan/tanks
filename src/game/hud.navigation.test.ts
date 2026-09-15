@@ -969,7 +969,8 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       'issue #599 the 13th -- the controller self-test, its own layer inside the developer ' +
       'shell rather than more of that pane, and issue #246 the 14th -- the configuration ' +
       'menu, its own layer for the same reason, and issue #730 the 15th -- the gallery ' +
-      'workbench, its own layer for the same reason').toBe(15);
+      'workbench, its own layer for the same reason, and issue #754 the 16th -- the ' +
+      'controller layout, opened from Settings, its own layer for the same reason').toBe(16);
     for (const c of containers) {
       const ref = c.getAttribute('aria-labelledby');
       expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();
@@ -1235,7 +1236,10 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // pushes a relevance verdict: per-device hiding is a `--hidden` class the page applies,
     // so the untouched HUD offers every control and this figure stays a property of the
     // MARKUP. A fixture that pushed a no-touch, no-vibration verdict would reach 83.
-    expect(totalControls, 'recount the panels above if this moves').toBe(86);
+    //
+    // 87 since issue #754's Controller Layout entry, beside Controllers in the same section. The
+    // layout pane's own controls do not count: the pane is not open in this walk.
+    expect(totalControls, 'recount the panels above if this moves').toBe(87);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );

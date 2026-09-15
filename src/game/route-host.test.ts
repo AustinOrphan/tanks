@@ -250,6 +250,7 @@ function fixture(
         },
       }) as unknown as TankPreview,
     readDetectedPads: () => [],
+    menuGamepads: () => box.pads,
     // A host that actually registers, so a test can fire the page's own listeners rather
     // than dispatching at a window the route host never bound (issue #496's input paths).
     host: {
@@ -281,7 +282,6 @@ function fixture(
     // page chrome, so the host reads `backdrop` itself rather than waiting for a session
     // to push one. `opts.devFlags` overrides exactly the fields a case is about.
     devFlags: { ...DEV_FLAGS_OFF, ...opts.devFlags },
-    menuGamepads: () => box.pads,
     now: () => box.now,
     requestFrame: (cb) => {
       box.frames.push(cb);

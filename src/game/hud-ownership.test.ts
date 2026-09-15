@@ -198,7 +198,12 @@ describe('HUD ownership boundary (issue #324)', () => {
     // 83 -> 84. It is the third trampoline the host registers once, and its session half (the
     // round, the replay trace, a copy of the frame) exists only inside whichever session is live.
     // Its page half, the download seam, is an OPTION, `developerDownloads`, like `developerPage`.
-    expect(frame.size + route.size + gameplay.size).toBe(84);
+    //
+    // Issue #754 adds FOUR, all route-owned: `setControllerLayout`, `onControllerLayoutRequest`
+    // and the `onControllerLayoutOpen`/`Close` pair. 84 -> 88. The self-test's reason: the layout
+    // pane is a Settings pane the PAGE owns, `route-ui.ts` paints it and captures presses for it,
+    // and a session must not be able to write a player's controller layout.
+    expect(frame.size + route.size + gameplay.size).toBe(88);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

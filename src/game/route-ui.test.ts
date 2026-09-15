@@ -35,6 +35,7 @@ import type { TankPreview } from '../render/preview';
 import { WORKBENCH_CATALOG } from '../render/gallery/workbench-scene';
 import { defaultGallerySelection, formatGallerySelection, parseGallerySelection } from './gallery-selection';
 import type { GalleryWorkbenchSceneOptions } from './gallery-workbench';
+import type { GamepadLike } from '../input/gamepad';
 
 type Triple = [string, string, string | null];
 
@@ -170,6 +171,8 @@ function fixture(
     cancelledFrames: [] as number[],
     /** How many times `deps.readPadDiagnostics` was called -- the poll's own tick count. */
     padDiagnosticReads: 0,
+    /** The pads `deps.menuGamepads` reports: none until a case plugs one in. */
+    pads: [] as Array<GamepadLike | null>,
   };
 
   const hostListeners = new Map<string, Array<() => void>>();
@@ -237,6 +240,8 @@ function fixture(
       box.campaignRequests += 1;
     },
     initialVersusConfig: null,
+    // What is plugged in, as the controller layout pane reads it (issue #754). A case moves it.
+    menuGamepads: () => box.pads,
     ...(opts.galleryWorkbench === undefined ? {} : { galleryWorkbench: opts.galleryWorkbench }),
   };
 
@@ -316,8 +321,12 @@ function fixture(
 // Issue #599's self-test pair are the newest: they scope a per-frame hardware poll to
 // exactly while the pane is open, the same shape `onControllersOpen`/`Close` use for the
 // assignment panel's hotplug listeners.
+// Issue #754's three are the newest: the controller layout pane's open/close pair scopes its
+// settings subscription, hotplug listeners and capture to the pane, and its request handler
+// is the one place a layout is written.
 const ROUTE_HANDLERS = [
-  'onCampaignOpen', 'onControllerRumbleChange', 'onControllerSelfTestClose',
+  'onCampaignOpen', 'onControllerLayoutClose', 'onControllerLayoutOpen', 'onControllerLayoutRequest',
+  'onControllerRumbleChange', 'onControllerSelfTestClose',
   'onControllerSelfTestOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
   'onGalleryClose', 'onGalleryOpen',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
