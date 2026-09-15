@@ -2750,11 +2750,12 @@ describe('forced-colors conformance (issue #368)', () => {
  */
 describe('hud.css: the stock-loss cue arms (issue #230)', () => {
   const src = stripComments(css);
-  // Every animated cue element, as the HUD renders it: the badge, the struck number, the pip
-  // that just emptied, and that pip's burst ring.
+  // Every animated cue element, as the HUD renders it: the badge, the struck number and the new
+  // number dropping in behind it, the pip that just emptied, and that pip's burst ring.
   const CUE_RULES = [
     '.hud-stock-cue--badge',
     '.hud-stock-cue--struck',
+    '.hud-stock-count.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue::after',
   ];

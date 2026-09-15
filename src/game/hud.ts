@@ -3356,6 +3356,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (stockCue === 'strike') {
       cue.className = 'hud-stock-cue--struck';
       cue.textContent = String(running.from);
+      // The new number drops in behind the struck one, so it animates too, on the same clock.
+      cueEl(count);
     } else {
       cue.className = 'hud-stock-cue--badge';
       cue.textContent = `−${running.from - entry.stock}`;

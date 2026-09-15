@@ -578,6 +578,8 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
     expect(struck.textContent).toBe('3');
     expect(struck.getAttribute('aria-hidden')).toBe('true');
     expect(p1.querySelector('.hud-stock-count')?.textContent).toBe('2');
+    // The new number drops in on the cue's clock, so it is a cue element too.
+    expect(p1.querySelector('.hud-stock-count')?.classList.contains('hud-stock-cue')).toBe(true);
     expect(p2.querySelector('.hud-stock-cue')).toBeNull();
   });
 

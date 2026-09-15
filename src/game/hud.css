@@ -3177,20 +3177,35 @@
   100% { opacity: 0; transform: translate(-50%, 14px); }
 }
 
-/* B. The struck-out digit: the old number, struck through, lifting away above the new one. */
+/* B. The struck-out digit. The old number, struck through, stands alone in the digit's place, then
+ * slides DOWN and fades as the new number drops in behind it.
+ *
+ * Down, not up as the #230 mockup drew it: the stock strip is the top row of the screen, so a number
+ * lifting away left the viewport part-way through its fade (measured in Chromium at 1280x800 and
+ * 390x844 -- clipped at 300 ms in both). And the new number waits out the first third, because
+ * drawing both at full opacity in one place garbled the two digits into one glyph. */
 .hud-stock-cue--struck {
   position: absolute;
   right: 0;
-  bottom: 100%;
+  top: 0;
   text-decoration: line-through;
   text-decoration-thickness: 2px;
   pointer-events: none;
-  animation: hud-stock-struck var(--hud-duration-slow) ease-out 1 both;
+  animation: hud-stock-struck var(--hud-duration-slow) ease-in 1 both;
 }
 
 @keyframes hud-stock-struck {
-  0% { opacity: 1; transform: translateY(12px); }
-  100% { opacity: 0; transform: translateY(-8px); }
+  0%, 35% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(14px); }
+}
+
+.hud-stock-count.hud-stock-cue {
+  animation: hud-stock-count-in var(--hud-duration-slow) ease-out 1 both;
+}
+
+@keyframes hud-stock-count-in {
+  0%, 35% { opacity: 0; transform: translateY(-6px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 /* A. Pips: one per starting stock. The pip just lost swells, bursts a ring, and empties. */
@@ -3219,11 +3234,22 @@
 }
 
 /* The burst ring. `animation-delay` is not inherited by default, so a resumed cue's negative
- * delay would reach the pip and not its ring without the `inherit` below. */
+ * delay would reach the pip and not its ring without the `inherit` below.
+ *
+ * A FIXED 18px ring centred on the pip, not an inset. An absolutely positioned child is placed
+ * against the padding box, and a filled pip's border is its whole radius, so its padding box is
+ * 0x0: `inset: -4px` drew an 8px ring INSIDE the 10px pip, invisible until the pip emptied
+ * (measured in Chromium -- reduced motion showed no ring at all for its first 300 ms). Centring
+ * on that 0x0 box stays centred as the border shrinks, because the border is symmetric. */
 .hud-stock-pip.hud-stock-cue::after {
   content: '';
   position: absolute;
-  inset: -4px;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
   border: 2px solid currentColor;
   border-radius: 50%;
   pointer-events: none;
@@ -3490,13 +3516,24 @@
   animation-name: hud-stock-badge--still;
 }
 
+/* The struck number and the new one cross-fade in place: the old holds for the first half, then
+ * the two swap with nothing moving. */
 @keyframes hud-stock-struck--still {
-  0%, 70% { opacity: 1; transform: none; }
+  0%, 50% { opacity: 1; transform: none; }
   100% { opacity: 0; transform: none; }
 }
 
 .hud--reduced-motion .hud-stock-cue--struck {
   animation-name: hud-stock-struck--still;
+}
+
+@keyframes hud-stock-count-in--still {
+  0%, 50% { opacity: 0; transform: none; }
+  100% { opacity: 1; transform: none; }
+}
+
+.hud--reduced-motion .hud-stock-count.hud-stock-cue {
+  animation-name: hud-stock-count-in--still;
 }
 
 @keyframes hud-stock-pip-empty--still {
