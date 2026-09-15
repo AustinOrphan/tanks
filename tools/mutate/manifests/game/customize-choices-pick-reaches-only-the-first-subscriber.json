@@ -1,0 +1,12 @@
+{
+  "id": "customize-choices-pick-reaches-only-the-first-subscriber",
+  "file": "src/game/customize-choices.ts",
+  "find": "      for (const cb of pickAccentCbs) cb(accentSwatch.id);",
+  "replace": "      pickAccentCbs[0]?.(accentSwatch.id);",
+  "expect": "killed",
+  "tests": ["src/game/customize-choices.test.ts"],
+  "why": "An accent pick reaches only the first subscriber. Every HUD case subscribes once, so under this mutation all 116 tests in hud.controls.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open). The direct case subscribes twice.",
+  "killedBy": [
+    "renderCustomizeChoices (issue #556) a pick in the accent row reaches every subscriber with its own id, in order"
+  ]
+}

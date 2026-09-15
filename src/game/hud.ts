@@ -278,7 +278,8 @@ import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topb
 import type { VersusActionLayout } from '../presentation/versus-actions';
 import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
-import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
+import type { HullColorId, SkinId, AccentId } from '../presentation/customization';
+import { renderCustomizeChoices } from './customize-choices';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import { arenaSchematic, drawArenaSchematic, type SchematicPaint } from './arena-schematic';
 import {
@@ -2741,72 +2742,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   fireBtn.addEventListener('pointerdown', onFireTapClick);
   const resetStatsCbs: Array<() => void> = [];
   const resetProgressCbs: Array<() => void> = [];
-  const pickHullCbs: Array<(id: HullColorId) => void> = [];
-  let currentHull: HullColorId = PALETTE[0].id;
-
-  // One button per palette entry, built once: the palette is a frozen constant.
-  // Their click closures are deliberately NOT in dispose()'s removeEventListener
-  // list: nothing outside this subtree holds them, so el.remove() reclaims all of
-  // it -- the explicit removals elsewhere cover elements tests re-dispatch into.
-  for (const swatch of PALETTE) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'ui-selectable hud-swatch';
-    b.dataset.hull = swatch.id;
-    // TITLE IS NOT A NAME (issue #629). These buttons have no text -- the colour IS the
-    // content -- so before this their only accessible name came from `title`, which is a
-    // tooltip: some screen readers ignore it entirely and none of them promise it. The
-    // row is named "Hull" by an <h2> a sighted reader can see, but a <section> with no
-    // accessible name announces nothing, so the context has to travel on the control.
-    // `title` stays for the sighted pointer user it already served.
-    b.setAttribute('aria-label', `Hull: ${swatch.label}`);
-    b.title = swatch.label;
-    b.style.background = swatch.hex;
-    b.addEventListener('click', (e) => {
-      for (const cb of pickHullCbs) cb(swatch.id);
-      if ((e as MouseEvent).detail > 0) b.blur();
-    });
-    swatchesRow.appendChild(b);
-  }
-
-  function renderSwatchSelection(): void {
-    for (const b of Array.from(swatchesRow.children) as HTMLButtonElement[]) {
-      setSelected(b, b.dataset.hull === currentHull);
-    }
-  }
-
   const skinsRow = el.querySelector('.hud-skins') as HTMLElement;
-  const pickSkinCbs: Array<(id: SkinId) => void> = [];
+  // Customize's hull, skin and accent rows: their buttons, which one is marked, and the
+  // pick subscribers (issue #556). The pane itself -- surface, layer row, open and close
+  // callbacks -- stays here with the rest of the navigation core; see the module header.
+  const customizeChoices = renderCustomizeChoices({
+    hull: swatchesRow,
+    skin: skinsRow,
+    accent: accentsRow,
+  });
   // The controller assignment UI's one write path -- see onReassignSlot's own doc
   // comment. The panel that fires this lands separately; the subscription exists now so
   // loop.ts's reassignSlot has somewhere real to register.
   const reassignSlotCbs: Array<(slot: number, source: SlotSource) => void> = [];
   let earnedIds: ReadonlySet<AchievementId> = new Set();
-  let currentSkin: SkinId = SKINS[0].id;
-
-  // One button per skin, built once, like the swatches above -- and like them,
-  // the click closures live and die with the subtree.
-  for (const skin of SKINS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'ui-btn ui-selectable hud-skin';
-    b.dataset.skin = skin.id;
-    b.textContent = skin.label;
-    b.addEventListener('click', (e) => {
-      for (const cb of pickSkinCbs) cb(skin.id);
-      if ((e as MouseEvent).detail > 0) b.blur();
-    });
-    skinsRow.appendChild(b);
-  }
-
-  function renderSkinSelection(): void {
-    for (const b of Array.from(skinsRow.children) as HTMLButtonElement[]) {
-      setSelected(b, b.dataset.skin === currentSkin);
-    }
-  }
-
-  const pickAccentCbs: Array<(id: AccentId) => void> = [];
-  let currentAccent: AccentId = ACCENTS[0].id;
   const customizeOpenCbs: Array<() => void> = [];
   const customizeCloseCbs: Array<() => void> = [];
   const settingsOpenCbs: Array<() => void> = [];
@@ -2843,35 +2792,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   let currentDetectedPads: readonly DetectedPad[] = [];
   /** Fails closed: see setBotAssignmentAllowed's doc comment on the Hud interface. */
   let botAssignmentAllowedNow = false;
-
-  // One button per accent entry, built once, exactly like the hull swatches above --
-  // reusing `.hud-swatch` rather than a new class, since it IS the same control: a
-  // colour circle with a selection ring. `auto`'s hex is null (it has none of its own --
-  // it derives from whatever hull is picked), so it gets a fixed neutral fill instead of
-  // a palette hex, distinguishing it from any real hull or accent colour on screen.
-  for (const accentSwatch of ACCENTS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'ui-selectable hud-swatch';
-    b.dataset.accent = accentSwatch.id;
-    // Named "Accent: X" rather than "X", and here the context is load-bearing rather than
-    // symmetrical: accents share the "Skin" section with the skin buttons, so a bare
-    // colour name would sit in a group whose heading says nothing about accents.
-    b.setAttribute('aria-label', `Accent: ${accentSwatch.label}`);
-    b.title = accentSwatch.label;
-    b.style.background = accentSwatch.hex ?? '#4a4f58';
-    b.addEventListener('click', (e) => {
-      for (const cb of pickAccentCbs) cb(accentSwatch.id);
-      if ((e as MouseEvent).detail > 0) b.blur();
-    });
-    accentsRow.appendChild(b);
-  }
-
-  function renderAccentSelection(): void {
-    for (const b of Array.from(accentsRow.children) as HTMLButtonElement[]) {
-      setSelected(b, b.dataset.accent === currentAccent);
-    }
-  }
 
   /** The Records table's two columns, and nothing else -- see setStats. */
   let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
@@ -3820,9 +3740,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const wasOpen = isSurfaceOpen(CUSTOMIZE_SURFACE);
     if (show) {
       swapSurface(openSurface(), CUSTOMIZE_SURFACE, () => {
-        renderSwatchSelection();
-        renderSkinSelection();
-        renderAccentSelection();
+        customizeChoices.renderSelection();
         customizeView.focus(); // the pane, not the canvas -- see the roving-focus comment below
         if (!wasOpen) for (const cb of customizeOpenCbs) cb();
       });
@@ -8000,22 +7918,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       resetProgressCbs.push(cb);
     },
     setHullColor(id: HullColorId): void {
-      currentHull = id;
-      renderSwatchSelection();
+      customizeChoices.setHullColor(id);
     },
     onPickHullColor(cb: (id: HullColorId) => void): void {
-      pickHullCbs.push(cb);
+      customizeChoices.onPickHullColor(cb);
     },
     setSkin(id: SkinId): void {
-      currentSkin = id;
-      renderSkinSelection();
+      customizeChoices.setSkin(id);
     },
     setAccentColor(id: AccentId): void {
-      currentAccent = id;
-      renderAccentSelection();
+      customizeChoices.setAccentColor(id);
     },
     onPickAccentColor(cb: (id: AccentId) => void): void {
-      pickAccentCbs.push(cb);
+      customizeChoices.onPickAccentColor(cb);
     },
     previewCanvas: previewCanvasEl,
     previewRotateButtons: previewRotateBtns,
@@ -8051,7 +7966,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       }
     },
     onPickSkin(cb: (id: SkinId) => void): void {
-      pickSkinCbs.push(cb);
+      customizeChoices.onPickSkin(cb);
     },
     onReassignSlot(cb: (slot: number, source: SlotSource) => void): void {
       reassignSlotCbs.push(cb);

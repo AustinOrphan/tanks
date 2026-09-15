@@ -1,6 +1,6 @@
 {
   "id": "a11y-swatch-named-by-tooltip-only",
-  "file": "src/game/hud.ts",
+  "file": "src/game/customize-choices.ts",
   "find": "    b.setAttribute('aria-label', `Hull: ${swatch.label}`);",
   "replace": "    b.removeAttribute('aria-label');",
   "expect": "killed",

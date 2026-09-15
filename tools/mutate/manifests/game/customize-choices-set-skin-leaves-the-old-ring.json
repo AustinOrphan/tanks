@@ -1,0 +1,12 @@
+{
+  "id": "customize-choices-set-skin-leaves-the-old-ring",
+  "file": "src/game/customize-choices.ts",
+  "find": "      currentSkin = id;\n      renderSkinSelection();",
+  "replace": "      currentSkin = id;",
+  "expect": "killed",
+  "tests": ["src/game/customize-choices.test.ts"],
+  "why": "Storing a skin no longer repaints its row, so the ring stays on the previous skin while the pane is open. Not a gap before issue #556: in a local control run, 1 of the 116 tests in hud.controls.test.ts and hud.a11y.test.ts already failed under it. Pinned here because the direct case is the module's own statement of the contract.",
+  "killedBy": [
+    "renderCustomizeChoices (issue #556) storing a skin choice moves that row's ring at once"
+  ]
+}
