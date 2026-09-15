@@ -1,0 +1,17 @@
+{
+  "id": "driver-step-samples-twice",
+  "file": "src/game/driver.ts",
+  "find": "      prev = curr;\n      const result = stepInputs(curr, deps.input.sample());",
+  "replace": "      prev = curr;\n      deps.input.sample();\n      const result = stepInputs(curr, deps.input.sample());",
+  "expect": "killed",
+  "tests": [
+    "src/game/driver.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "driver: the developer single-tick step (issue #253) advances exactly one tick from one sample, and renders it whole with effects frozen",
+    "driver: the developer single-tick step (issue #253) advances exactly N ticks for N steps, one sample each",
+    "startGameWith: the developer single-tick step (issue #253) records exactly one replay tick per step"
+  ],
+  "why": "The step samples input twice for one tick. The replay recorder decorates `sample()`, so every step appends two ticks to the trace for one simulated tick, and a replay of it -- the file #254's Download Replay saves -- diverges from the run it recorded. A latched one-shot press (fire, mine) is also consumed by the discarded sample."
+}

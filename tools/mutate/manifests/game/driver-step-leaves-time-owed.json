@@ -1,0 +1,14 @@
+{
+  "id": "driver-step-leaves-time-owed",
+  "file": "src/game/driver.ts",
+  "find": "      if (!deps.stateMachine.isPaused) return false;\n      prev = curr;",
+  "replace": "      if (!deps.stateMachine.isPaused) return false;\n      last -= 20;\n      prev = curr;",
+  "expect": "killed",
+  "tests": [
+    "src/game/driver.test.ts"
+  ],
+  "killedBy": [
+    "driver: the developer single-tick step (issue #253) RESUMING after steps neither repeats them nor catches up the paused time"
+  ],
+  "why": "Each step leaves 20 ms of real time owed to the frame clock, so the first frame after Resume repays the steps as extra ticks: the match jumps ahead by roughly one tick per step taken. Issue #253's criterion is that resuming after a step neither repeats nor catches up paused time."
+}

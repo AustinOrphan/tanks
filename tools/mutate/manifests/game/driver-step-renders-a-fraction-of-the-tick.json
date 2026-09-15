@@ -1,0 +1,14 @@
+{
+  "id": "driver-step-renders-a-fraction-of-the-tick",
+  "file": "src/game/driver.ts",
+  "find": "      deps.renderer.render(prev, curr, 1, frameEvents, animationDt(0, true));",
+  "replace": "      deps.renderer.render(prev, curr, 0, frameEvents, animationDt(0, true));",
+  "expect": "killed",
+  "tests": [
+    "src/game/driver.test.ts"
+  ],
+  "killedBy": [
+    "driver: the developer single-tick step (issue #253) advances exactly one tick from one sample, and renders it whole with effects frozen"
+  ],
+  "why": "The stepped frame renders the PREVIOUS pose (alpha 0) instead of the new one. The world advanced, the HUD updated, and the board on screen still shows the tick before -- so a developer stepping to watch one tick sees every change one press late, which is the thing a single-tick control exists to show."
+}

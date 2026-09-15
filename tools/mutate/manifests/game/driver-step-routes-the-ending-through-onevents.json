@@ -1,0 +1,14 @@
+{
+  "id": "driver-step-routes-the-ending-through-onevents",
+  "file": "src/game/driver.ts",
+  "find": "        deps.stateMachine.settleSteppedTick(frameEvents);",
+  "replace": "        deps.stateMachine.onEvents(frameEvents);",
+  "expect": "killed",
+  "tests": [
+    "src/game/driver.test.ts"
+  ],
+  "killedBy": [
+    "driver: the developer single-tick step (issue #253) routes a stepped tick's events as a simulating frame does, and its round ending through settleSteppedTick"
+  ],
+  "why": "A stepped tick's events go to `onEvents`, which the real state machine ignores while paused. The sim resolves a round's status only while it is `playing` and never re-emits it, so a step that ends the round leaves the world decided and the session paused on a board that can never finish, even after Resume."
+}

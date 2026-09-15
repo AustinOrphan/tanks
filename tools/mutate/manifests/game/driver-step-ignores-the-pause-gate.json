@@ -1,0 +1,17 @@
+{
+  "id": "driver-step-ignores-the-pause-gate",
+  "file": "src/game/driver.ts",
+  "find": "      if (!deps.stateMachine.isPaused) return false;",
+  "replace": "      if (deps.stateMachine.isPaused === undefined) return false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/driver.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "driver: the developer single-tick step (issue #253) refuses while playing, without sampling, stepping or rendering",
+    "driver: the developer single-tick step (issue #253) refuses while main-menu, without sampling, stepping or rendering",
+    "startGameWith: the developer single-tick step (issue #253) does nothing while the match is playing"
+  ],
+  "why": "The step runs whatever the session is doing. From a live match it hands out a tick the frame loop is also about to take, so the match runs one tick fast per press; from a menu or an ended round it moves a world nobody is playing. Issue #253's step is a paused-board tool, and the gate is what makes it one."
+}

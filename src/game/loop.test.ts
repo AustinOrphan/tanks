@@ -108,6 +108,7 @@ import {
   isMuteHotkey,
   musicIntensity,
   isPauseHotkey,
+  isStepHotkey,
   DEV_CONSOLE_KEY,
   createBrowserDeps,
   typedOutcomeForArm,
@@ -1175,6 +1176,16 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           setSurface('outcome-lose');
         }
       },
+      // Issue #253's stepped tick, modelled as state.ts models it: `onEvents`' real classification,
+      // acting from `paused` only. A double without it would throw the first time a stepped tick
+      // emitted anything, and one that ignored the phase would end a playing match here.
+      settleSteppedTick(events: SimEvent[]): void {
+        if (currentSurface !== 'paused' || classifyOutcome === null || enteredSession === null) return;
+        const outcome = classifyOutcome(events, enteredSession);
+        if (outcome === null) return;
+        rec.typedOutcomes.push(outcome);
+        setSurface(legacyOutcomePresentation(outcome) === 'win' ? 'outcome-win' : 'outcome-lose', outcome);
+      },
       toMainMenu(): void { setSurface('main-menu'); },
       toRoute(kind): void {
         // Every non-primary route folds to `main-menu` in the harness's
@@ -2067,6 +2078,93 @@ describe('deriveSeed', () => {
 // this used to hand-build -- see loop.ts's retirement comment at its old definition
 // site, and gamepad.ts's module doc comment. That mechanism's tests live in
 // gamepad.test.ts ("the no-pad-ever-connected case") and are unchanged by this PR.
+
+describe('isStepHotkey (issue #253)', () => {
+  it('is Period, and nothing else', () => {
+    expect(isStepHotkey({ key: '.', repeat: false, target: null } as unknown as KeyboardEvent)).toBe(true);
+    for (const key of ['>', ',', 'p', 'Escape', ' ']) {
+      expect(isStepHotkey({ key, repeat: false, target: null } as unknown as KeyboardEvent), key).toBe(false);
+    }
+  });
+
+  it('refuses key repeat, so holding the key steps once', () => {
+    expect(isStepHotkey({ key: '.', repeat: true, target: null } as unknown as KeyboardEvent)).toBe(false);
+  });
+
+  it('still reaches the game with a button focused, and not with a text field focused', () => {
+    // A focused button keeps only Space and Enter, so Developer Tools' own focused buttons do
+    // not swallow the step; a text field keeps every key.
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    const field = document.createElement('input');
+    field.type = 'text';
+    document.body.appendChild(field);
+    expect(isStepHotkey({ key: '.', repeat: false, target: button } as unknown as KeyboardEvent)).toBe(true);
+    expect(isStepHotkey({ key: '.', repeat: false, target: field } as unknown as KeyboardEvent)).toBe(false);
+    button.remove();
+    field.remove();
+  });
+});
+
+describe('startGameWith: the developer single-tick step (issue #253)', () => {
+  const tickNow = (h: ReturnType<typeof boot>): number => h.rec.renders[h.rec.renders.length - 1].curr.tick;
+  const period = { key: '.', repeat: false, target: null } as Partial<KeyboardEvent>;
+
+  it('Period advances exactly one tick while paused, in developer mode', () => {
+    const h = boot(makeDeps({ developerMode: true }));
+    h.setState('playing');
+    h.fireFrame(100); // 6 ticks
+    h.setState('paused');
+    const before = tickNow(h);
+    const samples = h.rec.samples;
+    h.keydown(period);
+    expect(tickNow(h)).toBe(before + 1);
+    expect(h.rec.samples).toBe(samples + 1);
+    expect(h.getState()).toBe('paused');
+    h.handle.dispose();
+  });
+
+  it('does nothing without developer mode', () => {
+    const h = boot(makeDeps({ developerMode: false }));
+    h.setState('playing');
+    h.fireFrame(100);
+    h.setState('paused');
+    const renders = h.rec.renders.length;
+    const samples = h.rec.samples;
+    h.keydown(period);
+    expect(h.rec.renders).toHaveLength(renders);
+    expect(h.rec.samples).toBe(samples);
+    h.handle.dispose();
+  });
+
+  it('does nothing while the match is playing', () => {
+    const h = boot(makeDeps({ developerMode: true }));
+    h.setState('playing');
+    h.fireFrame(100);
+    const renders = h.rec.renders.length;
+    const samples = h.rec.samples;
+    h.keydown(period);
+    expect(h.rec.renders).toHaveLength(renders);
+    expect(h.rec.samples).toBe(samples);
+    h.handle.dispose();
+  });
+
+  it('records exactly one replay tick per step', () => {
+    // The recorder decorates the driver's input, so a step that sampled twice, or skipped the
+    // recorder, would corrupt the trace Download Replay saves.
+    const h = boot(makeDeps({ devFlags: { replay: true } }));
+    const trace = (): ReturnType<NonNullable<DevConsole['replay']>> =>
+      (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).replay!();
+    h.setState('playing');
+    h.fireFrame(100);
+    h.setState('paused');
+    const recorded = trace().ticks.length;
+    h.keydown(period);
+    h.keydown(period);
+    expect(trace().ticks.length).toBe(recorded + 2);
+    h.handle.dispose();
+  });
+});
 
 describe('isPauseHotkey', () => {
   it('accepts Escape and both cases of P', () => {

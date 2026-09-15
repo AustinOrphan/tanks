@@ -1,0 +1,14 @@
+{
+  "id": "loop-step-hotkey-ignores-developer-mode",
+  "file": "src/game/loop.ts",
+  "find": "    if (deps.developerMode && isStepHotkey(e)) driver.advanceOneTick();",
+  "replace": "    if (isStepHotkey(e)) driver.advanceOneTick();",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the developer single-tick step (issue #253) does nothing without developer mode"
+  ],
+  "why": "Period steps the simulation on every page, not only a developer one. A player who pauses and presses the key moves the match a tick at a time, including onto its ending, which issue #253 requires to be unavailable in ordinary production use."
+}

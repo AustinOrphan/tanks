@@ -1,0 +1,14 @@
+{
+  "id": "loop-step-hotkey-accepts-repeat",
+  "file": "src/game/loop.ts",
+  "find": "export function isStepHotkey(e: KeyboardEvent): boolean {\n  if (e.repeat) return false;",
+  "replace": "export function isStepHotkey(e: KeyboardEvent): boolean {",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "isStepHotkey (issue #253) refuses key repeat, so holding the key steps once"
+  ],
+  "why": "Holding Period steps at the keyboard's repeat rate, around 30 ticks a second, so a developer who holds the key a moment too long overshoots the tick they were stepping toward -- the opposite of a single-tick control."
+}
