@@ -1,0 +1,14 @@
+{
+  "id": "settings-layout-setter-trims-instead-of-refusing",
+  "file": "src/game/settings.ts",
+  "find": "      if (!isAcceptableLayout(layout)) return;",
+  "replace": "      if (!isRecord(layout)) return;",
+  "expect": "killed",
+  "why": "Every setter in this store refuses an off-domain argument; quietly trimming a malformed layout would store something other than what the caller asked for, and could erase a valid entry.",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "killedBy": [
+    "createPlayerSettingsStore: controller layouts (issue #754) refuses a malformed profile id or layout and changes nothing"
+  ]
+}

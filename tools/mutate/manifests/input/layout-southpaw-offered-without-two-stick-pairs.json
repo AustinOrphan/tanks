@@ -1,0 +1,15 @@
+{
+  "id": "layout-southpaw-offered-without-two-stick-pairs",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "  return new Set([moveX, moveY, aimX, aimY]).size === 4 ? LAYOUT_PRESETS : ['recommended'];",
+  "replace": "  return LAYOUT_PRESETS;",
+  "expect": "killed",
+  "why": "Southpaw is offered only when the controller exposes two usable stick pairs; a profile naming one axis twice has no second pair to swap and must read as Recommended.",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "presetsFor (issue #754) offers Recommended alone on a profile that names one axis twice",
+    "resolveEffectiveProfile (issue #754) applies Recommended when the profile cannot honour the preset asked for"
+  ]
+}

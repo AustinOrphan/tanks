@@ -1,0 +1,16 @@
+{
+  "id": "effective-profile-reader-never-refreshes",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "    if (last === null || profile !== lastProfile || layout !== lastLayout) {",
+  "replace": "    if (last === null) {",
+  "expect": "killed",
+  "why": "The reader caches its resolution on the profile and layout it was given; a cache that never invalidates keeps reading the first layout after the player changes it.",
+  "tests": [
+    "src/input/gamepad-profile.test.ts",
+    "src/input/gamepad.test.ts"
+  ],
+  "killedBy": [
+    "createEffectiveProfileReader (issue #754) re-resolves when the looked-up layout changes, and returns the cached profile while it does not",
+    "createGamepadReader: the player's layout (issue #754) reads a changed layout on the very next poll"
+  ]
+}

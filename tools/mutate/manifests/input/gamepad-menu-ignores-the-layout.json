@@ -1,0 +1,15 @@
+{
+  "id": "gamepad-menu-ignores-the-layout",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "        actionsDown(pad, effective(profile), down);",
+  "replace": "        actionsDown(pad, profile, down);",
+  "expect": "killed",
+  "why": "Menu input must follow the player's layout too; a menu that keeps reading the shipped Confirm and stick leaves a rebound player confirming with a button they moved away.",
+  "tests": [
+    "src/input/gamepad-menu.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadMenuPoller: the player's layout (issue #754) reads Confirm from its bound control, and the old button no longer confirms",
+    "createGamepadMenuPoller: the player's layout (issue #754) moves stick navigation to the right stick under Southpaw, and leaves the D-pad where it is"
+  ]
+}
