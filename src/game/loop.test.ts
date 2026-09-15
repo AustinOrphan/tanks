@@ -1421,6 +1421,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onControllerSelfTestClose: (cb: () => void) => {
           onSelfTestClose = cb;
         },
+        // Issue #754's layout pane: no session test opens it, so the hooks are inert.
+        setControllerLayout: () => {},
+        onControllerLayoutRequest: () => {},
+        onControllerLayoutOpen: () => {},
+        onControllerLayoutClose: () => {},
         // Issue #730's workbench: no session test opens it, so the hooks are inert and the
         // boot open reports that nothing opened.
         galleryBody: document.createElement('div'),

@@ -1,0 +1,14 @@
+{
+  "id": "route-ui-capture-result-not-announced",
+  "file": "src/game/route-ui.ts",
+  "find": "    hud.showToast(layoutStatus);",
+  "replace": "    void layoutStatus;",
+  "expect": "killed",
+  "why": "A capture ends on a controller press with focus still on the row, so nothing a screen reader follows changes. The HUD keeps one live region, the toasts, and the result is announced there; without it a screen-reader player hears nothing happen.",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the controller layout pane is painted, written and captured for by the page (issue #754) captures the next NEW press and stores both halves of the swap it makes"
+  ]
+}

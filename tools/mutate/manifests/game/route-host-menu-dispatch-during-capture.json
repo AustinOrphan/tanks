@@ -1,0 +1,14 @@
+{
+  "id": "route-host-menu-dispatch-during-capture",
+  "file": "src/game/route-host.ts",
+  "find": "    if (routeUi.capturingBinding()) return;",
+  "replace": "    void routeUi.capturingBinding;",
+  "expect": "killed",
+  "why": "While a capture waits, the page's pad dispatch stands aside, Back and Pause included, because the button being chosen may be either. Without it, B chosen for Fire is also Back: the pane closes and the capture with it, so Fire can never be moved onto B from a controller.",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) rebinds Fire onto B from a controller alone, and the B that completes it does not also back out (issue #754)"
+  ]
+}

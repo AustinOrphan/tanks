@@ -52,7 +52,8 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
       'extra.controllers',
       'extra.settings.reset-armed',
     ]);
-    expect(hitSweepStates()).toHaveLength(24);
+    // 25 since issue #754's Controller Layout state: a Settings pane, so it is swept.
+    expect(hitSweepStates()).toHaveLength(25);
   });
 
   it('sweeps a state added to the catalogue without being told to', () => {

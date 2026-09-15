@@ -77,6 +77,7 @@ on:
           - screen.records.stats
           - screen.records.stats.empty
           - screen.settings
+          - screen.settings.controller-layout
           - screen.startup.match-failed
           - screen.startup.probe-blocked
           - screen.startup.unsupported-render

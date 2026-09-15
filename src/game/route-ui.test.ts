@@ -35,6 +35,8 @@ import type { TankPreview } from '../render/preview';
 import { WORKBENCH_CATALOG } from '../render/gallery/workbench-scene';
 import { defaultGallerySelection, formatGallerySelection, parseGallerySelection } from './gallery-selection';
 import type { GalleryWorkbenchSceneOptions } from './gallery-workbench';
+import type { GamepadLike } from '../input/gamepad';
+import type { ControllerLayoutModel } from './controller-layout';
 
 type Triple = [string, string, string | null];
 
@@ -120,6 +122,8 @@ interface Fixture {
   cancelledFrames: number[];
   /** Every key and value in the page's storage, so a WRITE anywhere is visible at once. */
   storageSnapshot: () => Record<string, string>;
+  /** What `deps.menuGamepads` reports. Push, replace or empty it to move the hardware. */
+  pads: Array<GamepadLike | null>;
 }
 
 function fixture(
@@ -170,6 +174,8 @@ function fixture(
     cancelledFrames: [] as number[],
     /** How many times `deps.readPadDiagnostics` was called -- the poll's own tick count. */
     padDiagnosticReads: 0,
+    /** The pads `deps.menuGamepads` reports: none until a case plugs one in. */
+    pads: [] as Array<GamepadLike | null>,
   };
 
   const hostListeners = new Map<string, Array<() => void>>();
@@ -237,6 +243,8 @@ function fixture(
       box.campaignRequests += 1;
     },
     initialVersusConfig: null,
+    // What is plugged in, as the controller layout pane reads it (issue #754). A case moves it.
+    menuGamepads: () => box.pads,
     ...(opts.galleryWorkbench === undefined ? {} : { galleryWorkbench: opts.galleryWorkbench }),
   };
 
@@ -289,6 +297,7 @@ function fixture(
       return cb;
     },
     cancelledFrames: box.cancelledFrames,
+    pads: box.pads,
     storageSnapshot: () => {
       const out: Record<string, string> = {};
       for (let i = 0; i < storage.length; i++) {
@@ -316,8 +325,12 @@ function fixture(
 // Issue #599's self-test pair are the newest: they scope a per-frame hardware poll to
 // exactly while the pane is open, the same shape `onControllersOpen`/`Close` use for the
 // assignment panel's hotplug listeners.
+// Issue #754's three are the newest: the controller layout pane's open/close pair scopes its
+// settings subscription, hotplug listeners and capture to the pane, and its request handler
+// is the one place a layout is written.
 const ROUTE_HANDLERS = [
-  'onCampaignOpen', 'onControllerRumbleChange', 'onControllerSelfTestClose',
+  'onCampaignOpen', 'onControllerLayoutClose', 'onControllerLayoutOpen', 'onControllerLayoutRequest',
+  'onControllerRumbleChange', 'onControllerSelfTestClose',
   'onControllerSelfTestOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
   'onGalleryClose', 'onGalleryOpen',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
@@ -910,5 +923,143 @@ describe('the controller self-test poll is scoped to the pane (issue #599)', () 
     f.fire('onControllerSelfTestClose');
     expect(f.storageSnapshot(), 'opening the self-test wrote to a store').toEqual(before);
     expect(new Set(f.hudCalls.slice(callsBefore))).toEqual(new Set(['setPadDiagnostics']));
+  });
+});
+
+describe('the controller layout pane is painted, written and captured for by the page (issue #754)', () => {
+  /** A standard-mapped pad with the listed buttons held. */
+  const standardPad = (...pressed: number[]): GamepadLike => ({
+    id: 'Test Pad',
+    mapping: 'standard',
+    axes: [0, 0, 0, 0],
+    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
+  });
+  const lastModel = (f: Fixture): ControllerLayoutModel => {
+    const painted = f.argsOf('setControllerLayout');
+    expect(painted.length, 'the pane was never painted').toBeGreaterThan(0);
+    return painted[painted.length - 1][0] as ControllerLayoutModel;
+  };
+  const stored = (f: Fixture) => f.deps.settings.snapshot().input.controllerLayouts;
+
+  it('paints the no-controller state on open, and the controller once one is plugged in', () => {
+    const f = fixture();
+    f.fire('onControllerLayoutOpen');
+    expect(lastModel(f).profileName).toBeNull();
+    f.pads.push(standardPad());
+    f.hostFire('gamepadconnected');
+    expect(lastModel(f).profileName).toBe('Standard controller');
+    expect(lastModel(f).rows[0]).toEqual({ action: 'fire', actionName: 'Fire', controlName: 'RT / R2' });
+  });
+
+  it('captures the next NEW press and stores both halves of the swap it makes', () => {
+    const f = fixture();
+    f.pads.push(standardPad(0)); // A still held: the press that chose the row
+    f.fire('onControllerLayoutOpen');
+    f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'fire' });
+    expect(f.routeUi.capturingBinding()).toBe(true);
+    expect(lastModel(f).capturing).toBe('fire');
+    // Two frames with A still down: the first only records what is held, so the second is the
+    // one that would bind a held button.
+    f.routeUi.pollBindingCapture();
+    f.routeUi.pollBindingCapture();
+    expect(f.routeUi.capturingBinding(), 'the held A bound itself').toBe(true);
+    expect(stored(f), 'the held A bound itself').toEqual({});
+    f.pads[0] = standardPad(1); // A up, B down
+    f.routeUi.pollBindingCapture();
+    expect(f.routeUi.capturingBinding()).toBe(false);
+    expect(stored(f)).toEqual({ standard: { preset: 'recommended', bindings: { fire: 'face-right', back: 'trigger-right' } } });
+    const model = lastModel(f);
+    expect(model.capturing).toBeNull();
+    expect(model.rows.find((r) => r.action === 'back')?.controlName).toBe('RT / R2');
+    expect(model.status).toBe('Fire is now B / Circle. Back moved to RT / R2.');
+    // The one live region hears it: focus is still on the row, so nothing else would.
+    expect(f.argsOf('showToast').at(-1)).toEqual(['Fire is now B / Circle. Back moved to RT / R2.']);
+  });
+
+  it('a new D-pad press cancels and stores nothing', () => {
+    const f = fixture();
+    f.pads.push(standardPad());
+    f.fire('onControllerLayoutOpen');
+    f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'back' });
+    f.routeUi.pollBindingCapture();
+    f.pads[0] = standardPad(13);
+    f.routeUi.pollBindingCapture();
+    expect(f.routeUi.capturingBinding()).toBe(false);
+    expect(stored(f)).toEqual({});
+    expect(lastModel(f).status).toBe('Back was not changed.');
+  });
+
+  it('Cancel ends the wait, and the pad reads nothing afterwards', () => {
+    const f = fixture();
+    f.pads.push(standardPad());
+    f.fire('onControllerLayoutOpen');
+    f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'mine' });
+    f.fire('onControllerLayoutRequest', { kind: 'cancel' });
+    expect(f.routeUi.capturingBinding()).toBe(false);
+    f.pads[0] = standardPad(4);
+    f.routeUi.pollBindingCapture();
+    f.routeUi.pollBindingCapture();
+    expect(stored(f)).toEqual({});
+    expect(lastModel(f).status).toBe('Mine was not changed.');
+  });
+
+  it('unplugging the controller ends a capture rather than binding the next pad plugged in', () => {
+    const f = fixture();
+    f.pads.push(standardPad());
+    f.fire('onControllerLayoutOpen');
+    f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'fire' });
+    f.pads.length = 0;
+    f.hostFire('gamepaddisconnected');
+    expect(f.routeUi.capturingBinding()).toBe(false);
+    expect(lastModel(f).profileName).toBeNull();
+  });
+
+  it('the preset and Reset write the store, and the pane repaints from what it holds', () => {
+    const f = fixture();
+    f.pads.push(standardPad());
+    f.fire('onControllerLayoutOpen');
+    f.fire('onControllerLayoutRequest', { kind: 'preset', preset: 'southpaw' });
+    expect(stored(f)).toEqual({ standard: { preset: 'southpaw', bindings: {} } });
+    expect(lastModel(f).preset).toBe('southpaw');
+    expect(lastModel(f).customised).toBe(true);
+    f.fire('onControllerLayoutRequest', { kind: 'reset' });
+    expect(stored(f)).toEqual({});
+    expect(lastModel(f).customised).toBe(false);
+    expect(lastModel(f).status).toBe('Recommended layout restored.');
+  });
+
+  it('writes nothing with no controller connected, since there is no profile to write for', () => {
+    const f = fixture();
+    const before = f.storageSnapshot();
+    f.fire('onControllerLayoutOpen');
+    f.fire('onControllerLayoutRequest', { kind: 'preset', preset: 'southpaw' });
+    f.fire('onControllerLayoutRequest', { kind: 'reset' });
+    f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'fire' });
+    expect(f.routeUi.capturingBinding()).toBe(false);
+    expect(f.storageSnapshot()).toEqual(before);
+  });
+
+  it('close ends the capture, the settings subscription and both hotplug listeners', () => {
+    const f = fixture();
+    f.pads.push(standardPad());
+    f.fire('onControllerLayoutOpen');
+    expect(f.hostEvents).toEqual(['+gamepadconnected', '+gamepaddisconnected']);
+    f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'fire' });
+    f.fire('onControllerLayoutClose');
+    expect(f.routeUi.capturingBinding()).toBe(false);
+    expect(f.hostEvents).toEqual(['+gamepadconnected', '+gamepaddisconnected', '-gamepadconnected', '-gamepaddisconnected']);
+    const paints = f.argsOf('setControllerLayout').length;
+    f.deps.settings.setControllerLayout('standard', { preset: 'southpaw', bindings: {} });
+    f.hostFire('gamepadconnected');
+    expect(f.argsOf('setControllerLayout'), 'a closed pane was repainted').toHaveLength(paints);
+  });
+
+  it('ignores a request that arrives with the pane closed', () => {
+    const f = fixture();
+    f.pads.push(standardPad());
+    f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'fire' });
+    f.fire('onControllerLayoutRequest', { kind: 'preset', preset: 'southpaw' });
+    expect(f.routeUi.capturingBinding()).toBe(false);
+    expect(stored(f)).toEqual({});
   });
 });

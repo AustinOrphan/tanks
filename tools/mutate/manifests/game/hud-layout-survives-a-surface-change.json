@@ -1,0 +1,14 @@
+{
+  "id": "hud-layout-survives-a-surface-change",
+  "file": "src/game/hud.ts",
+  "find": "    showControllerLayout(false);",
+  "replace": "    void showControllerLayout;",
+  "expect": "killed",
+  "why": "A surface change drops every layer without a Back, so `setState` has to close the Controller Layout pane itself. Otherwise its close never fires, and `route-ui.ts` keeps a capture, a settings subscription and two hotplug listeners over a match that started underneath it.",
+  "tests": [
+    "src/game/hud.controller-layout.test.ts"
+  ],
+  "killedBy": [
+    "the controller layout pane (issue #754) closes when a surface change takes the pane away"
+  ]
+}

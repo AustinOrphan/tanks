@@ -43,8 +43,12 @@ const controlsSection = (root: HTMLElement): HTMLElement =>
  * than by removing the node because `focusableControls` asks about resolved display, which
  * is the same question the production path asks.
  */
+// Hides BOTH entries the verdict does not own: Controllers, and since issue #754 Controller
+// Layout beside it. Either one left visible keeps the section alive for a reason unrelated to
+// the claim under test.
 function hideControllersEntry(root: HTMLElement): HTMLStyleElement {
   q(root, '.hud-settings-controllers').classList.add('hud-settings-controllers--test-hidden');
+  q(root, '.hud-settings-layout').classList.add('hud-settings-controllers--test-hidden');
   const style = document.createElement('style');
   style.textContent = '.hud-settings-controllers--test-hidden{display:none}';
   document.head.appendChild(style);

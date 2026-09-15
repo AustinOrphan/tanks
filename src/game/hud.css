@@ -1860,6 +1860,90 @@
   display: none;
 }
 
+/* THE CONTROLLER LAYOUT (issue #754): the self-test's scrolling page, top-aligned from the
+   start for its reason, holding a short column of controls. */
+.hud-layout {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-5);
+  overflow-y: auto;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
+}
+
+.hud-layout--hidden {
+  display: none;
+}
+
+.hud-layout-line,
+.hud-layout-profile,
+.hud-layout-empty,
+.hud-layout-status {
+  margin: 0;
+  max-width: 46ch;
+  text-align: center;
+}
+
+.hud-layout-line,
+.hud-layout-empty {
+  opacity: 0.9;
+}
+
+.hud-layout-profile {
+  font-weight: 600;
+}
+
+/* A status line that is empty still holds its height, so a capture's result arriving does not
+   move the controls under the player's focus. */
+.hud-layout-status {
+  min-height: 1.4em;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+
+.hud-layout-body,
+.hud-layout-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--hud-space-3);
+}
+
+.hud-layout-bindings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--hud-space-2);
+}
+
+/* One width for all five rows, the widest one's, so the list reads as a column rather than a
+   ragged stack: measured in the first capture of this pane, where each row was as wide as its
+   own button name. */
+.hud-layout-bind {
+  width: 100%;
+  min-width: 18ch;
+}
+
+/* The waiting row reads as pressed, in the same terms as a chosen control elsewhere. */
+.hud-layout-bind[aria-pressed='true'] {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* `hidden` has to win over `.ui-btn`'s own display, or a hidden Cancel stays on screen. */
+.hud-layout-body [hidden] {
+  display: none;
+}
+
 /* THE GALLERY WORKBENCH (issue #730): the self-test's scrolling page, holding a form, a
    fixed-buffer canvas scaled to fit, a timeline and a link. */
 .hud-gallery {

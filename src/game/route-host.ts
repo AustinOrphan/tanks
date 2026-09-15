@@ -21,7 +21,6 @@ import {
 import { createGamepadMenuPoller } from '../input/gamepad-menu';
 import { controllerLayoutFor } from './settings';
 import { settingRelevance } from './control-relevance';
-import type { GetGamepads } from '../input/gamepad';
 import type { UiAction } from '../input/ui-actions';
 import { createModalityTracker, type Modality } from './modality';
 import type { VersusConfig } from './versus-config';
@@ -79,13 +78,7 @@ export type RouteHostDeps = RouteUiDeps &
      * session's own view of those deps no longer names it.
      */
     readonly createHud: (root: HTMLElement) => Hud;
-    /**
-     * Menu-time gamepad input (issue #494): the pads the page's own poller reads -- the
-     * union of every connected pad, never the `pad[i] -> slot[i]` routing a session uses
-     * -- and the page frame loop it is sampled on. Injected like every other reader so
-     * jsdom drives menus through a fake pad and a fake frame clock.
-     */
-    readonly menuGamepads: GetGamepads;
+    // `menuGamepads` is on `RouteUiDeps` since issue #754: the controller layout pane reads it.
     /** Schedule one page frame; returns the cancel. `requestAnimationFrame` in the browser. */
     readonly requestFrame: (cb: (now: number) => void) => () => void;
     /**
@@ -1021,6 +1014,10 @@ export function createRouteHost(
       onLaunchGesture();
       return;
     }
+    // A controller-layout capture takes EVERY pad action (issue #754), Back and Pause
+    // included, because the button being chosen may be either. The poller keeps running, so
+    // the press that completes a capture is a held button, not a new one, on the next frame.
+    if (routeUi.capturingBinding()) return;
     if (sm.isSimulating && action !== 'pause') return;
     if (hud.act(action)) return;
     if (action === 'pause') {
@@ -1039,6 +1036,8 @@ export function createRouteHost(
   const pollFrame = (now: number): void => {
     cancelFrame = null;
     menuPoller.poll(now);
+    // The Controller Layout capture, on the same frame (issue #754): see `RouteUi.pollBindingCapture`.
+    routeUi.pollBindingCapture();
     if (polling) cancelFrame = deps.requestFrame(pollFrame);
   };
   cancelFrame = deps.requestFrame(pollFrame);

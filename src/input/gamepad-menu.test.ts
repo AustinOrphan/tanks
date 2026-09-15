@@ -454,6 +454,41 @@ describe("createGamepadMenuPoller: the player's layout (issue #754)", () => {
     expect(control.drain()).toEqual([]);
   });
 
+  it('adopts a button held across a layout change as held, not pressed, and reads it once pressed again', () => {
+    // The Controller Layout pane binds the button a player is still holding: Back moved onto X
+    // with X down. Held state is kept per action, so without adoption X is a new Back press on
+    // the next poll, and the pane closes on the press that only chose the button.
+    let layout: ControlLayout = { preset: 'recommended', bindings: {} };
+    const p = fakePad();
+    const emitted: UiAction[] = [];
+    const poller = createGamepadMenuPoller(() => [p.pad], (a) => emitted.push(a), () => layout);
+    p.press(2); // face-left: no menu action yet
+    poller.poll(0);
+    layout = { preset: 'recommended', bindings: { back: 'face-left' } };
+    poller.poll(1);
+    poller.poll(2);
+    expect(emitted, 'a held button became a Back press when the layout moved under it').toEqual([]);
+    p.release(2);
+    poller.poll(3);
+    p.press(2);
+    poller.poll(4);
+    expect(emitted).toEqual(['back']);
+  });
+
+  it('compares mappings by value: a new layout object that maps the same buttons adopts nothing', () => {
+    // The negative control for the case above. An identity comparison would read this fresh
+    // object as a remap and swallow the genuine press that lands on the same poll.
+    let layout: ControlLayout = { preset: 'recommended', bindings: { back: 'face-left' } };
+    const p = fakePad();
+    const emitted: UiAction[] = [];
+    const poller = createGamepadMenuPoller(() => [p.pad], (a) => emitted.push(a), () => layout);
+    poller.poll(0);
+    layout = { preset: 'recommended', bindings: { back: 'face-left' } };
+    p.press(2);
+    poller.poll(1);
+    expect(emitted).toEqual(['back']);
+  });
+
   it('moves stick navigation to the right stick under Southpaw, and leaves the D-pad where it is', () => {
     const southpaw: ControlLayout = { preset: 'southpaw', bindings: {} };
     const p = fakePad();

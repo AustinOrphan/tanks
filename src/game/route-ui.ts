@@ -5,6 +5,21 @@ import type { SkinId } from '../presentation/customization';
 import type { GameStateMachine } from './state';
 import type { Hud } from './hud';
 import type { GameDeps } from './loop';
+import {
+  activeLayoutProfile,
+  cancelledStatus,
+  captureResultStatus,
+  captureStatus,
+  createBindingCapture,
+  layoutModel,
+  presetStatus,
+  rebind,
+  RESET_STATUS,
+  type BindingCapture,
+} from './controller-layout';
+import { controllerLayoutFor } from './settings';
+import { RECOMMENDED_LAYOUT, type ControlLayout } from '../input/gamepad-profile';
+import { readConnectedPads, type GetGamepads } from '../input/gamepad';
 
 /**
  * The APPLICATION-ROUTE half of the HUD's handlers, owned above a gameplay session
@@ -94,6 +109,18 @@ export interface RouteUi {
    * is why these three handlers could move at all.
    */
   setStyleSink(sink: StyleSink | null): void;
+  /**
+   * Read one frame of pads for a controller-layout capture, if one is waiting (issue #754).
+   *
+   * Called by `route-host.ts` on its page frame, beside the menu poller -- not from a frame loop
+   * of its own, so the capture and the poller see the same frames and one stop ends both. What
+   * keeps the completing press out of the menu is not their order: the poller's dispatch stands
+   * aside while a capture waits (see `capturingBinding`), and `gamepad-menu.ts` adopts a button
+   * held across the layout change as held. Measured: swapping the two calls changes no test.
+   */
+  pollBindingCapture(): void;
+  /** Whether a capture is waiting, so the page's pad dispatch can stand aside for it. */
+  capturingBinding(): boolean;
 }
 
 /** Where a chosen style triple goes when a gameplay renderer exists to receive it. */
@@ -126,7 +153,17 @@ export type RouteUiDeps = Pick<
   | 'requestVersusSession'
   | 'requestCampaignSession'
   | 'initialVersusConfig'
->;
+> & {
+  /**
+   * Menu-time gamepad input (issue #494): the pads the page's own poller reads -- the union of
+   * every connected pad, never the `pad[i] -> slot[i]` routing a session uses. Injected like
+   * every other reader so jsdom drives menus through a fake pad and a fake frame clock.
+   *
+   * Here rather than only on `RouteHostDeps` since issue #754: the controller layout pane
+   * reads the same pads to name the controller it configures and to capture a press.
+   */
+  readonly menuGamepads: GetGamepads;
+};
 
 /**
  * Wire the route handlers onto a HUD and a state machine.
@@ -400,6 +437,109 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
   });
 
   /**
+   * THE CONTROLLER LAYOUT PANE (issue #754), live for exactly as long as it is open.
+   *
+   * WHICH CONTROLLER: the first connected pad the game reads. Layouts are stored per profile,
+   * and with one standard profile shipped (#606 owns the next) every readable pad is that one;
+   * a player with pads of two profiles configures the first, which the pane names.
+   *
+   * WHAT KEEPS IT CURRENT: the effective-settings subscription (a store write, from here or
+   * anywhere) and the two hotplug events, for the Controllers panel's reason -- nothing else
+   * runs while the page sits in Settings. Read once on open, since hotplug fires only on change.
+   *
+   * THE STORE IS THE ONLY WRITE. Every request writes `deps.settings` and repaints from what the
+   * store then holds; the pane never shows a value the store did not accept.
+   */
+  let layoutOpen = false;
+  let capture: BindingCapture | null = null;
+  let layoutStatus = '';
+  let stopLayoutSettings: (() => void) | null = null;
+  const storedLayout = (profileId: string): ControlLayout =>
+    controllerLayoutFor(deps.effectiveSettings.current().controllerLayouts, profileId);
+  function paintLayout(): void {
+    if (!layoutOpen) return;
+    const profile = activeLayoutProfile(readConnectedPads(deps.menuGamepads));
+    // A capture belongs to the controller kind it started on. If none is connected any more,
+    // the wait ends with it rather than binding whatever is plugged in next.
+    if (capture !== null && profile?.id !== capture.profile.id) {
+      layoutStatus = cancelledStatus(capture.action);
+      capture = null;
+    }
+    const layout = profile === null ? RECOMMENDED_LAYOUT : storedLayout(profile.id);
+    hud.setControllerLayout(layoutModel(profile, layout, capture?.action ?? null, layoutStatus));
+  }
+  hud.onControllerLayoutOpen(() => {
+    layoutOpen = true;
+    capture = null;
+    layoutStatus = '';
+    stopLayoutSettings = deps.effectiveSettings.subscribe(paintLayout);
+    deps.host.addEventListener('gamepadconnected', paintLayout);
+    deps.host.addEventListener('gamepaddisconnected', paintLayout);
+    paintLayout();
+  });
+  hud.onControllerLayoutClose(() => {
+    layoutOpen = false;
+    capture = null;
+    layoutStatus = '';
+    stopLayoutSettings?.();
+    stopLayoutSettings = null;
+    deps.host.removeEventListener('gamepadconnected', paintLayout);
+    deps.host.removeEventListener('gamepaddisconnected', paintLayout);
+  });
+  hud.onControllerLayoutRequest((request) => {
+    if (!layoutOpen) return;
+    if (request.kind === 'cancel') {
+      if (capture !== null) layoutStatus = cancelledStatus(capture.action);
+      capture = null;
+      paintLayout();
+      return;
+    }
+    const profile = activeLayoutProfile(readConnectedPads(deps.menuGamepads));
+    if (profile === null) {
+      paintLayout();
+      return;
+    }
+    if (request.kind === 'capture') {
+      capture = createBindingCapture(request.action, profile);
+      layoutStatus = captureStatus(request.action);
+      paintLayout();
+      return;
+    }
+    capture = null;
+    // The status is set BEFORE the write: an accepted write repaints through the subscription,
+    // and that repaint has to carry the sentence describing it.
+    if (request.kind === 'preset') {
+      layoutStatus = presetStatus(request.preset);
+      deps.settings.setControllerLayout(profile.id, { ...storedLayout(profile.id), preset: request.preset });
+    } else {
+      layoutStatus = RESET_STATUS;
+      deps.settings.resetControllerLayout(profile.id);
+    }
+    paintLayout();
+  });
+
+  function pollBindingCapture(): void {
+    if (capture === null) return;
+    const step = capture.step(readConnectedPads(deps.menuGamepads));
+    if (step.kind === 'waiting') return;
+    const { action, profile } = capture;
+    capture = null;
+    if (step.kind === 'cancel') {
+      layoutStatus = cancelledStatus(action);
+    } else {
+      // Both halves of a swap in ONE write: the resolver refuses a one-sided binding onto an
+      // occupied button (see `rebind`).
+      const result = rebind(profile, storedLayout(profile.id), action, step.controlId);
+      layoutStatus = captureResultStatus(profile, action, step.controlId, result);
+      if (result.kind === 'bound') deps.settings.setControllerLayout(profile.id, result.layout);
+    }
+    paintLayout();
+    // Announced through the HUD's one live region. A capture ends on a controller press with
+    // focus still on the row, so without this a screen-reader player hears nothing happen.
+    hud.showToast(layoutStatus);
+  }
+
+  /**
    * THE GALLERY WORKBENCH (issue #730), held the way the Customize preview is: mounted when
    * the pane opens, disposed when it closes, and disposed again, harmlessly, at teardown.
    *
@@ -492,5 +632,7 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     setStyleSink(sink: StyleSink | null): void {
       styleSink = sink;
     },
+    pollBindingCapture,
+    capturingBinding: () => capture !== null,
   };
 }

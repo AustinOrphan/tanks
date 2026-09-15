@@ -250,6 +250,7 @@ function fixture(
         },
       }) as unknown as TankPreview,
     readDetectedPads: () => [],
+    menuGamepads: () => box.pads,
     // A host that actually registers, so a test can fire the page's own listeners rather
     // than dispatching at a window the route host never bound (issue #496's input paths).
     host: {
@@ -281,7 +282,6 @@ function fixture(
     // page chrome, so the host reads `backdrop` itself rather than waiting for a session
     // to push one. `opts.devFlags` overrides exactly the fields a case is about.
     devFlags: { ...DEV_FLAGS_OFF, ...opts.devFlags },
-    menuGamepads: () => box.pads,
     now: () => box.now,
     requestFrame: (cb) => {
       box.frames.push(cb);
@@ -1934,6 +1934,72 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     f.pads[0] = pad(2); // face-left, the bound Back
     frame(f, 64);
     expect(customize.classList.contains('ui-surface--leaving'), 'the bound Back did not pop the pane').toBe(true);
+  });
+
+  it('rebinds Fire onto B from a controller alone, and the B that completes it does not also back out (issue #754)', () => {
+    // THE DISPATCH STANDS ASIDE while a capture waits. Without that, the B chosen for Fire is
+    // ALSO Back on the frame it lands: the pane closes, and the capture with it. The next case
+    // is the other half: a button that BECOMES a menu action by being bound.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
+    (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
+    f.pads.push(pad(0)); // A: confirm
+    frame(f, 0);
+    const pane = f.root.querySelector('.hud-layout') as HTMLElement;
+    expect(pane.classList.contains('hud-layout--hidden'), 'Confirm did not open the pane').toBe(false);
+    f.pads[0] = pad();
+    frame(f, 16);
+
+    const fire = f.root.querySelector('.hud-layout-bind[data-action="fire"]') as HTMLButtonElement;
+    fire.focus();
+    f.pads[0] = pad(0); // A on the Fire row: the capture starts with A held
+    frame(f, 32);
+    expect(fire.textContent).toBe('Fire: press a button…');
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(1); // B: the choice
+    frame(f, 64);
+    expect(f.stores.settings.snapshot().input.controllerLayouts).toEqual({
+      standard: { preset: 'recommended', bindings: { fire: 'face-right', back: 'trigger-right' } },
+    });
+    expect(pane.classList.contains('ui-surface--leaving'), 'the B that completed the capture also backed out').toBe(false);
+    expect(fire.textContent).toBe('Fire: B / Circle');
+
+    f.pads[0] = pad();
+    frame(f, 80);
+    f.pads[0] = pad(7); // RT, where Back moved
+    frame(f, 96);
+    expect(pane.classList.contains('ui-surface--leaving'), 'the moved Back did not leave the pane').toBe(true);
+  });
+
+  it('Back moved onto X does not back out while X is still held from choosing it (issue #754)', () => {
+    // A LAYOUT CHANGE UNDER A HELD BUTTON. X is no menu action until the capture binds Back to
+    // it, and it is still down on the frames after. The menu poller keeps held state per
+    // action, so without adopting X as held it reads as a new Back and the pane closes on the
+    // press that was only meant to choose a button. Found by this case, in `gamepad-menu.ts`.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
+    (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
+    f.pads.push(pad(0)); // A: confirm
+    frame(f, 0);
+    const pane = f.root.querySelector('.hud-layout') as HTMLElement;
+    f.pads[0] = pad();
+    frame(f, 16);
+    const back = f.root.querySelector('.hud-layout-bind[data-action="back"]') as HTMLButtonElement;
+    back.focus();
+    f.pads[0] = pad(0); // A on the Back row
+    frame(f, 32);
+    expect(back.textContent).toBe('Back: press a button…');
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(2); // X: the choice
+    frame(f, 64);
+    expect(f.stores.settings.snapshot().input.controllerLayouts).toEqual({
+      standard: { preset: 'recommended', bindings: { back: 'face-left' } },
+    });
+    expect(pane.classList.contains('ui-surface--leaving'), 'the X that moved Back also backed out').toBe(false);
+    frame(f, 80); // X still held: not a new press
+    expect(pane.classList.contains('ui-surface--leaving'), 'a held X backed out').toBe(false);
   });
 
   it('any button at Launch dismisses the splash, exactly as a key does', () => {
