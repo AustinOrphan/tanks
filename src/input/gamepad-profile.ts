@@ -511,6 +511,18 @@ export function resolveEffectiveProfile(profile: ControlProfile, layout: Control
 }
 
 /**
+ * The bindable control at a button index on this profile, or `null` when the profile names none
+ * there.
+ *
+ * The reverse of the lookup `resolveEffectiveProfile` makes. A caller holding an index -- a
+ * button just pressed, or the button an action reads now -- names it through this, so the raw
+ * number never has to reach anything a player sees (issue #754).
+ */
+export function controlIdAt(profile: ControlProfile, index: number): string | null {
+  return (profile.bindable ?? []).find((control) => control.index === index)?.id ?? null;
+}
+
+/**
  * `resolveEffectiveProfile` as a reader uses it: the effective profile for the pad in hand,
  * re-resolved only when the profile or the looked-up layout changes.
  *

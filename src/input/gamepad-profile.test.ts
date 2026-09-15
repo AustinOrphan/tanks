@@ -9,6 +9,7 @@ import {
   validateProfileCatalogue,
   BINDABLE_ACTIONS,
   RECOMMENDED_LAYOUT,
+  controlIdAt,
   createEffectiveProfileReader,
   presetsFor,
   resolveEffectiveProfile,
@@ -483,5 +484,19 @@ describe('createEffectiveProfileReader (issue #754)', () => {
     });
     read(STANDARD_PROFILE);
     expect(asked).toEqual(['standard']);
+  });
+});
+
+describe('controlIdAt (issue #754)', () => {
+  it('names the control at every standard bindable index, the reverse of the list it reads', () => {
+    const bindable = STANDARD_PROFILE.bindable ?? [];
+    expect(bindable).toHaveLength(12);
+    for (const control of bindable) expect(controlIdAt(STANDARD_PROFILE, control.index)).toBe(control.id);
+  });
+
+  it('names nothing where the profile lists no bindable control: the D-pad, Home, or a bare profile', () => {
+    for (const index of [12, 13, 14, 15, 16, 99]) expect(controlIdAt(STANDARD_PROFILE, index)).toBeNull();
+    const bare: ControlProfile = { ...STANDARD_PROFILE, bindable: undefined };
+    expect(controlIdAt(bare, 7)).toBeNull();
   });
 });
