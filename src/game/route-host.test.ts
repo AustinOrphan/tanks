@@ -1936,6 +1936,42 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     expect(customize.classList.contains('ui-surface--leaving'), 'the bound Back did not pop the pane').toBe(true);
   });
 
+  it('rebinds Fire onto B from a controller alone, and the B that completes it does not also back out (issue #754)', () => {
+    // THE ORDERING THIS PAGE OWNS. A capture reads pads on the page frame straight after the
+    // menu poller, and the poller's dispatch stands aside while a capture waits. Either half
+    // wrong and the B chosen for Fire is ALSO Back: the pane closes, and the capture with it.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
+    (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
+    f.pads.push(pad(0)); // A: confirm
+    frame(f, 0);
+    const pane = f.root.querySelector('.hud-layout') as HTMLElement;
+    expect(pane.classList.contains('hud-layout--hidden'), 'Confirm did not open the pane').toBe(false);
+    f.pads[0] = pad();
+    frame(f, 16);
+
+    const fire = f.root.querySelector('.hud-layout-bind[data-action="fire"]') as HTMLButtonElement;
+    fire.focus();
+    f.pads[0] = pad(0); // A on the Fire row: the capture starts with A held
+    frame(f, 32);
+    expect(fire.textContent).toBe('Fire: press a button…');
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(1); // B: the choice
+    frame(f, 64);
+    expect(f.stores.settings.snapshot().input.controllerLayouts).toEqual({
+      standard: { preset: 'recommended', bindings: { fire: 'face-right', back: 'trigger-right' } },
+    });
+    expect(pane.classList.contains('ui-surface--leaving'), 'the B that completed the capture also backed out').toBe(false);
+    expect(fire.textContent).toBe('Fire: B / Circle');
+
+    f.pads[0] = pad();
+    frame(f, 80);
+    f.pads[0] = pad(7); // RT, where Back moved
+    frame(f, 96);
+    expect(pane.classList.contains('ui-surface--leaving'), 'the moved Back did not leave the pane').toBe(true);
+  });
+
   it('any button at Launch dismisses the splash, exactly as a key does', () => {
     const f = fixture();
     expect(f.host.sm.atLaunch).toBe(true);

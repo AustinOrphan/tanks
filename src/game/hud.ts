@@ -7403,6 +7403,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // surface change goes through its close function rather than the bare class add its
     // siblings use -- `route-ui.ts`'s per-frame poll would otherwise outlive the pane.
     showControllerSelfTest(false);
+    // The controller layout, for the self-test's reason (issue #754): its close is what ends a
+    // capture, a settings subscription and two hotplug listeners in `route-ui.ts`.
+    showControllerLayout(false);
     // The workbench for the same reason: its body holds a WebGL renderer `route-ui.ts` must
     // dispose, and a match starting under the pane would otherwise keep it drawing.
     showGallery(false);
