@@ -1938,9 +1938,8 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
 
   it('rebinds Fire onto B from a controller alone, and the B that completes it does not also back out (issue #754)', () => {
     // THE DISPATCH STANDS ASIDE while a capture waits. Without that, the B chosen for Fire is
-    // ALSO Back on the frame it lands: the pane closes, and the capture with it. (The frame
-    // ORDER is the next case's: here B stops being Back once bound, so order alone changes
-    // nothing.)
+    // ALSO Back on the frame it lands: the pane closes, and the capture with it. The next case
+    // is the other half: a button that BECOMES a menu action by being bound.
     const f = fixture({ launchDismissed: true, realHud: true });
     (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
     (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
@@ -1973,11 +1972,11 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     expect(pane.classList.contains('ui-surface--leaving'), 'the moved Back did not leave the pane').toBe(true);
   });
 
-  it('reads a capture AFTER the menu poller: Back moved onto X does not back out on the press that moved it (issue #754)', () => {
-    // THE FRAME ORDER. X is no menu action until the capture binds Back to it. Polled after the
-    // menu, X reaches the poller while it is still nothing, and is a held button on the next
-    // frame. Polled before, the capture binds first and the poller then reads the same press
-    // as the new Back: the pane closes on the press that was only meant to choose a button.
+  it('Back moved onto X does not back out while X is still held from choosing it (issue #754)', () => {
+    // A LAYOUT CHANGE UNDER A HELD BUTTON. X is no menu action until the capture binds Back to
+    // it, and it is still down on the frames after. The menu poller keeps held state per
+    // action, so without adopting X as held it reads as a new Back and the pane closes on the
+    // press that was only meant to choose a button. Found by this case, in `gamepad-menu.ts`.
     const f = fixture({ launchDismissed: true, realHud: true });
     (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
     (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();

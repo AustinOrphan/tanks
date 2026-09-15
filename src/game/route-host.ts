@@ -1036,7 +1036,7 @@ export function createRouteHost(
   const pollFrame = (now: number): void => {
     cancelFrame = null;
     menuPoller.poll(now);
-    // AFTER the poll, on the same frame (issue #754): see `RouteUi.pollBindingCapture`.
+    // The Controller Layout capture, on the same frame (issue #754): see `RouteUi.pollBindingCapture`.
     routeUi.pollBindingCapture();
     if (polling) cancelFrame = deps.requestFrame(pollFrame);
   };

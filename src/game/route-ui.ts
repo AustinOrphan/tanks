@@ -112,11 +112,11 @@ export interface RouteUi {
   /**
    * Read one frame of pads for a controller-layout capture, if one is waiting (issue #754).
    *
-   * Called by `route-host.ts` on its page frame, straight AFTER the menu poller -- not from a
-   * frame loop of its own. The order is the point: the press that completes a capture is
-   * dropped by the poller on the frame it lands (see `capturingBinding`), and is a held button,
-   * not a new one, on the next. From a separate loop the two could run in either order, and a
-   * B chosen for Fire could also close the pane.
+   * Called by `route-host.ts` on its page frame, beside the menu poller -- not from a frame loop
+   * of its own, so the capture and the poller see the same frames and one stop ends both. What
+   * keeps the completing press out of the menu is not their order: the poller's dispatch stands
+   * aside while a capture waits (see `capturingBinding`), and `gamepad-menu.ts` adopts a button
+   * held across the layout change as held. Measured: swapping the two calls changes no test.
    */
   pollBindingCapture(): void;
   /** Whether a capture is waiting, so the page's pad dispatch can stand aside for it. */

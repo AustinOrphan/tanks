@@ -11,6 +11,6 @@
   ],
   "killedBy": [
     "createGamepadMenuPoller: the player's layout (issue #754) adopts a button held across a layout change as held, not pressed, and reads it once pressed again",
-    "createRouteHost: the gamepad menu poller (issue #494) reads a capture AFTER the menu poller: Back moved onto X does not back out on the press that moved it (issue #754)"
+    "createRouteHost: the gamepad menu poller (issue #494) Back moved onto X does not back out while X is still held from choosing it (issue #754)"
   ]
 }
