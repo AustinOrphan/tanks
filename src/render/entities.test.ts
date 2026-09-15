@@ -30,7 +30,8 @@ import { distance, overFelt } from '../presentation/colour-distance';
  */
 const OWNER_FLOOR = 15;
 const TEAM_FLOOR = 25;
-import { protectedOpacity } from './spawn-anim';
+import { protectedOpacity, SPAWN_ANIMATORS } from './spawn-anim';
+import type { SpawnAnimId } from '../presentation/customization';
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
@@ -2467,6 +2468,61 @@ describe('spawn animation (#199)', () => {
     views.dispose();
   });
 
+  it.each(['warp', 'rise', 'beacon'] as const)(
+    '%s: a shielded respawn played frame by frame never steps its opacity (issue #230)',
+    (variant) => {
+      // THE COMPOSITION, not the animator. spawn-anim.test.ts pins `invincible` at p = 0 as
+      // opaque, but the entrance runs for ENTRANCE_SECONDS of RENDER time while the shield
+      // has been counting down since the revival tick, so the first protected frame never
+      // sees p = 0: it opened at p ~ 1/3, already on the 0.45 floor, one frame after an
+      // entrance that ended at 1.0. Only playing the real sequence through `sync` at 60 Hz
+      // shows that step.
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene);
+      views.setPlayerStyle(null, 'solid', null, 0, variant);
+      let prev = deadPlayerWorld();
+      views.sync(prev, prev, 1, 1 / 60);
+      const REVIVE = 1;
+      const opacities: number[] = [];
+      let ringAt50 = NaN;
+      for (let tick = REVIVE; tick <= REVIVE + RESPAWN_SHIELD_TICKS + 5; tick++) {
+        const curr = alivePlayerWorld(REVIVE + RESPAWN_SHIELD_TICKS, tick);
+        views.sync(prev, curr, 1, 1 / 60);
+        opacities.push(tankBodyMaterial(scene, 1).opacity);
+        if (tick - REVIVE === 50) {
+          const ring = findByName(scene, 'spawn-ring') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+          ringAt50 = ring.material.opacity;
+        }
+        prev = curr;
+      }
+      // The variant really landed, or all three cases would quietly play `warp`: their
+      // protected OPACITY is one shared curve by design, but their rings are not. At 50 ticks
+      // in, p = 1 - 40/90, and each variant's ring must match its own animator there and no
+      // other variant's.
+      const p50 = 1 - 40 / RESPAWN_SHIELD_TICKS;
+      const ringOf = (id: SpawnAnimId): number => SPAWN_ANIMATORS[id]('invincible', p50, 0).ring.opacity;
+      expect(ringAt50, `${variant}: its own ring`).toBeCloseTo(ringOf(variant), 5);
+      for (const other of (['warp', 'rise', 'beacon'] as const).filter((v) => v !== variant)) {
+        expect(Math.abs(ringOf(other) - ringOf(variant)), `${variant} vs ${other}`).toBeGreaterThan(0.01);
+      }
+      // THE BOUND IS DERIVED, not fitted. The steepest SMOOTH frame in the sequence is the
+      // shield's own ease: depth 0.55 times smoothstep's peak slope 1.5, spread over
+      // SHIELD_EASE_FRACTION (0.15) of 90 ticks = 13.5 frames, about 0.061 -- and main's
+      // shipped ease-out measured 0.0609. Beacon's entrance fade-in is 1.6 / 30, about 0.053.
+      // 0.1 sits above both, and far below the 0.55 one-frame drop this case exists to catch.
+      // Starts from the entrance's second frame, so that fade-in is inside the bound.
+      for (let i = 1; i < opacities.length; i++) {
+        const step = Math.abs((opacities[i] as number) - (opacities[i - 1] as number));
+        expect(step, `${variant}: frame ${i - 1} -> ${i} of the respawn`).toBeLessThan(0.1);
+      }
+      // Not vacuous: the protected state is really translucent somewhere, and the tank is
+      // solid again once the shield has run out.
+      expect(Math.min(...opacities.slice(40, 80)), `${variant}: protected`).toBeLessThan(0.5);
+      expect(opacities[opacities.length - 1], `${variant}: after the shield`).toBe(1);
+      views.dispose();
+    },
+  );
+
   it('drives the invincibility overlay from shieldUntilTick, not a latched copy', () => {
     // An early/late `>` comparison survives two wrong reads that both still move the
     // right direction over two syncs: reading shieldLeft off `prev.tick` instead of
@@ -2476,30 +2532,36 @@ describe('spawn animation (#199)', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const prev = deadPlayerWorld(); // tick 0
-    // dt 0.6 > ENTRANCE_SECONDS (0.5), so this ONE sync both triggers the entrance edge
-    // AND advances straight past it into the invincibility branch -- prev.tick (0) and
-    // curr.tick (10) are both live inputs to this single call, which is what lets a
-    // wrong-tick read diverge from the right one without needing a second sync.
+    // dt 0.6 > ENTRANCE_SECONDS (0.5), so this first sync both triggers the entrance edge
+    // AND advances straight past it into the invincibility branch, where the protected
+    // phase's start is latched: 80 ticks left, p = 1 - 80/90 = 1/9.
     const curr = alivePlayerWorld(90, 10); // shieldUntilTick 90, tick 10 -> 80 ticks left
     views.sync(prev, curr, 1, 0.6);
+    // The second sync is the one asserted. prev.tick (10) and curr.tick (15) are both live
+    // inputs to it, which is what lets a wrong-tick read diverge from the right one.
+    const next = alivePlayerWorld(90, 15); // tick 15 -> 75 ticks left
+    views.sync(curr, next, 1, 1 / 60);
     const opacity = tankBodyMaterial(scene, 1).opacity;
     // Expected value re-derived from spawn-anim.ts rather than hardcoded, so the assertion
-    // states its own derivation: shieldLeft = shieldUntilTick - curr.tick = 90 - 10 = 80,
-    // p = 1 - shieldLeft/RESPAWN_SHIELD_TICKS = 1 - 80/90 = 1/9.
+    // states its own derivation: shieldLeft = shieldUntilTick - curr.tick = 90 - 15 = 75,
+    // p = 1 - shieldLeft/RESPAWN_SHIELD_TICKS = 1 - 75/90 = 1/6, eased in from 1/9.
     //
     // It CALLS `protectedOpacity` now instead of restating `0.45 + 0.55*p` (issue #230). The
     // restated formula was a second copy of the curve living in a test, and it went stale the
     // moment the curve changed -- which is how this case failed on a change it was never
     // about. Calling the production function keeps the derivation visible without duplicating
     // it.
-    const shieldLeft = 90 - 10;
+    const shieldLeft = 90 - 15;
     const expectedP = 1 - shieldLeft / RESPAWN_SHIELD_TICKS;
-    const expectedOpacity = protectedOpacity(expectedP);
-    // Mutation A (shieldLeft read off `prev.tick` instead of `curr.tick`): shieldLeft
-    // becomes 90 - 0 = 90, p = 0, opacity = 0.45 -- fails this assertion.
+    const expectedFrom = 1 - (90 - 10) / RESPAWN_SHIELD_TICKS;
+    const expectedOpacity = protectedOpacity(expectedP, expectedFrom);
+    // Mutation A (shieldLeft read off `prev.tick` instead of `curr.tick`): the start latches
+    // at p = 0 and this frame reads 90 - 10 = 80, so p = 1/9 eased in from 0 -- opacity ~0.54
+    // against ~0.83, which fails this assertion. (Tick 15, not 20: at 20 the two readings
+    // land on the same point of the same ramp and give the same opacity.)
     // Mutation B (progress derived from `spawn.elapsed` instead of shieldUntilTick -
-    // curr.tick): elapsed is 0.6 on this first sync, a different number entirely --
-    // fails this assertion too.
+    // curr.tick): elapsed is 0.6 + 1/60 by now, a different number entirely -- fails this
+    // assertion too.
     expect(opacity).toBeCloseTo(expectedOpacity, 5);
     // WHAT THIS ASSERTION NO LONGER DISCRIMINATES, stated rather than left as a gap: since
     // issue #230 the protected-opacity curve is symmetric about the middle of the phase, so

@@ -1,7 +1,7 @@
 {
   "id": "beacon-reads-as-fully-vulnerable-again",
   "file": "src/render/spawn-anim.ts",
-  "find": "  return {\n    tankOpacity: protectedOpacity(p),\n    tankScale: 1,\n    ring: { radius: 1, opacity: 0.9, arc: 1 - p },",
+  "find": "  return {\n    tankOpacity: protectedOpacity(p, protectedFrom),\n    tankScale: 1,\n    ring: { radius: 1, opacity: 0.9, arc: 1 - p },",
   "replace": "  return {\n    tankOpacity: 1,\n    tankScale: 1,\n    ring: { radius: 1, opacity: 0.9, arc: 1 - p },",
   "expect": "killed",
   "tests": [

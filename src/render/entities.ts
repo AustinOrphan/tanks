@@ -352,6 +352,11 @@ interface SpawnViewState {
   variant: SpawnAnimId;
   elapsed: number;
   ring: THREE.Mesh;
+  /**
+   * The shield progress on this tank's first protected frame, or null until the entrance has
+   * finished. The protected ease-in starts here rather than at p = 0 -- see `protectedOpacity`.
+   */
+  protectedFrom: number | null;
 }
 
 interface TankView {
@@ -1352,7 +1357,7 @@ export function createEntityViews(
           const color = resolveOwnerColor(curr, t);
           const ring = makeSpawnRing(color);
           view.group.add(ring);
-          view.spawn = { variant, elapsed: 0, ring };
+          view.spawn = { variant, elapsed: 0, ring, protectedFrom: null };
         }
         if (view.spawn) {
           // Captured locally: `view.spawn`'s own narrowing does not survive the
@@ -1376,7 +1381,15 @@ export function createEntityViews(
             );
           } else if (shieldLeft > 0) {
             const p = 1 - shieldLeft / RESPAWN_SHIELD_TICKS; // 0 fresh -> 1 ending
-            frame = SPAWN_ANIMATORS[spawn.variant]('invincible', p, 0, reducedMotion);
+            // Where this tank's protected phase BEGAN, latched on its first frame (issue
+            // #230). The shield has been counting down since the revival tick while the
+            // entrance played on render time, so the first protected frame is p ~ 1/3, not 0,
+            // and a curve that eased in from p = 0 was already on its floor there: a 0.55
+            // drop one frame after an entrance that ended opaque. The ease-in starts here
+            // instead. `p` itself stays the live shield progress, so the rings, beacon's timer
+            // arc and the ease-out are what they were.
+            spawn.protectedFrom ??= p;
+            frame = SPAWN_ANIMATORS[spawn.variant]('invincible', p, 0, reducedMotion, false, spawn.protectedFrom);
           } else {
             // Done: restore solid, drop the ring, clear state.
             setTankOpacity(view, 1);

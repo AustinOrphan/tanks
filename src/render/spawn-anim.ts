@@ -34,6 +34,11 @@ export type SpawnAnimator = (
    *  each style's own radius curve, and nothing downstream can invert a number it cannot
    *  tell from a resting value. Defaulted, so every existing caller reads unchanged. */
   opposed?: boolean,
+  /** INVINCIBLE ONLY: the progress at which this tank's protected phase began -- where its
+   *  entrance ended, which is not p = 0, because the shield counts down from the revival tick
+   *  while the entrance plays. The opacity eases in from here (see `protectedOpacity`).
+   *  Defaulted to 0. */
+  protectedFrom?: number,
 ) => SpawnFrame;
 
 /** Fixed entrance length, in seconds of render wall-clock. Round start and respawn share it. */
@@ -150,26 +155,33 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
  * CONTINUOUS AT BOTH ENDS BY CONSTRUCTION, which is what makes the issue's criteria
  * structural rather than a tuning accident:
  *
- *  - `p = 0` returns exactly 1, so it meets the entrance's final frame with no step.
+ *  - `p = from` returns exactly 1, so it meets the entrance's final frame with no step.
+ *    `from` is where the protected phase began, which `entities.ts` latches on its first
+ *    frame. It is NOT 0 in play: the shield counts down from the revival tick while the
+ *    entrance runs on render time, so a protected phase opens about a third of the way into
+ *    the shield. Easing in from p = 0 put that first frame on the floor -- the 0.55 drop this
+ *    curve was written to remove, still there once the two phases were played in sequence.
  *  - `p = 1` returns exactly 1, so it meets the un-shielded tank `entities.ts` restores when
  *    `shieldLeft` hits 0 -- and an expired shield cannot produce a late dip, because the
  *    curve is already back at opaque before the phase ends.
  *
- * Both properties come from the two smoothsteps being mirror images, not from a clamp or a
- * special case, so neither can be lost by retuning `SHIELD_EASE_FRACTION`.
+ * Both properties come from each smoothstep being 0 at its own edge, not from a clamp or a
+ * special case, so neither can be lost by retuning `SHIELD_EASE_FRACTION`. The ease-in and
+ * ease-out both last `SHIELD_EASE_FRACTION` of the whole shield, as they did.
  *
  * UNCHANGED UNDER REDUCED MOTION, deliberately, and by this file's own rule: what moves here
  * is a single slow transition carrying STATE ("you are protected"), not decoration. It is
  * the same reason `beacon`'s depleting timer arc is left alone below -- calming it would
  * delete information rather than motion.
  */
-export function protectedOpacity(p: number): number {
+export function protectedOpacity(p: number, from = 0): number {
   const t = clamp01(p);
-  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);
+  const start = clamp01(from);
+  const ramp = smoothstep(start, start + SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);
   return 1 - SHIELD_TRANSLUCENCY * ramp;
 }
 
-const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false) => {
+const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false, protectedFrom = 0) => {
   const p = clamp01(progress);
   if (phase === 'entrance') {
     return {
@@ -183,13 +195,13 @@ const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opp
   // invincible: eases into translucency and back out, meeting the entrance at opaque and the
   // un-shielded tank at opaque. See `protectedOpacity`.
   return {
-    tankOpacity: protectedOpacity(p),
+    tankOpacity: protectedOpacity(p, protectedFrom),
     tankScale: 1,
     ring: { radius: 1, opacity: 0.35 * (1 - p), arc: 1 },
   };
 };
 
-const rise: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false) => {
+const rise: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false, protectedFrom = 0) => {
   const p = clamp01(progress);
   if (phase === 'entrance') {
     return {
@@ -212,13 +224,13 @@ const rise: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opp
   // trap #652 records for `.hud-capacity` and `.hud-count`.
   const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(p * Math.PI * (4 + 6 * p));
   return {
-    tankOpacity: protectedOpacity(p),
+    tankOpacity: protectedOpacity(p, protectedFrom),
     tankScale: 1,
     ring: { radius: 1, opacity: 0.3 * pulse, arc: 1 },
   };
 };
 
-const beacon: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false) => {
+const beacon: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false, protectedFrom = 0) => {
   const p = clamp01(progress);
   if (phase === 'entrance') {
     return {
@@ -237,7 +249,7 @@ const beacon: SpawnAnimator = (phase, progress, _color, reducedMotion = false, o
   // one that looked fully vulnerable. The arc says how much is left; the translucency says
   // there is any.
   return {
-    tankOpacity: protectedOpacity(p),
+    tankOpacity: protectedOpacity(p, protectedFrom),
     tankScale: 1,
     ring: { radius: 1, opacity: 0.9, arc: 1 - p },
   };

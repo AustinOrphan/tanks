@@ -277,6 +277,23 @@ describe('the shielded-spawn opacity contract (issue #230)', () => {
     }
   });
 
+  it('meets an entrance that ended PART-WAY into the shield at opaque, too', () => {
+    // The case above is the animator alone at p = 0, and play never reaches it: the shield
+    // counts down from the revival tick while the entrance runs on render time, so the first
+    // protected frame is about a third of the way in. `entities.ts` latches that point and
+    // passes it as `protectedFrom`; the phase must open opaque from there and still reach the
+    // floor once it has eased in.
+    for (const from of [1 / 9, 1 / 3, 0.5]) {
+      for (const [name, anim] of VARIANTS) {
+        const first = anim('invincible', from, 0xffffff, false, false, from);
+        expect(first.tankOpacity, `${name} from ${from}`).toBeCloseTo(1, 5);
+      }
+      expect(protectedOpacity(0.7, from), `floor after easing in from ${from}`).toBeCloseTo(1 - SHIELD_TRANSLUCENCY, 10);
+    }
+    // The defect, stated: eased in from 0, a phase opening at 1/3 is already on the floor.
+    expect(protectedOpacity(1 / 3)).toBeCloseTo(1 - SHIELD_TRANSLUCENCY, 10);
+  });
+
   it('is visibly translucent while protection is running', () => {
     // Criterion: "the tank ... transitions smoothly to a visibly TRANSLUCENT protected
     // state". `beacon` is the one this was false for -- it held 1.0 for the entire phase.

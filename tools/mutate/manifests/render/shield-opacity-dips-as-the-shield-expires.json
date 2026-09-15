@@ -1,8 +1,8 @@
 {
   "id": "shield-opacity-dips-as-the-shield-expires",
   "file": "src/render/spawn-anim.ts",
-  "find": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;\n}",
-  "replace": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;\n}",
+  "find": "  const ramp = smoothstep(start, start + SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;\n}",
+  "replace": "  const ramp = smoothstep(start, start + SHIELD_EASE_FRACTION, t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;\n}",
   "expect": "killed",
   "tests": [
     "src/render/spawn-anim.test.ts"
