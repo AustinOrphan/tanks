@@ -1,0 +1,14 @@
+{
+  "id": "stock-cue-flag-accepts-any-value",
+  "file": "src/game/devflags.ts",
+  "find": "  return isStockCue(raw) ? raw : null;",
+  "replace": "  return raw as StockCue;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "why": "Reject-to-null dropped, so `?dev=1&stockCue=chip` becomes a `StockCue` the HUD does not branch on (issue #230). `fillStockCueEntry` treats anything that is not `pips` or `strike` as the badge, so a typo -- or `chip`, the dropped mockup -- would quietly show the badge while the URL named something else. The same guard `arrival`, `shellTrail` and the other arm flags carry.",
+  "killedBy": [
+    "parseDevFlags: stockCue (issue #230 -- the versus stock-loss cue arms) rejects anything else to null rather than guessing -- population: the 8 forms below"
+  ]
+}

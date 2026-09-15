@@ -126,7 +126,7 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - Rhythm templates are a fixed set of five, not data-driven. #70
 - `outro` and `bridge` transitions are designed and documented; the validator rejects them loudly rather than silently behaving like `dominant`. #71
 - Restart Level, held back on a pending lives-policy decision. #45 *(prose-only PR)*
-- Dev-flag retirement: `FLAG_REGISTRY` names 44 flags. Each one that exists to settle an open question needs an owner's ship-or-delete decision, which is the arrangement's own stated rule; a flag kept as a permanent rollback lever is exempt and says so in its own header (`.claude/rules/game.md`). #50 *(prose-only PR)*
+- Dev-flag retirement: `FLAG_REGISTRY` names 45 flags. Each one that exists to settle an open question needs an owner's ship-or-delete decision, which is the arrangement's own stated rule; a flag kept as a permanent rollback lever is exempt and says so in its own header (`.claude/rules/game.md`). #50 *(prose-only PR)*
 
 ### Cannot be settled by reading the tree
 

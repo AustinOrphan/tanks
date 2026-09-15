@@ -1,0 +1,16 @@
+{
+  "id": "hud-stock-cue-resumes-from-zero",
+  "file": "src/game/hud.ts",
+  "find": "    const delay = running === null ? '' : `${-Math.round(now - running.at)}ms`;",
+  "replace": "    const delay = running === null ? '' : '0ms';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Re-attaches a running stock-loss cue at its first frame instead of at the time already spent (issue #230). The cue survives the rebuild but REPLAYS: a player whose stock dropped 300 ms ago sees the swell or the badge start over the moment someone else loses one, so two nearby losses read as three. The rebuild cases pin the resumed delay as exactly -300ms.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
+    "hud: stock-loss cue arms (issue #230) strike: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
+    "hud: stock-loss cue arms (issue #230) badge: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time"
+  ]
+}

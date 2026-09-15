@@ -3286,10 +3286,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function recordStockLosses(next: GameplayStatus): void {
     if (stockCue === null) return;
+    // No expiry sweep here: `renderVersusStocks` already skips a cue past STOCK_CUE_MS, and the
+    // map holds at most one entry per slot -- overwritten by that slot's next loss and cleared
+    // when a different match starts -- so an expired entry is inert and bounded.
     const now = performance.now();
-    for (const [slot, cue] of stockCueStarts) {
-      if (now - cue.at >= STOCK_CUE_MS) stockCueStarts.delete(slot);
-    }
     const nextStocks = next.kind === 'versus' ? next.stocks : null;
     if (nextStocks === null) return;
     const prevStocks = prevStatus?.kind === 'versus' ? prevStatus.stocks : null;

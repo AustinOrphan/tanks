@@ -1,0 +1,16 @@
+{
+  "id": "hud-stock-cue-dropped-by-the-next-push",
+  "file": "src/game/hud.ts",
+  "find": "    const now = performance.now();\n    const nextStocks",
+  "replace": "    const now = performance.now();\n    stockCueStarts.clear();\n    const nextStocks",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Forgets every running stock-loss cue on each status push (issue #230). The strip is rebuilt whenever the status moves, so a second slot losing a stock inside the first cue's 700 ms wipes the first cue mid-flight -- the composition hazard the cue record exists for. The single-loss arm cases cannot see it, because nothing is pushed after the loss they make; only the rebuild cases, where another slot's loss follows 300 ms later, can.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
+    "hud: stock-loss cue arms (issue #230) strike: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
+    "hud: stock-loss cue arms (issue #230) badge: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time"
+  ]
+}

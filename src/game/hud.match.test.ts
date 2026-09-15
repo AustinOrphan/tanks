@@ -635,12 +635,34 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
   it('a rematch that resets stocks upward is not a loss, and starts a new pip count', () => {
     vi.useFakeTimers({ toFake: ['performance'] });
     const { hud: h, root } = mountCue('pips');
-    h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 1 }]));
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
     h.setStatus(versusStatus([{ slot: 0, stock: 5 }, { slot: 1, stock: 5 }]));
     expect(root.querySelectorAll('.hud-stock-cue')).toHaveLength(0);
     expect(entries(root)[0].querySelectorAll('.hud-stock-pip')).toHaveLength(5);
     expect(entries(root)[0].querySelectorAll('.hud-stock-pip--lost')).toHaveLength(0);
+    // The first loss of the new match counts against 5, not against the old match's 3. Without
+    // the reset on a rise, the denominator would stay 3 and this entry would show 4 pips, none lost.
+    h.setStatus(versusStatus([{ slot: 0, stock: 4 }, { slot: 1, stock: 5 }]));
+    expect(entries(root)[0].querySelectorAll('.hud-stock-pip')).toHaveLength(5);
+    expect(entries(root)[0].querySelectorAll('.hud-stock-pip--lost')).toHaveLength(1);
   });
+
+  it.each(['pips', 'strike', 'badge'] as const)(
+    '%s: a rebuild with no new status after STOCK_CUE_MS -- a pause -- draws no cue',
+    (arm) => {
+      // The strip is also rebuilt when the SURFACE moves (setState runs applyStatus), with no
+      // status push to record anything. Only the rebuild's own elapsed check can drop the cue.
+      vi.useFakeTimers({ toFake: ['performance'] });
+      const { hud: h, root } = mountCue(arm);
+      h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+      h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 3 }]));
+      h.setState('paused');
+      expect(entries(root)[0].querySelector('.hud-stock-cue'), `${arm}: still running at 0 ms`).not.toBeNull();
+      vi.advanceTimersByTime(STOCK_CUE_MS);
+      h.setState('playing');
+      expect(entries(root)[0].querySelector('.hud-stock-cue'), `${arm}: expired`).toBeNull();
+    },
+  );
 
   it('a different match with a lower stock is not a loss in this one -- the same-slots guard', () => {
     vi.useFakeTimers({ toFake: ['performance'] });

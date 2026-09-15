@@ -1,0 +1,14 @@
+{
+  "id": "stock-cue-ms-drifts-from-the-token",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "export const STOCK_CUE_MS = 700;",
+  "replace": "export const STOCK_CUE_MS = 600;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The HUD's cue lifetime drifts from `--hud-duration-slow`, the length the stylesheet runs every stock-loss cue for (issue #230). At 600 a rebuild in the last 100 ms of a cue drops it while it is still visibly fading, so it vanishes rather than finishing. The hud.match cases cannot see this -- they advance time BY the constant, so they agree with any value -- which is why the agreement with the token is pinned in the stylesheet test.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) runs for exactly STOCK_CUE_MS -- the token the cues use is the constant the HUD expires them by"
+  ]
+}

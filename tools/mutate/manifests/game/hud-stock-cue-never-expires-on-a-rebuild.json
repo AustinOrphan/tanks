@@ -1,0 +1,16 @@
+{
+  "id": "hud-stock-cue-never-expires-on-a-rebuild",
+  "file": "src/game/hud.ts",
+  "find": "        const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;",
+  "replace": "        const running = started !== undefined ? started : null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Drops the rebuild's elapsed check, so a stock-loss cue that has finished is re-attached on every later rebuild of the strip (issue #230) -- a pause, a resume, the next loss anywhere -- with a negative delay past its end, which under fill mode `both` holds its last frame. This check is the ONLY expiry: the cue record is not swept, so nothing else removes an old entry. The pause cases rebuild with no status push at all, which is the path only this check covers.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) pips: a rebuild with no new status after STOCK_CUE_MS -- a pause -- draws no cue",
+    "hud: stock-loss cue arms (issue #230) strike: a rebuild with no new status after STOCK_CUE_MS -- a pause -- draws no cue",
+    "hud: stock-loss cue arms (issue #230) badge: a rebuild with no new status after STOCK_CUE_MS -- a pause -- draws no cue"
+  ]
+}

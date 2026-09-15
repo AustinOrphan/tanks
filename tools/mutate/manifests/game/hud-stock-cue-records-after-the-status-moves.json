@@ -1,0 +1,16 @@
+{
+  "id": "hud-stock-cue-records-after-the-status-moves",
+  "file": "src/game/hud.ts",
+  "find": "        recordStockLosses(status);\n        announceStatusChange(status);\n        prevStatus = status;",
+  "replace": "        announceStatusChange(status);\n        prevStatus = status;\n        recordStockLosses(status);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Records stock losses after `prevStatus` has already moved to the push being recorded (issue #230), so every comparison is a status against itself and no loss is ever found. Every arm then draws no cue at all, the same as the shipped strip, while the flag still reads as set.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) badge: a \"−1\" on the entry that lost the stock, and on no other",
+    "hud: stock-loss cue arms (issue #230) strike: the old number struck beside the new one",
+    "hud: stock-loss cue arms (issue #230) pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue"
+  ]
+}

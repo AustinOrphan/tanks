@@ -1,0 +1,14 @@
+{
+  "id": "hud-stock-cue-reads-a-different-match-as-a-loss",
+  "file": "src/game/hud.ts",
+  "find": "    const sameSlots = prevStocks !== null\n      && nextStocks.length === prevStocks.length\n      && nextStocks.every((s) => before.has(s.slot));",
+  "replace": "    const sameSlots = prevStocks !== null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Drops the same-slots guard from the stock-loss cue's trigger (issue #230), so a different match that starts with fewer stocks -- three players at 1 after two players at 3 -- fires a loss cue on a slot that lost nothing. It is the guard `announceStatusChange` applies for the same reason (issue #629), restated rather than shared because the cue records every slot that dropped and the announcement speaks one.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) a different match with a lower stock is not a loss in this one -- the same-slots guard"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "hud-stock-cue-keeps-the-old-match-denominator",
+  "file": "src/game/hud.ts",
+  "find": "    if (!sameSlots || nextStocks.some((s) => s.stock > (before.get(s.slot) as number))) {",
+  "replace": "    if (!sameSlots) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "A rematch no longer resets the pips arm's starting stock (issue #230). Straight after the reset it is invisible -- the pip count takes the larger of the old start and the current stock, so 5 stocks still draw 5 pips -- which is why the case goes on to lose one: counted against the old match's 3, an entry at 4 draws 4 pips and none lost instead of 5 with one hollow.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) a rematch that resets stocks upward is not a loss, and starts a new pip count"
+  ]
+}
