@@ -23,6 +23,8 @@ import type {
   SettingsStatus,
 } from './settings';
 import type { EffectiveSettings, EffectiveSettingsHandle } from './effective-settings';
+import { controllerLayoutFor } from './settings';
+import type { LayoutLookup } from '../input/gamepad-profile';
 import { createBrowserAppShell, type AppShell } from './app-shell';
 import type { AchievementsStore, AchievementContext } from './achievements';
 import type { RunStore } from './run';
@@ -217,7 +219,7 @@ export interface GameDeps {
   readonly createInput: (
     target: HTMLElement,
     screenToGround: (clientX: number, clientY: number) => Vec2,
-    options?: { gamepad?: boolean },
+    options?: { gamepad?: boolean; layoutFor?: LayoutLookup },
   ) => InputController;
   /**
    * A standalone gamepad-only `PlayerInputSource`, one call per co-player slot 1..N-1
@@ -230,8 +232,12 @@ export interface GameDeps {
    * for why slot 0's own optional pad merge (`input.ts`'s `gamepad` option, always
    * padIndex 0) and every co-player slot's dedicated reader never collide: they read
    * different indices of the same pads array, not a shared one arbitrated at runtime.
+   *
+   * `layoutFor` is the player's controller layout by profile id (issue #754), which the
+   * source's reader resolves on every poll. Every slot gets the same lookup: a layout belongs
+   * to a logical profile, not to a slot or a browser gamepad index.
    */
-  readonly createGamepadSource: (padIndex: number) => PlayerInputSource;
+  readonly createGamepadSource: (padIndex: number, layoutFor?: LayoutLookup) => PlayerInputSource;
   /**
    * Every currently-connected pad, for the controller assignment panel's live list
    * (docs/superpowers/plans/2026-08-17-controller-assignment.md) -- `gamepad.ts`'s
@@ -1225,7 +1231,8 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
       saveStill: downloadCanvasStill,
     },
     createInput: createInputController,
-    createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
+    createGamepadSource: (padIndex, layoutFor) =>
+      createGamepadInputSource(readNavigatorGamepads, padIndex, layoutFor),
     readDetectedPads: () => readDetectedPads(readNavigatorGamepads),
     readPadDiagnostics: () => readPadDiagnostics(readNavigatorGamepads),
     // The PAGE's engine, the same instance on every session (issue #317) -- so the
@@ -2000,6 +2007,11 @@ export function startGameWith(
     // gates non-player ones. See death-pulse.ts's own doc comment.
     enemyDeathPulse: deps.devFlags.enemyDeathPulse,
   });
+  // The player's controller layouts (issue #754), for every gamepad reader this session
+  // builds. Kept current by `applySettings` below rather than re-read per poll, since
+  // `effectiveSettings.current()` recomputes on each call and the readers poll every tick.
+  let controllerLayouts = deps.effectiveSettings.current().controllerLayouts;
+  const layoutFor: LayoutLookup = (profileId) => controllerLayoutFor(controllerLayouts, profileId);
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y), {
     // `pad[i] -> slot[i]` (n-player arc PR3): NOT forced off at `playerCount >= 2`
     // anymore. Slot 0 keeps keyboard/mouse/touch as its baseline and can additionally
@@ -2016,6 +2028,7 @@ export function startGameWith(
     // anymore. Accepted, not fixed -- see gamepad.ts's module doc comment and
     // docs/superpowers/plans/2026-08-17-controllers-4.md.
     gamepad: deps.devFlags.gamepad,
+    layoutFor,
   });
   // The saved scheme and fire mode, pushed at boot so the very first touch already uses
   // them. Read through `effectiveSettings`, never the store: the effective layer is the
@@ -2046,7 +2059,7 @@ export function startGameWith(
       case 'keyboard':
         return input;
       case 'gamepad':
-        return deps.createGamepadSource(source.padIndex);
+        return deps.createGamepadSource(source.padIndex, layoutFor);
       case 'none':
         return createHeldInputSource();
       case 'bot':
@@ -2305,6 +2318,8 @@ export function startGameWith(
     input.setTouchScheme(effective.touchScheme);
     input.setFireMode(effective.fireMode);
     haptics.setEnabled(effective.deviceHaptics);
+    // Every gamepad reader reads this through `layoutFor`, so its next poll uses the new layout.
+    controllerLayouts = effective.controllerLayouts;
     // NO `hud.*` HERE (issue #324). Every line above drives a RUNTIME consumer this
     // session owns; the six HUD pushes that used to follow drove Settings' own controls
     // and the page frame, which the session does not own and cannot be the only writer

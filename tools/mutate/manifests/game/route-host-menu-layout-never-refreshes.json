@@ -1,0 +1,14 @@
+{
+  "id": "route-host-menu-layout-never-refreshes",
+  "file": "src/game/route-host.ts",
+  "find": "    controllerLayouts = deps.effectiveSettings.current().controllerLayouts;",
+  "replace": "    void deps.effectiveSettings;",
+  "expect": "killed",
+  "why": "The page's menu poller looks layouts up through a variable the page settings subscription refreshes; without it a rebound Back keeps reading the old button until reload.",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) reads Back through the player's stored controller layout, from the frame after the edit (issue #754)"
+  ]
+}

@@ -60,6 +60,17 @@ export interface ProfileButtons {
   readonly right: number;
 }
 
+/** A button a player may move an action onto: a stable name, and the index it reads. */
+export interface BindableControl {
+  /**
+   * Positional and stable (`face-bottom`, `trigger-right`), never a vendor's label. A stored
+   * binding names this, and the name a player sees is the Settings UI's to choose.
+   */
+  readonly id: string;
+  /** Index into `Gamepad.buttons`. */
+  readonly index: number;
+}
+
 /** One way of reading a pad: every logical Tanks control, as raw indices. */
 export interface ControlProfile {
   /** Stable identifier, for traces and diagnostics. Not player-facing copy. */
@@ -68,6 +79,12 @@ export interface ControlProfile {
   readonly label: string;
   readonly axes: ProfileAxes;
   readonly buttons: ProfileButtons;
+  /**
+   * The buttons Fire, Mine, Confirm, Back and Pause may be moved onto (issue #754). Absent
+   * means none: the profile still offers its presets and refuses every binding, since a
+   * profile that names no controls vouches for no index a binding could target.
+   */
+  readonly bindable?: readonly BindableControl[];
 }
 
 /**
@@ -95,6 +112,22 @@ export const STANDARD_PROFILE: ControlProfile = Object.freeze({
     left: 14,
     right: 15,
   }),
+  // Every standard button except the D-pad, which stays the menu's four directions, and 16
+  // (Home/Guide), which a browser or operating system may keep for itself.
+  bindable: Object.freeze([
+    { id: 'face-bottom', index: 0 },
+    { id: 'face-right', index: 1 },
+    { id: 'face-left', index: 2 },
+    { id: 'face-top', index: 3 },
+    { id: 'bumper-left', index: 4 },
+    { id: 'bumper-right', index: 5 },
+    { id: 'trigger-left', index: 6 },
+    { id: 'trigger-right', index: 7 },
+    { id: 'select', index: 8 },
+    { id: 'start', index: 9 },
+    { id: 'stick-left', index: 10 },
+    { id: 'stick-right', index: 11 },
+  ]),
 });
 
 /**
@@ -265,6 +298,15 @@ export function validateProfileCatalogue(entries: readonly ProfileEntry[]): void
         `profile catalogue: ${JSON.stringify(id)} puts a gameplay and a menu action on one button (${collisions.join(', ')}) -- see issue #494`,
       );
     }
+    // A repeated id would let a stored binding mean whichever entry a lookup met last, and a
+    // repeated index would offer one button under two names.
+    const bindable = entry.profile.bindable ?? [];
+    if (
+      new Set(bindable.map((c) => c.id)).size !== bindable.length ||
+      new Set(bindable.map((c) => c.index)).size !== bindable.length
+    ) {
+      throw new Error(`profile catalogue: ${JSON.stringify(id)} names a bindable control id or button twice`);
+    }
   }
 }
 
@@ -336,4 +378,157 @@ export function classifyPad(
   return recognized.kind === 'standard'
     ? { kind: 'standard', profile: recognized.profile }
     : { kind: 'profile', profile: recognized.profile };
+}
+
+/*
+ * THE PLAYER'S LAYOUT, ON TOP OF A PROFILE (issue #754).
+ *
+ * A profile says how a pad is built; a layout says how this player wants it read. The order
+ * is the issue's: the profile's recommended mapping, then a named preset, then per-action
+ * bindings, then validation. What comes out is an ordinary `ControlProfile`, so the two
+ * readers keep reading one record and never learn that a player moved anything.
+ *
+ * BINDINGS NAME CONTROLS, NOT INDICES. A binding is `fire -> 'face-bottom'`, resolved through
+ * the profile's own `bindable` list, so a stored layout cannot point a reader at an index the
+ * profile does not vouch for, and nothing a player sees has to be a raw number.
+ *
+ * Nothing here stores or reads settings. `settings.ts` keeps layouts per profile id, and each
+ * reader takes a `LayoutLookup`.
+ */
+
+/**
+ * The actions a player may move. The four menu directions are not among them: they stay on
+ * the profile's D-pad, so a player can always navigate back to Settings.
+ */
+export const BINDABLE_ACTIONS = ['fire', 'mine', 'confirm', 'back', 'pause'] as const;
+export type BindableAction = (typeof BINDABLE_ACTIONS)[number];
+
+/** Named stick-role presets. In PP1, movement and aim change only through these. */
+export const LAYOUT_PRESETS = ['recommended', 'southpaw'] as const;
+export type LayoutPreset = (typeof LAYOUT_PRESETS)[number];
+
+export interface ControlLayout {
+  readonly preset: LayoutPreset;
+  /** Action -> a control id from the profile's `bindable` list. An absent action keeps the profile's button. */
+  readonly bindings: Readonly<Partial<Record<BindableAction, string>>>;
+}
+
+/** No preset and no bindings: the profile exactly as it ships. */
+export const RECOMMENDED_LAYOUT: ControlLayout = Object.freeze({
+  preset: 'recommended',
+  bindings: Object.freeze({}),
+});
+
+/** The layout to read a profile with, by profile id. */
+export type LayoutLookup = (profileId: string) => ControlLayout;
+
+/** What a reader uses when nobody supplies a lookup: every profile as it ships. */
+export const recommendedLayouts: LayoutLookup = () => RECOMMENDED_LAYOUT;
+
+/**
+ * The presets a profile can honour.
+ *
+ * Southpaw swaps the movement and aim pairs, so it needs two pairs that really are two: four
+ * distinct axis indices. Every `ControlProfile` names four axes and `classifyPad` refuses a
+ * pad that lacks them, so for a pad that is read at all, the only way to lack a second pair
+ * is a profile naming one axis twice. Such a profile is offered Recommended alone.
+ */
+export function presetsFor(profile: ControlProfile): readonly LayoutPreset[] {
+  const { moveX, moveY, aimX, aimY } = profile.axes;
+  return new Set([moveX, moveY, aimX, aimY]).size === 4 ? LAYOUT_PRESETS : ['recommended'];
+}
+
+/** A binding that did not take effect, and why. */
+export interface RefusedBinding {
+  readonly action: BindableAction;
+  readonly control: string;
+  /**
+   * `unknown-control`: this profile names no such bindable control (a stale id, or another
+   * profile's). `collision`: it would leave two actions on one button.
+   */
+  readonly reason: 'unknown-control' | 'collision';
+}
+
+export interface EffectiveProfile {
+  /** The profile to read the pad with. Same `id` as the profile it was resolved from. */
+  readonly profile: ControlProfile;
+  /** The preset applied: `recommended` when the requested one is not offered for this profile. */
+  readonly preset: LayoutPreset;
+  readonly refused: readonly RefusedBinding[];
+}
+
+/**
+ * A profile read through a layout.
+ *
+ * NO TWO OF THE NINE BUTTON ACTIONS MAY SHARE A BUTTON. That widens `profileCollisions`' #494
+ * guard from "gameplay against menu" to every pair: gameplay against menu is the leak #494
+ * found, and one button doing any two things leaves one of them unreachable, since a reader
+ * cannot tell which was meant.
+ *
+ * A clash is settled by returning every binding involved in it to the profile's own button,
+ * then checking again, until nothing clashes. That always ends, because each round removes
+ * at least one binding and a profile's own buttons do not clash. It never picks a winner
+ * between two bindings, which a player could not predict. Two bindings that swap buttons
+ * (Fire to `face-bottom` AND Confirm to `trigger-right`) clash with nothing, so both stand.
+ *
+ * With no binding in effect and Recommended applied, the profile itself is returned, so
+ * "nothing customised" is the shipped record and not a copy of it.
+ */
+export function resolveEffectiveProfile(profile: ControlProfile, layout: ControlLayout): EffectiveProfile {
+  const preset = presetsFor(profile).includes(layout.preset) ? layout.preset : 'recommended';
+
+  const indexOf = new Map((profile.bindable ?? []).map((c) => [c.id, c.index]));
+  const refused: RefusedBinding[] = [];
+  const pending = new Map<BindableAction, { readonly control: string; readonly index: number }>();
+  for (const action of BINDABLE_ACTIONS) {
+    const control = layout.bindings[action];
+    if (control === undefined) continue;
+    const index = indexOf.get(control);
+    if (index === undefined) refused.push({ action, control, reason: 'unknown-control' });
+    else pending.set(action, { control, index });
+  }
+
+  for (;;) {
+    const buttons: Record<keyof ProfileButtons, number> = { ...profile.buttons };
+    for (const [action, binding] of pending) buttons[action] = binding.index;
+    const names = Object.keys(buttons) as (keyof ProfileButtons)[];
+    const clashing = [...pending.keys()].filter((action) =>
+      names.some((other) => other !== action && buttons[other] === buttons[action]),
+    );
+    for (const action of clashing) {
+      const binding = pending.get(action);
+      if (binding !== undefined) refused.push({ action, control: binding.control, reason: 'collision' });
+      pending.delete(action);
+    }
+    if (clashing.length > 0) continue;
+
+    if (pending.size === 0 && preset === 'recommended') return { profile, preset, refused };
+    const { moveX, moveY, aimX, aimY } = profile.axes;
+    const axes: ProfileAxes =
+      preset === 'southpaw' ? Object.freeze({ moveX: aimX, moveY: aimY, aimX: moveX, aimY: moveY }) : profile.axes;
+    return { profile: Object.freeze({ ...profile, axes, buttons: Object.freeze(buttons) }), preset, refused };
+  }
+}
+
+/**
+ * `resolveEffectiveProfile` as a reader uses it: the effective profile for the pad in hand,
+ * re-resolved only when the profile or the looked-up layout changes.
+ *
+ * Readers poll every frame or tick, and a stored layout changes only when a player edits it,
+ * so the result is cached on identity. That relies on the lookup returning the SAME object
+ * for an unchanged layout, which `controllerLayoutFor` over a frozen settings snapshot does.
+ */
+export function createEffectiveProfileReader(layoutFor: LayoutLookup): (profile: ControlProfile) => ControlProfile {
+  let lastProfile: ControlProfile | null = null;
+  let lastLayout: ControlLayout | null = null;
+  let last: ControlProfile | null = null;
+  return (profile) => {
+    const layout = layoutFor(profile.id);
+    if (last === null || profile !== lastProfile || layout !== lastLayout) {
+      last = resolveEffectiveProfile(profile, layout).profile;
+      lastProfile = profile;
+      lastLayout = layout;
+    }
+    return last;
+  };
 }

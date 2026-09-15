@@ -373,3 +373,15 @@ describe('createEffectiveSettings', () => {
     expect(() => h.handle.dispose()).not.toThrow();
   });
 });
+
+describe('resolveEffectiveSettings: controller layouts pass through ungated (issue #754)', () => {
+  it('hands the stored layouts object over as it is, on any capability set', () => {
+    // The identity matters: the gamepad readers cache their resolution on it.
+    const stored = settings({
+      input: { ...DEFAULT_SETTINGS.input, controllerLayouts: { standard: { preset: 'southpaw', bindings: {} } } },
+    });
+    for (const caps of [ALL_CAPABILITIES, NO_CAPABILITIES]) {
+      expect(resolveEffectiveSettings(stored, caps, false).controllerLayouts).toBe(stored.input.controllerLayouts);
+    }
+  });
+});

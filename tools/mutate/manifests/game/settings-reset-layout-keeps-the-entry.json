@@ -1,0 +1,14 @@
+{
+  "id": "settings-reset-layout-keeps-the-entry",
+  "file": "src/game/settings.ts",
+  "find": "      delete next[profileId];\n      commit(",
+  "replace": "      void next;\n      commit(",
+  "expect": "killed",
+  "why": "Reset to Recommended removes the profile's stored overrides; keeping the entry leaves every binding in effect while the control claims to have reset.",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "killedBy": [
+    "createPlayerSettingsStore: controller layouts (issue #754) resets one profile's layout and keeps every other profile's"
+  ]
+}

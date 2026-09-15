@@ -1,6 +1,14 @@
 import type { InputState, Vec2 } from '../sim/types';
 import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
-import { STANDARD_PROFILE, classifyPad, profileFor, type UnsupportedReason } from './gamepad-profile';
+import {
+  STANDARD_PROFILE,
+  classifyPad,
+  createEffectiveProfileReader,
+  profileFor,
+  recommendedLayouts,
+  type LayoutLookup,
+  type UnsupportedReason,
+} from './gamepad-profile';
 
 /**
  * Gamepad API reader: `navigator.getGamepads()`, mapped to the same `InputState` shape
@@ -211,8 +219,15 @@ export interface GamepadReader {
  * from every pre-PR3 call site (input.ts's single-player merge). `loop.ts` passes the
  * co-player's own slot number for every source at slot 1 and beyond -- see this file's
  * module doc comment for the `pad[i] -> slot[i]` mapping and its named tradeoff.
+ * @param layoutFor The player's layout for a profile id (issue #754), consulted on every poll
+ * so an edit in Settings reaches the next one. Defaults to every profile as it ships.
  */
-export function createGamepadReader(getGamepads: GetGamepads, padIndex: number = 0): GamepadReader {
+export function createGamepadReader(
+  getGamepads: GetGamepads,
+  padIndex: number = 0,
+  layoutFor: LayoutLookup = recommendedLayouts,
+): GamepadReader {
+  const effective = createEffectiveProfileReader(layoutFor);
   let cachedConnected = false;
   let prevFire = false;
   let prevMine = false;
@@ -264,10 +279,13 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
       // rising edge itself from connected(), and two mechanisms for one concept is how
       // the unwired one rots while its tests keep advertising coverage.
 
-      const move = deadzoneVector(pad.axes[profile.axes.moveX] ?? 0, pad.axes[profile.axes.moveY] ?? 0);
+      // Read through the player's layout (issue #754): every index below is the one the player
+      // chose, or the profile's own when they chose nothing.
+      const read = effective(profile);
+      const move = deadzoneVector(pad.axes[read.axes.moveX] ?? 0, pad.axes[read.axes.moveY] ?? 0);
 
       let aim: Vec2 | null = null;
-      const aimStick = deadzoneVector(pad.axes[profile.axes.aimX] ?? 0, pad.axes[profile.axes.aimY] ?? 0);
+      const aimStick = deadzoneVector(pad.axes[read.axes.aimX] ?? 0, pad.axes[read.axes.aimY] ?? 0);
       if ((aimStick.x !== 0 || aimStick.y !== 0) && playerPos !== null) {
         const len = Math.hypot(aimStick.x, aimStick.y);
         aim = {
@@ -276,8 +294,8 @@ export function createGamepadReader(getGamepads: GetGamepads, padIndex: number =
         };
       }
 
-      const firePressed = pad.buttons[profile.buttons.fire]?.pressed ?? false;
-      const minePressed = pad.buttons[profile.buttons.mine]?.pressed ?? false;
+      const firePressed = pad.buttons[read.buttons.fire]?.pressed ?? false;
+      const minePressed = pad.buttons[read.buttons.mine]?.pressed ?? false;
       // A resync poll reports no edge and only records what is held -- see `resync()`.
       const fire = firePressed && !prevFire && !resyncPending;
       const mine = minePressed && !prevMine && !resyncPending;
@@ -372,9 +390,14 @@ export interface PlayerInputSource {
  *
  * @param padIndex Defaults to 0 -- see `createGamepadReader`'s own `padIndex` doc
  * comment; `loop.ts` always passes the slot number explicitly for slot 1 and beyond.
+ * @param layoutFor Handed to the reader; see `createGamepadReader`.
  */
-export function createGamepadInputSource(getGamepads: GetGamepads, padIndex: number = 0): PlayerInputSource {
-  const reader = createGamepadReader(getGamepads, padIndex);
+export function createGamepadInputSource(
+  getGamepads: GetGamepads,
+  padIndex: number = 0,
+  layoutFor: LayoutLookup = recommendedLayouts,
+): PlayerInputSource {
+  const reader = createGamepadReader(getGamepads, padIndex, layoutFor);
   let aim: Vec2 = { x: 0, y: 0 };
   let playerPos: Vec2 | null = null;
 

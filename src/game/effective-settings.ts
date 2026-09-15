@@ -1,4 +1,5 @@
 import type { TouchScheme, FireMode } from '../input/touch';
+import type { ControlLayout } from '../input/gamepad-profile';
 import type { PlayerSettings, UiScale, PlayerSettingsStore, QualityPreset } from './settings';
 import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from './capabilities';
 
@@ -21,6 +22,7 @@ import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from
  * | `reducedMotion` | `'system'` follows the OS; `'full'` is always false; `'reduced'` is always true. |
  * | `uiScale` | the stored preference. |
  * | `quality` | the stored preference, UNGATED. Nothing here probes the GPU -- see below. |
+ * | `controllerLayouts` | the stored layouts, UNGATED. Each gamepad reader resolves one against its pad's profile. |
  *
  * Touch scheme and fire mode are deliberately NOT gated on `capabilities.touch`. Gating
  * them would mean a hybrid device -- a laptop with a touchscreen, a tablet with a
@@ -60,6 +62,13 @@ export interface EffectiveSettings {
    * nothing in the game layer may name that type.
    */
   readonly quality: QualityPreset;
+  /**
+   * The player's controller layouts by profile id (issue #754), as stored. Ungated for the
+   * reason the touch scheme is: whether a pad is connected decides whether Settings SHOWS the
+   * control, not what a stored layout means. A gamepad reader resolves one against its pad's
+   * actual profile (`resolveEffectiveProfile`), which is where a stale binding is refused.
+   */
+  readonly controllerLayouts: Readonly<Record<string, ControlLayout>>;
 }
 
 /**
@@ -84,6 +93,7 @@ export function resolveEffectiveSettings(
     uiScale: settings.presentation.uiScale,
     uiScaleFactor: settings.presentation.uiScale / 100,
     quality: settings.presentation.quality,
+    controllerLayouts: settings.input.controllerLayouts,
   });
 }
 

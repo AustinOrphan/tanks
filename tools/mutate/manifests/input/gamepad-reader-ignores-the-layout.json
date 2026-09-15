@@ -1,0 +1,16 @@
+{
+  "id": "gamepad-reader-ignores-the-layout",
+  "file": "src/input/gamepad.ts",
+  "find": "      const read = effective(profile);",
+  "replace": "      const read = profile;",
+  "expect": "killed",
+  "why": "Gameplay input must be read through the player's layout; a reader that reads the shipped profile ignores every preset and binding the player stored.",
+  "tests": [
+    "src/input/gamepad.test.ts",
+    "src/input/input.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadReader: the player's layout (issue #754) reads Fire from its bound control, and the trigger no longer fires",
+    "createGamepadReader: the player's layout (issue #754) drives with the right stick and aims with the left under Southpaw"
+  ]
+}

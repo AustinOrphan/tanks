@@ -1,0 +1,15 @@
+{
+  "id": "settings-serializer-drops-controller-layouts",
+  "file": "src/game/settings.ts",
+  "find": "      controllerLayouts: settings.input.controllerLayouts,",
+  "replace": "      controllerLayouts: {},",
+  "expect": "killed",
+  "why": "A layout must survive a reload; a serializer that writes none keeps the change for the session and loses it on the next page load.",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "killedBy": [
+    "createPlayerSettingsStore: controller layouts (issue #754) persists a layout under its profile id and reads it back in a fresh store",
+    "createPlayerSettingsStore: controller layouts (issue #754) round-trips layouts through the wire form"
+  ]
+}

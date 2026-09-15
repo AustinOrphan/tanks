@@ -1,0 +1,14 @@
+{
+  "id": "catalogue-accepts-a-bindable-button-twice",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "      new Set(bindable.map((c) => c.index)).size !== bindable.length",
+  "replace": "      false",
+  "expect": "killed",
+  "why": "A catalogue profile offering one button under two bindable names would let two actions look distinct in a layout while reading the same button.",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "bindable controls (issue #754) refuses a catalogue profile that names a bindable control id, or a button, twice"
+  ]
+}

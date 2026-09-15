@@ -11,7 +11,7 @@ import {
   type GamepadLike,
   type GetGamepads,
 } from './gamepad';
-import { classifyPad } from './gamepad-profile';
+import { classifyPad, RECOMMENDED_LAYOUT, type ControlLayout } from './gamepad-profile';
 import { AIM_PROJECTION_UNITS, AIM_GRID } from './touch';
 import { createWorld, applyPlayerInput } from '../sim/world';
 import type { Tank } from '../sim/types';
@@ -642,5 +642,68 @@ describe('readDetectedPads: the controller assignment panel\'s live list', () =>
       throw new Error('no gamepad API');
     };
     expect(readDetectedPads(throwing)).toEqual([]);
+  });
+});
+
+describe("createGamepadReader: the player's layout (issue #754)", () => {
+  /** Button 5 on a standard pad: the right bumper, which is no action as the pad ships. */
+  const BUMPER_RIGHT = 5;
+  const FIRE_ON_BUMPER: ControlLayout = { preset: 'recommended', bindings: { fire: 'bumper-right' } };
+
+  it('reads Fire from its bound control, and the trigger no longer fires', () => {
+    const bumper = [fakePad({ buttons: Object.assign([], { [BUMPER_RIGHT]: true }) })];
+    const trigger = [fakePad({ fire: true })];
+    expect(createGamepadReader(() => bumper, 0, () => FIRE_ON_BUMPER).poll(null).fire).toBe(true);
+    expect(createGamepadReader(() => trigger, 0, () => FIRE_ON_BUMPER).poll(null).fire).toBe(false);
+    // Controls: as the pad ships, the trigger fires and the bumper does not.
+    expect(createGamepadReader(() => trigger).poll(null).fire).toBe(true);
+    expect(createGamepadReader(() => bumper).poll(null).fire).toBe(false);
+  });
+
+  it('drives with the right stick and aims with the left under Southpaw', () => {
+    const southpaw: ControlLayout = { preset: 'southpaw', bindings: {} };
+    const leftStickRight = [fakePad({ axes: [1, 0, 0, 0] })];
+    const player = { x: 0, y: 0 };
+
+    const shipped = createGamepadReader(() => leftStickRight).poll(player);
+    expect(shipped.move.x).toBe(1);
+    expect(shipped.aim).toBeNull();
+
+    const swapped = createGamepadReader(() => leftStickRight, 0, () => southpaw).poll(player);
+    expect(swapped.move).toEqual({ x: 0, y: 0 });
+    expect(swapped.aim).toEqual({ x: AIM_PROJECTION_UNITS, y: 0 });
+  });
+
+  it('still adopts a held REBOUND fire button on the resync poll (#494)', () => {
+    // The resync guards whatever button fire is on, not the trigger it ships on.
+    const pads = [fakePad({ buttons: Object.assign([], { [BUMPER_RIGHT]: true }) })];
+    const control = createGamepadReader(() => pads, 0, () => FIRE_ON_BUMPER);
+    const resynced = createGamepadReader(() => pads, 0, () => FIRE_ON_BUMPER);
+    resynced.resync();
+    expect(control.poll(null).fire).toBe(true);
+    expect(resynced.poll(null).fire).toBe(false);
+  });
+
+  it('reads a changed layout on the very next poll', () => {
+    let current: ControlLayout = RECOMMENDED_LAYOUT;
+    let held = false;
+    const reader = createGamepadReader(
+      () => [fakePad({ buttons: Object.assign([], { [BUMPER_RIGHT]: held }) })],
+      0,
+      () => current,
+    );
+    held = true;
+    expect(reader.poll(null).fire).toBe(false);
+    held = false;
+    reader.poll(null);
+    current = FIRE_ON_BUMPER;
+    held = true;
+    expect(reader.poll(null).fire).toBe(true);
+  });
+
+  it("passes the source's layout to its reader", () => {
+    const pads = [fakePad({ buttons: Object.assign([], { [BUMPER_RIGHT]: true }) })];
+    expect(createGamepadInputSource(() => pads, 0, () => FIRE_ON_BUMPER).sample().fire).toBe(true);
+    expect(createGamepadInputSource(() => pads).sample().fire).toBe(false);
   });
 });

@@ -152,6 +152,7 @@ import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLe
 import { createLevelSystem } from './levels';
 import type { SlotSource } from '../input/assignment';
 import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
+import { RECOMMENDED_LAYOUT, type ControlLayout, type LayoutLookup } from '../input/gamepad-profile';
 import type { PadDiagnostic } from '../input/gamepad-diagnostics';
 import { SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
@@ -2978,7 +2979,10 @@ describe('startGameWith: capability-aware settings (issue #320)', () => {
     // GREW an index field is caught rather than merely a currently-absent one.
     const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>;
     expect(Object.keys(parsed).sort()).toEqual(['audio', 'input', 'presentation', 'version']);
+    // `controllerLayouts` (issue #754) is keyed by LOGICAL profile id such as `standard`,
+    // never by a pad index or device id; the substring checks above hold it to that.
     expect(Object.keys(parsed.input).sort()).toEqual([
+      'controllerLayouts',
       'controllerRumble',
       'deviceHaptics',
       'fireMode',
@@ -6215,11 +6219,11 @@ describe('startGameWith: stats wiring', () => {
 describe('startGameWith: gamepad connect toast (issue #114)', () => {
   it('passes the gamepad devFlag through to createInput, off by default', () => {
     const off = boot(makeDeps());
-    expect(off.rec.inputOptions).toEqual([{ gamepad: false }]);
+    expect(off.rec.inputOptions).toEqual([{ gamepad: false, layoutFor: expect.any(Function) }]);
     off.handle.dispose();
 
     const on = boot(makeDeps({ devFlags: { gamepad: true } }));
-    expect(on.rec.inputOptions).toEqual([{ gamepad: true }]);
+    expect(on.rec.inputOptions).toEqual([{ gamepad: true, layoutFor: expect.any(Function) }]);
     on.handle.dispose();
   });
 
@@ -6371,7 +6375,7 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
     expect(h.rec.slot1Positions).toEqual([]);
     // Slot 0's own gamepad option is governed by `gamepad` alone, exactly as before
     // this PR -- `players` unset must not perturb it either way.
-    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false, layoutFor: expect.any(Function) }]);
     h.handle.dispose();
     expect(h.rec.slot1Disposed).toBe(false); // nothing was ever built to dispose
   });
@@ -6389,7 +6393,7 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
     // Slot 0's own gamepad option is governed by `deps.devFlags.gamepad` alone (default
     // off here) -- see the "players=2 + gamepad=1" test below for the reversed rule
     // that lets it be on too, composing with slot 1's own dedicated reader.
-    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false, layoutFor: expect.any(Function) }]);
 
     const world = h.rec.builtWorlds[0];
     const p0 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
@@ -6429,7 +6433,7 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
   // docs/superpowers/plans/2026-08-17-controllers-4.md.
   it('players=2 + gamepad=1 together: slot 0 now HONOURS its own gamepad flag (the reversed rule), and slot 1 still gets its own dedicated source at padIndex 1', () => {
     const h = boot(makeDeps({ devFlags: { players: 2, gamepad: true } }));
-    expect(h.rec.inputOptions).toEqual([{ gamepad: true }]);
+    expect(h.rec.inputOptions).toEqual([{ gamepad: true, layoutFor: expect.any(Function) }]);
     // Slot 0's merge goes through createInput's own `gamepad` option, not through
     // deps.createGamepadSource -- so this factory is still called exactly once, for
     // slot 1 alone, whether or not slot 0's flag is on.
@@ -6448,7 +6452,7 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
     // Slot 0 is unaffected: with the sandbox excluding multiplayer, its own gamepad
     // option reverts to devFlags.gamepad alone (off here, matching every
     // single-player boot).
-    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false, layoutFor: expect.any(Function) }]);
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.slot1Samples).toBe(0);
@@ -6671,7 +6675,7 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
 
   it('bots=4 + gamepad=1 together: createInput still receives gamepad:true (unconditional on devFlags.gamepad alone, unaffected by bots or playerCount), even though slot 0 is bot-claimed and never samples it', () => {
     const h = boot(makeDeps({ devFlags: { players: 4, bots: 4, gamepad: true } }));
-    expect(h.rec.inputOptions).toEqual([{ gamepad: true }]);
+    expect(h.rec.inputOptions).toEqual([{ gamepad: true, layoutFor: expect.any(Function) }]);
     expect(h.rec.gamepadSourceBuilds).toBe(0); // every slot is bot-claimed
     h.handle.dispose();
   });
@@ -6998,6 +7002,37 @@ describe('startGameWith: reassignSlot (controller assignment UI, docs/superpower
     // falling edge. Without the re-sync this appends "Player 3's controller disconnected".
     expect(h.rec.plainToasts).toEqual(["Player 3's controller connected"]);
     h.handle.dispose();
+  });
+});
+
+describe("startGameWith: the player's controller layout reaches every gamepad reader (issue #754)", () => {
+  it('hands slot 0 and each co-player source ONE lookup, which follows a stored layout edit', () => {
+    const h = makeDeps({ devFlags: { players: 2, seed: 42 } });
+    const base = h.deps;
+    let slot0: LayoutLookup | undefined;
+    const coPlayers: (LayoutLookup | undefined)[] = [];
+    h.deps = {
+      ...base,
+      createInput: (target, screenToGround, options) => {
+        slot0 = options?.layoutFor;
+        return base.createInput(target, screenToGround, options);
+      },
+      createGamepadSource: (padIndex: number, layoutFor?: LayoutLookup) => {
+        coPlayers.push(layoutFor);
+        return createGamepadInputSource(() => [], padIndex, layoutFor);
+      },
+    };
+    boot(h);
+
+    expect(slot0, 'slot 0 was built without a layout lookup').toBeDefined();
+    expect(coPlayers, 'expected exactly one co-player source').toHaveLength(1);
+    expect(coPlayers[0], 'the co-player got a different lookup from slot 0').toBe(slot0);
+    expect(slot0?.('standard')).toBe(RECOMMENDED_LAYOUT);
+
+    // The edit reaches the lookup through the session's one settings subscription.
+    const southpaw: ControlLayout = { preset: 'southpaw', bindings: {} };
+    h.settingsStore.setControllerLayout('standard', southpaw);
+    expect(slot0?.('standard')).toEqual(southpaw);
   });
 });
 

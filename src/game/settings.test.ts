@@ -14,6 +14,8 @@ import {
   DEFAULT_UI_SCALE,
   DEFAULT_MOTION,
   DEFAULT_CONTROLLER_RUMBLE,
+  DEFAULT_CONTROLLER_LAYOUTS,
+  controllerLayoutFor,
   DEFAULT_DEVICE_HAPTICS,
   DEFAULT_TOUCH_SCHEME,
   DEFAULT_FIRE_MODE,
@@ -34,6 +36,7 @@ import {
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { createMemoryStorage } from './storage';
 import { TOUCH_SCHEMES, FIRE_MODES } from '../input/touch';
+import { RECOMMENDED_LAYOUT, type ControlLayout } from '../input/gamepad-profile';
 
 beforeEach(() => localStorage.clear());
 
@@ -71,8 +74,8 @@ describe('the schema constants', () => {
   });
 
   it('pins every documented default, so a silent retune fails here', () => {
-    // Population: all NINE fields in PlayerSettings -- eight from issue #320 plus
-    // `presentation.quality`, added by #540. Each is asserted against the literal the
+    // Population: all TEN fields in PlayerSettings -- eight from issue #320, plus
+    // `presentation.quality` (#540) and `input.controllerLayouts` (#754). Each is asserted against the literal the
     // issue requires, not against its own constant -- comparing a constant to itself
     // would pass whatever the constant became.
     //
@@ -90,6 +93,8 @@ describe('the schema constants', () => {
     expect(DEFAULT_MOTION).toBe('system');
     expect(DEFAULT_UI_SCALE).toBe(100);
     expect(DEFAULT_QUALITY_PRESET).toBe('high');
+    // No profile customised: every controller reads as it ships until a player changes it.
+    expect(DEFAULT_CONTROLLER_LAYOUTS).toEqual({});
     expect(DEFAULT_SETTINGS).toEqual({
       audio: { muted: false, volume: 0.6 },
       input: {
@@ -97,6 +102,7 @@ describe('the schema constants', () => {
         fireMode: 'tap',
         deviceHaptics: true,
         controllerRumble: true,
+        controllerLayouts: {},
       },
       presentation: { motion: 'system', uiScale: 100, quality: 'high' },
     });
@@ -127,7 +133,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
   });
 
   it('round-trips EVERY field through a fresh construction', () => {
-    // Population: all eight fields, each moved OFF its default so a store that silently
+    // Population: all ten fields, each moved OFF its default so a store that silently
     // fell back would have to disagree rather than accidentally match.
     const a = createPlayerSettingsStore(localStorage);
     a.setMuted(true);
@@ -136,6 +142,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
     a.setFireMode('button');
     a.setDeviceHaptics(false);
     a.setControllerRumble(false);
+    a.setControllerLayout('standard', { preset: 'southpaw', bindings: { fire: 'bumper-right' } });
     a.setMotion('reduced');
     a.setUiScale(150);
     a.setQuality('low');
@@ -146,6 +153,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
         fireMode: 'button',
         deviceHaptics: false,
         controllerRumble: false,
+        controllerLayouts: { standard: { preset: 'southpaw', bindings: { fire: 'bumper-right' } } },
       },
       presentation: { motion: 'reduced', uiScale: 150, quality: 'low' },
     };
@@ -326,7 +334,13 @@ describe('parseSettingsPayload: stored data', () => {
   it('round-trips its own serialiser exactly', () => {
     const settings: PlayerSettings = {
       audio: { muted: true, volume: 0.75 },
-      input: { touchScheme: 'point', fireMode: 'double', deviceHaptics: false, controllerRumble: false },
+      input: {
+        touchScheme: 'point',
+        fireMode: 'double',
+        deviceHaptics: false,
+        controllerRumble: false,
+        controllerLayouts: { standard: { preset: 'southpaw', bindings: { confirm: 'face-left' } } },
+      },
       presentation: { motion: 'full', uiScale: 125, quality: 'medium' },
     };
     const parsed = parseSettingsPayload(serializeSettings(settings));
@@ -471,6 +485,7 @@ describe('createPlayerSettingsStore: legacy migration', () => {
       fireMode: 'button',
       deviceHaptics: false,
       controllerRumble: DEFAULT_CONTROLLER_RUMBLE, // no legacy field existed
+      controllerLayouts: DEFAULT_CONTROLLER_LAYOUTS, // nor for this
     });
     // Non-legacy fields are the current defaults, not anything invented.
     expect(store.snapshot().audio).toEqual(DEFAULT_SETTINGS.audio);
@@ -659,5 +674,110 @@ describe('createPlayerSettingsStore: reset', () => {
     store.subscribe((s) => seen.push(s));
     store.reset();
     expect(seen).toEqual([DEFAULT_SETTINGS]);
+  });
+});
+
+describe('createPlayerSettingsStore: controller layouts (issue #754)', () => {
+  const SOUTHPAW: ControlLayout = { preset: 'southpaw', bindings: { fire: 'bumper-right' } };
+
+  /** The parsed settings of a payload that must read as current. */
+  function current(raw: string): PlayerSettings {
+    const parsed = parseSettingsPayload(raw);
+    if (parsed.kind !== 'current') throw new Error(`expected a current payload, got ${parsed.kind}`);
+    return parsed.settings;
+  }
+
+  it('customises no profile by default, and a profile with no entry reads as Recommended', () => {
+    const store = createPlayerSettingsStore(localStorage);
+    expect(DEFAULT_CONTROLLER_LAYOUTS).toEqual({});
+    expect(store.snapshot().input.controllerLayouts).toEqual({});
+    expect(controllerLayoutFor(store.snapshot().input.controllerLayouts, 'standard')).toBe(RECOMMENDED_LAYOUT);
+  });
+
+  it('persists a layout under its profile id and reads it back in a fresh store', () => {
+    createPlayerSettingsStore(localStorage).setControllerLayout('standard', SOUTHPAW);
+    const reloaded = createPlayerSettingsStore(localStorage).snapshot().input.controllerLayouts;
+    expect(reloaded).toEqual({ standard: SOUTHPAW });
+    // The lookup hands back the stored object itself, which the readers cache on.
+    expect(controllerLayoutFor(reloaded, 'standard')).toBe(reloaded.standard);
+  });
+
+  it("resets one profile's layout and keeps every other profile's", () => {
+    const store = createPlayerSettingsStore(localStorage);
+    store.setControllerLayout('standard', SOUTHPAW);
+    store.setControllerLayout('gamecube', { preset: 'recommended', bindings: { mine: 'face-top' } });
+    store.resetControllerLayout('standard');
+    expect(Object.keys(store.snapshot().input.controllerLayouts)).toEqual(['gamecube']);
+    expect(Object.keys(createPlayerSettingsStore(localStorage).snapshot().input.controllerLayouts)).toEqual([
+      'gamecube',
+    ]);
+  });
+
+  it('removes the entry when a layout is set back to Recommended with no bindings', () => {
+    const store = createPlayerSettingsStore(localStorage);
+    store.setControllerLayout('standard', SOUTHPAW);
+    store.setControllerLayout('standard', RECOMMENDED_LAYOUT);
+    expect(store.snapshot().input.controllerLayouts).toEqual({});
+  });
+
+  it('refuses a malformed profile id or layout and changes nothing', () => {
+    const store = createPlayerSettingsStore(localStorage);
+    store.setControllerLayout('standard', SOUTHPAW);
+    const before = store.snapshot();
+    // Population: four malformed ids with a valid layout, then four malformed layouts on a valid id.
+    for (const id of ['__proto__', '', 'Standard', 'x'.repeat(65)]) store.setControllerLayout(id, SOUTHPAW);
+    for (const bad of [
+      { preset: 'upside-down', bindings: {} },
+      { preset: 'southpaw', bindings: { jump: 'face-left' } },
+      { preset: 'southpaw', bindings: { fire: 3 } },
+      { preset: 'southpaw', bindings: { fire: 'Face Left' } },
+    ]) {
+      store.setControllerLayout('standard', bad as never);
+    }
+    expect(store.snapshot()).toBe(before);
+    // Control: a well-formed change on the same store is accepted.
+    store.setControllerLayout('standard', { preset: 'recommended', bindings: { pause: 'select' } });
+    expect(store.snapshot()).not.toBe(before);
+  });
+
+  it('loads layouts entry by entry: the valid part of each survives, junk is dropped, and siblings are untouched', () => {
+    // A raw string, because `__proto__` in an object literal sets the prototype instead of
+    // making a key, and a stored payload can carry it as a real key.
+    const settings = current(
+      '{"version":1,"input":{"controllerRumble":false,"controllerLayouts":{' +
+        '"standard":{"preset":"southpaw","bindings":{"fire":"bumper-right","jump":"face-left","mine":7}},' +
+        '"gamecube":{"preset":"upside-down","bindings":{"confirm":"face-left"}},' +
+        '"__proto__":{"preset":"southpaw","bindings":{}},' +
+        '"Bad Id":{"preset":"southpaw","bindings":{}},' +
+        '"plain":{"preset":"recommended","bindings":{}},' +
+        '"junk":5}}}',
+    );
+    const layouts = settings.input.controllerLayouts;
+    expect(layouts).toEqual({
+      standard: { preset: 'southpaw', bindings: { fire: 'bumper-right' } },
+      gamecube: { preset: 'recommended', bindings: { confirm: 'face-left' } },
+    });
+    expect(Object.getPrototypeOf(layouts)).toBe(Object.prototype);
+    expect(settings.input.controllerRumble).toBe(false);
+  });
+
+  it('reads a non-object controllerLayouts as none, without costing a sibling', () => {
+    const settings = current('{"version":1,"input":{"touchScheme":"point","controllerLayouts":"southpaw"}}');
+    expect(settings.input.controllerLayouts).toEqual({});
+    expect(settings.input.touchScheme).toBe('point');
+  });
+
+  it('keeps a well-formed binding to a control no profile names, for the reader to refuse', () => {
+    // Deliberate: this store cannot see a pad's profile, and a later build may add the control.
+    const settings = current(
+      '{"version":1,"input":{"controllerLayouts":{"standard":{"preset":"recommended","bindings":{"fire":"paddle-left"}}}}}',
+    );
+    expect(settings.input.controllerLayouts.standard?.bindings.fire).toBe('paddle-left');
+  });
+
+  it('round-trips layouts through the wire form', () => {
+    const store = createPlayerSettingsStore(localStorage);
+    store.setControllerLayout('standard', SOUTHPAW);
+    expect(current(serializeSettings(store.snapshot()))).toEqual(store.snapshot());
   });
 });

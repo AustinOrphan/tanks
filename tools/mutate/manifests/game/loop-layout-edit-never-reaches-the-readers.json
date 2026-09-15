@@ -1,0 +1,14 @@
+{
+  "id": "loop-layout-edit-never-reaches-the-readers",
+  "file": "src/game/loop.ts",
+  "find": "    controllerLayouts = effective.controllerLayouts;",
+  "replace": "    void effective.controllerLayouts;",
+  "expect": "killed",
+  "why": "The session's gamepad readers look layouts up through a variable the settings subscription refreshes; without the refresh a Settings edit reaches no reader until the next session.",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the player's controller layout reaches every gamepad reader (issue #754) hands slot 0 and each co-player source ONE lookup, which follows a stored layout edit"
+  ]
+}

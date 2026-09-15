@@ -1915,6 +1915,27 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     expect(f.frames, 'the frame did not queue its successor').toHaveLength(1);
   });
 
+  it("reads Back through the player's stored controller layout, from the frame after the edit (issue #754)", () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    (f.root.querySelector('.hud-customize-open') as HTMLElement).focus();
+    f.pads.push(pad(0)); // A: confirm
+    frame(f, 0);
+    const customize = f.root.querySelector('.hud-customize') as HTMLElement;
+    expect(customize.classList.contains('hud-customize--hidden'), 'Confirm did not open the pane').toBe(false);
+    f.pads[0] = pad();
+    frame(f, 16);
+
+    f.stores.settings.setControllerLayout('standard', { preset: 'recommended', bindings: { back: 'face-left' } });
+    f.pads[0] = pad(1); // B, which the layout no longer makes Back
+    frame(f, 32);
+    expect(customize.classList.contains('ui-surface--leaving'), 'the old Back button still backed out').toBe(false);
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(2); // face-left, the bound Back
+    frame(f, 64);
+    expect(customize.classList.contains('ui-surface--leaving'), 'the bound Back did not pop the pane').toBe(true);
+  });
+
   it('any button at Launch dismisses the splash, exactly as a key does', () => {
     const f = fixture();
     expect(f.host.sm.atLaunch).toBe(true);

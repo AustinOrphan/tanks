@@ -1,0 +1,15 @@
+{
+  "id": "settings-layout-id-accepts-anything",
+  "file": "src/game/settings.ts",
+  "find": "const LAYOUT_ID = /^[a-z0-9][a-z0-9._:-]{0,63}$/;",
+  "replace": "const LAYOUT_ID = /^.{1,64}$/;",
+  "expect": "killed",
+  "why": "Stored profile and control ids are held to short lowercase ASCII; accepting any string lets a stored `__proto__` key replace the layouts object's prototype and admits ids no profile uses.",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "killedBy": [
+    "createPlayerSettingsStore: controller layouts (issue #754) refuses a malformed profile id or layout and changes nothing",
+    "createPlayerSettingsStore: controller layouts (issue #754) loads layouts entry by entry: the valid part of each survives, junk is dropped, and siblings are untouched"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "layout-binding-to-an-unknown-control-reads-a-raw-index",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "    if (index === undefined) refused.push({ action, control, reason: 'unknown-control' });\n    else pending.set(action, { control, index });",
+  "replace": "    pending.set(action, { control, index: index ?? 0 });",
+  "expect": "killed",
+  "why": "A binding may only target a control the profile names; a stale or foreign control id must be refused as unknown, not turned into a raw button index the profile never vouched for.",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "resolveEffectiveProfile (issue #754) refuses a control the profile does not name, and the action keeps its own button"
+  ]
+}

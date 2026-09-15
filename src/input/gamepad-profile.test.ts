@@ -7,6 +7,12 @@ import {
   profileCollisions,
   profileRequirements,
   validateProfileCatalogue,
+  BINDABLE_ACTIONS,
+  RECOMMENDED_LAYOUT,
+  createEffectiveProfileReader,
+  presetsFor,
+  resolveEffectiveProfile,
+  type ControlLayout,
   type ControlProfile,
   type ProfileEntry,
 } from './gamepad-profile';
@@ -308,5 +314,174 @@ describe('validateProfileCatalogue refuses a catalogue that cannot mean what it 
       },
     };
     expect(profileCollisions(collided).sort()).toEqual(['fire/confirm', 'mine/back']);
+  });
+});
+
+/** A profile naming its move pair twice: readable, and with no second stick pair to swap. */
+const ONE_PAIR: ControlProfile = { ...STANDARD_PROFILE, axes: { moveX: 0, moveY: 1, aimX: 0, aimY: 1 } };
+
+function layout(preset: ControlLayout['preset'], bindings: ControlLayout['bindings'] = {}): ControlLayout {
+  return { preset, bindings };
+}
+
+describe('bindable controls (issue #754)', () => {
+  it("offers every action's own standard button, and neither the D-pad nor Home", () => {
+    const indices = (STANDARD_PROFILE.bindable ?? []).map((c) => c.index);
+    for (const action of BINDABLE_ACTIONS) {
+      expect(indices, action).toContain(STANDARD_PROFILE.buttons[action]);
+    }
+    const { up, down, left, right } = STANDARD_PROFILE.buttons;
+    for (const reserved of [up, down, left, right, 16]) expect(indices).not.toContain(reserved);
+  });
+
+  it('refuses a catalogue profile that names a bindable control id, or a button, twice', () => {
+    const entry = (bindable: ControlProfile['bindable']): ProfileEntry => ({
+      match: { idIncludes: 'fixture' },
+      profile: { ...STANDARD_PROFILE, id: 'fixture-bindable', bindable },
+    });
+    // Control: the standard list itself passes the same check.
+    expect(() => validateProfileCatalogue([entry(STANDARD_PROFILE.bindable)])).not.toThrow();
+    const twiceNamed = [{ id: 'a', index: 0 }, { id: 'a', index: 1 }];
+    const twicePressed = [{ id: 'a', index: 0 }, { id: 'b', index: 0 }];
+    expect(() => validateProfileCatalogue([entry(twiceNamed)])).toThrow(/twice/);
+    expect(() => validateProfileCatalogue([entry(twicePressed)])).toThrow(/twice/);
+  });
+});
+
+describe('presetsFor (issue #754)', () => {
+  it('offers Southpaw on the standard profile, whose four stick axes are distinct', () => {
+    expect(presetsFor(STANDARD_PROFILE)).toEqual(['recommended', 'southpaw']);
+  });
+
+  it('offers Recommended alone on a profile that names one axis twice', () => {
+    expect(presetsFor(ONE_PAIR)).toEqual(['recommended']);
+  });
+});
+
+describe('resolveEffectiveProfile (issue #754)', () => {
+  it('returns the profile ITSELF for Recommended with no bindings', () => {
+    const r = resolveEffectiveProfile(STANDARD_PROFILE, RECOMMENDED_LAYOUT);
+    expect(r.profile).toBe(STANDARD_PROFILE);
+    expect(r.preset).toBe('recommended');
+    expect(r.refused).toEqual([]);
+  });
+
+  it('swaps the movement and aim pairs for Southpaw, and moves no button', () => {
+    const r = resolveEffectiveProfile(STANDARD_PROFILE, layout('southpaw'));
+    expect(r.profile.axes).toEqual({ moveX: 2, moveY: 3, aimX: 0, aimY: 1 });
+    expect(r.profile.buttons).toEqual(STANDARD_PROFILE.buttons);
+    expect(r.profile.id).toBe(STANDARD_PROFILE.id);
+    expect(r.preset).toBe('southpaw');
+  });
+
+  it('applies Recommended when the profile cannot honour the preset asked for', () => {
+    const r = resolveEffectiveProfile(ONE_PAIR, layout('southpaw'));
+    expect(r.preset).toBe('recommended');
+    expect(r.profile).toBe(ONE_PAIR);
+  });
+
+  it('moves a bound action to the named control and leaves the other eight where they were', () => {
+    const r = resolveEffectiveProfile(STANDARD_PROFILE, layout('recommended', { fire: 'bumper-right' }));
+    expect(r.profile.buttons).toEqual({ ...STANDARD_PROFILE.buttons, fire: 5 });
+    expect(r.refused).toEqual([]);
+  });
+
+  it('refuses a control the profile does not name, and the action keeps its own button', () => {
+    const stale = resolveEffectiveProfile(STANDARD_PROFILE, layout('recommended', { fire: 'paddle-left' }));
+    expect(stale.profile).toBe(STANDARD_PROFILE);
+    expect(stale.refused).toEqual([{ action: 'fire', control: 'paddle-left', reason: 'unknown-control' }]);
+
+    // A profile naming no bindable controls refuses even a name the standard profile has.
+    const bare: ControlProfile = {
+      id: 'bare',
+      label: 'no bindable controls',
+      axes: STANDARD_PROFILE.axes,
+      buttons: STANDARD_PROFILE.buttons,
+    };
+    const none = resolveEffectiveProfile(bare, layout('recommended', { fire: 'face-left' }));
+    expect(none.profile).toBe(bare);
+    expect(none.refused.map((x) => x.reason)).toEqual(['unknown-control']);
+  });
+
+  it("refuses a binding onto another action's button, so Confirm can never also fire (#494)", () => {
+    // face-bottom is Confirm's own button: Fire there would shoot on the press that resumes play.
+    const r = resolveEffectiveProfile(STANDARD_PROFILE, layout('recommended', { fire: 'face-bottom' }));
+    expect(r.profile).toBe(STANDARD_PROFILE);
+    expect(r.refused).toEqual([{ action: 'fire', control: 'face-bottom', reason: 'collision' }]);
+  });
+
+  it('lets two bindings that SWAP buttons stand, since afterwards nothing is shared', () => {
+    const swap = layout('recommended', { fire: 'face-bottom', confirm: 'trigger-right' });
+    const r = resolveEffectiveProfile(STANDARD_PROFILE, swap);
+    expect(r.profile.buttons.fire).toBe(0);
+    expect(r.profile.buttons.confirm).toBe(7);
+    expect(r.refused).toEqual([]);
+  });
+
+  it('refuses BOTH bindings that name one control, rather than picking a winner', () => {
+    const r = resolveEffectiveProfile(STANDARD_PROFILE, layout('recommended', { fire: 'face-left', mine: 'face-left' }));
+    expect(r.profile).toBe(STANDARD_PROFILE);
+    expect(r.refused.map((x) => x.action).sort()).toEqual(['fire', 'mine']);
+  });
+
+  it('keeps refusing until nothing clashes: returning one binding can expose a clash for another', () => {
+    // Round one: Confirm on face-right clashes with Back, so Confirm returns to face-bottom.
+    // Round two: that is where Fire was bound, so Fire returns too.
+    const chain = layout('recommended', { fire: 'face-bottom', confirm: 'face-right' });
+    const r = resolveEffectiveProfile(STANDARD_PROFILE, chain);
+    expect(r.profile).toBe(STANDARD_PROFILE);
+    expect(r.refused).toEqual([
+      { action: 'confirm', control: 'face-right', reason: 'collision' },
+      { action: 'fire', control: 'face-bottom', reason: 'collision' },
+    ]);
+  });
+
+  it('never leaves two of the nine actions on one button, over every single and paired binding', () => {
+    // Population: 5 actions x 12 standard controls = 60 single bindings, plus each ordered pair
+    // of two different actions (20) bound to any two controls (144) = 2880. 2940 layouts.
+    const controls = (STANDARD_PROFILE.bindable ?? []).map((c) => c.id);
+    const layouts: ControlLayout[] = [];
+    for (const a of BINDABLE_ACTIONS) {
+      for (const c of controls) layouts.push(layout('recommended', { [a]: c } as ControlLayout['bindings']));
+    }
+    for (const a of BINDABLE_ACTIONS) {
+      for (const b of BINDABLE_ACTIONS) {
+        if (a === b) continue;
+        for (const c of controls) {
+          for (const d of controls) {
+            layouts.push(layout('recommended', { [a]: c, [b]: d } as ControlLayout['bindings']));
+          }
+        }
+      }
+    }
+    expect(layouts).toHaveLength(2940);
+    for (const l of layouts) {
+      const buttons = Object.values(resolveEffectiveProfile(STANDARD_PROFILE, l).profile.buttons);
+      expect(new Set(buttons).size, JSON.stringify(l.bindings)).toBe(9);
+    }
+  });
+});
+
+describe('createEffectiveProfileReader (issue #754)', () => {
+  it('re-resolves when the looked-up layout changes, and returns the cached profile while it does not', () => {
+    let current: ControlLayout = RECOMMENDED_LAYOUT;
+    const read = createEffectiveProfileReader(() => current);
+    expect(read(STANDARD_PROFILE)).toBe(STANDARD_PROFILE);
+    current = layout('southpaw');
+    const southpaw = read(STANDARD_PROFILE);
+    expect(southpaw.axes.moveX).toBe(STANDARD_PROFILE.axes.aimX);
+    expect(read(STANDARD_PROFILE)).toBe(southpaw);
+    current = RECOMMENDED_LAYOUT;
+    expect(read(STANDARD_PROFILE)).toBe(STANDARD_PROFILE);
+  });
+
+  it("asks the lookup for the pad's own profile id", () => {
+    const asked: string[] = [];
+    const read = createEffectiveProfileReader((id) => {
+      asked.push(id);
+      return RECOMMENDED_LAYOUT;
+    });
+    read(STANDARD_PROFILE);
+    expect(asked).toEqual(['standard']);
   });
 });
