@@ -1925,7 +1925,11 @@
   gap: var(--hud-space-2);
 }
 
+/* One width for all five rows, the widest one's, so the list reads as a column rather than a
+   ragged stack: measured in the first capture of this pane, where each row was as wide as its
+   own button name. */
 .hud-layout-bind {
+  width: 100%;
   min-width: 18ch;
 }
 
