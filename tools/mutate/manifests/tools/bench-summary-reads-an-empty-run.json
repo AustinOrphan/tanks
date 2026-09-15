@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-reads-an-empty-run",
+  "file": "tools/bench/summary.mjs",
+  "find": "report.frames.count === 0) reasons.push('measured no frames');",
+  "replace": "report.frames.count < 0) reasons.push('measured no frames');",
+  "expect": "killed",
+  "why": "A report that measured no frames is accepted, so its long-frame shares divide by zero in the arm table.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a report that measured no frames"
+  ]
+}

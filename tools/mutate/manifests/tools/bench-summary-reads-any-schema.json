@@ -1,0 +1,15 @@
+{
+  "id": "bench-summary-reads-any-schema",
+  "file": "tools/bench/summary.mjs",
+  "find": "  if (report.schema !== BENCH_REPORT_SCHEMA) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "why": "The summarizer stops checking the report's schema version, so a report from another version is read as if its fields meant what this version's do -- the misreading issue #737's version check exists to refuse.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a report with another schema version, and summarizes nothing",
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a report with no schema field at all"
+  ]
+}

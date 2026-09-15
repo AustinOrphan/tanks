@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-counts-a-file-twice",
+  "file": "tools/bench/summary.mjs",
+  "find": "  if (repeated.length > 0) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "why": "A report named twice (a shell glob that also matches the baseline named first, say) counts as two runs of its arm and moves that arm's median and range.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a file named twice, which would count its run twice"
+  ]
+}

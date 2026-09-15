@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-reads-an-open-window",
+  "file": "tools/bench/summary.mjs",
+  "find": "  if (report.phase !== 'done') {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "why": "A report copied while its measurement window is still open is summarized, so a run cut short is compared with full runs.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a report read before its measurement window closed"
+  ]
+}
