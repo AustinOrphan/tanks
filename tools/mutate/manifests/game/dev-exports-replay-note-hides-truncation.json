@@ -1,0 +1,14 @@
+{
+  "id": "dev-exports-replay-note-hides-truncation",
+  "file": "src/game/dev-exports.ts",
+  "find": "  const truncated = trace.truncated",
+  "replace": "  const truncated = false",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-exports.test.ts"
+  ],
+  "killedBy": [
+    "replayExport saves a replay only when there is one to replay says when recording stopped at its tick limit"
+  ],
+  "why": "A replay cut off at the recorder's tick limit is described as if it covered the whole world. The file's `truncated` field still says so, but the pane's line is what the developer reads when saving, and it would claim a complete recording."
+}

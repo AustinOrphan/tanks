@@ -71,7 +71,23 @@ export interface Renderer3D {
    * media query; game/capabilities.ts is the one place anything asks.
    */
   setReducedMotion(on: boolean): void;
+  /**
+   * Draw the scene as it stands and copy the frame into a new 2D canvas (issue #254's Download
+   * Screenshot). See the implementation for why it draws.
+   */
+  captureFrame(): FrameCapture;
   dispose(): void;
+}
+
+/** A copy of the game canvas's frame, from `Renderer3D.captureFrame`. */
+export interface FrameCapture {
+  /** A 2D canvas holding the copied pixels: encoding it later reads the copy, never the GL buffer. */
+  readonly image: HTMLCanvasElement;
+  /** The drawing buffer's size: the canvas's CSS size times `pixelRatio`. */
+  readonly width: number;
+  readonly height: number;
+  /** `devicePixelRatio`, capped by the quality preset's `pixelRatioCap` (scene.ts). */
+  readonly pixelRatio: number;
 }
 
 export interface RendererOptions {
@@ -254,6 +270,28 @@ export function createRenderer(
     ctx.renderer.render(ctx.scene, ctx.camera);
   }
 
+  /*
+   * WHY IT DRAWS AGAIN. The game's WebGLRenderer is created without `preserveDrawingBuffer`
+   * (scene.ts), so once a frame is presented the browser may clear the drawing buffer, and a
+   * button pressed in a later task reads a blank canvas. The gallery workbench's still avoids
+   * that only because its own renderer preserves the buffer; doing so here would cost every
+   * frame of every session for a developer button. So this draws the scene and copies the
+   * buffer in the same task, before anything can present it.
+   *
+   * It only draws. No system is synced or updated, so the copy is the last rendered state, and
+   * nothing a frame advances (particles, the animation clock, interpolation) moves.
+   */
+  function captureFrame(): FrameCapture {
+    ctx.renderer.render(ctx.scene, ctx.camera);
+    const image = document.createElement('canvas');
+    image.width = canvas.width;
+    image.height = canvas.height;
+    const copy = image.getContext('2d');
+    if (copy === null) throw new Error('no 2D context to copy the frame into');
+    copy.drawImage(canvas, 0, 0);
+    return { image, width: image.width, height: image.height, pixelRatio: ctx.renderer.getPixelRatio() };
+  }
+
   function screenToGround(clientX: number, clientY: number): Vec2 {
     const rect = canvas.getBoundingClientRect();
     ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
@@ -317,6 +355,7 @@ export function createRenderer(
     resize,
     refit,
     worldReplaced,
+    captureFrame,
     setPlayerStyle: (hex, skin, accentHex) => entities.setPlayerStyle(hex, skin, accentHex),
     // Forwarded, not stored: every consumer of the policy owns its own reduced treatment,
     // so the renderer is a router here rather than a second source of truth. Today that is

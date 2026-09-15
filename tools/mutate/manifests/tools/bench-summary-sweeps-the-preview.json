@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-sweeps-the-preview",
+  "file": "tools/bench/summary.mjs",
+  "find": "    const allowed = subject === 'session' ? ARM_FLAGS : [];",
+  "replace": "    const allowed = ARM_FLAGS;",
+  "expect": "killed",
+  "why": "A preview page carrying a sweep flag is accepted, though the preview's own renderer ignores the preset and every override, so its run would be kept beside runs it did not differ from.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer refuses a report it would misread (issue #737) refuses a sweep flag on the preview workload, whose renderer ignores it"
+  ]
+}

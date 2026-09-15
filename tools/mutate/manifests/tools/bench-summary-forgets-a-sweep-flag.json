@@ -1,0 +1,14 @@
+{
+  "id": "bench-summary-forgets-a-sweep-flag",
+  "file": "tools/bench/summary.mjs",
+  "find": "export const ARM_FLAGS = ['quality', 'shadowMapSize', 'antialias', 'pixelRatioCap', 'fillRimLights'];",
+  "replace": "export const ARM_FLAGS = ['quality', 'shadowMapSize', 'antialias', 'pixelRatioCap'];",
+  "expect": "killed",
+  "why": "The restated sweep-flag list drops fillRimLights, so a fill-and-rim-lights arm's report is refused as a foreign flag. The drift guard against render/quality.ts's NO_RENDER_OVERRIDES fails, as does the test sweeping every flag.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer compares only one device, build and workload (issue #737) names as sweep flags exactly the quality preset and every render override, each a real development flag"
+  ]
+}

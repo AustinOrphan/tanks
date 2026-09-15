@@ -1,0 +1,15 @@
+{
+  "id": "bench-summary-divides-by-the-last-arm",
+  "file": "tools/bench/summary.mjs",
+  "find": "  const base = rows[0];",
+  "replace": "  const base = rows[rows.length - 1];",
+  "expect": "killed",
+  "why": "The baseline becomes the last arm named instead of the first report's, so every ratio divides by a sweep arm and the procedure's baseline-first ordering no longer decides what 1.00x means.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summary (issue #737) groups runs into arms, takes the first report's arm as the baseline, and divides by it",
+    "the benchmark summary (issue #737) prints the sitting, the arms and every run, with the caveat that it is no budget"
+  ]
+}

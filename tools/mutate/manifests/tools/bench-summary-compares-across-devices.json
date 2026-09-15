@@ -1,0 +1,15 @@
+{
+  "id": "bench-summary-compares-across-devices",
+  "file": "tools/bench/summary.mjs",
+  "find": "    if (byValue.size > 1) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "why": "Reports from two devices, builds, pixel ratios or workloads are compared, so a ratio mixes devices -- the one comparison issue #737 says the summary must never make.",
+  "tests": [
+    "tools/bench/summary.test.ts"
+  ],
+  "killedBy": [
+    "the benchmark summarizer compares only one device, build and workload (issue #737) refuses a set taken on two devices, naming the fact and the files",
+    "the benchmark summarizer compares only one device, build and workload (issue #737) names every sitting fact that differs: pixel ratio, viewport, build, workload and session"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "dev-exports-replay-skips-the-trace-check",
+  "file": "src/game/dev-exports.ts",
+  "find": "  if (!check.ok) {",
+  "replace": "  if (check.ok && !check.ok) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-exports.test.ts"
+  ],
+  "killedBy": [
+    "replayExport saves a replay only when there is one to replay saves nothing when this build could not replay the trace, and says why"
+  ],
+  "why": "Saves a trace that checkTrace refuses. Issue #254 makes replay export capability-aware; a trace of another schema or other sim data saves without comment, and replaying it later silently produces a different run."
+}

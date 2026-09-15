@@ -1162,7 +1162,11 @@ describe('hud.css is syntactically whole', () => {
     // workbench -- the entry's `hidden` tracks that, and `hidden` is not what this sweep filters on.
     // All three carry `.ui-btn--slab`, so `unstyled` stays empty. The pane BODY's Play and Copy Link
     // are built by `gallery-workbench.ts` only while the pane is open, so this fixture never sees them.
-    expect(buttons.length).toBe(146 + 2 + devMenuButtons());
+    // Issue #254 adds THREE: Developer Tools' Download Screenshot, Download Diagnostics and Download
+    // Replay. 146 -> 149. Static markup, counted whether or not the page binds `developerDownloads`
+    // -- their `hidden` tracks that, and `hidden` is not what this sweep filters on. All three carry
+    // `.ui-btn--slab`, so `unstyled` stays empty.
+    expect(buttons.length).toBe(149 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1278,7 +1282,9 @@ describe('hud.css is syntactically whole', () => {
     // `hidden` is not what this sweep filters on. It carries `.ui-btn--slab`, so `unstyled` stays empty.
     // Issue #730 adds THREE, the same three as the button sweep above: 127 -> 130, each sized by
     // `.ui-btn--slab`.
-    expect(controls.length).toBe(130 + 2 + devMenuButtons());
+    // Issue #254 adds THREE, the same three as the button sweep above: 130 -> 133, each sized by
+    // `.ui-btn--slab`.
+    expect(controls.length).toBe(133 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {
