@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-forced-check-disc-translucent",
+  "file": "src/game/hud.css",
+  "find": "    background: rgb(from Highlight r g b / 1);",
+  "replace": "    background: rgb(from Highlight r g b);",
+  "expect": "killed",
+  "why": "The forced-colours disc loses its explicit alpha. Relative colour syntax with the alpha omitted inherits the origin's, and Chromium's emulated Highlight carries 0.8 in both schemes -- measured: the value computed to `color(srgb 0 0.901961 1 / 0.8)`, the same translucent disc the owner reported on issue #630. The rule still names Highlight and still opts out of forcing, so only the `/ 1` distinguishes it. Killed by the guard that the forced disc carries the opaque form after its plain fallback.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "forced-colors conformance (issue #368) paints the selected check's disc OPAQUE, keeping plain Highlight only as the fallback"
+  ]
+}

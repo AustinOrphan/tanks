@@ -248,6 +248,56 @@
   border-color: #ffffff;
 }
 
+/* The selected CHECK (issue #630): a second, non-colour signal on the chosen control, so the
+ * current choice no longer rests on a 2px white ring alone.
+ *
+ * The approved treatment, and its measured reasons (captures on the built app, posted on #630):
+ *  - A heavy check in a filled disc at the control's top-right corner, 8px outside it. The
+ *    owner picked it ("C3'") over lighter checks and over any treatment that RESERVES room:
+ *    nothing here adds padding or width, and a sweep of 66 control rows across desktop, forced
+ *    colours and three phone widths measured no row reflow and no label contact.
+ *  - SELECTED ONLY. Nothing below is keyed on `:hover` or `:focus`, which keep their own
+ *    properties (fill, border, box-shadow ring, outline) -- see the hover block.
+ *  - `position: relative` on the CHOSEN control only, as the approved captures ran it: it is
+ *    what anchors the disc, and a control that is not chosen has nothing to anchor.
+ *  - `pointer-events: none`, so the disc never takes a click or a hover meant for the control or
+ *    its neighbour, and hit targets are measured on the controls alone.
+ *  - Two layers rather than one: `::before` is the disc and its dark edge, `::after` is the
+ *    check, cut from a mask so it inherits no text colour. Their z-order keeps the check above
+ *    the disc and both above a neighbour the disc overhangs.
+ *
+ * Forced colours redraws the disc in the system selection colour and forces it OPAQUE -- see
+ * the forced-colors block. Map cards are the one placement exception, below
+ * `.hud-versus-map-card`. */
+.ui-selectable--on {
+  position: relative;
+}
+
+.ui-selectable--on::before,
+.ui-selectable--on::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+
+.ui-selectable--on::before {
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px #14181e;
+  z-index: 1;
+}
+
+.ui-selectable--on::after {
+  background: #14181e;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / 15px no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / 15px no-repeat;
+  z-index: 2;
+}
+
 /* Disabled-reason text: the line that says WHY a control the player could resolve is
  * unavailable. Two consumers today -- the versus pane's "Assignment applies after Start."
  * and the level picker's "Clear a level to unlock the next." -- and `ui.ts`'s
@@ -480,6 +530,33 @@
     border-color: Highlight;
   }
 
+  /* The selected check (issue #630), in the system selection colours and OPAQUE.
+   *
+   * Opaque is the whole reason for the two opt-outs. Chromium's forced-colours emulation
+   * resolves `Highlight` WITH an alpha -- measured rgba(0,230,255,0.8) on dark and
+   * rgba(5,0,73,0.8) on light, the only one of 17 system colours read that carries one -- so
+   * a disc painted with it showed the control through it, which the owner reported as a
+   * translucent check. `rgb(from Highlight r g b / 1)` keeps the theme's hue and drops the
+   * alpha; the explicit `/ 1` is required, since relative colour syntax with the alpha omitted
+   * inherits the origin's (measured: still 0.8). The plain `Highlight` before it is the
+   * fallback for an engine without relative colour syntax.
+   *
+   * The agent would repaint an authored relative colour back to its own translucent
+   * Highlight, so each layer opts out of forcing -- scoped to the two pseudo-elements and
+   * nothing they contain. The disc's edge and the check still use system colours (`Canvas`,
+   * `HighlightText`), so they follow the theme like everything else in this block. */
+  .ui-selectable--on::before {
+    forced-color-adjust: none;
+    background: Highlight;
+    background: rgb(from Highlight r g b / 1);
+    box-shadow: 0 0 0 2px Canvas;
+  }
+
+  .ui-selectable--on::after {
+    forced-color-adjust: none;
+    background: HighlightText;
+  }
+
   /* The one primary action per decision region, redrawn as WEIGHT rather than fill. Its
    * green and its raised shadow are both gone by this point (findings 2 and 3). */
   .ui-btn--primary {
@@ -501,8 +578,9 @@
     opacity: 1;
   }
 
-  /* THE ONE OPT-OUT, and the whole justification for it: on a colour swatch the colour is
-   * the CONTENT. `hud.ts` sets each swatch's fill inline from the palette, and forcing
+  /* THE ONE OPT-OUT ON A CONTROL, and the whole justification for it: on a colour swatch the
+   * colour is the CONTENT. (The selected check above opts out too, but on its two
+   * pseudo-elements only, which have no descendants and no text -- see its own comment.) `hud.ts` sets each swatch's fill inline from the palette, and forcing
    * replaces all eleven with one system colour -- so the hull and accent pickers stop
    * offering a choice at all rather than merely looking different. Scoped to the swatch
    * itself and to nothing else in this file.
@@ -3820,6 +3898,26 @@
   align-items: start;
   padding: var(--hud-space-2);
   text-align: left;
+}
+
+/* The selected check sits INSIDE a map card, 4px from its top and right edges, where every other
+ * control carries it 8px outside the corner (issue #630).
+ *
+ * A map card is the one control that meets its scroll pane's edges: at phone width it runs the
+ * full width of the pane, and scrolled to the top it sits flush under it. A disc outside the
+ * corner was cut in both places -- measured on all 7 cards across desktop (normal and both
+ * forced schemes) and 390/360/320px phones: outside the card in 42 of 42, clipped at the pane's
+ * top edge in 42 of 42. The owner ruled for "entirely inset within the map card, both
+ * horizontally and vertically".
+ *
+ * 4px, not the card's own 8px padding. At 4px the disc touched none of the card's name, config
+ * line, intent or preview in any of those 42, and was clipped nowhere, flush to the pane's top
+ * included. At 8px it reached 2px into the config line on the five arena cards at desktop, where
+ * "2/3/4 players . FFA and Teams" wraps to the column's right edge. */
+.hud-versus-map-card.ui-selectable--on::before,
+.hud-versus-map-card.ui-selectable--on::after {
+  top: 4px;
+  right: 4px;
 }
 
 /* Spans all three text rows, so the preview keeps its height however long an intent
