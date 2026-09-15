@@ -120,6 +120,22 @@ export function createGamepadMenuPoller(
   const effective = createEffectiveProfileReader(layoutFor);
   /** Actions currently held across the union of pads, with the time their next repeat is due. */
   const held = new Map<UiAction, number>();
+  /**
+   * How each pad was read on the previous poll, by `getGamepads()` index, as the values of its
+   * effective mapping (issue #754).
+   *
+   * A layout edit can move an action onto a button that is ALREADY down -- the Controller Layout
+   * pane does it on every capture, since the button just chosen is still held. `held` is kept per
+   * action, so that button would read as a new press of its new action on the next poll: Back
+   * moved onto X closes the pane while X is still down. A poll on which any pad's mapping changed
+   * therefore ADOPTS a newly down action as held instead of dispatching it, the menu's form of
+   * the gameplay reader's #494 resync. The cost: a genuinely new press landing on that same poll
+   * is adopted too, and needs pressing again.
+   *
+   * Values, not object identity: the effective reader caches one entry, so pads of two profiles
+   * would hand back a fresh object on every poll and every press would be adopted.
+   */
+  let lastMappings = new Map<number, string>();
   let cachedConnected = false;
   let disposed = false;
 
@@ -133,6 +149,8 @@ export function createGamepadMenuPoller(
         pads = []; // a throwing implementation is a permanently-empty one -- see gamepad.ts
       }
       const down = new Set<UiAction>();
+      const mappings = new Map<number, string>();
+      let remapped = false;
       let any = false;
       for (let i = 0; i < pads.length; i++) {
         const pad = pads[i];
@@ -147,8 +165,14 @@ export function createGamepadMenuPoller(
         any = true;
         const profile = profileFor(classifyPad(pad));
         if (profile === null) continue;
-        actionsDown(pad, effective(profile), down);
+        const read = effective(profile);
+        const mapping = `${read.id}|${Object.values(read.buttons).join(',')}|${Object.values(read.axes).join(',')}`;
+        mappings.set(i, mapping);
+        const before = lastMappings.get(i);
+        if (before !== undefined && before !== mapping) remapped = true;
+        actionsDown(pad, read, down);
       }
+      lastMappings = mappings;
       cachedConnected = any;
       for (const action of UI_ACTIONS) {
         if (!down.has(action)) {
@@ -156,6 +180,11 @@ export function createGamepadMenuPoller(
           continue;
         }
         const due = held.get(action);
+        if (due === undefined && remapped) {
+          // Down only because the mapping moved under a held button: adopted, not pressed.
+          held.set(action, Infinity);
+          continue;
+        }
         if (due === undefined) {
           // The press edge. Directions arm a repeat; the three one-shots never fire again
           // until released.

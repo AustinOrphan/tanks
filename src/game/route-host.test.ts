@@ -1937,9 +1937,10 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
   });
 
   it('rebinds Fire onto B from a controller alone, and the B that completes it does not also back out (issue #754)', () => {
-    // THE ORDERING THIS PAGE OWNS. A capture reads pads on the page frame straight after the
-    // menu poller, and the poller's dispatch stands aside while a capture waits. Either half
-    // wrong and the B chosen for Fire is ALSO Back: the pane closes, and the capture with it.
+    // THE DISPATCH STANDS ASIDE while a capture waits. Without that, the B chosen for Fire is
+    // ALSO Back on the frame it lands: the pane closes, and the capture with it. (The frame
+    // ORDER is the next case's: here B stops being Back once bound, so order alone changes
+    // nothing.)
     const f = fixture({ launchDismissed: true, realHud: true });
     (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
     (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
@@ -1970,6 +1971,36 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     f.pads[0] = pad(7); // RT, where Back moved
     frame(f, 96);
     expect(pane.classList.contains('ui-surface--leaving'), 'the moved Back did not leave the pane').toBe(true);
+  });
+
+  it('reads a capture AFTER the menu poller: Back moved onto X does not back out on the press that moved it (issue #754)', () => {
+    // THE FRAME ORDER. X is no menu action until the capture binds Back to it. Polled after the
+    // menu, X reaches the poller while it is still nothing, and is a held button on the next
+    // frame. Polled before, the capture binds first and the poller then reads the same press
+    // as the new Back: the pane closes on the press that was only meant to choose a button.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
+    (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
+    f.pads.push(pad(0)); // A: confirm
+    frame(f, 0);
+    const pane = f.root.querySelector('.hud-layout') as HTMLElement;
+    f.pads[0] = pad();
+    frame(f, 16);
+    const back = f.root.querySelector('.hud-layout-bind[data-action="back"]') as HTMLButtonElement;
+    back.focus();
+    f.pads[0] = pad(0); // A on the Back row
+    frame(f, 32);
+    expect(back.textContent).toBe('Back: press a button…');
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(2); // X: the choice
+    frame(f, 64);
+    expect(f.stores.settings.snapshot().input.controllerLayouts).toEqual({
+      standard: { preset: 'recommended', bindings: { back: 'face-left' } },
+    });
+    expect(pane.classList.contains('ui-surface--leaving'), 'the X that moved Back also backed out').toBe(false);
+    frame(f, 80); // X still held: not a new press
+    expect(pane.classList.contains('ui-surface--leaving'), 'a held X backed out').toBe(false);
   });
 
   it('any button at Launch dismisses the splash, exactly as a key does', () => {

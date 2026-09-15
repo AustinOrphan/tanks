@@ -1,10 +1,10 @@
 {
   "id": "gamepad-menu-ignores-the-layout",
   "file": "src/input/gamepad-menu.ts",
-  "find": "        actionsDown(pad, effective(profile), down);",
+  "find": "        actionsDown(pad, read, down);",
   "replace": "        actionsDown(pad, profile, down);",
   "expect": "killed",
-  "why": "Menu input must follow the player's layout too; a menu that keeps reading the shipped Confirm and stick leaves a rebound player confirming with a button they moved away.",
+  "why": "Menu input must follow the player's layout too; a menu that keeps reading the shipped Confirm and stick leaves a rebound player confirming with a button they moved away. RE-ANCHORED (issue #754, the Controller Layout pane): the effective profile is now read once into `read`, which the poller also records to notice a remap, so the find string names that variable; the replacement still reads the shipped profile.",
   "tests": [
     "src/input/gamepad-menu.test.ts"
   ],

@@ -4,11 +4,11 @@
   "find": "    menuPoller.poll(now);\n    // AFTER the poll, on the same frame (issue #754): see `RouteUi.pollBindingCapture`.\n    routeUi.pollBindingCapture();\n",
   "replace": "    routeUi.pollBindingCapture();\n    menuPoller.poll(now);\n",
   "expect": "killed",
-  "why": "The capture reads pads after the menu poller on the same page frame. Read first, the press that completes a capture ends it before the poller runs, so the poller no longer stands aside and dispatches the same press as a menu action: a B chosen for Fire also backs out of the pane.",
+  "why": "The capture reads pads after the menu poller on the same page frame. Read first, the press that completes a capture ends it and rewrites the layout before the poller runs, so the poller reads that same press through the NEW layout: X chosen for Back is Back already, and backs out of the pane on the press that only chose it. (A B chosen for Fire does not show this: once bound, B is no longer Back under either order -- the first measurement of this entry survived on that test.)",
   "tests": [
     "src/game/route-host.test.ts"
   ],
   "killedBy": [
-    "createRouteHost: the gamepad menu poller (issue #494) rebinds Fire onto B from a controller alone, and the B that completes it does not also back out (issue #754)"
+    "createRouteHost: the gamepad menu poller (issue #494) reads a capture AFTER the menu poller: Back moved onto X does not back out on the press that moved it (issue #754)"
   ]
 }

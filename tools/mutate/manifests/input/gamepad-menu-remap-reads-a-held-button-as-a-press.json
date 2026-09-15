@@ -1,0 +1,16 @@
+{
+  "id": "gamepad-menu-remap-reads-a-held-button-as-a-press",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "        if (before !== undefined && before !== mapping) remapped = true;",
+  "replace": "        void before;",
+  "expect": "killed",
+  "why": "The menu poller keeps held state per action, so a layout edit that moves an action onto a button already down would read that button as a new press. The Controller Layout pane makes that edit on every capture, with the chosen button still held: Back moved onto X closes the pane on the frame after X was chosen. A poll whose mapping changed adopts newly down actions as held instead.",
+  "tests": [
+    "src/input/gamepad-menu.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createGamepadMenuPoller: the player's layout (issue #754) adopts a button held across a layout change as held, not pressed, and reads it once pressed again",
+    "createRouteHost: the gamepad menu poller (issue #494) reads a capture AFTER the menu poller: Back moved onto X does not back out on the press that moved it (issue #754)"
+  ]
+}

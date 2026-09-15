@@ -958,8 +958,12 @@ describe('the controller layout pane is painted, written and captured for by the
     f.fire('onControllerLayoutRequest', { kind: 'capture', action: 'fire' });
     expect(f.routeUi.capturingBinding()).toBe(true);
     expect(lastModel(f).capturing).toBe('fire');
+    // Two frames with A still down: the first only records what is held, so the second is the
+    // one that would bind a held button.
+    f.routeUi.pollBindingCapture();
     f.routeUi.pollBindingCapture();
     expect(f.routeUi.capturingBinding(), 'the held A bound itself').toBe(true);
+    expect(stored(f), 'the held A bound itself').toEqual({});
     f.pads[0] = standardPad(1); // A up, B down
     f.routeUi.pollBindingCapture();
     expect(f.routeUi.capturingBinding()).toBe(false);
