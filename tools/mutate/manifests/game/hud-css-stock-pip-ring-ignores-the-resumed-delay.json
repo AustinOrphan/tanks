@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-stock-pip-ring-ignores-the-resumed-delay",
+  "file": "src/game/hud.css",
+  "find": "  animation-delay: inherit;",
+  "replace": "  animation-delay: 0s;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The pips arm's burst ring stops inheriting the pip's animation delay (issue #230). `animation-delay` is not an inherited property, so when the HUD re-attaches a running cue with a negative delay on the pip, the pip resumes mid-swell while its ::after ring starts its burst over -- the two halves of one cue out of step after any rebuild. Pinned in the stylesheet test because jsdom does not run pseudo-element animations.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) passes the resumed delay to the pip's burst ring, which does not inherit it by default"
+  ]
+}

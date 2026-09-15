@@ -18,6 +18,7 @@ import {
   isArrivalLanguage,
   type ArrivalLanguage,
 } from '../presentation/arrival-language';
+import { STOCK_CUES, isStockCue, type StockCue } from '../presentation/stock-cue';
 import {
   VERSUS_ACTION_LAYOUTS, isVersusActionLayout, type VersusActionLayout,
 } from '../presentation/versus-actions';
@@ -426,6 +427,13 @@ export interface DevFlags {
    */
   arrival: ArrivalLanguage | null;
   /**
+   * Which experimental versus STOCK-LOSS CUE to draw on the stock strip (issue #230). `null`
+   * draws none, which is the shipped strip: only the digit changes. `pips`, `strike` and
+   * `badge` are the shortlisted arms, to be judged in play. A temporary open-question flag.
+   * See presentation/stock-cue.ts.
+   */
+  stockCue: StockCue | null;
+  /**
    * Where Versus Setup puts Start and Back (issue #668); null = the pinned bar carrying
    * both. See presentation/versus-actions.ts.
    */
@@ -543,6 +551,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   identityMarker: null,
   shellTrail: null,
   arrival: null,
+  stockCue: null,
   versusActions: null,
   aiPerception: null,
 };
@@ -741,6 +750,13 @@ function asArrival(params: URLSearchParams): ArrivalLanguage | null {
   return isArrivalLanguage(raw) ? raw : null;
 }
 
+/** One of the named stock-loss cue arms, or null when absent or unrecognised. */
+function asStockCue(params: URLSearchParams): StockCue | null {
+  const raw = params.get('stockCue');
+  if (raw === null) return null;
+  return isStockCue(raw) ? raw : null;
+}
+
 /** One of the named identity-marker candidates, or null when absent or unrecognised. */
 function asIdentityMarker(params: URLSearchParams): IdentityMarkerStyle | null {
   const raw = params.get('identityMarker');
@@ -901,6 +917,7 @@ export function parseDevFlags(search: string): DevFlags {
     identityMarker: asIdentityMarker(params),
     shellTrail: asShellTrail(params),
     arrival: asArrival(params),
+    stockCue: asStockCue(params),
     versusActions: asVersusActions(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
@@ -1361,6 +1378,15 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Speaks an experimental arrival/destruction language (issue #230). The shipped pair '
       + 'both expand a ring and read alike at speed; \'opposed\' converges the spawn '
       + 'entrance onto the tank and throws a fat, hard-attacked band outward on death.',
+  },
+  stockCue: {
+    kind: 'valued',
+    values: [...STOCK_CUES],
+    description:
+      'Marks a lost versus stock on the stock strip (issue #230), one of three shortlisted arms: '
+      + '\'pips\' turns the count into pips that empty, \'strike\' lifts the old number away '
+      + 'struck through, and \'badge\' drops a "−1" under the entry. The shipped strip only '
+      + 'changes the digit. Temporary: deleted once an arm is chosen.',
   },
   shellTrail: {
     kind: 'valued',

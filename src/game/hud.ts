@@ -276,6 +276,7 @@ import { equalizeMenuRows } from './menu-row-width';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
+import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -1471,6 +1472,12 @@ export interface HudOptions {
    * every ordinary page load -- means the shipped bar carrying both at the foot.
    */
   readonly versusActions?: VersusActionLayout | null;
+  /**
+   * Issue #230's stock-loss cue arms: how the versus stock strip marks a stock just lost. `null`
+   * (and absent, which is every injected HUD) is the shipped strip, where only the digit changes.
+   * See presentation/stock-cue.ts.
+   */
+  readonly stockCue?: StockCue | null;
   /**
    * Is the developer master gate on (issue #243)? Absent -- every existing test, and every
    * ordinary page load -- means no, and no developer UI is built into the surface at all.
@@ -3217,6 +3224,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       versusStocksEl.classList.add('hud-versus-stocks--hidden');
       return;
     }
+    const now = performance.now();
     for (const entry of stocks) {
       const span = document.createElement('span');
       span.className = 'hud-versus-stock-entry';
@@ -3226,7 +3234,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // screenshot all lose the hue and keep the letter. Same A/B/C the setup pane's team
       // selector shows, so the readout and the control that set it agree.
       const teamMark = entry.team !== undefined ? ` ${TEAM_LABELS[entry.team] ?? '?'}` : '';
-      span.textContent = `P${entry.slot + 1}${teamMark} ${entry.stock}`;
+      if (stockCue === null) {
+        span.textContent = `P${entry.slot + 1}${teamMark} ${entry.stock}`;
+      } else {
+        const started = stockCueStarts.get(entry.slot);
+        const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
+        fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, running, now);
+      }
       // teams: TEAM_COLORS[team]; ffa (no `team` on the entry): IDENTITY_RING_COLORS[
       // slot] -- the SAME dispatch entities.ts's own ring/tint colouring uses at its
       // `mode === 'teams' ? teamColor(...) : identityColor(...)` site, imported rather
@@ -3242,6 +3256,113 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       versusStocksEl.appendChild(span);
     }
     versusStocksEl.classList.remove('hud-versus-stocks--hidden');
+  }
+
+  /** Issue #230's stock-loss cue arm, or `null` for the shipped strip -- see presentation/stock-cue.ts. */
+  const stockCue: StockCue | null = opts.stockCue ?? null;
+  /**
+   * The stock losses still worth drawing, by slot: WHEN each arrived (`performance.now()`) and the
+   * stock it dropped FROM. Kept here rather than on an element, because `renderVersusStocks`
+   * destroys every entry on each status that moves -- a second slot's loss inside one cue's run
+   * is enough -- and a cue owned by its element would die with it. The rebuild reads this and
+   * re-attaches a running cue at its elapsed time.
+   */
+  const stockCueStarts = new Map<number, { at: number; from: number }>();
+  /**
+   * The pips arm's denominator: each slot's stock when this match's strip began. `VersusStock`
+   * carries no starting stock, so it is remembered from the first push of a match, and taken
+   * again whenever a push is not a loss within the same match -- different slots, or any stock
+   * going up, which is a rematch.
+   */
+  let stockBaseline = new Map<number, number>();
+
+  /**
+   * Record which slots lost a stock in `next`, before `prevStatus` moves.
+   *
+   * The same test `announceStatusChange` applies (issue #629): a DECREASE, between two versus
+   * pushes carrying the same slots, so a rematch's reset and a different match's lower stock are
+   * not read as losses. Unlike the announcement, which speaks one loss, every slot that dropped is
+   * recorded: two entries can each be running a cue.
+   */
+  function recordStockLosses(next: GameplayStatus): void {
+    if (stockCue === null) return;
+    // No expiry sweep here: `renderVersusStocks` already skips a cue past STOCK_CUE_MS, and the
+    // map holds at most one entry per slot -- overwritten by that slot's next loss and cleared
+    // when a different match starts -- so an expired entry is inert and bounded.
+    const now = performance.now();
+    const nextStocks = next.kind === 'versus' ? next.stocks : null;
+    if (nextStocks === null) return;
+    const prevStocks = prevStatus?.kind === 'versus' ? prevStatus.stocks : null;
+    const before = new Map((prevStocks ?? []).map((s) => [s.slot, s.stock]));
+    const sameSlots = prevStocks !== null
+      && nextStocks.length === prevStocks.length
+      && nextStocks.every((s) => before.has(s.slot));
+    if (!sameSlots || nextStocks.some((s) => s.stock > (before.get(s.slot) as number))) {
+      stockBaseline = new Map(nextStocks.map((s) => [s.slot, s.stock]));
+      stockCueStarts.clear();
+      return;
+    }
+    for (const s of nextStocks) {
+      const was = before.get(s.slot) as number;
+      if (s.stock < was) stockCueStarts.set(s.slot, { at: now, from: was });
+    }
+  }
+
+  /**
+   * One stock entry under a cue arm: the label, then the arm's own count, then the cue if one is
+   * running. Every cue element carries `hud-stock-cue` and a negative `animation-delay` for the
+   * time already spent, so a cue re-attached by a rebuild resumes where it was instead of
+   * replaying. Cue elements are `aria-hidden`: the loss is already spoken (issue #629), and the
+   * count stays available as text.
+   */
+  function fillStockCueEntry(
+    span: HTMLElement,
+    label: string,
+    entry: VersusStock,
+    running: { at: number; from: number } | null,
+    now: number,
+  ): void {
+    const delay = running === null ? '' : `${-Math.round(now - running.at)}ms`;
+    const cueEl = (el: HTMLElement): HTMLElement => {
+      el.classList.add('hud-stock-cue');
+      el.style.animationDelay = delay;
+      return el;
+    };
+    span.append(label);
+    if (stockCue === 'pips') {
+      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
+      const pips = document.createElement('span');
+      pips.className = 'hud-stock-pips';
+      pips.setAttribute('role', 'img');
+      pips.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
+      for (let i = 0; i < total; i++) {
+        const pip = document.createElement('span');
+        pip.className = 'hud-stock-pip';
+        // Lost pips are the trailing ones, so the filled run always reads as the count.
+        if (i >= entry.stock) pip.classList.add('hud-stock-pip--lost');
+        if (running !== null && i >= entry.stock && i < running.from) cueEl(pip);
+        pips.appendChild(pip);
+      }
+      span.appendChild(pips);
+      return;
+    }
+    const count = document.createElement('span');
+    count.className = 'hud-stock-count';
+    count.textContent = String(entry.stock);
+    span.appendChild(count);
+    if (running === null) return;
+    const cue = document.createElement('span');
+    cue.setAttribute('aria-hidden', 'true');
+    if (stockCue === 'strike') {
+      cue.className = 'hud-stock-cue--struck';
+      cue.textContent = String(running.from);
+      // The new number drops in behind the struck one, so it animates too, on the same clock.
+      cueEl(count);
+    } else {
+      cue.className = 'hud-stock-cue--badge';
+      cue.textContent = `−${running.from - entry.stock}`;
+    }
+    span.appendChild(cueEl(cue));
   }
 
   /**
@@ -7634,6 +7755,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         prevStatus = null;
         deathPending = false;
       } else {
+        // Both read `prevStatus` as the push before this one, so both run before it moves.
+        recordStockLosses(status);
         announceStatusChange(status);
         prevStatus = status;
       }

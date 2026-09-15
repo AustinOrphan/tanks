@@ -133,7 +133,7 @@ describe('control type is derived from the registry, not declared twice', () => 
     // only reason a stated population is worth writing down. 17 -> 18 under issue #249's
     // `prodSave`, which is a boolean and therefore a toggle like its seventeen siblings.
     expect(toggles).toBe(18);
-    expect(controls).toHaveLength(44); // +4: shadowMapSize, antialias, pixelRatioCap, fillRimLights (#735's render overrides); +1 each: gallery (#730's workbench link), aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm), outcome (#591's capture arm), identityMarker (#630's identity-channel candidates), arrival (#230's opposed spawn/death language), versusActions (#668's action-bar arm), prodSave (#249's production-save access), shellTrail (#688's bounce-trail experiment), bench (#734's benchmark report)
+    expect(controls).toHaveLength(45); // +1: stockCue (#230's stock-loss cue arms), measured 44 -> 45; +4: shadowMapSize, antialias, pixelRatioCap, fillRimLights (#735's render overrides); +1 each: gallery (#730's workbench link), aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm), outcome (#591's capture arm), identityMarker (#630's identity-channel candidates), arrival (#230's opposed spawn/death language), versusActions (#668's action-bar arm), prodSave (#249's production-save access), shellTrail (#688's bounce-trail experiment), bench (#734's benchmark report)
   });
 
   it('reads each parameter from the registry, using the field name only where none is given', () => {
@@ -170,7 +170,7 @@ describe('explainDevConfig', () => {
     // `?players=1` look rejected.
     const valued = (Object.keys(FLAG_REGISTRY) as (keyof typeof FLAG_REGISTRY)[])
       .filter((f) => FLAG_REGISTRY[f].kind === 'valued');
-    expect(valued.length, 'the population this premise covers').toBe(26); // +4: #735's render overrides; +1 each: gallery, aiPerception, blockedFire, menuTransition, topbar, outcome, identityMarker, arrival, versusActions, shellTrail, bench
+    expect(valued.length, 'the population this premise covers').toBe(27); // +1: stockCue (#230's cue arms), measured 26 -> 27; +4: #735's render overrides; +1 each: gallery, aiPerception, blockedFire, menuTransition, topbar, outcome, identityMarker, arrival, versusActions, shellTrail, bench
     for (const f of valued) {
       expect(DEV_FLAGS_OFF[f], `${f} defaults to something a valid value could parse to`).toBeNull();
     }

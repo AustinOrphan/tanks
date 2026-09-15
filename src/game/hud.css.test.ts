@@ -18,6 +18,7 @@ import { LITERALS } from './devtools-menu';
 import hudSource from './hud.ts?raw';
 import { createHud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
+import { STOCK_CUE_MS } from '../presentation/stock-cue';
 
 // `?raw` returns an EMPTY STRING unless `test.css` is enabled in vite.config -- vitest
 // stubs CSS imports by default. That is not a harmless miss: every assertion below would
@@ -2738,5 +2739,71 @@ describe('forced-colors conformance (issue #368)', () => {
     const block = forcedBlock();
     expect(block).not.toContain('outline');
     expect(block).not.toContain(':focus');
+  });
+});
+
+/*
+ * Issue #230's stock-loss cue arms (`?dev=1&stockCue=`). The HUD re-attaches a cue still running
+ * after the strip is rebuilt, using STOCK_CUE_MS to decide whether it is still running and a
+ * negative `animation-delay` to resume it. Both halves only work if the stylesheet agrees, and a
+ * stylesheet is not typechecked -- so the agreement is pinned here.
+ */
+describe('hud.css: the stock-loss cue arms (issue #230)', () => {
+  const src = stripComments(css);
+  // Every animated cue element, as the HUD renders it: the badge, the struck number and the new
+  // number dropping in behind it, the pip that just emptied, and that pip's burst ring.
+  const CUE_RULES = [
+    '.hud-stock-cue--badge',
+    '.hud-stock-cue--struck',
+    '.hud-stock-count.hud-stock-cue',
+    '.hud-stock-pip.hud-stock-cue',
+    '.hud-stock-pip.hud-stock-cue::after',
+  ];
+
+  /** The body of the rule whose selector is exactly `selector`, at the start of a line. */
+  function ruleBody(selector: string): string {
+    const at = src.indexOf(`\n${selector} {`);
+    expect(at, `${selector} has a rule`).toBeGreaterThan(-1);
+    const open = src.indexOf('{', at);
+    return src.slice(open + 1, src.indexOf('}', open));
+  }
+
+  it('runs for exactly STOCK_CUE_MS -- the token the cues use is the constant the HUD expires them by', () => {
+    // Fails if either side moves alone: a retuned token would leave the HUD dropping a cue that
+    // is still on screen (or re-attaching one that has finished), and a retuned constant the same.
+    const token = /--hud-duration-slow:\s*(\d+)ms/.exec(src);
+    expect(token, '--hud-duration-slow is declared in ms').not.toBeNull();
+    expect(Number((token as RegExpExecArray)[1])).toBe(STOCK_CUE_MS);
+    for (const selector of CUE_RULES) {
+      expect(ruleBody(selector), selector).toMatch(/animation:[^;]*var\(--hud-duration-slow\)/);
+    }
+  });
+
+  it('fills both ways, so a cue resumed with a negative delay lands on its elapsed frame', () => {
+    // Without `both`, a negative delay still starts the animation part-way through, but the
+    // frames before it are unstyled for one paint, and the resting state after it snaps back.
+    for (const selector of CUE_RULES) {
+      expect(ruleBody(selector), selector).toMatch(/animation:[^;]*\bboth\b/);
+    }
+  });
+
+  it('passes the resumed delay to the pip\'s burst ring, which does not inherit it by default', () => {
+    expect(ruleBody('.hud-stock-pip.hud-stock-cue::after')).toMatch(/animation-delay:\s*inherit/);
+  });
+
+  it('draws no cue state with `background`, which forced colours drops', () => {
+    // The #230 mockups measured this: with a background fill, a filled pip and a hollow one were
+    // identical under forced colours. Every rule whose selector names a stock-cue class.
+    const rules = [...src.matchAll(/([^{}]*hud-stock-[^{}]*)\{([^}]*)\}/g)];
+    expect(rules.length, 'the population: rules naming a stock-cue class').toBeGreaterThanOrEqual(CUE_RULES.length);
+    for (const [, selector, body] of rules) {
+      expect(body, selector.trim()).not.toMatch(/background/);
+    }
+  });
+
+  it('gives every cue a reduced-motion form, keyed off the resolved policy class', () => {
+    for (const selector of CUE_RULES) {
+      expect(ruleBody(`.hud--reduced-motion ${selector}`), selector).toMatch(/animation-name:\s*[\w-]+--still/);
+    }
   });
 });

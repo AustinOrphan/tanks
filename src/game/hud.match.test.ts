@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type GameplayStatus, type Hud, type VersusStock } from './hud';
+import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
 import { configFor } from '../sim/config';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
 
@@ -512,6 +513,166 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
     expect(strip(root).classList.contains('hud-versus-stocks--hidden'), 'setup').toBe(false);
     h.setStatus(boardStatus('campaign'));
     expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(true);
+  });
+});
+
+/*
+ * Issue #230's stock-loss cue: three arms behind `?dev=1&stockCue=`, and no cue without it.
+ *
+ * Driven through the public boundary -- `createHud` with the option, then `setState` and
+ * `setStatus` in production order -- because the hazard these cases exist for is composition:
+ * `renderVersusStocks` rebuilds every entry from scratch on each status that moves, so a cue
+ * drawn on an entry is destroyed by the next push unless the rebuild puts it back.
+ *
+ * Time is `performance.now()`, faked, so "300 ms into the cue" is a fact the case sets rather
+ * than a race it hopes to win.
+ */
+describe('hud: stock-loss cue arms (issue #230)', () => {
+  const entries = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-stock-entry')) as HTMLElement[];
+
+  function mountCue(stockCue: StockCue | null): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, { stockCue });
+    hud.setState('playing');
+    return { hud, root };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('draws no cue at all without the flag -- the shipped strip only changes its digit', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountCue(null);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 3 }]));
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 2', 'P2 3']);
+    expect(root.querySelectorAll('.hud-stock-cue')).toHaveLength(0);
+    expect(root.querySelectorAll('.hud-stock-pip')).toHaveLength(0);
+  });
+
+  it('badge: a "−1" on the entry that lost the stock, and on no other', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountCue('badge');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    expect(root.querySelectorAll('.hud-stock-cue'), 'no loss yet, no cue').toHaveLength(0);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]));
+    const [p1, p2] = entries(root);
+    expect(p1.querySelector('.hud-stock-cue')).toBeNull();
+    const badge = p2.querySelector('.hud-stock-cue--badge') as HTMLElement;
+    expect(badge.textContent).toBe('−1');
+    // Decoration, not a second announcement: #629 already speaks the loss.
+    expect(badge.getAttribute('aria-hidden')).toBe('true');
+    expect(p2.querySelector('.hud-stock-count')?.textContent).toBe('2');
+  });
+
+  it('strike: the old number struck beside the new one', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountCue('strike');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 3 }]));
+    const [p1, p2] = entries(root);
+    const struck = p1.querySelector('.hud-stock-cue--struck') as HTMLElement;
+    expect(struck.textContent).toBe('3');
+    expect(struck.getAttribute('aria-hidden')).toBe('true');
+    expect(p1.querySelector('.hud-stock-count')?.textContent).toBe('2');
+    // The new number drops in on the cue's clock, so it is a cue element too.
+    expect(p1.querySelector('.hud-stock-count')?.classList.contains('hud-stock-cue')).toBe(true);
+    expect(p2.querySelector('.hud-stock-cue')).toBeNull();
+  });
+
+  it('pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountCue('pips');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    const pipsOf = (e: HTMLElement): HTMLElement[] => Array.from(e.querySelectorAll('.hud-stock-pip')) as HTMLElement[];
+    expect(pipsOf(entries(root)[0]).map((p) => p.classList.contains('hud-stock-pip--lost'))).toEqual([false, false, false]);
+    h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 3 }]));
+    const [p1, p2] = entries(root);
+    // Lost pips are the trailing ones, so the filled run always reads as the count.
+    expect(pipsOf(p1).map((p) => p.classList.contains('hud-stock-pip--lost'))).toEqual([false, false, true]);
+    expect(pipsOf(p1)[2].classList.contains('hud-stock-cue')).toBe(true);
+    expect(p1.querySelectorAll('.hud-stock-cue')).toHaveLength(1);
+    expect(p2.querySelectorAll('.hud-stock-cue')).toHaveLength(0);
+    // The count survives as text for assistive technology, since the pips are shapes.
+    expect(p1.querySelector('.hud-stock-pips')?.getAttribute('aria-label')).toBe('2 of 3 stocks');
+  });
+
+  it.each(['pips', 'strike', 'badge'] as const)(
+    '%s: a cue still running survives the rebuild another slot\'s loss causes, resumed at its elapsed time',
+    (arm) => {
+      vi.useFakeTimers({ toFake: ['performance'] });
+      const { hud: h, root } = mountCue(arm);
+      h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+      h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 3 }]));
+      vi.advanceTimersByTime(300);
+      // A second loss, on the OTHER slot, moves the status: the strip is rebuilt.
+      h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 2 }]));
+      const [p1, p2] = entries(root);
+      const cue = p1.querySelector('.hud-stock-cue') as HTMLElement | null;
+      expect(cue, `${arm}: P1's cue after the rebuild`).not.toBeNull();
+      expect((cue as HTMLElement).style.animationDelay).toBe('-300ms');
+      const fresh = p2.querySelector('.hud-stock-cue') as HTMLElement;
+      expect(fresh, `${arm}: P2's own cue`).not.toBeNull();
+      expect(fresh.style.animationDelay).toBe('0ms');
+    },
+  );
+
+  it.each(['pips', 'strike', 'badge'] as const)('%s: a cue is gone once STOCK_CUE_MS has passed', (arm) => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountCue(arm);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 3 }]));
+    vi.advanceTimersByTime(STOCK_CUE_MS);
+    h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 2 }]));
+    expect(entries(root)[0].querySelector('.hud-stock-cue'), `${arm}: P1's expired cue`).toBeNull();
+    // ...while the pips arm still shows the lost stock as a hollow pip: the count is permanent.
+    if (arm === 'pips') {
+      expect(entries(root)[0].querySelectorAll('.hud-stock-pip--lost')).toHaveLength(1);
+    }
+  });
+
+  it('a rematch that resets stocks upward is not a loss, and starts a new pip count', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountCue('pips');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    h.setStatus(versusStatus([{ slot: 0, stock: 5 }, { slot: 1, stock: 5 }]));
+    expect(root.querySelectorAll('.hud-stock-cue')).toHaveLength(0);
+    expect(entries(root)[0].querySelectorAll('.hud-stock-pip')).toHaveLength(5);
+    expect(entries(root)[0].querySelectorAll('.hud-stock-pip--lost')).toHaveLength(0);
+    // The first loss of the new match counts against 5, not against the old match's 3. Without
+    // the reset on a rise, the denominator would stay 3 and this entry would show 4 pips, none lost.
+    h.setStatus(versusStatus([{ slot: 0, stock: 4 }, { slot: 1, stock: 5 }]));
+    expect(entries(root)[0].querySelectorAll('.hud-stock-pip')).toHaveLength(5);
+    expect(entries(root)[0].querySelectorAll('.hud-stock-pip--lost')).toHaveLength(1);
+  });
+
+  it.each(['pips', 'strike', 'badge'] as const)(
+    '%s: a rebuild with no new status after STOCK_CUE_MS -- a pause -- draws no cue',
+    (arm) => {
+      // The strip is also rebuilt when the SURFACE moves (setState runs applyStatus), with no
+      // status push to record anything. Only the rebuild's own elapsed check can drop the cue.
+      vi.useFakeTimers({ toFake: ['performance'] });
+      const { hud: h, root } = mountCue(arm);
+      h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+      h.setStatus(versusStatus([{ slot: 0, stock: 2 }, { slot: 1, stock: 3 }]));
+      h.setState('paused');
+      expect(entries(root)[0].querySelector('.hud-stock-cue'), `${arm}: still running at 0 ms`).not.toBeNull();
+      vi.advanceTimersByTime(STOCK_CUE_MS);
+      h.setState('playing');
+      expect(entries(root)[0].querySelector('.hud-stock-cue'), `${arm}: expired`).toBeNull();
+    },
+  );
+
+  it('a different match with a lower stock is not a loss in this one -- the same-slots guard', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountCue('badge');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    // Three slots now: a different match, so slot 0's 1 is its starting stock, not a loss.
+    h.setStatus(versusStatus([{ slot: 0, stock: 1 }, { slot: 1, stock: 1 }, { slot: 2, stock: 1 }]));
+    expect(root.querySelectorAll('.hud-stock-cue')).toHaveLength(0);
   });
 });
 

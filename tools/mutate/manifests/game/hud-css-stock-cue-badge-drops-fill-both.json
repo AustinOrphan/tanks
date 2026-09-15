@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-stock-cue-badge-drops-fill-both",
+  "file": "src/game/hud.css",
+  "find": "  animation: hud-stock-badge var(--hud-duration-slow) ease-out 1 both;",
+  "replace": "  animation: hud-stock-badge var(--hud-duration-slow) ease-out 1;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The badge arm's animation loses fill mode `both` (issue #230). The HUD resumes a cue re-attached after a rebuild with a negative delay, and without backwards fill the badge paints unstyled -- fully opaque, unmoved -- for a frame before the animation takes hold, and snaps back to that resting state when it ends instead of staying faded. jsdom cannot show either, so the stylesheet test pins the declaration.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) fills both ways, so a cue resumed with a negative delay lands on its elapsed frame"
+  ]
+}
