@@ -658,6 +658,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.settings.controller-layout",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.settings.controller-layout"
+    },
+    "fixture": {
+      "id": "screen.settings.controller-layout",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Controller Layout",
+    "description": "The Controller Layout pane over a synthetic standard pad: the Sticks preset, the five action rows and Reset to Recommended.",
+    "altText": "Screenshot of the Tanks! controller layout screen, listing which controller button each action uses.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.customize",
     "producer": {
       "kind": "screen",

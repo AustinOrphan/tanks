@@ -228,6 +228,26 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
   }),
   state({
+    id: 'screen.settings.controller-layout',
+    title: 'Controller Layout',
+    description:
+      'The Controller Layout pane over a synthetic standard pad (issue #754): the Sticks preset, ' +
+      'the five action rows naming the button each reads, and Reset to Recommended.',
+    storage: MID_CAMPAIGN,
+    steps: [
+      ...PAST_SPLASH,
+      { fakeGamepads: 'mixed' },
+      { click: '.hud-settings-open' },
+      { waitVisible: '.hud-settings' },
+      { click: '.hud-settings-layout' },
+      { waitVisible: '.hud-layout' },
+      { waitHidden: '.hud-layout-empty' },
+    ],
+    // The empty state is measured for its ABSENCE, as the self-test's is: a pane showing both the
+    // explanation and the controls, or neither, is the failure this picture has to show.
+    measure: ['.hud-layout', '#hud-layout-title', '.hud-layout-preset', '.hud-layout-bindings', '.hud-layout-reset'],
+  }),
+  state({
     id: 'screen.customize',
     title: 'Customize',
     description: 'The paint shop, including the live tank preview canvas.',
