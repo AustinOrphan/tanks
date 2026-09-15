@@ -2467,6 +2467,42 @@ describe('spawn animation (#199)', () => {
     views.dispose();
   });
 
+  it.each(['warp', 'rise', 'beacon'] as const)(
+    '%s: a shielded respawn played frame by frame never steps its opacity (issue #230)',
+    (variant) => {
+      // THE COMPOSITION, not the animator. spawn-anim.test.ts pins `invincible` at p = 0 as
+      // opaque, but the entrance runs for ENTRANCE_SECONDS of RENDER time while the shield
+      // has been counting down since the revival tick, so the first protected frame never
+      // sees p = 0: it opened at p ~ 1/3, already on the 0.45 floor, one frame after an
+      // entrance that ended at 1.0. Only playing the real sequence through `sync` at 60 Hz
+      // shows that step.
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene);
+      views.setPlayerStyle(null, 'solid', null, 0, variant);
+      let prev = deadPlayerWorld();
+      views.sync(prev, prev, 1, 1 / 60);
+      const REVIVE = 1;
+      const opacities: number[] = [];
+      for (let tick = REVIVE; tick <= REVIVE + RESPAWN_SHIELD_TICKS + 5; tick++) {
+        const curr = alivePlayerWorld(REVIVE + RESPAWN_SHIELD_TICKS, tick);
+        views.sync(prev, curr, 1, 1 / 60);
+        opacities.push(tankBodyMaterial(scene, 1).opacity);
+        prev = curr;
+      }
+      // Starts from the entrance's second frame, so the entrance's own fade-in -- a ramp of
+      // at most 1.6 / 30 per frame, beacon's -- is inside the bound rather than exempt.
+      for (let i = 1; i < opacities.length; i++) {
+        const step = Math.abs((opacities[i] as number) - (opacities[i - 1] as number));
+        expect(step, `${variant}: frame ${i - 1} -> ${i} of the respawn`).toBeLessThan(0.06);
+      }
+      // Not vacuous: the protected state is really translucent somewhere, and the tank is
+      // solid again once the shield has run out.
+      expect(Math.min(...opacities.slice(40, 80)), `${variant}: protected`).toBeLessThan(0.5);
+      expect(opacities[opacities.length - 1], `${variant}: after the shield`).toBe(1);
+      views.dispose();
+    },
+  );
+
   it('drives the invincibility overlay from shieldUntilTick, not a latched copy', () => {
     // An early/late `>` comparison survives two wrong reads that both still move the
     // right direction over two syncs: reading shieldLeft off `prev.tick` instead of
