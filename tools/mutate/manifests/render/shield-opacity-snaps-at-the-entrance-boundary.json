@@ -1,7 +1,7 @@
 {
   "id": "shield-opacity-snaps-at-the-entrance-boundary",
   "file": "src/render/spawn-anim.ts",
-  "find": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;",
+  "find": "  const ramp = smoothstep(start, start + SHIELD_EASE_FRACTION, t) * smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;",
   "replace": "  const ramp = smoothstep(0, SHIELD_EASE_FRACTION, 1 - t);\n  return 1 - SHIELD_TRANSLUCENCY * ramp;",
   "expect": "killed",
   "tests": [

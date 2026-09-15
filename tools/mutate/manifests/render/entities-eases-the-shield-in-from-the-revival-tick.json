@@ -1,0 +1,16 @@
+{
+  "id": "entities-eases-the-shield-in-from-the-revival-tick",
+  "file": "src/render/entities.ts",
+  "find": "            spawn.protectedFrom ??= p;",
+  "replace": "            spawn.protectedFrom ??= 0;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "killedBy": [
+    "spawn animation (#199) warp: a shielded respawn played frame by frame never steps its opacity (issue #230)",
+    "spawn animation (#199) rise: a shielded respawn played frame by frame never steps its opacity (issue #230)",
+    "spawn animation (#199) beacon: a shielded respawn played frame by frame never steps its opacity (issue #230)"
+  ],
+  "why": "Eases the protected phase in from p = 0 again, which is what shipped after #683: the shield counts down from the revival tick while the entrance runs on render time, so the first protected frame is about a third of the way into the shield and already on `protectedOpacity`'s floor -- a 0.55 drop one frame after an entrance that ended opaque. spawn-anim.test.ts's animator cases cannot see it, because they call `invincible` at p = 0, which play never passes; only the composed frame-by-frame cases in entities.test.ts do. Before this fix those three cases failed on main at frame 29 -> 30 with a step of 0.55."
+}
