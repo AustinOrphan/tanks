@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "Issue #796: `anywhere` lowers a table cell's min-content width to one character, so the auto table layout squeezes the Legal privacy table's Key column until every storage key breaks mid-word, measured at 390 px and at 1280 px. jsdom cannot lay the table out, so the declaration is what the test can hold."
+  "why": "Issue #796: `anywhere` lowers a table cell's min-content width to one character, so the auto table layout squeezes the Legal privacy table's Key column until every storage key breaks mid-word, measured at 390 px and at 1280 px. jsdom cannot lay the table out, so the declaration is what the test can hold.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps legal table words whole unless one cannot fit the pane (issue #796)"
+  ]
 }
