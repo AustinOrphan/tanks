@@ -1,0 +1,14 @@
+{
+  "id": "hud-closure-placement-skips-leading-comments",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "    const owner = owners.find((o) => at >= o.fullPos && at < o.endPos);",
+  "replace": "    const owner = owners.find((o) => at >= o.pos && at < o.endPos);",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "An owner's range starts after its leading comments, so a manifest `find` that begins with the comment above a statement belongs to no owner. Measured on `hud.ts` at 43adf28 during development: 22 of the 201 entries naming the file fell between owners this way and dropped out of every pane's count.",
+  "killedBy": [
+    "hud closure analysis (issue #767) places a manifest entry by where its find starts, counting a leading comment as its statement"
+  ]
+}

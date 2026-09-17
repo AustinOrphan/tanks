@@ -1,0 +1,14 @@
+{
+  "id": "hud-closure-nouns-match-the-last-pane-first",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "    for (const { pane, nouns } of attribution.panes) if (nouns.some((noun) => lower.includes(noun))) return pane;",
+  "replace": "    for (const { pane, nouns } of [...attribution.panes].reverse()) if (nouns.some((noun) => lower.includes(noun))) return pane;",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "The noun table is ordered, and the account's corrections depend on that order: \"controller\" is checked before \"selftest\". Reversed, a name containing two nouns lands in the other pane and the committed corrections stop describing the data.",
+  "killedBy": [
+    "hud closure analysis (issue #767) puts a name in the FIRST pane whose noun it contains, and a correction wins over nouns"
+  ]
+}

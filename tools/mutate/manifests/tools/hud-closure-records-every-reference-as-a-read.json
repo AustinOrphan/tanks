@@ -1,0 +1,15 @@
+{
+  "id": "hud-closure-records-every-reference-as-a-read",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "        if (target && target !== owner) (isWriteTarget(ts, n) ? owner.writes : owner.reads).add(target);",
+  "replace": "        if (target && target !== owner) owner.reads.add(target);",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "Drops the read/write split, so no pane ever reports a write across its boundary and `--strict` passes a pane that assigns shared state, which is the coupling issue #556 says a split must not spread across files.",
+  "killedBy": [
+    "hud closure analysis (issue #767) reports a write to a binding outside the pane, and not a write inside it",
+    "hud closure analysis (issue #767) fails --strict on a write across a boundary and on a correction that names nothing, per pane"
+  ]
+}

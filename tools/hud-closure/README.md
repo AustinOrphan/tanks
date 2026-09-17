@@ -57,4 +57,4 @@ The report names the commit it measured. It marks the report when `hud.ts` has u
 - **`--strict` also fails on a correction that names nothing in the closure.** Stale data is
   reported, never silently ignored.
 - **It describes `createHud`. It does not decide the split.** The seam an extraction implements is
-  in `docs/superpowers/specs/2026-09-16-hud-pane-host-design.md`.
+  issue #765's specification.

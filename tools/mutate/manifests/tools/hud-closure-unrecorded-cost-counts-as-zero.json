@@ -1,0 +1,14 @@
+{
+  "id": "hud-closure-unrecorded-cost-counts-as-zero",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "    const costed = entries.map((p) => costOf(p.entry.tests ?? [])).filter((c) => c !== null && Number.isFinite(c));",
+  "replace": "    const costed = entries.map((p) => costOf(p.entry.tests ?? []) ?? 0);",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "An entry with no recorded scope cost is counted as a costed entry worth zero seconds. The #556 account had to warn that its \"0 s\" rows meant no recorded cost, not a cheap scope; this keeps the two apart in the report itself.",
+  "killedBy": [
+    "hud closure analysis (issue #767) sums recorded scope costs per pane and leaves an unrecorded scope out rather than as zero"
+  ]
+}
