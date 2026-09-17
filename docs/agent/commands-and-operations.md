@@ -456,7 +456,7 @@ entry points at the repository root. Dependabot's npm fetcher reads the root `wo
 | --- | --- | --- |
 | devDependency minor or patch | One grouped pull request a week (`tooling-minor-and-patch`) | Human review and required CI; the lowest-risk class, and the first candidate if auto-merge is ever proposed |
 | devDependency major | Its own pull request | Human review; may need migration |
-| Runtime dependency (`three`, `howler`), any update | Its own pull request, never grouped | Human review. `three` is 0.x, so any minor can change rendering, and `visual` must pass |
+| Runtime dependency (`three`, `howler`), any update | Its own pull request, grouped only with its own type package (`three` with `@types/three`), so the types never drift from the library | Human review. `three` is 0.x, so any minor can change rendering, and `visual` must pass |
 | `@types/node` | Up to the supported floor major only (22 while `engines` is `^22.13.0 \|\| ^24.0.0`) | Newer majors are ignored: types for a newer Node would let code use APIs the floor lacks. Raise the bound together with the floor |
 | GitHub Actions | One grouped pull request for every `actions/*` tag bump | Human review. A major tag usually moves the action's runtime; check its release notes |
 | An update that changes generated output | Arrives in its class above, and fails CI until regenerated. A runtime update changes `THIRD-PARTY-NOTICES.md`, whose section headers carry the installed version, so `tools/notices/generate.test.ts` fails | Human. Dependabot cannot run the repository's generators: run `npm run notices` (and any other affected generator) on the update branch and commit the result |

@@ -27,13 +27,26 @@ updates:
       - area:repository
     groups:
       # Routine tooling: minor and patch updates to devDependencies, one pull request a week.
-      # Majors are never grouped; each arrives alone. Runtime dependencies (three, howler)
-      # are never grouped either: `three` is 0.x, where every minor can change rendering.
+      # Majors are never grouped with other packages; each arrives alone.
       tooling-minor-and-patch:
         dependency-type: development
         update-types:
           - minor
           - patch
+        exclude-patterns:
+          - '@types/three'
+          - '@types/howler'
+      # A runtime dependency never shares a pull request with tooling, only with its own type
+      # definitions, so the types can never run ahead of or behind the library they describe.
+      # `three` is 0.x, where every minor can change rendering.
+      three:
+        patterns:
+          - three
+          - '@types/three'
+      howler:
+        patterns:
+          - howler
+          - '@types/howler'
     ignore:
       # The Node type definitions follow the SUPPORTED FLOOR (engines: ^22.13.0 || ^24.0.0),
       # not the newest Node. Types for a newer major would let code call APIs the floor lacks,

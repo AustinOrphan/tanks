@@ -43,15 +43,29 @@ describe('dependency updates: coverage', () => {
 });
 
 describe('dependency updates: grouping keeps different risks apart', () => {
-  it('groups only minor and patch devDependency updates, so majors and runtime updates arrive alone', () => {
+  it('groups tooling minor and patch updates, and each runtime dependency only with its own types', () => {
     const npm = ecosystem('npm');
-    const groups = npm.slice(npm.indexOf('\n    groups:\n'), npm.indexOf('\n    ignore:\n'));
-    expect([...groups.matchAll(/^ {6}([\w-]+):$/gm)].map((m) => m[1])).toEqual(['tooling-minor-and-patch']);
-    expect(groups).toContain('        dependency-type: development\n');
-    expect(groups).toContain('        update-types:\n          - minor\n          - patch');
-    expect(groups).not.toMatch(/- major|patterns:/);
-    // The runtime set this protects. A new runtime dependency is ungrouped by the same rule.
-    expect(Object.keys(PACKAGE.dependencies).sort()).toEqual(['howler', 'three']);
+    const text = npm.slice(npm.indexOf('\n    groups:\n'), npm.indexOf('\n    ignore:\n'));
+    // Each group's own lines, keyed by name.
+    const groups = Object.fromEntries(
+      text.split(/^ {6}(?=[\w-]+:$)/m).slice(1).map((g) => [g.slice(0, g.indexOf(':')), g]));
+    const runtime = Object.keys(PACKAGE.dependencies).sort();
+    expect(runtime).toEqual(['howler', 'three']);
+    expect(Object.keys(groups).sort()).toEqual(['tooling-minor-and-patch', ...runtime].sort());
+
+    // Tooling: devDependencies, never a major, and never a runtime dependency's type package,
+    // which a devDependency group would otherwise move ahead of its library.
+    const tooling = groups['tooling-minor-and-patch'];
+    expect(tooling).toContain('  dependency-type: development\n');
+    expect(tooling).toContain('  update-types:\n          - minor\n          - patch\n');
+    expect(tooling).not.toMatch(/- major|^ {8}patterns:/m);
+    for (const dep of runtime) expect(tooling).toContain(`          - '@types/${dep}'`);
+
+    // Runtime: exactly the library and its types, nothing else in the pull request.
+    for (const dep of runtime) {
+      const patterns = [...groups[dep].matchAll(/^ {10}- '?([^'\n]+)'?$/gm)].map((m) => m[1]);
+      expect(patterns, dep).toEqual([dep, `@types/${dep}`]);
+    }
   });
 });
 
