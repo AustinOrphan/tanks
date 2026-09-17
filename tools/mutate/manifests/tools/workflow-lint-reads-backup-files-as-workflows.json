@@ -7,5 +7,8 @@
   "tests": [
     "tools/workflow-lint/lint.test.ts"
   ],
-  "why": "Issue #761 lints the files GitHub reads, which are the ones ending in .yml or .yaml. An unanchored match also lints an editor's ci.yml.bak or ci.yml.orig, so a stale copy of a workflow can fail the gate for a file GitHub never parses."
+  "why": "Issue #761 lints the files GitHub reads, which are the ones ending in .yml or .yaml. An unanchored match also lints an editor's ci.yml.bak or ci.yml.orig, so a stale copy of a workflow can fail the gate for a file GitHub never parses.",
+  "killedBy": [
+    "workflow lint scope lints every .yml and .yaml file GitHub reads, and nothing else"
+  ]
 }

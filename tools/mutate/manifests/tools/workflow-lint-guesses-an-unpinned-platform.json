@@ -7,5 +7,8 @@
   "tests": [
     "tools/workflow-lint/lint.test.ts"
   ],
-  "why": "Issue #761: a platform with no pin must be refused by name. Without the refusal pinsFor returns undefined and run.mjs dies reading `.actionlint` of it, a TypeError that names neither the platform nor the supported ones."
+  "why": "Issue #761: a platform with no pin must be refused by name. Without the refusal pinsFor returns undefined and run.mjs dies reading `.actionlint` of it, a TypeError that names neither the platform nor the supported ones.",
+  "killedBy": [
+    "workflow lint pins refuses a platform it has no pin for, naming the ones it has"
+  ]
 }
