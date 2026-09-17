@@ -1,0 +1,11 @@
+{
+  "id": "shell-cap-allows-one-extra",
+  "file": "src/sim/bullets.ts",
+  "find": "  return ownerShellCount(world, ownerId) >= (owner.shellCap ?? configFor(owner.kind).weapon.maxActiveProjectiles)",
+  "replace": "  return ownerShellCount(world, ownerId) > (owner.shellCap ?? configFor(owner.kind).weapon.maxActiveProjectiles)",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's authoritative population bound: an off-by-one lets an owner hold one shell past its cap. The shell-cap invariant counts every owner's live shells after every tick against the same cap expression, so a corpus tank that fires into its cap reports it."
+}

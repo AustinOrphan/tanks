@@ -1,0 +1,11 @@
+{
+  "id": "shell-ids-reused",
+  "file": "src/sim/bullets.ts",
+  "find": "    id: world.nextId++,",
+  "replace": "    id: world.nextId,",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's id and ownership corruption: a shell that takes nextId without advancing it shares its id with the next shell, mine or blast the world issues, and is never below nextId. The renderer keys shell meshes and trails by id (render/entities.ts, render/shell-trail.ts), so two live shells with one id share one view. The unique-ids invariant reports the first tick a corpus shell's id was never issued."
+}

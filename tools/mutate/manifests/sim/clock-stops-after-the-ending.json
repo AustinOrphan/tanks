@@ -1,0 +1,11 @@
+{
+  "id": "clock-stops-after-the-ending",
+  "file": "src/sim/world.ts",
+  "find": "  draft.tick += 1;",
+  "replace": "  if (draft.status === 'playing') draft.tick += 1;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's phase transitions: stepInputs advances the clock on every call, including after a win or loss, and this stops it at the ending. It proves the runs really are checked past their ending: runScenario continues TERMINAL_WATCH_TICKS after the status leaves 'playing', and the tick-advances invariant reports the first post-ending step whose tick did not move."
+}

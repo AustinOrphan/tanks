@@ -1,0 +1,11 @@
+{
+  "id": "player-fire-ignores-last-cooldown-ticks",
+  "file": "src/sim/world.ts",
+  "find": "if (canAct && input.fire && player.fireCooldown <= 0) {",
+  "replace": "if (canAct && input.fire && player.fireCooldown <= 2) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's 'no generated input bypasses authoritative cooldown rules': a player whose fire press lands in the last two ticks of the cooldown fires early. The scripted driver presses fire on about 30% of ticks, so it reaches that window; the fire-legal invariant reports a shot from a tank whose cooldown before the step was above 1."
+}

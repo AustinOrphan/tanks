@@ -74,6 +74,42 @@ Raising the repository default would ship one machine's constraint to every cont
 to CI, where a hung test would take proportionally longer to fail and a genuine performance
 regression could stop tripping the timeout.
 
+### Generated-scenario invariants
+
+`src/sim/scenarios.ts` (issue #760) resolves a seed to a legal scenario: a campaign arena
+at one to four players, or a versus catalog entry at a mode and player count that entry
+lists, with seeded rule values and one driver per player (the player-profile bot, a
+scripted walk through the input space, or idle). It steps the scenario through
+`stepInputs` and checks structural invariants after every tick:
+
+- every number in the world is finite
+- ids are unique and issued, and every owner exists
+- nothing revives without a respawn event or round restart
+- each step advances the clock one tick, and an ending stays latched
+- shell, mine, and bounce bounds hold
+- only a live tank off cooldown fires, and only once a tick
+
+A run continues 30 ticks past its ending, then stops.
+
+| Command | Scope | Measured warm runtime |
+| --- | --- | ---: |
+| `npx vitest run src/sim/generated-scenarios.test.ts` | The required corpus inside `npm run test:unit`: seeds 1–10 at 1,200 ticks each, three of them repeated, plus a known-bad control per invariant | TBD-CORPUS |
+| `VITE_RUN_MEASURE=1 npx vitest run tools/scenarios/generated-scenarios.measure.test.ts` | The on-demand sweep: seeds 1–200 at 3,600 ticks by default, every seed run twice; `VITE_SCENARIO_SEEDS` (`1-200`, `3,7,40-42`) and `VITE_SCENARIO_TICKS` override | TBD-SWEEP |
+
+A failure prints the seed, the resolved scenario as JSON, the tick and invariant, and a
+`rerun:` command that reproduces that one seed with no CI state. A repeat failure names the
+first tick the two runs disagree on. The sweep closes with a `corpus digest` line, which two
+sweeps of the same seeds and ticks on the same code must print identically. On GitHub,
+dispatch **Generated-scenario sweep** (`scenario-sweep.yml`) with seed and tick inputs; it
+uploads the console log for 14 days and is on no automatic trigger.
+
+Budget: TBD-BUDGET
+
+What the invariants do not cover: balance or feel, render and audio, malformed worlds that
+`createWorldFor` cannot produce, geometry (a tank inside a wall), and event payloads other
+than `fire` and `respawn`. There is no shrinking; a reported seed and tick budget are the
+reproduction.
+
 ### Local candidate verification
 
 Run directly relevant tests during implementation, then choose the candidate floor from the

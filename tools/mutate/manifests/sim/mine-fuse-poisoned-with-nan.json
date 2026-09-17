@@ -1,0 +1,11 @@
+{
+  "id": "mine-fuse-poisoned-with-nan",
+  "file": "src/sim/mines.ts",
+  "find": "    timer: MINE_TIMER,",
+  "replace": "    timer: (MINE_TIMER * (owner.mineCap as number)) / (owner.mineCap as number),",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's non-finite state: a fuse scaled by a per-tank field that is absent on every shipped tank is undefined/undefined, NaN, and a NaN fuse never reaches zero, so the mine never goes off by itself. Nothing clamps it and the determinism test's hand-picked finite checks do not read mine timers; the generated-scenario finite-numbers invariant walks the whole world after every tick, so every corpus seed that drops a mine reports it with its seed, tick and path."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "respawn-revives-silently",
+  "file": "src/sim/world.ts",
+  "find": "    events.push({ type: 'respawn', tankId: t.id, controlledBy: t.controlledBy ?? 0, pos: { x: t.pos.x, y: t.pos.y } });",
+  "replace": "    void t.controlledBy;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's lifecycle transition: stepRespawns still revives the tank but no longer says so, so the respawn event's consumers (render/particles.ts, audio/director.ts) see a dead tank come back with nothing to react to. The no-resurrection invariant accepts a revival only with a respawn event naming the tank or a round restart, so the corpus's versus and co-op respawns report it."
+}

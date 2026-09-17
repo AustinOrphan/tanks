@@ -1,0 +1,11 @@
+{
+  "id": "respawn-cell-memoised-across-worlds",
+  "file": "src/sim/world.ts",
+  "find": "function respawnPos(world: World, tankIndex: number): Vec2 {",
+  "replace": "const respawnMemo = new Map<number, Vec2>();\nfunction respawnPos(world: World, tankIndex: number): Vec2 {\n  const memo = respawnMemo.get(tankIndex);\n  if (memo) return { x: memo.x, y: memo.y };\n  const fresh = respawnPosFresh(world, tankIndex);\n  respawnMemo.set(tankIndex, fresh);\n  return { x: fresh.x, y: fresh.y };\n}\nfunction respawnPosFresh(world: World, tankIndex: number): Vec2 {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's determinism break: a module-level cache keyed by slot, not by world, so the second world stepped in one process respawns its tanks where the FIRST world's tanks respawned. Each run is internally consistent and breaks no structural invariant; only running the same seed twice and comparing per-tick digests shows it. determinism.test.ts cannot, because its single-player campaign runs never respawn."
+}
