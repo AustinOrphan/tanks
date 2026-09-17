@@ -60,7 +60,7 @@ Settings → Controls also opens Controllers and Controller Layout.
 ## Modes
 
 - **Campaign** runs the levels in order. **Practice** appears once a level has been
-  cleared and replays any cleared level.
+  cleared, and replays a cleared level.
 - **Versus** is local play for 2–4 tanks, free-for-all or teams, on a choice of arenas,
   and any slot can be a bot. Player 1 plays on keyboard, mouse or touch; every other human
   player needs a controller.
