@@ -12,7 +12,7 @@
     <title>Tanks!</title>
     <meta
       name="description"
-      content="A top-down arena tank game: ricochet shells, mines, and three enemy personalities."
+      content="A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus."
     />
     <meta name="theme-color" content="#1a1a1a" />
     <!-- Absolute, unlike every other URL-bearing tag below it in this file: canonical and
@@ -25,10 +25,12 @@
     <meta property="og:url" content="https://austinorphan.com/tanks/" />
     <meta property="og:title" content="Tanks!" />
     <!-- Same sentence as the description meta above, deliberately: one honest description
-         of the game, not a second copy that could drift from the first. -->
+         of the game, not a second copy that could drift from the first. The manifest's
+         description is the third copy; tools/webmanifest.test.ts holds all three equal and
+         free of counts, which go stale when the roster changes (#772). -->
     <meta
       property="og:description"
-      content="A top-down arena tank game: ricochet shells, mines, and three enemy personalities."
+      content="A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus."
     />
     <!-- No og:image/twitter:image: no share-image asset exists in this repo yet, and a
          summary card renders fine without one. Inventing a placeholder file here would be

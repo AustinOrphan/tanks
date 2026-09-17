@@ -4,6 +4,12 @@ A top-down arena tank game. Clear the arena; one shot kills anything, including 
 
 [Play it](https://austinorphan.com/tanks/)
 
+## Project status
+
+This repository is the **Public Prototype** of Tanks!: a playable prototype and engineering
+showcase, built to be technically representative rather than a finished game. What belongs
+in it is set out in the [project direction](docs/superpowers/specs/2026-08-22-project-direction.md).
+
 Three.js renderer over a pure, deterministic 2D simulation — swept ray-vs-AABB shell
 physics with in-tick reflection, proximity mines, and a data-driven enemy roster.
 
@@ -32,7 +38,12 @@ The canonical roster currently defines 6 enemy types. Its gameplay data lives in
 | Aim | Mouse |
 | Fire | Left click |
 | Drop mine | `Space` / right click |
+| Pause | `Esc` / `P` |
 | Mute | `M` |
+
+On a touch screen, drag on the left half of the screen to move and on the right half to
+aim. On-screen **FIRE** and **MINE** buttons shoot and lay mines, and **II** pauses.
+Settings → Controls chooses the aim style and fire mode.
 
 On a gamepad, both thumbs stay on the sticks and the index fingers do the shooting:
 
@@ -44,8 +55,18 @@ On a gamepad, both thumbs stay on the sticks and the index fingers do the shooti
 | Drop mine | Left trigger (`LT` / `L2`) |
 | Menus | `A`/`Cross` confirms, `B`/`Circle` backs out, `Start` pauses |
 
-Experimental gamepad input and 2–4-player couch co-op are available behind
-development flags; see the [generated dev-flag reference](docs/dev-flags.md).
+Settings → Controls also opens Controllers and Controller Layout.
+
+## Modes
+
+- **Campaign** runs the levels in order. **Practice** appears once a level has been
+  cleared, and replays a cleared level.
+- **Versus** is local play for 2–4 tanks, free-for-all or teams, on a choice of arenas,
+  and any slot can be a bot. Player 1 plays on keyboard, mouse or touch; every other human
+  player needs a controller.
+- A controller drives Player 1 in Campaign and Practice only with the `gamepad`
+  development flag, and campaign co-op for 2–4 players is behind the `players` flag;
+  see the [generated dev-flag reference](docs/dev-flags.md).
 
 ## Development
 
