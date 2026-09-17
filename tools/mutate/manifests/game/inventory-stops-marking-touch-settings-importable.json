@@ -7,5 +7,8 @@
   "tests": [
     "src/game/persistence-inventory.test.ts"
   ],
-  "why": "Issue #764's legacy classification: tanks.touch.v1 is accepted by import so a save taken before #320 keeps its touch preferences. The inventory saying otherwise must fail against SAVE_IMPORT_KEYS rather than drift from it."
+  "why": "Issue #764's legacy classification: tanks.touch.v1 is accepted by import so a save taken before #320 keeps its touch preferences. The inventory saying otherwise must fail against SAVE_IMPORT_KEYS rather than drift from it.",
+  "killedBy": [
+    "persistence inventory: save export and import imports the exported keys plus exactly the importable legacy keys, and never exports a legacy key"
+  ]
 }
