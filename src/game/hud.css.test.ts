@@ -939,6 +939,20 @@ describe('hud.css is syntactically whole', () => {
     expect(rule('.hud-settings-volume')).toMatch(/height:\s*var\(--hud-control-min\);/);
   });
 
+  it('keeps legal table words whole unless one cannot fit the pane (issue #796)', () => {
+    // jsdom lays nothing out, so the breaking itself was measured in Chromium on a built page,
+    // over every legal table (privacy, credits, content licence) at 320, 390 and 1280 px:
+    // `anywhere` split 21 tokens mid-word, every storage key included, and `break-word` split
+    // 4, each right after a hyphen, with no table overflowing its pane under either. What
+    // this pins is the declaration that measurement depends on.
+    const src = stripComments(css);
+    const at = src.search(/(^|\n)\.hud-legal-th,\s*\.hud-legal-td \{/);
+    expect(at, 'no legal table cell rule').toBeGreaterThan(-1);
+    const cells = src.slice(at, src.indexOf('}', at));
+    expect(cells).toMatch(/overflow-wrap:\s*break-word;/);
+    expect(cells, '`anywhere` lowers min-content to one character and squeezes the Key column').not.toMatch(/anywhere/);
+  });
+
   it('pads a control that carries no size variant (issue #686)', () => {
     // `.hud-new-game` is `.ui-btn.ui-btn--primary` in the markup, and `--primary` is where its
     // padding comes from. With a run active the button becomes the tertiary "Start New
