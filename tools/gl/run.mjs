@@ -83,7 +83,20 @@ try {
   // changes to the harness at all, before the guard below was ever reached. 120s, for the
   // same reason the guard below is generous -- a bare TimeoutError with no check output
   // reads as a broken harness rather than a slow one.
-  await page.goto(`${BASE}tools/gl/harness.html`, { waitUntil: 'load', timeout: 120000 });
+  //
+  // THE THIRD RAISE, 120s -> 600s, is three r186's (issue #800). The budget stopped being
+  // about this repository's code: what the page waits on is the BROWSER PARSING AND
+  // EVALUATING vite's pre-bundled `three`, and that bundle grew from 3.93 MB to 5.96 MB.
+  // Measured on the 4 GB CI-shaped box with no GPU, importing the pre-bundled module alone
+  // from an already-warm dep cache: 17.8s on 0.169 against 92.9s on 0.186, five times
+  // longer for one and a half times the bytes. The whole page load tracks it -- 17.8s
+  // against 93.0s -- and only 7.1s of that is requests; the rest is main-thread work before
+  // `load`. CI's `visual` job failed on exactly this, twice, with no check having run.
+  //
+  // This is a DEVELOPMENT SERVER cost, not a shipped one: the production build tree-shakes
+  // the same import down to a 1.17 MB bundle, and `npm run visual` (which runs against
+  // `dist`) was unaffected. It is the ceiling for a hang, matching the guard below.
+  await page.goto(`${BASE}tools/gl/harness.html`, { waitUntil: 'load', timeout: 600000 });
   // A LIVENESS guard, not an assertion: nothing about the checks depends on this number,
   // and a harness that hangs is caught just as well at 600s as at 30s. It has now been
   // raised twice, and the second raise is worth recording in full because the first one's
