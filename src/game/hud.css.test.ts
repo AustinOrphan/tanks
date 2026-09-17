@@ -322,14 +322,28 @@ describe('resolved(): the token-aware computed style this suite reads', () => {
 
   it('records the OTHER jsdom trap: a tokenised shorthand leaves its longhands unset', () => {
     // Measured. With `outline: var(--w) solid #7fd0ff`, jsdom keeps the reference on the
-    // SHORTHAND (`outline` reads `"var(--w) solid #7fd0ff"`) but never expands it, so
-    // `outlineWidth` reads its initial `"medium"` -- no reference for `resolved` to catch
-    // and nothing to signal that the declaration was dropped. A guard that reads the
-    // longhand of a tokenised shorthand is therefore measuring the initial value, not the
-    // stylesheet. Tokenise the focus ring's longhands individually, not `outline`.
+    // SHORTHAND (`outline` reads `"var(--w) solid #7fd0ff"`) but never expands it, so every
+    // longhand reads the value an element with NO outline rule reads -- no reference for
+    // `resolved` to catch and nothing to signal that the declaration was dropped. A guard
+    // that reads the longhand of a tokenised shorthand is therefore measuring the initial
+    // value, not the stylesheet. Tokenise the focus ring's longhands individually, not
+    // `outline`.
+    //
+    // Compared against a bare element rather than pinned as a literal, because the literal
+    // is how jsdom PRINTS the initial value and that moved without the trap moving: jsdom 29
+    // printed the initial width as `"medium"` and jsdom 30 prints `"16px"`, while both drop
+    // the shorthand identically (probed on both versions, together with writing the three
+    // longhands individually, which both apply: `2px` / `solid` / `rgb(127, 208, 255)`).
+    // `outlineStyle` is the half that cannot be an accident of printing: the rule says
+    // `solid` and `none` comes back. If jsdom ever expands a tokenised shorthand, this fails.
     const el = probe(':root { --w: 2px } .probe { outline: var(--w) solid #7fd0ff }');
-    expect(getComputedStyle(el).outlineWidth).toBe('medium');
-    expect(resolved(el, 'outlineWidth')).toBe('medium');
+    const bare = probe('', 'bare');
+    expect(getComputedStyle(el).outline).toBe('var(--w) solid #7fd0ff');
+    for (const prop of ['outlineWidth', 'outlineStyle', 'outlineColor'] as const) {
+      expect(getComputedStyle(el)[prop], prop).toBe(getComputedStyle(bare)[prop]);
+      expect(resolved(el, prop), prop).toBe(resolved(bare, prop));
+    }
+    expect(resolved(el, 'outlineStyle')).toBe('none');
   });
 
   it('never returns a string that still contains `var(`', () => {
@@ -1212,23 +1226,35 @@ describe('hud.css is syntactically whole', () => {
     // disclosure rows at the pane's 16px, one 72ch box came out 648px and the other 691px, so
     // the heading sat 22px right of the rows it introduces. Captured at 1280x800.
     //
-    // Equality alone would NOT have caught it -- all four elements carried the identical
-    // declaration, and jsdom reports the declared string. The unit is the assertion.
+    // Equality alone is not the guard -- all four elements carried the identical declaration.
+    // Under jsdom 29 the computed value was the declared string and a unit regex was the
+    // assertion; jsdom 30 resolves `rem`, `ch` and `em` to px, so that regex could no longer
+    // match anything. What is asserted instead is the property itself: give every element,
+    // and its parent, a font size nothing in hud.css uses, and require the measure not to
+    // move. Probed on jsdom 30 before writing this: `72ch` and `40em` move (864px -> 1116px,
+    // 960px -> 1240px on an <h2> taken to 31px), `43rem` and `688px` do not. Setting the
+    // parent as well keeps this honest whether a unit resolves against the element's own
+    // font or the one it inherits.
     const { root, dispose } = mountEveryButton();
     const selectors = ['.hud-about-subtitle', '.hud-about-subline', '.hud-about-links', '.hud-legal'];
-    const widths = selectors.map((sel) => {
-      const el = root.querySelector(sel);
+    const elements = selectors.map((sel) => {
+      const el = root.querySelector<HTMLElement>(sel);
       expect(el, `${sel} is not in the fixture`).not.toBeNull();
-      return getComputedStyle(el!).maxWidth;
+      return el!;
     });
+    const widths = elements.map((el) => getComputedStyle(el).maxWidth);
     for (const [i, width] of widths.entries()) {
       expect(width, `${selectors[i]} takes a different measure from its siblings`).toBe(widths[0]);
-      // `ch`, `em` and `ex` resolve against the ELEMENT's font; `rem` resolves against the
-      // root's, which is the whole point of choosing it, so the pattern requires a digit
-      // before the unit and `43rem` is deliberately not a match.
-      expect(width, `${selectors[i]} measures in an element-font-relative unit`).not.toMatch(
-        /[0-9.](ch|em|ex)$/,
-      );
+    }
+    for (const el of elements) {
+      el.parentElement!.style.fontSize = '31px';
+      el.style.fontSize = '31px';
+    }
+    for (const [i, el] of elements.entries()) {
+      expect(
+        getComputedStyle(el).maxWidth,
+        `${selectors[i]} measures in an element-font-relative unit`,
+      ).toBe(widths[i]);
     }
     // Non-vacuity: an empty string would satisfy both assertions above for every selector.
     expect(widths[0]).not.toBe('');
@@ -1673,17 +1699,21 @@ describe('hud.css is syntactically whole', () => {
     // scoped rule's own comment in hud.css.
     expect(versusStyle.maxHeight).toBe('none');
     expect(versusStyle.overflowY).toBe('visible');
-    // jsdom's cssstyle does not resolve `vw` to a pixel value (same limitation this
-    // file's own doc comment already names for `max()`/`env()`), but it DOES keep the
-    // specified value verbatim, which is enough to tell "a definite width is set" from
-    // "none is" -- the standalone panel's row has no width rule at all and reports the
-    // browser default `auto`. Without this container's own definite width, the row
-    // rule below folds unevenly well above the 760px breakpoint -- measured directly
-    // in Chromium at 700px with 2 slots, before this existed: fit-content resolved the
-    // container narrower than the viewport and the pair stacked into ONE column
-    // instead of sitting side by side. See the scoped rule's own comment in hud.css.
+    // A definite width is set on the versus container and none on the standalone panel's
+    // row, which has no width rule at all and reports the browser default `auto`. Without
+    // this container's own definite width, the row rule below folds unevenly well above
+    // the 760px breakpoint -- measured directly in Chromium at 700px with 2 slots, before
+    // this existed: fit-content resolved the container narrower than the viewport and the
+    // pair stacked into ONE column instead of sitting side by side. See the scoped rule's
+    // own comment in hud.css.
+    //
+    // jsdom 29 kept `92vw` verbatim; jsdom 30 resolves `vw` against its own window, so the
+    // expected value is DERIVED from `window.innerWidth` rather than pinned as `942.08px`,
+    // which would pin this harness's 1024px window instead of the stylesheet. Still fails
+    // if the declaration is deleted (`auto`) or retuned to any other viewport fraction.
     expect(controllersStyle.width).toBe('auto');
-    expect(versusStyle.width).toBe('92vw');
+    expect(versusStyle.width).toMatch(/^[\d.]+px$/);
+    expect(parseFloat(versusStyle.width)).toBeCloseTo((92 * window.innerWidth) / 100, 2);
 
     document.body.innerHTML = '';
   });
