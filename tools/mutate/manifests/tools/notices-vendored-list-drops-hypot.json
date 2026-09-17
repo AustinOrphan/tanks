@@ -1,0 +1,17 @@
+{
+  "id": "notices-vendored-list-drops-hypot",
+  "file": "tools/notices/vendored.mjs",
+  "find": "    files: Object.freeze(['src/sim/math/hypot.ts', 'src/sim/math/trig.ts', 'src/sim/math/rem-pio2.ts']),",
+  "replace": "    files: Object.freeze(['src/sim/math/trig.ts', 'src/sim/math/rem-pio2.ts']),",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) accounts for every file under src/sim/math, so a new port cannot arrive unlisted",
+    "vendored third-party source (issue #771) declares every file carrying a third-party provenance marker, as vendored or as first-party with a reason",
+    "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
+  ],
+  "why": "Drops the one file that is V8's alone from the declaration. hypot.ts carries no copyright line, only a provenance comment, so it is the file most easily left off a list and the one #771 found missing from every licensing surface. The marker scan must name it, the src/sim/math inventory must name it, and the committed notices must stop matching."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "notices-first-party-path-misspelled",
+  "file": "tools/notices/vendored.mjs",
+  "find": "  'tools/baseline/angles.ts':",
+  "replace": "  'tools/baseline/angle.ts':",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) declares every file carrying a third-party provenance marker, as vendored or as first-party with a reason"
+  ],
+  "why": "A first-party exemption keyed on a path that does not exist exempts nothing, and silently: the real file then carries its fdlibm mention undeclared, and the stale key would outlive a rename forever. The guard must reject a declared path that is not in the scan."
+}

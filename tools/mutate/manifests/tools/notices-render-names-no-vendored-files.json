@@ -1,0 +1,16 @@
+{
+  "id": "notices-render-names-no-vendored-files",
+  "file": "tools/notices/render.mjs",
+  "find": "  const files = source.files.map((f) => `\\`${f}\\``).join(', ');",
+  "replace": "  const files = 'src/sim/math';",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) renders every vendored source, its files and its notice into THIRD-PARTY-NOTICES.md",
+    "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
+  ],
+  "why": "A section that names its origin and quotes its notice but not the files that carry it leaves a reader unable to tell which code the notice governs. Every vendored file must be named in its section."
+}

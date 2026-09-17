@@ -1,0 +1,16 @@
+{
+  "id": "notices-header-notice-keeps-the-opening-rule",
+  "file": "tools/notices/vendored.mjs",
+  "find": "    .slice(rules[0] + 1, rules[1])",
+  "replace": "    .slice(rules[0], rules[1])",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) quotes the fdlibm notice from the source, identical in every fdlibm file",
+    "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
+  ],
+  "why": "An off-by-one in the header extraction quotes the fdlibm `=====` rule into the notice. The rendered notice would still contain the permission text, so a contains-check alone passes; the notice must start at the copyright line."
+}

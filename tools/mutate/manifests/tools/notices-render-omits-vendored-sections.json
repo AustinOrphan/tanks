@@ -1,0 +1,16 @@
+{
+  "id": "notices-render-omits-vendored-sections",
+  "file": "tools/notices/render.mjs",
+  "find": "  return `${GENERATED_HEADER}\\n${intro}\\n${sections.join('\\n')}\\n${vendoredIntro}\\n${vendored.join('\\n')}`;",
+  "replace": "  return `${GENERATED_HEADER}\\n${intro}\\n${sections.join('\\n')}`;",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) renders every vendored source, its files and its notice into THIRD-PARTY-NOTICES.md",
+    "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
+  ],
+  "why": "The state #771 found: THIRD-PARTY-NOTICES.md listing only npm runtime dependencies, with no word about the source vendored into src/. Rendering must include every declared vendored source."
+}
