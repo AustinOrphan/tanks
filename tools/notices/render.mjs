@@ -20,6 +20,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { VENDORED_SOURCES, noticeText } from './vendored.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -63,6 +64,21 @@ function renderDependencySection(name) {
   return `## ${name}@${depPkg.version} (${license})\n\n\`\`\`\n${text}\n\`\`\`\n`;
 }
 
+/**
+ * One vendored source's section (issue #771): where it came from, the files that carry it,
+ * and its notice, read from the source file's header or from the licence stored beside
+ * `vendored.mjs`.
+ */
+export function renderVendoredSection(source) {
+  const files = source.files.map((f) => `\`${f}\``).join(', ');
+  const where = source.notice.source ? ` The licence below is ${source.notice.source}, verbatim from the copyright line on.` : '';
+  return (
+    `## ${source.name} (${source.license})\n\n` +
+    `Vendored into ${files}. Origin: ${source.origin}.${where}\n\n` +
+    `\`\`\`\n${noticeText(source)}\n\`\`\`\n`
+  );
+}
+
 export function renderNotices() {
   const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const names = runtimeDependencyNames(pkg);
@@ -72,5 +88,12 @@ export function renderNotices() {
     "bundled into `npm run build`'s dist/ output. devDependencies are excluded because " +
     'they are build/test tooling that is never distributed with the built site.\n';
   const sections = names.map(renderDependencySection);
-  return `${GENERATED_HEADER}\n${intro}\n${sections.join('\n')}`;
+  const vendoredIntro =
+    '# Vendored source\n\n' +
+    'Third-party code copied into this repository rather than installed, and so not listed ' +
+    `above (${VENDORED_SOURCES.length} at generation time: ` +
+    `${VENDORED_SOURCES.map((s) => s.name).join(', ')}). Each notice is also preserved in the ` +
+    'header of the files named. Declared in tools/notices/vendored.mjs.\n';
+  const vendored = VENDORED_SOURCES.map(renderVendoredSection);
+  return `${GENERATED_HEADER}\n${intro}\n${sections.join('\n')}\n${vendoredIntro}\n${vendored.join('\n')}`;
 }

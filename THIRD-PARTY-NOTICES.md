@@ -54,3 +54,53 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
+
+# Vendored source
+
+Third-party code copied into this repository rather than installed, and so not listed above (2 at generation time: fdlibm, V8). Each notice is also preserved in the header of the files named. Declared in tools/notices/vendored.mjs.
+
+## fdlibm (permission notice)
+
+Vendored into `src/sim/math/trig.ts`, `src/sim/math/rem-pio2.ts`. Origin: netlib.org/fdlibm's s_sin.c, s_cos.c, k_sin.c, k_cos.c, s_atan.c, e_atan2.c, e_rem_pio2.c and k_rem_pio2.c, ported line-by-line.
+
+```
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+Developed at SunSoft, a Sun Microsystems, Inc. business.
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+```
+
+## V8 (BSD-3-Clause)
+
+Vendored into `src/sim/math/hypot.ts`, `src/sim/math/trig.ts`, `src/sim/math/rem-pio2.ts`. Origin: V8's src/builtins/math.tq (FastMathHypot's two-argument path), transliterated into hypot.ts; and three V8-authored expressions from src/base/ieee754.cc kept in trig.ts and rem-pio2.ts, all at branch-heads/13.6. The licence below is https://chromium.googlesource.com/v8/v8/+/branch-heads/13.6/LICENSE, verbatim from the copyright line on.
+
+```
+Copyright 2014, the V8 project authors. All rights reserved.
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+    * Neither the name of Google Inc. nor the names of its
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
