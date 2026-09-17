@@ -1,0 +1,14 @@
+{
+  "id": "legal-vendored-heading-relevelled",
+  "file": "src/game/legal-content.ts",
+  "find": "      { kind: 'heading', level: 3, text: 'V8 (BSD-3-Clause)' },",
+  "replace": "      { kind: 'heading', level: 2, text: 'V8 (BSD-3-Clause)' },",
+  "expect": "killed",
+  "tests": [
+    "src/game/legal.test.ts"
+  ],
+  "killedBy": [
+    "the legal block renderer nests a third-level heading under the second, which the shipped notices exercise"
+  ],
+  "why": "The two vendored-source sections are the only shipped level-3 headings, so they are what walks the renderer's h5 branch on real data. Scoped to legal.test.ts alone, so the regenerate-and-diff test cannot be what kills it: re-levelling one must fail the exact count, rather than leaving that branch to the fixture case again without a word."
+}

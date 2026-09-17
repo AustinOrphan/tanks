@@ -1,0 +1,26 @@
+{
+  "id": "notices-header-notice-accepts-no-block",
+  "file": "tools/notices/vendored.mjs",
+  "find": "  if (rules.length < 2) throw new Error('no ===== notice block in the file header');",
+  "replace": "  if (rules.length < 0) throw new Error('no ===== notice block in the file header');",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) quotes the fdlibm notice from the source, identical in every fdlibm file"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "Without the throw, a source whose header lost its notice block would have its whole text quoted as the notice, and the notices would be regenerated without complaint. Extraction must refuse a file with no notice block."
+}

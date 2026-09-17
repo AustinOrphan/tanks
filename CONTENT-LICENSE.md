@@ -10,7 +10,7 @@ exactly one of them:
 | --- | --- |
 | Original code, tests and repository tooling | [`LICENSE`](LICENSE) — PolyForm Shield 1.0.0 |
 | First-party content (this notice) | **All Rights Reserved** |
-| Third-party components | Their own licenses, recorded in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) |
+| Third-party components, including source vendored into `src/` | Their own licenses, recorded in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) |
 
 > This file records the project's licensing boundary. It is not legal advice.
 
@@ -40,6 +40,19 @@ apply, the more specific one wins.
 its verification remain the authoritative third-party notice path — this notice does not
 restate, override or relicense any of it.
 
+**Third-party source vendored into `src/`** is third-party first too. These files are ports
+of other projects' code, and each carries its original notice in its header:
+
+| Path | Origin | Notice |
+| --- | --- | --- |
+| `src/sim/math/trig.ts` | fdlibm (netlib), with two V8-authored expressions | fdlibm permission notice; V8 BSD-3-Clause |
+| `src/sim/math/rem-pio2.ts` | fdlibm (netlib), with one V8-authored expression | fdlibm permission notice; V8 BSD-3-Clause |
+| `src/sim/math/hypot.ts` | V8 (`src/builtins/math.tq`), transliterated | V8 BSD-3-Clause |
+
+`LICENSE` does not relicense the ported code in them. The list is declared in
+`tools/notices/vendored.mjs`, and a test fails when a file with a third-party provenance
+marker is missing from it.
+
 **Then reserved content:**
 
 | Path | Why |
@@ -51,8 +64,8 @@ restate, override or relicense any of it.
 | Product names and logos wherever they appear | branding |
 
 **Everything else is code**, and is licensed under `LICENSE`: `src/**` (other than the
-content data named above), `tools/**`, `tests`, build configuration, and repository
-tooling.
+content data and the vendored source named above), `tools/**`, `tests`, build
+configuration, and repository tooling.
 
 **Two boundary cases, stated so they are not judgement calls:**
 
