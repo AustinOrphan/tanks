@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto';
 import {
+  GALLERY_ARMS,
   GALLERY_VIEW_IDS,
   MOMENT_IDS,
   SKIN_IDS,
   SPAWN_ANIM_IDS,
+  galleryArmArguments,
+  parseArgs,
 } from '../gallery/args.mjs';
 import { SCREEN_STATE_IDS } from '../screens/states.mjs';
 
@@ -106,7 +109,9 @@ function validateVariant(recipe) {
     recipe.variant,
     'variant',
     ['view', 'skin', 'hull', 'accent', 'spawnAnimation'],
+    ['arms'],
   );
+  if (Object.hasOwn(variant, 'arms')) validateArms(variant.arms, recipe.producer.scenarioId);
   if (!GALLERY_VIEW_IDS.includes(variant.view)) {
     fail('variant.view', `must be one of ${GALLERY_VIEW_IDS.join(', ')}`);
   }
@@ -120,6 +125,24 @@ function validateVariant(recipe) {
     if (variant[key] !== null && (typeof variant[key] !== 'string' || !HEX.test(variant[key]))) {
       fail(`variant.${key}`, 'must be null or a #rrggbb hex colour');
     }
+  }
+}
+
+/**
+ * The developer arms a moment recipe captures under (issue #775). The keys are the gallery's
+ * own `GALLERY_ARMS`; the values, and whether an arm means anything for this scene, are
+ * decided by running the gallery's own `parseArgs` on exactly the arguments the adapter will
+ * pass. A recipe therefore cannot name an arm the CLI would refuse.
+ */
+function validateArms(value, scenarioId) {
+  const arms = exactKeys(value, 'variant.arms', [], Object.keys(GALLERY_ARMS));
+  const keys = Object.keys(arms);
+  if (keys.length === 0) fail('variant.arms', 'must name at least one arm; omit it for the shipped look');
+  for (const key of keys) stringAt(arms[key], `variant.arms.${key}`, { max: 40 });
+  try {
+    parseArgs(['--scene', scenarioId, ...galleryArmArguments(arms)]);
+  } catch (error) {
+    fail('variant.arms', `the gallery refuses it: ${error.message}`);
   }
 }
 

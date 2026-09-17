@@ -12,7 +12,7 @@
     <title>Tanks!</title>
     <meta
       name="description"
-      content="A top-down arena tank game: ricochet shells, mines, and three enemy personalities."
+      content="A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus."
     />
     <meta name="theme-color" content="#1a1a1a" />
     <!-- Absolute, unlike every other URL-bearing tag below it in this file: canonical and
@@ -25,10 +25,12 @@
     <meta property="og:url" content="https://austinorphan.com/tanks/" />
     <meta property="og:title" content="Tanks!" />
     <!-- Same sentence as the description meta above, deliberately: one honest description
-         of the game, not a second copy that could drift from the first. -->
+         of the game, not a second copy that could drift from the first. The manifest's
+         description is the third copy; tools/webmanifest.test.ts holds all three equal and
+         free of counts, which go stale when the roster changes (#772). -->
     <meta
       property="og:description"
-      content="A top-down arena tank game: ricochet shells, mines, and three enemy personalities."
+      content="A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus."
     />
     <!-- No og:image/twitter:image: no share-image asset exists in this repo yet, and a
          summary card renders fine without one. Inventing a placeholder file here would be
@@ -160,6 +162,86 @@
         </div>
       </noscript>
     </main>
+    <!-- THE ENTRY BUNDLE'S OWN FAILURE (issue #770, under #325). If the one module script
+         never arrives, or arrives and cannot run, none of `boot.ts`'s error handling exists
+         yet, and the holding card above would stay up forever, reading exactly like a slow
+         connection. Measured in Chromium (#325, 2026-09-14): a 404, a dropped connection or
+         a wrong MIME type fires `error` on the module script ELEMENT; a bundle that arrives
+         but throws while evaluating fires a window `error` whose `filename` is the bundle.
+         Both fire after parsing, so this classic script, run during parsing, is in time.
+
+         It acts ONLY while `#boot-loading` is still in the document. `boot.ts` removes that
+         card before any session exists, and from then on boot's own `onError` owns window
+         errors, so nothing after startup can reach this. There is deliberately no timeout: a
+         slow network is not a failure (owner decision on #325, 2026-09-15).
+
+         Listening in the CAPTURE phase on `window` is what lets one listener see the script
+         element's `error`, which does not bubble, without depending on where the build puts
+         the tag: Vite rewrites it to `./assets/index-<hash>.js` and moves it into <head>.
+         Styles are inline because `hud.css` arrives with the bundle; they match
+         `boot.ts`'s failure page, so this looks like the game failing, not a different site. -->
+    <script id="boot-entry-failure">
+      (function () {
+        function entryScript() {
+          return document.querySelector('script[type="module"][src]');
+        }
+        function show(title, detail) {
+          var card = document.getElementById('boot-loading');
+          var app = document.getElementById('app');
+          // The card itself is the guard: gone once boot has taken over, and gone once this
+          // has shown a failure, so a second report of the same failure changes nothing.
+          if (!card || !app) return;
+          app.innerHTML = '';
+          var page = document.createElement('div');
+          page.id = 'boot-entry-failure-card';
+          page.style.cssText =
+            'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+            'gap:1rem;height:100%;padding:2rem;box-sizing:border-box;color:#d8dde6;' +
+            'font:16px/1.6 system-ui,sans-serif;text-align:center';
+          page.setAttribute('role', 'alert');
+          page.setAttribute('aria-live', 'assertive');
+          var h = document.createElement('h1');
+          h.style.cssText = 'margin:0;font-size:1.25rem;font-weight:600;color:#f0f3f8';
+          h.textContent = title;
+          var p = document.createElement('p');
+          p.style.cssText = 'margin:0;max-width:34rem';
+          p.textContent = detail;
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.style.cssText =
+            'margin-top:0.5rem;padding:0.6rem 1.4rem;font:inherit;color:#f0f3f8;' +
+            'background:#2a2f38;border:1px solid #4a515e;border-radius:6px;cursor:pointer';
+          b.textContent = 'Reload';
+          b.addEventListener('click', function () {
+            location.reload();
+          });
+          page.appendChild(h);
+          page.appendChild(p);
+          page.appendChild(b);
+          app.appendChild(page);
+          b.focus();
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            var entry = entryScript();
+            if (!entry) return;
+            if (e.target === entry) {
+              show(
+                'Tanks! could not load.',
+                "Part of the game couldn't load. Check your connection, then reload."
+              );
+            } else if (e.filename && e.filename === entry.src) {
+              show(
+                'Tanks! could not start.',
+                'Something went wrong before the game was ready. Try reloading.'
+              );
+            }
+          },
+          true
+        );
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

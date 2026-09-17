@@ -1,0 +1,14 @@
+{
+  "id": "respawn-cell-memoised-across-worlds",
+  "file": "src/sim/world.ts",
+  "find": "function respawnPos(world: World, tankIndex: number): Vec2 {",
+  "replace": "const respawnMemo = new Map<number, Vec2>();\nfunction respawnPos(world: World, tankIndex: number): Vec2 {\n  const memo = respawnMemo.get(tankIndex);\n  if (memo) return { x: memo.x, y: memo.y };\n  const fresh = respawnPosFresh(world, tankIndex);\n  respawnMemo.set(tankIndex, fresh);\n  return { x: fresh.x, y: fresh.y };\n}\nfunction respawnPosFresh(world: World, tankIndex: number): Vec2 {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's determinism break: a module-level cache keyed by slot, not by world, so every world stepped later in the same process respawns that slot where the first world to respawn it did. Each run is internally consistent and breaks no structural invariant, and a second run of the same seed in the same module graph agrees with the first, because both read the cache (measured: this entry SURVIVED that check alone). Only the comparison against a run on freshly loaded modules shows it. determinism.test.ts's single-player campaign worlds never call stepRespawns, which world.ts gates on versus or two or more co-op players.",
+  "killedBy": [
+    "generated scenarios: the required corpus repeats exactly: a second run, and a run on freshly loaded sim modules, match the first on every tick"
+  ]
+}

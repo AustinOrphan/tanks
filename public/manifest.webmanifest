@@ -1,7 +1,7 @@
 {
   "name": "Tanks!",
   "short_name": "Tanks!",
-  "description": "A top-down arena tank game: ricochet shells, mines, and three enemy personalities.",
+  "description": "A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus.",
   "categories": ["games"],
   "lang": "en",
   "dir": "ltr",

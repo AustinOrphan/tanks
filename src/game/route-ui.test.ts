@@ -325,9 +325,11 @@ function fixture(
 // Issue #599's self-test pair are the newest: they scope a per-frame hardware poll to
 // exactly while the pane is open, the same shape `onControllersOpen`/`Close` use for the
 // assignment panel's hotplug listeners.
-// Issue #754's three are the newest: the controller layout pane's open/close pair scopes its
-// settings subscription, hotplug listeners and capture to the pane, and its request handler
-// is the one place a layout is written.
+// Issue #754's three: the controller layout pane's open/close pair scopes its settings
+// subscription, hotplug listeners and capture to the pane, and its request handler is the one
+// place a layout is written.
+// Issue #785's pair are the newest: the versus setup pane reads the connected pads on open
+// and holds hotplug listeners while it is up, the Controllers panel's shape.
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllerLayoutClose', 'onControllerLayoutOpen', 'onControllerLayoutRequest',
   'onControllerRumbleChange', 'onControllerSelfTestClose',
@@ -336,7 +338,7 @@ const ROUTE_HANDLERS = [
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
   'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin', 'onQualityChange',
   'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onSettingsClose', 'onSettingsOpen',
-  'onTouchSchemeChange', 'onVersusOpen',
+  'onTouchSchemeChange', 'onVersusOpen', 'onVersusSetupClose', 'onVersusSetupOpen',
   'onVersusStart', 'onVolumeChange',
 ];
 
@@ -481,6 +483,17 @@ describe('the application routes work with no gameplay session behind them', () 
     f.fire('onControllersOpen');
     expect(f.hostEvents).toEqual(['+gamepadconnected', '+gamepaddisconnected']);
     f.fire('onControllersClose');
+    expect(f.hostEvents).toEqual([
+      '+gamepadconnected', '+gamepaddisconnected',
+      '-gamepadconnected', '-gamepaddisconnected',
+    ]);
+  });
+
+  it('the versus setup pane adds and removes its own hotplug listeners around open/close', () => {
+    const f = fixture();
+    f.fire('onVersusSetupOpen');
+    expect(f.hostEvents).toEqual(['+gamepadconnected', '+gamepaddisconnected']);
+    f.fire('onVersusSetupClose');
     expect(f.hostEvents).toEqual([
       '+gamepadconnected', '+gamepaddisconnected',
       '-gamepadconnected', '-gamepaddisconnected',

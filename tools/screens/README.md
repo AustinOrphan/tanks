@@ -52,6 +52,72 @@ the reach steps, because those are properties of the screen rather than of one c
 it. That is why implementing this producer needed exactly one schema change — validating
 `scenarioId` against the catalogue, the same rule `moment` already had.
 
+## Sweeping every state across layouts, and comparing two builds
+
+A refactor that should change nothing a player sees needs proof that it did not (issue #766).
+`npm run screens:sweep` photographs every state at every layout in a fixed matrix, from one built
+`dist`, and `npm run screens:compare` compares two such sweeps byte for byte.
+
+```sh
+# Build each commit in its own worktree, then sweep both builds from this checkout:
+npm run screens:sweep -- --dist ../base-worktree/dist --out tmp/sweep/base --hide-game
+npm run screens:sweep -- --dist ../head-worktree/dist --out tmp/sweep/head --hide-game
+npm run screens:compare -- --base tmp/sweep/base --head tmp/sweep/head
+
+# Settle only the pairs that came out different, with a control sweep of each build:
+S=screen.devtools.actions,screen.ending.campaign-over.played
+npm run screens:sweep -- --dist ../base-worktree/dist --out tmp/sweep/base-control --states $S --hide-game
+npm run screens:sweep -- --dist ../head-worktree/dist --out tmp/sweep/head-control --states $S --hide-game
+npm run screens:compare -- --base tmp/sweep/base --head tmp/sweep/head \
+  --base-control tmp/sweep/base-control --head-control tmp/sweep/head-control --states $S
+```
+
+A full sweep of both builds and a control of only the differing states costs much less than
+three full sweeps. `--states` and `--layouts` restrict the comparison to the pairs being settled,
+so the control needs to cover only those.
+
+**What a sweep writes.** Each capture goes to `<out>/<state>/<layout>.png`, with the producer report
+beside it as `<layout>.json`. `manifest.json` records:
+- the `dist`, and the commit it came from;
+- the options;
+- every capture's SHA-256, a hash of its measurements, and its page-error count, or the error if it
+  failed.
+
+One browser and one server serve the whole run, and each capture gets a fresh browser context.
+`--states` and `--layouts` take comma-separated ids and refuse an unknown one. `--out` must not exist
+yet.
+
+**How compare classifies each state and layout.**
+
+| Outcome | Meaning |
+| --- | --- |
+| `identical` | Base and head are byte-identical, and every control given agrees with its side. |
+| `different` | Base and head differ, and the pair was stable. |
+| `missing` | Absent, or failed, on either side. It is never read as identical. |
+| `unstable` | A control sweep of the same build differs from its side, so the pair cannot say anything about the change. |
+
+- **Exit code.** The command exits 0 only when every pair is identical.
+- **Measurements, per pair.** It also says whether the measured boxes, text and watched styles
+  agree. That is secondary evidence, and it never turns an unstable or different pair identical.
+- **Read back.** It recomputes every frame's hash from the file, and fails if a file no longer
+  matches its manifest.
+
+**Why `--hide-game`.** The states reached through a live match, such as Pause and Controllers, show
+that match behind a translucent pane. How long the round ran before the pause decides where the
+enemy turrets point. Measured on one build, two sweeps of `screen.controllers` differed in 2021
+pixels at 1280x800, all inside the box around the two enemy tanks behind the title. Their
+measurements were identical. With the game canvas hidden, two sweeps of `screen.controllers`,
+`screen.controllers.pads` and `screen.pause.campaign` at 390x844 and 1280x800 were byte-identical: 6
+of 6 pairs. A sweep with the canvas hidden cannot be compared with one without it, and compare
+refuses to.
+
+**The layouts** live in [`sweep-plan.mjs`](sweep-plan.mjs), and each one names the risk it protects.
+A test reads the viewport queries `hud.css` declares, and fails when two layouts meet the same
+queries without one naming the other in `sameQueriesAs` and saying what still tells them apart.
+
+**What it is not.** It is not #326's regression suite, and it commits no baselines. It is not a
+required check. A full sweep is several hundred captures on software GL.
+
 ## Failure screens are produced by failing, never by injecting markup
 
 `screen.startup.unsupported-render` and `screen.startup.probe-blocked` patch

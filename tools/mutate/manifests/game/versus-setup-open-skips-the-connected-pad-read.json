@@ -1,0 +1,15 @@
+{
+  "id": "versus-setup-open-skips-the-connected-pad-read",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onVersusSetupOpen(() => {\n    onVersusSetupHotplug();",
+  "replace": "  hud.onVersusSetupOpen(() => {\n    void onVersusSetupHotplug;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: Versus Setup reads the controllers already connected (issue #785) resolves Player 2 to a controller that was connected before the pane opened"
+  ],
+  "why": "Issue #785 itself: with no read on open, the pane resolves human slots against whatever pad list was last pushed, which is empty until the Controllers panel has been opened once. A controller connected before the pane opened reads \"Unassigned\" and Start is refused. The hotplug listeners still repair it on the next plug event, which is why only the connected-before-open case can fail."
+}

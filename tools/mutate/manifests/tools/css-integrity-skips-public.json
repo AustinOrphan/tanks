@@ -1,0 +1,15 @@
+{
+  "id": "css-integrity-skips-public",
+  "file": "tools/css-integrity/check.mjs",
+  "find": "  for (const dir of ['src', 'public']) walk(join(root, dir));",
+  "replace": "  for (const dir of ['src']) walk(join(root, dir));",
+  "expect": "killed",
+  "tests": [
+    "tools/css-integrity/check.test.ts"
+  ],
+  "why": "Issue #763 requires that a new production stylesheet cannot be left outside the check. public/ is copied into the build as-is (privacy.html carries a <style> block today), so a discovery that walks only src/ silently stops checking it.",
+  "killedBy": [
+    "css integrity: the shipped stylesheets every shipped stylesheet parses as written",
+    "css integrity: the shipped stylesheets finds a stylesheet added anywhere under src/ or public/, or as a root page, without a list to update"
+  ]
+}

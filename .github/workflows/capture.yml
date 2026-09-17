@@ -59,6 +59,8 @@ on:
           - screen.devtools.diagnostics
           - screen.devtools.controller-selftest
           - screen.confirm.new-campaign
+          - screen.controllers
+          - screen.controllers.pads
           - screen.customize
           - screen.levels
           - screen.main-menu

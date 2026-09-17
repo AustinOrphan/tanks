@@ -3,6 +3,14 @@ import { join } from 'node:path';
 import { evaluateExpectations } from './assertions.mjs';
 import { PRODUCER_RESULT_SCHEMA_VERSION } from './producer.mjs';
 import { runProcess } from './process.mjs';
+import { GALLERY_ARMS, galleryArmArguments } from '../gallery/args.mjs';
+
+/** Every gallery arm, null where the recipe names none -- the shape the gallery reports. */
+function requestedArms(recipe) {
+  return Object.fromEntries(
+    Object.keys(GALLERY_ARMS).map((key) => [key, recipe.variant.arms?.[key] ?? null]),
+  );
+}
 
 function assertMomentProfile(recipe) {
   const { profile } = recipe;
@@ -41,6 +49,9 @@ export function buildGalleryArguments(recipe, outputRelative) {
   ];
   if (recipe.variant.hull !== null) args.push('--hull', recipe.variant.hull);
   if (recipe.variant.accent !== null) args.push('--accent', recipe.variant.accent);
+  // The developer arms the recipe names (issue #775). A recipe without `arms` adds nothing,
+  // so every recipe written before arms existed keeps its argv byte for byte.
+  args.push(...galleryArmArguments(recipe.variant.arms));
 
   if (recipe.schedule.kind === 'still') {
     if (recipe.schedule.alpha !== 0) {
@@ -91,6 +102,16 @@ function validateReport(report, recipe, rawFrameCount) {
     throw new Error(
       `gallery producer used DPR ${report.capture.viewport?.devicePixelRatio}, expected ${expectedDpr}`,
     );
+  }
+  // The arms the gallery says it APPLIED must be the arms the recipe asked for (issue #775): a
+  // dropped or misrouted flag would otherwise shoot the shipped look under an arm's name.
+  const requested = requestedArms(recipe);
+  for (const key of Object.keys(GALLERY_ARMS)) {
+    if (report.arms === null || typeof report.arms !== 'object' || report.arms[key] !== requested[key]) {
+      throw new Error(
+        `gallery applied ${key}=${report.arms?.[key]}, but the recipe requested ${key}=${requested[key]}`,
+      );
+    }
   }
   if ((report.capture.pageErrors ?? []).length > 0) {
     throw new Error(`gallery page raised ${report.capture.pageErrors.length} error(s)`);
@@ -209,6 +230,7 @@ export async function runGalleryMoment(context, deps = {}) {
     metadata: {
       moment: {
         fixture: { id: context.recipe.fixture.id, seed: report.producer.fixture.seed },
+        arms: report.arms,
         tickSchedule,
         observedEvents: report.producer.observedEvents,
         fixtureAssertions: report.producer.fixtureAssertions,

@@ -128,7 +128,7 @@ function exactKeys(file: string, path: string, obj: Record<string, unknown>, exp
 }
 
 const DEFINITION_FIELDS = [
-  'displayName', 'color', 'firstMission', 'singlePlayerOnly', 'movementSpeed',
+  'displayName', 'color', 'singlePlayerOnly', 'movementSpeed',
   'rotationSpeed', 'aiProfile', 'weapon', 'mineCapacity', 'abilities',
 ] as const;
 const WEAPON_FIELDS = ['projectileType', 'fireRate', 'maxActiveProjectiles', 'ricochetCount'] as const;
@@ -150,7 +150,6 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
     out[kind] = {
       displayName: str(file, `${kind}.displayName`, d.displayName),
       color: cssHexColor(file, `${kind}.color`, d.color),
-      firstMission: nonNegInt(file, `${kind}.firstMission`, d.firstMission),
       singlePlayerOnly: bool(file, `${kind}.singlePlayerOnly`, d.singlePlayerOnly),
       movementSpeed: oneOf(file, `${kind}.movementSpeed`, d.movementSpeed, Object.values(MovementSpeed), 'MovementSpeed'),
       rotationSpeed: oneOf(file, `${kind}.rotationSpeed`, d.rotationSpeed, Object.values(RotationSpeed), 'RotationSpeed'),

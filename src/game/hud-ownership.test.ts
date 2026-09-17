@@ -203,7 +203,11 @@ describe('HUD ownership boundary (issue #324)', () => {
     // and the `onControllerLayoutOpen`/`Close` pair. 84 -> 88. The self-test's reason: the layout
     // pane is a Settings pane the PAGE owns, `route-ui.ts` paints it and captures presses for it,
     // and a session must not be able to write a player's controller layout.
-    expect(frame.size + route.size + gameplay.size).toBe(88);
+    //
+    // Issue #785 adds TWO, both route-owned: the `onVersusSetupOpen`/`Close` pair. 88 -> 90. The
+    // Controllers panel's reason: `route-ui.ts` holds the pad hotplug listeners the versus setup
+    // pane reads, for exactly as long as it is open, and a session must not reach either.
+    expect(frame.size + route.size + gameplay.size).toBe(90);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

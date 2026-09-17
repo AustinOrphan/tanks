@@ -1426,6 +1426,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onControllerLayoutRequest: () => {},
         onControllerLayoutOpen: () => {},
         onControllerLayoutClose: () => {},
+        // Issue #785's versus setup pane lifecycle: no session test opens it.
+        onVersusSetupOpen: () => {},
+        onVersusSetupClose: () => {},
         // Issue #730's workbench: no session test opens it, so the hooks are inert and the
         // boot open reports that nothing opened.
         galleryBody: document.createElement('div'),

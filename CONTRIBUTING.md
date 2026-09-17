@@ -42,4 +42,4 @@ overrides the default.
 - [`LICENSE`](LICENSE) — PolyForm Shield 1.0.0, covering code, tests and tooling.
 - [`CONTENT-LICENSE.md`](CONTENT-LICENSE.md) — first-party content, All Rights Reserved.
 - [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) — generated; the authoritative record
-  for dependencies, which keep their own licenses.
+  for dependencies and vendored source, which keep their own licenses.

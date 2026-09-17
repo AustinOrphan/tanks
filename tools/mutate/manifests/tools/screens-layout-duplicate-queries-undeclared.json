@@ -1,0 +1,14 @@
+{
+  "id": "screens-layout-duplicate-queries-undeclared",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "    sameQueriesAs: '1280x800',\n  }),\n]);",
+  "replace": "  }),\n]);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "The TV layout stops saying why it is kept although it meets the same `hud.css` queries as the laptop layout, so the matrix silently holds two layouts the stylesheet's queries cannot tell apart. The matrix test asks every such pair to declare itself.",
+  "killedBy": [
+    "screen sweep layout matrix (issue #766) keeps no two layouts hud.css cannot tell apart, unless one says why in sameQueriesAs"
+  ]
+}

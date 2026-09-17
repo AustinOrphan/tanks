@@ -1,0 +1,16 @@
+{
+  "id": "roster-order-puts-absent-kinds-first",
+  "file": "tools/tanks/render.ts",
+  "find": "      if (fa === null) return 1;\n      if (fb === null) return -1;",
+  "replace": "      if (fa === null) return -1;\n      if (fb === null) return 1;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/first-appearance.test.ts",
+    "tools/tanks/doc.test.ts"
+  ],
+  "killedBy": [
+    "README enemy roster is generated, not hand-edited orders rows by first appearance, then catalog order, with absent kinds last",
+    "README enemy roster is generated, not hand-edited contains exactly one current generated block"
+  ],
+  "why": "A kind the campaign never spawns belongs after every kind it does. Yellow is absent from the shipped campaign, so putting absent kinds first moves its row to the top of the committed table."
+}

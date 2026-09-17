@@ -20,6 +20,9 @@ paths:
   cross-engine determinism work.
 - `determinism.test.ts` proves repeatability, not behavior preservation. AI, arena, collision,
   and balance changes need the golden trace and the directly affected invariant tests.
+- `generated-scenarios.test.ts` checks structural invariants on seeded legal scenarios and
+  prints a `rerun:` command on failure. A change that adds a lifecycle transition, cap, or
+  collection updates `checkTick` in `scenarios.ts` and its known-bad control together.
 - Arena grids, claims, campaign membership, trace pins, achievements, and framing have
   separate obligations. Re-derive the affected list instead of trusting an old checklist.
 - Solid walls may merge as geometry; destructible cells remain separate destruction units.

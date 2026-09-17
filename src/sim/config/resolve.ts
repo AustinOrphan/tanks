@@ -76,7 +76,6 @@ export function resolveTankConfig<K extends string>(
   return {
     displayName: definition.displayName,
     color: definition.color,
-    firstMission: definition.firstMission,
     singlePlayerOnly: definition.singlePlayerOnly,
     movementSpeed,
     rotationSpeed,

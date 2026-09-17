@@ -1392,9 +1392,10 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...SHELL_TRAIL_STYLES],
     description:
-      'Draws an experimental shell bounce-trail (issue #688). \'segments\' puts a row of '
-      + 'neutral dashes behind each shell, one more than the ricochets it has left, so a '
-      + 'shell on its last flight still shows one. No owner hue; the shipped game shows none.',
+      'Draws an experimental shell bounce-trail (issues #688, #774). \'segments\' puts a row of '
+      + 'neutral dashes behind each shell, one per ricochet it has left and none on its last '
+      + 'flight, laid around the wall a bounced shell just left rather than through it. No owner '
+      + 'hue; the shipped game shows none.',
   },
   identityMarker: {
     kind: 'valued',

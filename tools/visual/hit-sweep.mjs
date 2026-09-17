@@ -32,29 +32,16 @@ const PAST_SPLASH = [{ press: 'Space' }, { waitHidden: '.hud-splash' }];
 /**
  * Player-facing surfaces no screen state reaches, in the catalogue's own shape.
  *
- *  - The Controllers pane: its open button shows only while a match is paused.
  *  - Settings with Reset stats ARMED. Not a dialog: the first press relabels the same button
  *    "Really reset?" for 4 s (`handleDangerClick` in hud.ts), and the longer label is the one
  *    a player presses a second time. It needs recorded stats, or Reset stats is disabled and
  *    never arms, so it borrows the mid-campaign save `screen.main-menu` seeds.
+ *
+ * The Controllers pane was an extra here until issue #766 added it to the catalogue as
+ * `screen.controllers`, with the same steps. The catalogue half of the sweep now reaches it,
+ * along with its two-pad variant.
  */
 export const HIT_EXTRA_STATES = Object.freeze([
-  Object.freeze({
-    id: 'extra.controllers',
-    storage: {},
-    webgl: 'ok',
-    javascript: 'on',
-    query: '',
-    steps: [
-      ...PAST_SPLASH,
-      { click: '.hud-new-game' },
-      { waitHidden: '.hud-panel' },
-      { press: 'Escape' },
-      { waitVisible: '.hud-controllers-open' },
-      { click: '.hud-controllers-open' },
-      { waitVisible: '.hud-controllers' },
-    ],
-  }),
   Object.freeze({
     id: 'extra.settings.reset-armed',
     storage: findScreenState('screen.main-menu').storage,
@@ -134,6 +121,27 @@ export const COLLECT_CONTROLS = () => {
         break;
       }
     }
+    // What its clipping ancestors leave visible (issue #766): a control scrolled out of view
+    // keeps its box, but a press there lands on whatever is drawn instead.
+    let left = r.left;
+    let top = r.top;
+    let right = r.right;
+    let bottom = r.bottom;
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const ar = a.getBoundingClientRect();
+      left = Math.max(left, ar.left + a.clientLeft);
+      top = Math.max(top, ar.top + a.clientTop);
+      right = Math.min(right, ar.left + a.clientLeft + a.clientWidth);
+      bottom = Math.min(bottom, ar.top + a.clientTop + a.clientHeight);
+    }
+    const clip = {
+      x: +left.toFixed(1),
+      y: +top.toFixed(1),
+      w: +Math.max(0, right - left).toFixed(1),
+      h: +Math.max(0, bottom - top).toFixed(1),
+    };
     const classes = [...el.classList].filter((c) => !/--(on|hidden|active|selected|entering|leaving)$/.test(c));
     out.push({
       key: `${el.tagName.toLowerCase()}${el.tagName === 'INPUT' && el.type ? `[${el.type}]` : ''}${classes.length ? `.${classes.join('.')}` : ''}`,
@@ -142,6 +150,7 @@ export const COLLECT_CONTROLS = () => {
       y: +r.y.toFixed(1),
       w: +r.width.toFixed(1),
       h: +r.height.toFixed(1),
+      clip,
       reachable,
       pinned,
     });

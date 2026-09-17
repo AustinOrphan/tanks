@@ -1,0 +1,15 @@
+{
+  "id": "mine-fuse-poisoned-with-nan",
+  "file": "src/sim/mines.ts",
+  "find": "    timer: MINE_TIMER,",
+  "replace": "    timer: (MINE_TIMER * (owner.mineCap as number)) / (owner.mineCap as number),",
+  "expect": "killed",
+  "tests": [
+    "src/sim/generated-scenarios.test.ts"
+  ],
+  "why": "Issue #760's non-finite state: a fuse scaled by a per-tank field that is absent on every shipped tank is undefined/undefined, NaN, and a NaN fuse never satisfies `timer <= 0`, so the mine never goes off by itself. determinism.test.ts's finite checks read tank positions and angles and shell position and velocity, not mine timers; the generated-scenario finite-numbers invariant walks the whole world after every tick and reports the path (world.mines[0].timer = NaN).",
+  "killedBy": [
+    "generated scenarios: the required corpus seed 1 holds every structural invariant on every tick",
+    "generated scenarios: the required corpus seed 2 holds every structural invariant on every tick"
+  ]
+}

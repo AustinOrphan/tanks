@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Regenerates THIRD-PARTY-NOTICES.md from package.json's runtime "dependencies" and each
- * dependency's license file in node_modules.
+ * Regenerates THIRD-PARTY-NOTICES.md from package.json's runtime "dependencies", each
+ * dependency's license file in node_modules, and the vendored sources declared in
+ * vendored.mjs.
  *
  *   npm run notices
  *

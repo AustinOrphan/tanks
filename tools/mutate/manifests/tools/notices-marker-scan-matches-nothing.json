@@ -1,0 +1,26 @@
+{
+  "id": "notices-marker-scan-matches-nothing",
+  "file": "tools/notices/vendored.mjs",
+  "find": "export const PROVENANCE_MARKERS = Object.freeze([",
+  "replace": "export const PROVENANCE_MARKERS = Object.freeze([/^$/] || [",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) declares every file carrying a third-party provenance marker, as vendored or as first-party with a reason"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "Replaces the marker list with one pattern that matches no source file, so the scan passes over every file and reports nothing undeclared. A guard whose scan is blind looks exactly like a clean tree; only the in-test control, which expects hypot.ts to be named when it is left off the list, can tell them apart."
+}

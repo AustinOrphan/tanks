@@ -1,0 +1,27 @@
+{
+  "id": "notices-v8-licence-keeps-its-trailing-newline",
+  "file": "tools/notices/vendored.mjs",
+  "find": "  return readFileSync(path.join(root, source.notice.file), 'utf8').trim();",
+  "replace": "  return readFileSync(path.join(root, source.notice.file), 'utf8');",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) stores V8's BSD licence whole, from its copyright line to its disclaimer",
+    "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "The stored V8 licence ends in a newline, so reading it untrimmed changes the fenced block in THIRD-PARTY-NOTICES.md. The stored licence must end at its disclaimer."
+}

@@ -1,0 +1,25 @@
+{
+  "id": "notices-rem-pio2-notice-drifts-from-trig",
+  "file": "src/sim/math/rem-pio2.ts",
+  "find": " * is preserved.",
+  "replace": " * is kept.",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "src/sim/math/rem-pio2.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) quotes the fdlibm notice from the source, identical in every fdlibm file"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "THIRD-PARTY-NOTICES.md quotes the fdlibm notice once, from trig.ts's header, on the claim that rem-pio2.ts carries the same text. A one-word edit to rem-pio2.ts's copy breaks that claim, and nothing rendered changes. rem-pio2.test.ts is in the scope only so the harness's module graph can reach the file; the guard reads it through fs."
+}
