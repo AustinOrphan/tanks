@@ -59,13 +59,22 @@ A refactor that should change nothing a player sees needs proof that it did not 
 `dist`, and `npm run screens:compare` compares two such sweeps byte for byte.
 
 ```sh
-# On the base commit:
-npm run build && npm run screens:sweep -- --dist dist --out tmp/sweep/base --hide-game
-npm run screens:sweep -- --dist dist --out tmp/sweep/base-control --hide-game   # same build again
-# On the head commit:
-npm run build && npm run screens:sweep -- --dist dist --out tmp/sweep/head --hide-game
-npm run screens:compare -- --base tmp/sweep/base --head tmp/sweep/head --base-control tmp/sweep/base-control
+# Build each commit in its own worktree, then sweep both builds from this checkout:
+npm run screens:sweep -- --dist ../base-worktree/dist --out tmp/sweep/base --hide-game
+npm run screens:sweep -- --dist ../head-worktree/dist --out tmp/sweep/head --hide-game
+npm run screens:compare -- --base tmp/sweep/base --head tmp/sweep/head
+
+# Settle only the pairs that came out different, with a control sweep of each build:
+S=screen.devtools.actions,screen.ending.campaign-over.played
+npm run screens:sweep -- --dist ../base-worktree/dist --out tmp/sweep/base-control --states $S --hide-game
+npm run screens:sweep -- --dist ../head-worktree/dist --out tmp/sweep/head-control --states $S --hide-game
+npm run screens:compare -- --base tmp/sweep/base --head tmp/sweep/head \
+  --base-control tmp/sweep/base-control --head-control tmp/sweep/head-control --states $S
 ```
+
+A full sweep of both builds and a control of only the differing states costs much less than
+three full sweeps. `--states` and `--layouts` restrict the comparison to the pairs being settled,
+so the control needs to cover only those.
 
 **What a sweep writes.** Each capture goes to `<out>/<state>/<layout>.png`, with the producer report
 beside it as `<layout>.json`. `manifest.json` records:
