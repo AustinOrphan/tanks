@@ -1,0 +1,14 @@
+{
+  "id": "inventory-files-run-stats-under-the-run-store",
+  "file": "src/game/persistence-inventory.ts",
+  "find": "    key: RUN_STATS_KEY,\n    store: 'stats',",
+  "replace": "    key: RUN_STATS_KEY,\n    store: 'run',",
+  "expect": "killed",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "why": "Issue #764: tanks.stats.run.v1 is written by the stats store, not the run store, though both concern the campaign run. storage.test.ts drives one store at a time and requires exactly the inventory's keys for it, so a key filed under the wrong owner fails there.",
+  "killedBy": [
+    "createStores writes each inventory key from the store the inventory says owns it (issue #764)"
+  ]
+}

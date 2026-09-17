@@ -1,0 +1,14 @@
+{
+  "id": "save-export-drops-the-run-tally",
+  "file": "src/game/save.ts",
+  "find": "  RUN_STATS_KEY,",
+  "replace": "  // RUN_STATS_KEY,",
+  "expect": "killed",
+  "tests": [
+    "src/game/persistence-inventory.test.ts"
+  ],
+  "why": "Issue #764: SAVE_KEYS stays save.ts's own list, and the inventory proves it is the exported set. An export that stopped carrying the campaign run's tally would restore a run whose end screen reported zeros, while the privacy policy still promised the key exports.",
+  "killedBy": [
+    "persistence inventory: save export and import exports exactly the current keys the inventory marks exported, in save.ts order"
+  ]
+}

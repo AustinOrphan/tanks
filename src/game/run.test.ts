@@ -12,8 +12,8 @@ import {
 import { LIVES } from '../sim/constants';
 
 /** The v1 key this store's tests exercise directly, to prove the bump's own behaviour --
- *  see run.ts's LEGACY_RUN_KEY_V1 doc comment (not exported: only this module needs it,
- *  and only to construct a stale record no code should ever write again). */
+ *  see run.ts's LEGACY_RUN_KEY_V1 doc comment. Retyped as a raw string rather than imported,
+ *  as a fixture: it constructs a stale record no code should ever write again. */
 const LEGACY_RUN_KEY_V1 = 'tanks.run.v1';
 
 beforeEach(() => {
