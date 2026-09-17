@@ -14,8 +14,8 @@
  * nothing is built and the shipped render is untouched. The issue closes on adopt / revise /
  * reject evidence for #632, not on a shipped visual grammar.
  *
- * `segments` -- a short row of dashes behind the shell, ONE MORE than its remaining bounces.
- * Counting, in a neutral tone, and three constraints shape it:
+ * `segments` -- a short row of dashes behind the shell, ONE PER REMAINING BOUNCE. Counting, in a
+ * neutral tone, and three constraints shape it:
  *
  *  - NO HUE. The shell's emissive already carries its owner's identity colour in a versus or
  *    co-op match (`SHELL_TINT_INTENSITY`, render/entities.ts), and tread marks lean toward the
@@ -28,10 +28,18 @@
  *    growth -- so the reduced-motion form is the same form, and the cue survives that policy
  *    intact rather than being traded for a weaker one.
  *
- * WHY +1. A shell with no bounces left is the one the issue calls out -- it dies at the next
- * wall -- and it must still carry a mark distinct from "no trail drawn". One dash means "this
- * is its last flight"; two, one bounce to come; three, two. The shipped starting budgets
- * (`balance.json`'s `shells`: normal 1, fast 0, ricochet 2) therefore start at 2, 1 and 3.
+ * A DIRECT COUNT (issue #774, the owner's direction on #632 of 2026-09-14). Two dashes, two
+ * ricochets to come; one, one; none, none -- and no placeholder for zero. The first experiment
+ * (#688) drew one MORE than the bounces left, so a last-flight shell kept a single dash; that
+ * mapping is superseded. A shell with no bounces left is still drawn, and still dangerous: the
+ * cue describes remaining ricochets, not whether a shell can hit a tank or what type it is. The
+ * shipped starting budgets (`balance.json`'s `shells`: normal 1, fast 0, ricochet 2) therefore
+ * start at 1, 0 and 2.
+ *
+ * THE COST OF A ZERO. Under +1 no live shell ever drew nothing, so "no dashes" could not be
+ * misread. Now it is a real answer, which makes any dash that is hidden or clipped a potential
+ * false zero; `render/shell-trail.ts` lays the row around a wall rather than dropping dashes
+ * into it for that reason.
  */
 export const SHELL_TRAIL_STYLES = ['segments'] as const;
 export type ShellTrailStyle = (typeof SHELL_TRAIL_STYLES)[number];
@@ -42,15 +50,14 @@ export function isShellTrailStyle(value: unknown): value is ShellTrailStyle {
 }
 
 /**
- * The most dashes one shell draws. Three is the largest shipped starting budget (ricochet's 2
- * bounces) plus one. A shell configured with more bounces clamps here rather than growing a
- * longer row: the per-shell budget is what bounds the renderer's instance count, and a row too
- * long to count at a glance would stop being a count.
+ * The most dashes one shell draws: the largest shipped starting budget, ricochet's 2 bounces. A
+ * shell configured with more bounces clamps here rather than growing a longer row: the per-shell
+ * budget is what bounds the renderer's instance count, and a row too long to count at a glance
+ * would stop being a count.
  */
-export const MAX_TRAIL_SEGMENTS = 3;
+export const MAX_TRAIL_SEGMENTS = 2;
 
-/** Dashes for a shell with `bouncesLeft` ricochets to come: one more than that, clamped to 1..MAX. */
+/** Dashes for a shell with `bouncesLeft` ricochets to come: exactly that, clamped to 0..MAX. */
 export function trailSegmentsFor(bouncesLeft: number): number {
-  const n = Math.floor(bouncesLeft) + 1;
-  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(1, n));
+  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(0, Math.floor(bouncesLeft)));
 }
