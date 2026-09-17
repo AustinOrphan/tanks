@@ -1,0 +1,20 @@
+{
+  "id": "first-appearance-returns-the-stale-authored-table",
+  "file": "src/sim/config/first-appearance.ts",
+  "find": "): number | null {\n  for (let i = 0; i < levels.length; i++) {",
+  "replace": "): number | null {\n  const authored: Record<TankKind, number> = { player: 0, brown: 1, grey: 2, teal: 5, olive: 3, green: 12, yellow: 8 };\n  if (levels.length > 0) return authored[kind];\n  for (let i = 0; i < levels.length; i++) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/first-appearance.test.ts",
+    "tools/tanks/doc.test.ts"
+  ],
+  "killedBy": [
+    "firstAppearanceFor (issue #777) matches a spawn-letter count of the shipped campaign's own arenas",
+    "firstAppearanceFor (issue #777) follows the campaign order, so reordering the levels moves every answer with it",
+    "firstAppearanceFor (issue #777) orders by position in the level list, never by the level id",
+    "firstAppearanceFor (issue #777) reads a cell through SPAWN_LETTERS, so green is N and a G is grey",
+    "firstAppearanceFor (issue #777) answers 1 for the player, which every arena spawns, and null for an empty campaign",
+    "README enemy roster is generated, not hand-edited contains exactly one current generated block"
+  ],
+  "why": "The negative control #777 asks for by name: the numbers tank-defs.json used to author, returned for any campaign. They were wrong for four of six enemies against the shipped campaign (Grey 2, Teal 5, Green 12 and Yellow 8, where the campaign gives 1, 1, 4 and none), and a table cannot follow a reordered campaign. The README block rendered from it stops matching the committed one."
+}
