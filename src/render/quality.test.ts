@@ -44,8 +44,17 @@ describe('QUALITY_PRESETS.high matches scene.ts literals exactly', () => {
   it('shadowMapSize is 2048 (scene.ts:168)', () => {
     expect(QUALITY_PRESETS.high.shadowMapSize).toBe(2048);
   });
-  it('shadowType is PCFSoftShadowMap (scene.ts:119)', () => {
-    expect(QUALITY_PRESETS.high.shadowType).toBe(THREE.PCFSoftShadowMap);
+  it('shadowType is PCFShadowMap, the filter r186 left standing (issue #800)', () => {
+    // scene.ts:119 asked for PCFSoftShadowMap until three r186 removed that filter. The table
+    // now names what the renderer actually uses; the width it lost comes back through
+    // shadowRadius below, and the harness check reads the type back after a frame.
+    expect(QUALITY_PRESETS.high.shadowType).toBe(THREE.PCFShadowMap);
+  });
+  it('shadowRadius is 1.625, the spread that restores r169 PCFSoft\'s penumbra (issue #800)', () => {
+    // Not any radius above the default: measured on the level 1 start at 2048, the centre
+    // wall's 10-90 shadow edge is 33.1 px at 1.625 against r169's 33.0 px, where three's
+    // default of 1 gives 22.5 px and 2 gives 39.8 px (top-down, 800 px per world unit).
+    expect(QUALITY_PRESETS.high.shadowRadius).toBe(1.625);
   });
   it('fillRimLights is true (scene.ts built its fill and rim lights unconditionally before #735)', () => {
     expect(QUALITY_PRESETS.high.fillRimLights).toBe(true);
@@ -168,13 +177,31 @@ describe('medium and low are real steps down, not copies of high', () => {
     expect(medium.maxClouds).toBeLessThan(high.maxClouds);
   });
 
-  it('the shadow filters step DOWN in order: PCFSoft, plain PCF, Basic', () => {
+  it('the shadow filters step DOWN in order: PCF spread wide, PCF at the default spread, Basic', () => {
     // Pinned as literals, not distinctness: review proved that swapping medium's and
     // low's filters (an internally-incoherent table where "low" shadows better than
     // "medium") survived the whole 2144-test suite when this only asserted a Set of
     // size 3. Breaks if any preset's filter moves off its rung.
-    expect(QUALITY_PRESETS.high.shadowType).toBe(THREE.PCFSoftShadowMap);
+    //
+    // high and medium share a filter since r186 removed PCFSoft (issue #800), so the rung
+    // between them is the radius: five taps spread over 1.625 texels against 1.
+    expect(QUALITY_PRESETS.high.shadowType).toBe(THREE.PCFShadowMap);
     expect(QUALITY_PRESETS.medium.shadowType).toBe(THREE.PCFShadowMap);
     expect(QUALITY_PRESETS.low.shadowType).toBe(THREE.BasicShadowMap);
+    expect(QUALITY_PRESETS.high.shadowRadius).toBeGreaterThan(QUALITY_PRESETS.medium.shadowRadius);
+  });
+
+  it('no preset asks for a filter this three.js does not implement -- population: all 3 QualityPreset values', () => {
+    // How #800 arrived: the table asked for PCFSoftShadowMap, r186 deleted that branch, and
+    // WebGLShadowMap.render() quietly swapped in PCFShadowMap with a console warning. The
+    // preset read back as PCFSoft everywhere the renderer had not yet drawn, so nothing failed
+    // and every high-quality shadow edge narrowed by a third. PCFSoftShadowMap is still
+    // EXPORTED (value 2), which is why naming it here is still a type-correct mistake to make.
+    const implemented: THREE.ShadowMapType[] = [THREE.BasicShadowMap, THREE.PCFShadowMap, THREE.VSMShadowMap];
+    for (const p of QUALITY_PRESET_IDS) {
+      expect(implemented, `${p} asks for shadow filter ${QUALITY_PRESETS[p].shadowType}`)
+        .toContain(QUALITY_PRESETS[p].shadowType);
+    }
+    expect(implemented).not.toContain(THREE.PCFSoftShadowMap);
   });
 });

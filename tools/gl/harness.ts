@@ -437,11 +437,33 @@ check('omitting the quality argument reproduces the `high` preset\'s shadowMap.t
   // `quality` dev flag must not move construction away from what shipped before this
   // feature existed. Split per-knob for the same masking reason as the low-preset
   // checks above.
+  //
+  // READ BACK AFTER A FRAME, which is issue #800's lesson. `WebGLShadowMap.render()` is where
+  // three drops a filter it no longer implements and substitutes another, so a type read
+  // before the first render is only the type ASKED FOR. This check passed unchanged through
+  // the r169 -> r186 upgrade that silently gave high's shadows medium's filter.
   const ctx = fresh();
+  ctx.renderer.render(ctx.scene, ctx.camera);
   const shadowType = ctx.renderer.shadowMap.type;
   ctx.dispose();
   if (shadowType !== QUALITY_PRESETS.high.shadowType) {
-    return `default shadowMap.type is ${shadowType}, want high's ${QUALITY_PRESETS.high.shadowType} (PCFSoftShadowMap)`;
+    return `default shadowMap.type after one frame is ${shadowType}, want high's ${QUALITY_PRESETS.high.shadowType} (PCFShadowMap); three substitutes a filter it has removed`;
+  }
+  return null;
+});
+
+check('omitting the quality argument reproduces the `high` preset\'s sun.shadow.radius', () => {
+  // The knob that carries high's penumbra width now that r186 has removed PCFSoft (issue
+  // #800). scene.ts set no radius before, so three's default of 1 applied and every shadow
+  // edge on the default preset measured about a third narrower than the shipped look.
+  const ctx = fresh();
+  ctx.renderer.render(ctx.scene, ctx.camera);
+  const sun = sunOf(ctx);
+  const radius = sun?.shadow.radius;
+  ctx.dispose();
+  if (!sun) return 'no shadow-casting sun found';
+  if (radius !== QUALITY_PRESETS.high.shadowRadius) {
+    return `default sun.shadow.radius is ${radius}, want high's ${QUALITY_PRESETS.high.shadowRadius}`;
   }
   return null;
 });

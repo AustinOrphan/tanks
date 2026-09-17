@@ -206,6 +206,9 @@ export function createScene(
   // enough to close the gap without acne returning.
   sun.shadow.normalBias = 0.008;
   sun.shadow.bias = -0.0001;
+  // How far the filter spreads its samples, in shadow-map texels. three r186 removed the soft
+  // PCF filter this scene used, and `high` restores that penumbra width here (issue #800).
+  sun.shadow.radius = quality.shadowRadius;
   const shadowCam = sun.shadow.camera as THREE.OrthographicCamera;
   scene.add(sun);
   scene.add(sun.target);

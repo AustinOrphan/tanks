@@ -58,6 +58,15 @@ export interface RenderQuality {
   readonly shadowMapSize: number;
   readonly shadowType: THREE.ShadowMapType;
   /**
+   * How wide the shadow filter spreads its samples, in shadow-map texels: three's
+   * `LightShadow.radius`, which scene.ts hands the sun. three r186 removed
+   * `PCFSoftShadowMap` (`WebGLShadowMap` substitutes `PCFShadowMap` and warns), and the
+   * surviving PCF filter spreads its five Vogel-disk taps by this radius. At the default of 1
+   * its penumbra measured about a third narrower than r169's soft filter drew (issue #800).
+   * `BasicShadowMap` takes one unfiltered sample and ignores this.
+   */
+  readonly shadowRadius: number;
+  /**
    * Whether `createScene` builds its cool fill and warm rim directional lights. True in every
    * preset, so `high` still reproduces the shipped scene; it is a field so the `fillRimLights`
    * development flag (issue #735) can take them out for a device sweep. False means the two
@@ -140,7 +149,16 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
     antialias: true, // scene.ts:116 `new THREE.WebGLRenderer({ canvas, antialias: true })`
     pixelRatioCap: 2, // scene.ts:117 & :293 `Math.min(window.devicePixelRatio, 2)`
     shadowMapSize: 2048, // scene.ts:168 `sun.shadow.mapSize.set(2048, 2048)`
-    shadowType: THREE.PCFSoftShadowMap, // scene.ts:119 `renderer.shadowMap.type = THREE.PCFSoftShadowMap`
+    // Was `PCFSoftShadowMap` until three r186 removed it (issue #800). r186 renders that
+    // request as plain PCF at radius 1 and warns, which is a third-narrower penumbra, so the
+    // preset names the filter it actually gets and restores the width with the radius below.
+    shadowType: THREE.PCFShadowMap,
+    // The radius whose penumbra matches what r169's soft filter drew at this map size. Measured
+    // on the level 1 start at 2048: the 10-90 width of the centre wall's shadow edge is 33.1 px
+    // against r169's 33.0 px in a top-down view at 800 px per world unit, where r186's default
+    // radius of 1 gives 22.5 px. It costs what radius 1 costs: the radius scales the five taps'
+    // offsets and adds no work (evidence on issue #800).
+    shadowRadius: 1.625,
     fillRimLights: true, // scene.ts's `fill` and `rim` DirectionalLights, added unconditionally before #735
     muzzleSmoke: FULL_MUZZLE_SMOKE, // every billow of muzzle-smoke.ts's table, at its own ceiling
   },
@@ -149,16 +167,17 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
    * awaiting the sweep the issue defers -- but `muzzleSmoke` is, in the GL harness, and
    * its numbers are on CHEAP_MUZZLE_SMOKE above. Half the shadow texel density (1024 vs
    * 2048) and a slightly lower pixel ratio ceiling (1.5 vs 2) are where most of a
-   * mid-range GPU's cost sits; antialias stays on, and the shadow filter steps down ONE
-   * rung, PCFSoft -> plain PCF (still filtered, no longer soft-sampled) -- review caught
-   * an earlier draft of this comment claiming "the soft PCF filter stays on", which is
-   * high's filter, not this one's.
+   * mid-range GPU's cost sits; antialias stays on, and the shadow filter keeps high's PCF at
+   * three's default radius of 1 rather than high's 1.625, spread over texels that are
+   * themselves half as dense -- review caught an earlier draft of this comment claiming
+   * "the soft PCF filter stays on", which was high's PCFSoft filter, the one r186 removed.
    */
   medium: {
     antialias: true,
     pixelRatioCap: 1.5,
     shadowMapSize: 1024,
     shadowType: THREE.PCFShadowMap,
+    shadowRadius: 1, // three's default: unchanged by issue #800, which retuned high only
     fillRimLights: true,
     muzzleSmoke: CHEAP_MUZZLE_SMOKE,
   },
@@ -178,6 +197,7 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
     pixelRatioCap: 1,
     shadowMapSize: 512,
     shadowType: THREE.BasicShadowMap,
+    shadowRadius: 1, // three's default; Basic takes one unfiltered sample and never reads it
     fillRimLights: true,
     muzzleSmoke: null,
   },
