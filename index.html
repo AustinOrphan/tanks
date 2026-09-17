@@ -180,15 +180,15 @@
          `boot.ts`'s failure page, so this looks like the game failing, not a different site. -->
     <script id="boot-entry-failure">
       (function () {
-        var shown = false;
         function entryScript() {
           return document.querySelector('script[type="module"][src]');
         }
         function show(title, detail) {
           var card = document.getElementById('boot-loading');
           var app = document.getElementById('app');
-          if (shown || !card || !app) return;
-          shown = true;
+          // The card itself is the guard: gone once boot has taken over, and gone once this
+          // has shown a failure, so a second report of the same failure changes nothing.
+          if (!card || !app) return;
           app.innerHTML = '';
           var page = document.createElement('div');
           page.id = 'boot-entry-failure-card';

@@ -59,6 +59,7 @@ describe('index.html entry bundle failure card (issue #770)', () => {
     expect(shown, 'no failure card after the entry script failed').not.toBeNull();
     expect(document.getElementById('boot-loading'), 'the holding card is still up').toBeNull();
     expect(shown?.getAttribute('role')).toBe('alert');
+    expect(shown?.getAttribute('aria-live')).toBe('assertive');
     expect(shown?.querySelector('h1')?.textContent).toBe('Tanks! could not load.');
     expect(shown?.querySelector('p')?.textContent).toBe(DELIVERY);
     const reload = shown?.querySelector('button');
