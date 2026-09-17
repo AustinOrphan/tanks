@@ -5,9 +5,10 @@
   "replace": "import type { PaneHost, Surface } from './pane-host';\nimport type { Hud } from './hud';",
   "expect": "killed",
   "tests": [
+    "src/game/customize-pane.test.ts",
     "src/game/pane-host.test.ts"
   ],
-  "why": "The pane takes a type-only import from `hud.ts`. It compiles, and `dependency-direction.test.ts` allows a game-to-game edge, so nothing else stops the closure's types, and the file that imports the pane, coming back within the pane's reach.",
+  "why": "The pane takes a type-only import from `hud.ts`. It compiles, and `dependency-direction.test.ts` allows a game-to-game edge, so nothing else stops the closure's types, and the file that imports the pane, coming back within the pane's reach. Scoped with `customize-pane.test.ts` because `pane-host.test.ts` reads the pane through a raw glob, which vitest's module graph does not relate to the file; the pane's own test is what makes the entry reachable, and it passes under the mutation.",
   "killedBy": [
     "pane host seam (issue #556) keeps every pane module from importing hud.ts"
   ]

@@ -5,9 +5,10 @@
   "replace": "export type CustomizeHost = Pick<PaneHost, 'enterSurface' | 'closeSurface' | 'isSurfaceOpen' | 'open' | 'back' | 'captureFocus'>;",
   "expect": "killed",
   "tests": [
+    "src/game/customize-pane.test.ts",
     "src/game/pane-host.test.ts"
   ],
-  "why": "The pane declares a host member beyond the five it uses. The compiler would reject a key `PaneHost` lacks, but vitest does not typecheck, and a real widening to a member that exists would compile. The source scan is what makes the pane's shared-state cost a pinned number.",
+  "why": "The pane declares a host member beyond the five it uses. The compiler would reject a key `PaneHost` lacks, but vitest does not typecheck, and a real widening to a member that exists would compile. The source scan is what makes the pane's shared-state cost a pinned number. Scoped with `customize-pane.test.ts` because `pane-host.test.ts` reads the pane through a raw glob, which vitest's module graph does not relate to the file; the pane's own test is what makes the entry reachable, and it passes under the mutation.",
   "killedBy": [
     "pane host seam (issue #556) pins the host members each pane declares"
   ]
