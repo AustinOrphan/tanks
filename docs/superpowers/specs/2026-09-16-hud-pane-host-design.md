@@ -1,30 +1,34 @@
 ---
-status: proposed
+status: active
 date: 2026-09-16
-last-reviewed: 2026-09-16
+last-reviewed: 2026-09-17
 scope: What an extracted HUD pane module receives from hud.ts, how it registers, where its markup lives, and how the first extraction proves no behaviour change
 implementation-issues: [556, 765]
-implementation-prs: []
+implementation-prs: [779]
 supersedes: []
 superseded-by: []
 ---
 
 # The seam hud.ts hands to an extracted pane
 
-**Proposed, 2026-09-16.** Issue #556 splits `src/game/hud.ts`. It asks for a design of what the
+**Proposed 2026-09-16; active since the rulings of 2026-09-17.** Issue #556 splits `src/game/hud.ts`. It asks for a design of what the
 shared state becomes before any file is created. Issue #765 asks for that design as a spec
 that a pane extraction can be built and reviewed against.
 
-Four decisions below need an owner ruling before this spec becomes `active`: the markup
-rule (rule 3) and the three cross-pane couplings (rule 4). The other rules follow from
+Four decisions below needed an owner ruling before this spec became `active`: the markup
+rule (rule 3) and the three cross-pane couplings (rule 4). **All four were ruled on
+2026-09-17, each for the recommended option.** The recommendations below are the rules; the
+alternatives are kept as the record of what was rejected. #779 extracted Customize under rule
+3 before the ruling, stating that assumption, and the ruling confirms it. The other rules follow from
 measurement, from the precedents in #755 and #759, and from a panel of three independent
 designs that two judges scored against the source.
 
 ## 1. What this is measured against
 
 Every figure here was measured with `npm run hud:closure`, the tool PR #768 checks in for
-#767. The run is on that PR's head, where `hud.ts` is unchanged from `main` at `43adf28`. Until
-#768 merges, treat the tables as candidate evidence.
+#767. The run is on that PR's head, where `hud.ts` is unchanged from `main` at `43adf28`. #768
+merged as `024a0be` on 2026-09-17, so the tool is on `main`; the tables stay a reading of
+`43adf28`, before #779 moved Customize out.
 
 **How it counts.** The tool loads `hud.ts` into a TypeScript program, then walks every direct
 statement of `createHud`'s body.
@@ -227,9 +231,9 @@ names the pane's exports (all three).**
   it is named at 2522, 5028, 5487, 5488, 7631, 8374 and 8375. Registering earlier in construction
   does not reorder dispatch, because listeners on different elements fire by propagation path.
 
-### Rule 3: Where markup lives *(needs an owner ruling)*
+### Rule 3: Where markup lives *(ruled 2026-09-17: the recommended option)*
 
-**Proposed: the pane's body moves with the pane as an exported string. The container line stays
+**Ruled: the pane's body moves with the pane as an exported string. The container line stays
 in the one template. hud.ts interpolates the body at its exact position, so the string assigned
 to `el.innerHTML` is identical character for character, and one parse produces the DOM.**
 
@@ -256,25 +260,25 @@ to `el.innerHTML` is identical character for character, and one parse produces t
   any pane whose body writes a `--hidden` class is extracted. Versus Setup's body writes
   `hud-versus-mode-note--hidden`. Customize's writes none, so its PR may widen the scan or leave
   that to Versus Setup's PR. The spec recommends doing it in the first PR, while it is cheap.
-- **The alternative, if the owner prefers it:** the whole fragment stays in the template, and the
+- **The rejected alternative:** the whole fragment stays in the template, and the
   pane scopes its lookups to the container it receives. This is the smallest step, and one design
   argued for it. It leaves Customize's markup in `hud.ts`, which is the half-extraction #755 and
   #759 already did.
 
-### Rule 4: The three cross-pane couplings *(each needs an owner ruling)*
+### Rule 4: The three cross-pane couplings *(each ruled 2026-09-17: the recommended option)*
 
 1. **Detected pads.** Versus Setup reads Controllers' `currentDetectedPads` and
    `slotSourceLabel`, and `setDetectedPads` (8107) repaints both panes.
-   - **Proposed (two of three designs):** the pad list stays a host binding, because a `Hud` member
+   - **Ruled (two of three designs proposed it):** the pad list stays a host binding, because a `Hud` member
      writes it. Both panes read it through `detectedPads()`.
    - `setDetectedPads` repaints Controllers, then Versus Setup, in today's order.
    - `slotSourceLabel` becomes a pure `(source, pads)` function in a small shared module that both
      panes import. Its only closure read is `currentDetectedPads`, at 4140. **(all three)**
-   - **The third design:** Controllers owns the list and exposes a feed that Versus Setup subscribes
+   - **The rejected third design:** Controllers owns the list and exposes a feed that Versus Setup subscribes
      to. That makes the dependency explicit, but it makes one pane depend on another.
 2. **Armed confirmation.** This is `armedReset`, `disarmReset` (3726), `handleDangerClick` (3740)
    and `restingLabel` (3642).
-   - **Proposed (all three):** it is host-owned, because the core disarms from `showStats` (3773),
+   - **Ruled (all three designs proposed it):** it is host-owned, because the core disarms from `showStats` (3773),
      `openLayer` (4925) and `setState` (7414).
    - Settings, Records and Developer Tools receive `arm(button, restingLabel, callbacks)` and
      `disarm()`.
@@ -282,7 +286,7 @@ to `el.innerHTML` is identical character for character, and one parse produces t
      naming five buttons from three panes. Do this in the first PR that extracts one of those
      three panes.
 3. **Input modality.**
-   - **Proposed (all three):** `currentModality` stays shared, and Settings receives
+   - **Ruled (all three designs proposed it):** `currentModality` stays shared, and Settings receives
      `modality(): Modality`.
    - `Modality` comes from the leaf module `modality.ts`.
 
