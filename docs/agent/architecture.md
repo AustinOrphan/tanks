@@ -126,6 +126,20 @@ would have widened the security boundary. Adding the settings key did not bump
 `SAVE_VERSION`: the blob SCHEMA is unchanged, and an old build already ignores keys outside
 its own allow-list.
 
+**Every persisted key is classified once (#764).** `src/game/persistence-inventory.ts` lists
+each key a current build writes, taken from its owning store's constant rather than
+retyped. For each one it records the owning store, whether an export carries it, and the
+privacy policy's description. It also lists the legacy keys and whether import still accepts
+them.
+
+- `storage.test.ts` drives every store and requires the written keys, store by store, to be
+  exactly the inventory's.
+- `persistence-inventory.test.ts` holds `SAVE_KEYS`, `SAVE_IMPORT_KEYS` and the data tables
+  in `PRIVACY.md` and `public/privacy.html` to it.
+
+Before #764 both policies listed six keys and omitted `tanks.stats.run.v1` and
+`tanks.versus.v1`, and each claimed that every listed key exports.
+
 **Player settings are one versioned, capability-aware model (#320).** `tanks.settings.v1`
 holds every durable preference, grouped `audio` / `input` / `presentation`, with an explicit
 `version` integer INSIDE the payload — the other stores version by key name, which cannot
