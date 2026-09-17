@@ -1,0 +1,16 @@
+{
+  "id": "screens-compare-ignores-a-disagreeing-control",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "  if (baseControl !== undefined && baseControl !== base) return 'unstable';",
+  "replace": "  if (baseControl !== undefined && baseControl === null) return 'unstable';",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "A control sweep of the base build that came out different is ignored, so a pair whose pixels move between two runs of one build is reported as a regression or as identical. The control exists to stop exactly that.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) calls a pair unstable when a control of the same build differs, before judging the change",
+    "screen sweep comparison (issue #766) says whether the measurements agree, without letting them turn a pixel difference identical",
+    "screen sweep comparison (issue #766) compares every pair either sweep names, and exits 0 only when all are identical"
+  ]
+}

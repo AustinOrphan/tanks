@@ -1,0 +1,14 @@
+{
+  "id": "screens-compare-drops-pairs-only-head-has",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "  const keys = [...new Set([...b.keys(), ...h.keys()])].sort();",
+  "replace": "  const keys = [...b.keys()].sort();",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "Only the base sweep's pairs are compared, so a capture the head sweep has and the base does not vanishes from the report instead of being counted missing.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) compares every pair either sweep names, and exits 0 only when all are identical"
+  ]
+}
