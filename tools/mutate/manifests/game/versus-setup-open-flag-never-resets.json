@@ -1,0 +1,16 @@
+{
+  "id": "versus-setup-open-flag-never-resets",
+  "file": "src/game/hud.ts",
+  "find": "    versusSetupOpen = false;\n    for (const cb of versusSetupCloseCbs) cb();",
+  "replace": "    for (const cb of versusSetupCloseCbs) cb();",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract reports the versus setup pane opening and closing exactly once per transition (issue #785)",
+    "createRouteHost: Versus Setup reads the controllers already connected (issue #785) holds its hotplug listeners for exactly as long as the pane is up"
+  ],
+  "why": "The flag is what makes open and close fire exactly once per transition. Left set after the first close, a second visit fires no open, so it reads no pads and adds no listeners, and every later surface change fires a close for a pane that is not there."
+}
