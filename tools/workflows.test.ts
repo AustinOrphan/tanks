@@ -1089,8 +1089,8 @@ describe('scenario-sweep.yml: the on-demand generated-scenario sweep (issue #760
   it("runs the file every failure's rerun line names, with the measure gate set", () => {
     // The harness is describe.skip without VITE_RUN_MEASURE, and a skipped file exits 0.
     const scenarios = read('src/sim/scenarios.ts');
-    const named = /npx vitest run (src\/sim\/\S+\.measure\.test\.ts)/.exec(scenarios)?.[1];
-    expect(named).toBe('src/sim/generated-scenarios.measure.test.ts');
+    const named = /npx vitest run (tools\/scenarios\/\S+\.measure\.test\.ts)/.exec(scenarios)?.[1];
+    expect(named).toBe('tools/scenarios/generated-scenarios.measure.test.ts');
     expect(SWEEP).toContain(`npx vitest run ${named} `);
     expect(SWEEP).toContain("VITE_RUN_MEASURE: '1'");
   });

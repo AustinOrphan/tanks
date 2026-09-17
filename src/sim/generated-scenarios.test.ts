@@ -4,8 +4,8 @@
 // `stepInputs`, and must hold every structural invariant in `scenarios.ts` on every tick. A
 // failure prints the seed, the resolved scenario, the tick, the invariant and the command
 // that reruns exactly that case. The deeper sweep over many more seeds is
-// `generated-scenarios.measure.test.ts`; both commands and their runtime budgets are in
-// docs/agent/commands-and-operations.md.
+// tools/scenarios/generated-scenarios.measure.test.ts; both commands and their runtime
+// budgets are in docs/agent/commands-and-operations.md.
 //
 // The second half is the harness's own negative control: every invariant is shown to fire
 // on a known-bad world, so a check that silently stopped checking fails here rather than
@@ -129,7 +129,7 @@ describe('generated scenarios: the generator', () => {
     expect(text).toContain(`scenario: ${JSON.stringify(cfg)}`);
     expect(text).toContain(`rerun: ${reproductionCommand(cfg)}`);
     expect(reproductionCommand(cfg)).toBe(
-      'VITE_RUN_MEASURE=1 VITE_SCENARIO_SEEDS=4 VITE_SCENARIO_TICKS=900 npx vitest run src/sim/generated-scenarios.measure.test.ts',
+      'VITE_RUN_MEASURE=1 VITE_SCENARIO_SEEDS=4 VITE_SCENARIO_TICKS=900 npx vitest run tools/scenarios/generated-scenarios.measure.test.ts',
     );
   });
 
@@ -144,8 +144,8 @@ describe('generated scenarios: the generator', () => {
 describe('generated scenarios: every invariant fires on a known-bad world', () => {
   /**
    * A genuine step from the corpus with something in every collection a check reads: two or
-   * more tanks, a live shell and a mine. The first such step of seed 1's scripted-driver
-   * corpus is found, not hand-built, so the world is one the sim really produces.
+   * more tanks, a live shell and a mine: the first such step of the first corpus seed with a
+   * scripted driver, found rather than hand-built, so the world is one the sim really produces.
    */
   let found: { prev: World; curr: World; events: readonly SimEvent[] } | undefined;
   function fixture(): { prev: World; curr: World; events: SimEvent[] } {

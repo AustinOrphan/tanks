@@ -13,7 +13,7 @@
  * imports it. Pure like the rest of `src/sim/`: seeded randomness only, no wall clock.
  *
  * The required-CI corpus is `generated-scenarios.test.ts`; the deeper on-demand sweep is
- * `generated-scenarios.measure.test.ts`. Commands and runtime budgets are in
+ * `tools/scenarios/generated-scenarios.measure.test.ts`. Commands and runtime budgets are in
  * docs/agent/commands-and-operations.md.
  */
 import { arenaById } from './config/arenas';
@@ -417,7 +417,7 @@ export function firstDivergence(a: readonly number[], b: readonly number[]): num
 /** The copy-paste command that reruns exactly one seed at one tick budget. */
 export function reproductionCommand(cfg: Pick<ScenarioConfig, 'seed' | 'ticks'>): string {
   return `VITE_RUN_MEASURE=1 VITE_SCENARIO_SEEDS=${cfg.seed} VITE_SCENARIO_TICKS=${cfg.ticks} `
-    + 'npx vitest run src/sim/generated-scenarios.measure.test.ts';
+    + 'npx vitest run tools/scenarios/generated-scenarios.measure.test.ts';
 }
 
 /** A failure report: everything needed to rerun and read the case, in one string. */

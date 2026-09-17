@@ -8,38 +8,38 @@ import {
   generateScenario,
   parseSeedList,
   runScenario,
-} from './scenarios';
+} from '../../src/sim/scenarios';
 
 // ---------------------------------------------------------------------------
 // ON-DEMAND SWEEP, skipped by default: the generated-scenario invariants (issue #760) over
 // many more seeds and ticks than required CI pays for.
 //
-// Required CI runs the small fixed corpus in generated-scenarios.test.ts. This runs the same
-// generator, drivers and checks -- `scenarios.ts`, the one implementation -- over a seed list
-// from the environment, runs EVERY seed twice for the repeat check, and fails a seed on any
-// violation or divergence, printing its reproduction.
+// Required CI runs the small fixed corpus in src/sim/generated-scenarios.test.ts. This runs
+// the same generator, drivers and checks -- src/sim/scenarios.ts, the one implementation --
+// over a seed list from the environment, runs EVERY seed twice for the repeat check, and
+// fails a seed on any violation or divergence, printing its reproduction.
 //
 // Usage (defaults: seeds 1-200, 3600 ticks = 60 s of play each):
-//   VITE_RUN_MEASURE=1 npx vitest run src/sim/generated-scenarios.measure.test.ts
+//   VITE_RUN_MEASURE=1 npx vitest run tools/scenarios/generated-scenarios.measure.test.ts
 //   VITE_RUN_MEASURE=1 VITE_SCENARIO_SEEDS=1-50,900 VITE_SCENARIO_TICKS=1800 \
-//     npx vitest run src/sim/generated-scenarios.measure.test.ts
+//     npx vitest run tools/scenarios/generated-scenarios.measure.test.ts
 //
 // A reported seed reruns alone with the `rerun:` line of its failure, which is this command
 // with that one seed and its tick budget. Runtime budgets are in
 // docs/agent/commands-and-operations.md; on GitHub, the "Generated-scenario sweep" workflow
 // (scenario-sweep.yml) runs it with the seed list and tick budget as dispatch inputs.
 //
-// One test per seed, not one loop in one test: a single synchronous test that runs for
-// minutes starves the Vitest worker's RPC, and the run then exits 1 with "Timeout calling
-// onTaskUpdate" after every seed passed (measured: the first 200-seed sweep did exactly that).
+// WHY THIS LIVES IN tools/ AND YIELDS BETWEEN SEEDS. Vitest's worker answers its runner over
+// RPC, and a reply can only be read when the event loop turns. Minutes of synchronous
+// simulation never turn it, so the RPC's own timeout fires first and the run exits 1 with
+// "Timeout calling onTaskUpdate" after every seed passed. Measured twice before this shape:
+// once as one 197 s test, and again as 200 synchronous per-seed tests (195 s). Each test here
+// awaits a zero-delay timer first. src/sim/purity.test.ts bans timers anywhere under src/sim/,
+// test files included, which is right for the simulation and why the sweep is tooling here.
 //
 // The closing `corpus digest` line hashes every seed's per-tick digests in seed order. Two
 // sweeps of the same seed list and tick budget on the same code must print the same line;
 // that is how the sweep itself is checked for repeatability across separate invocations.
-//
-// Read via `import.meta.env`: purity.test.ts bans the other environment global's bare token
-// anywhere in src/sim/, test files included, and only a VITE_-prefixed shell variable reaches
-// `import.meta.env` at all.
 // ---------------------------------------------------------------------------
 
 const measure = import.meta.env.VITE_RUN_MEASURE ? describe : describe.skip;
@@ -59,7 +59,8 @@ measure('generated scenarios: on-demand sweep (set VITE_RUN_MEASURE=1 to run)', 
   let endings = 0;
 
   for (const seed of SEEDS) {
-    it(`seed ${seed} holds every invariant on every tick, and repeats exactly`, () => {
+    it(`seed ${seed} holds every invariant on every tick, and repeats exactly`, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
       const cfg = generateScenario(seed, TICKS);
       const first = runScenario(cfg);
       const second = runScenario(cfg);

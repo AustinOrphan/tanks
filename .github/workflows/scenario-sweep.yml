@@ -50,7 +50,7 @@ jobs:
           VITE_SCENARIO_SEEDS: ${{ inputs.seeds || '1-200' }}
           VITE_SCENARIO_TICKS: ${{ inputs.ticks || '3600' }}
         run: |
-          npx vitest run src/sim/generated-scenarios.measure.test.ts --testTimeout=3000000 \
+          npx vitest run tools/scenarios/generated-scenarios.measure.test.ts --testTimeout=3000000 \
             > scenario-sweep.log 2>&1 || status=$?
           cat scenario-sweep.log
           exit "${status:-0}"
