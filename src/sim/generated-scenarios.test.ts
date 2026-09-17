@@ -10,7 +10,7 @@
 // The second half is the harness's own negative control: every invariant is shown to fire
 // on a known-bad world, so a check that silently stopped checking fails here rather than
 // passing the corpus forever.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { cloneWorld, type World } from './world';
 import { bulletConfig } from './constants';
 import { configFor } from './config/roster';
@@ -28,6 +28,7 @@ import {
   runScenario,
   scenarioSteps,
   type InvariantName,
+  type ScenarioConfig,
   type ScenarioRun,
 } from './scenarios';
 
@@ -61,13 +62,24 @@ describe('generated scenarios: the required corpus', () => {
     }, SEED_TIMEOUT_MS);
   }
 
-  it('repeats exactly: a second run of the same seed matches the first on every tick', () => {
+  it('repeats exactly: a second run, and a run on freshly loaded sim modules, match the first on every tick', async () => {
+    // Two comparisons, because they catch different module-level state. A second run in the
+    // same module graph catches state that keeps changing (a counter). It cannot catch a
+    // first-write-wins cache: both runs read what the first run, or an earlier seed, stored.
+    // A run on a fresh copy of every module starts from no stored state at all, so it
+    // disagrees with a corpus run that inherited some from the seeds before it.
+    // Measured: a module-level respawn-cell cache survived the second-run check alone
+    // (manifest entry respawn-cell-memoised-across-worlds).
+    const expectSame = (cfg: ScenarioConfig, a: ScenarioRun, b: ScenarioRun): void => {
+      expect(firstDivergence(a.digests, b.digests) === -1 ? 'repeatable' : describeDivergence(cfg, a, b)).toBe('repeatable');
+    };
     for (const seed of REPEAT_SEEDS) {
       const cfg = generateScenario(seed, CORPUS_TICKS);
       const first = corpusRun(seed);
-      const second = runScenario(cfg);
-      expect(firstDivergence(first.digests, second.digests) === -1 ? 'repeatable' : describeDivergence(cfg, first, second))
-        .toBe('repeatable');
+      expectSame(cfg, first, runScenario(cfg));
+      vi.resetModules();
+      const fresh = await import('./scenarios');
+      expectSame(cfg, first, fresh.runScenario(fresh.generateScenario(seed, CORPUS_TICKS)));
     }
   }, SEED_TIMEOUT_MS * REPEAT_SEEDS.length);
 
