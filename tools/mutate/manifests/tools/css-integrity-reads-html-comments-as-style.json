@@ -1,0 +1,11 @@
+{
+  "id": "css-integrity-reads-html-comments-as-style",
+  "file": "tools/css-integrity/check.mjs",
+  "find": "  const blanked = text.replace(/<!--[\\s\\S]*?-->/g, (c) => c.replace(/[^\\n]/g, ' '));",
+  "replace": "  const blanked = text;",
+  "expect": "killed",
+  "tests": [
+    "tools/css-integrity/check.test.ts"
+  ],
+  "why": "Issue #763's HTML extraction: index.html has a comment that mentions `<style>` before its <noscript> style block, and matched as a tag it produces a 'stylesheet' spanning prose, which fails the shipped files with a parse error that is not there (measured on the probe that motivated the blanking)."
+}
