@@ -1,0 +1,16 @@
+{
+  "id": "shell-trail-keeps-a-zero-placeholder",
+  "file": "src/presentation/shell-trail.ts",
+  "find": "  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(0, Math.floor(bouncesLeft)));",
+  "replace": "  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(1, Math.floor(bouncesLeft)));",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/shell-trail.test.ts"
+  ],
+  "killedBy": [
+    "shell bounce-trail vocabulary (issues #688, #774) draws one dash per remaining bounce, and none on a last flight",
+    "shell bounce-trail vocabulary (issues #688, #774) gives each shipped starting budget its own count",
+    "shell bounce-trail vocabulary (issues #688, #774) clamps to the renderer budget at both ends"
+  ],
+  "why": "Zero bounces draws NO dash (#774: \"do not add a placeholder dash\"). A floor of one would give a last-flight shell the same single dash as a shell with one bounce to come, which is the exact confusion the direct count exists to remove."
+}

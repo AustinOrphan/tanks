@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Regenerates the marked enemy-roster block in README.md from the validated
- * tank definitions and AI profiles.
+ * tank definitions and AI profiles, and each enemy's first appearance in the
+ * campaign (issue #777).
  *
  *   npm run tanks:doc
  *

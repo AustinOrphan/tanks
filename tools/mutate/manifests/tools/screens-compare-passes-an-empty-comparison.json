@@ -1,0 +1,14 @@
+{
+  "id": "screens-compare-passes-an-empty-comparison",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "  return result.totals.pairs > 0 && result.totals.identical === result.totals.pairs ? 0 : 1;",
+  "replace": "  return result.totals.identical === result.totals.pairs ? 0 : 1;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "Two sweeps that compared nothing, such as a filter that matched no state, exit 0, and \"every pair is identical\" becomes true of zero pairs.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) compares every pair either sweep names, and exits 0 only when all are identical"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "screens-viewport-queries-read-comments",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "  const withoutComments = css.replace(/\\/\\*[\\s\\S]*?\\*\\//g, '');",
+  "replace": "  const withoutComments = css;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "`hud.css` is heavily commented, and its comments quote media queries while explaining them. Read as live queries, they add signatures no layout can meet and hide real duplicates.",
+  "killedBy": [
+    "screen sweep layout matrix (issue #766) reads the viewport queries hud.css actually uses, and skips commented-out ones"
+  ]
+}

@@ -398,6 +398,22 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     deps.host.removeEventListener('gamepadconnected', onGamepadHotplug);
     deps.host.removeEventListener('gamepaddisconnected', onGamepadHotplug);
   });
+  // The versus setup pane reads the same list, for its device column and Start gate
+  // (issue #785), on the same terms: once on open, then live while it is up. Its OWN
+  // function rather than `onGamepadHotplug`, because a listener is keyed by its function:
+  // sharing one would let either pane's close remove the other pane's listeners.
+  const onVersusSetupHotplug = (): void => {
+    hud.setDetectedPads(deps.readDetectedPads());
+  };
+  hud.onVersusSetupOpen(() => {
+    onVersusSetupHotplug();
+    deps.host.addEventListener('gamepadconnected', onVersusSetupHotplug);
+    deps.host.addEventListener('gamepaddisconnected', onVersusSetupHotplug);
+  });
+  hud.onVersusSetupClose(() => {
+    deps.host.removeEventListener('gamepadconnected', onVersusSetupHotplug);
+    deps.host.removeEventListener('gamepaddisconnected', onVersusSetupHotplug);
+  });
 
   /**
    * The controller self-test's live readout (issue #599), on the page's own frame loop for

@@ -1,14 +1,14 @@
 {
   "id": "shell-trail-row-grows-past-the-budget",
   "file": "src/presentation/shell-trail.ts",
-  "find": "  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(1, n));",
-  "replace": "  return Math.max(1, n);",
+  "find": "  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(0, Math.floor(bouncesLeft)));",
+  "replace": "  return Math.max(0, Math.floor(bouncesLeft));",
   "expect": "killed",
   "tests": [
     "src/presentation/shell-trail.test.ts"
   ],
-  "why": "Lets a shell with more bounces than any shipped type draw an unbounded row. The renderer's instance buffer is sized as shells x MAX_TRAIL_SEGMENTS, so an unclamped count is what would turn a data change into fewer shells getting a trail at all -- and a row too long to count at a glance stops being a count.",
   "killedBy": [
-    "shell bounce-trail vocabulary (issue #688) clamps to the renderer budget at both ends"
-  ]
+    "shell bounce-trail vocabulary (issues #688, #774) clamps to the renderer budget at both ends"
+  ],
+  "why": "Re-anchored for #774 on the direct-count line. The per-shell cap is what bounds the renderer's instance buffer (64 shells x MAX_TRAIL_SEGMENTS), and a row too long to count at a glance stops being a count; a shell configured with more bounces must clamp rather than grow."
 }

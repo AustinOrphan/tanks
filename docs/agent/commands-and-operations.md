@@ -18,6 +18,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run mutate:smoke` | One representative real mutation-harness path used by floor CI | under 5 seconds |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
+| `npm run lint:css` | Parse integrity of every shipped stylesheet; also enforced inside `npm run test:unit` | under 1 second |
 | `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, and the session-lifecycle round trip | roughly 55–130 seconds after browser setup |
 | `npm run verify:full` | Complete core composite: quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
 
@@ -28,6 +29,27 @@ startup move them substantially. The command contract matters more than the exac
 `npm test` remains a compatibility alias for `npm run verify:quick`; both package scripts
 retain a trailing `--` boundary so `npm test -- <Vitest arguments>` reaches Vitest. For a
 focused test without an implicit typecheck, use `npm run test:unit -- <Vitest arguments>`.
+
+`npm run lint:css` (`tools/css-integrity/`, issue #763) checks that every shipped stylesheet
+parses as written: each `.css` file under `src/` and `public/`, and each `<style>` block in
+an `.html` file there or at the repository root. Files are found by walking the tree, so a
+new stylesheet is covered without a list to update. Problems print as
+`file:line:column: message` and the command exits 1.
+
+It runs two checks, and both are needed:
+
+1. A token scan that reports a block still open at the end, a `}` that closes nothing, and
+   an unterminated comment or string. A conforming parser repairs these silently. The end of
+   the file closes an open block, and CSS nesting turns the rules after a missing brace into
+   children of the unclosed rule.
+2. A strict parse with lightningcss, which Vite 8 depends on and by default minifies
+   production CSS with. Error recovery is off, so every parse error is reported.
+
+`tools/css-integrity/check.test.ts` runs the same check over the same files in
+`npm run test:unit`, and that is the required-CI enforcement. It is parse validity only;
+`src/game/hud.css.test.ts` and the visual checks stay authoritative for structure and
+behavior. CSS assigned from TypeScript (`style.cssText` in `src/boot.ts`) is not a
+stylesheet and is not scanned.
 
 `verify:full` is the complete core, non-browser composite. It is available for exceptional
 local reproduction of the core CI scope, but it is not the routine local candidate gate or
@@ -106,6 +128,55 @@ heaviest individual tests finish in roughly 2.3–2.6 seconds against the 5000ms
 Raising the repository default would ship one machine's constraint to every contributor and
 to CI, where a hung test would take proportionally longer to fail and a genuine performance
 regression could stop tripping the timeout.
+
+### Generated-scenario invariants
+
+`src/sim/scenarios.ts` (issue #760) resolves a seed to a legal scenario: a campaign arena
+at one to four players, or a versus catalog entry at a mode and player count that entry
+lists, with seeded rule values and one driver per player (the player-profile bot, a
+scripted walk through the input space, or idle). It steps the scenario through
+`stepInputs` and checks structural invariants after every tick:
+
+- every number in the world is finite
+- ids are unique and issued, and every owner exists
+- nothing revives without a respawn event or round restart
+- each step advances the clock one tick, and an ending stays latched
+- shell, mine, and bounce bounds hold
+- only a live tank off cooldown fires, and only once a tick
+
+A run continues 30 ticks past its ending, then stops.
+
+| Command | Scope | Measured warm runtime |
+| --- | --- | ---: |
+| `npx vitest run src/sim/generated-scenarios.test.ts` | The required corpus inside `npm run test:unit`: seeds 1–10 at 1,200 ticks each; three repeated, both in the same module graph and on freshly loaded modules; a known-bad control per invariant | about 5 seconds |
+| `VITE_RUN_MEASURE=1 npx vitest run tools/scenarios/generated-scenarios.measure.test.ts` | The on-demand sweep: seeds 1–200 at 3,600 ticks by default, every seed run twice; `VITE_SCENARIO_SEEDS` (`1-200`, `3,7,40-42`) and `VITE_SCENARIO_TICKS` override | about 3.3 minutes |
+
+A failure prints the seed, the resolved scenario as JSON, the tick and invariant, and a
+`rerun:` command that reproduces that one seed with no CI state. A repeat failure names the
+first tick the two runs disagree on. The sweep closes with a `corpus digest` line, which two
+sweeps of the same seeds and ticks on the same code must print identically. On GitHub,
+dispatch **Generated-scenario sweep** (`scenario-sweep.yml`) with seed and tick inputs; it
+uploads the console log for 14 days and is on no automatic trigger.
+
+Budget. The required corpus measured 4.9 s of test time run alone (27 tests, Node 24, the
+4-core/4GB Linux box, 2026-09-17). Keep it near that: add breadth to the sweep, not the
+corpus. Its enforced ceiling is a 20-second timeout per seed test, and 60 seconds for the
+repeat test, so a slowdown fails with a timeout instead of quietly stretching CI. The default
+sweep measured 195 s wall on the same box with one fork: 443,556 simulated ticks checked in
+the first runs, 129 of 200 scenarios reaching an ending. The workflow allows 60 minutes.
+
+The sweep is in `tools/`, not beside the corpus, because each seed awaits a zero-delay timer
+first. Without that turn of the event loop, Vitest's worker RPC times out
+("Timeout calling onTaskUpdate") and the run exits 1 after every seed passed. That was
+measured on a single 197-second test and again on 200 synchronous per-seed tests.
+`src/sim/purity.test.ts` bans timers anywhere under `src/sim/`, test files included.
+The comparison on freshly loaded modules (`vi.resetModules`) is what catches a module-level
+cache: a second run in the same module graph reads the same cached values and agrees.
+
+What the invariants do not cover: balance or feel, render and audio, malformed worlds that
+`createWorldFor` cannot produce, geometry (a tank inside a wall), and event payloads other
+than `fire` and `respawn`. There is no shrinking; a reported seed and tick budget are the
+reproduction.
 
 ### Local candidate verification
 
@@ -190,6 +261,8 @@ Specialized commands remain directly available:
 npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
 npm run capture -- --list                                  # list reproducible media recipes
 npm run hud:closure                                        # who owns what inside createHud (issue #767)
+npm run screens:sweep -- --dist dist --out tmp/sweep/base   # every screen state at every layout (issue #766)
+npm run screens:compare -- --base <dir> --head <dir>         # byte-compare two sweeps
 npm run mutate -- --only <id>                              # run one mutation entry
 npm run mutate -- --only <id> --only <id>                  # repeatable; --only a,b is the same
 npm run mutate -- --jobs auto                              # the whole manifest over a worktree pool (committed tree only)
@@ -468,3 +541,43 @@ is only migrated from and imported; this sentence said "four", "five" and then "
 keys were added, and since issue #693 `tools/instructions.test.ts` recomputes it), and the
 portfolio's root-scoped `/sw.js` service worker controls `/tanks/` and deletes every
 CacheStorage entry it does not own — so an offline feature here needs coordination first.
+
+## Dependency updates
+
+`.github/dependabot.yml` (issue #762) opens update pull requests for npm and for the GitHub
+Actions used by the workflows.
+
+**Coverage.** Both ecosystems are checked weekly, on Monday at 06:00 America/Chicago. The npm
+entry points at the repository root. Dependabot's npm fetcher reads the root `workspaces`, so
+`tools/mutate/package.json` is covered too, and every change lands in the one root
+`package-lock.json`.
+
+**Noise limits:**
+
+- A seven-day cooldown (fourteen days for an npm major) before a new release is proposed.
+- At most five open update pull requests per ecosystem.
+- Routine tooling updates arrive grouped.
+
+| Update class | How it arrives | Review |
+| --- | --- | --- |
+| devDependency minor or patch | One grouped pull request a week (`tooling-minor-and-patch`) | Human review and required CI; the lowest-risk class, and the first candidate if auto-merge is ever proposed |
+| devDependency major | Its own pull request | Human review; may need migration |
+| Runtime dependency (`three`, `howler`), any update | Its own pull request, grouped only with its own type package (`three` with `@types/three`), so the types never drift from the library | Human review. `three` is 0.x, so any minor can change rendering, and `visual` must pass |
+| `@types/node` | Up to the supported floor major only (22 while `engines` is `^22.13.0 \|\| ^24.0.0`) | Newer majors are ignored: types for a newer Node would let code use APIs the floor lacks. Raise the bound together with the floor |
+| GitHub Actions | One grouped pull request for every `actions/*` tag bump | Human review. A major tag usually moves the action's runtime; check its release notes |
+| An update that changes generated output | Arrives in its class above, and fails CI until regenerated. A runtime update changes `THIRD-PARTY-NOTICES.md`, whose section headers carry the installed version, so `tools/notices/generate.test.ts` fails | Human. Dependabot cannot run the repository's generators: run `npm run notices` (and any other affected generator) on the update branch and commit the result |
+
+**Lockfile.** `versioning-strategy: increase` raises the `package.json` range and the lockfile
+in the same pull request, so the manifest always states the version CI ran. A lockfile-only
+drift fix is not automated. Run `npm install`, commit the lockfile, and let `npm ci` in CI
+prove it reproduces.
+
+**No auto-merge.** Nothing merges an update pull request. Each one runs the same required
+checks as any pull request, and `tools/dependency-updates.test.ts` fails if a workflow gains
+a merge or Dependabot auto-merge step, or special-cases the Dependabot actor. A future
+auto-merge policy is its own decision and pull request.
+
+**Action references.** First-party `actions/*` are referenced by major tag (`@v7`), which
+every workflow uses today and which Dependabot updates in place. A third-party action must be
+pinned by full commit SHA, with the version in a trailing comment. The same test enforces
+both across every workflow file.

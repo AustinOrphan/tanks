@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-judges-overlap-on-the-whole-box",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "const visibleBox = (c) => c.clip ?? c;",
+  "replace": "const visibleBox = (c) => c;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Overlap is judged on a control's whole box again, so a control scrolled out of view inside its container 'overlaps' whatever is drawn where its box would be. Measured on the Controllers pane with two pads at 1280x800@200%: the unsupported pad's button, scrolled below its rows container, failed the required visual check for overlapping the pane's Back button, which a press there reaches.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) judges overlap on the visible part, so a control scrolled out of its container does not overlap one outside it (issue #766)"
+  ]
+}

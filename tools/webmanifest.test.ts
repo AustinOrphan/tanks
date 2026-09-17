@@ -35,6 +35,7 @@ interface Manifest {
   start_url: string;
   scope: string;
   display: string;
+  description: string;
   background_color: string;
   theme_color: string;
   icons: Icon[];
@@ -96,6 +97,19 @@ describe('the web app manifest', () => {
     // nothing checks against each other.
     expect(html).toContain(`<meta name="theme-color" content="${manifest.theme_color}" />`);
     expect(html).toContain(`background: ${manifest.background_color};`);
+  });
+
+  it('describes the game in one count-free sentence, shared with index.html', () => {
+    // Three copies of one sentence, in two files: the page's meta description, its
+    // og:description, and this manifest's description. All three still said "three enemy
+    // personalities" after the roster grew to six (#772). A count in this sentence goes
+    // stale whenever the roster changes, so the sentence states none.
+    const meta = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)?.[1];
+    const og = html.match(/<meta\s+property="og:description"\s+content="([^"]*)"/)?.[1];
+    expect(meta, 'index.html has no meta description').toBeTruthy();
+    expect(og, 'og:description differs from the meta description').toBe(meta);
+    expect(manifest.description, 'the manifest description differs from index.html').toBe(meta);
+    expect(meta).not.toMatch(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i);
   });
 
   it('declares icons that exist, at the size they claim', () => {

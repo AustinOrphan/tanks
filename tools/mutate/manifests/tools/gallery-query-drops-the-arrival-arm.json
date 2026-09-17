@@ -1,0 +1,14 @@
+{
+  "id": "gallery-query-drops-the-arrival-arm",
+  "file": "tools/gallery/args.mjs",
+  "find": "  if (args.arrival !== null) p.set('arrival', args.arrival);",
+  "replace": "  void args.arrival;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/gallery-adapter.test.ts"
+  ],
+  "killedBy": [
+    "moment recipes naming developer arms (issue #775) carries a recipe's arrival arm into the respawn moment's page request, and nothing without it"
+  ],
+  "why": "The last hop before the page. `galleryQuery` moved out of run.mjs for #775 so this could be tested at all: a parsed `--arrival opposed` that never reaches the page's query would photograph the shipped arrival under the arm's name, and nothing short of a browser run could tell before."
+}

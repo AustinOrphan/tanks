@@ -1,0 +1,26 @@
+{
+  "id": "notices-v8-marker-narrowed-to-the-copyright-line",
+  "file": "tools/notices/vendored.mjs",
+  "find": "  /\\bV8\\b/,",
+  "replace": "  /the V8 project authors/,",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) declares every file carrying a third-party provenance marker, as vendored or as first-party with a reason"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "hypot.ts, the file #771 found missing, names V8 but has no copyright line, so a marker narrowed to V8's copyright wording would miss the next port like it. The narrowing is visible only through the exemptions: touch.ts and baseline/run.mjs mention V8 and nothing else, so they would match no marker, and an exemption no marker needs is stale."
+}

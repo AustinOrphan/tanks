@@ -1,0 +1,15 @@
+{
+  "id": "shell-trail-restores-the-plus-one",
+  "file": "src/presentation/shell-trail.ts",
+  "find": "  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(0, Math.floor(bouncesLeft)));",
+  "replace": "  return Math.min(MAX_TRAIL_SEGMENTS, Math.max(0, Math.floor(bouncesLeft) + 1));",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/shell-trail.test.ts"
+  ],
+  "killedBy": [
+    "shell bounce-trail vocabulary (issues #688, #774) draws one dash per remaining bounce, and none on a last flight",
+    "shell bounce-trail vocabulary (issues #688, #774) gives each shipped starting budget its own count"
+  ],
+  "why": "The first experiment's mapping (#688), which the owner's direction of 2026-09-14 on #632 superseded: one MORE dash than the bounces left. It replaces `shell-trail-drops-the-last-flight-dash`, which pinned the opposite -- that the +1 was kept -- and is retired with the mapping it defended. Under the budget of 2 it also makes a normal shell and a ricochet shell start alike."
+}

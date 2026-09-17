@@ -559,6 +559,47 @@ export const SCREEN_STATES = Object.freeze([
     ],
     measure: ['.hud-panel', '.hud-quit', '.hud-change-setup', '.hud-settings-open'],
   }),
+  state({
+    id: 'screen.controllers',
+    title: 'Controllers, from Pause',
+    description:
+      'The controller assignment pane (issue #766), reached the only way a player can: start a ' +
+      'round, pause, and press Controllers. No pad is connected, so each slot names its default ' +
+      'source.',
+    // A FRESH save, not `MID_CAMPAIGN`: with a run active, New Game opens the replace-run
+    // confirmation instead of starting the round this path needs.
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-new-game' },
+      { waitHidden: '.hud-panel' },
+      { press: 'Escape' },
+      { waitVisible: '.hud-controllers-open' },
+      { click: '.hud-controllers-open' },
+      { waitVisible: '.hud-controllers' },
+    ],
+    measure: ['.hud-controllers', '#hud-controllers-title', '.hud-controller-rows', '.hud-controllers-back'],
+  }),
+  state({
+    id: 'screen.controllers.pads',
+    title: 'Controllers, from Pause, with two pads',
+    description:
+      'The same pane over the two synthetic pads `mixed` installs (issue #766): a standard pad and a ' +
+      'non-standard one, so each slot lists the pads it can take and the unsupported note shows.',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-new-game' },
+      { waitHidden: '.hud-panel' },
+      { press: 'Escape' },
+      { waitVisible: '.hud-controllers-open' },
+      { fakeGamepads: 'mixed' },
+      { click: '.hud-controllers-open' },
+      { waitVisible: '.hud-controllers' },
+    ],
+    measure: [
+      '.hud-controllers', '#hud-controllers-title', '.hud-controller-rows', '#hud-controllers-unsupported',
+      '.hud-controllers-back',
+    ],
+  }),
 
   // ---- The five ENDING SCREENS (issue #591) -----------------------------------------
   //

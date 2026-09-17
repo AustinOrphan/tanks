@@ -1,0 +1,15 @@
+{
+  "id": "versus-setup-replaced-without-release",
+  "file": "src/game/hud.ts",
+  "find": "      release: closeVersusSetupSubscribers,",
+  "replace": "      /* no release */",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract closes the versus setup pane when another pane replaces it (issue #785)"
+  ],
+  "why": "A pane replaced by another is RELEASED, not closed (issue #558), so a layer whose subscribers hold a resource needs a release row. Without it the listeners outlive a pane that another pane replaced."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "versus-setup-close-leaves-a-listener-on-the-page",
+  "file": "src/game/route-ui.ts",
+  "find": "    deps.host.removeEventListener('gamepadconnected', onVersusSetupHotplug);",
+  "replace": "    void onVersusSetupHotplug;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: Versus Setup reads the controllers already connected (issue #785) holds its hotplug listeners for exactly as long as the pane is up",
+    "the application routes work with no gameplay session behind them the versus setup pane adds and removes its own hotplug listeners around open/close"
+  ],
+  "why": "The listeners belong to the pane. One left behind keeps rewriting the pad list, and repainting a pane that is gone, on every hotplug for the life of the page."
+}

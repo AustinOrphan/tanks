@@ -168,14 +168,15 @@ describe('src/game/legal-content.ts is generated, not hand-edited', () => {
         expect(block.caption, `a table in ${entry.source} has no caption`).not.toBe('');
       }
     }
-    // Non-vacuity: two of the five documents contain tables today (PRIVACY.md's storage-key
-    // table and CREDITS.md's two attribution tables; CONTENT-LICENSE.md's two make five
-    // tables across three files). A loop over zero tables would pass while measuring nothing.
+    // Non-vacuity: three of the five documents contain tables today (PRIVACY.md's storage-key
+    // table, CREDITS.md's two attribution tables, and CONTENT-LICENSE.md's three, one of them
+    // the vendored-source table from #771: six tables). A loop over zero tables would pass
+    // while measuring nothing.
     const tables = LEGAL_SOURCES.flatMap((entry) =>
       (parseLegalDocument(repoFile(entry.source), entry.source).blocks as { kind: string }[]).filter(
         (b) => b.kind === 'table',
       ),
     );
-    expect(tables.length).toBe(5);
+    expect(tables.length).toBe(6);
   });
 });

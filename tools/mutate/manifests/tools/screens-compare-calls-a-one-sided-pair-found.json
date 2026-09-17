@@ -1,0 +1,14 @@
+{
+  "id": "screens-compare-calls-a-one-sided-pair-found",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "  if (base === null || head === null) return 'missing';",
+  "replace": "  if (base === null && head === null) return 'missing';",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "A capture that exists on one side only is judged as if it had been compared. A head build that stopped reaching a state then reads as a difference to eyeball, or, with a control, as unstable, instead of as the missing capture it is.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) classifies a pair missing on either side as missing, never identical"
+  ]
+}

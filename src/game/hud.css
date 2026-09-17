@@ -2439,13 +2439,20 @@
   font-size: 12px;
 }
 
+/*
+ * `break-word`, not `anywhere` (issue #796). Both let a word too long for its line break
+ * rather than overflow, but `anywhere` also lowers the cell's MIN-CONTENT width to one
+ * character, so the auto table layout squeezed the Key column until every storage key broke
+ * mid-word (`tanks.pr|ogress.v1`), at desktop width as well as on phones. `break-word` sizes
+ * the column to the longest word and still breaks one that cannot fit the pane.
+ */
 .hud-legal-th,
 .hud-legal-td {
   padding: var(--hud-space-1);
   border-bottom: 1px solid var(--hud-quiet-fill);
   text-align: left;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .hud-legal-th {

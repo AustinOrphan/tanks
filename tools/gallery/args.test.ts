@@ -282,7 +282,7 @@ describe('gallery args', () => {
     const ringBearing = Object.keys(ELEMENTS).filter(
       (name) => compose([name], 0).world.tanks.filter((t) => t.kind === 'player').length >= 2,
     );
-    expect(ringBearing.sort()).toEqual(['coop', 'identity', 'shelltrail']);
+    expect(ringBearing.sort()).toEqual(['coop', 'identity', 'shelltrail', 'shelltrail-cross']);
     for (const name of ringBearing) {
       expect(parseArgs(['--elements', name, '--identityMarker', 'shape']).identityMarker).toBe('shape');
     }
@@ -310,7 +310,7 @@ describe('gallery args', () => {
     // MEASURED, like the ring-bearing list below: every element's own `place` is run and its
     // shells counted, so a subject that gains or loses one fails here.
     const shellBearing = Object.keys(ELEMENTS).filter((name) => compose([name], 0).world.bullets.length > 0);
-    expect(shellBearing.sort()).toEqual(['coop', 'shell', 'shellring', 'shelltrail']);
+    expect(shellBearing.sort()).toEqual(['coop', 'shell', 'shellring', 'shelltrail', 'shelltrail-cross']);
     for (const name of shellBearing) {
       expect(parseArgs(['--elements', name, '--shellTrail', 'segments']).shellTrail).toBe('segments');
     }
@@ -321,7 +321,7 @@ describe('gallery args', () => {
     const firing = Object.keys(MOMENTS).filter((id) =>
       simulateMoment(MOMENTS[id]).worlds.some((w) => w.bullets.some((b) => b.alive)),
     );
-    for (const id of ['fire', 'ricochet']) expect(firing, id).toContain(id);
+    for (const id of ['fire', 'ricochet', 'ricochet-twice']) expect(firing, id).toContain(id);
   });
 
   it('pins --arrival to the vocabulary the renderer actually owns', () => {

@@ -1,0 +1,15 @@
+{
+  "id": "roster-order-ignores-first-appearance",
+  "file": "tools/tanks/render.ts",
+  "find": "  return [...kinds].sort((a, b) => {\n    const fa = appearance(a);",
+  "replace": "  return [...kinds].sort((a, b) => {\n    if (a !== b) return (catalog.get(a) as number) - (catalog.get(b) as number);\n    const fa = appearance(a);",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/first-appearance.test.ts",
+    "tools/tanks/doc.test.ts"
+  ],
+  "killedBy": [
+    "README enemy roster is generated, not hand-edited orders rows by first appearance, then catalog order, with absent kinds last"
+  ],
+  "why": "Catalog order alone. On the shipped data it renders the SAME rows -- brown, grey and teal tie at level 1, then olive 3, green 4, and yellow is absent, which is catalog order -- so only the synthetic ordering case can tell a sort by appearance from no sort at all."
+}

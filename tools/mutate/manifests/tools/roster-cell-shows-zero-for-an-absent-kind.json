@@ -1,0 +1,16 @@
+{
+  "id": "roster-cell-shows-zero-for-an-absent-kind",
+  "file": "tools/tanks/render.ts",
+  "find": "  return appearance === null ? NOT_IN_CAMPAIGN : String(appearance);",
+  "replace": "  return String(appearance ?? 0);",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/first-appearance.test.ts",
+    "tools/tanks/doc.test.ts"
+  ],
+  "killedBy": [
+    "README enemy roster is generated, not hand-edited shows a kind the campaign never spawns as absent, not as a number",
+    "README enemy roster is generated, not hand-edited contains exactly one current generated block"
+  ],
+  "why": "An absent kind rendered as a number reads as a mission that exists. The authored field this replaced used 0 for the player, which is exactly the placeholder a hurried renderer would reach for."
+}

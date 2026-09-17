@@ -1,0 +1,26 @@
+{
+  "id": "notices-first-party-reason-dropped",
+  "file": "tools/notices/vendored.mjs",
+  "find": "'Names fdlibm as one side of a cost comparison; no ported code.'",
+  "replace": "'first-party'",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) declares every file carrying a third-party provenance marker, as vendored or as first-party with a reason"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "An exemption with no reason is an unexplained exception to the licensing classification. Each first-party entry must say why a file that mentions third-party code carries none of it."
+}

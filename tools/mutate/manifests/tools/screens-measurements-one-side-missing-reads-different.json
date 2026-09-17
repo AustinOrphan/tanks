@@ -1,0 +1,14 @@
+{
+  "id": "screens-measurements-one-side-missing-reads-different",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "    const measurements = rb?.measurementsSha256 === undefined || rh?.measurementsSha256 === undefined",
+  "replace": "    const measurements = rb?.measurementsSha256 === undefined && rh?.measurementsSha256 === undefined",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "A pair whose measurements were recorded on one side only is reported as a measurement difference, which reads as layout drift when nothing was measured to differ.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) says whether the measurements agree, without letting them turn a pixel difference identical"
+  ]
+}

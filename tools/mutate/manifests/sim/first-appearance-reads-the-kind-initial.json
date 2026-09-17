@@ -1,0 +1,18 @@
+{
+  "id": "first-appearance-reads-the-kind-initial",
+  "file": "src/sim/config/first-appearance.ts",
+  "find": "        if (SPAWN_LETTERS[ch] === kind) return i + 1;",
+  "replace": "        if (ch === kind[0].toUpperCase()) return i + 1;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/first-appearance.test.ts",
+    "tools/tanks/doc.test.ts"
+  ],
+  "killedBy": [
+    "firstAppearanceFor (issue #777) matches a spawn-letter count of the shipped campaign's own arenas",
+    "firstAppearanceFor (issue #777) follows the campaign order, so reordering the levels moves every answer with it",
+    "firstAppearanceFor (issue #777) reads a cell through SPAWN_LETTERS, so green is N and a G is grey",
+    "README enemy roster is generated, not hand-edited contains exactly one current generated block"
+  ],
+  "why": "A raw-character rule, keyed on the kind's initial, instead of the loader's SPAWN_LETTERS map. Green is N because G was grey's first, so this reads every grey cell as green and reports Green in level 1 of the shipped campaign."
+}

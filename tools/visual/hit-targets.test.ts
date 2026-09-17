@@ -75,6 +75,29 @@ describe('menu hit-target verdict (issue #686)', () => {
     ]);
   });
 
+  it('judges overlap on the visible part, so a control scrolled out of its container does not overlap one outside it (issue #766)', () => {
+    // Shaped on the Controllers pane with two pads at 1280x800@200% (a 640x400 page): the
+    // unsupported pad's button is scrolled below its rows container, and its box lies on Back.
+    const back = control({ key: 'button.ui-btn.ui-btn--slab.hud-controllers-back', text: 'Back', x: 284, y: 356, w: 72, h: 44 });
+    const hidden = control({
+      key: 'button.ui-btn.ui-selectable.hud-controller-source-btn',
+      text: 'HuiJia USB GamePad (index 1) — not suppo',
+      x: 237, y: 360, w: 167, h: 44,
+      clip: { x: 237, y: 236, w: 167, h: 0 },
+    });
+    expect(hitTargetFailures({ ...holding(), controls: [back, hidden] })).toEqual([]);
+    // The same button half scrolled into view, where its visible half does lie on Back, still fails.
+    const halfShown = { ...hidden, clip: { x: 237, y: 360, w: 167, h: 22 } };
+    expect(hitTargetFailures({ ...holding(), controls: [back, halfShown] })).toEqual([
+      'screen.settings 320x568: button.ui-btn.ui-btn--slab.hud-controllers-back "Back" overlaps button.ui-btn.ui-selectable.hud-controller-source-btn "HuiJia USB GamePad (index 1) — not suppo"',
+    ]);
+    // And the size floor still reads the whole box: a clipped 30px-tall control is still too small.
+    const small = { ...hidden, y: 600, h: 30, clip: { x: 237, y: 236, w: 167, h: 0 } };
+    expect(hitTargetFailures({ ...holding(), controls: [back, small] })).toEqual([
+      'screen.settings 320x568: button.ui-btn.ui-selectable.hud-controller-source-btn "HuiJia USB GamePad (index 1) — not suppo" is 167x30, under the 44px floor',
+    ]);
+  });
+
   it('fails a control a player cannot scroll to', () => {
     const run = holding();
     run.controls[0] = control({ reachable: false });

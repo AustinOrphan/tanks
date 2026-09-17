@@ -80,6 +80,8 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.no-script` | `screen.no-script` | `capture.png` | still |
 | `screen.pause.versus` | `screen.pause.versus` | `capture.png` | still |
 | `screen.pause.campaign` | `screen.pause.campaign` | `capture.png` | still |
+| `screen.controllers` | `screen.controllers` | `capture.png` | still |
+| `screen.controllers.pads` | `screen.controllers.pads` | `capture.png` | still |
 | `screen.ending.mission-clear` | `screen.ending.mission-clear` | `capture.png` | still |
 | `screen.ending.campaign-over` | `screen.ending.campaign-over` | `capture.png` | still |
 | `screen.ending.mission-clear.played` | `screen.ending.mission-clear.played` | `capture.png` | still |

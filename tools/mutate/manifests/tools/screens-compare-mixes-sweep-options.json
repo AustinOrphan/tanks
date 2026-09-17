@@ -1,0 +1,14 @@
+{
+  "id": "screens-compare-mixes-sweep-options",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "    if (optionsOf(m) !== reference) throw new Error(",
+  "replace": "    if (optionsOf(m) === 'never') throw new Error(",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "A sweep taken with the game canvas hidden is compared with one taken without it. Every state that shows a match then differs, and the difference is the option, not the change under review.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) refuses to compare sweeps taken with different options"
+  ]
+}

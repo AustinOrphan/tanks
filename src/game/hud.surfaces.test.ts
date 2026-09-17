@@ -2436,6 +2436,68 @@ describe('createHud application transition contract', () => {
       vi.useRealTimers();
     }
   });
+  it('reports the versus setup pane opening and closing exactly once per transition (issue #785)', () => {
+    // `route-ui.ts` holds two pad hotplug listeners from open to close. A second open with no
+    // close would hold a second pair nothing removes; a missing close leaves them on the page.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const log: string[] = [];
+      h.onVersusSetupOpen(() => log.push('open'));
+      h.onVersusSetupClose(() => log.push('close'));
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+
+      h.showVersusSetup(true);
+      h.showVersusSetup(true); // already on top: a re-render, not a second open
+      vi.advanceTimersByTime(1000);
+      h.back();
+      h.back();
+      vi.advanceTimersByTime(1000);
+      expect(log).toEqual(['open', 'close']);
+
+      h.showVersusSetup(true);
+      vi.advanceTimersByTime(1000);
+      click(root, '.hud-versus-back');
+      vi.advanceTimersByTime(1000);
+      expect(log, 'the Back button and back() disagree').toEqual(['open', 'close', 'open', 'close']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('closes the versus setup pane when a surface change takes it away (issue #785)', () => {
+    // `setState` drops every layer without a Back, which is how a match started from the pane
+    // leaves it.
+    const { hud: h } = mount();
+    const log: string[] = [];
+    h.onVersusSetupClose(() => log.push('close'));
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    h.setState('playing');
+    expect(log).toEqual(['close']);
+  });
+
+  it('closes the versus setup pane when another pane replaces it (issue #785)', () => {
+    // The replace path RELEASES rather than closes, so it needs its own row in the layer table.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const log: string[] = [];
+      h.onVersusSetupClose(() => log.push('close'));
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      h.showVersusSetup(true);
+      vi.advanceTimersByTime(1000);
+      click(root, '.hud-customize-open');
+      vi.advanceTimersByTime(1000);
+      expect(hidden(root, '.hud-customize', 'hud-customize--hidden'), 'Customize did not open').toBe(false);
+      expect(log, 'the replaced pane kept its listeners').toEqual(['close']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('settles rather than orphans an outstanding transition when the HUD is disposed', () => {
     // The other half of criterion 6: a HUD torn down mid-transition must leave no timer
     // behind. `dispose` settles rather than drops, so the surface it was hiding is hidden
