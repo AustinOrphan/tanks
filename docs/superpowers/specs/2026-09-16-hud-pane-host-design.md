@@ -21,15 +21,17 @@ measurement and from the precedents in #755 and #759.
 
 ## 1. What this is measured against
 
-Every figure here was measured on `main` at `43adf28` (2026-09-16). It came from a prototype
-of the #767 analysis tool. #767 checks that tool into the repository, so the figures can be
-re-derived there. Until then, the tables are candidate evidence.
+Every figure here was measured with `npm run hud:closure`, the tool PR #768 checks in for
+#767. The run is on that PR's head, where `hud.ts` is unchanged from `main` at `43adf28`. Until
+#768 merges, treat the tables as candidate evidence.
 
-**How the prototype counts.** It loads `hud.ts` into a TypeScript program, then walks every
-direct statement of `createHud`'s body. Each statement is an **owner**, and so is each
-member of the returned `Hud` object. References are resolved through the checker, so a local
-that shadows a closure name is not counted. A reference is a **write** when it is an
-assignment target or an operand of `++` or `--`.
+**How it counts.** The tool loads `hud.ts` into a TypeScript program, then walks every direct
+statement of `createHud`'s body.
+- **Owner:** each statement, and each member of the returned `Hud` object.
+- **Reference:** resolved through the checker, so a local that shadows a closure name is not
+  counted.
+- **Write:** an assignment target, an operand of `++` or `--`, a destructuring target, or a
+  loop variable.
 
 At `43adf28`, `createHud` has **761 owners**:
 
@@ -42,25 +44,27 @@ At `43adf28`, `createHud` has **761 owners**:
 | other statement | 165 |
 | local type | 4 |
 
-**How owners are attributed to panes.** The #556 account's rules are used without change:
+**How owners are attributed to panes.** The attribution is data in
+`tools/hud-closure/attribution.mjs`. It keeps the #556 account's rules:
 - the noun table, first match wins;
-- its hand corrections;
+- the account's hand corrections;
 - a statement belongs to a pane when every pane-owned name it references is that pane's.
 
-One correction is added. Issue #754 (the Controller Layout pane, opened from Settings) landed
-after the account. The correction attributes its 17 names to Settings. Without it, the 5 that
-contain "controller" would count as Controllers, and the other 12, which match no noun, would
-count as shared.
+It adds three corrections, each with its reason:
+- the 17 names of #754's Controller Layout pane, which opens from Settings and landed after
+  the account, go to Settings;
+- `recordStockLosses` and `setReducedMotion` are shared, for the reasons in the table below;
+- the `ach*` names, which no noun matches, go to Records.
 
-| Pane | Owners | Owner lines | Members | Places | Outside values | Cross-pane | Writes across | Inbound |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Customize | 29 | 74 | 10 | 9 | 8 | 0 | 0 | 6 |
-| Controllers | 37 | 199 | 6 | 11 | 12 | 1 | 0 | 6 |
-| Versus Setup | 72 | 547 | 3 | 8 | 11 | 2 | 0 | 7 |
-| Records | 33 | 211 | 4 | 16 | 18 | 1 | 1 | 9 |
-| Developer Tools | 132 | 419 | 10 | 24 | 10 | 1 | 0 | 13 |
-| Settings | 158 | 478 | 26 | 34 | 15 | 0 | 1 | 13 |
-| shared | 300 | 2992 | 28 | 50 | | | | |
+| Pane | Owners | Owner lines | Members | Places | Outside values | Cross-pane | Writes across | Inbound | Manifest entries |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Customize | 29 | 74 | 10 | 9 | 8 | 0 | 0 | 6 | 0 |
+| Controllers | 37 | 199 | 6 | 11 | 12 | 1 | 0 | 6 | 5 |
+| Records | 40 | 198 | 4 | 19 | 10 | 1 | 0 | 8 | 16 |
+| Versus Setup | 72 | 547 | 3 | 8 | 11 | 2 | 0 | 7 | 19 |
+| Developer Tools | 132 | 419 | 10 | 24 | 10 | 1 | 0 | 13 | 17 |
+| Settings | 157 | 452 | 25 | 33 | 15 | 0 | 0 | 14 | 10 |
+| shared | 294 | 3031 | 29 | 47 | | | | | 129 |
 
 - **Owner lines** add up each owner's line span. They leave out markup inside the one
   `el.innerHTML` template, which is a single shared owner.
@@ -68,29 +72,32 @@ count as shared.
 - **Outside values** are the non-type owners outside the pane that the pane reads or writes.
   Each pane also reads the local `Surface` type, which is not counted here.
 - **Inbound** counts owners outside the pane that reference it.
-- **Records' 18 outside values are inflated by the heuristic.** `achView`, `achListEl`,
-  `achCountEl`, `ACH_SURFACE` and `STAT_ROWS` are Records code, but no noun matches them.
-  Only the Customize row was checked name by name against the source.
+- **Manifest entries** counts entries naming `hud.ts` whose `find` starts inside one of the
+  pane's owners, counting a statement's leading comments as part of it. All 201 such entries
+  were found, and 5 of them start outside `createHud`.
+- **Only the Customize row was also checked name by name** against the source.
 
 **Why these differ from the account on #556.** The account measured `21f554e`. Since then,
 #753, #755 and #759 changed `hud.ts` by 380 lines. #755 moved Customize's three choice rows
-out, which is why Customize has 29 owners here and had 40 there. Customize's inbound count
-of 6 matches the account.
+out, which is why Customize has 29 owners here against 40 there. Customize's 8 outside values
+and 6 inbound users match the account.
 
 ### The account's headline is contingent on attribution
 
-The account found that no pane writes a binding outside itself. Its rules, re-applied at
-`43adf28`, find three such writes. Each one is an artifact of the naming heuristic, not a
-pane reaching into shared state:
+The account found that no pane writes a binding outside itself. The tool's prototype applied
+the account's rules alone, without the three new corrections, at `43adf28`. That run found
+three such writes. Each one is an artifact of the naming heuristic, not a pane reaching into
+shared state:
 
 | Writer | Binding written | Why it crosses a line |
 | --- | --- | --- |
-| `showControllerLayout` | `let layoutOpen` | #754's names say "controller", but its state does not. The correction above removes this one. |
-| `recordStockLosses` | `let stockBaseline` | "records" matches inside "recordStockLosses", which is gameplay stock-strip code. |
+| `showControllerLayout` | `let layoutOpen` | #754's names say "controller", but its state belongs to a Settings sub-pane. |
+| `recordStockLosses` | `let stockBaseline` | "records" matches inside "recordStockLosses", which is gameplay stock-strip code from #753. |
 | `setReducedMotion` (member) | `let reducedMotion` | The account keeps `reducedMotion` shared, while its setter's name matches Settings' "motion". |
 
-So the guarantee is not stated as a fact about `hud.ts`. It is stated as a rule each
-extraction must meet, in rule 1.
+With the corrections, the count is zero. But zero is then a result of attribution choices, not
+a property of the file. So this spec does not state the guarantee as a fact about `hud.ts`. It
+states it as a rule each extraction must meet, in rule 1.
 
 ## 2. The rules
 
@@ -132,9 +139,10 @@ export interface PaneHost {
 - **A value a pane needs from shared state arrives as an accessor.** The accessor returns a
   plain value in the pane's own vocabulary, never the binding. For example, Controllers gets
   `isPaused(): boolean` rather than `shownState`.
-- **A pane owns every binding it writes.** At the extraction PR's head, #767's `--strict`
-  check must report zero writes across the boundary of the pane being moved. If a pane-named
-  owner writes a shared binding, the writer stays in `hud.ts` with its binding.
+- **A pane owns every binding it writes.** At the extraction PR's base, `npm run hud:closure --
+  --strict --pane <pane>` must exit 0 for the pane being moved. At `43adf28` it exits 0 for
+  Customize. If a pane-named owner writes a shared binding, the writer stays in `hud.ts` with
+  its binding.
 - **Closure-free helpers are imported, not handed in.** `blurIfPointer` and `blurAfterDrag`
   (`hud.ts` 4630 and 4633) read nothing from the closure. They move to module scope in the
   first PR that needs them, and `hud.ts` imports them under the same names. No manifest entry
@@ -372,9 +380,9 @@ surface at every supported layout. The first extraction PR gives three pieces of
 - **`activePanelContainer` omits `galleryView`,** although `PANEL_FAMILY` includes
   `GALLERY_SURFACE`. An extraction preserves both lists as they are. Whether the difference
   is intended is a separate question.
-- **The shared layer's own structure is out of scope.** It is 300 owners and 2992 lines under
+- **The shared layer's own structure is out of scope.** It is 294 owners and 3031 lines under
   this attribution.
 - **The `Hud` interface stays in `hud.ts`.** Moving it would need `hud-ownership.test.ts`'s
   glob key changed, and nothing here needs that.
-- **Records' attribution gaps** (`ach*`, `STAT_ROWS`) are a matter for #767's noun data, not for
-  this seam.
+- **Remaining attribution gaps belong in the tool's data, not in this seam.** For example,
+  `STAT_ROWS` is used by Records and by the ending tally, and it is attributed as shared.
