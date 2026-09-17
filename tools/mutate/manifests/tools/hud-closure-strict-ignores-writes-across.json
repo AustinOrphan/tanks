@@ -1,0 +1,14 @@
+{
+  "id": "hud-closure-strict-ignores-writes-across",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "      failures.push(`${row.pane} writes ${w.binding} (${w.kind}, ${w.pane}) from ${w.writers.join(', ')}`);",
+  "replace": "      void w;",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "`--strict` is the check the proposed pane seam asks each extraction PR to pass on the pane it moves. Without this line it passes a pane that writes shared state, and only reports stale corrections.",
+  "killedBy": [
+    "hud closure analysis (issue #767) fails --strict on a write across a boundary and on a correction that names nothing, per pane"
+  ]
+}

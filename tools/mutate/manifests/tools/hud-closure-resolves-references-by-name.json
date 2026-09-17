@@ -1,0 +1,14 @@
+{
+  "id": "hud-closure-resolves-references-by-name",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "        const target = ownerOf(symbol);",
+  "replace": "        const target = owners.find((o) => o.names.includes(n.text)) ?? ownerOf(symbol);",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "Resolves an identifier by its text before asking the checker, which is the name-matching the tool exists to avoid. A pane function that declares its own `swap` would then count as reaching the closure's `swap`, and every pane's outside-value list would grow with names it never touches.",
+  "killedBy": [
+    "hud closure analysis (issue #767) does not count a shadowed local as a reference to the closure name it shadows"
+  ]
+}
