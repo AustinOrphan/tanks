@@ -138,7 +138,7 @@ them.
   in `PRIVACY.md` and `public/privacy.html` to it.
 
 Before #764 both policies listed six keys and omitted `tanks.stats.run.v1` and
-`tanks.versus.v1`, and each claimed that every listed key exports.
+`tanks.versus.v1`.
 
 **Player settings are one versioned, capability-aware model (#320).** `tanks.settings.v1`
 holds every durable preference, grouped `audio` / `input` / `presentation`, with an explicit
