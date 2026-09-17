@@ -5,6 +5,7 @@
  *   npm run screens:sweep -- --dist dist --out tmp/sweep/base
  *   npm run screens:sweep -- --dist dist --out tmp/sweep/one --states screen.customize --layouts 320x568,1280x800
  *   npm run screens:sweep -- --dist dist --out tmp/sweep/hud --hide-game
+ *   npm run screens:sweep -- --dist ../other-worktree/dist --out tmp/sweep/head --hide-game
  *
  * Writes `<out>/<state>/<layout>.png`, the producer report beside it as `<layout>.json`, and one
  * `manifest.json`. One browser and one static server serve the whole run, and every capture
@@ -32,13 +33,22 @@ function arg(/** @type {string} */ name) {
   return i > -1 ? process.argv[i + 1] : undefined;
 }
 
-function sourceDescription() {
+/**
+ * What the swept build was made from: the commit of the checkout that holds `dist`, which is not
+ * necessarily the checkout running this tool. A sweep of another worktree's build is the normal
+ * before/after case. `--source` overrides it, for a `dist` built somewhere version control cannot
+ * see.
+ */
+function sourceDescription(/** @type {string} */ dist) {
+  const given = arg('source');
+  if (given !== undefined) return given;
+  const cwd = dirname(dist);
   try {
-    const sha = execFileSync('git', ['rev-parse', 'HEAD']).toString().trim();
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', 'src', 'index.html', 'public']).toString().trim() !== '';
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd }).toString().trim();
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', 'src', 'index.html', 'public'], { cwd }).toString().trim() !== '';
     return dirty ? `${sha} with uncommitted changes under src/, index.html or public/` : sha;
   } catch {
-    return 'unknown (git unavailable)';
+    return `unknown (no checkout holds ${dist}; pass --source)`;
   }
 }
 
@@ -59,7 +69,7 @@ async function main() {
   const base = `http://127.0.0.1:${server.address().port}/`;
   const results = [];
   const total = states.length * layouts.length;
-  const source = sourceDescription();
+  const source = sourceDescription(dist);
   await mkdir(out, { recursive: true });
   const writeManifest = (complete) =>
     writeFile(resolve(out, MANIFEST), `${JSON.stringify(sweepManifest({ dist, source, options, states, layouts, results, complete }), null, 2)}\n`);
