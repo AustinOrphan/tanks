@@ -1,0 +1,14 @@
+{
+  "id": "capture-schema-skips-the-gallery-arm-check",
+  "file": "tools/capture/schema.mjs",
+  "find": "    parseArgs(['--scene', scenarioId, ...galleryArmArguments(arms)]);",
+  "replace": "    void scenarioId;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/gallery-adapter.test.ts"
+  ],
+  "killedBy": [
+    "moment recipes naming developer arms (issue #775) refuses arms the gallery itself would refuse"
+  ],
+  "why": "Recipe arms are validated by the gallery's own `parseArgs`, not a second vocabulary. Without the call a recipe could name an arm value the CLI refuses, or an arm on a scene where it shows nothing, and fail only at capture time -- or, for the applicability refusal, pass schema validation for a picture that cannot contain the arm."
+}
