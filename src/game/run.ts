@@ -30,7 +30,7 @@ export const RUN_KEY = 'tanks.run.v2';
  * Migration notes. `createRunStore` best-effort deletes it on construction so it does
  * not sit as permanently inert dead data in every returning player's storage.
  */
-const LEGACY_RUN_KEY_V1 = 'tanks.run.v1';
+export const LEGACY_RUN_KEY_V1 = 'tanks.run.v1';
 
 /**
  * The one campaign this build ships -- matches `CAMPAIGN.id` in

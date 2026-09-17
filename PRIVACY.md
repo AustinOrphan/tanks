@@ -4,7 +4,7 @@ title: Privacy Policy
 
 # Privacy Policy
 
-Last updated: 2026-08-25
+Last updated: 2026-09-17
 
 This policy covers the **Tanks!** browser game (the "game" or "app"), published at
 `austinorphan.com/tanks/`.
@@ -30,10 +30,12 @@ The stored data is organized into the following keys:
 |---|---|
 | `tanks.progress.v1` | Highest level cleared in the campaign |
 | `tanks.stats.v1` | Lifetime and per-attempt game statistics |
+| `tanks.stats.run.v1` | Game statistics for the campaign run in progress |
 | `tanks.run.v2` | Active campaign run: current level, remaining lives |
 | `tanks.custom.v1` | Chosen tank color and paint customization |
 | `tanks.settings.v1` | Player settings: sound mute and volume, touch control scheme and fire mode, device vibration and controller rumble preferences, motion/flash preference, interface scale |
 | `tanks.achievements.v1` | Earned achievements |
+| `tanks.versus.v1` | Versus match setup: mode, player count, lives, friendly fire, arena, and which player slots are people or computer players (never which controller anyone uses) |
 
 `tanks.settings.v1` replaces an older `tanks.touch.v1` key. The first time you open
 this version of the game, any touch control settings saved under the old key are
@@ -52,10 +54,10 @@ If your browser cannot save data &mdash; for example in a private window, or wit
 site storage blocked &mdash; the game still runs, and shows a brief on-screen note
 that settings will not be saved for that session.
 
-You can export and import all of the keys above as a single file, and you can reset
-your settings back to their defaults. Resetting settings does not affect campaign
-progress, statistics, or achievements, and resetting progress does not affect
-settings.
+You can export and import all of the keys above except `tanks.versus.v1` as a single
+file, and you can reset your settings back to their defaults. Resetting settings does
+not affect campaign progress, statistics, or achievements, and resetting progress does
+not affect settings.
 
 The data is scoped to the game's origin: it is accessible only to the origin
 that serves the game and is unreachable by other sites.
