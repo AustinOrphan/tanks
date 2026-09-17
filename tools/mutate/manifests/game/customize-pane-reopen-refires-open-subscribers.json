@@ -1,0 +1,14 @@
+{
+  "id": "customize-pane-reopen-refires-open-subscribers",
+  "file": "src/game/customize-pane.ts",
+  "find": "        if (!wasOpen) for (const cb of openCbs) cb();",
+  "replace": "        for (const cb of openCbs) cb();",
+  "expect": "killed",
+  "tests": [
+    "src/game/customize-pane.test.ts"
+  ],
+  "why": "A second open of the pane already on screen fires the open subscribers again. `route-ui.ts` builds a live WebGL preview on open, so a repeat open builds a second one over the first. Under this mutation all 360 tests in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open, before the new cases existed).",
+  "killedBy": [
+    "createCustomizePane (issue #556) opens once per real open: selection repainted and the pane focused before subscribers run"
+  ]
+}

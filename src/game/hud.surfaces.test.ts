@@ -2406,6 +2406,36 @@ describe('createHud application transition contract', () => {
     }
   });
 
+
+  it('opens an extracted pane from the surface on screen, never by naming the Main Menu (issue #556)', () => {
+    // `enterSurface` is the one open `pane-host.ts` gives an extracted pane. Every open a player
+    // can make of Customize starts at the Main Menu, where "the surface on screen" and "the Main
+    // Menu" are the same surface, so no other case here can tell the two apart. A pane opened over
+    // another pane can: the outgoing surface has to leave with the transition, or both stay
+    // painted, which is what `openSurface`'s own comment records as measured once.
+    //
+    // Reached by clicking the Customize opener while Versus Setup is up. No player path does that
+    // today; the contract is the host's, and the next pane opened from another pane relies on it.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      h.showVersusSetup(true);
+      vi.advanceTimersByTime(1000);
+      expect(hidden(root, '.hud-versus-setup', 'hud-versus-setup--hidden'), 'Versus Setup did not open').toBe(false);
+
+      click(root, '.hud-customize-open');
+      vi.advanceTimersByTime(1000);
+      expect(hidden(root, '.hud-customize', 'hud-customize--hidden'), 'Customize did not open').toBe(false);
+      expect(
+        hidden(root, '.hud-versus-setup', 'hud-versus-setup--hidden'),
+        'Versus Setup stayed painted under the pane that replaced it',
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('settles rather than orphans an outstanding transition when the HUD is disposed', () => {
     // The other half of criterion 6: a HUD torn down mid-transition must leave no timer
     // behind. `dispose` settles rather than drops, so the surface it was hiding is hidden

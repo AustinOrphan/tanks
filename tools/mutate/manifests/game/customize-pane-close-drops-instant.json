@@ -1,0 +1,14 @@
+{
+  "id": "customize-pane-close-drops-instant",
+  "file": "src/game/customize-pane.ts",
+  "find": "        instant,\n      );",
+  "replace": "        false,\n      );",
+  "expect": "killed",
+  "tests": [
+    "src/game/customize-pane.test.ts"
+  ],
+  "why": "`setState`'s cleanup close asks for an instant close, and the pane drops the flag, so entering gameplay animates the pane out over the live game. Under this mutation all 360 tests in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open, before the new cases existed). The jsdom runs read a zero transition duration, which is why none of those cases saw it.",
+  "killedBy": [
+    "createCustomizePane (issue #556) closes only a pane that was open, and passes instant through"
+  ]
+}

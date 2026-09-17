@@ -1,0 +1,14 @@
+{
+  "id": "pane-host-customize-widens-its-host",
+  "file": "src/game/customize-pane.ts",
+  "find": "export type CustomizeHost = Pick<PaneHost, 'enterSurface' | 'closeSurface' | 'isSurfaceOpen' | 'open' | 'back'>;",
+  "replace": "export type CustomizeHost = Pick<PaneHost, 'enterSurface' | 'closeSurface' | 'isSurfaceOpen' | 'open' | 'back' | 'captureFocus'>;",
+  "expect": "killed",
+  "tests": [
+    "src/game/pane-host.test.ts"
+  ],
+  "why": "The pane declares a host member beyond the five it uses. The compiler would reject a key `PaneHost` lacks, but vitest does not typecheck, and a real widening to a member that exists would compile. The source scan is what makes the pane's shared-state cost a pinned number.",
+  "killedBy": [
+    "pane host seam (issue #556) pins the host members each pane declares"
+  ]
+}

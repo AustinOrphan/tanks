@@ -1,0 +1,14 @@
+{
+  "id": "customize-pane-opener-keeps-focus-after-a-pointer-click",
+  "file": "src/game/customize-pane.ts",
+  "find": "  opener.addEventListener('click', blurIfPointer);",
+  "replace": "  void opener;",
+  "expect": "killed",
+  "tests": [
+    "src/game/customize-pane.test.ts"
+  ],
+  "why": "The Main Menu's Customize button keeps focus after a mouse click, so a mouse player's arrow keys and Space go to the button instead of the game. Under this mutation all 360 tests in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open, before the new cases existed).",
+  "killedBy": [
+    "createCustomizePane (issue #556) opens its layer from the opener, keeping focus after a keyboard press and dropping it after a pointer click"
+  ]
+}

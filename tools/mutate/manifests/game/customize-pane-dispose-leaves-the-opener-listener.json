@@ -1,0 +1,14 @@
+{
+  "id": "customize-pane-dispose-leaves-the-opener-listener",
+  "file": "src/game/customize-pane.ts",
+  "find": "      opener.removeEventListener('click', handleOpen);",
+  "replace": "      void handleOpen;",
+  "expect": "killed",
+  "tests": [
+    "src/game/customize-pane.test.ts"
+  ],
+  "why": "Disposing the HUD leaves the opener's click handler attached, so a click after teardown still pushes a layer on a disposed HUD. Under this mutation all 360 tests in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open, before the new cases existed).",
+  "killedBy": [
+    "createCustomizePane (issue #556) removes the opener and Back listeners it added when disposed"
+  ]
+}

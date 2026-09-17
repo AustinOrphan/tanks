@@ -1,0 +1,14 @@
+{
+  "id": "pane-host-customize-imports-hud",
+  "file": "src/game/customize-pane.ts",
+  "find": "import type { PaneHost, Surface } from './pane-host';",
+  "replace": "import type { PaneHost, Surface } from './pane-host';\nimport type { Hud } from './hud';",
+  "expect": "killed",
+  "tests": [
+    "src/game/pane-host.test.ts"
+  ],
+  "why": "The pane takes a type-only import from `hud.ts`. It compiles, and `dependency-direction.test.ts` allows a game-to-game edge, so nothing else stops the closure's types, and the file that imports the pane, coming back within the pane's reach.",
+  "killedBy": [
+    "pane host seam (issue #556) keeps every pane module from importing hud.ts"
+  ]
+}
