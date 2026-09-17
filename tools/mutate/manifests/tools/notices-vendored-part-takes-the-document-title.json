@@ -1,0 +1,27 @@
+{
+  "id": "notices-vendored-part-takes-the-document-title",
+  "file": "tools/notices/render.mjs",
+  "find": "    '## Vendored source\\n\\n' +",
+  "replace": "    '# Vendored source\\n\\n' +",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts",
+    "tools/notices/generate.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) keeps the notices untitled, so the Legal page heads them with their own label",
+    "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "The defect #771's first render shipped past 6194 green tests and was seen only in a screenshot: the Legal page takes a document's first H1 as its title, and THIRD-PARTY-NOTICES.md had none, so a vendored part rendered as an H1 retitled the whole notices document \"Vendored source\" and swallowed its own heading. The guard parses the rendered notices with the Legal page's own parser."
+}
