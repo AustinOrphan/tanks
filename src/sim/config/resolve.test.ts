@@ -15,7 +15,7 @@ import refBalanceRaw from './reference/balance-constants.json';
 
 function def(over: Partial<TankDefinition>): TankDefinition {
   return {
-    displayName: 'X', color: '#000000', firstMission: 1, singlePlayerOnly: false,
+    displayName: 'X', color: '#000000', singlePlayerOnly: false,
     movementSpeed: MovementSpeed.MEDIUM, rotationSpeed: RotationSpeed.MEDIUM,
     aiProfile: refBalanceKeyedProfile(),
     weapon: { projectileType: ProjectileType.STANDARD_SHELL, fireRate: FireRate.MEDIUM, maxActiveProjectiles: 1, ricochetCount: 1 },
