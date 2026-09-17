@@ -1040,6 +1040,7 @@ describe('bench-contrast.yml: the on-demand benchmark contrast workflow (issue #
 //   `contents: read` -> `contents: write`            -> grants no write permission
 //   interpolate ${{ inputs.seeds }} into the script  -> passes both inputs through env
 //   rename the measure file in the workflow only     -> runs the file every failure's rerun line names
+//                                                       (and the env test's own vacuity check)
 //   delete `VITE_RUN_MEASURE: '1'`                   -> runs the file every failure's rerun line names
 //   delete timeout-minutes                           -> bounds its runtime and keeps its output
 // ---------------------------------------------------------------------------
