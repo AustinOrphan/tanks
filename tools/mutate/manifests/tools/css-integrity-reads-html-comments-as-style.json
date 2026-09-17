@@ -7,5 +7,9 @@
   "tests": [
     "tools/css-integrity/check.test.ts"
   ],
-  "why": "Issue #763's HTML extraction: index.html has a comment that mentions `<style>` before its <noscript> style block, and matched as a tag it produces a 'stylesheet' spanning prose, which fails the shipped files with a parse error that is not there (measured on the probe that motivated the blanking)."
+  "why": "Issue #763's HTML extraction: index.html has a comment that mentions `<style>` before its <noscript> style block, and matched as a tag it produces a 'stylesheet' spanning prose, which fails the shipped files with a parse error that is not there (measured on the probe that motivated the blanking).",
+  "killedBy": [
+    "css integrity: the shipped stylesheets every shipped stylesheet parses as written",
+    "css integrity: HTML <style> blocks reports a problem at its line and column in the HTML file, skipping a comment that mentions <style>"
+  ]
 }

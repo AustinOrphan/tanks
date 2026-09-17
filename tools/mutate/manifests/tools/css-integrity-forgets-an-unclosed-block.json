@@ -7,5 +7,8 @@
   "tests": [
     "tools/css-integrity/check.test.ts"
   ],
-  "why": "Issue #763's headline break: a rule that lost its closing brace. lightningcss accepts it (the end of the file closes the block and the rules after it parse as nested children), so the token scan's end-of-file report is the only thing that fails it. This is the break hud.css shipped twice."
+  "why": "Issue #763's headline break: a rule that lost its closing brace. lightningcss accepts it (the end of the file closes the block and the rules after it parse as nested children), so the token scan's end-of-file report is the only thing that fails it. This is the break hud.css shipped twice.",
+  "killedBy": [
+    "css integrity: what it rejects a rule that lost its closing brace, at the brace that went missing"
+  ]
 }
