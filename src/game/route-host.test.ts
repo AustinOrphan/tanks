@@ -21,7 +21,7 @@ import { ZERO_STATS } from './stats';
 import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
 import type { RouteUiDeps } from './route-ui';
-import type { GamepadLike } from '../input/gamepad';
+import type { DetectedPad, GamepadLike } from '../input/gamepad';
 import type { SlotSource } from '../input/assignment';
 import { MODALITY_SWITCH_MS } from './modality';
 import { DEV_CONSOLE_KEY, type DevConsole } from './loop';
@@ -133,6 +133,9 @@ interface Fixture {
   audioBuilds: () => number;
   /** The page menu poller's pads and queued frames (issue #494). */
   pads: GamepadLike[];
+  /** What `readDetectedPads` answers, and how many page-host listeners an event type has (issue #785). */
+  detectedPads: DetectedPad[];
+  hostListenerCount: (type: string) => number;
   frames: Array<(now: number) => void>;
   advance: (ms: number) => void;
   fireHost: (type: string, event: Event) => void;
@@ -177,6 +180,8 @@ function fixture(
     launchDismissed: opts.launchDismissed ?? false,
     /** The pads the page's menu poller sees (issue #494); a test mutates this and runs a frame. */
     pads: [] as GamepadLike[],
+    /** What `readDetectedPads` answers (issue #785); a test mutates this before a read. */
+    detectedPads: [] as DetectedPad[],
     /** Page frames requested and not yet run or cancelled, oldest first. */
     frames: [] as Array<(now: number) => void>,
     /** The clock the modality tracker reads (issue #496); a test advances it by hand. */
@@ -249,7 +254,7 @@ function fixture(
           box.previewDisposals += 1;
         },
       }) as unknown as TankPreview,
-    readDetectedPads: () => [],
+    readDetectedPads: () => [...box.detectedPads],
     menuGamepads: () => box.pads,
     // A host that actually registers, so a test can fire the page's own listeners rather
     // than dispatching at a window the route host never bound (issue #496's input paths).
@@ -337,6 +342,8 @@ function fixture(
     audioCalls: box.audioCalls,
     audioBuilds: () => box.audioBuilds,
     pads: box.pads,
+    detectedPads: box.detectedPads,
+    hostListenerCount: (type: string) => box.hostListeners.get(type)?.size ?? 0,
     frames: box.frames,
     advance: (ms: number) => {
       box.now += ms;
@@ -1843,6 +1850,86 @@ describe("createRouteHost: the HUD's own Back never leaves gameplay (issue #318)
     expect(f.stopRequests(), 'Back asked the page to dispose the session').toBe(0);
     expect(f.startRequests, 'Back asked the page for a match').toEqual([]);
     expect((f.root.querySelector('.hud-action') as HTMLElement).textContent).toBe('Resume');
+    f.host.dispose();
+    f.root.remove();
+  });
+});
+
+describe('createRouteHost: Versus Setup reads the controllers already connected (issue #785)', () => {
+  /**
+   * Through the real HUD and the page's own route UI, from the Main Menu's Versus button --
+   * the direct path that broke. Before the fix the pane's device column read a pad list that
+   * only the Controllers panel ever pushed, so a controller connected before the pane opened
+   * was "Unassigned" and Start was refused until that panel had been opened once.
+   */
+  const PAD: DetectedPad = { padIndex: 0, id: 'Xbox Wireless Controller' };
+  type F = ReturnType<typeof fixture>;
+  const click = (f: F, sel: string): void => {
+    (f.root.querySelector(sel) as HTMLElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }),
+    );
+  };
+  const devices = (f: F): Array<string | null> =>
+    [...f.root.querySelectorAll('.hud-versus-slot-device')].map((el) => el.textContent);
+  const startDisabled = (f: F): boolean =>
+    (f.root.querySelector('.hud-versus-start') as HTMLButtonElement).disabled;
+  const openWithPlayer2Human = (f: F): void => {
+    click(f, '.hud-versus-open');
+    click(f, 'button[aria-label="Player 2 Human"]');
+  };
+
+  it('resolves Player 2 to a controller that was connected before the pane opened', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    f.detectedPads.push(PAD);
+    openWithPlayer2Human(f);
+    expect(devices(f)).toEqual(['Keyboard / Mouse / Touch', 'Xbox Wireless Controller (index 0)']);
+    expect(startDisabled(f), 'Start was refused with a controller connected').toBe(false);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('follows a controller unplugged and plugged back in while the pane is open', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    f.detectedPads.push(PAD);
+    openWithPlayer2Human(f);
+
+    f.detectedPads.length = 0;
+    f.fireHost('gamepaddisconnected', new Event('gamepaddisconnected'));
+    expect(devices(f)[1]).toBe('Unassigned');
+    expect(startDisabled(f), 'Start stayed enabled for a controller that is gone').toBe(true);
+
+    f.detectedPads.push(PAD);
+    f.fireHost('gamepadconnected', new Event('gamepadconnected'));
+    expect(devices(f)[1]).toBe('Xbox Wireless Controller (index 0)');
+    expect(startDisabled(f)).toBe(false);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('holds its hotplug listeners for exactly as long as the pane is up', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    const before = {
+      connected: f.hostListenerCount('gamepadconnected'),
+      disconnected: f.hostListenerCount('gamepaddisconnected'),
+    };
+    const added = () => ({
+      connected: f.hostListenerCount('gamepadconnected') - before.connected,
+      disconnected: f.hostListenerCount('gamepaddisconnected') - before.disconnected,
+    });
+
+    click(f, '.hud-versus-open');
+    expect(added()).toEqual({ connected: 1, disconnected: 1 });
+    click(f, '.hud-versus-back');
+    expect(added(), 'Back left the listeners attached').toEqual({ connected: 0, disconnected: 0 });
+
+    // A second visit adds one pair again, not a second pair on top of a leaked first.
+    click(f, '.hud-versus-open');
+    expect(added()).toEqual({ connected: 1, disconnected: 1 });
+
+    // A match starting while the pane is up is a surface change, not a Back.
+    f.host.attach(CAMPAIGN);
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    expect(added(), 'a match started over the pane kept its listeners').toEqual({ connected: 0, disconnected: 0 });
     f.host.dispose();
     f.root.remove();
   });

@@ -1121,14 +1121,11 @@ export interface Hud {
   /**
    * The title screen's Versus button was clicked -- a bare click passthrough, the
    * shape `onNewGame`/`onQuitToTitle` already use, NOT the transition-guarded
-   * onCustomizeOpen/onControllersOpen shape. Those two pair with an onClose because an
-   * external subscriber owns a resource whose lifecycle must match the panel's
-   * (the paint shop's second WebGL context; the gamepad hotplug listeners) -- this
-   * pane owns nothing like that, so there is no `onVersusClose`. The subscriber
-   * (`route-ui.ts`) is what actually opens the pane, by calling `showVersusSetup` itself,
-   * because only the loop knows which `VersusConfig` to retain across a rematch --
-   * see `showVersusSetup`'s own doc comment for why the button click does not call it
-   * directly.
+   * onCustomizeOpen/onControllersOpen shape. The subscriber (`route-ui.ts`) is what
+   * actually opens the pane, by calling `showVersusSetup` itself, because only the loop
+   * knows which `VersusConfig` to retain across a rematch -- see `showVersusSetup`'s own
+   * doc comment for why the button click does not call it directly. The pane's own
+   * lifecycle, which does own a resource, is `onVersusSetupOpen`/`onVersusSetupClose`.
    */
   onVersusOpen(cb: () => void): void;
   /**
@@ -1149,10 +1146,24 @@ export interface Hud {
    * `deps.initialVersusConfig ?? null` for "nothing retained yet") both leave the
    * pane's PERSISTED session-local selections untouched rather than resetting them to
    * a hardcoded default -- so Back, then Versus again, keeps whatever was last chosen
-   * (spec ruling 4: "rematch-friendly"). No paired `showVersusSetup`-triggered close
-   * callback: see `onVersusOpen`'s own doc comment for why none is needed.
+   * (spec ruling 4: "rematch-friendly"). Its open and every exit fire
+   * `onVersusSetupOpen`/`onVersusSetupClose`.
    */
   showVersusSetup(show: boolean, initial?: VersusConfig | null): void;
+  /**
+   * The versus setup pane just became visible/hidden (issue #785), the Controllers panel's
+   * shape and reason. The pane's device column and its Start gate resolve human slots
+   * against the detected pad list (`resolveSources`), and nothing pushes that list while
+   * the page sits in a menu -- the driver does not tick. So `route-ui.ts` reads the pads on
+   * open and holds hotplug listeners for exactly as long as the pane is up. Without it a
+   * controller connected BEFORE the pane opened was "Unassigned" until the Controllers
+   * panel had been opened once.
+   *
+   * Fired exactly once per transition, from every exit: Back, a sibling replacing the pane,
+   * and `setState`'s unconditional close.
+   */
+  onVersusSetupOpen(cb: () => void): void;
+  onVersusSetupClose(cb: () => void): void;
   /**
    * WHAT THE TITLE SCREEN'S BUTTONS DO -- the affordance policy for every
    * kind-dependent control on the Main Menu.
@@ -1332,6 +1343,7 @@ export type RouteHudKey =
   // supplies its facts to the host through the slot, and the host decides what is live.
   | 'setDiagnosticsSource' | 'setDevActionPort' | 'setDevExportPort'
   | 'onVersusOpen' | 'onVersusStart' | 'showVersusSetup'
+  | 'onVersusSetupOpen' | 'onVersusSetupClose'
   | 'setRelaunchTarget';
 
 /**
@@ -2723,6 +2735,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (!settingsOpen) return;
     settingsOpen = false;
     for (const cb of settingsCloseCbs) cb();
+  }
+  const versusSetupOpenCbs: Array<() => void> = [];
+  const versusSetupCloseCbs: Array<() => void> = [];
+  /**
+   * Whether the versus setup pane is on screen (issue #785), tracked for the Settings pane's
+   * reason: `route-ui.ts` hangs hotplug listeners off the open/close callbacks, so each must
+   * fire exactly once per transition.
+   */
+  let versusSetupOpen = false;
+  function closeVersusSetupSubscribers(): void {
+    if (!versusSetupOpen) return;
+    versusSetupOpen = false;
+    for (const cb of versusSetupCloseCbs) cb();
   }
   const controllersOpenCbs: Array<() => void> = [];
   const controllersCloseCbs: Array<() => void> = [];
@@ -4554,10 +4579,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      * what turns two transitions through the menu into one directly between the panes.
      *
      * ABSENT for a layer whose close is only its surface, which is most of them --
-     * `stats`, `achievements`, `levelselect`, `settings`, `about`, the confirmation, and
-     * `versus-setup` (whose `closeVersusPane` is a bare `closeSurface`). Only the two
-     * panes with real close callbacks need a row here, and a row that did nothing would
-     * suggest there was something to do.
+     * `stats`, `achievements`, `levelselect`, `settings`, `about` and the confirmation.
+     * Only the panes with real close callbacks need a row here, and a row that did nothing
+     * would suggest there was something to do.
      */
     release?(): void;
     /** `'already-top'`: re-render in place, no transition. */
@@ -4589,6 +4613,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       open: (initial) => openVersusPane(initial),
       close: () => closeVersusPane(),
       refresh: (initial) => seedAndRenderVersus(initial),
+      /** The pane's subscribers own the pad hotplug listeners (issue #785). */
+      release: closeVersusSetupSubscribers,
     },
     settings: { container: settingsView, open: () => showSettings(true), close: () => showSettings(false) },
     about: { container: aboutView, open: () => showAbout(true), close: () => showAbout(false) },
@@ -7105,9 +7131,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * "seed unconditionally from `initial ?? DEFAULTS`", which would silently wipe a
    * returning player's own selections on every open.
    *
-   * No paired onVersusClose callback (see onVersusOpen's own doc comment): nothing
-   * here owns a resource that must tear down on close, so there is no transition-
-   * guarded firing the way Customize's `show` and showControllers need.
+   * The pane's subscribers fire from `openVersusPane`/`closeVersusPane`, which the layer
+   * stack reaches from here (issue #785).
    */
   function showVersusSetup(show: boolean, initial?: VersusConfig | null): void {
     if (!show) {
@@ -7135,10 +7160,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       seedAndRenderVersus(initial);
       versusSetupView.focus();
     });
+    if (!versusSetupOpen) {
+      versusSetupOpen = true;
+      for (const cb of versusSetupOpenCbs) cb();
+    }
   }
 
   function closeVersusPane(): void {
     closeSurface(VERSUS_SETUP_SURFACE);
+    closeVersusSetupSubscribers();
   }
 
   // Continue shares the Resume/Next Level/Play Again/Retry button's own handler: it IS
@@ -7239,11 +7269,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // gamepadconnected/disconnected listeners -- would leak onto the live game on
     // Resume, since 'paused' -> 'playing' is one of this function's own early returns.
     showControllers(false, true); // instant, same reason as Customize above
-    // A bare class add, not routed through showVersusSetup(false) -- unlike Customize/
-    // Controllers just above, this pane has no onVersusClose to fire (see its own doc
-    // comment), so there is nothing a transition-guarded call would buy here that a
-    // plain toggle does not already give the stats/achievements/level-select siblings.
+    // A bare class add, not routed through showVersusSetup(false), which would animate a
+    // Back. Its subscribers are released explicitly instead, for Settings' reason below: a
+    // match started from the pane would otherwise keep `route-ui.ts`'s pad hotplug
+    // listeners attached to a pane that is gone (issue #785).
     cleanupHide(versusSetupView, 'hud-versus-setup--hidden');
+    closeVersusSetupSubscribers();
     // The three panes issue #226 added, closed on the same terms as their siblings: none
     // of them owns a close callback or a live resource, so each is a bare class add. The
     // confirmation is included deliberately -- a surface change is never an answer to it,
@@ -8008,6 +8039,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     onControllerLayoutRequest(cb: (request: LayoutRequest) => void): void {
       layoutRequestCbs.push(cb);
+    },
+    onVersusSetupOpen(cb: () => void): void {
+      versusSetupOpenCbs.push(cb);
+    },
+    onVersusSetupClose(cb: () => void): void {
+      versusSetupCloseCbs.push(cb);
     },
     onControllerLayoutOpen(cb: () => void): void {
       layoutOpenCbs.push(cb);
