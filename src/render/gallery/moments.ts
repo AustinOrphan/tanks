@@ -404,31 +404,35 @@ export const MOMENTS: Record<string, MomentDef> = {
    * solid walls 2 units apart, and a heading of 50 degrees off the corridor axis at the
    * ricochet speed of 4.
    *
+   * The corridor runs AWAY from the camera (along world -y). Laid across the view, the near
+   * wall hid the shell at every bounce -- the game camera looks over a wall's top at what is
+   * behind it -- so the transition this moment exists to show was the one thing out of sight.
+   *
    * MEASURED (throwaway vite-node probe through `simulateMoment`, deleted before commit):
    * ricochet at events[20] (2 -> 1) and events[59] (1 -> 0); the shell's last live tick is
-   * 97, where it meets the top wall with none left and stops without an event. 110 ticks
-   * keeps that last flight and a short hold after it.
+   * 97, where it meets a wall with none left and stops without an event. 110 ticks keeps that
+   * last flight and a short hold after it.
    */
   'ricochet-twice': (() => {
     const ANGLE = (50 * Math.PI) / 180;
     const SPEED = 4;
     const CORRIDOR: Wall[] = [
-      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: 1.0, maxX: 14, maxY: 1.3 } },
-      { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: -1.3, maxX: 14, maxY: -1.0 } },
+      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 1.0, minY: -9, maxX: 1.3, maxY: 1 } },
+      { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -1.3, minY: -9, maxX: -1.0, maxY: 1 } },
     ];
-    const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false };
+    const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: -1000 }, fire: false, mine: false };
     return {
       ticks: 110,
       expect: [
         { type: 'ricochet', tick: 20 },
         { type: 'ricochet', tick: 59 },
       ],
-      focus: [2.6, 0.3, 0], span: 6,
+      focus: [0, 0.3, -2.6], span: 6,
       build: () => {
         const w = buildSoloWorld(CORRIDOR.map((wall) => ({ ...wall, aabb: { ...wall.aabb } })));
         w.bullets.push({
           id: w.nextId++, ownerId: 1, type: 'ricochet', bouncesLeft: 2, alive: true,
-          pos: { x: 1.0, y: 0 }, vel: { x: Math.cos(ANGLE) * SPEED, y: Math.sin(ANGLE) * SPEED },
+          pos: { x: 0, y: -1.0 }, vel: { x: Math.sin(ANGLE) * SPEED, y: -Math.cos(ANGLE) * SPEED },
         });
         return w;
       },
