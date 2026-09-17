@@ -54,6 +54,13 @@ updates:
       - dependency-name: '@types/node'
         versions:
           - '>=23'
+      # TypeScript 7 removes the JavaScript compiler API that tools/hud-closure
+      # (npm run hud:closure) is built on, so the tool and its test fail to load (#802).
+      # TypeScript 6 still has the API. Held until the tool is ported (#807); remove this entry
+      # in that pull request.
+      - dependency-name: typescript
+        versions:
+          - '>=7'
 
   - package-ecosystem: github-actions
     directory: /

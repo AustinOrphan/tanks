@@ -79,6 +79,21 @@ describe('dependency updates: the Node floor', () => {
   });
 });
 
+describe('dependency updates: the TypeScript 7 hold', () => {
+  it('ignores typescript 7 exactly while tools/hud-closure imports the compiler API it removed', () => {
+    // TypeScript 7's `typescript` export is only { version, versionMajorMinor } (#802), and
+    // hud-closure builds its programs with the compiler API that export used to carry. Porting
+    // the tool (#807) drops this import, and the test then fails until the ignore goes too, so
+    // the hold cannot outlive its reason or be dropped before it.
+    const importers = readdirSync(new URL('../tools/hud-closure/', import.meta.url))
+      .filter((name) => /\.[cm]?[jt]s$/.test(name))
+      .filter((name) => /^import \w+ from 'typescript';$/m.test(read(`tools/hud-closure/${name}`)));
+    const hold = `      - dependency-name: typescript\n        versions:\n          - '>=7'\n`;
+    expect(ecosystem('npm').includes(hold), `importers: ${importers.join(', ') || 'none'}`)
+      .toBe(importers.length > 0);
+  });
+});
+
 describe('dependency updates: review, not automation', () => {
   it('no workflow merges or auto-merges a pull request', () => {
     expect(WORKFLOWS.length, 'no workflows read; this test would pass vacuously').toBeGreaterThan(5);

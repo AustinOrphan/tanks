@@ -564,6 +564,7 @@ entry points at the repository root. Dependabot's npm fetcher reads the root `wo
 | devDependency major | Its own pull request | Human review; may need migration |
 | Runtime dependency (`three`, `howler`), any update | Its own pull request, grouped only with its own type package (`three` with `@types/three`), so the types never drift from the library | Human review. `three` is 0.x, so any minor can change rendering, and `visual` must pass |
 | `@types/node` | Up to the supported floor major only (22 while `engines` is `^22.13.0 \|\| ^24.0.0`) | Newer majors are ignored: types for a newer Node would let code use APIs the floor lacks. Raise the bound together with the floor |
+| `typescript` | Below 7 only, while `tools/hud-closure` uses the JavaScript compiler API that TypeScript 7 removes (#802) | Remove the ignore in the pull request that ports the tool (#807). Until then, TypeScript 5 and 6 updates arrive in their classes above |
 | GitHub Actions | One grouped pull request for every `actions/*` tag bump | Human review. A major tag usually moves the action's runtime; check its release notes |
 | An update that changes generated output | Arrives in its class above, and fails CI until regenerated. A runtime update changes `THIRD-PARTY-NOTICES.md`, whose section headers carry the installed version, so `tools/notices/generate.test.ts` fails | Human. Dependabot cannot run the repository's generators: run `npm run notices` (and any other affected generator) on the update branch and commit the result |
 
