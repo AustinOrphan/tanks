@@ -175,7 +175,8 @@ describe('the legal block renderer', () => {
     const tables = LEGAL_DOCUMENTS.flatMap((d) => d.blocks).filter(
       (b): b is Extract<LegalBlock, { kind: 'table' }> => b.kind === 'table',
     );
-    expect(tables.length).toBe(5);
+    // PRIVACY.md's one, CREDITS.md's two, and CONTENT-LICENSE.md's three (one is #771's).
+    expect(tables.length).toBe(6);
     for (const block of tables) {
       const el = legalBlockElement(block);
       expect(el.querySelector('caption')?.textContent).toBe(block.caption);
