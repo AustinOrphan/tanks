@@ -1,0 +1,16 @@
+{
+  "id": "quality-high-asks-for-the-removed-soft-filter",
+  "file": "src/render/quality.ts",
+  "find": "    shadowType: THREE.PCFShadowMap,\n    // The radius whose penumbra matches",
+  "replace": "    shadowType: THREE.PCFSoftShadowMap,\n    // The radius whose penumbra matches",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts"
+  ],
+  "why": "PCFSoftShadowMap is still exported by three r186, so naming it type-checks -- and `WebGLShadowMap.render()` then substitutes PCFShadowMap and warns to the console. That is how issue #800 shipped a third-narrower penumbra on the default preset with every test green: the preset read back as the filter it asked for everywhere the renderer had not drawn yet. A preset may only name a filter this three.js implements.",
+  "killedBy": [
+    "QUALITY_PRESETS.high matches scene.ts literals exactly shadowType is PCFShadowMap, the filter r186 left standing (issue #800)",
+    "medium and low are real steps down, not copies of high the shadow filters step DOWN in order: PCF spread wide, PCF at the default spread, Basic",
+    "medium and low are real steps down, not copies of high no preset asks for a filter this three.js does not implement -- population: all 3 QualityPreset values"
+  ]
+}

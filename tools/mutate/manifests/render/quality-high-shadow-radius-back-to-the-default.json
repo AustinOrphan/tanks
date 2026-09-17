@@ -1,0 +1,15 @@
+{
+  "id": "quality-high-shadow-radius-back-to-the-default",
+  "file": "src/render/quality.ts",
+  "find": "    shadowRadius: 1.625,",
+  "replace": "    shadowRadius: 1,",
+  "expect": "killed",
+  "tests": [
+    "src/render/quality.test.ts"
+  ],
+  "why": "three's default radius of 1 is exactly what issue #800 found wrong: with PCFSoftShadowMap removed in r186, `high` renders its five PCF taps over one texel and the shadow edge measures about a third narrower than the shipped look (22.5 px against 33.0 px at 800 px per world unit). The value is a measured match, not a preference, so a revert to the default has to fail rather than read as a tidy-up.",
+  "killedBy": [
+    "QUALITY_PRESETS.high matches scene.ts literals exactly shadowRadius is 1.625, the spread that restores r169 PCFSoft's penumbra (issue #800)",
+    "medium and low are real steps down, not copies of high the shadow filters step DOWN in order: PCF spread wide, PCF at the default spread, Basic"
+  ]
+}
