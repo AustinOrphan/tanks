@@ -10,6 +10,6 @@
   "why": "Issue #617. The required `visual` check's hit-target sweep drives the two played ending states, each tens of seconds of software-GL play before its panel shows, to press controls the pushed-outcome state of the same ending already puts in front of the sweep.",
   "killedBy": [
     "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule",
-    "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the two extra surfaces"
+    "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the extra surface"
   ]
 }
