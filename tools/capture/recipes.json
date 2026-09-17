@@ -1736,6 +1736,104 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.controllers",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.controllers"
+    },
+    "fixture": {
+      "id": "screen.controllers",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Controllers, from Pause",
+    "description": "The controller assignment pane, reached by starting a round, pausing and pressing Controllers, with no pad connected.",
+    "altText": "Screenshot of the Tanks! controllers screen over a paused round, showing Player 1 on the keyboard.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.controllers.pads",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.controllers.pads"
+    },
+    "fixture": {
+      "id": "screen.controllers.pads",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Controllers, from Pause, with two pads",
+    "description": "The controller assignment pane over two synthetic pads: a standard pad offered to the slot and a non-standard one named as unsupported.",
+    "altText": "Screenshot of the Tanks! controllers screen listing a standard gamepad as a choice for Player 1 and a second gamepad marked not supported.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.ending.mission-clear",
     "producer": {
       "kind": "screen",

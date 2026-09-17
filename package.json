@@ -22,6 +22,8 @@
     "verify:full": "npm run verify:quick && npm run mutate && npm run verify:build && npm run audit:prod",
     "visual": "node tools/visual/verify.mjs dist --check",
     "screens": "node tools/screens/run.mjs",
+    "screens:sweep": "node tools/screens/sweep.mjs",
+    "screens:compare": "node tools/screens/compare.mjs",
     "roundtrip": "node tools/visual/roundtrip.mjs dist",
     "portability": "node tools/portability/check.mjs dist",
     "test:gl": "node tools/gl/run.mjs",

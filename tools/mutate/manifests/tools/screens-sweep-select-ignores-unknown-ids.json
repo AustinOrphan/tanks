@@ -1,0 +1,14 @@
+{
+  "id": "screens-sweep-select-ignores-unknown-ids",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "  if (unknown.length > 0) throw new Error(`unknown ${what}: ${unknown.join(', ')}`);",
+  "replace": "  void unknown;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "A mistyped `--states` or `--layouts` id is dropped silently, and the sweep is smaller than asked for. A comparison of that sweep then reports fewer pairs, and nothing says which ones were never captured.",
+  "killedBy": [
+    "screen sweep selection and output (issue #766) selects everything by default, a named subset in catalogue order, and refuses an unknown id"
+  ]
+}

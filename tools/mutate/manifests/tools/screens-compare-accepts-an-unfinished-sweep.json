@@ -1,0 +1,14 @@
+{
+  "id": "screens-compare-accepts-an-unfinished-sweep",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "    if (m?.complete !== true) throw new Error(",
+  "replace": "    if (m?.complete === 'never') throw new Error(",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "A sweep that was stopped part way is compared as if it had finished, so the states it never reached read as missing pairs rather than as a sweep that must be taken again. The first full sweep of this tool stopped for good at `screen.no-script`, which is what made the manifest record `complete`.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) refuses a sweep that did not finish, naming which one"
+  ]
+}

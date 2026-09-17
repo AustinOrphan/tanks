@@ -23,12 +23,20 @@
  *
  * Input, one per screen state and viewport:
  *   { state, viewport, failed?: string,
- *     controls: [{ key, text, x, y, w, h, reachable, pinned }],
+ *     controls: [{ key, text, x, y, w, h, clip?, reachable, pinned }],
  *     overflow: { page: boolean } }
- * where x/y/w/h are CSS px from getBoundingClientRect; `reachable` says the control's
- * bottom edge is within its scroll container's scrollHeight (measured from the container's
- * padding box), or within the viewport when it has none; and `pinned` names the sticky or
- * fixed ancestor the control is drawn in, or is null.
+ * where x/y/w/h are CSS px from getBoundingClientRect; `clip` is the part of that box its
+ * clipping ancestors leave visible, { x, y, w, h }, zero-sized when it is scrolled out of view;
+ * `reachable` says the control's bottom edge is within its scroll container's scrollHeight
+ * (measured from the container's padding box), or within the viewport when it has none; and
+ * `pinned` names the sticky or fixed ancestor the control is drawn in, or is null.
+ *
+ * OVERLAP IS JUDGED ON THE VISIBLE PART (issue #766). A control scrolled out of view inside a
+ * scroll container keeps a box where it is not drawn, and a press there reaches whatever IS
+ * drawn. Measured: the Controllers pane with two pads at 1280x800@200% scrolls its source rows
+ * inside their own container, and the unsupported pad's button, scrolled below the fold, had a
+ * box on top of the pane's Back button, which sits outside that container. The floor and
+ * reachability still read the whole box: a clipped control is still that size once scrolled to.
  *
  * The on-screen driving controls (`.hud-touch`) are not menu targets and are left out by the
  * collector; they are sized by `--hud-control-touch`, 56 px.
@@ -40,6 +48,9 @@ export const HIT_FLOOR = 44;
 const OVERLAP_EPSILON = 0.5;
 
 const label = (c) => `${c.key} "${c.text}"`;
+
+/** The part of a control a press can land on: its clipped box when measured, else its box. */
+const visibleBox = (c) => c.clip ?? c;
 
 /** Every way one reading breaks the contract, as readable lines; empty means it holds. */
 export function hitTargetFailures(run) {
@@ -62,8 +73,10 @@ export function hitTargetFailures(run) {
       // Versus Setup's Start and Back (issue #668) sit over the map cards by design -- and the
       // bar owns every press where it paints. Only two controls on the same layer compete.
       if (Boolean(a.pinned) !== Boolean(b.pinned)) continue;
-      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
-      const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      const va = visibleBox(a);
+      const vb = visibleBox(b);
+      const ox = Math.min(va.x + va.w, vb.x + vb.w) - Math.max(va.x, vb.x);
+      const oy = Math.min(va.y + va.h, vb.y + vb.h) - Math.max(va.y, vb.y);
       if (ox > OVERLAP_EPSILON && oy > OVERLAP_EPSILON) {
         failures.push(`${where}: ${label(a)} overlaps ${label(b)}`);
       }
