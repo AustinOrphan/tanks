@@ -109,8 +109,9 @@ Three things govern this repository, and every file is under exactly one of them
   logos and branding — **All Rights Reserved**. See
   [CONTENT-LICENSE.md](CONTENT-LICENSE.md), which classifies paths so a reader can tell
   which of the three applies to any file.
-- **Dependencies** — their own licenses, recorded in
-  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- **Dependencies and vendored source** — their own licenses, recorded in
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). The deterministic math in
+  `src/sim/math` includes ports of fdlibm and V8.
 
 Shield permits reading and private experimentation, but **not** using the software to
 provide a competing product — and that holds whether a competing release is **paid or
