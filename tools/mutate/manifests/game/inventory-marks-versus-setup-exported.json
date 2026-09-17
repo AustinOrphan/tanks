@@ -1,0 +1,11 @@
+{
+  "id": "inventory-marks-versus-setup-exported",
+  "file": "src/game/persistence-inventory.ts",
+  "find": "    exported: false,",
+  "replace": "    exported: true,",
+  "expect": "killed",
+  "tests": [
+    "src/game/persistence-inventory.test.ts"
+  ],
+  "why": "Issue #764: the inventory's export flag is what the privacy policies' 'every key above except ...' sentence and the SAVE_KEYS parity are derived from. Marking the versus setup exported claims a save file carries data it does not."
+}
