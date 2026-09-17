@@ -23,10 +23,12 @@ describe('css integrity: the shipped stylesheets', () => {
     const files = discoverSources(ROOT);
     const { units, reports } = checkSources(ROOT, files, transform);
     expect(reports).toEqual([]);
-    // Non-vacuity: the three files that carry CSS today, and their four stylesheets
-    // (hud.css; index.html's head and <noscript> blocks; privacy.html's one block).
+    // Non-vacuity: the three files that carry CSS today, and at least their four stylesheets
+    // (hud.css; index.html's head and <noscript> blocks; privacy.html's one block). A floor,
+    // not an exact count: a stylesheet added later is found by discovery and checked above,
+    // and should not also have to edit this number.
     expect(files).toEqual(expect.arrayContaining(['index.html', 'public/privacy.html', 'src/game/hud.css']));
-    expect(units).toBe(4);
+    expect(units).toBeGreaterThanOrEqual(4);
   });
 
   it('finds a stylesheet added anywhere under src/ or public/, or as a root page, without a list to update', () => {
