@@ -22,6 +22,7 @@ import {
   describeFailure,
   digest,
   firstDivergence,
+  buildScenarioWorld,
   generateScenario,
   parseSeedList,
   reproductionCommand,
@@ -96,6 +97,12 @@ describe('generated scenarios: the required corpus', () => {
     expect(new Set(configs.flatMap((c) => c.drivers))).toEqual(new Set(['ai', 'scripted', 'idle']));
     expect(new Set(configs.map((c) => c.playerCount))).toEqual(new Set([1, 2, 3, 4]));
     expect(new Set(configs.map((c) => c.arenaId)).size).toBeGreaterThanOrEqual(4);
+    // 'teams' is only a label unless the world it builds has two sides: buildScenarioWorld
+    // passes no `teams`, so this pins that the default assignment really splits the players.
+    for (const c of configs.filter((config) => config.mode === 'teams')) {
+      const sides = new Set(buildScenarioWorld(c).tanks.filter((t) => t.kind === 'player').map((t) => t.team));
+      expect(sides.size, `teams seed ${c.seed}`).toBeGreaterThanOrEqual(2);
+    }
     // One per mode, as REPEAT_SEEDS' comment says.
     expect(new Set(REPEAT_SEEDS.map((seed) => generateScenario(seed, CORPUS_TICKS).mode)).size).toBe(3);
   });
