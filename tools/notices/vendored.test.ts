@@ -10,6 +10,7 @@ import {
   vendoredFiles,
 } from './vendored.mjs';
 import { renderNotices } from './render.mjs';
+import { parseLegalDocument } from '../legal/parse.mjs';
 
 // The vendored-source declaration (issue #771), checked against the tree it describes.
 //
@@ -97,10 +98,17 @@ describe('vendored third-party source (issue #771)', () => {
   it('renders every vendored source, its files and its notice into THIRD-PARTY-NOTICES.md', () => {
     const rendered = renderNotices();
     for (const source of VENDORED_SOURCES) {
-      expect(rendered).toContain(`## ${source.name} (${source.license})`);
+      expect(rendered).toContain(`\n### ${source.name} (${source.license})\n`);
       for (const f of source.files) expect(rendered).toContain(`\`${f}\``);
       expect(rendered).toContain(noticeText(source));
     }
+  });
+
+  it('keeps the notices untitled, so the Legal page heads them with their own label', () => {
+    // The Legal page takes a document's first H1 as its title. THIRD-PARTY-NOTICES.md has
+    // none, so the pane shows its label; a vendored part rendered as an H1 retitled the whole
+    // document "Vendored source".
+    expect(parseLegalDocument(renderNotices(), 'THIRD-PARTY-NOTICES.md').title).toBeNull();
   });
 
   it('names every vendored file in CONTENT-LICENSE.md, which would otherwise class it as first-party code', () => {

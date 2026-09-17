@@ -76,7 +76,7 @@ export function renderVendoredSection(source) {
   const files = source.files.map((f) => `\`${f}\``).join(', ');
   const where = source.notice.source ? ` The licence below is ${source.notice.source}, verbatim from the copyright line on.` : '';
   return (
-    `## ${source.name} (${source.license})\n\n` +
+    `### ${source.name} (${source.license})\n\n` +
     `Vendored into ${files}. Origin: ${source.origin}.${where}\n\n` +
     `\`\`\`\n${noticeText(source)}\n\`\`\`\n`
   );
@@ -92,7 +92,9 @@ export function renderNotices() {
     'they are build/test tooling that is never distributed with the built site.\n';
   const sections = names.map(renderDependencySection);
   const vendoredIntro =
-    '# Vendored source\n\n' +
+    // Not an H1: the Legal page takes a document's first H1 as its title (issue #771's first
+    // render titled the whole notices document "Vendored source").
+    '## Vendored source\n\n' +
     'Third-party code copied into this repository rather than installed, and so not listed ' +
     `above (${VENDORED_SOURCES.length} at generation time: ` +
     `${VENDORED_SOURCES.map((s) => s.name).join(', ')}). Each notice is also preserved in the ` +

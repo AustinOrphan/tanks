@@ -57,11 +57,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-# Vendored source
+## Vendored source
 
 Third-party code copied into this repository rather than installed, and so not listed above (2 at generation time: fdlibm, V8). Each notice is also preserved in the header of the files named. Declared in tools/notices/vendored.mjs.
 
-## fdlibm (permission notice)
+### fdlibm (permission notice)
 
 Vendored into `src/sim/math/trig.ts`, `src/sim/math/rem-pio2.ts`. Origin: netlib.org/fdlibm's s_sin.c, s_cos.c, k_sin.c, k_cos.c, s_atan.c, e_atan2.c, e_rem_pio2.c and k_rem_pio2.c, ported line-by-line.
 
@@ -74,7 +74,7 @@ software is freely granted, provided that this notice
 is preserved.
 ```
 
-## V8 (BSD-3-Clause)
+### V8 (BSD-3-Clause)
 
 Vendored into `src/sim/math/hypot.ts`, `src/sim/math/trig.ts`, `src/sim/math/rem-pio2.ts`. Origin: V8's src/builtins/math.tq (FastMathHypot's two-argument path), transliterated into hypot.ts; and three V8-authored expressions from src/base/ieee754.cc kept in trig.ts and rem-pio2.ts, all at branch-heads/13.6. The licence below is https://chromium.googlesource.com/v8/v8/+/branch-heads/13.6/LICENSE, verbatim from the copyright line on.
 
