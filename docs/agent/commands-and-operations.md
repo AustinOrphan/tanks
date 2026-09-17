@@ -14,6 +14,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run test:unit` | Complete Vitest suite only | about 55 seconds |
 | `npm run build` | Vite production bundle only | about 1 second |
 | `npm run docs:check` | Plan/spec metadata and unchanged-legacy validation | under 1 second |
+| `npm run lint:workflows` | actionlint with shellcheck over every `.github/workflows` file, after its known-bad fixtures | under 1 second warm; about 1 second on the first run, which downloads |
 | `npm run mutate:smoke` | One representative real mutation-harness path used by floor CI | under 5 seconds |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
@@ -48,6 +49,38 @@ and then returns a verdict; the required `visual` CI job runs it after the scree
 Measured at **23.1 s on the CI runner** (ubuntu-latest, 2026-09-01) and 40.0/40.3/40.8 s
 over three consecutive local runs (Linux, swiftshader, n=3) -- the software renderer
 locally is the slower of the two.
+
+### Workflow static validation
+
+`npm run lint:workflows` (`tools/workflow-lint/`, issue #761) runs
+[actionlint](https://github.com/rhysd/actionlint) 1.7.12 with shellcheck 0.11.0 over every
+`.yml` and `.yaml` file in `.github/workflows`. It catches:
+
+- malformed YAML
+- invalid `${{ }}` expressions
+- keys the workflow schema does not have
+- malformed `uses:` references
+- shellcheck findings in `run:` scripts
+
+Findings print as `file:line:column` with a snippet, and the command exits 1.
+
+Both tools are official release binaries, not npm packages. Each is pinned by version and
+SHA-256 for linux and darwin on x64 and arm64, downloaded on first use, refused unless its
+digest matches, and cached under `node_modules/.cache/tanks-workflow-lint`. Any other
+platform is refused by name. pyflakes is disabled explicitly rather than left to whatever is
+on `PATH`.
+
+Before linting the real workflows, each run lints `tools/workflow-lint/fixtures/`, five
+known-bad files. Each must report its own rule, or the run fails. A validator that has
+quietly stopped validating therefore cannot report the repository clean.
+
+Required CI runs the command as the first checking step of both `verify` lanes. It
+complements `tools/workflows.test.ts`, which remains the authority for this repository's own
+workflow policies.
+
+A finding GitHub would accept is suppressed at that exact site with a comment saying why. The
+one current case is `# shellcheck disable=SC2329` on the trap-invoked `cleanup` function in
+`engines.yml`. No rule is ignored globally.
 
 ### Constrained-machine escape hatches
 
@@ -377,7 +410,7 @@ went red before assuming the deploy is broken.
 
 **`workflow_dispatch` is the ungated path, and it stays that way** — it exists to
 re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
-`ci.yml`'s 12 checking steps** (`verify`: 6, `mutation`: 2, `visual`: 4), **not the
+`ci.yml`'s 13 checking steps** (`verify`: 7, `mutation`: 2, `visual`: 4), **not the
 `visual` job and not any mutation step**, so a manual deploy can still publish a render
 regression that only `tools/gl/` and `tools/visual/` catch, and a stale
 `tools/mutate/manifests/`. Those five steps are duplicated work on the automatic path;
@@ -386,7 +419,7 @@ they are kept because deleting them would leave the manual path checking nothing
 that can fail because of the tree — rather than set up the runner, so `checkout`,
 `setup-node`, `npm ci`, BOTH Playwright steps (`Install Playwright` and `Install
 chromium` are separate named steps), the browser cache and `Upload screenshots` are all
-excluded. `verify` contributes 6: Typecheck, Test, Mutation harness smoke, Build,
+excluded. `verify` contributes 7: Lint workflows, Typecheck, Test, Mutation harness smoke, Build,
 portability, audit. `mutation` contributes 2: the affected-entries and the full Mutation
 manifest (a pull request runs the first and a push the second, but each is its own named
 check; the job runs four times, as shards, and each step is still one check). `visual`

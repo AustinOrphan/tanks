@@ -100,6 +100,7 @@ const ATOMIC = {
   roundtrip: 'node tools/visual/roundtrip.mjs dist',
   mutate: 'node tools/mutate/run.mjs',
   'audit:prod': 'node tools/audit/prod.mjs',
+  'lint:workflows': 'node tools/workflow-lint/run.mjs',
   'issues:audit': 'node tools/issues/run.mjs audit',
   'issues:maintain': 'node tools/issues/run.mjs event',
   'issues:reconcile': 'node tools/issues/run.mjs reconcile',
@@ -405,11 +406,17 @@ describe('canonical verification commands in workflows', () => {
       Build: 'npm run build',
       'Assert the build is subpath-portable': 'npm run portability',
       'Audit production dependencies': 'npm run audit:prod',
+      'Lint workflows': 'npm run lint:workflows',
     };
     for (const [name, command] of Object.entries(expected)) {
       expect(namedStep(ciVerify, name), name).toContain(`run: ${command}`);
     }
     expect(namedStep(ciVerify, 'Mutation harness smoke (floor)')).toContain("if: matrix.label == 'floor'");
+    // Issue #761: the seconds-long workflow lint runs before the minutes of verification, and
+    // in both lanes (no `if:`), since the floor is a supported Node line for the fetch too.
+    expect(ciVerify.indexOf('- name: Lint workflows'), 'workflow lint runs before Typecheck')
+      .toBeLessThan(ciVerify.indexOf('- name: Typecheck'));
+    expect(namedStep(ciVerify, 'Lint workflows')).not.toContain('if:');
     expect(ciVerify, 'the manifest runs in the shard jobs, not in a verify lane').not.toContain('npm run mutate --');
     expect(ciVerify).not.toContain("matrix.node == '24' || github.event_name == 'push'");
     expect(ciVerify).toContain("- label: floor\n            node: '22.13.0'\n            check: verify (floor)");

@@ -32,6 +32,8 @@ paths:
   than duplicating tool commands or routinely running the complete manifest locally.
 - Recount named checking steps whenever workflow structure changes; historical bare counts
   have repeatedly gone stale.
+- Run `npm run lint:workflows` after editing a workflow. Suppress a false positive only at
+  its exact site with a reason; never ignore an actionlint or shellcheck rule globally.
 
 Read `docs/agent/commands-and-operations.md` before modifying CI, Pages, engine-matrix, or
 ruleset-sensitive behavior.

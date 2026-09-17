@@ -56,6 +56,13 @@ jobs:
       # Keep these as atomic named steps rather than one composite command: each
       # failure's diagnostic boundary stays visible, while package.json remains
       # the one command source of truth.
+      #
+      # Workflow lint first (issue #761): seconds, and a malformed workflow is cheaper to
+      # read here than as GitHub's own parse error. Both lanes, because the pinned binaries
+      # are fetched and verified by Node and the floor is a supported Node line too.
+      - name: Lint workflows
+        run: npm run lint:workflows
+
       - name: Typecheck
         run: npm run typecheck
 
