@@ -3,11 +3,13 @@
  * Compare two screen-state sweeps byte for byte (issue #766).
  *
  *   npm run screens:compare -- --base tmp/sweep/base --head tmp/sweep/head \
- *     [--base-control tmp/sweep/base-2] [--head-control tmp/sweep/head-2] [--json]
+ *     [--base-control tmp/sweep/base-2] [--head-control tmp/sweep/head-2] \
+ *     [--states a,b] [--layouts x,y] [--json]
  *
  * Every state and layout either sweep names is classified as `identical`, `different`, `missing`
  * or `unstable` (see `classifyPair` in `sweep-plan.mjs`). The command exits 0 only when every pair
- * is identical.
+ * is identical. `--states` and `--layouts` restrict the comparison, so control sweeps need to cover
+ * only the pairs being settled.
  *
  * READ BACK, NOT TRUSTED. Each frame's hash is recomputed from the file on disk. A file that does
  * not match the hash its own manifest recorded is an error, because the manifest no longer
@@ -44,11 +46,16 @@ function main() {
   if (baseDir === undefined || headDir === undefined) throw new Error('--base and --head are required');
   const baseControlDir = arg('base-control');
   const headControlDir = arg('head-control');
+  const list = (/** @type {string} */ name) => {
+    const raw = arg(name);
+    return raw === undefined ? undefined : raw.split(',').map((s) => s.trim()).filter(Boolean);
+  };
   const result = compareManifests({
     base: readSweep(baseDir),
     head: readSweep(headDir),
     baseControl: baseControlDir === undefined ? undefined : readSweep(baseControlDir),
     headControl: headControlDir === undefined ? undefined : readSweep(headControlDir),
+    only: { states: list('states'), layouts: list('layouts') },
   });
 
   if (process.argv.includes('--json')) {

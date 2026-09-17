@@ -185,9 +185,12 @@ export function classifyPair({ base, head, baseControl, headControl }) {
  * Sweeps taken with different options cannot be compared, and asking to is an error. A sweep
  * with the game canvas hidden against one without it would differ in every state that shows a
  * match.
- * @param {{ base: any, head: any, baseControl?: any, headControl?: any }} manifests
+ * `only` restricts the comparison to the named states and layouts. That is how a reviewer controls
+ * just the pairs that came out different, instead of sweeping the whole matrix a third time: the
+ * control sweeps then need to cover only the pairs selected.
+ * @param {{ base: any, head: any, baseControl?: any, headControl?: any, only?: { states?: readonly string[], layouts?: readonly string[] } }} manifests
  */
-export function compareManifests({ base, head, baseControl, headControl }) {
+export function compareManifests({ base, head, baseControl, headControl, only = {} }) {
   const sweeps = [['base', base], ['head', head], ['base control', baseControl], ['head control', headControl]]
     .filter(([, m]) => m !== undefined);
   for (const [name, m] of sweeps) {
@@ -207,7 +210,12 @@ export function compareManifests({ base, head, baseControl, headControl }) {
   const h = index(head);
   const bc = baseControl === undefined ? null : index(baseControl);
   const hc = headControl === undefined ? null : index(headControl);
-  const keys = [...new Set([...b.keys(), ...h.keys()])].sort();
+  const selected = (/** @type {string} */ key) => {
+    const [state, layout] = key.split(' ');
+    return (only.states === undefined || only.states.includes(state))
+      && (only.layouts === undefined || only.layouts.includes(layout));
+  };
+  const keys = [...new Set([...b.keys(), ...h.keys()])].filter(selected).sort();
   const pairs = keys.map((key) => {
     const [state, layout] = key.split('\u0000');
     const rb = b.get(key) ?? null;

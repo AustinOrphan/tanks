@@ -167,4 +167,22 @@ describe('screen sweep comparison (issue #766)', () => {
     expect(() => compareManifests({ base: { results: [] }, head: done })).toThrow(/base sweep did not finish/);
     expect(compareManifests({ base: done, head: done }).totals.identical).toBe(1);
   });
+
+  it('compares only the selected states and layouts, so a control need cover only those pairs', () => {
+    const full = (rows: Array<[string, string, string]>) => ({
+      complete: true,
+      results: rows.map(([state, layout, sha]) => ({ state, layout, ok: true, sha256: sha })),
+    });
+    const base = full([['s1', 'l1', 'a'], ['s1', 'l2', 'b'], ['s2', 'l1', 'c']]);
+    const head = full([['s1', 'l1', 'a'], ['s1', 'l2', 'x'], ['s2', 'l1', 'y']]);
+    // A control of s1 alone: without the filter, s2's pair would read unstable for having none.
+    const control = full([['s1', 'l1', 'a'], ['s1', 'l2', 'b']]);
+    const result = compareManifests({ base, head, baseControl: control, only: { states: ['s1'] } });
+    expect(result.pairs.map((p) => [p.state, p.layout, p.outcome])).toEqual([
+      ['s1', 'l1', 'identical'],
+      ['s1', 'l2', 'different'],
+    ]);
+    expect(compareManifests({ base, head, only: { layouts: ['l2'] } }).pairs.map((p) => p.state)).toEqual(['s1']);
+    expect(compareManifests({ base, head, baseControl: control }).pairs.find((p) => p.state === 's2')?.outcome).toBe('unstable');
+  });
 });

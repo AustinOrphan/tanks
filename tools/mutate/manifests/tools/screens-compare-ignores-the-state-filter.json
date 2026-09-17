@@ -1,0 +1,14 @@
+{
+  "id": "screens-compare-ignores-the-state-filter",
+  "file": "tools/screens/sweep-plan.mjs",
+  "find": "    return (only.states === undefined || only.states.includes(state))",
+  "replace": "    return (only.states === undefined || only.states.length > 0)",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/sweep-plan.test.ts"
+  ],
+  "why": "`--states` is accepted and ignored, so a comparison meant to settle a few pairs with a small control sweep classifies every other pair as unstable for having no control, and the pairs it was run for are lost among them.",
+  "killedBy": [
+    "screen sweep comparison (issue #766) compares only the selected states and layouts, so a control need cover only those pairs"
+  ]
+}

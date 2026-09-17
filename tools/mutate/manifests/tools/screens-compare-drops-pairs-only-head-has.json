@@ -1,8 +1,8 @@
 {
   "id": "screens-compare-drops-pairs-only-head-has",
   "file": "tools/screens/sweep-plan.mjs",
-  "find": "  const keys = [...new Set([...b.keys(), ...h.keys()])].sort();",
-  "replace": "  const keys = [...b.keys()].sort();",
+  "find": "  const keys = [...new Set([...b.keys(), ...h.keys()])].filter(selected).sort();",
+  "replace": "  const keys = [...b.keys()].filter(selected).sort();",
   "expect": "killed",
   "tests": [
     "tools/screens/sweep-plan.test.ts"
