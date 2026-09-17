@@ -53,7 +53,7 @@ const STORE_WRITES: Record<keyof GameStores, (stores: GameStores) => void> = {
   versusSetup: (s) => s.versusSetup.set({ ...s.versusSetup.get(), players: 4 }),
 };
 
-/** Make each of the seven stores write, so their keys have to appear somewhere. */
+/** Make every store in `GameStores` write, so their keys have to appear somewhere. */
 function writeThroughEveryStore(stores: GameStores): void {
   for (const write of Object.values(STORE_WRITES)) write(stores);
 }
@@ -185,7 +185,7 @@ describe('createStores', () => {
   });
 
   it('puts all seven stores on the storage it was handed, and no others', () => {
-    // Population: all six stores in GameStores, each driven through a write.
+    // Population: every store in GameStores (seven today), each driven through a write.
     // The exact-set assertion is what catches a store wired to its own private
     // storage (its key would be missing) as well as one writing a stray key.
     const storage = createMemoryStorage();
