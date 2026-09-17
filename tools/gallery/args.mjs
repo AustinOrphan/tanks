@@ -452,6 +452,58 @@ export function parseArgs(argv) {
 }
 
 /**
+ * The query string a parsed invocation asks the gallery page for. Moved here from run.mjs
+ * unchanged (issue #775) so a test can read what reaches the page without a browser.
+ */
+export function galleryQuery(args, extra = {}) {
+  const p = new URLSearchParams({ elements: args.elements, view: args.view, w: String(args.w), h: String(args.h), ...extra });
+  if (args.reach) p.set('reach', '1');
+  if (args.timer) p.set('timer', '1');
+  if (args.fill) p.set('fill', '1');
+  if (args.skin !== 'solid') p.set('skin', args.skin);
+  if (args.mineWarn !== null) p.set('mineWarn', args.mineWarn);
+  if (args.motion !== 'full') p.set('motion', args.motion);
+  if (args.identityMarker !== null) p.set('identityMarker', args.identityMarker);
+  if (args.shellTrail !== null) p.set('shellTrail', args.shellTrail);
+  if (args.arrival !== null) p.set('arrival', args.arrival);
+  if (args.blockedFire !== null) p.set('blockedFire', args.blockedFire);
+  if (args.hull) p.set('hull', args.hull);
+  if (args.accent) p.set('accent', args.accent);
+  if (args.frames !== null) p.set('frames', String(args.frames));
+  if (args.age !== 0) p.set('age', String(args.age));
+  // Only when non-default, mirroring skin/hull/accent above: DEFAULTS.spawnAnim is
+  // always defined, so an UNCONDITIONAL emit would set ?spawn-anim= on every gallery
+  // invocation and fire setPlayerStyle through subjects.ts's widened guard even when
+  // nothing else asked to be styled -- the exact regression this guard is against.
+  if (args.spawnAnim !== DEFAULTS.spawnAnim) p.set('spawn-anim', args.spawnAnim);
+  // The only scene ids that reach here are 'gallery' (the default; omitted, same as
+  // skin='solid') and a moment id: run.mjs captures `--scene game` on its own path.
+  if (args.scene !== 'gallery') p.set('scene', args.scene);
+  return p.toString();
+}
+
+/**
+ * The developer arms a capture recipe may name (issue #775), and the gallery flag each one
+ * is. A recipe's `variant.arms` keys are exactly these; their VALUES are validated by
+ * `parseArgs` itself, so a recipe and the CLI share one vocabulary and one set of refusals.
+ */
+export const GALLERY_ARMS = Object.freeze({
+  arrival: '--arrival',
+  identityMarker: '--identityMarker',
+  shellTrail: '--shellTrail',
+});
+
+/** The gallery arguments for a recipe's arms, in `GALLERY_ARMS` order; none when absent. */
+export function galleryArmArguments(arms) {
+  if (arms === undefined) return [];
+  const out = [];
+  for (const [key, flag] of Object.entries(GALLERY_ARMS)) {
+    if (Object.hasOwn(arms, key)) out.push(flag, arms[key]);
+  }
+  return out;
+}
+
+/**
  * Make a string safe to hand to ffmpeg's drawtext.
  *
  * Both of these have already cost a rebuild: drawtext reads `%` as a strftime escape and

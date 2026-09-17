@@ -42,7 +42,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { parseArgs, safeLabel, gridShape, DEFAULTS } from './args.mjs';
+import { parseArgs, safeLabel, gridShape, galleryQuery, GALLERY_ARMS } from './args.mjs';
 import { enterGameplay, GAME_CANVAS } from './enter-gameplay.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 
@@ -170,34 +170,11 @@ async function run(browser) {
    */
   const pumpFrame = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
 
-  const q = (extra = {}) => {
-    const p = new URLSearchParams({ elements: args.elements, view: args.view, w: String(args.w), h: String(args.h), ...extra });
-    if (args.reach) p.set('reach', '1');
-    if (args.timer) p.set('timer', '1');
-    if (args.fill) p.set('fill', '1');
-    if (args.skin !== 'solid') p.set('skin', args.skin);
-    if (args.mineWarn !== null) p.set('mineWarn', args.mineWarn);
-    if (args.motion !== 'full') p.set('motion', args.motion);
-    if (args.identityMarker !== null) p.set('identityMarker', args.identityMarker);
-    if (args.shellTrail !== null) p.set('shellTrail', args.shellTrail);
-    if (args.arrival !== null) p.set('arrival', args.arrival);
-    if (args.blockedFire !== null) p.set('blockedFire', args.blockedFire);
-    if (args.hull) p.set('hull', args.hull);
-    if (args.accent) p.set('accent', args.accent);
-    if (args.frames !== null) p.set('frames', String(args.frames));
-    if (args.age !== 0) p.set('age', String(args.age));
-    // Only when non-default, mirroring skin/hull/accent above: DEFAULTS.spawnAnim is
-    // always defined, so an UNCONDITIONAL emit would set ?spawn-anim= on every gallery
-    // invocation and fire setPlayerStyle through subjects.ts's widened guard even when
-    // nothing else asked to be styled -- the exact regression this guard is against.
-    if (args.spawnAnim !== DEFAULTS.spawnAnim) p.set('spawn-anim', args.spawnAnim);
-    // q() is only ever reached once captureGame's own `args.scene === 'game'` branch
-    // (above, in capture()) has already returned -- so 'game' can never land here, and
-    // the only scene ids left are 'gallery' (the default; omitted, same as skin='solid')
-    // and a moment id.
-    if (args.scene !== 'gallery') p.set('scene', args.scene);
-    return `http://localhost:${PORT}/tools/gallery/index.html?${p}`;
-  };
+  // The page's query is built by `galleryQuery` (args.mjs) so a test can read exactly what a
+  // parsed invocation asks the gallery page for (issue #775). q() is only ever reached once
+  // captureGame's own `args.scene === 'game'` branch (above, in capture()) has already
+  // returned, so 'game' never lands in it.
+  const q = () => `http://localhost:${PORT}/tools/gallery/index.html?${galleryQuery(args)}`;
 
   /**
    * The GAME's canvas, not the Customize panel's.
@@ -322,6 +299,9 @@ async function run(browser) {
         pageErrors: errors,
       },
       browser: { chromiumVersion: browser.version() },
+      // The developer arms this run put in the page's query, so a capture's provenance records
+      // what was applied rather than only what a recipe asked for (issue #775).
+      arms: Object.fromEntries(Object.keys(GALLERY_ARMS).map((key) => [key, args[key]])),
       producer: producerReport,
     }, null, 2)}\n`);
     // `--report` is the capture-adapter seam: publish raw frames and producer metadata
