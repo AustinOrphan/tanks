@@ -11,5 +11,16 @@
   "killedBy": [
     "vendored third-party source (issue #771) declares every file carrying a third-party provenance marker, as vendored or as first-party with a reason"
   ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
   "why": "A first-party exemption keyed on a path that does not exist exempts nothing, and silently: the real file then carries its fdlibm mention undeclared, and the stale key would outlive a rename forever. The guard must reject a declared path that is not in the scan."
 }

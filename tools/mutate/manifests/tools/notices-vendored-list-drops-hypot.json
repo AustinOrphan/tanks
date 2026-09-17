@@ -11,7 +11,19 @@
   "killedBy": [
     "vendored third-party source (issue #771) accounts for every file under src/sim/math, so a new port cannot arrive unlisted",
     "vendored third-party source (issue #771) declares every file carrying a third-party provenance marker, as vendored or as first-party with a reason",
+    "vendored third-party source (issue #771) names every vendored file in CONTENT-LICENSE.md, which would otherwise class it as first-party code",
     "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
   ],
-  "why": "Drops the one file that is V8's alone from the declaration. hypot.ts carries no copyright line, only a provenance comment, so it is the file most easily left off a list and the one #771 found missing from every licensing surface. The marker scan must name it, the src/sim/math inventory must name it, and the committed notices must stop matching."
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
+  "why": "Drops the one file that is V8's alone from the declaration. hypot.ts carries no copyright line, only a provenance comment, so it is the file most easily left off a list and the one #771 found missing from every licensing surface. The marker scan must name it, the src/sim/math inventory must name it, and the committed notices must stop matching. The CONTENT-LICENSE.md test fails through its negative control, which expects hypot.ts among the declared files."
 }

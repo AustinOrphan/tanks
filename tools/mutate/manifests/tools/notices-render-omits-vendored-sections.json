@@ -12,5 +12,16 @@
     "vendored third-party source (issue #771) renders every vendored source, its files and its notice into THIRD-PARTY-NOTICES.md",
     "THIRD-PARTY-NOTICES.md is generated, not hand-edited matches what renderNotices() produces right now -- run `npm run notices` to fix"
   ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/sim/math/bits.ts",
+    "src/sim/math/hypot.ts",
+    "src/sim/math/rem-pio2.ts",
+    "src/sim/math/trig.ts",
+    "tools/baseline/angles.ts",
+    "tools/baseline/tick-cost.mjs"
+  ],
   "why": "The state #771 found: THIRD-PARTY-NOTICES.md listing only npm runtime dependencies, with no word about the source vendored into src/. Rendering must include every declared vendored source."
 }
