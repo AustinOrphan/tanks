@@ -1,0 +1,15 @@
+{
+  "id": "shell-trail-reflects-the-wrong-way",
+  "file": "src/render/shell-trail.ts",
+  "find": "      const ix = folds ? dx - 2 * dot * behind.nx : dx;",
+  "replace": "      const ix = folds ? dx + 2 * dot * behind.nx : dx;",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "killedBy": [
+    "shell bounce-trail after a bounce (issue #774) lays a bounced shell's dash back along the leg it came in on, never inside the wall",
+    "shell bounce-trail after a bounce (issue #774) moves a dash that would straddle the corner wholly onto one leg"
+  ],
+  "why": "The incoming leg is the current heading REFLECTED in the face. With the sign flipped the folded dash points back into the wall rather than along the path the shell came in on."
+}

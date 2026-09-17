@@ -1,0 +1,15 @@
+{
+  "id": "shell-trail-lays-bounced-rows-through-the-wall",
+  "file": "src/render/shell-trail.ts",
+  "find": "      const folds = bounced && wallBehind(curr.walls, x, y, -dx, -dy, rowReach(segments));",
+  "replace": "      const folds = false;",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "killedBy": [
+    "shell bounce-trail after a bounce (issue #774) lays a bounced shell's dash back along the leg it came in on, never inside the wall",
+    "shell bounce-trail after a bounce (issue #774) moves a dash that would straddle the corner wholly onto one leg"
+  ],
+  "why": "The residual #774 asks to address: after a ricochet the row trails the NEW heading, so for a bounced shell with a bounce to come its dash sits inside the wall it just left. Laid straight, the dash is drawn through the wall; dropped instead, the shell would read as a zero -- so the row folds onto the leg it came in on."
+}
