@@ -24,6 +24,10 @@ import {
 // the sim's own BulletType ('normal'|'fast'|'ricochet'). The sim's bullet physics
 // is keyed by BulletType, so the resolver maps each ProjectileType onto one (see
 // resolve.ts). Everything else is as supplied.
+//
+// Provenance (issue #783): the supplied files are first-party. They were written for this
+// project with ChatGPT, not copied from another codebase. See CONTENT-LICENSE.md, "Where the
+// supplied tank configuration came from".
 // ---------------------------------------------------------------------------
 
 export interface TankWeaponDefinition {

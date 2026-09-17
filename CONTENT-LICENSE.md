@@ -72,8 +72,24 @@ configuration, and repository tooling.
 - **Generated output** (`dist/**`, gallery and capture output) inherits the license of
   whatever it was generated from. A bundle contains both code and reserved content.
 - **Data files that are balance rather than content** — `balance.json`, `ai-profiles.json`,
-  `tank-defs.json` — are **code**. They configure behaviour rather than describing a level
-  or a piece of art, and the sim reads them the way it reads any other module.
+  `tank-defs.json`, and the reference taxonomy in `src/sim/config/reference/`
+  (`tank-types.json`, `balance-constants.json`) — are **code**. They configure behaviour
+  rather than describing a level or a piece of art, and the sim reads them the way it reads
+  any other module.
+
+**Where the supplied tank configuration came from.** `src/sim/config/reference/`, and the
+code in `src/sim/config/enums.ts`, `types.ts` and `resolve.ts` that was adopted or adapted
+from the same files, began as a set of files written for this project with ChatGPT. It was
+not copied from another codebase or a published dataset. The conversation started from a
+plain-language description of the nine enemy tank types in *Wii Play: Tanks!*: first
+missions, movement, fire rate, simultaneous shots, ricochets, mines and special behaviour.
+The source of that description is not recorded. ChatGPT turned it into the taxonomy,
+enums, types and resolver, and delivered them as `wii-play-tanks-config.zip`. The two
+reference JSON files are byte-identical to that output. The numbers in
+`balance-constants.json`, and the AI-profile figures the game adopted from it, are
+ChatGPT's own starting points. It described them as "reasonable starting points, not
+verified Wii Play values". They are not measurements of the original game. These files are
+first-party and fall under the rule above.
 
 ## Permission
 
