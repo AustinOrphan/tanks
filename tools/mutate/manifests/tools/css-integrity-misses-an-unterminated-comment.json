@@ -1,0 +1,14 @@
+{
+  "id": "css-integrity-misses-an-unterminated-comment",
+  "file": "tools/css-integrity/check.mjs",
+  "find": "        problems.push({ ...position(unit, i), message: 'comment is never closed, so everything after it is ignored' });",
+  "replace": "        void unit;",
+  "expect": "killed",
+  "tests": [
+    "tools/css-integrity/check.test.ts"
+  ],
+  "why": "Issue #763: an unterminated comment swallows every rule after it, and lightningcss parses the remainder as one comment without an error. Without this report the scan stops at the comment and returns nothing.",
+  "killedBy": [
+    "css integrity: what it rejects a comment that is never closed, which would swallow the rest of the file"
+  ]
+}

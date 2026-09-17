@@ -17,6 +17,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run mutate:smoke` | One representative real mutation-harness path used by floor CI | under 5 seconds |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
+| `npm run lint:css` | Parse integrity of every shipped stylesheet; also enforced inside `npm run test:unit` | under 1 second |
 | `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, and the session-lifecycle round trip | roughly 55–130 seconds after browser setup |
 | `npm run verify:full` | Complete core composite: quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
 
@@ -27,6 +28,27 @@ startup move them substantially. The command contract matters more than the exac
 `npm test` remains a compatibility alias for `npm run verify:quick`; both package scripts
 retain a trailing `--` boundary so `npm test -- <Vitest arguments>` reaches Vitest. For a
 focused test without an implicit typecheck, use `npm run test:unit -- <Vitest arguments>`.
+
+`npm run lint:css` (`tools/css-integrity/`, issue #763) checks that every shipped stylesheet
+parses as written: each `.css` file under `src/` and `public/`, and each `<style>` block in
+an `.html` file there or at the repository root. Files are found by walking the tree, so a
+new stylesheet is covered without a list to update. Problems print as
+`file:line:column: message` and the command exits 1.
+
+It runs two checks, and both are needed:
+
+1. A token scan that reports a block still open at the end, a `}` that closes nothing, and
+   an unterminated comment or string. A conforming parser repairs these silently. The end of
+   the file closes an open block, and CSS nesting turns the rules after a missing brace into
+   children of the unclosed rule.
+2. A strict parse with lightningcss, which Vite 8 depends on and by default minifies
+   production CSS with. Error recovery is off, so every parse error is reported.
+
+`tools/css-integrity/check.test.ts` runs the same check over the same files in
+`npm run test:unit`, and that is the required-CI enforcement. It is parse validity only;
+`src/game/hud.css.test.ts` and the visual checks stay authoritative for structure and
+behavior. CSS assigned from TypeScript (`style.cssText` in `src/boot.ts`) is not a
+stylesheet and is not scanned.
 
 `verify:full` is the complete core, non-browser composite. It is available for exceptional
 local reproduction of the core CI scope, but it is not the routine local candidate gate or

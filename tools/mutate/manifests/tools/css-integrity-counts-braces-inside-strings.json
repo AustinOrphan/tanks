@@ -1,0 +1,14 @@
+{
+  "id": "css-integrity-counts-braces-inside-strings",
+  "file": "tools/css-integrity/check.mjs",
+  "find": "    } else if (ch === '\"' || ch === \"'\") {",
+  "replace": "    } else if (ch === '\"' && ch === \"'\") {",
+  "expect": "killed",
+  "tests": [
+    "tools/css-integrity/check.test.ts"
+  ],
+  "why": "Issue #763 must pass valid CSS: `content: \"{\"` is one string token, and a scan that counts the brace inside it reports a block that is never closed in a stylesheet that is fine.",
+  "killedBy": [
+    "css integrity: what it accepts braces inside strings, escapes, url() and comments, and nested at-rules"
+  ]
+}

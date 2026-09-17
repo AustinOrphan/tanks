@@ -40,6 +40,7 @@
     "issues:relationships": "node tools/issues/migrate-relationships.mjs",
     "docs:check": "node tools/docs/check.mjs",
     "docs:index": "node tools/docs/index.mjs",
+    "lint:css": "node tools/css-integrity/run.mjs",
     "mutate": "node tools/mutate/run.mjs",
     "hud:closure": "node tools/hud-closure/analyze.mjs",
     "mutate:smoke": "npm run mutate -- --only capture-prerequisite-error-drops-the-ci-pin",
