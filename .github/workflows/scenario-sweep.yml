@@ -1,0 +1,64 @@
+name: Generated-scenario sweep
+
+# Issue #760: the deeper sweep of the simulation's generated-scenario invariants. The same
+# generator, drivers and checks as the small corpus required CI runs
+# (src/sim/generated-scenarios.test.ts) -- one implementation, src/sim/scenarios.ts -- over a
+# seed list and tick budget chosen at dispatch, every seed run twice for the repeat check.
+#
+# Dispatch-only: breadth is what this lane is for, and no pull request should wait on it.
+# A failure's log names each seed, its scenario, the tick and invariant, and a `rerun:` line
+# that reproduces it locally with no state from this run.
+on:
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: Seeds and inclusive ranges, e.g. 1-200 or 3,7,40-42
+        required: false
+        default: '1-200'
+        type: string
+      ticks:
+        description: Tick budget per seed (60 ticks per simulated second)
+        required: false
+        default: '3600'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    # The default sweep measured 7 minutes on the 4-core development box; see
+    # docs/agent/commands-and-operations.md for the budget. Wide headroom for a larger seed list.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # Both inputs reach the harness through env, never through the script text. The harness
+      # refuses a seed list or tick budget it cannot parse rather than sweeping a guess.
+      # Output goes to a file, not a pipe, so vitest's exit code is the step's.
+      - name: Run the generated-scenario sweep
+        env:
+          VITE_RUN_MEASURE: '1'
+          VITE_SCENARIO_SEEDS: ${{ inputs.seeds || '1-200' }}
+          VITE_SCENARIO_TICKS: ${{ inputs.ticks || '3600' }}
+        run: |
+          npx vitest run src/sim/generated-scenarios.measure.test.ts --testTimeout=3000000 \
+            > scenario-sweep.log 2>&1 || status=$?
+          cat scenario-sweep.log
+          exit "${status:-0}"
+
+      - name: Upload console output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scenario-sweep-output
+          path: scenario-sweep.log
+          retention-days: 14

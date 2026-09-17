@@ -1026,3 +1026,76 @@ describe('bench-contrast.yml: the on-demand benchmark contrast workflow (issue #
     expect(BENCH, 'the workflow drives a browser directly').not.toContain('npx playwright test');
   });
 });
+
+// ---------------------------------------------------------------------------
+// scenario-sweep.yml (issue #760): the on-demand generated-scenario sweep.
+//
+// Same TEXT-not-YAML caveat as everything above. Its silent failure is the workflow running a
+// different file from the one every failure's `rerun:` line names: the wrong file still runs,
+// and a skipped harness runs green.
+//
+// EACH ASSERTION WAS RUN AGAINST THE MUTATION IT CLAIMS TO CATCH:
+//   add `pull_request:`                              -> is dispatch-only
+//   add `schedule:`                                  -> is dispatch-only
+//   `contents: read` -> `contents: write`            -> grants no write permission
+//   interpolate ${{ inputs.seeds }} into the script  -> passes both inputs through env
+//   rename the measure file in the workflow only     -> runs the file every failure's rerun line names
+//   delete `VITE_RUN_MEASURE: '1'`                   -> runs the file every failure's rerun line names
+//   delete timeout-minutes                           -> bounds its runtime and keeps its output
+// ---------------------------------------------------------------------------
+describe('scenario-sweep.yml: the on-demand generated-scenario sweep (issue #760)', () => {
+  const SWEEP = read('.github/workflows/scenario-sweep.yml');
+
+  it('is dispatch-only, so no pull request pays for the sweep', () => {
+    const triggers = SWEEP.slice(SWEEP.indexOf('\non:'), SWEEP.indexOf('\npermissions:'));
+    expect(triggers).toContain('workflow_dispatch:');
+    for (const forbidden of ['pull_request_target:', 'pull_request:', 'push:', 'schedule:', 'workflow_run:']) {
+      expect(triggers, `scenario-sweep.yml triggers on ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('grants no write permission and exposes no secret', () => {
+    expect(SWEEP).toContain('permissions:\n  contents: read\n');
+    expect(SWEEP, 'a write permission appeared').not.toMatch(/:\s*write\b/);
+    expect(SWEEP, 'a token was exposed to the run').not.toContain('secrets.');
+  });
+
+  it('passes both inputs through env rather than into script text', () => {
+    // Both inputs are free strings. Every `run:` line and every line of a block body is
+    // checked; a body is the lines indented further than its own `run:` key.
+    const lines = SWEEP.split('\n');
+    const scripts: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const run = /^(\s*)run: (.*)$/.exec(lines[i]);
+      if (!run) continue;
+      scripts.push(run[2]);
+      const indent = run[1].length;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() !== '' && lines[j].length - lines[j].trimStart().length <= indent) break;
+        scripts.push(lines[j]);
+      }
+    }
+    expect(scripts.join('\n'), 'the sweep step was not found; this test would pass vacuously')
+      .toContain('generated-scenarios.measure.test.ts');
+    for (const line of scripts) {
+      expect(line, 'an input is interpolated into a run: script').not.toMatch(/\$\{\{\s*inputs\./);
+      expect(line, 'a github context value is interpolated into a run: script').not.toMatch(/\$\{\{\s*github\./);
+    }
+    expect(SWEEP).toContain("VITE_SCENARIO_SEEDS: ${{ inputs.seeds || '1-200' }}");
+    expect(SWEEP).toContain("VITE_SCENARIO_TICKS: ${{ inputs.ticks || '3600' }}");
+  });
+
+  it("runs the file every failure's rerun line names, with the measure gate set", () => {
+    // The harness is describe.skip without VITE_RUN_MEASURE, and a skipped file exits 0.
+    const scenarios = read('src/sim/scenarios.ts');
+    const named = /npx vitest run (src\/sim\/\S+\.measure\.test\.ts)/.exec(scenarios)?.[1];
+    expect(named).toBe('src/sim/generated-scenarios.measure.test.ts');
+    expect(SWEEP).toContain(`npx vitest run ${named} `);
+    expect(SWEEP).toContain("VITE_RUN_MEASURE: '1'");
+  });
+
+  it('bounds its runtime and keeps its output', () => {
+    expect(SWEEP).toMatch(/timeout-minutes: \d+/);
+    expect(SWEEP).toContain('retention-days: 14');
+  });
+});
