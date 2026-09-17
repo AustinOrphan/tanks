@@ -955,7 +955,7 @@ describe('world replacement (level switch)', () => {
       if (!t) throw new Error('no hull map found');
       return t;
     };
-    expect(Array.from(hullMap(scene).image.data)).toEqual(Array.from(hullMap(refScene).image.data));
+    expect(Array.from(hullMap(scene).image.data!)).toEqual(Array.from(hullMap(refScene).image.data!));
 
     views.dispose();
     refViews.dispose();
@@ -1775,12 +1775,12 @@ describe('enemy skins (issue #137)', () => {
 
     const brownMap = matOf(scene, 2, 'hull').map as THREE.DataTexture;
     const greyMap = matOf(scene, 3, 'hull').map as THREE.DataTexture;
-    expect(Array.from(brownMap.image.data)).not.toEqual(Array.from(greyMap.image.data));
+    expect(Array.from(brownMap.image.data!)).not.toEqual(Array.from(greyMap.image.data!));
 
     const expectedBrown = createSkinTexture('two-tone', configFor('brown').color, null)!;
     const expectedGrey = createSkinTexture('two-tone', configFor('grey').color, null)!;
-    expect(Array.from(brownMap.image.data)).toEqual(Array.from(expectedBrown.image.data));
-    expect(Array.from(greyMap.image.data)).toEqual(Array.from(expectedGrey.image.data));
+    expect(Array.from(brownMap.image.data!)).toEqual(Array.from(expectedBrown.image.data!));
+    expect(Array.from(greyMap.image.data!)).toEqual(Array.from(expectedGrey.image.data!));
     expectedBrown.dispose();
     expectedGrey.dispose();
     views.dispose();

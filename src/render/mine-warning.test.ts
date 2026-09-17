@@ -203,8 +203,9 @@ describe('the cues are actually VISIBLE, not just computed', () => {
     expect(mat.blending).toBe(THREE.AdditiveBlending);
     const tex = mat.map!;
     expect(tex).toBeDefined();
-    const px = (tex.image as { data: Uint8ClampedArray }).data;
-    const n = tex.image.width as number;
+    const img = tex.image as { data: Uint8ClampedArray; width: number };
+    const px = img.data;
+    const n = img.width;
     const alphaAt = (x: number, y: number) => px[(y * n + x) * 4 + 3];
     const mid = Math.floor((n - 1) / 2);
     expect(alphaAt(mid, mid)).toBeGreaterThan(240); // opaque at the centre
