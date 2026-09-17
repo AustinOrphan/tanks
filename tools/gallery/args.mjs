@@ -152,6 +152,8 @@ export const SPAWN_ANIM_IDS = ['warp', 'rise', 'beacon'];
  */
 export const MOMENT_IDS = [
   'fire', 'destroyed', 'respawn', 'ricochet', 'wall-break', 'mine-cycle',
+  // Issue #774: a ricochet shell spending both bounces, for the shell trail's 2 -> 1 -> 0.
+  'ricochet-twice',
   // Issue #276's proximity half: the reaction window between tripping an armed mine and
   // its blast, which no other moment stages (mine-cycle runs a fuse out, wall-break shoots).
   'mine-proximity',
@@ -257,7 +259,7 @@ export function parseArgs(argv) {
     // ordinary frame with no marker in it and report success. That silent no-op is the
     // bug this whole change exists to end; reintroducing it for a sibling flag would be
     // an odd way to celebrate.
-    const withRings = ['coop', 'identity', 'shelltrail'];
+    const withRings = ['coop', 'identity', 'shelltrail', 'shelltrail-cross'];
     const chosen = out.elements.split(',').map((e) => e.trim()).filter(Boolean);
     if (!chosen.some((e) => withRings.includes(e))) {
       throw new Error(
@@ -278,8 +280,8 @@ export function parseArgs(argv) {
     // tank renders an ordinary frame and would report success. `game` is refused too, because
     // captureGame builds its own URL from --query; the flag belongs there as
     // `--query 'dev=1&shellTrail=segments'`.
-    const shellElements = ['coop', 'shell', 'shellring', 'shelltrail'];
-    const shellMoments = ['fire', 'ricochet'];
+    const shellElements = ['coop', 'shell', 'shellring', 'shelltrail', 'shelltrail-cross'];
+    const shellMoments = ['fire', 'ricochet', 'ricochet-twice'];
     const chosen = out.elements.split(',').map((e) => e.trim()).filter(Boolean);
     const ok = out.scene === 'gallery'
       ? chosen.some((e) => shellElements.includes(e))
