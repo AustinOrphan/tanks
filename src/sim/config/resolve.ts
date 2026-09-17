@@ -24,6 +24,10 @@ const PROJECTILE_BULLET_TYPE: Record<ProjectileType, BulletType> = {
  * `K` so the SAME resolver serves both the game roster (keyed by the sim's TankKind)
  * and the Wii reference taxonomy (keyed by TankType) -- see config/reference/.
  *
+ * Provenance (issue #783): the supplied resolver is first-party. It was written for this
+ * project with ChatGPT, in a conversation that cites no other codebase. See
+ * CONTENT-LICENSE.md, "Where the supplied tank configuration came from".
+ *
  * Pure: definition + numbers in, plain object out. No sim/render/DOM dependency.
  */
 export function resolveTankConfig<K extends string>(

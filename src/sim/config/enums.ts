@@ -4,6 +4,10 @@
 // (config/reference/) and the game's shipped 4-kind roster (config/roster.ts).
 // Numbers live in a BalanceConstants table, never here.
 //
+// Provenance (issue #783): the drop is first-party. It was written for this project with
+// ChatGPT from a description of Wii Play: Tanks!'s enemy types, in a conversation that cites
+// no other codebase. See CONTENT-LICENSE.md, "Where the supplied tank configuration came from".
+//
 // This file is under src/sim/ and therefore pure: it names classes, it imports
 // nothing. See src/sim/purity.test.ts.
 

@@ -109,7 +109,10 @@ export const GAME_BALANCE: BalanceConstants = {
   // held solutions, ai/index.ts). EVERY profile field is now consumed --
   // the carried-but-unread list is empty. Values
   // are the Wii reference figures except where noted: this is the GAME's table,
-  // retuned to describe the game's actual tanks.
+  // retuned to describe the game's actual tanks. "Wii reference figure" here means the
+  // value in config/reference/balance-constants.json, which is a ChatGPT starting point
+  // written for this project, "not verified Wii Play values" in its own words, and not a
+  // measurement of the original game (issue #783; CONTENT-LICENSE.md).
   // The per-profile numbers now live in data/ai-profiles.json, validated at
   // load (validate.ts). ONE authored deviation from the Wii reference (review
   // recounted: 1 of 76 field slots), since the JSON cannot carry comments:
