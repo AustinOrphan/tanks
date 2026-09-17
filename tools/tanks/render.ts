@@ -4,11 +4,15 @@
  * Pure string building: generate.mjs writes the block and doc.test.ts compares the
  * committed README against this exact function.
  */
+import { arenaById } from '../../src/sim/config/arenas';
 import { GAME_BALANCE } from '../../src/sim/config/balance';
+import { CAMPAIGN_LEVELS } from '../../src/sim/config/campaign';
 import { AIBehavior, TankAbility } from '../../src/sim/config/enums';
+import { firstAppearanceFor } from '../../src/sim/config/first-appearance';
 import { GAME_TANK_DEFS } from '../../src/sim/config/roster';
 import type { TankDefinition } from '../../src/sim/config/types';
 import { TANK_KINDS } from '../../src/sim/config/validate';
+import type { TankKind } from '../../src/sim/types';
 
 export const ROSTER_START = '<!-- BEGIN GENERATED ENEMY ROSTER -->';
 export const ROSTER_END = '<!-- END GENERATED ENEMY ROSTER -->';
@@ -43,14 +47,42 @@ function shells(definition: TankDefinition): string {
   ].join('; ');
 }
 
+/** The First mission cell for a kind the campaign never spawns: absent, not a number (issue #777). */
+export const NOT_IN_CAMPAIGN = 'Not in the campaign';
+
+export function firstMissionCell(appearance: number | null): string {
+  return appearance === null ? NOT_IN_CAMPAIGN : String(appearance);
+}
+
+/**
+ * The roster's row order, with no authored number to sort by (issue #777): earliest first
+ * appearance first; kinds that first appear at the same level keep catalog order (the order
+ * `kinds` is given in); kinds the campaign never spawns come last, in catalog order.
+ */
+export function rosterOrder<K extends string>(
+  kinds: readonly K[],
+  appearance: (kind: K) => number | null,
+): K[] {
+  const catalog = new Map(kinds.map((kind, i) => [kind, i]));
+  return [...kinds].sort((a, b) => {
+    const fa = appearance(a);
+    const fb = appearance(b);
+    if (fa !== fb) {
+      if (fa === null) return 1;
+      if (fb === null) return -1;
+      return fa - fb;
+    }
+    return (catalog.get(a) as number) - (catalog.get(b) as number);
+  });
+}
+
 function enemyRows(): string[] {
-  return TANK_KINDS
-    .filter((kind) => kind !== 'player')
-    .sort((a, b) => GAME_TANK_DEFS[a].firstMission - GAME_TANK_DEFS[b].firstMission)
-    .map((kind) => {
-      const definition = GAME_TANK_DEFS[kind];
-      return `| ${definition.displayName} | ${definition.firstMission} | ${movement(definition)} | ${sentenceCase(definition.aiProfile)} | ${mines(definition)} | ${shells(definition)} |`;
-    });
+  const appearance = (kind: TankKind): number | null => firstAppearanceFor(CAMPAIGN_LEVELS, arenaById, kind);
+  const enemies = TANK_KINDS.filter((kind) => kind !== 'player');
+  return rosterOrder(enemies, appearance).map((kind) => {
+    const definition = GAME_TANK_DEFS[kind];
+    return `| ${definition.displayName} | ${firstMissionCell(appearance(kind))} | ${movement(definition)} | ${sentenceCase(definition.aiProfile)} | ${mines(definition)} | ${shells(definition)} |`;
+  });
 }
 
 export function renderEnemyRosterBlock(): string {
@@ -60,7 +92,9 @@ export function renderEnemyRosterBlock(): string {
 
 The canonical roster currently defines ${rows.length} enemy types. Its gameplay data lives in
 [\`tank-defs.json\`](src/sim/config/data/tank-defs.json) and
-[\`ai-profiles.json\`](src/sim/config/data/ai-profiles.json).
+[\`ai-profiles.json\`](src/sim/config/data/ai-profiles.json). First mission is not authored: it is
+the earliest level in [\`campaign.json\`](src/sim/config/data/campaign.json) whose arena spawns
+that enemy.
 
 | Enemy | First mission | Movement | AI profile | Mines | Shells |
 | --- | ---: | --- | --- | --- | --- |

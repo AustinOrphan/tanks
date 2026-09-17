@@ -1,0 +1,15 @@
+{
+  "id": "first-appearance-numbers-levels-by-id",
+  "file": "src/sim/config/first-appearance.ts",
+  "find": "        if (SPAWN_LETTERS[ch] === kind) return i + 1;",
+  "replace": "        if (SPAWN_LETTERS[ch] === kind) return Number(levels[i].id.replace(/\\D/g, ''));",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/first-appearance.test.ts",
+    "tools/tanks/doc.test.ts"
+  ],
+  "killedBy": [
+    "firstAppearanceFor (issue #777) orders by position in the level list, never by the level id"
+  ],
+  "why": "Level ids are opaque and order comes only from position (campaign-types.ts). Today's ids happen to be level-01 to level-05 in order, so reading the number out of the id gives the same answers on the shipped campaign and survives everything but a campaign whose ids and positions disagree, which is exactly what #360's reorder will produce."
+}

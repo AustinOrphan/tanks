@@ -38,8 +38,6 @@ export interface TankDefinition {
   displayName: string;
   /** Presentation only (render reads it; the pure sim never does). CSS hex. */
   color: string;
-  /** 1-based mission this tank first appears in. Reference/expansion metadata. */
-  firstMission: number;
   singlePlayerOnly: boolean;
   movementSpeed: MovementSpeed;
   rotationSpeed: RotationSpeed;
@@ -320,7 +318,6 @@ export interface ResolvedWeaponConfig extends ProjectileBalance {
 export interface ResolvedTankConfig {
   displayName: string;
   color: string;
-  firstMission: number;
   singlePlayerOnly: boolean;
   /** World units per second. */
   movementSpeed: number;

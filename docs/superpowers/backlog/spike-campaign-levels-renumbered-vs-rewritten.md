@@ -41,7 +41,8 @@ re-verified 2026-08-11 after PR #145: `src/sim/config/data/arenas.json` holds ex
 shipped sequence rather than adopting the spec's renumbered arc, which deepens rather than
 resolves this spike's question). `firstMission` is still only validated as a non-negative integer
 (`config/validate.ts`'s `nonNegInt` call for it) and copied through `config/resolve.ts` — the spec's
-"enforced load-time rule" does not exist and **nothing reads the field**. And the plan's
+"enforced load-time rule" does not exist and **nothing reads the field**. (Since #777 the field
+no longer exists: first appearance is derived per campaign by `config/first-appearance.ts`.) And the plan's
 boards are specified as `"cols": 9, "rows": 7, "cellSize": 2`, which is pre-#75 geometry:
 shipped arenas are 33x27 at `cellSize` 0.667. Its grids cannot be pasted in as written.
 

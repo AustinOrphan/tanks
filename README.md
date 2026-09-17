@@ -18,16 +18,18 @@ physics with in-tick reflection, proximity mines, and a data-driven enemy roster
 
 The canonical roster currently defines 6 enemy types. Its gameplay data lives in
 [`tank-defs.json`](src/sim/config/data/tank-defs.json) and
-[`ai-profiles.json`](src/sim/config/data/ai-profiles.json).
+[`ai-profiles.json`](src/sim/config/data/ai-profiles.json). First mission is not authored: it is
+the earliest level in [`campaign.json`](src/sim/config/data/campaign.json) whose arena spawns
+that enemy.
 
 | Enemy | First mission | Movement | AI profile | Mines | Shells |
 | --- | ---: | --- | --- | --- | --- |
 | Brown | 1 | Stationary | Static basic | No | Standard shell; slow fire; max 5; 1 bounce |
-| Grey | 2 | Medium | Defensive basic | Yes (2) | Standard shell; medium fire; max 5; 1 bounce |
+| Grey | 1 | Medium | Defensive basic | Yes (2) | Standard shell; medium fire; max 5; 1 bounce |
+| Teal | 1 | Slow | Mobile mine layer | Yes (2) | Ricochet rocket; fast fire; max 5; 2 bounces |
 | Olive | 3 | Slow | Defensive rocket | No | Rocket; slow fire; max 1; no bounces |
-| Teal | 5 | Slow | Mobile mine layer | Yes (2) | Ricochet rocket; fast fire; max 5; 2 bounces |
-| Yellow | 8 | Medium | Mobile mine layer | Yes (4) | Standard shell; medium fire; max 1; 1 bounce |
-| Green | 12 | Stationary | Ricochet sniper | No | Ricochet rocket; slow fire; max 5; 2 bounces |
+| Green | 4 | Stationary | Ricochet sniper | No | Ricochet rocket; slow fire; max 5; 2 bounces |
+| Yellow | Not in the campaign | Medium | Mobile mine layer | Yes (4) | Standard shell; medium fire; max 1; 1 bounce |
 <!-- END GENERATED ENEMY ROSTER -->
 
 ## Controls

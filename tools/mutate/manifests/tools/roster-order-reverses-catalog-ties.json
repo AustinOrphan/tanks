@@ -1,0 +1,16 @@
+{
+  "id": "roster-order-reverses-catalog-ties",
+  "file": "tools/tanks/render.ts",
+  "find": "    return (catalog.get(a) as number) - (catalog.get(b) as number);\n  });",
+  "replace": "    return (catalog.get(b) as number) - (catalog.get(a) as number);\n  });",
+  "expect": "killed",
+  "tests": [
+    "src/sim/config/first-appearance.test.ts",
+    "tools/tanks/doc.test.ts"
+  ],
+  "killedBy": [
+    "README enemy roster is generated, not hand-edited orders rows by first appearance, then catalog order, with absent kinds last",
+    "README enemy roster is generated, not hand-edited contains exactly one current generated block"
+  ],
+  "why": "Ties are real on the shipped campaign: three enemies first appear in level 1. Reversing the tie-break reorders those rows, so the committed README block stops matching as well as the synthetic case."
+}

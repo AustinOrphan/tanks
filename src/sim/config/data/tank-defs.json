@@ -2,7 +2,6 @@
   "player": {
     "displayName": "Player",
     "color": "#3d7bd6",
-    "firstMission": 0,
     "singlePlayerOnly": false,
     "movementSpeed": "MEDIUM",
     "rotationSpeed": "MEDIUM",
@@ -21,7 +20,6 @@
   "brown": {
     "displayName": "Brown",
     "color": "#8a5a2b",
-    "firstMission": 1,
     "singlePlayerOnly": false,
     "movementSpeed": "MEDIUM",
     "rotationSpeed": "SLOW",
@@ -38,7 +36,6 @@
   "grey": {
     "displayName": "Grey",
     "color": "#8890a0",
-    "firstMission": 2,
     "singlePlayerOnly": false,
     "movementSpeed": "MEDIUM",
     "rotationSpeed": "MEDIUM",
@@ -57,7 +54,6 @@
   "teal": {
     "displayName": "Teal",
     "color": "#2bb0a6",
-    "firstMission": 5,
     "singlePlayerOnly": false,
     "movementSpeed": "SLOW",
     "rotationSpeed": "SLOW",
@@ -77,7 +73,6 @@
   "olive": {
     "displayName": "Olive",
     "color": "#7a8f3c",
-    "firstMission": 3,
     "singlePlayerOnly": false,
     "movementSpeed": "SLOW",
     "rotationSpeed": "SLOW",
@@ -94,7 +89,6 @@
   "green": {
     "displayName": "Green",
     "color": "#0A6E42",
-    "firstMission": 12,
     "singlePlayerOnly": false,
     "movementSpeed": "MEDIUM",
     "rotationSpeed": "SLOW",
@@ -113,7 +107,6 @@
   "yellow": {
     "displayName": "Yellow",
     "color": "#E7C928",
-    "firstMission": 8,
     "singlePlayerOnly": false,
     "movementSpeed": "MEDIUM",
     "rotationSpeed": "MEDIUM",

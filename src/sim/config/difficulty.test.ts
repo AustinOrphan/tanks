@@ -48,7 +48,7 @@ function aiProfile(over: Partial<AIProfileBalance> = {}): AIProfileBalance {
 function cfg(over: Partial<ResolvedTankConfig> = {}, aiOver: Partial<AIProfileBalance> = {}): ResolvedTankConfig {
   const ai = aiProfile(aiOver);
   return {
-    displayName: 'Synthetic', color: '#000000', firstMission: 0, singlePlayerOnly: false,
+    displayName: 'Synthetic', color: '#000000', singlePlayerOnly: false,
     movementSpeed: 3, rotationSpeed: 5,
     ai, behavior: ai.behavior,
     weapon: {
