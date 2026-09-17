@@ -171,15 +171,6 @@ describe('shell bounce-trail after a bounce (issue #774)', () => {
     expect(d.yaw).toBeCloseTo(-Math.PI / 4, 5);
   });
 
-  it('leaves a bounced shell with no wall within its reach laid straight', () => {
-    const { trail, mesh } = setup();
-    const w = worldOf([bounced(-3, 3)], [wallRightOf(0.2)]);
-    trail.sync(w, w, 0);
-    const d = dashAt(mesh, 0);
-    expect(d.x).toBeCloseTo(-3 + s * back(0), 5);
-    expect(d.y).toBeCloseTo(3 - s * back(0), 5);
-  });
-
   it('lays a shell that has not bounced straight, even with a wall close behind it', () => {
     const { trail, mesh } = setup();
     // A fresh normal shell (budget 1, one left) flying -x away from a face 0.1 behind it: it

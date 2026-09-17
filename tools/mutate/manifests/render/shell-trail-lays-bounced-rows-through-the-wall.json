@@ -1,7 +1,7 @@
 {
   "id": "shell-trail-lays-bounced-rows-through-the-wall",
   "file": "src/render/shell-trail.ts",
-  "find": "      const folds = bounced && wallBehind(curr.walls, x, y, -dx, -dy, rowReach(segments));",
+  "find": "      const folds = bounced && wallBehind(curr.walls, x, y, -dx, -dy);",
   "replace": "      const folds = false;",
   "expect": "killed",
   "tests": [

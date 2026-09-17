@@ -31,8 +31,8 @@ import { MAX_TRAIL_SEGMENTS, trailSegmentsFor } from '../presentation/shell-trai
  * wall would draw that shell as a zero, the one misreading the count must not allow.
  *
  * So a shell that has bounced (its `bouncesLeft` is below its type's budget, the sim's own
- * reckoning in `stepBullets`) looks straight back for the nearest live wall face within the
- * row's reach. It flew straight from that face since the bounce, so the face is where it
+ * reckoning in `stepBullets`) looks straight back for the nearest live wall face. It flew
+ * straight from that face since the bounce, so the face is where it
  * turned: dashes nearer than the face stay on the current leg, and dashes beyond it are laid
  * back along the leg it came in on, the current heading reflected in the face. Still state,
  * not history: nothing is remembered between frames, and a posed still folds the same way.
@@ -87,23 +87,22 @@ const DASH_OPACITY = 0.95;
  */
 export const MAX_SHELL_TRAIL_DASHES = 64 * MAX_TRAIL_SEGMENTS;
 
-/** Where the row's last dash ends behind the shell's centre, for `segments` dashes. */
-function rowReach(segments: number): number {
-  return SHELL_TAIL + DASH_LEAD + segments * (DASH_LEN + DASH_GAP) - DASH_GAP;
-}
-
 /** Scratch for `wallBehind`: distance to the face and its outward normal. */
 const behind = { d: 0, nx: 0, ny: 0 };
 
 /**
- * The nearest live wall face straight behind (x, y) along (bx, by), within `reach`. Writes
- * `behind` and returns true, or returns false. An axis-aligned slab test like the sim's
- * `raySegmentVsAABB`, but allocation-free, since it runs for every bounced shell every frame. A
- * ray that starts inside a wall crosses no face and finds nothing.
+ * The nearest live wall face straight behind (x, y) along (bx, by). Writes `behind` and returns
+ * true, or returns false. An axis-aligned slab test like the sim's `raySegmentVsAABB`, but
+ * allocation-free, since it runs for every bounced shell every frame. A ray that starts inside a
+ * wall crosses no face and finds nothing.
+ *
+ * UNBOUNDED, deliberately. A face farther back than the row cannot move any dash -- no dash is
+ * past it -- so bounding the search by the row's reach changed nothing a frame shows (a mutation
+ * dropping the bound survived every test) and was removed rather than kept untestable.
  */
-function wallBehind(walls: readonly Wall[], x: number, y: number, bx: number, by: number, reach: number): boolean {
+function wallBehind(walls: readonly Wall[], x: number, y: number, bx: number, by: number): boolean {
   let found = false;
-  let best = reach;
+  let best = Infinity;
   for (const wall of walls) {
     if (wall.destroyed) continue;
     const a = wall.aabb;
@@ -195,7 +194,7 @@ export function createShellTrailSystem(scene: THREE.Scene): ShellTrailSystem {
       const dy = b.vel.y / speed;
       // A shell that has bounced may have the wall it left closer than its row (see the header).
       const bounced = b.bouncesLeft < bulletConfig[b.type].bounces;
-      const folds = bounced && wallBehind(curr.walls, x, y, -dx, -dy, rowReach(segments));
+      const folds = bounced && wallBehind(curr.walls, x, y, -dx, -dy);
       const corner = folds ? behind.d : Infinity;
       // The leg it came in on: the current heading reflected in the face it left.
       const dot = dx * behind.nx + dy * behind.ny;

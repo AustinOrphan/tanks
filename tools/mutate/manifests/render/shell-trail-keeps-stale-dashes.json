@@ -7,9 +7,8 @@
   "tests": [
     "src/render/shell-trail.test.ts"
   ],
-  "why": "Never lowers the instance count, so dashes from an earlier frame keep drawing after a shell bounces (its row shortens) or leaves the board. The cue exists to show the count DROPPING at a ricochet; stale instances left at their old matrices would show the old count, floating where the shell used to be.",
+  "why": "Never lowers the instance count, so dashes from an earlier frame keep drawing after a shell bounces (its row shortens) or leaves the board. The cue exists to show the count DROPPING at a ricochet; stale instances left at their old matrices would show the old count, floating where the shell used to be. RE-MEASURED (issue #774): the turn case no longer fails here -- under the direct count both of its syncs draw one dash, so a stale count reads the same -- and is dropped from killedBy; the dead-shell case, whose count goes from two to none, still does.",
   "killedBy": [
-    "shell bounce-trail system (issue #688) turns the row with the shell the frame its heading turns",
     "shell bounce-trail system (issue #688) draws nothing for a dead shell, and forgets a shell that has left the world"
   ]
 }
