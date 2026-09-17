@@ -25,11 +25,11 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
  */
 export const PROVENANCE_MARKERS = Object.freeze([
   /Sun Microsystems/,
-  /the V8 project authors/,
+  /\bV8\b/,
   /\bfdlibm\b/,
   /\bnetlib\b/,
   /transliterat/i,
-  /ported line-by-line/i,
+  /\bported\b/i,
 ]);
 
 /**
@@ -73,6 +73,10 @@ export const FIRST_PARTY_WITH_MARKERS = Object.freeze({
     '__LO macros do in C. The macros are named as the reference; no fdlibm code is copied.',
   'tools/baseline/angles.ts': 'Names fdlibm as the comparison target of the determinism baseline; no ported code.',
   'tools/baseline/tick-cost.mjs': 'Names fdlibm as one side of a cost comparison; no ported code.',
+  'src/input/touch.ts':
+    'Names V8 among the engines where exactly-specified double operations are already ' +
+    'bit-identical, as the reason aim quantization needs no vendoring; no ported code.',
+  'tools/baseline/run.mjs': "Names the pinned V8 angle baseline in an error message; no ported code.",
 });
 
 /** Every file any vendored source lists, sorted and deduplicated. */

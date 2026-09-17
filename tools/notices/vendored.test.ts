@@ -56,6 +56,9 @@ describe('vendored third-party source (issue #771)', () => {
     for (const [file, reason] of Object.entries(FIRST_PARTY_WITH_MARKERS)) {
       expect(files, `${file} is declared first-party but is not in the scan`).toContain(file);
       expect(reason.length, `${file} gives no reason`).toBeGreaterThan(20);
+      // An exemption for a file no marker matches is stale, and hides a narrowed marker.
+      const text = readFileSync(join(ROOT, file), 'utf8');
+      expect(PROVENANCE_MARKERS.some((m: RegExp) => m.test(text)), `${file} matches no marker`).toBe(true);
     }
     // Negative control, which also shows the scan reads real files: without hypot.ts on the
     // vendored list, the scan names it.
