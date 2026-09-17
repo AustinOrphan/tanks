@@ -16,6 +16,9 @@ import { LITERALS } from './devtools-menu';
 // still true rather than asserting it. A TEST may read a fixture; this is the same shape
 // `index-html.test.ts` uses for index.html.
 import hudSource from './hud.ts?raw';
+// The extracted pane modules (issue #556). A pane's markup and class toggles leave hud.ts's text,
+// so every source scan below that asks "what does the HUD write" reads these too.
+const paneSources = import.meta.glob('./*-pane.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 import { createHud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
 import { STOCK_CUE_MS } from '../presentation/stock-cue';
@@ -770,14 +773,23 @@ describe('hud.css is syntactically whole', () => {
     // but hud.css never declares is invisible to it. That is exactly what
     // `.hud-versus-mode-note--hidden` was (issue #694): toggled on whenever Teams is offered,
     // with no rule anywhere, so the empty note's paragraph margins stayed in the mode row.
-    // This derives the list the other way round, from hud.ts's own text.
+    // This derives the list the other way round, from hud.ts's own text and, since issue #556,
+    // from every extracted pane module's text as well.
     const declared = new Set([...stripComments(css).matchAll(/\.([a-z0-9-]+--hidden)\b/g)].map((m) => m[1]));
-    const written = [...new Set([...hudSource.matchAll(/['"`\s]([a-z][a-z0-9-]*--hidden)\b/g)].map((m) => m[1]))];
+    const writtenIn = (sources: readonly string[]): string[] => [
+      ...new Set(sources.flatMap((src) => [...src.matchAll(/['"`\s]([a-z][a-z0-9-]*--hidden)\b/g)].map((m) => m[1]))),
+    ];
+    expect(Object.keys(paneSources), 'the pane glob found nothing: panes would go unscanned').toContain('./customize-pane.ts');
+    const written = writtenIn([hudSource, ...Object.values(paneSources)]);
     expect(written.length, 'the scan found almost nothing; this test would pass vacuously').toBeGreaterThan(40);
     expect(
       written.filter((cls) => !declared.has(cls)),
-      'a --hidden modifier hud.ts writes that hud.css never declares',
+      'a --hidden modifier hud.ts or a pane module writes that hud.css never declares',
     ).toEqual([]);
+    // Negative control: a pane source writing an undeclared modifier is caught by the same scan.
+    expect(writtenIn(["el.classList.add('hud-planted--hidden');"]).filter((cls) => !declared.has(cls))).toEqual([
+      'hud-planted--hidden',
+    ]);
   });
 
   it('hides the Versus mode note while Teams is offered, through the real HUD and stylesheet', () => {
