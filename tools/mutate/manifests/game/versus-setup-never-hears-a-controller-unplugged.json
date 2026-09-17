@@ -1,0 +1,17 @@
+{
+  "id": "versus-setup-never-hears-a-controller-unplugged",
+  "file": "src/game/route-ui.ts",
+  "find": "    deps.host.addEventListener('gamepaddisconnected', onVersusSetupHotplug);",
+  "replace": "    void onVersusSetupHotplug;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createRouteHost: Versus Setup reads the controllers already connected (issue #785) follows a controller unplugged and plugged back in while the pane is open",
+    "createRouteHost: Versus Setup reads the controllers already connected (issue #785) holds its hotplug listeners for exactly as long as the pane is up",
+    "the application routes work with no gameplay session behind them the versus setup pane adds and removes its own hotplug listeners around open/close"
+  ],
+  "why": "A controller pulled while the pane is open must move its slot to Unassigned and refuse Start; without the listener the pane keeps offering a device that is gone, and Start binds a slot that reads nothing."
+}

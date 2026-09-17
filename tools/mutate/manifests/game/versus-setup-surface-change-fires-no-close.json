@@ -1,0 +1,16 @@
+{
+  "id": "versus-setup-surface-change-fires-no-close",
+  "file": "src/game/hud.ts",
+  "find": "    cleanupHide(versusSetupView, 'hud-versus-setup--hidden');\n    closeVersusSetupSubscribers();",
+  "replace": "    cleanupHide(versusSetupView, 'hud-versus-setup--hidden');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "killedBy": [
+    "createHud application transition contract closes the versus setup pane when a surface change takes it away (issue #785)",
+    "createRouteHost: Versus Setup reads the controllers already connected (issue #785) holds its hotplug listeners for exactly as long as the pane is up"
+  ],
+  "why": "A match started from the pane leaves it through setState's unconditional close, not a Back. Settings' listeners leaked this way before issue #227; this is the same hole for the versus pane."
+}
