@@ -35,14 +35,14 @@ These files load only after Claude Code reads a file matching their `paths` fron
 | Rule | Lines | UTF-8 bytes |
 | --- | ---: | ---: |
 | `.claude/rules/simulation.md` | 32 | 1896 |
-| `.claude/rules/game.md` | 44 | 2477 |
+| `.claude/rules/game.md` | 47 | 2740 |
 | `.claude/rules/rendering.md` | 32 | 1437 |
 | `.claude/rules/audio.md` | 20 | 778 |
 | `.claude/rules/presentation.md` | 19 | 944 |
 | `.claude/rules/testing.md` | 47 | 2772 |
 | `.claude/rules/workflows.md` | 37 | 1722 |
 | `.claude/rules/documentation.md` | 39 | 2029 |
-| **Total conditional rules** | — | **14055** |
+| **Total conditional rules** | — | **14318** |
 
 The documents in this directory are normal links and remain unloaded until read.
 

@@ -1,0 +1,19 @@
+{
+  "id": "versus-setup-key-renamed-without-the-privacy-policy",
+  "file": "src/game/versus-setup-store.ts",
+  "find": "export const VERSUS_SETUP_KEY = 'tanks.versus.v1';",
+  "replace": "export const VERSUS_SETUP_KEY = 'tanks.versus.v2';",
+  "expect": "killed",
+  "tests": [
+    "src/game/persistence-inventory.test.ts"
+  ],
+  "why": "Issue #764's rename case: the inventory follows the store's constant automatically, so it is the privacy policies that would silently keep naming the old key. Both tables and both 'except' sentences must follow the rename.",
+  "killedBy": [
+    "persistence inventory: the privacy policies PRIVACY.md lists every current key with the inventory's description, in inventory order",
+    "persistence inventory: the privacy policies PRIVACY.md says which listed keys a save file leaves out, and no others",
+    "persistence inventory: the privacy policies PRIVACY.md names no key that is neither current nor classified legacy",
+    "persistence inventory: the privacy policies public/privacy.html lists every current key with the inventory's description, in inventory order",
+    "persistence inventory: the privacy policies public/privacy.html says which listed keys a save file leaves out, and no others",
+    "persistence inventory: the privacy policies public/privacy.html names no key that is neither current nor classified legacy"
+  ]
+}

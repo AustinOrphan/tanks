@@ -20,6 +20,9 @@ paths:
 - A new store must be added to `GameStores`, to `createStores`, and to `STORE_WRITES` in
   `src/game/storage.test.ts`; the inventory test fails until it is, which is what stops a
   store bypassing the developer namespace.
+- Every persisted key is classified in `src/game/persistence-inventory.ts`. A new or renamed
+  key updates that file, the data tables in `PRIVACY.md` and `public/privacy.html`, and
+  `npm run legal`; `persistence-inventory.test.ts` fails until all of them agree.
 - A campaign run owns its shared lives and campaign progress. Practice/level-select state
   must not create or mutate a campaign run.
 - Replay recording decorates the effective per-tick input. It spans one world; its data

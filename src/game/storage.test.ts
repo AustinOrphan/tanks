@@ -15,20 +15,20 @@ import {
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { exportSave, importSave, SAVE_FORMAT, SAVE_VERSION } from './save';
 import { PROGRESS_KEY } from './progress';
-import { STATS_KEY, RUN_STATS_KEY } from './stats';
+import { STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
-import { SETTINGS_KEY } from './settings';
-import { ACHIEVEMENTS_KEY } from './achievements';
-import { RUN_KEY } from './run';
-import { VERSUS_SETUP_KEY } from './versus-setup-store';
+import { PERSISTED_DATA } from './persistence-inventory';
 import { CAMPAIGN_LEVELS } from '../sim/arena';
 
-/** Every key the six stores own, as the wire strings the browser sees. */
-// Eight keys across SEVEN stores: the stats store owns two persisted scopes since the
-// campaign-run tally, so this list is no longer one key per store and the difference is
-// the point -- a second key on an existing store bypasses the developer namespace exactly
-// as easily as a new store does.
-const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, RUN_STATS_KEY, CUSTOM_KEY, SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY, VERSUS_SETUP_KEY];
+/**
+ * Every key the stores own, as the wire strings the browser sees: the persistence inventory
+ * (issue #764) rather than a list retyped here, so the tests below that drive every store
+ * and compare the written set are also the proof that the inventory is complete. More keys
+ * than stores: the stats store owns two persisted scopes since the campaign-run tally, and
+ * a second key on an existing store bypasses the developer namespace exactly as easily as a
+ * new store does.
+ */
+const ALL_KEYS = PERSISTED_DATA.map((datum) => datum.key);
 
 /**
  * One write per store in `GameStores`, keyed by that store's own field name.
@@ -53,7 +53,7 @@ const STORE_WRITES: Record<keyof GameStores, (stores: GameStores) => void> = {
   versusSetup: (s) => s.versusSetup.set({ ...s.versusSetup.get(), players: 4 }),
 };
 
-/** Make each of the seven stores write, so their keys have to appear somewhere. */
+/** Make every store in `GameStores` write, so their keys have to appear somewhere. */
 function writeThroughEveryStore(stores: GameStores): void {
   for (const write of Object.values(STORE_WRITES)) write(stores);
 }
@@ -169,8 +169,23 @@ describe('resolveStorage', () => {
 });
 
 describe('createStores', () => {
+  it('writes each inventory key from the store the inventory says owns it (issue #764)', () => {
+    // One store at a time, on its own storage: the keys that store's write adds must be
+    // exactly the inventory's keys for that store. Catches a key filed under the wrong
+    // store, as well as a store that gained or lost a key without the inventory following.
+    for (const store of Object.keys(STORE_WRITES) as (keyof GameStores)[]) {
+      const storage = createMemoryStorage();
+      const stores = createStores(storage);
+      const before = new Set(rawKeys(storage));
+      STORE_WRITES[store](stores);
+      const added = rawKeys(storage).filter((key) => !before.has(key)).sort();
+      const owned = PERSISTED_DATA.filter((datum) => datum.store === store).map((datum) => datum.key).sort();
+      expect(added, store).toEqual(owned);
+    }
+  });
+
   it('puts all seven stores on the storage it was handed, and no others', () => {
-    // Population: all six stores in GameStores, each driven through a write.
+    // Population: every store in GameStores (seven today), each driven through a write.
     // The exact-set assertion is what catches a store wired to its own private
     // storage (its key would be missing) as well as one writing a stray key.
     const storage = createMemoryStorage();
