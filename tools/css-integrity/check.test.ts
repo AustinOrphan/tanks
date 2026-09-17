@@ -78,18 +78,22 @@ describe('css integrity: what it rejects', () => {
 
 describe('css integrity: what it accepts', () => {
   it('braces inside strings, escapes, url() and comments, and nested at-rules', () => {
-    const css = [
+    // Each case is its own stylesheet, and each lone brace is unpaired within it. Checked
+    // together, the `{` in one string and the `}` in another cancel out, and a scan that
+    // counted braces inside strings passed (measured: mutation entry
+    // css-integrity-counts-braces-inside-strings survived the combined fixture).
+    const cases = [
       '.a::before { content: "{"; }',
       ".b::after { content: '}'; }",
-      '.c\\{ { color: red; }',
-      '.d { background: url(data:image/svg+xml;utf8,<svg>{}</svg>); }',
-      '/* { an open brace in a comment */',
-      '@media (min-width: 40rem) { @supports (display: grid) { .e { display: grid; } } }',
+      '.c::before { content: "\\"{"; }',
+      '.d\\{ { color: red; }',
+      '.e { background: url(data:image/svg+xml;utf8,<svg>{</svg>); }',
+      '/* { an open brace in a comment */ .f { color: red; }',
+      '@media (min-width: 40rem) { @supports (display: grid) { .g { display: grid; } } }',
       '@keyframes spin { from { rotate: 0deg; } to { rotate: 360deg; } }',
-      '.f { color: color-mix(in srgb, red 50%, blue); }',
-      '',
-    ].join('\n');
-    expect(problems(css)).toEqual([]);
+      '.h { color: color-mix(in srgb, red 50%, blue); }',
+    ];
+    expect(cases.map((css) => [css, problems(css)]).filter(([, found]) => found.length > 0)).toEqual([]);
   });
 });
 
