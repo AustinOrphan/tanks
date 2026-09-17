@@ -79,8 +79,10 @@ configuration, and repository tooling.
 
 **Where the supplied tank configuration came from.** `src/sim/config/reference/`, and the
 code in `src/sim/config/enums.ts`, `types.ts` and `resolve.ts` that was adopted or adapted
-from the same files, began as a set of files written for this project with ChatGPT. It was
-not copied from another codebase or a published dataset. The conversation started from a
+from the same files, began as a set of files written for this project with ChatGPT.
+Nothing in that conversation cites or copies another codebase or a published dataset: the
+script that wrote the files builds every value as an inline literal. The conversation
+started from a
 plain-language description of the nine enemy tank types in *Wii Play: Tanks!*: first
 missions, movement, fire rate, simultaneous shots, ricochets, mines and special behaviour.
 The source of that description is not recorded. ChatGPT turned it into the taxonomy,

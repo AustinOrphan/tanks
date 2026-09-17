@@ -26,8 +26,8 @@ import {
 // resolve.ts). Everything else is as supplied.
 //
 // Provenance (issue #783): the supplied files are first-party. They were written for this
-// project with ChatGPT, not copied from another codebase. See CONTENT-LICENSE.md, "Where the
-// supplied tank configuration came from".
+// project with ChatGPT, in a conversation that cites no other codebase. See CONTENT-LICENSE.md,
+// "Where the supplied tank configuration came from".
 // ---------------------------------------------------------------------------
 
 export interface TankWeaponDefinition {
