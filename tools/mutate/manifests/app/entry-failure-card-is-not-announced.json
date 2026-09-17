@@ -1,0 +1,14 @@
+{
+  "id": "entry-failure-card-is-not-announced",
+  "file": "index.html",
+  "find": "          page.setAttribute('role', 'alert');",
+  "replace": "          page.setAttribute('role', 'region');",
+  "expect": "killed",
+  "tests": [
+    "src/game/index-html-entry-failure.test.ts"
+  ],
+  "why": "The card replaces the holding card without navigation, so without `role=\"alert\"` a screen reader is given no reason to read it.",
+  "killedBy": [
+    "index.html entry bundle failure card (issue #770) turns the holding card into a focused alert when the entry script never arrives"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "entry-failure-card-takes-any-element-error",
+  "file": "index.html",
+  "find": "            if (e.target === entry) {",
+  "replace": "            if (e.target instanceof Element) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/index-html-entry-failure.test.ts"
+  ],
+  "why": "Any element's error counts as the entry bundle failing, so a missing icon or image during startup replaces a page that is loading fine with 'could not load'.",
+  "killedBy": [
+    "index.html entry bundle failure card (issue #770) ignores a failed image and an error thrown from any other script"
+  ]
+}
