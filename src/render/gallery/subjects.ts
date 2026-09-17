@@ -294,6 +294,57 @@ export const ELEMENTS: Record<string, ElementDef> = {
       });
     },
   },
+  /**
+   * Shell trails that OVERLAP, for the overlap half of the trail question (issue #774): can a
+   * row read as belonging to the wrong shell, or be hidden, so a live count reads as a
+   * different one or as none? Four close encounters in one still, with two player tanks for
+   * the identity hue as in `shelltrail`:
+   *
+   *  - CROSSING: a 2-bounce shell flying +x, crossed at a right angle by a 1-bounce shell
+   *    flying +y whose row runs back across the first row.
+   *  - SIDE BY SIDE: two shells flying +x 0.25 apart, 2 bounces and 1.
+   *  - NOSE TO TAIL: a 2-bounce shell flying directly behind a 1-bounce shell, close enough
+   *    that the follower's nose sits inside the leader's row.
+   *  - ZERO BESIDE ONE: a 0-bounce shell flying +x beside a 1-bounce shell flying -x, so a row
+   *    passes right by a shell that has none of its own.
+   *
+   * A still, as `shelltrail` is: the trail reads only heading and `bouncesLeft`.
+   */
+  'shelltrail-cross': {
+    width: 6.0, frames: 1, focusY: BULLET_Y,
+    place: (w, x) => {
+      const owners: number[] = [];
+      for (let slot = 0; slot < 2; slot++) {
+        const id = 1 + w.tanks.length;
+        owners.push(id);
+        w.tanks.push({
+          id, kind: 'player', controlledBy: slot,
+          pos: { x: x - 2.6, y: -0.6 + slot * 1.2 }, bodyAngle: 0, turretAngle: 0, alive: true,
+          desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+          aiState: 'idle', aiTimer: 0,
+        });
+      }
+      const shot = (owner: number, type: 'normal' | 'fast' | 'ricochet', bouncesLeft: number, px: number, py: number, vx: number, vy: number) => {
+        w.bullets.push({
+          id: 100 + w.bullets.length, ownerId: owners[owner], type, bouncesLeft, alive: true,
+          pos: { x: px, y: py }, vel: { x: vx, y: vy },
+        });
+      };
+      const v = NORMAL_SPEED;
+      // Crossing, back left.
+      shot(0, 'ricochet', 2, x - 0.9, -1.0, v, 0);
+      shot(1, 'normal', 1, x - 1.5, -0.55, 0, v);
+      // Side by side, back right.
+      shot(0, 'ricochet', 2, x + 1.2, -1.1, v, 0);
+      shot(1, 'normal', 1, x + 1.2, -0.85, v, 0);
+      // Nose to tail, front left.
+      shot(0, 'normal', 1, x - 0.6, 0.6, v, 0);
+      shot(1, 'ricochet', 2, x - 1.1, 0.6, v, 0);
+      // Zero beside one, front right.
+      shot(0, 'fast', 0, x + 1.0, 0.95, v, 0);
+      shot(1, 'normal', 1, x + 1.6, 1.2, -v, 0);
+    },
+  },
   blast: {
     width: 5.4, frames: BLAST_LIFE, focusY: 0.6,
     place: (w, x, age) => {

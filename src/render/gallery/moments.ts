@@ -394,6 +394,53 @@ export const MOMENTS: Record<string, MomentDef> = {
   })(),
 
   /**
+   * A ricochet shell's whole budget spent, for the shell bounce-trail (issue #774): 2 bounces
+   * left, then 1, then 0, then stopped. `ricochet` above shows a normal shell's single
+   * bounce; this is the only moment where a shell still has a bounce to come AFTER bouncing,
+   * which is the one state whose trail can point back through the wall it just left.
+   *
+   * No tank fires it. The shell is placed in the tick-0 world, so the moment needs no weapon
+   * that fires ricochet rockets and no aim, and the corridor alone decides the bounces. Two
+   * solid walls 2 units apart, and a heading of 50 degrees off the corridor axis at the
+   * ricochet speed of 4.
+   *
+   * The corridor runs AWAY from the camera (along world -y). Laid across the view, the near
+   * wall hid the shell at every bounce -- the game camera looks over a wall's top at what is
+   * behind it -- so the transition this moment exists to show was the one thing out of sight.
+   *
+   * MEASURED (throwaway vite-node probe through `simulateMoment`, deleted before commit):
+   * ricochet at events[20] (2 -> 1) and events[59] (1 -> 0); the shell's last live tick is
+   * 97, where it meets a wall with none left and stops without an event. 110 ticks keeps that
+   * last flight and a short hold after it.
+   */
+  'ricochet-twice': (() => {
+    const ANGLE = (50 * Math.PI) / 180;
+    const SPEED = 4;
+    const CORRIDOR: Wall[] = [
+      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 1.0, minY: -9, maxX: 1.3, maxY: 1 } },
+      { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -1.3, minY: -9, maxX: -1.0, maxY: 1 } },
+    ];
+    const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: -1000 }, fire: false, mine: false };
+    return {
+      ticks: 110,
+      expect: [
+        { type: 'ricochet', tick: 20 },
+        { type: 'ricochet', tick: 59 },
+      ],
+      focus: [0, 0.3, -2.6], span: 6,
+      build: () => {
+        const w = buildSoloWorld(CORRIDOR.map((wall) => ({ ...wall, aabb: { ...wall.aabb } })));
+        w.bullets.push({
+          id: w.nextId++, ownerId: 1, type: 'ricochet', bouncesLeft: 2, alive: true,
+          pos: { x: 0, y: -1.0 }, vel: { x: Math.sin(ANGLE) * SPEED, y: -Math.cos(ANGLE) * SPEED },
+        });
+        return w;
+      },
+      input: () => IDLE,
+    };
+  })(),
+
+  /**
    * `wall-destroyed` has exactly one production emission site in the whole sim
    * (`applyBlast`, mines.ts) -- a shell alone never touches a destructible wall's
    * `destroyed` flag; `stepBullets`/`resolveBulletHits` only ever bounce or stop a

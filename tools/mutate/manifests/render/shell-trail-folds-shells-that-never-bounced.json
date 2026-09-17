@@ -1,0 +1,14 @@
+{
+  "id": "shell-trail-folds-shells-that-never-bounced",
+  "file": "src/render/shell-trail.ts",
+  "find": "      const bounced = b.bouncesLeft < bulletConfig[b.type].bounces;",
+  "replace": "      const bounced = true;",
+  "expect": "killed",
+  "tests": [
+    "src/render/shell-trail.test.ts"
+  ],
+  "killedBy": [
+    "shell bounce-trail after a bounce (issue #774) lays a shell that has not bounced straight, even with a wall close behind it"
+  ],
+  "why": "Only a shell that has spent a bounce came off a wall. A fresh shell fired by a tank with its back to a wall would otherwise have its row bent around a corner it never turned, drawing a ricochet that did not happen."
+}
