@@ -1,0 +1,14 @@
+{
+  "id": "workflow-lint-trusts-any-digest",
+  "file": "tools/workflow-lint/lint.mjs",
+  "find": "  if (actual !== expected) {",
+  "replace": "  if (actual !== expected && expected === '') {",
+  "expect": "killed",
+  "tests": [
+    "tools/workflow-lint/lint.test.ts"
+  ],
+  "why": "Issue #761 downloads two executables and runs them in required CI. The pinned SHA-256 is the only thing between a replaced release asset and code execution on the runner; a check that no longer refuses a mismatch would still print the computed digest and let any archive through.",
+  "killedBy": [
+    "workflow lint pins refuses bytes whose digest is not the pinned one"
+  ]
+}

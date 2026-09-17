@@ -40,9 +40,9 @@ These files load only after Claude Code reads a file matching their `paths` fron
 | `.claude/rules/audio.md` | 20 | 778 |
 | `.claude/rules/presentation.md` | 19 | 944 |
 | `.claude/rules/testing.md` | 47 | 2772 |
-| `.claude/rules/workflows.md` | 37 | 1722 |
+| `.claude/rules/workflows.md` | 39 | 1901 |
 | `.claude/rules/documentation.md` | 39 | 2029 |
-| **Total conditional rules** | — | **14318** |
+| **Total conditional rules** | — | **14497** |
 
 The documents in this directory are normal links and remain unloaded until read.
 

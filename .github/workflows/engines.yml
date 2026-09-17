@@ -337,6 +337,8 @@ jobs:
         run: |
           set -euo pipefail
           RUNNER_PID=""
+          # Invoked by `trap cleanup EXIT` below; shellcheck 0.11 cannot see a trap-only call.
+          # shellcheck disable=SC2329
           cleanup() {
             STATUS=$?
             trap - EXIT
