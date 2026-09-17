@@ -12,7 +12,9 @@
  * older one.
  *
  * A capture that fails is recorded in the manifest with its error, and the sweep goes on. The
- * command exits 1 when any capture failed, after writing the manifest.
+ * command exits 1 when any capture failed. The manifest is rewritten after every capture with
+ * `complete: false`, and only the last write says `complete: true`, so a sweep that was stopped
+ * still records what it took, and `compare.mjs` refuses it.
  *
  * `compare.mjs` compares two sweeps. The procedure is in this directory's README.
  */
@@ -57,6 +59,10 @@ async function main() {
   const base = `http://127.0.0.1:${server.address().port}/`;
   const results = [];
   const total = states.length * layouts.length;
+  const source = sourceDescription();
+  await mkdir(out, { recursive: true });
+  const writeManifest = (complete) =>
+    writeFile(resolve(out, MANIFEST), `${JSON.stringify(sweepManifest({ dist, source, options, states, layouts, results, complete }), null, 2)}\n`);
   try {
     for (const state of states) {
       for (const layout of layouts) {
@@ -76,6 +82,7 @@ async function main() {
           results.push({ state: state.id, layout: layout.name, ok: false, error: message });
           console.log(`[${results.length}/${total}] ${state.id} ${layout.name} FAILED: ${message}`);
         }
+        await writeManifest(false);
       }
     }
   } finally {
@@ -83,9 +90,8 @@ async function main() {
     server.close();
   }
 
-  const manifest = sweepManifest({ dist, source: sourceDescription(), options, states, layouts, results });
-  await mkdir(out, { recursive: true });
-  await writeFile(resolve(out, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeManifest(true);
+  const manifest = sweepManifest({ dist, source, options, states, layouts, results, complete: true });
   console.log(`${manifest.captures - manifest.failed} of ${manifest.captures} captures written to ${outArg}; ${manifest.failed} failed`);
   if (manifest.failed > 0) process.exit(1);
 }

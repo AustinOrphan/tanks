@@ -122,9 +122,15 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     // One settle after the last step, at the reduced-motion duration, so a crossfade that
     // has been asked to be instant has still had a frame to become instant in.
     await page.waitForTimeout(250);
-    if (hideGame) {
+    // Not on a page with scripting off: there is no game to hide, and an evaluation there waits
+    // for a frame callback that never runs. Measured: the first full sweep stopped for good at
+    // `screen.no-script`. The frame wait is also bounded, so no page can hold a sweep forever.
+    if (hideGame && state.javascript !== 'off') {
       await page.addStyleTag({ content: `${GAME_CANVAS} { visibility: hidden !important; }` });
-      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      await page.evaluate(() => new Promise((done) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => done(undefined)));
+        setTimeout(() => done(undefined), 500);
+      }));
     }
 
     const measurements = await measure(page, state.measure);

@@ -132,11 +132,13 @@ export const MANIFEST = 'manifest.json';
 
 /**
  * The manifest a sweep writes: what was built, what was asked for, and every capture's result.
- * @param {{ dist: string, source: string, options: { hideGame: boolean }, states: readonly { id: string }[], layouts: readonly { name: string, width: number, height: number, dpr: number }[], results: readonly { state: string, layout: string, ok: boolean, error?: string, pageErrors?: number, sha256?: string, measurementsSha256?: string }[] }} sweep
+ * `complete` is false until the sweep has attempted every state and layout it was asked for.
+ * @param {{ dist: string, source: string, options: { hideGame: boolean }, states: readonly { id: string }[], layouts: readonly { name: string, width: number, height: number, dpr: number }[], results: readonly { state: string, layout: string, ok: boolean, error?: string, pageErrors?: number, sha256?: string, measurementsSha256?: string }[], complete: boolean }} sweep
  */
 export function sweepManifest(sweep) {
   return {
     tool: 'tools/screens/sweep.mjs',
+    complete: sweep.complete,
     dist: sweep.dist,
     source: sweep.source,
     options: { hideGame: sweep.options.hideGame },
@@ -177,6 +179,9 @@ export function classifyPair({ base, head, baseControl, headControl }) {
  * state names. That is secondary evidence. It can show that the layout held for a pair whose
  * pixels are unstable, but it never turns an unstable or different pair into an identical one.
  *
+ * A sweep that did not finish cannot be compared either: its manifest is written as it goes, and
+ * says `complete: true` only at the end.
+ *
  * Sweeps taken with different options cannot be compared, and asking to is an error. A sweep
  * with the game canvas hidden against one without it would differ in every state that shows a
  * match.
@@ -185,6 +190,9 @@ export function classifyPair({ base, head, baseControl, headControl }) {
 export function compareManifests({ base, head, baseControl, headControl }) {
   const sweeps = [['base', base], ['head', head], ['base control', baseControl], ['head control', headControl]]
     .filter(([, m]) => m !== undefined);
+  for (const [name, m] of sweeps) {
+    if (m?.complete !== true) throw new Error(`the ${name} sweep did not finish: its manifest says complete is ${JSON.stringify(m?.complete)}`);
+  }
   const optionsOf = (/** @type {any} */ m) => JSON.stringify({ hideGame: m?.options?.hideGame === true });
   const reference = optionsOf(base);
   for (const [name, m] of sweeps) {

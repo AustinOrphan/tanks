@@ -84,6 +84,7 @@ describe('screen sweep selection and output (issue #766)', () => {
       dist: '/d',
       source: 'abc',
       options: { hideGame: true },
+      complete: false,
       states: [{ id: 'screen.a' }],
       layouts: [{ name: '320x568', width: 320, height: 568, dpr: 2, risk: 'r' } as never],
       results: [
@@ -91,7 +92,7 @@ describe('screen sweep selection and output (issue #766)', () => {
         { state: 'screen.a', layout: '320x568', ok: false, error: 'boom' },
       ],
     });
-    expect(manifest).toMatchObject({ dist: '/d', source: 'abc', options: { hideGame: true }, states: ['screen.a'], captures: 2, failed: 1 });
+    expect(manifest).toMatchObject({ dist: '/d', source: 'abc', options: { hideGame: true }, complete: false, states: ['screen.a'], captures: 2, failed: 1 });
     expect(manifest.layouts).toEqual([{ name: '320x568', width: 320, height: 568, dpr: 2 }]);
   });
 });
@@ -114,6 +115,7 @@ describe('screen sweep comparison (issue #766)', () => {
 
   it('compares every pair either sweep names, and exits 0 only when all are identical', () => {
     const sweep = (results: Array<[string, string, string | null]>) => ({
+      complete: true,
       results: results.map(([state, layout, sha]) => (sha === null
         ? { state, layout, ok: false }
         : { state, layout, ok: true, sha256: sha, measurementsSha256: 'm' })),
@@ -142,7 +144,7 @@ describe('screen sweep comparison (issue #766)', () => {
   });
 
   it('says whether the measurements agree, without letting them turn a pixel difference identical', () => {
-    const one = (sha: string, m?: string) => ({ results: [{ state: 's', layout: 'l', ok: true, sha256: sha, measurementsSha256: m }] });
+    const one = (sha: string, m?: string) => ({ complete: true, results: [{ state: 's', layout: 'l', ok: true, sha256: sha, measurementsSha256: m }] });
     const unstableButSameLayout = compareManifests({ base: one('a', 'm1'), head: one('a', 'm1'), baseControl: one('b', 'm1') });
     expect(unstableButSameLayout.pairs[0]).toMatchObject({ outcome: 'unstable', measurements: 'identical' });
     expect(compareExitCode(unstableButSameLayout)).toBe(1);
@@ -151,10 +153,18 @@ describe('screen sweep comparison (issue #766)', () => {
   });
 
   it('refuses to compare sweeps taken with different options', () => {
-    const shown = { options: { hideGame: false }, results: [] };
-    const hidden = { options: { hideGame: true }, results: [] };
+    const shown = { complete: true, options: { hideGame: false }, results: [] };
+    const hidden = { complete: true, options: { hideGame: true }, results: [] };
     expect(() => compareManifests({ base: shown, head: hidden })).toThrow(/head sweep was taken with/);
     expect(() => compareManifests({ base: hidden, head: hidden, baseControl: shown })).toThrow(/base control sweep/);
     expect(compareManifests({ base: hidden, head: hidden }).options).toEqual({ hideGame: true });
+  });
+
+  it('refuses a sweep that did not finish, naming which one', () => {
+    const done = { complete: true, results: [{ state: 's', layout: 'l', ok: true, sha256: 'a' }] };
+    const stopped = { complete: false, results: [{ state: 's', layout: 'l', ok: true, sha256: 'a' }] };
+    expect(() => compareManifests({ base: done, head: stopped })).toThrow(/head sweep did not finish/);
+    expect(() => compareManifests({ base: { results: [] }, head: done })).toThrow(/base sweep did not finish/);
+    expect(compareManifests({ base: done, head: done }).totals.identical).toBe(1);
   });
 });
