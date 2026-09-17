@@ -59,6 +59,8 @@
 //   pass a secrets.* token to reconcile           -> reconcile job assertion
 //   add ref: to any checkout                      -> pull_request_target safety assertion
 //   audit needs: [maintain] again / PR-gated audit -> audit wiring assertion
+//   move Lint workflows after Typecheck           -> CI named steps assertion (issue #761)
+//   gate Lint workflows to the current lane       -> CI named steps assertion (issue #761)
 //
 // The three `push:` spellings are there because review DEFEATED the first version of that
 // assertion, which required `push:` to be followed immediately by a newline. A trailing
