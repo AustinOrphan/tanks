@@ -435,3 +435,43 @@ is only migrated from and imported; this sentence said "four", "five" and then "
 keys were added, and since issue #693 `tools/instructions.test.ts` recomputes it), and the
 portfolio's root-scoped `/sw.js` service worker controls `/tanks/` and deletes every
 CacheStorage entry it does not own — so an offline feature here needs coordination first.
+
+## Dependency updates
+
+`.github/dependabot.yml` (issue #762) opens update pull requests for npm and for the GitHub
+Actions used by the workflows.
+
+**Coverage.** Both ecosystems are checked weekly, on Monday at 06:00 America/Chicago. The npm
+entry points at the repository root. Dependabot's npm fetcher reads the root `workspaces`, so
+`tools/mutate/package.json` is covered too, and every change lands in the one root
+`package-lock.json`.
+
+**Noise limits:**
+
+- A seven-day cooldown (fourteen days for an npm major) before a new release is proposed.
+- At most five open update pull requests per ecosystem.
+- Routine tooling updates arrive grouped.
+
+| Update class | How it arrives | Review |
+| --- | --- | --- |
+| devDependency minor or patch | One grouped pull request a week (`tooling-minor-and-patch`) | Human review and required CI; the lowest-risk class, and the first candidate if auto-merge is ever proposed |
+| devDependency major | Its own pull request | Human review; may need migration |
+| Runtime dependency (`three`, `howler`), any update | Its own pull request, never grouped | Human review. `three` is 0.x, so any minor can change rendering, and `visual` must pass |
+| `@types/node` | Up to the supported floor major only (22 while `engines` is `^22.13.0 \|\| ^24.0.0`) | Newer majors are ignored: types for a newer Node would let code use APIs the floor lacks. Raise the bound together with the floor |
+| GitHub Actions | One grouped pull request for every `actions/*` tag bump | Human review. A major tag usually moves the action's runtime; check its release notes |
+| An update that changes generated output | Arrives in its class above, and fails CI until regenerated. A runtime update changes `THIRD-PARTY-NOTICES.md`, whose section headers carry the installed version, so `tools/notices/generate.test.ts` fails | Human. Dependabot cannot run the repository's generators: run `npm run notices` (and any other affected generator) on the update branch and commit the result |
+
+**Lockfile.** `versioning-strategy: increase` raises the `package.json` range and the lockfile
+in the same pull request, so the manifest always states the version CI ran. A lockfile-only
+drift fix is not automated. Run `npm install`, commit the lockfile, and let `npm ci` in CI
+prove it reproduces.
+
+**No auto-merge.** Nothing merges an update pull request. Each one runs the same required
+checks as any pull request, and `tools/dependency-updates.test.ts` fails if a workflow gains
+a merge or Dependabot auto-merge step, or special-cases the Dependabot actor. A future
+auto-merge policy is its own decision and pull request.
+
+**Action references.** First-party `actions/*` are referenced by major tag (`@v7`), which
+every workflow uses today and which Dependabot updates in place. A third-party action must be
+pinned by full commit SHA, with the version in a trailing comment. The same test enforces
+both across every workflow file.
