@@ -7,6 +7,7 @@ import { createArenaWorld } from './arena';
 import { cloneWorld, step, type World } from './world';
 import type { InputState } from './types';
 import { nextRng } from './types';
+import { worldFingerprint } from './fingerprint';
 
 /**
  * A scripted, seed-derived input stream. Deterministic but non-trivial: a
@@ -24,33 +25,9 @@ function inputAt(tick: number): InputState {
   };
 }
 
-/**
- * Structural fingerprint. `JSON.stringify` would hide -0 and turn NaN into
- * null -- exactly the two values a determinism bug is most likely to produce --
- * so numbers go through a DataView as raw float64 bits.
- */
-function fingerprint(w: World): string {
-  const nums: number[] = [];
-  const push = (...xs: number[]): void => {
-    nums.push(...xs);
-  };
-  push(w.tick, w.nextId, w.seed, w.lives, w.roundStartTick, w.status === 'playing' ? 0 : 1);
-  for (const t of w.tanks) {
-    push(t.id, t.pos.x, t.pos.y, t.bodyAngle, t.turretAngle, t.alive ? 1 : 0);
-    push(t.desiredMove.x, t.desiredMove.y, t.fireCooldown, t.mineCooldown, t.aiTimer);
-  }
-  for (const b of w.bullets) push(b.id, b.pos.x, b.pos.y, b.vel.x, b.vel.y, b.bouncesLeft);
-  for (const m of w.mines) push(m.id, m.pos.x, m.pos.y, m.timer, m.armed ? 1 : 0);
-  for (const wl of w.walls) push(wl.id, wl.destroyed ? 1 : 0);
-
-  const view = new DataView(new ArrayBuffer(8));
-  return nums
-    .map((n) => {
-      view.setFloat64(0, n);
-      return view.getBigUint64(0).toString(36);
-    })
-    .join(',');
-}
+// The structural fingerprint lives in `fingerprint.ts`, shared with the generated-scenario
+// harness (issue #760), so the two determinism checks cannot hash worlds differently.
+const fingerprint = worldFingerprint;
 
 function run(world: World, ticks: number, from = 0): World {
   let w = world;

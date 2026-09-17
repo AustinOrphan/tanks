@@ -74,6 +74,55 @@ Raising the repository default would ship one machine's constraint to every cont
 to CI, where a hung test would take proportionally longer to fail and a genuine performance
 regression could stop tripping the timeout.
 
+### Generated-scenario invariants
+
+`src/sim/scenarios.ts` (issue #760) resolves a seed to a legal scenario: a campaign arena
+at one to four players, or a versus catalog entry at a mode and player count that entry
+lists, with seeded rule values and one driver per player (the player-profile bot, a
+scripted walk through the input space, or idle). It steps the scenario through
+`stepInputs` and checks structural invariants after every tick:
+
+- every number in the world is finite
+- ids are unique and issued, and every owner exists
+- nothing revives without a respawn event or round restart
+- each step advances the clock one tick, and an ending stays latched
+- shell, mine, and bounce bounds hold
+- only a live tank off cooldown fires, and only once a tick
+
+A run continues 30 ticks past its ending, then stops.
+
+| Command | Scope | Measured warm runtime |
+| --- | --- | ---: |
+| `npx vitest run src/sim/generated-scenarios.test.ts` | The required corpus inside `npm run test:unit`: seeds 1–10 at 1,200 ticks each; three repeated, both in the same module graph and on freshly loaded modules; a known-bad control per invariant | about 5 seconds |
+| `VITE_RUN_MEASURE=1 npx vitest run tools/scenarios/generated-scenarios.measure.test.ts` | The on-demand sweep: seeds 1–200 at 3,600 ticks by default, every seed run twice; `VITE_SCENARIO_SEEDS` (`1-200`, `3,7,40-42`) and `VITE_SCENARIO_TICKS` override | about 3.3 minutes |
+
+A failure prints the seed, the resolved scenario as JSON, the tick and invariant, and a
+`rerun:` command that reproduces that one seed with no CI state. A repeat failure names the
+first tick the two runs disagree on. The sweep closes with a `corpus digest` line, which two
+sweeps of the same seeds and ticks on the same code must print identically. On GitHub,
+dispatch **Generated-scenario sweep** (`scenario-sweep.yml`) with seed and tick inputs; it
+uploads the console log for 14 days and is on no automatic trigger.
+
+Budget. The required corpus measured 4.9 s of test time run alone (27 tests, Node 24, the
+4-core/4GB Linux box, 2026-09-17). Keep it near that: add breadth to the sweep, not the
+corpus. Its enforced ceiling is a 20-second timeout per seed test, and 60 seconds for the
+repeat test, so a slowdown fails with a timeout instead of quietly stretching CI. The default
+sweep measured 195 s wall on the same box with one fork: 443,556 simulated ticks checked in
+the first runs, 129 of 200 scenarios reaching an ending. The workflow allows 60 minutes.
+
+The sweep is in `tools/`, not beside the corpus, because each seed awaits a zero-delay timer
+first. Without that turn of the event loop, Vitest's worker RPC times out
+("Timeout calling onTaskUpdate") and the run exits 1 after every seed passed. That was
+measured on a single 197-second test and again on 200 synchronous per-seed tests.
+`src/sim/purity.test.ts` bans timers anywhere under `src/sim/`, test files included.
+The comparison on freshly loaded modules (`vi.resetModules`) is what catches a module-level
+cache: a second run in the same module graph reads the same cached values and agrees.
+
+What the invariants do not cover: balance or feel, render and audio, malformed worlds that
+`createWorldFor` cannot produce, geometry (a tank inside a wall), and event payloads other
+than `fire` and `respawn`. There is no shrinking; a reported seed and tick budget are the
+reproduction.
+
 ### Local candidate verification
 
 Run directly relevant tests during implementation, then choose the candidate floor from the
