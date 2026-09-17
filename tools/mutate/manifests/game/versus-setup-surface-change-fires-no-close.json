@@ -9,8 +9,9 @@
     "src/game/route-host.test.ts"
   ],
   "killedBy": [
+    "createHud application transition contract reports the versus setup pane opening and closing exactly once per transition (issue #785)",
     "createHud application transition contract closes the versus setup pane when a surface change takes it away (issue #785)",
     "createRouteHost: Versus Setup reads the controllers already connected (issue #785) holds its hotplug listeners for exactly as long as the pane is up"
   ],
-  "why": "A match started from the pane leaves it through setState's unconditional close, not a Back. Settings' listeners leaked this way before issue #227; this is the same hole for the versus pane."
+  "why": "The pane's ONE close point for Back and for a surface change alike: `back()` re-enters the origin through `setState`, so this call is what fires the close on Back too. A second call in `closeVersusPane` was tried and its mutation SURVIVED with 0 failures, so it was deleted rather than kept untested. Without this one, a match started from the pane (Settings' leak before issue #227) and an ordinary Back both leave route-ui's hotplug listeners on the page."
 }

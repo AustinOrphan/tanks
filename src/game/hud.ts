@@ -7168,7 +7168,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   function closeVersusPane(): void {
     closeSurface(VERSUS_SETUP_SURFACE);
-    closeVersusSetupSubscribers();
   }
 
   // Continue shares the Resume/Next Level/Play Again/Retry button's own handler: it IS
@@ -7272,7 +7271,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // A bare class add, not routed through showVersusSetup(false), which would animate a
     // Back. Its subscribers are released explicitly instead, for Settings' reason below: a
     // match started from the pane would otherwise keep `route-ui.ts`'s pad hotplug
-    // listeners attached to a pane that is gone (issue #785).
+    // listeners attached to a pane that is gone (issue #785). This is ALSO the pane's close
+    // on Back, which is why `closeVersusPane` does not repeat it: `back()` re-enters the
+    // origin through `setState`, and a close there was measured to change nothing.
     cleanupHide(versusSetupView, 'hud-versus-setup--hidden');
     closeVersusSetupSubscribers();
     // The three panes issue #226 added, closed on the same terms as their siblings: none
