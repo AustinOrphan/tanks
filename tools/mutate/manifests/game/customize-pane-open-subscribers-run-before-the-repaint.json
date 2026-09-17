@@ -1,0 +1,14 @@
+{
+  "id": "customize-pane-open-subscribers-run-before-the-repaint",
+  "file": "src/game/customize-pane.ts",
+  "find": "        choices.renderSelection();\n        root.focus(); // the pane, not the canvas: the roving focus starts from the container\n        if (!wasOpen) for (const cb of openCbs) cb();",
+  "replace": "        if (!wasOpen) for (const cb of openCbs) cb();\n        choices.renderSelection();\n        root.focus(); // the pane, not the canvas: the roving focus starts from the container",
+  "expect": "killed",
+  "tests": [
+    "src/game/customize-pane.test.ts"
+  ],
+  "why": "Open subscribers run before the choice rows are repainted and before the pane takes focus, so a subscriber that reads the selection or the focused control sees the state from before the open. Under this mutation all 360 tests in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open, before the new cases existed).",
+  "killedBy": [
+    "createCustomizePane (issue #556) opens once per real open: selection repainted and the pane focused before subscribers run"
+  ]
+}

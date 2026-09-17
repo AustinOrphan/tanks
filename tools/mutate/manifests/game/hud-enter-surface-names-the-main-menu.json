@@ -1,0 +1,14 @@
+{
+  "id": "hud-enter-surface-names-the-main-menu",
+  "file": "src/game/hud.ts",
+  "find": "    swapSurface(openSurface(), to, onBegin, instant);",
+  "replace": "    swapSurface(PANEL_SURFACE, to, onBegin, instant);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "The host's one open for an extracted pane names the Main Menu as its source instead of the surface on screen. Every player path into Customize starts at the Main Menu, so all 360 tests in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts and hud.a11y.test.ts still passed (local control run while issue #556 was open, before the new cases existed). A pane opened over another pane then leaves the outgoing one painted.",
+  "killedBy": [
+    "createHud application transition contract opens an extracted pane from the surface on screen, never by naming the Main Menu (issue #556)"
+  ]
+}

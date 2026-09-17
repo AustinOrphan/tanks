@@ -1,0 +1,14 @@
+{
+  "id": "hud-closure-destructuring-is-not-a-write",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "      return node === id || k === ts.SyntaxKind.EqualsToken;",
+  "replace": "      return node === id;",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "`[a, b] = next` and `({ a } = next)` assign `a` without `a` being the whole left-hand side. Read as reads, a pane that destructures into a shared `let` reports no write across its boundary.",
+  "killedBy": [
+    "isWriteTarget (issue #767) reads assignments, updates, destructuring and loop variables as writes"
+  ]
+}

@@ -156,6 +156,7 @@ Specialized commands remain directly available:
 ```sh
 npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
 npm run capture -- --list                                  # list reproducible media recipes
+npm run hud:closure                                        # who owns what inside createHud (issue #767)
 npm run screens:sweep -- --dist dist --out tmp/sweep/base   # every screen state at every layout (issue #766)
 npm run screens:compare -- --base <dir> --head <dir>         # byte-compare two sweeps
 npm run mutate -- --only <id>                              # run one mutation entry

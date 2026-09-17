@@ -54,3 +54,21 @@ export function describeDisabledReason(el: Element, reasonId: string | null): vo
   if (reasonId === null) el.removeAttribute('aria-describedby');
   else el.setAttribute('aria-describedby', reasonId);
 }
+
+/*
+ * A focused control legitimately claims Space, Enter and the arrow keys -- input.ts
+ * deliberately lets it have them. But a MOUSE player who clicks Mute never asked to hand
+ * over their keyboard, and the control stays focused after a click, so arrow-key driving
+ * and the Space mine-drop went dead with nothing on screen to explain it. Dropping focus
+ * on pointer interactions only hands those keys back. `detail > 0` marks a real pointer
+ * activation; keyboard activation reports 0 and keeps focus, so tabbing still works.
+ *
+ * Moved here from `hud.ts`'s closure (issue #556): neither reads anything from it, and an
+ * extracted pane wires them on its own controls.
+ */
+export const blurIfPointer = (e: MouseEvent): void => {
+  if (e.detail > 0) (e.currentTarget as HTMLElement).blur();
+};
+export const blurAfterDrag = (e: Event): void => {
+  (e.currentTarget as HTMLElement).blur();
+};

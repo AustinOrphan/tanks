@@ -1,0 +1,15 @@
+{
+  "id": "hud-closure-statements-never-join-a-pane",
+  "file": "tools/hud-closure/closure.mjs",
+  "find": "    if (referenced.size === 1) owner.pane = [...referenced][0];",
+  "replace": "    if (referenced.size === -1) owner.pane = [...referenced][0];",
+  "expect": "killed",
+  "tests": [
+    "tools/hud-closure/closure.test.ts"
+  ],
+  "why": "Every nameless statement stays shared. The listener wiring a pane owns then counts as shared, so the pane looks smaller and less scattered than it is, and its manifest entries land in the shared row.",
+  "killedBy": [
+    "hud closure analysis (issue #767) gives a nameless statement to the one pane it references, and shares one that references two",
+    "hud closure analysis (issue #767) reports a write to a binding outside the pane, and not a write inside it"
+  ]
+}

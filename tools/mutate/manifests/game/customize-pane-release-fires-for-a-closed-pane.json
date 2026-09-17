@@ -1,0 +1,14 @@
+{
+  "id": "customize-pane-release-fires-for-a-closed-pane",
+  "file": "src/game/customize-pane.ts",
+  "find": "      if (host.isSurfaceOpen(surface)) for (const cb of closeCbs) cb();",
+  "replace": "      for (const cb of closeCbs) cb();",
+  "expect": "killed",
+  "tests": [
+    "src/game/customize-pane.test.ts"
+  ],
+  "why": "A release fires the close subscribers even when the pane was not on screen, so `route-ui.ts` disposes a preview it never built. The other direction, a release that fires nothing, is `a-replaced-customize-pane-keeps-its-webgl-context`. Under this mutation all 360 tests in hud.controls.test.ts, hud.navigation.test.ts, hud.surfaces.test.ts and hud.a11y.test.ts passed (local control run while issue #556 was open, before the new cases existed).",
+  "killedBy": [
+    "createCustomizePane (issue #556) releases its subscribers only when on screen, and leaves the surface to the incoming pane"
+  ]
+}
