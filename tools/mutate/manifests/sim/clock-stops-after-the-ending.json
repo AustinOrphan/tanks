@@ -7,5 +7,9 @@
   "tests": [
     "src/sim/generated-scenarios.test.ts"
   ],
-  "why": "Issue #760's phase transitions: stepInputs advances the clock on every call, including after a win or loss, and this stops it at the ending. It proves the runs really are checked past their ending: runScenario continues TERMINAL_WATCH_TICKS after the status leaves 'playing', and the tick-advances invariant reports the first post-ending step whose tick did not move."
+  "why": "Issue #760's phase transitions: stepInputs advances the clock on every call, including after a win or loss, and this stops it at the ending. It proves the runs really are checked past their ending: runScenario continues TERMINAL_WATCH_TICKS after the status leaves 'playing', and the tick-advances invariant reports the first post-ending step whose tick did not move. Only corpus seeds whose scenario ends within the tick budget can report it.",
+  "killedBy": [
+    "generated scenarios: the required corpus seed 1 holds every structural invariant on every tick",
+    "generated scenarios: the required corpus seed 2 holds every structural invariant on every tick"
+  ]
 }

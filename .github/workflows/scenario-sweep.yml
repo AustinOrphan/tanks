@@ -28,8 +28,8 @@ permissions:
 jobs:
   sweep:
     runs-on: ubuntu-latest
-    # The default sweep measured 7 minutes on the 4-core development box; see
-    # docs/agent/commands-and-operations.md for the budget. Wide headroom for a larger seed list.
+    # The default sweep measured 195 s on the 4-core development box (one fork); see
+    # docs/agent/commands-and-operations.md for the budget. Headroom for a larger seed list.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7

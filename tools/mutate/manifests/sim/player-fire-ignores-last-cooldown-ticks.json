@@ -7,5 +7,9 @@
   "tests": [
     "src/sim/generated-scenarios.test.ts"
   ],
-  "why": "Issue #760's 'no generated input bypasses authoritative cooldown rules': a player whose fire press lands in the last two ticks of the cooldown fires early. The scripted driver presses fire on about 30% of ticks, so it reaches that window; the fire-legal invariant reports a shot from a tank whose cooldown before the step was above 1."
+  "why": "Issue #760's 'no generated input bypasses authoritative cooldown rules': a player whose fire press lands in the last two ticks of the cooldown fires early. The corpus's bot and scripted drivers both press fire often enough to land there; the fire-legal invariant reports a shot from a tank whose cooldown before the step was above 1 ('fired with 3 ticks of cooldown left').",
+  "killedBy": [
+    "generated scenarios: the required corpus seed 1 holds every structural invariant on every tick",
+    "generated scenarios: the required corpus seed 2 holds every structural invariant on every tick"
+  ]
 }

@@ -7,5 +7,9 @@
   "tests": [
     "src/sim/generated-scenarios.test.ts"
   ],
-  "why": "Issue #760's lifecycle transition: stepRespawns still revives the tank but no longer says so, so the respawn event's consumers (render/particles.ts, audio/director.ts) see a dead tank come back with nothing to react to. The no-resurrection invariant accepts a revival only with a respawn event naming the tank or a round restart, so the corpus's versus and co-op respawns report it."
+  "why": "Issue #760's lifecycle transition: stepRespawns still revives the tank but no longer says so, so the respawn event's consumers (render/particles.ts, audio/director.ts) see a dead tank come back with nothing to react to. The no-resurrection invariant accepts a revival only with a respawn event naming the tank or a round restart, so the corpus's versus and co-op respawns report it.",
+  "killedBy": [
+    "generated scenarios: the required corpus seed 3 holds every structural invariant on every tick",
+    "generated scenarios: the required corpus seed 7 holds every structural invariant on every tick"
+  ]
 }
