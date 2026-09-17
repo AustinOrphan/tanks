@@ -121,6 +121,27 @@ export const COLLECT_CONTROLS = () => {
         break;
       }
     }
+    // What its clipping ancestors leave visible (issue #766): a control scrolled out of view
+    // keeps its box, but a press there lands on whatever is drawn instead.
+    let left = r.left;
+    let top = r.top;
+    let right = r.right;
+    let bottom = r.bottom;
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const ar = a.getBoundingClientRect();
+      left = Math.max(left, ar.left + a.clientLeft);
+      top = Math.max(top, ar.top + a.clientTop);
+      right = Math.min(right, ar.left + a.clientLeft + a.clientWidth);
+      bottom = Math.min(bottom, ar.top + a.clientTop + a.clientHeight);
+    }
+    const clip = {
+      x: +left.toFixed(1),
+      y: +top.toFixed(1),
+      w: +Math.max(0, right - left).toFixed(1),
+      h: +Math.max(0, bottom - top).toFixed(1),
+    };
     const classes = [...el.classList].filter((c) => !/--(on|hidden|active|selected|entering|leaving)$/.test(c));
     out.push({
       key: `${el.tagName.toLowerCase()}${el.tagName === 'INPUT' && el.type ? `[${el.type}]` : ''}${classes.length ? `.${classes.join('.')}` : ''}`,
@@ -129,6 +150,7 @@ export const COLLECT_CONTROLS = () => {
       y: +r.y.toFixed(1),
       w: +r.width.toFixed(1),
       h: +r.height.toFixed(1),
+      clip,
       reachable,
       pinned,
     });
