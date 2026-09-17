@@ -156,6 +156,7 @@ Specialized commands remain directly available:
 ```sh
 npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
 npm run capture -- --list                                  # list reproducible media recipes
+npm run hud:closure                                        # who owns what inside createHud (issue #767)
 npm run mutate -- --only <id>                              # run one mutation entry
 npm run mutate -- --only <id> --only <id>                  # repeatable; --only a,b is the same
 npm run mutate -- --jobs auto                              # the whole manifest over a worktree pool (committed tree only)

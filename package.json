@@ -39,6 +39,7 @@
     "docs:check": "node tools/docs/check.mjs",
     "docs:index": "node tools/docs/index.mjs",
     "mutate": "node tools/mutate/run.mjs",
+    "hud:closure": "node tools/hud-closure/analyze.mjs",
     "mutate:smoke": "npm run mutate -- --only capture-prerequisite-error-drops-the-ci-pin",
     "audit:prod": "node tools/audit/prod.mjs",
     "devflags:doc": "vite-node tools/devflags/generate.mjs",
