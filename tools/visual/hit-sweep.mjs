@@ -32,29 +32,16 @@ const PAST_SPLASH = [{ press: 'Space' }, { waitHidden: '.hud-splash' }];
 /**
  * Player-facing surfaces no screen state reaches, in the catalogue's own shape.
  *
- *  - The Controllers pane: its open button shows only while a match is paused.
  *  - Settings with Reset stats ARMED. Not a dialog: the first press relabels the same button
  *    "Really reset?" for 4 s (`handleDangerClick` in hud.ts), and the longer label is the one
  *    a player presses a second time. It needs recorded stats, or Reset stats is disabled and
  *    never arms, so it borrows the mid-campaign save `screen.main-menu` seeds.
+ *
+ * The Controllers pane was an extra here until issue #766 added it to the catalogue as
+ * `screen.controllers`, with the same steps. The catalogue half of the sweep now reaches it,
+ * along with its two-pad variant.
  */
 export const HIT_EXTRA_STATES = Object.freeze([
-  Object.freeze({
-    id: 'extra.controllers',
-    storage: {},
-    webgl: 'ok',
-    javascript: 'on',
-    query: '',
-    steps: [
-      ...PAST_SPLASH,
-      { click: '.hud-new-game' },
-      { waitHidden: '.hud-panel' },
-      { press: 'Escape' },
-      { waitVisible: '.hud-controllers-open' },
-      { click: '.hud-controllers-open' },
-      { waitVisible: '.hud-controllers' },
-    ],
-  }),
   Object.freeze({
     id: 'extra.settings.reset-armed',
     storage: findScreenState('screen.main-menu').storage,

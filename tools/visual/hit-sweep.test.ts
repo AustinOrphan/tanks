@@ -6,7 +6,7 @@ import { HIT_EXTRA_STATES, hitSweepExclusion, hitSweepStates } from './hit-sweep
 /**
  * Issue #710: the `visual` gate sweeps menu hit targets, and WHICH surfaces it sweeps is
  * decided here rather than in `verify.mjs`, which runs on import. The population below is
- * the screen-state catalogue as it stands: 33 states, 11 excluded, 22 swept, plus 2 extras.
+ * the screen-state catalogue as it stands: 38 states, 13 excluded, 25 swept, plus 1 extra.
  */
 
 /** Every excluded catalogue state, by the rule that removes it. */
@@ -44,16 +44,18 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     expect(actual).toEqual(EXCLUDED);
   });
 
-  it('sweeps every other catalogue state, the endings included, then the two extra surfaces', () => {
-    // Negative control: dropping HIT_EXTRA_STATES from the result loses the last two ids.
+  it('sweeps every other catalogue state, the endings included, then the extra surface', () => {
+    // Negative control: dropping HIT_EXTRA_STATES from the result loses the last id.
     const excluded = new Set(Object.values(EXCLUDED).flat());
     expect(hitSweepStates().map((s) => s.id)).toEqual([
       ...SCREEN_STATE_IDS.filter((id) => !excluded.has(id)),
-      'extra.controllers',
       'extra.settings.reset-armed',
     ]);
-    // 25 since issue #754's Controller Layout state: a Settings pane, so it is swept.
-    expect(hitSweepStates()).toHaveLength(25);
+    // 25 since issue #754's Controller Layout state: a Settings pane, so it is swept. 26 since
+    // issue #766: the Controllers extra became `screen.controllers`, and `screen.controllers.pads`
+    // joined it, so the pane is swept once without pads and once with two.
+    expect(hitSweepStates()).toHaveLength(26);
+    expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 
   it('sweeps a state added to the catalogue without being told to', () => {

@@ -58,6 +58,8 @@ describe('capture recipe schema', () => {
       'screen.no-script',
       'screen.pause.versus',
       'screen.pause.campaign',
+      'screen.controllers',
+      'screen.controllers.pads',
       'screen.ending.mission-clear',
       'screen.ending.campaign-over',
       'screen.ending.mission-clear.played',
