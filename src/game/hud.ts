@@ -281,7 +281,8 @@ import type { VersusActionLayout } from '../presentation/versus-actions';
 import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import type { HullColorId, SkinId, AccentId } from '../presentation/customization';
-import { renderCustomizeChoices } from './customize-choices';
+import { createCustomizePane, CUSTOMIZE_BODY } from './customize-pane';
+import type { Surface } from './pane-host';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import { arenaSchematic, drawArenaSchematic, type SchematicPaint } from './arena-schematic';
 import {
@@ -347,7 +348,7 @@ import {
   type FireMode,
 } from '../input/touch';
 import './hud.css';
-import { describeDisabledReason, setSelected } from './ui';
+import { blurAfterDrag, blurIfPointer, describeDisabledReason, setSelected } from './ui';
 import {
   isOffered,
   type Relevance,
@@ -894,7 +895,7 @@ export interface Hud {
   readonly previewRotateButtons: readonly HTMLButtonElement[];
   /**
    * The Customize panel just became visible/hidden. This is the ONE chokepoint for
-   * both transitions -- the Back button (`showCustomize(false)`) and any OTHER state
+   * both transitions -- the Back button (the pane's `show(false)`) and any OTHER state
    * change, which closes the panel unconditionally (see setState) -- so a caller that
    * builds the live preview on open and disposes it on close cannot leak a WebGL
    * context down the second path. Fired only on an actual transition, never on a
@@ -1141,7 +1142,7 @@ export interface Hud {
   onVersusStart(cb: (config: VersusConfig) => void): void;
   /**
    * Show/hide the versus setup pane, following the exact panel-open template
-   * `showControllers`/`showCustomize` use: focus-the-pane on open, closed
+   * `showControllers` and the Customize pane's `show` use: focus-the-pane on open, closed
    * unconditionally by `setState` (every OTHER state change hides it, same as every
    * sibling subpanel). `initial`, when supplied and TRUTHY, reseeds the pane's own
    * selections; omitting the argument AND passing `null` (`route-ui.ts`'s own
@@ -1397,43 +1398,6 @@ export const SINGLE_PLAYER_DEATH_VIGNETTE = 0xb41e1e;
 function cssColor(hex: number): string {
   return '#' + hex.toString(16).padStart(6, '0');
 }
-
-/**
- * The four rotate buttons' icons, built from two halves so the pairs cannot drift apart:
- * an arc arrow (mirrored for the left-hand button by a transform, NOT by a second
- * hand-written path -- a mirrored copy is where an asymmetric pair comes from) over the
- * silhouette of the part it turns.
- *
- * `currentColor` throughout, so the buttons' own hover/active colours carry the icon
- * with them, and `aria-hidden` because the accessible name lives on the button.
- */
-const ROTATE_ARROW =
-  '<path d="M5 9a9 7 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
-  '<path d="M19 11.4l-2.3-3.8h4.6z" fill="currentColor"/>';
-const ROTATE_HULL = '<rect x="7" y="13.5" width="10" height="7.5" rx="2" fill="currentColor"/>';
-const ROTATE_TURRET =
-  '<circle cx="10.5" cy="17.2" r="3.4" fill="currentColor"/>' +
-  '<rect x="13" y="16.2" width="6.5" height="2" rx="1" fill="currentColor"/>';
-
-function rotateIcon(part: 'hull' | 'turret', dir: 'left' | 'right'): string {
-  const arrow =
-    dir === 'right'
-      ? ROTATE_ARROW
-      : `<g transform="translate(24,0) scale(-1,1)">${ROTATE_ARROW}</g>`;
-  return (
-    '<svg class="hud-rotate-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
-    arrow +
-    (part === 'hull' ? ROTATE_HULL : ROTATE_TURRET) +
-    '</svg>'
-  );
-}
-
-const ROTATE_ICON = {
-  hullLeft: rotateIcon('hull', 'left'),
-  hullRight: rotateIcon('hull', 'right'),
-  turretLeft: rotateIcon('turret', 'left'),
-  turretRight: rotateIcon('turret', 'right'),
-};
 
 /**
  * The padlock on a locked achievement (issue #630). Same construction as the rotate icons:
@@ -1923,67 +1887,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--primary hud-versus-start" type="button">Start</button>
       </div>
     </div>
-    <div class="hud-customize hud-customize--hidden" role="region" tabindex="-1" aria-labelledby="hud-customize-title">
-      <h1 id="hud-customize-title">Customize</h1>
-      <!-- The live preview: render/preview.ts builds a SECOND small WebGL scene against
-           this canvas, using the SAME tank-building code (render/entities.ts) and skin
-           textures (render/skins.ts) the game itself uses -- not a depiction of the
-           tank, the tank. Owned as markup here, driven from game/loop.ts via
-           onCustomizeOpen/onCustomizeClose (hud.ts stays free of three.js, see the Hud
-           interface doc comment on previewCanvas).
-
-           It USED to be aria-hidden, on the reasoning that it only repaints choices
-           already exposed as labelled buttons below. That stopped being true when it
-           became interactive: render/preview-controls.ts gives it a keyboard scheme,
-           and a focusable element inside an aria-hidden subtree is a focus trap for a
-           screen-reader user -- tabbable but unannounced. So it is now a labelled,
-           focusable control instead, and the label states the scheme, which is also
-           one of two places a keyboard-only player could learn it. tabindex is what
-           puts it in the pane's tab order at all; a canvas has none by default.
-           No explicit role: it is a focusable element with an accessible name, which
-           is enough to be announced. An img role would contradict the tabindex (an
-           image is not interactive) and an application role hands the whole key
-           stream over for the sake of two arrows.
-
-           A focus-gated <p> used to sit here spelling out the keyboard scheme, because
-           shift+arrows had no discoverability path for a sighted keyboard user. The row
-           of buttons below replaces it and does the job better: it is on screen for
-           everyone rather than only for whoever tabs to the canvas, it works for touch
-           (which had no path to the scheme at all), and it teaches the hull/turret split
-           by showing it as four controls. So the pane is back to no prose. -->
-      <canvas class="hud-preview" tabindex="0" title="Drag to turn the hull. Point to aim the turret. Arrow keys turn the hull, shift+arrows turn the turret." aria-label="Tank preview. Drag to turn the hull, or use the left and right arrow keys. Move the pointer over it to aim the turret, or hold shift with the arrow keys."></canvas>
-      <!-- The rotate cluster: hull left/right, turret left/right, in that order, with
-           hold-to-repeat (render/preview-controls.ts, which reads the data attributes
-           below -- an unrecognised pair leaves a button INERT, which is why the exact
-           four are pinned in hud.test.ts).
-
-           Four buttons and not a slider: a slider is a linear control for a circular
-           quantity, so it needs endpoints that do not exist, wraps badly at 0/360, and
-           eats width in a 260px pane.
-
-           Icons only, no visible text: this is a control cluster, not prose, and the
-           pane is pinned at two labelled sections. The accessible name is on the button
-           via aria-label; the SVGs are aria-hidden so a screen reader reads the name
-           once. Each icon carries the SHAPE of what it turns -- a hull plate, or a
-           turret with its barrel -- under an arc arrow pointing the way the tank will
-           go, which is the same direction the matching arrow key and drag send it. -->
-      <div class="hud-preview-rotate">
-        <button class="hud-rotate-btn" type="button" data-rotate-part="hull" data-rotate-dir="left" aria-label="Turn hull left" title="Turn hull left (hold to keep turning)">${ROTATE_ICON.hullLeft}</button>
-        <button class="hud-rotate-btn" type="button" data-rotate-part="hull" data-rotate-dir="right" aria-label="Turn hull right" title="Turn hull right (hold to keep turning)">${ROTATE_ICON.hullRight}</button>
-        <button class="hud-rotate-btn" type="button" data-rotate-part="turret" data-rotate-dir="left" aria-label="Turn turret left" title="Turn turret left (hold to keep turning)">${ROTATE_ICON.turretLeft}</button>
-        <button class="hud-rotate-btn" type="button" data-rotate-part="turret" data-rotate-dir="right" aria-label="Turn turret right" title="Turn turret right (hold to keep turning)">${ROTATE_ICON.turretRight}</button>
-      </div>
-      <section class="hud-customize-section">
-        <h2>Hull</h2>
-        <div class="hud-swatches"></div>
-      </section>
-      <section class="hud-customize-section">
-        <h2>Skin</h2>
-        <div class="hud-skins"></div>
-        <div class="hud-accents"></div>
-      </section>
-      <button class="ui-btn ui-btn--slab hud-customize-back" type="button">Back</button>
-    </div>
+    <div class="hud-customize hud-customize--hidden" role="region" tabindex="-1" aria-labelledby="hud-customize-title">${CUSTOMIZE_BODY}</div>
     <!-- The Stats tab of Records (issue #226). The two RESET buttons that used to sit in
          .hud-stats-actions moved to Settings -> Data: the issue's ruling is that
          "destructive reset/import actions live under Data, not Records", and a page whose
@@ -2521,13 +2425,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const statsBackBtn = el.querySelector('.hud-stats-back') as HTMLButtonElement;
   const customizeOpenBtn = el.querySelector('.hud-customize-open') as HTMLButtonElement;
   const customizeView = el.querySelector('.hud-customize') as HTMLElement;
-  const previewCanvasEl = el.querySelector('.hud-preview') as HTMLCanvasElement;
-  const previewRotateBtns = Array.from(
-    el.querySelectorAll('.hud-preview-rotate .hud-rotate-btn'),
-  ) as HTMLButtonElement[];
-  const swatchesRow = el.querySelector('.hud-swatches') as HTMLElement;
-  const accentsRow = el.querySelector('.hud-accents') as HTMLElement;
-  const customizeBackBtn = el.querySelector('.hud-customize-back') as HTMLButtonElement;
   const achView = el.querySelector('.hud-achievements') as HTMLElement;
   const achListEl = el.querySelector('.hud-achievement-list') as HTMLElement;
   const achCountEl = el.querySelector('.hud-achievements-count') as HTMLElement;
@@ -2789,22 +2686,29 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   fireBtn.addEventListener('pointerdown', onFireTapClick);
   const resetStatsCbs: Array<() => void> = [];
   const resetProgressCbs: Array<() => void> = [];
-  const skinsRow = el.querySelector('.hud-skins') as HTMLElement;
-  // Customize's hull, skin and accent rows: their buttons, which one is marked, and the
-  // pick subscribers (issue #556). The pane itself -- surface, layer row, open and close
-  // callbacks -- stays here with the rest of the navigation core; see the module header.
-  const customizeChoices = renderCustomizeChoices({
-    hull: swatchesRow,
-    skin: skinsRow,
-    accent: accentsRow,
-  });
+  // The Customize pane (issue #556): its body, choice rows, preview handles, open and close
+  // chokepoint and listeners live in `customize-pane.ts`. Built HERE, where its choice rows were
+  // built before, so the DOM fills in the same order. The container and its surface stay with
+  // the host: `PANEL_FAMILY` below names this surface, and the Main Menu opener is Main Menu
+  // markup. The host functions are hoisted declarations, and the pane calls none of them while
+  // it is being built.
+  const CUSTOMIZE_SURFACE: Surface = { el: customizeView, hidden: 'hud-customize--hidden' };
+  const customize = createCustomizePane(
+    {
+      enterSurface,
+      closeSurface,
+      isSurfaceOpen,
+      open: (opener) => openLayer('customize', opener),
+      back,
+    },
+    CUSTOMIZE_SURFACE,
+    customizeOpenBtn,
+  );
   // The controller assignment UI's one write path -- see onReassignSlot's own doc
   // comment. The panel that fires this lands separately; the subscription exists now so
   // loop.ts's reassignSlot has somewhere real to register.
   const reassignSlotCbs: Array<(slot: number, source: SlotSource) => void> = [];
   let earnedIds: ReadonlySet<AchievementId> = new Set();
-  const customizeOpenCbs: Array<() => void> = [];
-  const customizeCloseCbs: Array<() => void> = [];
   const settingsOpenCbs: Array<() => void> = [];
   const settingsCloseCbs: Array<() => void> = [];
   /**
@@ -3387,15 +3291,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   /**
    * The application surfaces this contract moves between. One entry per screen, so a
-   * screen's hidden-class name is written once rather than at each of its call sites.
+   * screen's hidden-class name is written once rather than at each of its call sites. The
+   * `Surface` shape lives in `pane-host.ts`, because an extracted pane is handed one.
    */
-  interface Surface {
-    readonly el: HTMLElement;
-    readonly hidden: string;
-  }
   const PANEL_SURFACE: Surface = { el: panel, hidden: 'hud-panel--hidden' };
   const STATS_SURFACE: Surface = { el: statsView, hidden: 'hud-stats--hidden' };
-  const CUSTOMIZE_SURFACE: Surface = { el: customizeView, hidden: 'hud-customize--hidden' };
   const ACH_SURFACE: Surface = { el: achView, hidden: 'hud-achievements--hidden' };
   const LEVELSELECT_SURFACE: Surface = { el: levelSelectView, hidden: 'hud-levelselect--hidden' };
   const CONTROLLERS_SURFACE: Surface = { el: controllersView, hidden: 'hud-controllers--hidden' };
@@ -3594,7 +3494,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function closeSurface(from: Surface, onBegin?: () => void, instant = false): void {
     if (!isSurfaceOpen(from)) {
-      // Still owed: the callback half. `showCustomize`/`showControllers` guard their own
+      // Still owed: the callback half. Customize's `show` and `showControllers` guard their own
       // on `wasOpen`, so passing it through here would double-guard rather than skip.
       onBegin?.();
       return;
@@ -3629,6 +3529,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     for (const surface of PANEL_FAMILY) if (isSurfaceOpen(surface)) return surface;
     // Nothing open means `launch` or `playing`; the menu is where a panel Back lands.
     return PANEL_SURFACE;
+  }
+
+  /**
+   * Show `to`, leaving whatever surface the player is on: the one open an extracted pane is
+   * given (issue #556). Every pane open in this file has this shape, and `pane-host.ts` offers
+   * no raw `swapSurface`, so a pane cannot name a source of its own.
+   */
+  function enterSurface(to: Surface, onBegin?: () => void, instant = false): void {
+    swapSurface(openSurface(), to, onBegin, instant);
   }
 
   /**
@@ -3756,7 +3665,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * Hand the Records tables their numbers, immediately before the pane renders them.
    *
-   * Placed before the render rather than after it (the order `showCustomize` and
+   * Placed before the render rather than after it (the order Customize's `show` and
    * `showControllers` use) so the pane is drawn once from the values it is about to show.
    * That is a saving, not a correctness point -- `setStats` and `setAchievements` both
    * re-render while their pane is visible, so either order settles on the same table.
@@ -3781,31 +3690,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       });
     } else {
       closeSurface(STATS_SURFACE);
-    }
-  }
-
-  // The single chokepoint for both the panel's own Back button AND setState's
-  // unconditional close (below) -- see onCustomizeOpen/onCustomizeClose's doc comment.
-  // Guarded on the ACTUAL transition so a caller building/disposing the live preview
-  // off these never sees a redundant open or a redundant dispose.
-  function showCustomize(show: boolean, instant = false): void {
-    // Read BEFORE the transition begins -- see `isSurfaceOpen` for why "not hidden" alone
-    // is the wrong question during a crossfade.
-    const wasOpen = isSurfaceOpen(CUSTOMIZE_SURFACE);
-    if (show) {
-      swapSurface(openSurface(), CUSTOMIZE_SURFACE, () => {
-        customizeChoices.renderSelection();
-        customizeView.focus(); // the pane, not the canvas -- see the roving-focus comment below
-        if (!wasOpen) for (const cb of customizeOpenCbs) cb();
-      });
-    } else {
-      closeSurface(
-        CUSTOMIZE_SURFACE,
-        () => {
-          if (wasOpen) for (const cb of customizeCloseCbs) cb();
-        },
-        instant,
-      );
     }
   }
 
@@ -4309,11 +4193,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * The single chokepoint for both the panel's own Back button AND setState's
    * unconditional close -- see onControllersOpen/onControllersClose's doc comment.
-   * Guarded on the ACTUAL transition, same as showCustomize, so loop.ts's window
+   * Guarded on the ACTUAL transition, same as Customize's `show`, so loop.ts's window
    * listener add/remove never sees a redundant open or close.
    */
   function showControllers(show: boolean, instant = false): void {
-    // Read before the transition begins -- same reason as showCustomize.
+    // Read before the transition begins -- same reason as Customize's `show`.
     const wasOpen = isSurfaceOpen(CONTROLLERS_SURFACE);
     if (show) {
       swapSurface(openSurface(), CONTROLLERS_SURFACE, () => {
@@ -4364,7 +4248,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * reachable by Tab, exactly as it was before this file existed.
    *
    * EVERY panel-open transition focuses the CONTAINER, never a control inside it --
-   * `showStats`/`showCustomize`/`showAchievements`/`showLevelSelect`/`showControllers`/
+   * `showStats`/Customize's `show`/`showAchievements`/`showLevelSelect`/`showControllers`/
    * `showVersusSetup` above and setState's paused/win/lose/title branches below all
    * call `.focus()` on the pane itself, which is exactly what `.hud-panel`'s own
    * pre-existing `tabindex="-1"` did for the one transition this file used to handle
@@ -4573,7 +4457,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // hotkey -- see `keyToUiAction`.
     if (action === null || !isDirection(action)) return;
     const isLateral = action === 'left' || action === 'right';
-    if (isLateral && e.target === previewCanvasEl) return; // the preview owns its own scheme
+    if (isLateral && e.target === customize.previewCanvas) return; // the preview owns its own scheme
     const container = activePanelContainer();
     if (!container) return; // nothing shown (splash/playing): let input.ts drive the tank
     // Claiming the key stops the WHOLE remaining dispatch -- including el's own
@@ -4619,19 +4503,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   const handleQuit = (): void => {
     for (const cb of quitCbs) cb();
-  };
-
-  // A focused control legitimately claims Space, Enter and the arrow keys -- input.ts
-  // deliberately lets it have them. But a MOUSE player who clicks Mute never asked to hand
-  // over their keyboard, and the control stays focused after a click, so arrow-key driving
-  // and the Space mine-drop went dead with nothing on screen to explain it. Dropping focus
-  // on pointer interactions only hands those keys back. `detail > 0` marks a real pointer
-  // activation; keyboard activation reports 0 and keeps focus, so tabbing still works.
-  const blurIfPointer = (e: MouseEvent): void => {
-    if (e.detail > 0) (e.currentTarget as HTMLElement).blur();
-  };
-  const blurAfterDrag = (e: Event): void => {
-    (e.currentTarget as HTMLElement).blur();
   };
 
   actionBtn.addEventListener('click', handleAction);
@@ -4696,15 +4567,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     stats: { container: statsView, open: () => showStats(true), close: () => showStats(false) },
     customize: {
       container: customizeView,
-      open: () => showCustomize(true),
-      close: () => showCustomize(false),
-      // The pane owns a live `TankPreview` -- a WebGL context and its listeners -- handed
-      // out to `customizeCloseCbs` subscribers. Guarded on the surface being open for the
-      // same reason `showCustomize` guards on `wasOpen`: a release that fired for a pane
-      // that was never on screen would tear down a preview nobody built.
-      release: () => {
-        if (isSurfaceOpen(CUSTOMIZE_SURFACE)) for (const cb of customizeCloseCbs) cb();
-      },
+      open: () => customize.show(true),
+      close: () => customize.show(false),
+      // The pane's subscribers own a live `TankPreview`: a WebGL context and its listeners.
+      // `customize-pane.ts` releases them only when the pane was on screen.
+      release: () => customize.release(),
     },
     achievements: { container: achView, open: () => showAchievements(true), close: () => showAchievements(false) },
     levelselect: { container: levelSelectView, open: () => showLevelSelect(true), close: () => showLevelSelect(false) },
@@ -5024,12 +4891,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   const handleResetStats = (): void => handleDangerClick(resetStatsBtn, resetStatsCbs);
   const handleResetProgress = (): void => handleDangerClick(resetProgressBtn, resetProgressCbs);
-  const handleCustomizeOpen = (): void => {
-    openLayer('customize', customizeOpenBtn);
-  };
-  const handleCustomizeBack = (): void => {
-    back();
-  };
   const handleAchBack = (): void => {
     back();
   };
@@ -5484,10 +5345,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
-  customizeOpenBtn.addEventListener('click', handleCustomizeOpen);
-  customizeOpenBtn.addEventListener('click', blurIfPointer);
-  customizeBackBtn.addEventListener('click', handleCustomizeBack);
-  customizeBackBtn.addEventListener('click', blurIfPointer);
   recordsOpenBtn.addEventListener('click', handleRecordsOpen);
   recordsOpenBtn.addEventListener('click', blurIfPointer);
   for (const btn of recordsTabStatsBtns) {
@@ -7250,7 +7107,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    *
    * No paired onVersusClose callback (see onVersusOpen's own doc comment): nothing
    * here owns a resource that must tear down on close, so there is no transition-
-   * guarded firing the way showCustomize/showControllers need.
+   * guarded firing the way Customize's `show` and showControllers need.
    */
   function showVersusSetup(show: boolean, initial?: VersusConfig | null): void {
     if (!show) {
@@ -7364,7 +7221,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // playing early-return below, or an overlay opened on the Main Menu would
     // sit over the live game. They are Main-Menu affairs.
     cleanupHide(statsView, 'hud-stats--hidden');
-    // Routed through showCustomize (not a bare class add, unlike its stats/achievements
+    // Routed through the Customize pane's `show` (not a bare class add, unlike its stats/achievements
     // siblings above/below) so this path fires onCustomizeClose too -- the common exit
     // from the panel is Start, which arrives here, not through the Back button.
     // INSTANT. This is `setState`'s unconditional cleanup, not a navigation the player
@@ -7373,15 +7230,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // on every time. Animating it also left the panel painted over the live game for the
     // duration, and its close callbacks (which tear down window listeners) landed a frame
     // late.
-    showCustomize(false, true);
+    customize.show(false, true);
     cleanupHide(achView, 'hud-achievements--hidden');
     cleanupHide(levelSelectView, 'hud-levelselect--hidden');
-    // Routed through showControllers for the same reason as showCustomize above -- it
+    // Routed through showControllers for the same reason as Customize above -- it
     // must fire onControllersClose (loop.ts's window listener teardown) on EVERY exit,
     // not only the panel's own Back button. Omitted, the panel -- and its live
     // gamepadconnected/disconnected listeners -- would leak onto the live game on
     // Resume, since 'paused' -> 'playing' is one of this function's own early returns.
-    showControllers(false, true); // instant, same reason as showCustomize above
+    showControllers(false, true); // instant, same reason as Customize above
     // A bare class add, not routed through showVersusSetup(false) -- unlike Customize/
     // Controllers just above, this pane has no onVersusClose to fire (see its own doc
     // comment), so there is nothing a transition-guarded call would buy here that a
@@ -8037,27 +7894,27 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       resetProgressCbs.push(cb);
     },
     setHullColor(id: HullColorId): void {
-      customizeChoices.setHullColor(id);
+      customize.setHullColor(id);
     },
     onPickHullColor(cb: (id: HullColorId) => void): void {
-      customizeChoices.onPickHullColor(cb);
+      customize.onPickHullColor(cb);
     },
     setSkin(id: SkinId): void {
-      customizeChoices.setSkin(id);
+      customize.setSkin(id);
     },
     setAccentColor(id: AccentId): void {
-      customizeChoices.setAccentColor(id);
+      customize.setAccentColor(id);
     },
     onPickAccentColor(cb: (id: AccentId) => void): void {
-      customizeChoices.onPickAccentColor(cb);
+      customize.onPickAccentColor(cb);
     },
-    previewCanvas: previewCanvasEl,
-    previewRotateButtons: previewRotateBtns,
+    previewCanvas: customize.previewCanvas,
+    previewRotateButtons: customize.previewRotateButtons,
     onCustomizeOpen(cb: () => void): void {
-      customizeOpenCbs.push(cb);
+      customize.onCustomizeOpen(cb);
     },
     onCustomizeClose(cb: () => void): void {
-      customizeCloseCbs.push(cb);
+      customize.onCustomizeClose(cb);
     },
     setTouchIndicator(t: TouchIndicator): void {
       // Hidden entirely until a touch has happened, so a mouse player never sees it.
@@ -8085,7 +7942,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       }
     },
     onPickSkin(cb: (id: SkinId) => void): void {
-      customizeChoices.onPickSkin(cb);
+      customize.onPickSkin(cb);
     },
     onReassignSlot(cb: (slot: number, source: SlotSource) => void): void {
       reassignSlotCbs.push(cb);
@@ -8371,10 +8228,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       confirmAcceptBtn.removeEventListener('click', blurIfPointer);
       confirmCancelBtn.removeEventListener('click', handleConfirmCancel);
       confirmCancelBtn.removeEventListener('click', blurIfPointer);
-      customizeOpenBtn.removeEventListener('click', handleCustomizeOpen);
-      customizeOpenBtn.removeEventListener('click', blurIfPointer);
-      customizeBackBtn.removeEventListener('click', handleCustomizeBack);
-      customizeBackBtn.removeEventListener('click', blurIfPointer);
+      customize.dispose(); // the Customize opener's and Back button's listeners
       recordsOpenBtn.removeEventListener('click', handleRecordsOpen);
       recordsOpenBtn.removeEventListener('click', blurIfPointer);
       for (const btn of recordsTabStatsBtns) {
