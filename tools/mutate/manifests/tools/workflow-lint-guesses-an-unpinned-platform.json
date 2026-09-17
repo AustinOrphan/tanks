@@ -1,0 +1,11 @@
+{
+  "id": "workflow-lint-guesses-an-unpinned-platform",
+  "file": "tools/workflow-lint/lint.mjs",
+  "find": "  if (!pins) {",
+  "replace": "  if (!pins && platform === 'none') {",
+  "expect": "killed",
+  "tests": [
+    "tools/workflow-lint/lint.test.ts"
+  ],
+  "why": "Issue #761: a platform with no pin must be refused by name. Without the refusal pinsFor returns undefined and run.mjs dies reading `.actionlint` of it, a TypeError that names neither the platform nor the supported ones."
+}

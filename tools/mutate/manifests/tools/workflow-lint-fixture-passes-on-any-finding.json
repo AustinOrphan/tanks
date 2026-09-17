@@ -1,0 +1,11 @@
+{
+  "id": "workflow-lint-fixture-passes-on-any-finding",
+  "file": "tools/workflow-lint/lint.mjs",
+  "find": "    .filter(({ fixture, reported }) => !reported.includes(fixture.rule));",
+  "replace": "    .filter(({ reported }) => reported.length === 0);",
+  "expect": "killed",
+  "tests": [
+    "tools/workflow-lint/lint.test.ts"
+  ],
+  "why": "Issue #761's known-bad fixtures are the proof that each check still runs. If any finding satisfied a fixture, the invalid-expression fixture would pass on any other finding, and an actionlint whose expression checker had stopped working would still report the repository clean."
+}
