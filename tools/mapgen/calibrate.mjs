@@ -41,7 +41,7 @@ if (json) {
   const f = (v, d = 2) => (typeof v === 'number' ? v.toFixed(d) : String(v));
   const head = [
     'board'.padEnd(12), 'N', 'ok', 'wall', 'dstr', 'cov', 'spc', 'legal', 'corr', 'open',
-    'prs', 'unr', 'mine', 'pMin', 'pMax', 'sprd', 'rout', '2nd', '1way', 'sight', 'long',
+    'prs', 'unr', 'mine', 'pMin', 'pMax', 'sprd', 'neck', 'rout', '1way', 'pts', 'sight',
     'bank', 'bOnly', 'rot',
   ];
   console.log(head.join('  '));
@@ -56,8 +56,8 @@ if (json) {
       String(r.spawnPairs).padStart(3), String(r.unreachablePairs).padStart(3),
       String(r.mineGatedPairs).padStart(4),
       f(r.pathMin, 1).padStart(4), f(r.pathMax, 1).padStart(4), f(r.pathSpread),
-      f(r.routeCount), f(r.secondRouteDetour), String(r.singleRoutePairs).padStart(4),
-      f(r.openSightFraction), f(r.longestSightlineRelative),
+      f(r.bottleneckWidth).padStart(4), f(r.routeCount), String(r.singleRoutePairs).padStart(4),
+      String(r.samplePoints).padStart(3), f(r.openSightFraction),
       f(r.bankGain), f(r.bankOnlyFraction), f(r.asymmetryRotational),
     ].join('  '));
   }
@@ -68,10 +68,12 @@ if (json) {
   console.log('directions clear for 1.5 tank diameters; prs = spawn pairs measured, unr =');
   console.log('unreachable even with destructibles gone, mine = routable only by mining through;');
   console.log('pMin/pMax = shortest/longest spawn-pair path (solid-only space); sprd =');
-  console.log('(max-min)/mean; rout = mean route-disjoint ways between a pair, capped at 3;');
-  console.log('2nd = second route length over first; 1way = pairs with a single route;');
-  console.log('sight = mean fraction of sample points in direct view; long = longest sightline');
-  console.log('over board diagonal; bank = of pairs with no direct shot and within 9 units, the');
-  console.log('fraction one bounce reaches; bOnly = that as a fraction of ALL pairs in reach;');
+  console.log('(max-min)/mean; neck = narrowest passage every pair must pass, world units');
+  console.log('(1.000 = a tank exactly, 1.333 = the minimum corridor, 2.000 = a 3-cell lane);');
+  console.log('rout = mean route-disjoint ways between a pair, greedy lower bound capped at 4;');
+  console.log('1way = pairs with a single route; pts = sample points behind the three shell');
+  console.log('fractions that follow; sight = mean fraction of them in direct view; bank = of');
+  console.log('pairs with no direct shot and within 9 units, the fraction one bounce reaches;');
+  console.log('bOnly = that as a fraction of ALL pairs in reach;');
   console.log('rot = fraction of cells disagreeing under 180-degree rotation.');
 }

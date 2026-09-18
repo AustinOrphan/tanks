@@ -111,6 +111,26 @@ describe('mapgen quality measures: each measure moves when its cause is introduc
     expect(open.routeCount).toBeGreaterThan(door.routeCount);
   });
 
+  it('bottleneckWidth reads the doorway it was given, in cells', () => {
+    // The door is 3 cells, so its free width is exactly 3 * (2/3) = 2.0 and nothing wider
+    // than that gets between the halves. An open board of the same size has no doorway at
+    // all and must report something wider. Both are fixed by construction, which is what
+    // makes this a control rather than a snapshot.
+    const door = measureBoard(oneDoorBoard(33, 27), 2, 'control-one-door');
+    expect(door.bottleneckWidth).toBeCloseTo(2, 6);
+    expect(open.bottleneckWidth).toBeGreaterThan(door.bottleneckWidth);
+
+    // Narrow the same door to 2 cells and the measure must step down one rung, to the
+    // minimum legal corridor -- 2 * (2/3) = 1.333.
+    const narrowed = oneDoorBoard(33, 27);
+    const mid = Math.floor(27 / 2);
+    const two = {
+      ...narrowed,
+      grid: narrowed.grid.map((row, r) => (r === mid ? row.slice(0, 15) + '#' + row.slice(16) : row)),
+    };
+    expect(measureBoard(two, 2, 'control-two-cell-door').bottleneckWidth).toBeCloseTo(4 / 3, 6);
+  });
+
   it('a slit wall blocks tanks and sight but not shells -- the two spaces are distinct', () => {
     // A one-cell wall with a one-cell slit: 0.667 wide, so no tank passes, and `lineOfSight`
     // sees nothing through it either since the slit is a gap between two boxes on the same

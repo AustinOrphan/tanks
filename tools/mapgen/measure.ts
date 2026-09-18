@@ -70,6 +70,11 @@ export interface LatticePoint {
  * `step` is `cellSize / 8`, matching `versus-board.ts`: the narrowest passage a tank can
  * use is 2 cells (1.333), leaving a legal centre band of `1.333 - 1.0 = 0.333`, and four
  * samples across that band means the minimum legal passage cannot alias closed.
+ *
+ * `radius` defaults to a tank's own, which is the only value the mobility measures use.
+ * `bottleneckWidth` sweeps it upward instead, asking how WIDE a body could still make the
+ * same journey -- see that measure for why that is the exact question `routeCount` only
+ * bounds.
  */
 export interface TankLattice {
   readonly nx: number;
@@ -90,7 +95,7 @@ const idxOf = (_nx: number, ny: number) => (i: number, j: number) => i * ny + j;
  * naive loop measured 44s on one variant sweep. The exact `circleVsAABB` test still
  * decides every cell, so this is a speed change and not an approximation.
  */
-export function tankLattice(arena: Arena, walls: readonly Wall[]): TankLattice {
+export function tankLattice(arena: Arena, walls: readonly Wall[], radius: number = TANK_RADIUS): TankLattice {
   const width = arena.cols * arena.cellSize;
   const height = arena.rows * arena.cellSize;
   const step = arena.cellSize / 8;
@@ -103,25 +108,34 @@ export function tankLattice(arena: Arena, walls: readonly Wall[]): TankLattice {
     for (let j = 0; j < ny; j++) {
       const x = (i + 0.5) * step;
       const y = (j + 0.5) * step;
-      if (x - TANK_RADIUS < 0 || y - TANK_RADIUS < 0) continue;
-      if (x + TANK_RADIUS > width || y + TANK_RADIUS > height) continue;
+      if (x - radius < 0 || y - radius < 0) continue;
+      if (x + radius > width || y + radius > height) continue;
       legal[idx(i, j)] = 1;
     }
   }
   for (const wall of walls) {
     if (wall.destroyed) continue;
     const b = wall.aabb;
-    const i0 = Math.max(0, Math.floor((b.minX - TANK_RADIUS) / step) - 1);
-    const i1 = Math.min(nx - 1, Math.ceil((b.maxX + TANK_RADIUS) / step) + 1);
-    const j0 = Math.max(0, Math.floor((b.minY - TANK_RADIUS) / step) - 1);
-    const j1 = Math.min(ny - 1, Math.ceil((b.maxY + TANK_RADIUS) / step) + 1);
+    const i0 = Math.max(0, Math.floor((b.minX - radius) / step) - 1);
+    const i1 = Math.min(nx - 1, Math.ceil((b.maxX + radius) / step) + 1);
+    const j0 = Math.max(0, Math.floor((b.minY - radius) / step) - 1);
+    const j1 = Math.min(ny - 1, Math.ceil((b.maxY + radius) / step) + 1);
     for (let i = i0; i <= i1; i++) {
       for (let j = j0; j <= j1; j++) {
         const k = idx(i, j);
         if (legal[k] !== 1) continue;
         const x = (i + 0.5) * step;
         const y = (j + 0.5) * step;
-        if (circleVsAABB({ x, y }, TANK_RADIUS, b)) legal[k] = 0;
+        // `.hit`, and the missing property is not a style point: `circleVsAABB` returns a
+        // `Hit` OBJECT, which is truthy whether or not it hit, so without this the rasterised
+        // neighbourhood of every wall -- the box grown by `radius` plus a step, square corners
+        // and all -- was marked illegal. The lattice still looked broadly right, because that
+        // neighbourhood mostly IS the blocked region, which is what made it survive a first
+        // calibration run over all 8 shipped boards. It cost the rounded corners a tank can
+        // really occupy and one lattice step of margin everywhere, and it read a 3-cell
+        // doorway as impassable to anything wider than a 2-cell one. `versus-board.ts:241`
+        // has the same call written correctly; this copy dropped the property.
+        if (circleVsAABB({ x, y }, radius, b).hit) legal[k] = 0;
       }
     }
   }
@@ -285,6 +299,22 @@ export interface BoardMeasures {
   /** `(pathMax - pathMin) / pathMean`: 0 means every pair starts equally far apart. */
   readonly pathSpread: number;
   /**
+   * The narrowest passage any spawn pair's journey must squeeze through, in world units:
+   * the widest body that can still get from one spawn to the other, over every pair, taking
+   * the tightest pair. Exact to the ladder step, with no path choice and no cap -- which is
+   * what `routeCount` cannot offer, since it is greedy.
+   *
+   * It reads directly in the gap taxonomy the arena-geometry spec sets out, which is the
+   * language a board should be argued in:
+   *
+   *   0      no route at all, at any width
+   *   1.000  a tank fits and nothing wider -- the hull's own width, a scrape
+   *   1.333  the MINIMUM legal corridor: 2 cells
+   *   2.000  a comfortable corridor: 3 cells, today's standard
+   *   2.667+ a room rather than a corridor
+   */
+  readonly bottleneckWidth: number;
+  /**
    * Mean over pairs of how many ROUTE-DISJOINT ways there are from one spawn to the other,
    * counted up to `ROUTE_CAP`. 1.0 means every pair is joined by a single corridor.
    *
@@ -302,7 +332,13 @@ export interface BoardMeasures {
   readonly singleRoutePairs: number;
 
   // ---- sightlines and carom (SHELL space, sampled) ----
-  /** How many legal sample points the shell measures used. */
+  /**
+   * How many legal sample points the shell measures used -- the DENOMINATOR behind
+   * `openSightFraction`, `bankGain` and `bankOnlyFraction`, all three of which are means
+   * over pairs drawn from it. It is not a constant: the sample is a 2-unit grid snapped to
+   * legal ground, so a tight board yields far fewer points than an open one of the same
+   * size, and a bigger board yields more. Read the three fractions beside it, never alone.
+   */
   readonly samplePoints: number;
   /** Mean fraction of other sample points with direct line of sight. */
   readonly openSightFraction: number;
@@ -496,6 +532,33 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     }
   }
 
+  // ---- bottleneck width ----
+  // Rebuild the legal lattice for a BODY of increasing size and ask, each time, whether the
+  // spawns are still joined. The widest body that still gets through is the narrowest
+  // passage on the journey. The ladder walks the gap taxonomy's own rungs -- a tank's own
+  // width, then whole cells -- rather than an arbitrary sweep, and each radius is pulled one
+  // lattice step below the rung so a passage exactly that wide reads as passable rather than
+  // aliasing shut on the boundary.
+  const rungs: number[] = [2 * TANK_RADIUS];
+  for (let cells = 2; cells * arena.cellSize <= Math.min(width, height); cells++) {
+    rungs.push(cells * arena.cellSize);
+  }
+  let bottleneck = 0;
+  for (const rung of rungs) {
+    const wide = tankLattice(arena, solidWalls, rung / 2 - lat.step);
+    const nodes = positions.map((p) => nearestLegal(wide, p, 2.0));
+    let allJoined = pairPaths.length > 0;
+    for (let a = 0; a < nodes.length && allJoined; a++) {
+      if (nodes[a] < 0) { allJoined = false; break; }
+      const d = geodesic(wide, nodes[a]);
+      for (let b = a + 1; b < nodes.length; b++) {
+        if (nodes[b] < 0 || d[nodes[b]] < 0) { allJoined = false; break; }
+      }
+    }
+    if (!allJoined) break;
+    bottleneck = rung;
+  }
+
   // ---- sightlines and carom ----
   // A fixed stratified sample: legal points nearest each node of a 2-world-unit grid over
   // the board. Deterministic, evenly spread, and about 90-130 points on shipped sizes --
@@ -600,6 +663,7 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     pathMean,
     pathMax: pairPaths.length ? Math.max(...pairPaths) : 0,
     pathSpread: pathMean > 0 ? (Math.max(...pairPaths) - Math.min(...pairPaths)) / pathMean : 0,
+    bottleneckWidth: bottleneck,
     routeCount: mean(routeCounts),
     secondRouteDetour: mean(secondDetours),
     singleRoutePairs,
