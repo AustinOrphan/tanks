@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-flow-measured-through-destructibles",
+  "file": "tools/mapgen/measure.ts",
+  "find": "  const solidWalls = walls.filter((w) => w.kind !== 'destructible');",
+  "replace": "  const solidWalls = walls;",
+  "expect": "killed",
+  "why": "Measures mobility through the INTACT board rather than through solid-only space. `versus-board.ts` gates egress on destructible-free connectivity for a stated reason -- a player may mine through a destructible, so the solid layout is the topology no play can change -- and this module follows it. Under the mutation arena-02, whose two halves are joined only through destructible walls, reports its spawn pair as having no route at all: the pair falls out of `spawnPairs`, `pathMin` collapses to its empty-list fallback of 0, and a board designed around blowing a hole in the centre barrier reads as two spawns sitting on top of each other. Pins that mine-gated is reported as mine-gated and never as unreachable.",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: each measure moves when its cause is introduced destructible-only separation reads as mine-gated, never as unreachable"
+  ]
+}
