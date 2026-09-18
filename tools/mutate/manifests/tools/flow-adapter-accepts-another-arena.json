@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-accepts-another-arena",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "  const worldOk = w.seed === recipe.fixture.seed && w.arenaId === expectedArena;",
+  "replace": "  const worldOk = w.seed === recipe.fixture.seed;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "judgeFlowReport: every gate, both ways (issue #815) fails world identity on another seed or another arena than the level maps to"
+  ],
+  "why": "The level a recipe names maps to one arena in the campaign data; a round on another arena is another workload under the same label."
+}

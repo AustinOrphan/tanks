@@ -1,0 +1,14 @@
+{
+  "id": "realtime-early-stop-unchecked-against-the-policy",
+  "file": "tools/capture/producer.mjs",
+  "find": "      const early = recipe.schedule.stop === 'round-end' && schedule.frameCount < expected;",
+  "replace": "      const early = schedule.frameCount < expected;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/producer.test.ts"
+  ],
+  "killedBy": [
+    "a realtime window fixes the frame count (issue #815) rejects a frames result whose count is not the window times the rate, naming both"
+  ],
+  "why": "Only a round-end recipe may end early. Allowing any realtime recipe to come up short would let a fixed-window capture publish a truncated clip under the window it promised."
+}

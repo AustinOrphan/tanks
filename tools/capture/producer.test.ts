@@ -85,3 +85,30 @@ describe('normalized capture producer result', () => {
     })).rejects.toThrow(/escapes the producer output directory/);
   });
 });
+
+describe('a realtime window fixes the frame count (issue #815)', () => {
+  it('rejects a frames result whose count is not the window times the rate, naming both', async () => {
+    const { outputDirectory, frame } = await fixture();
+    const shipped = CAPTURE_RECIPES.find((entry: any) => entry.recipe.id === 'flow.campaign-round.pp1roles-off').recipe;
+    // The shipped pair stops at the round's end; this rule is about a fixed window, so the
+    // fixture asks for one. The round-end case is the negative control below.
+    const flow = structuredClone(shipped);
+    flow.schedule = { kind: 'realtime', durationSeconds: 20 };
+    const short = {
+      ...result(frame),
+      producer: { kind: 'flow', scenarioId: 'campaign-round' },
+      capture: { viewport: flow.viewport, frameSchedule: { kind: 'frames', frameCount: 599 } },
+    };
+    await expect(validateProducerResult(short, { recipe: flow, outputDirectory }))
+      .rejects.toThrow(/reported 599; a 20 s window at 30 fps is 600/);
+    // Two negative controls, each accepted at THIS check and failing later on the raw-frame
+    // count, which is a different rule: a plain `frames` recipe of 599, and the same short
+    // count under a round-end stop, where a round shorter than the window is the point.
+    for (const schedule of [{ kind: 'frames', frameCount: 599 }, { kind: 'realtime', durationSeconds: 20, stop: 'round-end' }]) {
+      const other = structuredClone(flow);
+      other.schedule = schedule;
+      await expect(validateProducerResult(short, { recipe: other, outputDirectory }), JSON.stringify(schedule))
+        .rejects.not.toThrow(/a 20 s window/);
+    }
+  });
+});

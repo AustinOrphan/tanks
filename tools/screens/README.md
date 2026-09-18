@@ -251,3 +251,12 @@ needs a new step kind whose capture time then depends on the AI.
 **The session is part of the recipe.** The flag ends whatever session is running and the panel
 describes that session, so each state starts the session its ending belongs to — a campaign
 ending photographed over a practice session would be a screen no player can reach.
+
+## Recording a flow at normal speed
+
+`node tools/screens/record.mjs` (issue #815) is the moving counterpart of `run.mjs`: it
+boots the built page the same way, drives a flow from `flow.mjs` to a playing round, and
+records the compositor screencast for a wall-clock window while sampling the replay
+surface's tick count and the page's animation frames. It measures and never decides; the
+capture pipeline's `flow` adapter judges its report. Use it through `npm run capture --
+--recipe flow.<...>`; the arguments it takes are built from the recipe, never typed.

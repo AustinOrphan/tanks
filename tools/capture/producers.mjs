@@ -1,3 +1,4 @@
+import { runFlow } from './flow-adapter.mjs';
 import { runGalleryMoment } from './gallery-adapter.mjs';
 import { runScreenState } from './screen-adapter.mjs';
 
@@ -14,6 +15,7 @@ export function createProducerRegistry(entries) {
 export const CAPTURE_PRODUCERS = createProducerRegistry([
   ['moment', runGalleryMoment],
   ['screen', runScreenState],
+  ['flow', runFlow],
 ]);
 
 export function producerForKind(kind, registry = CAPTURE_PRODUCERS) {

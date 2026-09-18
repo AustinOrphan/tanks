@@ -1,0 +1,14 @@
+{
+  "id": "round-end-never-stops-at-the-round",
+  "file": "tools/screens/flow.mjs",
+  "find": "  return stop === 'round-end' && surface !== 'playing';",
+  "replace": "  return false;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "stopsAtSample: whether a poll ends the recording (issue #815) ends a round-end recording the moment play stops, and never a window one"
+  ],
+  "why": "A round-end recording stops at the first sample that is not playing. Never stopping would record on to the end of the window, putting the outcome panel in a clip the recipe asked to end before it."
+}

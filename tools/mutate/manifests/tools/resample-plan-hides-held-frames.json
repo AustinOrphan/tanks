@@ -1,0 +1,14 @@
+{
+  "id": "resample-plan-hides-held-frames",
+  "file": "tools/screens/flow.mjs",
+  "find": "      heldFrames++;\n      run++;",
+  "replace": "      run++;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "resamplePlan: hold the last frame at a constant rate (issue #815) repeats the last frame across a gap, and reports the repeats rather than smoothing them"
+  ],
+  "why": "A slot the page rendered no new frame for repeats the previous one. Not counting those repeats would let a smooth-looking MP4 built from few frames pass as evidence of smooth play."
+}

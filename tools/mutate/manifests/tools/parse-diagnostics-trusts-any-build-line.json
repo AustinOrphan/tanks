@@ -1,0 +1,14 @@
+{
+  "id": "parse-diagnostics-trusts-any-build-line",
+  "file": "tools/screens/flow.mjs",
+  "find": "  const build = buildRaw !== null && /^[0-9a-f]{40}$/.test(buildRaw)",
+  "replace": "  const build = buildRaw !== null",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "parseDiagnostics: the page's own account (issue #815) reads a refused parameter and an unknown one from their sections, and an unlabelled build as unknown"
+  ],
+  "why": "The page prints \"unknown (not a deployed build)\" when it has no commit. Reading that as a known build would let an unlabelled bundle pass the build-identity gate with a nonsense commit."
+}

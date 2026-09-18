@@ -1,0 +1,14 @@
+{
+  "id": "playing-window-cuts-under-every-policy",
+  "file": "tools/screens/flow.mjs",
+  "find": "  if (stop === 'window' || firstOff === -1) return { samples, stopReason: 'window', cutAtMs: null, endedAs };",
+  "replace": "  if (firstOff === -1) return { samples, stopReason: 'window', cutAtMs: null, endedAs };",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "playingWindow: where a recording stops (issue #815) under `window`, keeps every sample and names the surface that left play"
+  ],
+  "why": "A `window` recipe records its whole window and lets the adapter refuse a round that ended inside it. Cutting silently would turn that refusal into a shorter clip nobody asked for."
+}

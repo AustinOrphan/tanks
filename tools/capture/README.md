@@ -89,6 +89,8 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.ending.campaign-complete` | `screen.ending.campaign-complete` | `capture.png` | still |
 | `screen.ending.practice-cleared` | `screen.ending.practice-cleared` | `capture.png` | still |
 | `screen.ending.practice-failed` | `screen.ending.practice-failed` | `capture.png` | still |
+| `flow.campaign-round.pp1roles-off` | `campaign-round` | `capture.mp4` | 20 s of wall clock at 30 fps |
+| `flow.campaign-round.pp1roles-on` | `campaign-round` | `capture.mp4` | 20 s of wall clock at 30 fps |
 
 The `screen.*` recipes are the `screen` producer (issue #561): they boot the BUILT page
 into a named application state from [`tools/screens/states.mjs`](../screens/states.mjs) and
@@ -133,10 +135,10 @@ the content hash then identifies the exact reviewed configuration.
 
 ### Producer contract and registration
 
-The producer vocabulary reserves `moment`, `screen`, `flow`, and `replay`. Only `moment`
-is registered in [`producers.mjs`](producers.mjs). The other recognized kinds fail with an
-explicit “not implemented” error until a reviewed adapter exists; no speculative screen,
-flow, or replay path is hidden behind the registry.
+The producer vocabulary reserves `moment`, `screen`, `flow`, and `replay`. `moment`,
+`screen`, and `flow` are registered in [`producers.mjs`](producers.mjs). `replay` fails with
+an explicit “not implemented” error until a reviewed adapter exists; no speculative replay
+path is hidden behind the registry.
 
 An adapter receives the validated recipe, an isolated producer output directory, resolved
 prerequisites, environment, and an `AbortSignal`. It returns the schema-v1 normalized result
@@ -169,7 +171,7 @@ Adding a real producer requires its own strict recipe-option validation, an adap
 returns this result, and one registration in `producers.mjs`. It does not require runner,
 manifest-builder, or media-encoder changes. A generic `frames` schedule is available for
 non-simulation producers; the gallery adapter continues to require the existing fixed
-`ticks` schedule.
+`ticks` schedule, and the flow adapter the `realtime` one described below.
 
 ## Artifact contract
 
@@ -189,6 +191,9 @@ A temporal capture is:
   preview.gif
   capture.json
 ```
+
+A `flow` recipe may leave `preview.gif` out (issue #815): at a real-time capture's size and
+length a GIF is tens of megabytes, and the MP4 is the review artifact.
 
 The MP4 is the normal-speed review source of truth. The encoder is constructed to request
 libx264, yuv420p, and fast-start metadata. Validation then independently measures H.264,
@@ -228,6 +233,70 @@ subprocess group and lets the normal idempotent cleanup path remove workspaces, 
 publication, and `.capture.lock`; exit status is 130 for SIGINT or 143 for SIGTERM. A
 repeated signal force-kills active groups and imposes a bounded hard-exit fallback rather
 than hanging indefinitely.
+
+## Real-time application captures (`flow`)
+
+The `flow` producer (issue #815) records the BUILT application playing at wall-clock pace:
+`tools/screens/record.mjs` serves `dist`, drives the page through a flow from
+[`tools/screens/flow.mjs`](../screens/flow.mjs), and once the round is playing (and its
+start countdown has cleared) captures every frame the compositor produces, with its
+timestamp, through the CDP screencast for `schedule.durationSeconds`. Nothing steps the
+simulation. The frames are laid onto a constant-rate timeline by holding the last frame
+(`resamplePlan`) and decoded by one ffmpeg call into the numbered PNGs every producer hands
+the shared runner, which encodes and validates the MP4 exactly as for a gallery clip.
+
+A flow recipe:
+
+- names a flow through `producer.scenarioId` (`campaign-round`: a fresh save, New Game at
+  the requested level);
+- carries the seed in `fixture.seed` (1 or more: the page derives a clock seed from 0);
+- carries `variant: { level, driver: 'autoplay', flags: { pp1Roles?: boolean },
+  minimumDeliveredFps? }`. The page URL is BUILT from these in a fixed order; a recipe never
+  supplies query text, and `flags` is an allowlist checked against the dev-flag registry;
+- uses `schedule: { kind: 'realtime', durationSeconds }` (1 to 60 s) with `playback.rate` 1
+  and an `intendedFps` that gives a whole frame count, `profile.motion` `full`, and
+  `profile.visual` `software-gl` (SwiftShader) or `host-gpu` (the machine's GPU; on macOS
+  through ANGLE Metal). Which renderer ran is recorded, never assumed;
+- needs `timeoutMs` to hold the window plus 60 s of boot.
+
+**The manifest's timing evidence** lives in `producer.metadata.flow.timing` and in the
+assertions the adapter judges the recording by:
+
+- `flow-report-identity`: the recorder played the level, seed, driver and flags the recipe asked for
+- `flow-config-effective`: the page's own diagnostics report opened developer mode and refused none of the parameters
+- `flow-build-identity`: the page names the checkout's commit; build with `VITE_BUILD_SHA=$(git rev-parse HEAD) npm run build`
+- `flow-world-identity`: the replay surface reports the recipe's seed and the level's arena
+- `flow-still-playing`: the surface was `playing` at every sample and at the end of the window
+- `flow-no-clamped-frames`: no animation frame crossed the 250 ms catch-up clamp (`MAX_FRAME_DT`), so simulated time kept pace with the clock
+- `flow-simulation-rate`: the replay surface advanced 60 ticks per wall-clock second within 3%
+- `flow-frame-size` and `flow-frame-count`: every staged frame is the viewport at its DPR, and there are exactly `durationSeconds x intendedFps` of them
+- `flow-delivered-rate`: only when `variant.minimumDeliveredFps` is set: the compositor delivered at least that many frames per second
+
+The simulation-rate and clamp assertions are the normal-speed proof, and they hold under
+SwiftShader too: the game's driver catches up in whole ticks, so simulated time tracks the
+clock even when rendering is slow. What a slow renderer changes is the delivered rate and
+the held frames, both recorded (`screencast.fps`, `resample.heldFrames`,
+`resample.maxConsecutiveHold`). Measured on an M1 Max at 1280x800: about 100 delivered
+frames per second under `host-gpu`, about 30 under `software-gl`. The proving pair asks for
+45, so on a machine without a GPU it fails with the measured number rather than publishing
+choppy footage as evidence. Headless animation frames are not display-throttled, so a render
+rate above the display rate is a headless artefact, not a display condition.
+
+**What the manifest says about provenance.** `reproduce` (every recipe) lists the Playwright
+install, the build line with the commit, and the capture command, with a note when the
+checkout was dirty. `metadata.flow` records the built URL, the page's diagnostics report
+(build, developer mode, refused and unknown parameters), the world's seed and arena, whether
+the round is the campaign's or a practice level (a `level` jump plays as practice: the same
+world, outside a run), the served bundle's fingerprint, the browser version and renderer,
+and every timing number above. World-level application of `pp1Roles` is not observable
+from the page (issue #797); the flag's evidence is that the page accepted it.
+
+**Registering a flow capture.** Add the recipe to `recipes.json`, its row above, its id to
+`schema.test.ts` and to `.github/workflows/capture.yml`'s options; a new flow goes in
+`flow.mjs`'s catalogue with its storage and is validated like a screen state. Two real-time
+captures differ by timing jitter, so `npm run capture:compare` refuses flow recipes; review
+the MP4 pair and the two manifests, whose `producer.requestedInputs` differ in exactly the
+experiment's flags.
 
 ## Comparing two refs
 

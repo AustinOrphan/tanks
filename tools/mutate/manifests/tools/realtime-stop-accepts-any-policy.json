@@ -1,0 +1,14 @@
+{
+  "id": "realtime-stop-accepts-any-policy",
+  "file": "tools/capture/schema.mjs",
+  "find": "    if (Object.hasOwn(schedule, 'stop') && !REALTIME_STOPS.includes(schedule.stop)) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow recipes (issue #815) refuses every combination the flow producer cannot honour, at validation"
+  ],
+  "why": "The stop policy reaches the recorder's argv and decides where a clip ends; a policy neither side knows would be accepted here and refused there, far from the recipe that named it."
+}

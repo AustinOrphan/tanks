@@ -1,0 +1,15 @@
+{
+  "id": "record-flow-leaves-the-server-open",
+  "file": "tools/screens/record.mjs",
+  "find": "    if (server) await new Promise((ok) => server.close(ok));",
+  "replace": "    void server;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "recordFlow releases what it opened (issue #815) closes the server when the browser fails to launch",
+    "recordFlow releases what it opened (issue #815) closes the context, the browser and the server when the page cannot be reached"
+  ],
+  "why": "The static server is opened before the browser; a failure after it must still close it, or the process never exits and the adapter waits for its timeout."
+}

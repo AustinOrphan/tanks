@@ -1,0 +1,14 @@
+{
+  "id": "host-gpu-launches-swiftshader",
+  "file": "tools/screens/record.mjs",
+  "find": "    return ['--ignore-gpu-blocklist', ...(platform === 'darwin' ? ['--use-angle=metal'] : [])];",
+  "replace": "    return ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'];",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "launchArgumentsFor (issue #815) maps software-gl to SwiftShader and host-gpu to the platform's GPU backend"
+  ],
+  "why": "A recipe asking for the host GPU must get the launch arguments that reach it; silently launching SwiftShader would record a slow renderer under the fast profile name."
+}

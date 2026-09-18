@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-accepts-an-ended-round",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "  const stayed = r.surfaceAtStart === 'playing' && r.surfaceAtEnd === 'playing' && surfaces.every((s) => s === 'playing');",
+  "replace": "  const stayed = r.surfaceAtStart === 'playing';",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "judgeFlowReport: every gate, both ways (issue #815) fails still-playing when the round ended inside the window or a sample saw a menu"
+  ],
+  "why": "A round that ended inside the window leaves an outcome panel in the tail of the clip; the issue says a failure surface is never recorded as gameplay evidence."
+}

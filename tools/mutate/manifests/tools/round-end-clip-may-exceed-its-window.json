@@ -1,0 +1,14 @@
+{
+  "id": "round-end-clip-may-exceed-its-window",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "    && (roundEnd ? count >= 1 && count <= expectedFrames : count === expectedFrames);",
+  "replace": "    && (roundEnd ? count >= 1 : count === expectedFrames);",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "judgeFlowReport: every gate, both ways (issue #815) under a round-end stop, accepts a short clip and the whole window, but never more than it"
+  ],
+  "why": "A round-end recipe states a ceiling as well as a policy. A clip longer than the window it declared is a recorder bug, not a long round, and the manifest would still label it with the declared window."
+}

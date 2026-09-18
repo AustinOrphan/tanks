@@ -7,13 +7,14 @@ import { CAPTURE_RECIPES } from '../registry.mjs';
 const [root, pidFile] = process.argv.slice(2);
 if (!root || !pidFile) throw new Error('usage: signal-cli.mjs <root> <pid-file>');
 
-// `flow`, not `screen`: issue #561 gave `screen` a real adapter and a validated scenario
-// list, so a made-up id no longer builds a registry. This fixture is about the CLI's
-// SIGNAL handling and wants a producer kind the schema still treats as an open name.
+// `replay`, the one kind the schema still treats as an open name: issue #561 gave `screen`
+// a real adapter and a validated scenario list, and issue #815 did the same for `flow`, so
+// a made-up id under either no longer builds a registry. This fixture is about the CLI's
+// SIGNAL handling and wants a kind with no catalogue to disagree with.
 const recipe = structuredClone(CAPTURE_RECIPES[1].recipe);
-recipe.id = 'test.flow.slow';
-recipe.producer = { kind: 'flow', scenarioId: 'slow-flow' };
-recipe.fixture = { id: 'slow-flow', seed: 1 };
+recipe.id = 'test.replay.slow';
+recipe.producer = { kind: 'replay', scenarioId: 'slow-replay' };
+recipe.fixture = { id: 'slow-replay', seed: 1 };
 recipe.variant = {};
 recipe.schedule = { kind: 'frames', frameCount: 2 };
 const [entry] = createRegistry([recipe]);
@@ -41,7 +42,7 @@ async function slowProducer(context) {
   throw new Error('slow producer unexpectedly completed');
 }
 
-const producerRegistry = createProducerRegistry([['flow', slowProducer]]);
+const producerRegistry = createProducerRegistry([['replay', slowProducer]]);
 const code = await runCaptureCli({
   argv: ['--recipe', recipe.id, '--out', 'artifacts/capture/signal-test'],
   root,

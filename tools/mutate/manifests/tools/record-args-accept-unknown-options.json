@@ -1,0 +1,14 @@
+{
+  "id": "record-args-accept-unknown-options",
+  "file": "tools/screens/record.mjs",
+  "find": "  for (const name of values.keys()) if (!known.has(name)) throw new Error(`unknown option --${name}`);",
+  "replace": "  void known;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "parseRecordArgs (issue #815) refuses an unknown option, a missing value, a repeated option, a bad flag and a fractional frame count"
+  ],
+  "why": "The recorder takes exactly the options the adapter builds from a recipe. An option it silently ignored would be a way for a mistyped argument to record something other than what was asked."
+}

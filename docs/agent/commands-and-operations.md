@@ -276,11 +276,19 @@ npm run visual                                             # inspect an existing
 npm run roundtrip                                          # session lifecycle census in Chromium
 ```
 
-`npm run capture` (`tools/capture/`) wraps the gallery's deterministic moment path in a
-versioned, reviewed recipe contract. `npm run capture -- --recipe gallery.fire.still`
-publishes `capture.png` plus `capture.json`; `npm run capture -- --recipe
-gallery.ai-tracking.normal` publishes a timing-faithful H.264 MP4, a convenience GIF, and
-the manifest. Output defaults under ignored `artifacts/capture/`, refuses collisions, and
+`npm run capture` (`tools/capture/`) puts three producers behind one versioned, reviewed
+recipe contract: the gallery's deterministic moment path, the built application's screen
+states, and (issue #815) the built application playing at wall-clock pace. `npm run capture
+-- --recipe gallery.fire.still` publishes `capture.png` plus `capture.json`; `npm run
+capture -- --recipe gallery.ai-tracking.normal` publishes a timing-faithful H.264 MP4, a
+convenience GIF, and the manifest; `npm run capture -- --recipe
+flow.campaign-round.pp1roles-off` records twenty seconds of a real campaign round through
+the production game loop and publishes the MP4 and a manifest whose assertions prove the
+simulation kept 60 Hz wall-clock pace (`flow-simulation-rate`, `flow-no-clamped-frames`),
+the round stayed in play, and the page named the checkout's commit. A flow recipe needs a
+build that knows its commit (`VITE_BUILD_SHA=$(git rev-parse HEAD) npm run build`) and, for
+its delivered-rate gate, a host GPU; on the hosted runner it fails with the measured rate
+rather than publishing choppy footage as evidence. Output defaults under ignored `artifacts/capture/`, refuses collisions, and
 can be redirected with a safe relative `--out` path. Temporary numbered PNGs are removed
 unless `--retain-frames` is explicit. The MP4 is timing truth; GIF delay precision cannot
 express exact 60 fps. See [`tools/capture/README.md`](../../tools/capture/README.md) for

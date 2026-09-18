@@ -1188,7 +1188,7 @@
       "events": [],
       "allowUnexpectedEvents": true
     },
-    "title": "Developer Configuration \u2014 Sandbox",
+    "title": "Developer Configuration — Sandbox",
     "description": "The Sandbox group scrolled into view: the tank multiset built by a count per kind.",
     "altText": "Screenshot of the Tanks! developer configuration menu, Sandbox group.",
     "timeoutMs": 60000,
@@ -2173,5 +2173,117 @@
     "altText": "Screenshot of the Tanks! practice failed ending screen.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "flow.campaign-round.pp1roles-off",
+    "producer": {
+      "kind": "flow",
+      "scenarioId": "campaign-round"
+    },
+    "fixture": {
+      "id": "campaign-round",
+      "seed": 1
+    },
+    "variant": {
+      "level": 1,
+      "driver": "autoplay",
+      "flags": {
+        "pp1Roles": false
+      },
+      "minimumDeliveredFps": 45
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "host-gpu",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "realtime",
+      "durationSeconds": 60,
+      "stop": "round-end"
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": 30
+    },
+    "artifacts": [
+      {
+        "format": "mp4",
+        "filename": "capture.mp4"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Campaign level 1 at normal speed, pp1Roles off",
+    "description": "The baseline half of issue #720's matched pair: campaign level 1, seed 1, the scripted player, shipped role budgets. The whole round of the real application at wall-clock pace, from the end of the round-start countdown to the last frame before the outcome panel (under a 60 s ceiling), recorded from the compositor and resampled to 30 fps. The page runs its production game loop; nothing steps the simulation. Needs a build that names its commit (VITE_BUILD_SHA) and a host GPU for the delivered-rate gate.",
+    "altText": "One whole round of the scripted player fighting the level 1 roster under the shipped budgets, seen from the game camera.",
+    "timeoutMs": 180000,
+    "outputBudgetBytes": 100000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "flow.campaign-round.pp1roles-on",
+    "producer": {
+      "kind": "flow",
+      "scenarioId": "campaign-round"
+    },
+    "fixture": {
+      "id": "campaign-round",
+      "seed": 1
+    },
+    "variant": {
+      "level": 1,
+      "driver": "autoplay",
+      "flags": {
+        "pp1Roles": true
+      },
+      "minimumDeliveredFps": 45
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "host-gpu",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "realtime",
+      "durationSeconds": 60,
+      "stop": "round-end"
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": 30
+    },
+    "artifacts": [
+      {
+        "format": "mp4",
+        "filename": "capture.mp4"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Campaign level 1 at normal speed, pp1Roles on",
+    "description": "The experiment half of issue #720's matched pair: campaign level 1, seed 1, the scripted player, with issue #358's PP1 role-first ordnance matrix applied (?pp1Roles=1). The whole round of the real application at wall-clock pace, from the end of the round-start countdown to the last frame before the outcome panel (under a 60 s ceiling), recorded from the compositor and resampled to 30 fps. The page runs its production game loop; nothing steps the simulation. Needs a build that names its commit (VITE_BUILD_SHA) and a host GPU for the delivered-rate gate.",
+    "altText": "One whole round of the scripted player fighting the level 1 roster under the PP1 role budgets, seen from the game camera.",
+    "timeoutMs": 180000,
+    "outputBudgetBytes": 100000000
   }
 ]
