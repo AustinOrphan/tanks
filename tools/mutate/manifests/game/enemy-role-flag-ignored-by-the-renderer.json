@@ -1,0 +1,14 @@
+{
+  "id": "enemy-role-flag-ignored-by-the-renderer",
+  "file": "src/game/loop.ts",
+  "find": "    enemyRole: deps.devFlags.enemyRole,",
+  "replace": "    enemyRole: null,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: dev flags stay off by default threads the enemyRole dev flag through to the renderer (issues #357, #773)"
+  ],
+  "why": "The one line where the parsed arm reaches the renderer. Dropped, `?dev=1&enemyRole=both` renders the shipped board and reports success, so a reviewer would judge the arm by looking at its absence."
+}

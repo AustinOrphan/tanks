@@ -480,6 +480,63 @@ check('omitting the quality argument reproduces the `high` preset\'s sun.shadow.
   return null;
 });
 
+await checkAsync('createRenderer forwards its enemyRole option, and draws the shipped board without it (issues #357, #773)', async () => {
+  // renderer.ts's own seam, proved in PIXELS because that is what the renderer exposes: the
+  // scene is private, and a RendererOptions field that is typed but never passed into
+  // createEntityViews compiles, renders the shipped board, and reports success.
+  //
+  // Both halves of the acceptance criteria in one check. The arm must CHANGE the frame, and
+  // its absence must leave the frame exactly as shipped -- so the control is a second
+  // renderer with no options at all, compared byte for byte against the first.
+  const shot = async (options: Parameters<typeof createRenderer>[4]): Promise<Uint8ClampedArray> => {
+    const c = freshCanvas(640, 400);
+    c.style.cssText = 'position:fixed;left:0;top:0;z-index:1';
+    const r = createRenderer(c, W, H, BOUNDARY, options);
+    const world = soloTankWorld(W / 2, H / 2);
+    r.render(world, world, 1, [], 1 / 60);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    try {
+      const frame = r.captureFrame();
+      const ctx2d = frame.image.getContext('2d');
+      if (ctx2d === null) throw new Error('no 2d context to read the capture back');
+      return ctx2d.getImageData(0, 0, frame.width, frame.height).data;
+    } finally {
+      r.dispose();
+      c.remove();
+    }
+  };
+  const colours = (a: Uint8ClampedArray): number => {
+    const seen = new Set<number>();
+    for (let i = 0; i < a.length; i += 4 * 97) seen.add((a[i] << 16) | (a[i + 1] << 8) | a[i + 2]);
+    return seen.size;
+  };
+  const differs = (a: Uint8ClampedArray, b: Uint8ClampedArray): number => {
+    if (a.length !== b.length) return a.length;
+    let n = 0;
+    for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++;
+    return n;
+  };
+  // A DISCARDED WARM-UP FIRST. Measured: without it the first capture in this check raced
+  // presentation and read back a cleared buffer, so the control comparison failed with every
+  // pixel differing -- and passed on the next run. A check that flaky is worse than none.
+  await shot(undefined);
+  const shipped = await shot(undefined);
+  const alsoShipped = await shot({});
+  const armed = await shot({ enemyRole: 'both' });
+  for (const [name, frame] of [['shipped', shipped], ['also shipped', alsoShipped], ['armed', armed]] as const) {
+    const n = colours(frame);
+    if (n < 8) return `the ${name} frame has ${n} distinct sampled colours -- a cleared buffer, not a drawn board`;
+  }
+  const drift = differs(shipped, alsoShipped);
+  if (drift !== 0) {
+    return `two shipped frames differ in ${drift} pixels (colours ${colours(shipped)} vs ${colours(alsoShipped)}, armed ${colours(armed)}) -- this check cannot measure the arm`;
+  }
+  const changed = differs(shipped, armed);
+  return changed > 0
+    ? null
+    : 'enemyRole: both drew a frame identical to the shipped board: the option is typed but not forwarded';
+});
+
 check('createRenderer forwards its quality option through to the scene it builds', () => {
   // renderer.ts's own seam, not scene.ts's -- proves the RendererOptions.quality field
   // (loop.ts's actual wiring point) is not merely typed but actually plumbed.

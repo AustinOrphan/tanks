@@ -1,0 +1,14 @@
+{
+  "id": "enemy-role-flag-accepts-any-value",
+  "file": "src/game/devflags.ts",
+  "find": "  return isEnemyRoleCue(raw) ? raw : null;",
+  "replace": "  return raw as EnemyRoleCue;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "killedBy": [
+    "parseDevFlags: enemyRole (issues #357, #773 -- the non-colour role cue) rejects anything else to null rather than guessing -- population: the 8 forms below"
+  ],
+  "why": "A misspelled cue would be handed to the renderer as though it named a lever. The first vocabulary's names (`barrel`, `band`) still appear in #678's own example command, so the near-miss is the likely typo, and accepting it would compare something nobody asked for."
+}

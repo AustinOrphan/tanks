@@ -1,0 +1,15 @@
+{
+  "id": "enemy-role-cue-keyed-on-the-roster-not-the-tank",
+  "file": "src/render/entities.ts",
+  "find": "    const mines = mineShapeFor(mineLever(enemyRole), mineCap ?? cfg.mineCapacity);",
+  "replace": "    const mines = mineShapeFor(mineLever(enemyRole), cfg.mineCapacity);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "killedBy": [
+    "enemy role cues read the tank, not its kind (issues #357, #773) draws no mine block for a tank whose session took its mines away",
+    "enemy role cues read the tank, not its kind (issues #357, #773) sizes the block by the tank's own budget, so a raised cap reads wider"
+  ],
+  "why": "The cue would state the ROSTER's mine budget rather than this tank's. Under `?dev=1&pp1Roles=1` (issue #358) Brown, Teal and Green carry `mineCap: 0` while their roster entries read 2, so the cue would draw a mine block on a tank that cannot lay a mine -- contradicting the one thing it reports, on the very arm it would most often be run beside."
+}
