@@ -28,8 +28,29 @@ const inputs = (over: Record<string, unknown> = {}) => ({ level: 1, seed: 7, dri
 describe('the flow catalogue (issue #815)', () => {
   it('names the campaign round, and refuses a flow it does not know', () => {
     expect(FLOW_IDS).toEqual(['campaign-round']);
-    expect(findFlow('campaign-round').storage).toEqual({});
     expect(() => findFlow('campaign-menu')).toThrow(/unknown flow 'campaign-menu'/);
+  });
+
+  it('boots with every level unlocked, under the developer storage namespace', () => {
+    // Level Select renders one button per UNLOCKED level, so a recipe naming level 4 needs
+    // four of them; `?dev=1` reads the developer namespace, hence the prefixed key.
+    const storage = findFlow('campaign-round').storage;
+    expect(Object.keys(storage)).toEqual(['tanks.dev.tanks.progress.v1']);
+    expect(JSON.parse(storage['tanks.dev.tanks.progress.v1'])).toEqual({ levelId: 'level-05' });
+    expect(JSON.parse(storage['tanks.dev.tanks.progress.v1']).levelId)
+      .toBe(`level-0${CAMPAIGN_LEVEL_COUNT}`);
+  });
+
+  it('reaches the level the recipe names through Level Select, by accessible name', () => {
+    // The regression this pins: a flow that pressed New Game got level one whatever the
+    // recipe asked for, because `campaign-new` lands on level one by design (issue #428).
+    const flow = findFlow('campaign-round');
+    expect(flow.open.map((step: any) => Object.values(step)[0])).toEqual(['Space', '.hud-splash']);
+    for (const level of [1, 3, 5]) {
+      const clicks = flow.start({ level }).map((step: any) => step.click).filter(Boolean);
+      expect(clicks).toEqual(['.hud-levelselect-open', `.hud-level-btn[aria-label="Level ${level}"]`]);
+    }
+    expect(flow.start({ level: 2 }).some((step: any) => step.click === '.hud-new-game')).toBe(false);
   });
 
   it('reads the campaign the game reads: five levels, level 1 on arena-01', () => {

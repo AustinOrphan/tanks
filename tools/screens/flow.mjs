@@ -94,8 +94,18 @@ export const REALTIME_READINESS_BUDGET_MS = 60_000;
 
 /**
  * The flows the `flow` producer can capture. A flow is how the built page is taken from a
- * fresh load into the state the recording starts from; the recipe supplies the level, seed,
- * driver and flags, and the flow owns the storage it boots with and the steps it presses.
+ * fresh load into the state the recording starts from: the storage it boots with, the steps
+ * that get past the launch splash (`open`), and the steps that reach gameplay (`start`).
+ * The recipe supplies the level, seed, driver and flags.
+ *
+ * WHY LEVEL SELECT AND NOT NEW GAME. `?level=N` moves the level system's `start`, which is
+ * what CONTINUE resumes; a New Game deliberately lands on level one whatever the flag says
+ * (`campaign-new` in `loop.ts`, issue #428). A flow that pressed New Game therefore ignored
+ * the level its recipe named, silently, for every level but one -- caught here by the
+ * adapter's `flow-world-identity` gate, which compares the round's arena against the level's.
+ * Level Select reaches any unlocked level directly, so the recipe's `level` means what it
+ * says. The session is a practice attempt either way: a developer level jump never owns the
+ * campaign run (`isDevJump` in `levels.ts`).
  *
  * ONE ENTRY, deliberately. The issue asks for a reusable capability proved by one consumer,
  * and a catalogue of one keeps the id space real (a recipe names a flow the way a screen
@@ -104,13 +114,31 @@ export const REALTIME_READINESS_BUDGET_MS = 60_000;
 export const FLOWS = Object.freeze([
   Object.freeze({
     id: 'campaign-round',
-    title: 'A campaign round from a fresh save',
+    title: 'A campaign round at a chosen level',
     description:
-      'Boot the built page with a fresh save, dismiss the launch splash, read the session '
-      + 'diagnostics, start a new campaign game at the requested level, and record from the '
-      + 'moment the HUD reports the round is playing.',
-    /** A fresh save: New Game starts the round instead of opening the replace-run confirmation. */
-    storage: Object.freeze({}),
+      'Boot the built page with every level unlocked, dismiss the launch splash, read the '
+      + 'session diagnostics, pick the requested level from Level Select, and record from the '
+      + 'moment the round is playing and its start countdown has cleared.',
+    /**
+     * Enough progress that Level Select offers every campaign level: the pane renders one
+     * button per UNLOCKED level. Under `?dev=1` the page reads the developer namespace, so
+     * these are the developer-prefixed keys (`storage.ts`). No run is seeded: a practice pick
+     * neither reads nor writes one.
+     */
+    storage: Object.freeze({
+      'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-05' }),
+    }),
+    open: Object.freeze([
+      Object.freeze({ press: 'Space' }),
+      Object.freeze({ waitHidden: '.hud-splash' }),
+    ]),
+    start: ({ level }) => [
+      { click: '.hud-levelselect-open' },
+      { waitVisible: '.hud-levelselect' },
+      // By accessible name, not by position: the grid renders a bare digit per unlocked
+      // level and issue #629 gave each one this label.
+      { click: `.hud-level-btn[aria-label="Level ${level}"]` },
+    ],
   }),
 ]);
 export const FLOW_IDS = Object.freeze(FLOWS.map((flow) => flow.id));

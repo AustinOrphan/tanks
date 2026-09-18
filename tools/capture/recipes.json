@@ -2285,5 +2285,117 @@
     "altText": "One whole round of the scripted player fighting the level 1 roster under the PP1 role budgets, seen from the game camera.",
     "timeoutMs": 180000,
     "outputBudgetBytes": 100000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "flow.campaign-roster.pp1roles-off",
+    "producer": {
+      "kind": "flow",
+      "scenarioId": "campaign-round"
+    },
+    "fixture": {
+      "id": "campaign-round",
+      "seed": 1
+    },
+    "variant": {
+      "level": 4,
+      "driver": "autoplay",
+      "flags": {
+        "pp1Roles": false
+      },
+      "minimumDeliveredFps": 45
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "host-gpu",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "realtime",
+      "durationSeconds": 60,
+      "stop": "round-end"
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": 30
+    },
+    "artifacts": [
+      {
+        "format": "mp4",
+        "filename": "capture.mp4"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Campaign level 4 at normal speed, pp1Roles off",
+    "description": "The baseline half of the full-roster pair: campaign level 4, seed 1, the scripted player, shipped role budgets. Level 4 is the first campaign board holding every kind the arm touches (brown, grey, teal, olive and green), which is why the pair for issue #720 is shot here as well as on level 1. The whole round at wall-clock pace under a 60 s ceiling, recorded from the compositor and resampled to 30 fps.",
+    "altText": "One round of the scripted player against level 4's full roster under the shipped budgets, seen from the game camera.",
+    "timeoutMs": 180000,
+    "outputBudgetBytes": 100000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "flow.campaign-roster.pp1roles-on",
+    "producer": {
+      "kind": "flow",
+      "scenarioId": "campaign-round"
+    },
+    "fixture": {
+      "id": "campaign-round",
+      "seed": 1
+    },
+    "variant": {
+      "level": 4,
+      "driver": "autoplay",
+      "flags": {
+        "pp1Roles": true
+      },
+      "minimumDeliveredFps": 45
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "host-gpu",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "realtime",
+      "durationSeconds": 60,
+      "stop": "round-end"
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": 30
+    },
+    "artifacts": [
+      {
+        "format": "mp4",
+        "filename": "capture.mp4"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Campaign level 4 at normal speed, pp1Roles on",
+    "description": "The experiment half of the full-roster pair: campaign level 4, seed 1, the scripted player, with issue #358's PP1 role-first ordnance matrix applied (?pp1Roles=1). Level 4 is the first campaign board holding every kind the arm touches (brown, grey, teal, olive and green), which is why the pair for issue #720 is shot here as well as on level 1. The whole round at wall-clock pace under a 60 s ceiling, recorded from the compositor and resampled to 30 fps.",
+    "altText": "One round of the scripted player against level 4's full roster under the PP1 role budgets, seen from the game camera.",
+    "timeoutMs": 180000,
+    "outputBudgetBytes": 100000000
   }
 ]
