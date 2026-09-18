@@ -222,13 +222,15 @@ the clip is what it says it is.
 | Recipe | Level (arena) | Arm | Clip | Round | Ended |
 | --- | --- | --- | --- | --- | --- |
 | `flow.campaign-round.pp1roles-off` | 1 (`arena-01`) | shipped | 150 frames, 5.0 s | 302 ticks | Level Cleared |
-| `flow.campaign-round.pp1roles-on` | 1 (`arena-01`) | `pp1Roles=1` | 165 frames, 5.5 s | 333 ticks | Level Cleared |
-| `flow.campaign-roster.pp1roles-off` | 4 (`arena-04`) | shipped | 1524 frames, 50.8 s | 3050 ticks | Level Failed |
-| `flow.campaign-roster.pp1roles-on` | 4 (`arena-04`) | `pp1Roles=1` | 558 frames, 18.6 s | 1117 ticks | Level Failed |
+| `flow.campaign-round.pp1roles-on` | 1 (`arena-01`) | `pp1Roles=1` | 165 frames, 5.5 s | 332 ticks | Level Cleared |
+| `flow.campaign-roster.pp1roles-off` | 4 (`arena-04`) | shipped | 1518 frames, 50.6 s | 3039 ticks | Level Failed |
+| `flow.campaign-roster.pp1roles-on` | 4 (`arena-04`) | `pp1Roles=1` | 557 frames, 18.6 s | 1116 ticks | Level Failed |
 
 Every clip is 1280x800 at 30 fps, seed 1, the scripted player, recorded from the end of the
 round-start countdown to the last frame before the outcome panel. Within a pair the only
-difference is the flag, which each manifest records as `producer.requestedInputs`.
+difference is the flag, which each manifest records as `producer.requestedInputs`. The page
+boots with every level unlocked and every achievement already earned, so no unlock toast lays
+itself over the board mid-round.
 
 **Why two levels.** Level 1 holds Brown, Grey and Teal -- three of the five kinds the arm
 touches, including Teal, whose mine removal is the only one that changes AI play. Level 4 is
@@ -237,16 +239,21 @@ the first board holding every kind it touches, and it is where the difference is
 **What the pairs show, as durations.** These are one scripted player on one seed, not a
 difficulty measurement; the deterministic numbers above are that.
 
-- **Level 1:** both arms clear it. The arm takes 31 more ticks, about half a second.
-- **Level 4:** both arms fail. The baseline survives 3050 ticks, the arm 1117 -- under a third
+- **Level 1:** both arms clear it. The arm takes 30 more ticks, about half a second.
+- **Level 4:** both arms fail. The baseline survives 3039 ticks, the arm 1116 -- under a third
   as long. The 12-encounter harness recorded the opposite direction overall (player deaths
   26 to 22 in the arm's favour), so these two clips are a different sample, not a contradiction
   of it: one seed, one board, one policy.
 
+**A clip is a recording, not a fixture.** The simulation is deterministic on a fixed seed, but
+where the recording starts and stops is wall-clock: re-running a recipe gives the same round
+one or two frames longer or shorter, and a different file. The manifest, not the byte count,
+is what two captures are compared through.
+
 **What each manifest asserts.** Eleven checks pass on every capture. The ones carrying the
 timing claim:
 
-- `flow-simulation-rate`: the replay surface advanced 59.98 to 60.18 ticks per wall-clock
+- `flow-simulation-rate`: the replay surface advanced 59.96 to 60.02 ticks per wall-clock
   second across the four, against a 60 Hz simulation.
 - `flow-no-clamped-frames`: no animation frame crossed the game's 250 ms catch-up clamp, so no
   simulated time was lost against the clock.
@@ -254,7 +261,7 @@ timing claim:
 - `flow-world-identity`: the round's own seed and arena match the recipe's level.
 - `flow-build-identity`: the page named the commit being captured, read from its diagnostics
   report rather than assumed.
-- `flow-delivered-rate`: the compositor delivered 99 to 100 frames per second against the
+- `flow-delivered-rate`: the compositor delivered 98 to 100 frames per second against the
   recipe's floor of 45, and no output frame is a repeat of the one before it.
 
 **To make them again**, on any machine with a GPU:
