@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { Arena } from '../../src/sim/arena';
 import { ARENA_DEFS, loadArena } from '../../src/sim/arena';
 import { evaluateVersusBoard } from '../../src/sim/versus-board';
-import { measureBoard, tankLattice, geodesic, nearestLegal } from './measure';
+import { lineOfSight as losImpl } from '../../src/sim/ai/targeting';
+import { measureBoard, tankLattice, geodesic, nearestLegal, openingShots, wallAABBs } from './measure';
 
 /**
  * NEGATIVE CONTROLS for the quality measures.
@@ -57,6 +58,12 @@ function oneDoorBoard(cols: number, rows: number): Arena {
     return [...row].map((_, c) => (c >= door - 1 && c <= door + 1 ? '.' : '#')).join('');
   });
   return { ...open, grid };
+}
+
+/** Direct line of sight between two world points on a board, through its real walls. */
+function lineOfSightBetween(a: { x: number; y: number }, b: { x: number; y: number }, arena: Arena): boolean {
+  const { walls } = loadArena(arena, 2, 'ffa');
+  return losImpl(a, b, walls);
 }
 
 describe('mapgen quality measures: the open board is the floor of every measure', () => {
@@ -182,6 +189,44 @@ describe('mapgen quality measures: each measure moves when its cause is introduc
     expect(a.asymmetryRotational).toBe(0);
     expect(b.asymmetryRotational).toBeGreaterThan(0);
     expect(b.asymmetryMirrorH).toBeGreaterThan(0);
+  });
+
+  it('openingShots sees a bank shot the direct line does not -- the positive control', () => {
+    // A short vertical stub between two points, with open floor above it and the board's own
+    // top wall behind. The stub blocks the straight line between them; a shell fired up over
+    // the stub, off the top wall and back down reaches the far point inside the 9-unit trace.
+    //
+    // The positions are HANDED to `openingShots` rather than taken from a board, because
+    // versus spawn placement is geometric and a caller cannot steer where the second spawn
+    // lands. Without this control the spawn-level count is zero everywhere and there is no
+    // way to tell a real result from a measure that never fires.
+    const rows: string[] = [];
+    for (let r = 0; r < 27; r++) {
+      let row = '';
+      for (let c = 0; c < 33; c++) row += c === 6 && r >= 2 && r <= 6 ? '#' : r === 1 && c === 1 ? 'P' : '.';
+      rows.push(row);
+    }
+    const stub = board(rows);
+    const { walls } = loadArena(stub, 2, 'ffa');
+    const boxes = wallAABBs(walls);
+    const left = { x: 1.667, y: 2.667 };
+    const right = { x: 7.0, y: 2.667 };
+
+    // The straight line really is blocked: no direct shot either way.
+    expect(lineOfSightBetween(left, right, stub)).toBe(false);
+
+    const shots = openingShots([left, right], boxes);
+    expect(shots.ordered).toBe(2);
+    expect(shots.direct).toBe(0);
+    expect(shots.bankOnly).toBeGreaterThan(0);
+
+    // And with the stub gone, the same pair is a plain direct shot -- so the fan is finding
+    // the target rather than reporting a bounce for anything it cannot see.
+    const open = board(rows.map((row) => row.replace('#', '.').replace(/#/g, '.')));
+    const openBoxes = wallAABBs(loadArena(open, 2, 'ffa').walls);
+    const openShots = openingShots([left, right], openBoxes);
+    expect(openShots.direct).toBe(2);
+    expect(openShots.bankOnly).toBe(0);
   });
 
   it('destructible-only separation reads as mine-gated, never as unreachable', () => {

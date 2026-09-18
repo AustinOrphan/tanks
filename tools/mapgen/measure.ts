@@ -352,6 +352,24 @@ export interface BoardMeasures {
   /** Of ALL ordered sample pairs within shell reach, the fraction hittable only by banking. */
   readonly bankOnlyFraction: number;
 
+  /**
+   * SPAWN-TO-SPAWN OPENING SHOTS, counted over ordered spawn pairs.
+   *
+   * `evaluateVersusBoard`'s `allPairsConcealed` asks whether a spawn can SEE another at t=0.
+   * That is the right question for a game whose shells travel in straight lines, and this one
+   * does not: a normal shell bounces once, so "cannot see you" and "cannot shoot you" are
+   * different statements. Five of the six research lenses surveyed for the map-generation
+   * spec state the opening-shot rule as excluding the one-bounce line as well as the direct
+   * one, independently of each other.
+   *
+   * `spawnBankPairs` is therefore the count of ordered spawn pairs with NO direct line but a
+   * live one-bounce firing solution -- shots the shipped concealment rule permits and the
+   * researched rule would not.
+   */
+  readonly spawnOrderedPairs: number;
+  readonly spawnDirectPairs: number;
+  readonly spawnBankPairs: number;
+
   // ---- symmetry (CELL space) ----
   /** Fraction of cells whose wall kind disagrees with their image under 180-degree
    *  rotation / horizontal mirror / vertical mirror. 0 is exact symmetry. */
@@ -367,6 +385,58 @@ export interface BoardMeasures {
  * top of the scale and the measure stopped separating them.
  */
 export const ROUTE_CAP = 4;
+
+/**
+ * Rays per fan. 720 is half a degree -- finer than a player can aim with a 5 rad/s turret,
+ * and fine enough that a 0.6-radius target at the 9-unit trace reach cannot fall between two
+ * rays (the gap between adjacent rays there is 9 * 2pi / 720 = 0.079).
+ */
+const ANGLES = 720;
+
+/**
+ * Which of these positions can shoot which, at t=0, over ordered pairs.
+ *
+ * SEPARATE FROM `measureBoard` ON PURPOSE. Inside a board measurement the positions come
+ * from `loadArena`'s geometric versus placement, which the caller cannot steer -- so there is
+ * no way to construct a board whose spawns are arranged to make this fire, and a measure with
+ * no reachable positive case is one nobody has checked. Taking positions as an argument lets
+ * `measure.test.ts` hand it two points with a known bank solution and a known blocked direct
+ * line, which is the control.
+ *
+ * `bankOnly` counts the ordered pairs this game permits and a straight-line reading of
+ * concealment does not: no direct line, but a live one-bounce firing solution.
+ */
+export function openingShots(
+  positions: readonly LatticePoint[],
+  boxes: ReturnType<typeof wallAABBs>,
+): { ordered: number; direct: number; bankOnly: number } {
+  let ordered = 0;
+  let direct = 0;
+  let bankOnly = 0;
+  for (let a = 0; a < positions.length; a++) {
+    const hitDirect = new Uint8Array(positions.length);
+    const hitBanked = new Uint8Array(positions.length);
+    for (let t = 0; t < ANGLES; t++) {
+      const path = shellPath(positions[a], (t / ANGLES) * Math.PI * 2, boxes);
+      for (let b = 0; b < positions.length; b++) {
+        if (b === a) continue;
+        for (let seg = 0; seg + 1 < path.length; seg++) {
+          if (pointSegmentDistance(positions[b], path[seg], path[seg + 1]) > HIT_RADIUS) continue;
+          if (seg === 0) hitDirect[b] = 1;
+          else hitBanked[b] = 1;
+          break;
+        }
+      }
+    }
+    for (let b = 0; b < positions.length; b++) {
+      if (b === a) continue;
+      ordered++;
+      if (hitDirect[b]) direct++;
+      else if (hitBanked[b]) bankOnly++;
+    }
+  }
+  return { ordered, direct, bankOnly };
+}
 
 /** 8 compass directions, for the corridor/open-ground probe. */
 const DIRS: ReadonlyArray<readonly [number, number]> = [
@@ -594,7 +664,6 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
   // (direct fire) or after it (only reachable by banking). 720 angles is half a degree --
   // finer than a player can aim with a 5 rad/s turret and fine enough that a 0.6-radius
   // target at the 9-unit trace reach cannot fall between two rays.
-  const ANGLES = 720;
   let inReach = 0;
   let blockedInReach = 0;
   let bankOnly = 0;
@@ -624,6 +693,9 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
       if (banked[b]) bankOnly++;
     }
   }
+
+  // ---- spawn-to-spawn opening shots ----
+  const shots = openingShots(positions, boxes);
 
   // ---- symmetry ----
   const kindAt = (r: number, c: number): number => {
@@ -673,6 +745,9 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     longestSightlineRelative: longest / Math.sqrt(width * width + height * height),
     bankGain: blockedInReach ? bankOnly / blockedInReach : 0,
     bankOnlyFraction: inReach ? bankOnly / inReach : 0,
+    spawnOrderedPairs: shots.ordered,
+    spawnDirectPairs: shots.direct,
+    spawnBankPairs: shots.bankOnly,
     asymmetryRotational: rot / totalCells,
     asymmetryMirrorH: mirH / totalCells,
     asymmetryMirrorV: mirV / totalCells,
