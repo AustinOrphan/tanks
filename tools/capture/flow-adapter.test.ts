@@ -50,9 +50,13 @@ describe('buildFlowArguments (issue #815)', () => {
     expect(buildFlowArguments(recipe(), 'tmp/capture-1/producer')).toEqual([
       '--flow', 'campaign-round', '--level', '1', '--seed', '7', '--driver', 'autoplay',
       '--seconds', '4', '--fps', '30', '--w', '1280', '--h', '800', '--dpr', '1', '--visual', 'host-gpu',
+      '--stop', 'window',
       '--dist', 'dist', '--out', 'tmp/capture-1/producer', '--report', 'tmp/capture-1/producer/producer.json',
       '--timeout', '120000',
     ]);
+    // A recipe that stops at the round's end says so; the default is the whole window.
+    const roundEnd = recipe({ schedule: { kind: 'realtime', durationSeconds: 4, stop: 'round-end' } });
+    expect(buildFlowArguments(roundEnd, 'tmp/x')).toContain('round-end');
     const on = buildFlowArguments(recipe({ variant: { level: 2, driver: 'autoplay', flags: { pp1Roles: true } } }), 'tmp/x');
     expect(on.slice(0, 10)).toEqual(['--flow', 'campaign-round', '--level', '2', '--seed', '7', '--driver', 'autoplay', '--flag', 'pp1Roles']);
     const off = buildFlowArguments(recipe({ variant: { level: 2, driver: 'autoplay', flags: { pp1Roles: false } } }), 'tmp/x');
@@ -178,6 +182,24 @@ describe('judgeFlowReport: every gate, both ways (issue #815)', () => {
     const v = byKind(judgeFlowReport(recipe(), count, source))['flow-frame-count'];
     expect(v.passed).toBe(false);
     expect(v.diagnostic).toMatch(/119 frames/);
+  });
+
+  it('under a round-end stop, accepts a short clip and the whole window, but never more than it', async () => {
+    const roundEnd = recipe({ schedule: { kind: 'realtime', durationSeconds: 4, stop: 'round-end' } });
+    const short = await fixtureReport();
+    short.producer.timing.frameCount = 74;
+    short.producer.timing.stop = { requested: 'round-end', reason: 'round-ended', cutAtMs: 1, playingSeconds: 2.48, droppedFrames: 12 };
+    const v = byKind(judgeFlowReport(roundEnd, short, source))['flow-frame-count'];
+    expect(v.passed).toBe(true);
+    expect(v.diagnostic).toMatch(/74 frames.*ended after 2.48 s/);
+    // The whole window is still the ceiling: a longer clip than the window is a bug, not a round.
+    const over = await fixtureReport();
+    over.producer.timing.frameCount = 121;
+    expect(byKind(judgeFlowReport(roundEnd, over, source))['flow-frame-count'].passed).toBe(false);
+    // ...and a round-end recipe still fails the surface gate if the recorder kept the panel.
+    const kept = await fixtureReport();
+    kept.producer.readiness.surfaceAtEnd = 'menu';
+    expect(byKind(judgeFlowReport(roundEnd, kept, source))['flow-still-playing'].passed).toBe(false);
   });
 
   it('gates the delivered rate only when the recipe asks, against the screencast rate', async () => {

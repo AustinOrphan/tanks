@@ -47,6 +47,34 @@ export const FLOW_DRIVERS = Object.freeze(['autoplay']);
  */
 export const FLOW_VISUALS = Object.freeze(['software-gl', 'host-gpu']);
 
+/**
+ * How a realtime recording ends. `window` records the whole `durationSeconds`; `round-end`
+ * stops at the last sample taken while the round was still playing, so a round shorter than
+ * the window is captured whole and an outcome panel is never in the clip. The window is then
+ * the ceiling, and the frame count is whatever the round lasted.
+ */
+export const REALTIME_STOPS = Object.freeze(['window', 'round-end']);
+
+/**
+ * The usable window a recording's samples define. Each sample is one poll, in order, with
+ * the surface it saw and the wall-clock time it was taken (`atMs`). Under `window` every
+ * sample belongs to the window and a surface that is not `playing` is the adapter's to
+ * refuse; under `round-end` the window ends at the last playing sample, and the cut time is
+ * what the frames are trimmed to.
+ */
+export function playingWindow(samples, stop) {
+  if (!REALTIME_STOPS.includes(stop)) throw new Error(`unknown stop policy '${stop}' (${REALTIME_STOPS.join(', ')})`);
+  const firstOff = samples.findIndex((sample) => sample.surface !== 'playing');
+  const endedAs = firstOff === -1 ? null : samples[firstOff].surface;
+  if (stop === 'window' || firstOff === -1) return { samples, stopReason: 'window', cutAtMs: null, endedAs };
+  return {
+    samples: samples.slice(0, firstOff),
+    stopReason: 'round-ended',
+    cutAtMs: firstOff === 0 ? samples[0].atMs : samples[firstOff - 1].atMs,
+    endedAs,
+  };
+}
+
 /** A realtime schedule's bounds: whole seconds of wall clock, and the headroom the boot needs. */
 export const REALTIME_MIN_SECONDS = 1;
 export const REALTIME_MAX_SECONDS = 60;

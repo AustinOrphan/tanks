@@ -15,6 +15,7 @@ import {
 const ARGV = [
   '--flow', 'campaign-round', '--level', '1', '--seed', '7', '--driver', 'autoplay',
   '--seconds', '4', '--fps', '30', '--w', '1280', '--h', '800', '--dpr', '1', '--visual', 'host-gpu',
+  '--stop', 'window',
   '--dist', 'dist', '--out', 'tmp/x', '--report', 'tmp/x/producer.json', '--timeout', '120000',
 ];
 
@@ -26,6 +27,8 @@ describe('parseRecordArgs (issue #815)', () => {
     expect(options.frameCount).toBe(120);
     expect(options.viewport).toEqual({ width: 1280, height: 800, devicePixelRatio: 1 });
     expect(parseRecordArgs([...ARGV, '--flag', 'pp1Roles']).inputs.flags).toEqual({ pp1Roles: true });
+    expect(options.stop).toBe('window');
+    expect(parseRecordArgs(ARGV.map((a) => (a === 'window' ? 'round-end' : a))).stop).toBe('round-end');
   });
 
   it('refuses an unknown option, a missing value, a repeated option, a bad flag and a fractional frame count', () => {
@@ -35,6 +38,7 @@ describe('parseRecordArgs (issue #815)', () => {
     expect(() => parseRecordArgs([...ARGV, '--flag', 'aimRay'])).toThrow(/--flag aimRay is not a flow flag/);
     expect(() => parseRecordArgs(ARGV.map((a) => (a === '4' ? '0.25' : a)))).toThrow(/whole frame count/);
     expect(() => parseRecordArgs(ARGV.map((a) => (a === 'host-gpu' ? 'metal' : a)))).toThrow(/--visual must be one of/);
+    expect(() => parseRecordArgs(ARGV.map((a) => (a === 'window' ? 'first-kill' : a)))).toThrow(/--stop must be one of/);
     expect(() => parseRecordArgs(['stray'])).toThrow(/unexpected argument 'stray'/);
   });
 });

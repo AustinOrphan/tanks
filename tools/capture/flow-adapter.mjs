@@ -49,6 +49,7 @@ export function buildFlowArguments(recipe, outputRelative) {
     '--h', String(viewport.height),
     '--dpr', String(viewport.devicePixelRatio),
     '--visual', profile.visual,
+    '--stop', schedule.stop ?? 'window',
     '--dist', 'dist',
     '--out', outputRelative,
     '--report', `${outputRelative}/producer.json`,
@@ -177,12 +178,19 @@ export function judgeFlowReport(recipe, report, source) {
   ));
 
   const expectedFrames = recipe.schedule.durationSeconds * recipe.playback.intendedFps;
-  const countOk = t?.frameCount === expectedFrames && t?.fps === recipe.playback.intendedFps;
+  const roundEnd = (recipe.schedule.stop ?? 'window') === 'round-end';
+  const count = t?.frameCount ?? null;
+  const countOk = t?.fps === recipe.playback.intendedFps && count !== null
+    && (roundEnd ? count >= 1 && count <= expectedFrames : count === expectedFrames);
   out.push(assertion(
     'flow-frame-count',
     countOk,
-    countOk ? `${expectedFrames} frames at ${recipe.playback.intendedFps} fps` : `recorder produced ${t?.frameCount} frames at ${t?.fps} fps; the recipe's window is ${expectedFrames} at ${recipe.playback.intendedFps}`,
-    { frameCount: t?.frameCount ?? null, fps: t?.fps ?? null, expectedFrames, resample: t?.resample ?? null },
+    countOk
+      ? roundEnd
+        ? `${count} frames at ${recipe.playback.intendedFps} fps: the round ${t?.stop?.reason === 'round-ended' ? `ended after ${t?.stop?.playingSeconds?.toFixed(2)} s` : 'lasted the whole window'}, within the ${recipe.schedule.durationSeconds} s ceiling`
+        : `${expectedFrames} frames at ${recipe.playback.intendedFps} fps`
+      : `recorder produced ${count} frames at ${t?.fps} fps; the recipe's window is ${expectedFrames} at ${recipe.playback.intendedFps}${roundEnd ? ' at most' : ''}`,
+    { frameCount: count, fps: t?.fps ?? null, expectedFrames, stop: t?.stop ?? null, resample: t?.resample ?? null },
   ));
 
   if (Object.hasOwn(recipe.variant, 'minimumDeliveredFps')) {

@@ -14,6 +14,7 @@ import {
   findFlow,
   jpegDimensions,
   parseDiagnostics,
+  playingWindow,
   resamplePlan,
   timingStats,
   totalTicks,
@@ -221,5 +222,39 @@ describe('parseDiagnostics: the page\'s own account (issue #815)', () => {
   it('refuses text that is not the report', () => {
     expect(() => parseDiagnostics('')).toThrow(/not a Tanks! session diagnostics/);
     expect(() => parseDiagnostics(null as never)).toThrow(/not a Tanks! session diagnostics/);
+  });
+});
+
+describe('playingWindow: where a recording stops (issue #815)', () => {
+  const s = (surface: string, atMs: number) => ({ surface, atMs, ticks: 1, now: atMs });
+
+  it('under `window`, keeps every sample and names the surface that left play', () => {
+    const samples = [s('playing', 0), s('playing', 250), s('menu', 500)];
+    const w = playingWindow(samples, 'window');
+    expect(w.samples).toHaveLength(3);
+    expect(w.stopReason).toBe('window');
+    expect(w.cutAtMs).toBeNull();
+    // Recorded, not hidden: the adapter's still-playing gate is what refuses this.
+    expect(w.endedAs).toBe('menu');
+  });
+
+  it('under `round-end`, cuts at the last playing sample and says why', () => {
+    const w = playingWindow([s('playing', 0), s('playing', 250), s('playing', 500), s('menu', 750)], 'round-end');
+    expect(w.samples.map((x) => x.atMs)).toEqual([0, 250, 500]);
+    expect(w.stopReason).toBe('round-ended');
+    expect(w.cutAtMs).toBe(500);
+    expect(w.endedAs).toBe('menu');
+  });
+
+  it('under `round-end`, a round that lasted the whole window is not cut', () => {
+    const w = playingWindow([s('playing', 0), s('playing', 250)], 'round-end');
+    expect(w.samples).toHaveLength(2);
+    expect(w.stopReason).toBe('window');
+    expect(w.cutAtMs).toBeNull();
+    expect(w.endedAs).toBeNull();
+  });
+
+  it('refuses a policy it does not know', () => {
+    expect(() => playingWindow([s('playing', 0)], 'first-kill')).toThrow(/unknown stop policy 'first-kill'/);
   });
 });

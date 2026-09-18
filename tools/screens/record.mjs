@@ -34,6 +34,7 @@ import { serve as serveDist } from './capture.mjs';
 import {
   FLOW_FLAG_IDS,
   FLOW_VISUALS,
+  REALTIME_STOPS,
   TICKS_START,
   bankTicks,
   buildFlowUrl,
@@ -41,6 +42,7 @@ import {
   findFlow,
   jpegDimensions,
   parseDiagnostics,
+  playingWindow,
   resamplePlan,
   timingStats,
   totalTicks,
@@ -89,7 +91,7 @@ export function parseRecordArgs(argv) {
     if (values.has(name)) throw new Error(`--${name} given twice`);
     values.set(name, value);
   }
-  const required = ['flow', 'level', 'seed', 'driver', 'seconds', 'fps', 'w', 'h', 'dpr', 'visual', 'dist', 'out', 'report', 'timeout'];
+  const required = ['flow', 'level', 'seed', 'driver', 'seconds', 'fps', 'w', 'h', 'dpr', 'visual', 'stop', 'dist', 'out', 'report', 'timeout'];
   for (const name of required) if (!values.has(name)) throw new Error(`--${name} is required`);
   const known = new Set(required);
   for (const name of values.keys()) if (!known.has(name)) throw new Error(`unknown option --${name}`);
@@ -110,6 +112,7 @@ export function parseRecordArgs(argv) {
   const frameCount = seconds * fps;
   if (!Number.isInteger(frameCount)) throw new Error(`--seconds x --fps must be a whole frame count, got ${frameCount}`);
   if (!FLOW_VISUALS.includes(values.get('visual'))) throw new Error(`--visual must be one of ${FLOW_VISUALS.join(', ')}`);
+  if (!REALTIME_STOPS.includes(values.get('stop'))) throw new Error(`--stop must be one of ${REALTIME_STOPS.join(', ')}`);
   const timeout = num('timeout');
   if (!(timeout >= 1000)) throw new Error('--timeout must be at least 1000 ms');
   return {
@@ -120,6 +123,7 @@ export function parseRecordArgs(argv) {
     frameCount,
     viewport: { width: num('w'), height: num('h'), devicePixelRatio: num('dpr') },
     visual: values.get('visual'),
+    stop: values.get('stop'),
     dist: values.get('dist'),
     out: values.get('out'),
     report: values.get('report'),
@@ -242,7 +246,7 @@ async function reachPlaying(page, flow, timeout) {
  * Record `seconds` of the playing page: screencast frames to disk, tick samples, animation
  * frames. Returns everything measured, with frame timestamps relative to the first frame.
  */
-async function recordWindow(page, context, { seconds, viewport, out, signal }) {
+async function recordWindow(page, context, { seconds, viewport, out, signal, stop }) {
   const cdp = await context.newCDPSession(page);
   const frames = [];
   const writes = [];
@@ -271,7 +275,11 @@ async function recordWindow(page, context, { seconds, viewport, out, signal }) {
     const endAtMs = startedAtMs + seconds * 1000;
     for (;;) {
       if (signal?.aborted) throw new Error('recording aborted');
-      samples.push(await page.evaluate(TICK_SAMPLE_IN));
+      const sample = await page.evaluate(TICK_SAMPLE_IN);
+      samples.push({ ...sample, atMs: Date.now() });
+      // A round-end stop ends at the first sample that is not playing; the window is then cut
+      // back to the last sample that was, so the outcome panel is never in the clip.
+      if (stop === 'round-end' && sample.surface !== 'playing') break;
       const remaining = endAtMs - Date.now();
       if (remaining <= 0) break;
       await sleep(Math.min(TICK_POLL_MS, remaining));
@@ -396,11 +404,22 @@ export async function recordFlow(options, deps = {}) {
     const { diagnostics, readyAfterMs, countdownMs, practice } = await reachPlaying(page, flow, timeout);
     const world = await page.evaluate(WORLD_IN);
     const renderer = await page.evaluate(RENDERER_IN);
-    const recorded = await recordWindow(page, context, { seconds, viewport, out, signal });
-    const decoded = await decodeFrames({ frames: recorded.frames, fps, frameCount, out, viewport, timeoutMs: timeout, signal, run });
+    const recorded = await recordWindow(page, context, { seconds, viewport, out, signal, stop });
+    const window = playingWindow(recorded.samples, stop);
+    // Frames after the cut are dropped before anything is laid on the timeline. The screencast
+    // stamps frames with epoch seconds and the samples carry epoch milliseconds, so the two
+    // clocks compare directly.
+    const cutEpoch = window.cutAtMs === null ? null : window.cutAtMs / 1000;
+    const keptFrames = cutEpoch === null
+      ? recorded.frames
+      : recorded.frames.filter((frame) => recorded.firstFrameEpochSeconds + frame.timestamp <= cutEpoch);
+    if (keptFrames.length === 0) throw new Error(`the round ended (${window.endedAs}) before any frame was recorded`);
+    const playingSeconds = keptFrames[keptFrames.length - 1].timestamp - keptFrames[0].timestamp;
+    const keptFrameCount = window.stopReason === 'window' ? frameCount : Math.max(1, Math.min(frameCount, Math.floor(playingSeconds * fps)));
+    const decoded = await decodeFrames({ frames: keptFrames, fps, frameCount: keptFrameCount, out, viewport, timeoutMs: timeout, signal, run });
     const render = timingStats(recorded.raf, FRAME_CLAMP_MS);
-    const castStats = timingStats(recorded.frames.map((f) => f.timestamp * 1000), FRAME_CLAMP_MS);
-    const simulation = simulationFromSamples(recorded.samples);
+    const castStats = timingStats(keptFrames.map((f) => f.timestamp * 1000), FRAME_CLAMP_MS);
+    const simulation = simulationFromSamples(window.samples);
 
     const producer = {
       kind: 'flow',
@@ -411,19 +430,26 @@ export async function recordFlow(options, deps = {}) {
       dist: fingerprint,
       diagnostics,
       world: { ...world, expectedArenaId: campaignArenaId(inputs.level), practice },
-      readiness: { readyAfterMs, countdownMs, surfaceAtStart: 'playing', surfaceAtEnd: recorded.surfaceAtEnd },
+      readiness: {
+        readyAfterMs,
+        countdownMs,
+        surfaceAtStart: 'playing',
+        surfaceAtEnd: window.samples.length > 0 ? window.samples[window.samples.length - 1].surface : recorded.surfaceAtEnd,
+        endedAs: window.endedAs,
+      },
       timing: {
         policy: 'real-time: the production game loop at wall-clock pace, recorded from the compositor screencast and resampled to a constant frame rate by holding the last frame',
         requestedSeconds: seconds,
+        stop: { requested: stop, reason: window.stopReason, cutAtMs: window.cutAtMs, playingSeconds, droppedFrames: recorded.frames.length - keptFrames.length },
         fps,
-        frameCount,
+        frameCount: keptFrameCount,
         recording: { startedAtMs: recorded.startedAtMs, stoppedAtMs: recorded.stoppedAtMs, wallMs: recorded.stoppedAtMs - recorded.startedAtMs },
         simulation,
         render: { ...render, measuredUnder: 'cdp-screencast', note: 'headless animation frames are not display-throttled; a rate above the display rate is a headless artefact' },
         screencast: {
           format: 'jpeg',
           quality: SCREENCAST_JPEG_QUALITY,
-          framesReceived: recorded.frames.length,
+          framesReceived: keptFrames.length,
           fps: castStats.fps,
           gapP50Ms: castStats.gapP50Ms,
           gapP95Ms: castStats.gapP95Ms,

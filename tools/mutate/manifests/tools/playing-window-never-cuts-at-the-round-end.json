@@ -1,0 +1,14 @@
+{
+  "id": "playing-window-never-cuts-at-the-round-end",
+  "file": "tools/screens/flow.mjs",
+  "find": "  if (stop === 'window' || firstOff === -1) return { samples, stopReason: 'window', cutAtMs: null, endedAs };",
+  "replace": "  if (firstOff === -1) return { samples, stopReason: 'window', cutAtMs: null, endedAs };\n  if (stop === 'window') return { samples, stopReason: 'window', cutAtMs: null, endedAs };\n  if (true) return { samples, stopReason: 'window', cutAtMs: null, endedAs };",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "playingWindow: where a recording stops (issue #815) under `round-end`, cuts at the last playing sample and says why"
+  ],
+  "why": "Under a round-end stop the window ends at the last sample that was still playing. Ignoring the policy would keep the samples taken after the round ended, putting the outcome panel in the clip the recipe asked to end before it."
+}

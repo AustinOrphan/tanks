@@ -12,6 +12,7 @@ import { SCREEN_STATE_IDS } from '../screens/states.mjs';
 import {
   FLOW_IDS,
   FLOW_VISUALS,
+  REALTIME_STOPS,
   REALTIME_MAX_SECONDS,
   REALTIME_MIN_SECONDS,
   REALTIME_READINESS_BUDGET_MS,
@@ -219,8 +220,11 @@ function validateSchedule(recipe) {
   // producer records this way, and it records only this way; both directions are checked in
   // `validateKindRules`.
   if (schedule.kind === 'realtime') {
-    exactKeys(schedule, 'schedule', ['kind', 'durationSeconds']);
+    exactKeys(schedule, 'schedule', ['kind', 'durationSeconds'], ['stop']);
     numberAt(schedule.durationSeconds, 'schedule.durationSeconds', { min: REALTIME_MIN_SECONDS, max: REALTIME_MAX_SECONDS });
+    if (Object.hasOwn(schedule, 'stop') && !REALTIME_STOPS.includes(schedule.stop)) {
+      fail('schedule.stop', `must be one of ${REALTIME_STOPS.join(', ')}`);
+    }
     return;
   }
   if (schedule.kind !== 'ticks') fail('schedule.kind', "must be 'still', 'frames', 'realtime', or 'ticks'");

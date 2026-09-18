@@ -1,0 +1,14 @@
+{
+  "id": "record-round-end-never-breaks",
+  "file": "tools/screens/record.mjs",
+  "find": "      if (stop === 'round-end' && sample.surface !== 'playing') break;",
+  "replace": "      void stop;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "parseRecordArgs (issue #815) reads the adapter's argv into validated inputs and a whole frame count"
+  ],
+  "why": "A round-end recording stops at the first sample that is not playing. Polling on to the end of the window would keep recording the outcome panel, and the frames after the cut would be dropped only by the trim, which is a different guard."
+}

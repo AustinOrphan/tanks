@@ -88,7 +88,8 @@ function validateCapture(result, recipe) {
     // the recorder lays every capture onto that timeline, so any other count is a bug there.
     if (recipe.schedule.kind === 'realtime') {
       const expected = recipe.schedule.durationSeconds * recipe.playback.intendedFps;
-      if (schedule.frameCount !== expected) {
+      const early = recipe.schedule.stop === 'round-end' && schedule.frameCount < expected;
+      if (schedule.frameCount !== expected && !early) {
         fail(
           'capture.frameSchedule.frameCount',
           `reported ${schedule.frameCount}; a ${recipe.schedule.durationSeconds} s window at ${recipe.playback.intendedFps} fps is ${expected}`,
