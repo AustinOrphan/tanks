@@ -22,6 +22,15 @@ const campaign = JSON.parse(
 );
 export const CAMPAIGN_LEVEL_COUNT = campaign.levels.length;
 
+/**
+ * Every achievement id the game defines, read from its own source rather than restated, so a
+ * new achievement is seeded the day it ships instead of unlocking itself mid-capture.
+ */
+export const ACHIEVEMENT_IDS = Object.freeze(
+  [...readFileSync(new URL('../../src/game/achievements.ts', import.meta.url), 'utf8')
+    .matchAll(/^\s{4}id: '([a-z0-9-]+)',$/gm)].map((m) => m[1]),
+);
+
 /** The arena a 1-based campaign level is built from. */
 export function campaignArenaId(level) {
   const entry = campaign.levels[level - 1];
@@ -124,9 +133,16 @@ export const FLOWS = Object.freeze([
      * button per UNLOCKED level. Under `?dev=1` the page reads the developer namespace, so
      * these are the developer-prefixed keys (`storage.ts`). No run is seeded: a practice pick
      * neither reads nor writes one.
+     *
+     * THE ACHIEVEMENTS ARE SEEDED TOO, and that is not tidiness. Progress alone leaves the
+     * progress-shaped achievements unearned, so the first seconds of play unlock them and
+     * lay toasts over the board -- an artifact of the fixture rather than of the game, and on
+     * a short round they cover most of the clip. A player who had reached this progress would
+     * already hold them. Every id is seeded: a capture is of PLAY, not of a notification.
      */
     storage: Object.freeze({
       'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-05' }),
+      'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: ACHIEVEMENT_IDS }),
     }),
     open: Object.freeze([
       Object.freeze({ press: 'Space' }),

@@ -1,0 +1,14 @@
+{
+  "id": "flow-lets-achievements-unlock-mid-capture",
+  "file": "tools/screens/flow.mjs",
+  "find": "      'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: ACHIEVEMENT_IDS }),",
+  "replace": "      'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: [] }),",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "the flow catalogue (issue #815) boots with every level unlocked and every achievement already earned"
+  ],
+  "why": "Seeded progress without seeded achievements unlocks the progress-shaped ones as play starts, laying toasts over the board for the first seconds -- most of a short round's clip. That is the fixture showing through, not the game."
+}
