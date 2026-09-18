@@ -439,7 +439,7 @@ const TRACE = 6 * 1.5;        // NORMAL_SPEED * AI_SHOT_LOOKAHEAD = 9 world unit
 
 const FLOOR = 0, SOLID = 1, DEST = 2;
 const SPAWN_TOOL = 9;   // not a cell value -- spawns live beside the grid, not in it
-const MAX_SPAWNS = 4;
+const MAX_SPAWNS = 6;   // a radial x6 orbit is six; versus itself plays 2-4, and the page says so
 
 /**
  * Symmetry operators available while painting.
@@ -1090,12 +1090,47 @@ function cellFromEvent(ev) {
   return r * S.cols + c;
 }
 
+/** The spawn at (c, r), or within `slack` cells of it -- a thumb is wider than a cell. */
+function spawnIndexNear(c, r, slack = 1) {
+  let best = -1, bestD = Infinity;
+  S.spawns.forEach((sp, i) => {
+    const d = Math.max(Math.abs(sp.c - c), Math.abs(sp.r - r));
+    if (d <= slack && d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+/**
+ * Place or remove a spawn, AS A SYMMETRY ORBIT.
+ *
+ * A spawn placed on a symmetric board wants its images placed too: on a four-fold board one
+ * tap should give four starts, not one and three more taps that have to be aimed by eye. So a
+ * tap adds every image of the tapped cell under the current operator, and a tap on an existing
+ * spawn removes that spawn together with the rest of its orbit -- removing one corner of a
+ * symmetric set and leaving the other three would quietly make the board unfair, which is the
+ * thing the operator exists to prevent.
+ *
+ * With symmetry off, an orbit is one cell, so this is exactly tap-to-place and tap-to-remove.
+ */
 function toggleSpawnAt(i) {
   const r = (i / S.cols) | 0, c = i - r * S.cols;
-  const at = S.spawns.findIndex((sp) => sp.c === c && sp.r === r);
-  if (at >= 0) S.spawns.splice(at, 1);
-  else if (S.spawns.length < MAX_SPAWNS) S.spawns.push({ c, r });
-  else { S.spawns.shift(); S.spawns.push({ c, r }); }
+
+  const hit = spawnIndexNear(c, r);
+  if (hit >= 0) {
+    const target = S.spawns[hit];
+    const orbit = imagesOf(target.c, target.r);
+    S.spawns = S.spawns.filter((sp) => !orbit.some(([oc, orr]) => oc === sp.c && orr === sp.r));
+    draw();
+    scheduleMeasure();
+    return;
+  }
+
+  const orbit = imagesOf(c, r).filter(([oc, orr]) => spawnIndexNear(oc, orr, 0) < 0);
+  if (!orbit.length) return;
+  // An orbit that cannot fit beside what is already placed replaces it, rather than landing
+  // half-placed: a partial orbit is the asymmetry this is meant to avoid.
+  if (S.spawns.length + orbit.length > MAX_SPAWNS) S.spawns = [];
+  for (const [oc, orr] of orbit.slice(0, MAX_SPAWNS)) S.spawns.push({ c: oc, r: orr });
   draw();
   scheduleMeasure();
 }
@@ -1135,6 +1170,17 @@ function paintAt(i) {
   lastCell = i;
   const r = (i / S.cols) | 0, c = i - r * S.cols;
   for (const [cc, rr] of imagesOf(c, r)) S.cells[rr * S.cols + cc] = paintVal;
+  // Erase clears spawns too, and clears the whole orbit for the same reason placing adds one:
+  // half a symmetric set is worse than none of it. Exact cell only, no slack -- an erase
+  // stroke passing near a spawn should not swallow it.
+  if (paintVal === FLOOR) {
+    const hit = spawnIndexNear(c, r, 0);
+    if (hit >= 0) {
+      const target = S.spawns[hit];
+      const orbit = imagesOf(target.c, target.r);
+      S.spawns = S.spawns.filter((sp) => !orbit.some(([oc, orr]) => oc === sp.c && orr === sp.r));
+    }
+  }
   draw();
   scheduleMeasure();
 }
@@ -1391,11 +1437,15 @@ function runMeasure() {
     el.textContent = `Measuring ${S.spawns.length} spawn${S.spawns.length === 1 ? "" : "s"} you placed.`;
     noteEl.textContent = "A what-if. The game derives versus spawns from the board's geometry and "
       + "ignores where the letter sits, so these are not where a match will actually start — "
-      + "they answer how the board would measure if players began here. Tap a ring to remove it.";
+      + "they answer how the board would measure if players began here. "
+      + "Placing adds the whole symmetry orbit; tapping a ring, or erasing over one, removes the "
+      + "whole orbit."
+      + (S.spawns.length > 4 ? " Versus plays 2 to 4, so a set this size is measurement only." : "");
   } else {
     el.textContent = `Measuring ${m.spawns.length} derived spawn${m.spawns.length === 1 ? "" : "s"}.`;
     noteEl.textContent = "What the game will really do: versus spawns are derived from the geometry. "
-      + "Use the Spawn tool to place your own and measure a what-if instead.";
+      + "Use the Spawn tool to place your own and measure a what-if instead — one tap places "
+      + "every image of the cell under the current symmetry.";
   }
 
   const problems = [];
