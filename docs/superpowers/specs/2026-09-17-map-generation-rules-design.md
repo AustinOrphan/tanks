@@ -2,7 +2,7 @@
 status: proposed
 date: 2026-09-17
 scope: A three-tier rule set for generating versus maps -- generative rules, the shipped acceptance filter, and a new measured quality tier calibrated on shipped boards.
-implementation-issues: []
+implementation-issues: [819, 820, 821, 822]
 implementation-prs: []
 supersedes: []
 superseded-by: []
@@ -266,7 +266,8 @@ deliberate, is about as much corroboration as this kind of rule gets.
 
 ### Rules the research supplies that this repository does not yet have
 
-Ordered by how cheaply they could be adopted, all computable on the existing measures:
+Ordered by how cheaply they could be adopted, all computable on the existing measures. Items
+3 to 6 are issue #822:
 
 1. **One-bounce opening shot** -- measured, currently zero everywhere. Insurance.
 2. **Longest sightline cap at 70% of the board diagonal** (`longest-sightline-cap`, measured
@@ -445,7 +446,7 @@ acceptance tier's live edge is concealment at 3 and 4 players, not connectivity.
 moment a quality measure becomes a gate, a generator can be tuned against it and the measure
 stops describing the board and starts describing the generator.
 
-**2. Pursue the template-grammar family, and not the other two.** Of the three rulesets
+**2. Pursue the template-grammar family, and not the other two** (issue #821). Of the three rulesets
 built, `rooms` is the only one whose boards land inside the shipped bands on wall fraction,
 legal area, sightline and carom. `scatter` is outside on two measures and is the baseline
 anyway; `topology` is half again as walled as the most walled shipped board. This is a
@@ -462,8 +463,9 @@ disagree all give their players a free repeatable destroyer that this game does 
 
 **5. Settle two open questions before authoring a generator**, because both change what it
 should build: whether the 70%-of-diagonal sightline cap transfers to a game with no
-verticality (5 of 8 shipped boards exceed it), and what to do at 3 players, where rotational
-symmetry and a rectangle are incompatible and the literature is silent.
+verticality (issue #819 -- 5 of 8 shipped boards exceed it), and what to do at 3 players,
+where rotational symmetry and a rectangle are incompatible and the literature is silent
+(issue #820).
 
 **6. Then playtest.** Every claim here is static. A bot-vs-bot capture at normal speed on the
 best board from each ruleset is the cheapest thing that would turn any of this into evidence
