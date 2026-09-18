@@ -44,6 +44,7 @@ import {
   parseDiagnostics,
   playingWindow,
   resamplePlan,
+  stopsAtSample,
   timingStats,
   totalTicks,
   validateFlowInputs,
@@ -279,7 +280,7 @@ async function recordWindow(page, context, { seconds, viewport, out, signal, sto
       samples.push({ ...sample, atMs: Date.now() });
       // A round-end stop ends at the first sample that is not playing; the window is then cut
       // back to the last sample that was, so the outcome panel is never in the clip.
-      if (stop === 'round-end' && sample.surface !== 'playing') break;
+      if (stopsAtSample(stop, sample.surface)) break;
       const remaining = endAtMs - Date.now();
       if (remaining <= 0) break;
       await sleep(Math.min(TICK_POLL_MS, remaining));

@@ -16,6 +16,7 @@ import {
   parseDiagnostics,
   playingWindow,
   resamplePlan,
+  stopsAtSample,
   timingStats,
   totalTicks,
   validateFlowInputs,
@@ -256,5 +257,20 @@ describe('playingWindow: where a recording stops (issue #815)', () => {
 
   it('refuses a policy it does not know', () => {
     expect(() => playingWindow([s('playing', 0)], 'first-kill')).toThrow(/unknown stop policy 'first-kill'/);
+  });
+});
+
+describe('stopsAtSample: whether a poll ends the recording (issue #815)', () => {
+  it('ends a round-end recording the moment play stops, and never a window one', () => {
+    expect(stopsAtSample('round-end', 'playing')).toBe(false);
+    expect(stopsAtSample('round-end', 'menu')).toBe(true);
+    expect(stopsAtSample('round-end', 'not-playing')).toBe(true);
+    // A `window` recording runs its window out; the adapter's still-playing gate judges it.
+    expect(stopsAtSample('window', 'menu')).toBe(false);
+    expect(stopsAtSample('window', 'playing')).toBe(false);
+  });
+
+  it('refuses a policy it does not know, rather than recording on', () => {
+    expect(() => stopsAtSample('first-kill', 'menu')).toThrow(/unknown stop policy 'first-kill'/);
   });
 });

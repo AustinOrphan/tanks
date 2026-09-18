@@ -56,6 +56,18 @@ export const FLOW_VISUALS = Object.freeze(['software-gl', 'host-gpu']);
 export const REALTIME_STOPS = Object.freeze(['window', 'round-end']);
 
 /**
+ * Whether the poll that saw `surface` ends the recording.
+ *
+ * Pure, because the loop it governs runs only against a live page: a `round-end` recording
+ * stops the moment play does, and a `window` recording runs its window out and leaves the
+ * verdict to the adapter's still-playing gate.
+ */
+export function stopsAtSample(stop, surface) {
+  if (!REALTIME_STOPS.includes(stop)) throw new Error(`unknown stop policy '${stop}' (${REALTIME_STOPS.join(', ')})`);
+  return stop === 'round-end' && surface !== 'playing';
+}
+
+/**
  * The usable window a recording's samples define. Each sample is one poll, in order, with
  * the surface it saw and the wall-clock time it was taken (`atMs`). Under `window` every
  * sample belongs to the window and a surface that is not `playing` is the adapter's to

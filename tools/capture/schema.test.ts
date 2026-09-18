@@ -275,6 +275,7 @@ describe('flow recipes (issue #815)', () => {
       ['a driver it has no policy for', (r) => { r.variant.driver = 'human'; }, /variant\.driver: driver must be/],
       ['a raw query smuggled as a field', (r) => { r.variant.query = 'dev=1'; }, /variant\.query.*not an allowed field/],
       ['an unreadable delivered-rate gate', (r) => { r.variant.minimumDeliveredFps = 0; }, /variant\.minimumDeliveredFps/],
+      ['a stop policy neither the schema nor the recorder knows', (r) => { r.schedule.stop = 'first-kill'; }, /schedule\.stop: must be one of window, round-end/],
     ];
     for (const [name, change, message] of cases) {
       const flow = flowRecipe();
