@@ -40,7 +40,9 @@ on:
           Which committed recipe to run. This list is the allowlist, and
           tools/workflows.test.ts asserts it equals the ids in tools/capture/recipes.json --
           a recipe added there without being added here is a red suite, not a silent
-          omission.
+          omission. A flow.* recipe records the real application at wall-clock pace and asks
+          for a host GPU; this runner has none, so it fails with the delivered frame rate it
+          measured rather than publishing choppy footage as evidence (issue #815).
         required: true
         type: choice
         options:
