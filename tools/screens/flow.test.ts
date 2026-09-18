@@ -6,6 +6,7 @@ import {
   ACHIEVEMENT_IDS,
   CAMPAIGN_LEVEL_COUNT,
   FLOW_DRIVER_PARAMS,
+  FLOW_FLAGS,
   FLOW_FLAG_IDS,
   FLOW_IDS,
   TICKS_START,
@@ -23,6 +24,8 @@ import {
   validateFlowInputs,
 } from './flow.mjs';
 import { FLAG_REGISTRY } from '../../src/game/devflags';
+import { ENEMY_ROLE_CUES } from '../../src/presentation/enemy-role';
+import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
 import { ACHIEVEMENTS } from '../../src/game/achievements';
 
 const inputs = (over: Record<string, unknown> = {}) => ({ level: 1, seed: 7, driver: 'autoplay', flags: {}, ...over });
@@ -73,13 +76,26 @@ describe('the flow catalogue (issue #815)', () => {
     expect(() => campaignArenaId(CAMPAIGN_LEVEL_COUNT + 1)).toThrow(/no level 6/);
   });
 
-  it('allowlists only flags the dev-flag registry knows as booleans under the same parameter name', () => {
-    // A renamed or retyped flag fails HERE, not as an unknown parameter on a captured page.
+  it('allowlists only flags the dev-flag registry knows, with the vocabulary it knows', () => {
+    // A renamed, retyped or re-valued flag fails HERE, not as an unknown parameter on a
+    // captured page. This file runs under vitest and can import the TypeScript the `.mjs`
+    // flow module cannot, which is what makes the two-way pin possible.
+    const vocabularies: Record<string, readonly string[]> = {
+      enemyRole: ENEMY_ROLE_CUES,
+      identityMarker: IDENTITY_MARKER_STYLES,
+    };
     for (const id of FLOW_FLAG_IDS) {
-      const spec = (FLAG_REGISTRY as Record<string, { kind: string; param?: string }>)[id];
+      const spec = (FLAG_REGISTRY as Record<string, { kind: string; param?: string; values?: readonly string[] }>)[id];
       expect(spec, `${id} is not a registered dev flag`).toBeDefined();
-      expect(spec.kind).toBe('boolean');
       expect(spec.param ?? id).toBe(id);
+      const allowed = (FLOW_FLAGS as Record<string, true | readonly string[]>)[id];
+      if (allowed === true) {
+        expect(spec.kind, id).toBe('boolean');
+      } else {
+        expect(spec.kind, id).toBe('valued');
+        // Both directions: the flow offers exactly what the flag accepts.
+        expect([...allowed].sort(), id).toEqual([...(vocabularies[id] ?? spec.values ?? [])].sort());
+      }
     }
     for (const param of FLOW_DRIVER_PARAMS) {
       if (param === 'dev') continue; // the gate itself, not a DevFlags field
@@ -103,10 +119,25 @@ describe('flow inputs and the URL they build (issue #815)', () => {
     expect(() => validateFlowInputs(inputs({ level: '1' }))).toThrow(/level must be/);
   });
 
+  it('carries a valued flag as its own value, and a switch as a bare 1', () => {
+    expect(buildFlowUrl(inputs({ flags: { enemyRole: 'both' } })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1&enemyRole=both');
+    // Two cues at once, which is what issue #773's evidence list asks to see: a role cue and
+    // an owner cue on the same board, to judge whether they stay distinct.
+    expect(buildFlowUrl(inputs({ flags: { enemyRole: 'both', identityMarker: 'roof' } })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1&enemyRole=both&identityMarker=roof');
+    expect(buildFlowUrl(inputs({ flags: { pp1Roles: true, enemyRole: 'flare' } })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1&pp1Roles=1&enemyRole=flare');
+  });
+
   it('refuses a driver it has no policy for and a flag off the allowlist, and never a raw string', () => {
     expect(() => validateFlowInputs(inputs({ driver: 'human' }))).toThrow(/driver must be one of autoplay/);
     expect(() => validateFlowInputs(inputs({ flags: { aimRay: true } }))).toThrow(/flags\.aimRay is not a flow flag/);
     expect(() => validateFlowInputs(inputs({ flags: { pp1Roles: 'yes' } }))).toThrow(/flags\.pp1Roles must be a boolean/);
+    // A valued flag takes ITS OWN values: the page reads anything else as absent, so a
+    // capture would record the arm it asked for and show the board without it.
+    expect(() => validateFlowInputs(inputs({ flags: { enemyRole: 'barrel' } }))).toThrow(/flags\.enemyRole must be one of/);
+    expect(() => validateFlowInputs(inputs({ flags: { enemyRole: true } }))).toThrow(/flags\.enemyRole must be one of/);
     expect(() => validateFlowInputs(inputs({ flags: ['pp1Roles'] }))).toThrow(/flags must be a plain object/);
     expect(() => validateFlowInputs(inputs({ flags: { 'pp1Roles&x': true } }))).toThrow(/not a flow flag/);
   });

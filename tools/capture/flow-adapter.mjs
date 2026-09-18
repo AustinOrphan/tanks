@@ -42,7 +42,13 @@ export function buildFlowArguments(recipe, outputRelative) {
     '--level', String(variant.level),
     '--seed', String(fixture.seed),
     '--driver', variant.driver,
-    ...FLOW_FLAG_IDS.filter((id) => variant.flags[id] === true).flatMap((id) => ['--flag', id]),
+    // A switch passes its id; a choice passes `id=value`. A flag the recipe leaves off or sets
+    // false passes nothing at all, which is what keeps a matched pair's halves one field apart.
+    ...FLOW_FLAG_IDS.flatMap((id) => {
+      const value = variant.flags[id];
+      if (value === undefined || value === false) return [];
+      return ['--flag', value === true ? id : `${id}=${value}`];
+    }),
     '--seconds', String(schedule.durationSeconds),
     '--fps', String(playback.intendedFps),
     '--w', String(viewport.width),
