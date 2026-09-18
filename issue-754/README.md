@@ -25,3 +25,13 @@ Captured with `npm run screens` from the built output of branch `feat/controller
   #227's existing behaviour, unchanged here.
 - Not captured: a capture in progress, a swap message, or Southpaw. Those states are driven by a
   live controller press; they are covered by the unit and route tests rather than by a still.
+
+# Issue #754, PR 3: the settings key's privacy sentence
+
+Captured with `npm run screens` from the built output of branch `feat/controller-layout-presets` at
+`9625bcae`. Viewport 1280x2400 CSS px at devicePixelRatio 1, so the whole privacy table is in frame.
+3 of 3 measured elements visible, 0 page errors.
+
+| File | State | What it shows |
+| --- | --- | --- |
+| `legal-privacy.png` | `screen.about.document` | The Legal pane with the privacy policy open. The `tanks.settings.v1` row now names the controller layout (stick preset and rebound buttons, per controller type) and the render quality preset; the longer sentence wraps to three lines inside its cell and the table keeps its shape. |
