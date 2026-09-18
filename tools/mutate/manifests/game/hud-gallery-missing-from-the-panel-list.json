@@ -1,0 +1,16 @@
+{
+  "id": "hud-gallery-missing-from-the-panel-list",
+  "file": "src/game/hud.ts",
+  "find": "      galleryView,\n      confirmView,\n",
+  "replace": "      confirmView,\n",
+  "expect": "killed",
+  "why": "`act` and the arrow-key handler move focus inside whichever pane `activePanelContainer` returns. The gallery workbench was missing from that list from #741 until this entry's tests: a controller's D-pad and the arrow keys moved nothing in it, and Confirm with nothing focused landed nowhere.",
+  "tests": [
+    "src/game/hud.gallery.test.ts"
+  ],
+  "killedBy": [
+    "the gallery workbench pane is a focus target (issue #730) Confirm with nothing focused lands inside the pane",
+    "the gallery workbench pane is a focus target (issue #730) the arrow keys reach Developer Tools and Back in order, from the container",
+    "the gallery workbench pane is a focus target (issue #730) a controller's D-pad reaches the same controls"
+  ]
+}

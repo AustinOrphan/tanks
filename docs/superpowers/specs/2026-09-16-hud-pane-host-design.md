@@ -459,9 +459,11 @@ states its claim no wider than they reach.
 
 ## 5. Not decided here
 
-- **`activePanelContainer` omits `galleryView`,** although `PANEL_FAMILY` includes
-  `GALLERY_SURFACE`. An extraction preserves both lists as they are. Whether the difference
-  is intended is a separate question.
+- **`activePanelContainer` omitted `galleryView`,** although `PANEL_FAMILY` included
+  `GALLERY_SURFACE`. *Ruled 2026-09-17: an oversight from #741, not a design.* Arrow keys and
+  a D-pad moved nothing inside the gallery workbench, and Confirm with nothing focused landed
+  nowhere. The gallery joined the list beside the other developer panes, and
+  `hud.gallery.test.ts` pins it there. An extraction still preserves both lists as they are.
 - **The shared layer's own structure is out of scope.** It is 294 owners and 3031 lines under
   this attribution.
 - **The `Hud` interface stays in `hud.ts`.** Moving it would need `hud-ownership.test.ts`'s
