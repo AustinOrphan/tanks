@@ -137,6 +137,18 @@ arenas indefinitely, or the procedural-generation spike above (`## Spike: pathfi
 risk-aversion weights in the movement AI`'s neighbour sections) reaching its own answer
 first (6) -- the one piece of 4-6 still open.
 
+**Narrowed 2026-09-18 by the map-generation rules specification**
+(`docs/superpowers/specs/2026-09-17-map-generation-rules-design.md`), which answers the
+question this item was blocked on -- what a generator would be tuned against -- without
+shipping a generator. It surveyed the genre (112 rules over 92 sources), built the quality
+tier the acceptance rules deliberately are not (`tools/mapgen/`), calibrated it on all 8
+shipped boards at 3 player counts, and compared three candidate rulesets plus a null one over
+20 seeds each. What remains of this item is therefore no longer "decide how to judge a
+generated board" but the narrower "build the chosen ruleset and playtest it", which the spec
+recommends taking in the template-grammar family. The two questions the spec says to settle
+first -- whether the researched sightline cap transfers, and what to do at 3 players -- are
+its own open items rather than this one's.
+
 **Not scheduled.** Recorded so the one remaining piece of versus mode -- whole-board
 procedural generation, item 6's own residual -- is not mistaken for finished now that 4
 and 5 have both closed, and is not rediscovered from scratch by the next person who

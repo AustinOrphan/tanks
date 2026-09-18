@@ -41,7 +41,10 @@ through the shipped acceptance rules.
 
 **It is accepted 10 boards out of 10, at 2, 3 and 4 players.** Here is one of them:
 
-<!-- MEDIA: scatter-seed1.png -->
+![A 33x27 board from the null ruleset: 2x2 blocks scattered uniformly across the whole board with no lanes, rooms or structure](https://raw.githubusercontent.com/AustinOrphan/tanks/pr-media/map-generation-rules/scatter-seed1.png)
+
+*`scatter`, seed 1, at 4 players. Rotationally symmetric, floor fully connected, every spawn
+mutually concealed, 10 of 10 accepted. Also confetti.*
 
 Nobody would ship that board. Every rule the repository owns says it is fine. That gap is
 what this document exists to close, and it is why the proposal has three tiers rather than
@@ -184,6 +187,140 @@ because one spawn is sealed by destructibles in a pocket 2.24 across against a 2
 radius: leaving the start line costs a life. A generator that reasons only about
 connectivity will produce boards that fail for this reason and not understand why.
 
+## What the genre knows
+
+Six parallel surveys were run, each on a different lens, each required to say for every rule
+whether it was a measured result, a convention verified by looking at real maps, or designer
+folklore repeated in talks. They returned **112 rules over 92 sources**. The full results are
+not reproduced here; what follows is what survives contact with this game.
+
+| lens | what it covered | rules |
+| --- | --- | --- |
+| tank-lineage | Wii Play Tanks!, Battle City, Atari Combat, Kee Games Tank, open-source remakes | 19 |
+| arena-fps-flow | Quake 1/3, Doom, UT, Halo deathmatch canon | 18 |
+| grid-topdown | Bomberman family, Battle City, grid board-game arenas | 17 |
+| pcg-techniques | BSP, cellular automata, WFC, agent digging, template stamping, ASP | 19 |
+| competitive-symmetry-spawns | symmetry groups, spawn placement, team and odd-count cases | 19 |
+| pcg-evaluation-metrics | expressive range, Liapis map-sketch metrics, visibility and graph metrics | 20 |
+
+### Where independent lenses converged
+
+**The opening-shot rule must exclude the one-bounce line, not just the direct one.** Five of
+the six lenses state it independently -- `no-opening-line-between-spawns`,
+`spawn-no-opening-shot`, `no-one-bounce-spawn-to-spawn-line`,
+`no-firing-solution-between-spawns-at-t0`, `spawn-first-shot-safety`. The shipped
+`allPairsConcealed` checks line of sight only, which is the right rule for a game whose
+shells travel straight, and this game's do not.
+
+**This was measured rather than assumed, and the answer is reassuring.** `openingShots` in
+`tools/mapgen/measure.ts` counts ordered spawn pairs with no direct line but a live
+one-bounce firing solution. Across **all 24 shipped (board, N) combinations and all 177
+accepted generated boards** across three rulesets at three player counts, the count is
+**zero**. The measure is not dead -- its control hands it a stub between two points and gets
+a bank line, then removes the stub and gets a direct line instead. So the rule the research
+asks for is already satisfied everywhere it has been checked, and enforcing it would be
+insurance rather than a fix.
+
+**Validate the board twice, with destructibles solid and with them gone.** Four lenses state
+this. `versus-board.ts` already gates egress on the destructible-free layout, and the quality
+tier reports `mineGatedPairs` from the intact one.
+
+**Symmetry: rotate, do not reflect.** A mirror gives one player's cover to the other hand, so
+a right-handed approach becomes a left-handed one. The shipped boards already agree --
+vs-duel-01 and vs-quad-01 measure 0.00 rotational asymmetry and no shipped board is mirror
+symmetric. The honest caveat from the `pcg-techniques` lens is that **nobody has measured
+mirror against rotational on any outcome in any game**; the two sources that address it most
+directly disagree with each other.
+
+### The one place the genre is actively misleading
+
+Every grid ancestor makes destructible walls the MAJORITY of blocking mass. Battle City's
+median destructible share is **66% of tank-blocking mass across all 35 stages**, measured from
+a 6502 disassembly; a Bomberman open-source clone measures 47.3% destructible against 14.8%
+solid over 16 maps.
+
+Copying that here would be a mistake, and the reason is the cost model. Those games give
+every player a free, fast, infinitely repeatable destroyer. This game gives 2 mines, a 3
+second fuse, a blast radius of 2 that also kills the owner, and shells that break nothing. It
+inherits the Wii Tanks cost model, where cork is a minority embedded in wood and the game's
+own strategy guide says removing it usually is not necessary.
+
+The shipped boards already follow the cost model rather than the genre:
+
+| board | wall cells | destructible | share of wall mass |
+| --- | --- | --- | --- |
+| vs-tri-01 | 168 | 19 | 11.3% |
+| arena-05 | 126 | 18 | 14.3% |
+| arena-01 | 117 | 18 | 15.4% |
+| vs-quad-01 | 279 | 54 | 19.4% |
+| arena-04 | 126 | 27 | 21.4% |
+| arena-03 | 99 | 27 | 27.3% |
+| vs-duel-01 | 117 | 34 | 29.1% |
+| arena-02 | 144 | 72 | 50.0% |
+
+Range 11.3% to 50.0%, median 21.4% over 8 boards. The `grid-topdown` lens derives a cap of
+**30% of wall mass** from the cost model; **7 of the 8 shipped boards are at or under it**,
+and the exception is arena-02, the board whose whole design is mining through a central
+barrier. A researched rule and eight authored maps agreeing, with the one exception being
+deliberate, is about as much corroboration as this kind of rule gets.
+
+### Rules the research supplies that this repository does not yet have
+
+Ordered by how cheaply they could be adopted, all computable on the existing measures:
+
+1. **One-bounce opening shot** -- measured, currently zero everywhere. Insurance.
+2. **Longest sightline cap at 70% of the board diagonal** (`longest-sightline-cap`, measured
+   from Quake and Halo practice). **Five of the eight shipped boards exceed it**: arena-03 at
+   0.82, arena-04 at 0.80, arena-05 at 0.78, vs-tri-01 at 0.76, arena-02 at 0.72. That is
+   either a real defect in the campaign boards or a cap that does not transfer to a top-down
+   game with no verticality to break a sightline with. It should not be adopted without
+   deciding which.
+3. **Dead-end budget** -- `no-leaf-rooms`, `navigability-degree-profile` (dead ends at or
+   below 2.5% of navigable positions), `cycle-richness-no-dead-ends`. Not currently measured
+   at all; `corridorAreaFraction` is a blunt proxy.
+4. **Gap taxonomy budget** -- at least 60% of navigable positions in a 3-cell corridor or
+   wider. Directly measurable from the existing lattice and not currently computed.
+5. **Expressive range analysis** -- rank the RULESET, not the board, by how much of a
+   two-axis behavioural space its output occupies. This is the right frame for the sweep
+   tables above, which currently report means and hide the spread.
+6. **Bot jam filter** -- reject a minimum-width corridor that is also an articulation point.
+   This game's bots steer reactively with no pathfinding, so it is more relevant here than in
+   the games the rule came from.
+
+### What the research could not establish
+
+These are quoted rather than paraphrased, because the absences are as useful as the findings.
+
+**Nobody has written down how to design maps for bouncing projectiles.** From the
+`grid-topdown` lens: "No talk, paper, postmortem or guide in this sweep discusses building
+geometry for bouncing projectiles. Every bank-shot rule here is derived by me from the
+mechanics in the brief, and the metric's target band is a guess with no validation." The
+carom measures in this document are therefore unanchored to any outside practice, and the
+shipped-board range of 0.09 to 0.29 is the only scale they have.
+
+**No metric in the quality literature has been validated against human play.** From the
+`pcg-evaluation-metrics` lens: the StarCraft map-space paper defers it explicitly, both
+Liapis papers measured only that a genetic algorithm converges on their own fitness
+functions, and the one paper that measured anything through play used bots at 15% and 85%
+scripted skill. The honest status of the whole quality tier -- theirs and the one proposed
+here -- is published and computable, not validated.
+
+**No source anywhere gives a numeric area-per-player rule.** The best available is
+categorical: Quake 3 deathmatch maps "designed for up to 16 players" against tournament maps
+"for duels between 2". No rule here sets board size from player count, and
+`MIN_OPEN_FLOOR_PER_PLAYER` remains a figure derived from this repository's own boards.
+
+**Three-player FFA arena layout: nothing found.** Nor anything on 2v1v1 spawn placement, in
+Halo Multi-Team, The Finals, or Unreal Tournament multi-team mods. The `competitive-symmetry`
+lens labels its own 2v1v1 rule an invented convention and says the absence "is a signal that
+this is unexplored territory rather than a gap in my searching". vs-tri-01's 0.33 rotational
+asymmetry is this repository facing the same wall.
+
+**Wii Play Tanks! board data could not be obtained.** Primary sources are behind a Cloudflare
+challenge or return HTTP 402; the remakes load levels from external files not in their
+repositories. Every statement about Wii cover arrangement is eyeballed from 28 screenshots.
+The Battle City numbers, by contrast, come from a 6502 disassembly and are measured.
+
 ## Candidate rulesets
 
 Three rulesets were built and swept, plus the null one. They are in
@@ -240,7 +377,24 @@ a verdict on which plays better -- nobody has played any of them -- but it is th
 statement the calibration supports: of the three, `rooms` is the family that produces boards
 resembling the ones already shipped.
 
-<!-- MEDIA: rooms-seed1.png topology-seed1.png -->
+![A board from the rooms ruleset: small cover pieces stamped into a sparse lattice, with wide continuous lanes between them](https://raw.githubusercontent.com/AustinOrphan/tanks/pr-media/map-generation-rules/rooms-seed1.png)
+
+*`rooms`, seed 1, at 4 players, at the default fill share of 0.62. The lattice reads as
+scattered pieces rather than as rooms, because the vocabulary pieces are small against the
+4-cell room -- visible here and confirmed by the wall fraction of 0.05 against a shipped
+floor of 0.08. The fill share is the knob, and it is live.*
+
+![A board from the topology ruleset: a ring of open plazas joined by wide lanes carved out of large solid masses](https://raw.githubusercontent.com/AustinOrphan/tanks/pr-media/map-generation-rules/topology-seed1.png)
+
+*`topology`, seed 1, at 4 players. Legible and exactly symmetric, but at 0.55 wall fraction
+it is half again as walled as the most walled shipped board, and the plazas are barely wider
+than the lanes joining them.*
+
+![vs-quad-01, a shipped versus board: four corner spawns, 180-degree rotational symmetry, destructible blocks in the interior](https://raw.githubusercontent.com/AustinOrphan/tanks/pr-media/map-generation-rules/vs-quad-01.png)
+
+*vs-quad-01 at 4 players, for scale -- an authored board drawn by the same renderer, from the
+same merged wall geometry the game collides against. Grey is solid, brown destructible, rings
+are the spawns `loadArena` really picked.*
 
 ### Individual rules, swept one at a time
 
@@ -283,6 +437,37 @@ So of the four shipped criteria, one does nearly all the work on generated board
 refuses them for being too OPEN -- `rooms fill=0.35` loses 14 of 20 because four spawns on a
 sparse board can see each other. That is worth knowing before anyone tunes a generator: the
 acceptance tier's live edge is concealment at 3 and 4 players, not connectivity.
+
+## What this proposes
+
+**1. Keep the three tiers separate, permanently.** Acceptance stays a pass/fail filter in
+`src/sim/`, gating what may be offered. Quality stays a tool in `tools/`, gating nothing. The
+moment a quality measure becomes a gate, a generator can be tuned against it and the measure
+stops describing the board and starts describing the generator.
+
+**2. Pursue the template-grammar family, and not the other two.** Of the three rulesets
+built, `rooms` is the only one whose boards land inside the shipped bands on wall fraction,
+legal area, sightline and carom. `scatter` is outside on two measures and is the baseline
+anyway; `topology` is half again as walled as the most walled shipped board. This is a
+statement about where to spend the next effort, not a verdict about play -- nobody has played
+any of them.
+
+**3. Do not put carom in a fitness function.** The null ruleset maximises bank gain by
+accident, at 0.40 against a shipped ceiling of 0.29. Optimising for it converges on confetti.
+Report it; do not reward it.
+
+**4. Fix the destructible budget by the cost model, not the genre.** Cap destructibles at
+about 30% of wall mass. Seven of eight shipped boards already comply, and the ancestors that
+disagree all give their players a free repeatable destroyer that this game does not.
+
+**5. Settle two open questions before authoring a generator**, because both change what it
+should build: whether the 70%-of-diagonal sightline cap transfers to a game with no
+verticality (5 of 8 shipped boards exceed it), and what to do at 3 players, where rotational
+symmetry and a rectangle are incompatible and the literature is silent.
+
+**6. Then playtest.** Every claim here is static. A bot-vs-bot capture at normal speed on the
+best board from each ruleset is the cheapest thing that would turn any of this into evidence
+about play, and the versus rulings already accept one as satisfying a playtest criterion.
 
 ## Residuals and what is not settled
 
