@@ -1,0 +1,14 @@
+{
+  "id": "record-never-reads-the-outcome",
+  "file": "tools/screens/record.mjs",
+  "find": "  const outcome = surfaceAtEnd === 'playing' ? null : await page.evaluate(OUTCOME_IN);",
+  "replace": "  const outcome = null;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "recordFlow: what a finished round reports (issue #720) names the outcome panel that ended the round, and nothing while it is still playing"
+  ],
+  "why": "A clip whose round ended is evidence of an outcome -- cleared, failed, game over -- and the manifest is where a reviewer reads which. Without it the only record is that play stopped."
+}

@@ -168,6 +168,17 @@ const SURFACE_IN = `(() => {
   return s.playing && s.panelHidden && s.canvas ? 'playing' : (s.panelHidden ? 'not-playing' : 'menu');
 })()`;
 
+/**
+ * What the screen says once a round is over: the outcome panel's own heading ("Level
+ * Cleared", "Level Failed", "Game Over"). A clip whose round ended is evidence of an
+ * OUTCOME, and a reviewer should not have to infer which one from the last frame.
+ */
+const OUTCOME_IN = `(() => {
+  const title = document.querySelector('.hud-title');
+  const text = title === null ? '' : (title.textContent ?? '').trim();
+  return text === '' ? null : text;
+})()`;
+
 const TICK_SAMPLE_IN = `(() => {
   const replay = globalThis.__tanks && globalThis.__tanks.replay;
   const surface = ${SURFACE_IN};
@@ -294,6 +305,7 @@ async function recordWindow(page, context, { seconds, viewport, out, signal, sto
   await Promise.all(writes);
   const raf = await page.evaluate('globalThis.__flowRaf ? globalThis.__flowRaf.slice() : []');
   const surfaceAtEnd = await page.evaluate(SURFACE_IN);
+  const outcome = surfaceAtEnd === 'playing' ? null : await page.evaluate(OUTCOME_IN);
   await cdp.detach().catch(() => {});
   const first = frames[0]?.timestamp ?? 0;
   return {
@@ -303,6 +315,7 @@ async function recordWindow(page, context, { seconds, viewport, out, signal, sto
     samples,
     raf,
     surfaceAtEnd,
+    outcome,
     startedAtMs,
     stoppedAtMs,
   };
@@ -440,6 +453,7 @@ export async function recordFlow(options, deps = {}) {
         surfaceAtStart: 'playing',
         surfaceAtEnd: window.samples.length > 0 ? window.samples[window.samples.length - 1].surface : recorded.surfaceAtEnd,
         endedAs: window.endedAs,
+        endedWith: recorded.outcome,
       },
       timing: {
         policy: 'real-time: the production game loop at wall-clock pace, recorded from the compositor screencast and resampled to a constant frame rate by holding the last frame',

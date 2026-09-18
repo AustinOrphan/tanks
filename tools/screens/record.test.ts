@@ -2,6 +2,7 @@
 // maps to, the tick-sample summary, and that every resource is released when a recording
 // fails before or after the browser is up. The measurements themselves are `flow.test.ts`'s.
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -126,5 +127,19 @@ describe('recordFlow releases what it opened (issue #815)', () => {
     await expect(recordFlow({ ...parseRecordArgs(ARGV), dist, out: join(dist, 'out'), report: join(dist, 'out', 'r.json') }, { serve: async () => f.server, loadChromium: async () => f.chromium }))
       .rejects.toThrow(/no index.html under/);
     expect(f.chromium.launch).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordFlow: what a finished round reports (issue #720)', () => {
+  // The outcome is read straight off the page, so the unit under test here is the decision
+  // to read it at all: a round still playing at the cut has no outcome to name.
+  const source = readFileSync(new URL('./record.mjs', import.meta.url), 'utf8');
+
+  it('names the outcome panel that ended the round, and nothing while it is still playing', () => {
+    const line = /const outcome = surfaceAtEnd === 'playing' \? null : await page\.evaluate\(OUTCOME_IN\);/;
+    expect(source, 'the recorder no longer reads the outcome').toMatch(line);
+    // ...and what it reads is the panel's own heading, not a guess from the surface class.
+    expect(source).toMatch(/const OUTCOME_IN = `\(\(\) => \{\n\s+const title = document\.querySelector\('\.hud-title'\);/);
+    expect(source).toMatch(/endedWith: recorded\.outcome,/);
   });
 });
