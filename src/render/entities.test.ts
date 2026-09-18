@@ -8,6 +8,8 @@ import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
   STRIPE_TURRET_MODE, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_OPACITY,
 } from './entities';
+import { hullGeometry, tankParts, HULL_CORNER, HULL_NOSE } from './tank-model';
+import { weaponShapeFor } from '../presentation/enemy-role';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { distance, overFelt } from '../presentation/colour-distance';
 
@@ -736,6 +738,56 @@ describe('tank geometry', () => {
     const ratio = HULL_LEN / HULL_WIDTH;
     expect(ratio).toBeGreaterThan(0.8);
     expect(ratio).toBeLessThan(1.3);
+  });
+
+  it('draws the shipped hull when the role lever is unpulled, vertex for vertex', () => {
+    // Issue #831 made the hull plan's corner and nose arguments so a role cue could spend
+    // them. The property every arm of that experiment rests on is that NOT spending them
+    // changes nothing: `tankParts({})` must be the shipped model exactly, and the flag is
+    // absent for every player who never types it.
+    //
+    // Compared as the whole position buffer rather than as a bounding box, because the lever
+    // moves the plan OUTLINE -- a rounder corner and a tapered nose both leave the extents
+    // untouched while moving most of the vertices between them, so a box check would pass on
+    // exactly the change this is guarding.
+    const shipped = hullGeometry();
+    const viaParts = tankParts({}).find((q) => q.name === 'hull');
+    expect(viaParts, 'tankParts() must include a hull').toBeDefined();
+    const a = Array.from(shipped.getAttribute('position').array as Float32Array);
+    const b = Array.from(viaParts!.geometry.getAttribute('position').array as Float32Array);
+    expect(b).toEqual(a);
+
+    // And the control: the lever must actually be able to move those vertices, or the test
+    // above is asserting that two identical calls are identical. A pulled corner changes the
+    // buffer; the extents stay put, which is the whole reason for comparing vertices.
+    const pulled = tankParts({ hullCorner: 0.45, hullNose: 0.62 })
+      .find((q) => q.name === 'hull')!.geometry;
+    const c = Array.from(pulled.getAttribute('position').array as Float32Array);
+    expect(c, 'the hull lever must move vertices').not.toEqual(a);
+    // The footprint must not move, because the hull's job is to state the collider honestly:
+    // HULL_WIDTH is pinned to TANK_RADIUS * 2 exactly for that reason. To 3 decimal places,
+    // not more -- the corner is a quadratic curve and changing its radius resamples it, which
+    // shifts the outermost vertex by about 3e-5 world units. That is 0.003% of a 1.0 hull and
+    // a property of the curve, not of the footprint; asserting 6 places would pin the
+    // tessellation instead of the claim.
+    shipped.computeBoundingBox();
+    pulled.computeBoundingBox();
+    expect(pulled.boundingBox!.max.x).toBeCloseTo(shipped.boundingBox!.max.x, 3);
+    expect(pulled.boundingBox!.max.z).toBeCloseTo(shipped.boundingBox!.max.z, 3);
+  });
+
+  it('ties the hull cue\'s shipped state to the hull the renderer actually draws', () => {
+    // The cross-layer half of the pin, and it has to live HERE. `enemy-role.ts` owns the three
+    // states as plain numbers and may not import the renderer -- presentation may not depend on
+    // render, which `dependency-direction.test.ts` enforces -- so its own test pins the values
+    // and this one pins that those values ARE the shipped hull.
+    //
+    // Split that way, retuning `HULL_CORNER` without retuning the cue fails here, and retuning
+    // the cue without retuning the hull fails there. Either alone would let the standard shell
+    // drift off the shipped tank, which is the property the whole role-cue experiment rests on.
+    const shipped = weaponShapeFor('hull', 'normal');
+    expect(shipped.hullCorner, 'the standard shell must be the shipped corner').toBe(HULL_CORNER);
+    expect(shipped.hullNose, 'the standard shell must be the shipped nose').toBe(HULL_NOSE);
   });
 
   it('has tracks that read as part of the tank, not as its shadow', () => {

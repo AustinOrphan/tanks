@@ -62,6 +62,69 @@ describe('enemy role cues: the mapping is the number the player needs', () => {
     }
   });
 
+  it('orders the hull lever by the same budget, on the axis that can carry three states', () => {
+    // `hull` is the one weapon lever whose states are ABSOLUTE plan parameters rather than
+    // multipliers, so it cannot join the sweep above: its shipped value is HULL_CORNER, not 1.
+    // The reason is the clamps. `hullPlan` puts `nose` through `clamp01` and the shipped nose
+    // is already 1, so nose cannot go above shipped and can only mark the `fast` end; `round`
+    // is clamped to min(round, halfW * 0.9, halfL * 0.45) = 0.45 here, which is the ceiling the
+    // `ricochet` end sits at.
+    const corner = (t: 'fast' | 'normal' | 'ricochet') =>
+      weaponShapeFor('hull', t).hullCorner as number;
+    const nose = (t: 'fast' | 'normal' | 'ricochet') =>
+      weaponShapeFor('hull', t).hullNose as number;
+
+    // CORNER carries all three states, ordered by the bounce budget like every other lever.
+    expect(corner('fast')).toBeLessThan(corner('normal'));
+    expect(corner('normal')).toBeLessThan(corner('ricochet'));
+    // The shipped tank must not move a vertex, so the standard shell is the shipped hull.
+    //
+    // LITERALS, not the render constants, and deliberately: presentation may not import
+    // render -- the renderer is an implementation, not a contract, and
+    // `dependency-direction.test.ts` enforces it. So this half pins the VALUES, and the tie
+    // between them and `HULL_CORNER` / `HULL_NOSE` is asserted one layer up, in
+    // `entities.test.ts`, where both are legally in scope. Neither half is sufficient alone:
+    // this one would pass if the render constants moved, and that one would pass if these
+    // numbers stopped being the shipped ones.
+    expect(corner('normal'), 'the standard shell is the shipped hull').toBe(0.3);
+    expect(nose('normal'), 'the standard shell is the shipped hull').toBe(1);
+    // NOSE sharpens the outlier and cannot do more: it is at its own ceiling for two states.
+    expect(nose('fast')).toBeLessThan(nose('normal'));
+    expect(nose('ricochet')).toBe(nose('normal'));
+
+    // Neither end may exceed a clamp, because a value the clamp eats is a state that silently
+    // reads as its neighbour.
+    for (const t of ['fast', 'normal', 'ricochet'] as const) {
+      expect(corner(t), `${t} corner above the 0.45 clamp`).toBeLessThanOrEqual(0.45);
+      expect(nose(t), `${t} nose above the clamp01 ceiling`).toBeLessThanOrEqual(1);
+      expect(nose(t), `${t} nose below zero`).toBeGreaterThan(0);
+    }
+  });
+
+  it('spends the hull lever on weapon TYPE, never on the kind name', () => {
+    // The fix PR #830 made for mine capacity, applied here before it can go wrong: the cue
+    // answers "what is about to be fired at me", so re-arming a tank in tank-defs.json has to
+    // move its hull with it. A mapping keyed on kind would agree today and drift silently.
+    //
+    // The control is that kinds sharing a bullet type must share a hull, and kinds differing in
+    // it must differ -- which is a property of the ROSTER, so it fails if the mapping is keyed
+    // on anything else.
+    const byType = new Map<string, Set<string>>();
+    for (const kind of ENEMIES) {
+      const t = configFor(kind).weapon.bulletType;
+      const shape = weaponShapeFor('hull', t);
+      const sig = `${shape.hullCorner}|${shape.hullNose}`;
+      if (!byType.has(t)) byType.set(t, new Set());
+      byType.get(t)!.add(sig);
+    }
+    for (const [t, sigs] of byType) {
+      expect(sigs.size, `every ${t} tank must get one hull`).toBe(1);
+    }
+    // ...and distinct types must not collide, or the lever carries nothing.
+    const all = new Set([...byType.values()].map((s) => [...s][0]));
+    expect(all.size, 'distinct bullet types must get distinct hulls').toBe(byType.size);
+  });
+
   it('agrees with the ROSTER rather than restating it -- every enemy, collars vs ricochetCount', () => {
     // The guard that makes "derived, not keyed on kind" mean something. If a tank is re-armed
     // in tank-defs.json, its collars have to move with it; a mapping that agreed only today
@@ -118,6 +181,24 @@ describe('enemy role cues: what the grammar can and cannot separate (issue #357)
       ['brown', 'grey'],
       ['green', 'teal'],
     ]);
+  });
+
+  it('does not widen the ceiling when the hull lever joins the grammar (issue #831)', () => {
+    // A seventh lever is a seventh way of saying the same three weapon states, not a seventh
+    // group. Hull shape encodes WEAPON CLASS, which brown and grey already share and teal and
+    // green already share, so adding it to the signature must leave the count at four.
+    //
+    // This is the check that a new lever cannot quietly widen the ceiling by being keyed on
+    // something it should not be: if `hull` were derived from the kind name rather than the
+    // resolved weapon, this would read six and the ceiling argument would silently become
+    // false while every other test still passed.
+    const withHull = (kind: (typeof ENEMIES)[number]) => {
+      const c = configFor(kind);
+      const h = weaponShapeFor('hull', c.weapon.bulletType);
+      return `${signature(kind)}|${h.hullCorner}|${h.hullNose}`;
+    };
+    const groups = new Set(ENEMIES.map(withHull));
+    expect(groups.size, 'the hull lever must not add a group').toBe(4);
   });
 
   it('gives the two unique kinds signatures nothing else shares', () => {

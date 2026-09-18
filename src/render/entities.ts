@@ -907,6 +907,8 @@ export function createEntityViews(
       muzzleFlare: weapon.muzzleFlare,
       turretTall: weapon.turretTall,
       turretWide: mines.turretWide,
+      hullCorner: weapon.hullCorner,
+      hullNose: weapon.hullNose,
     });
     const partFor = (name: TankPart['name']): TankPart => {
       const found = parts.find((q) => q.name === name);
