@@ -446,7 +446,10 @@ describe('the exports (issue #254)', () => {
   const shotBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-screenshot');
   const diagBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-diagnostics');
   const replayBtn = (root: HTMLElement): HTMLButtonElement => q(root, '.hud-export-replay');
-  const hiddenOf = (root: HTMLElement): boolean[] => [shotBtn(root).hidden, diagBtn(root).hidden, replayBtn(root).hidden];
+  // TypeScript 6's DOM types widen `hidden` to `boolean | 'until-found'` (5.x had `boolean`), and
+  // these buttons are hidden through that property, so what is read back carries the wider type.
+  const hiddenOf = (root: HTMLElement): (boolean | 'until-found')[] =>
+    [shotBtn(root).hidden, diagBtn(root).hidden, replayBtn(root).hidden];
   /** Lets a resolved or rejected save settle before asserting on the field. */
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
