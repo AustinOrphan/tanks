@@ -4305,6 +4305,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       devToolsView,
       selfTestView,
       devCfgView,
+      // The gallery workbench (issue #730) was left out when #741 added it, while the paint
+      // order below listed it: arrow keys and a D-pad moved nothing inside the pane, and
+      // Confirm landed nowhere. `hud.gallery.test.ts` pins its place here.
+      galleryView,
       confirmView,
     ]) {
       // A surface fading OUT is displayed but no longer active (issue #364). Before the

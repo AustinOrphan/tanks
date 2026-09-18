@@ -108,6 +108,48 @@ describe('the gallery workbench pane (issue #730)', () => {
   });
 });
 
+describe('the gallery workbench pane is a focus target (issue #730)', () => {
+  // `act` and the arrow-key handler both find the pane to move focus in through
+  // `activePanelContainer`. The gallery was missing from that list while the paint order
+  // included it, so a controller's D-pad and the arrow keys moved nothing here, and Confirm
+  // with nothing focused landed nowhere. Would catch: the pane dropped from the list again.
+  const controls = (root: HTMLElement): HTMLElement[] =>
+    ['.hud-gallery-devtools', '.hud-gallery-back'].map((sel) => q<HTMLElement>(root, sel));
+  const pressActive = (key: string): void => {
+    (document.activeElement as HTMLElement).dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+    );
+  };
+
+  it('Confirm with nothing focused lands inside the pane', () => {
+    const { hud: h, root } = mount();
+    openFromShell(root);
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(h.act('confirm')).toBe(true);
+    expect(q(root, '.hud-gallery').contains(document.activeElement), 'focus went outside the pane').toBe(true);
+  });
+
+  it('the arrow keys reach Developer Tools and Back in order, from the container', () => {
+    const { root } = mount();
+    openFromShell(root);
+    expect(document.activeElement, 'the pane opens focused as a container').toBe(q(root, '.hud-gallery'));
+    for (const control of controls(root)) {
+      pressActive('ArrowDown');
+      expect(document.activeElement).toBe(control);
+    }
+  });
+
+  it("a controller's D-pad reaches the same controls", () => {
+    const { hud: h, root } = mount();
+    openFromShell(root);
+    (document.activeElement as HTMLElement | null)?.blur();
+    for (const control of controls(root)) {
+      expect(h.act('down')).toBe(true);
+      expect(document.activeElement).toBe(control);
+    }
+  });
+});
+
 describe('openGalleryWorkbench: the boot path for a ?gallery= link (issue #730)', () => {
   it('opens the pane with no opener on a developer page that binds the workbench', () => {
     const { hud: h, root, events } = mount();
