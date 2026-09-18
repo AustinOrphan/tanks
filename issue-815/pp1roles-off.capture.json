@@ -1,0 +1,480 @@
+{
+  "schemaVersion": 1,
+  "status": "success",
+  "recipe": {
+    "id": "flow.campaign-round.pp1roles-off",
+    "version": 1,
+    "contentHash": "1ff1e084cb9521d75be405561953843097f827466626bc09b4e8d594e8856eee",
+    "title": "Campaign level 1 at normal speed, pp1Roles off",
+    "description": "The baseline half of issue #720's matched pair: campaign level 1, seed 1, the scripted player, shipped role budgets. The whole round of the real application at wall-clock pace, from the end of the round-start countdown to the last frame before the outcome panel (under a 60 s ceiling), recorded from the compositor and resampled to 30 fps. The page runs its production game loop; nothing steps the simulation. Needs a build that names its commit (VITE_BUILD_SHA) and a host GPU for the delivered-rate gate.",
+    "altText": "One whole round of the scripted player fighting the level 1 roster under the shipped budgets, seen from the game camera."
+  },
+  "source": {
+    "requestedRef": "HEAD",
+    "commitSha": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+    "dirty": false
+  },
+  "producer": {
+    "kind": "flow",
+    "scenarioId": "campaign-round",
+    "requestedInputs": {
+      "fixture": {
+        "id": "campaign-round",
+        "seed": 1
+      },
+      "variant": {
+        "level": 1,
+        "driver": "autoplay",
+        "flags": {
+          "pp1Roles": false
+        },
+        "minimumDeliveredFps": 45
+      }
+    },
+    "metadata": {
+      "flow": {
+        "kind": "flow",
+        "flowId": "campaign-round",
+        "title": "A campaign round from a fresh save",
+        "inputs": {
+          "level": 1,
+          "seed": 1,
+          "driver": "autoplay",
+          "flags": {}
+        },
+        "url": "?dev=1&replay=1&level=1&seed=1&autoplay=1",
+        "dist": {
+          "indexSha256": "d88b9c86ebccb2be02184ded280884ee97fbb585b8099cdba459e4c616262c96",
+          "assets": [
+            "index-D2iOmdjq.js",
+            "index-DCXTDbBc.css"
+          ]
+        },
+        "diagnostics": {
+          "url": "/?dev=1&seed=1&level=1&autoplay=1&replay=1",
+          "build": {
+            "commit": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+            "known": true
+          },
+          "developerMode": true,
+          "requestedNotInEffect": [],
+          "inEffectUnrequested": [
+            "disarmed"
+          ],
+          "unknownParams": []
+        },
+        "world": {
+          "seed": 1,
+          "arenaId": "arena-01",
+          "expectedArenaId": "arena-01",
+          "practice": true
+        },
+        "readiness": {
+          "readyAfterMs": 3222,
+          "countdownMs": 2911,
+          "surfaceAtStart": "playing",
+          "surfaceAtEnd": "playing",
+          "endedAs": "menu"
+        },
+        "timing": {
+          "policy": "real-time: the production game loop at wall-clock pace, recorded from the compositor screencast and resampled to a constant frame rate by holding the last frame",
+          "requestedSeconds": 60,
+          "stop": {
+            "requested": "round-end",
+            "reason": "round-ended",
+            "cutAtMs": 1789735539704,
+            "playingSeconds": 5.015817165374756,
+            "droppedFrames": 25
+          },
+          "fps": 30,
+          "frameCount": 150,
+          "recording": {
+            "startedAtMs": 1789735534668,
+            "stoppedAtMs": 1789735539956,
+            "wallMs": 5288
+          },
+          "simulation": {
+            "available": true,
+            "samples": 21,
+            "ticks": 302,
+            "seconds": 5.034699999988079,
+            "ticksPerSecond": 59.983713031703,
+            "resets": 0,
+            "surfaces": [
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing"
+            ]
+          },
+          "render": {
+            "frames": 634,
+            "spanMs": 5274.500000000001,
+            "fps": 120.01137548582803,
+            "gapP50Ms": 8.300000000000182,
+            "gapP95Ms": 9.200000000000728,
+            "gapMaxMs": 9.400000000000546,
+            "clampMs": 250,
+            "clampedFrames": 0,
+            "simTimeLostMs": 0,
+            "measuredUnder": "cdp-screencast",
+            "note": "headless animation frames are not display-throttled; a rate above the display rate is a headless artefact"
+          },
+          "screencast": {
+            "format": "jpeg",
+            "quality": 90,
+            "framesReceived": 495,
+            "fps": 98.48843841641322,
+            "gapP50Ms": 8.350133895874023,
+            "gapP95Ms": 17.12179183959961,
+            "gapMaxMs": 17.568111419677734,
+            "bytes": 41504415,
+            "firstFrameEpochSeconds": 1789735534.677003
+          },
+          "resample": {
+            "method": "hold-last-frame",
+            "uniqueFramesUsed": 150,
+            "heldFrames": 0,
+            "maxConsecutiveHold": 0,
+            "sourceFrames": 495,
+            "coveredMs": 5015.817165374756,
+            "tailPadMs": 0
+          }
+        },
+        "frames": {
+          "expected": {
+            "width": 1280,
+            "height": 800
+          },
+          "first": {
+            "width": 1280,
+            "height": 800
+          },
+          "mismatched": []
+        },
+        "browser": {
+          "version": "151.0.7922.34",
+          "headless": true,
+          "visual": "host-gpu",
+          "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)",
+          "launchArgs": [
+            "--ignore-gpu-blocklist",
+            "--use-angle=metal"
+          ]
+        },
+        "pageErrors": []
+      }
+    }
+  },
+  "capture": {
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "host-gpu",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "requestedSchedule": {
+      "kind": "realtime",
+      "durationSeconds": 60,
+      "stop": "round-end"
+    },
+    "frameSchedule": {
+      "kind": "frames",
+      "frameCount": 150
+    }
+  },
+  "playback": {
+    "rate": 1,
+    "intendedFps": 30,
+    "intendedDurationSeconds": 5,
+    "sourceOfTruth": "capture.mp4",
+    "effective": {
+      "mp4": {
+        "averageFrameRate": 30,
+        "durationSeconds": 5,
+        "playbackRate": 1,
+        "faststart": true
+      }
+    }
+  },
+  "reproduce": {
+    "install": [
+      "npm i --no-save playwright@1.62.0",
+      "npx playwright install chromium"
+    ],
+    "build": "VITE_BUILD_SHA=c9b96cd26b98c78baefe7f265825fe2f3b5490a7 npm run build",
+    "capture": "npm run capture -- --recipe flow.campaign-round.pp1roles-off --source-ref c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+    "note": null
+  },
+  "assertions": [
+    {
+      "kind": "flow-report-identity",
+      "passed": true,
+      "diagnostic": "recorded flow 'campaign-round' with the requested level, seed, driver and flags",
+      "details": {
+        "requested": {
+          "level": 1,
+          "seed": 1,
+          "driver": "autoplay",
+          "flags": {}
+        },
+        "reported": {
+          "level": 1,
+          "seed": 1,
+          "driver": "autoplay",
+          "flags": {}
+        }
+      }
+    },
+    {
+      "kind": "page-errors",
+      "passed": true,
+      "diagnostic": "no uncaught page errors",
+      "details": {
+        "errors": []
+      }
+    },
+    {
+      "kind": "flow-config-effective",
+      "passed": true,
+      "diagnostic": "the page opened developer mode and refused none of the requested parameters",
+      "details": {
+        "developerMode": true,
+        "requestedNotInEffect": [],
+        "inEffectUnrequested": [
+          "disarmed"
+        ],
+        "unknownParams": [],
+        "url": "/?dev=1&seed=1&level=1&autoplay=1&replay=1"
+      }
+    },
+    {
+      "kind": "flow-build-identity",
+      "passed": true,
+      "diagnostic": "the page names build c9b96cd26b98c78baefe7f265825fe2f3b5490a7, the checkout being captured",
+      "details": {
+        "pageBuild": {
+          "commit": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+          "known": true
+        },
+        "checkout": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+        "dist": {
+          "indexSha256": "d88b9c86ebccb2be02184ded280884ee97fbb585b8099cdba459e4c616262c96",
+          "assets": [
+            "index-D2iOmdjq.js",
+            "index-DCXTDbBc.css"
+          ]
+        }
+      }
+    },
+    {
+      "kind": "flow-world-identity",
+      "passed": true,
+      "diagnostic": "the round is seed 1 on arena-01, level 1's arena",
+      "details": {
+        "reported": {
+          "seed": 1,
+          "arenaId": "arena-01",
+          "practice": true
+        },
+        "expected": {
+          "seed": 1,
+          "arenaId": "arena-01"
+        }
+      }
+    },
+    {
+      "kind": "flow-still-playing",
+      "passed": true,
+      "diagnostic": "the round was playing at every sample and at the end of the 60 s window",
+      "details": {
+        "surfaceAtStart": "playing",
+        "surfaceAtEnd": "playing",
+        "samples": 21,
+        "readyAfterMs": 3222,
+        "countdownMs": 2911
+      }
+    },
+    {
+      "kind": "flow-no-clamped-frames",
+      "passed": true,
+      "diagnostic": "no animation frame crossed the 250 ms catch-up clamp; simulated time kept pace with the clock",
+      "details": {
+        "clampedFrames": 0,
+        "simTimeLostMs": 0,
+        "renderFps": 120.01137548582803,
+        "gapMaxMs": 9.400000000000546
+      }
+    },
+    {
+      "kind": "flow-simulation-rate",
+      "passed": true,
+      "diagnostic": "the simulation advanced 59.98 ticks per wall-clock second over 5.03 s",
+      "details": {
+        "ticksPerSecond": 59.983713031703,
+        "ticks": 302,
+        "seconds": 5.034699999988079,
+        "samples": 21,
+        "resets": 0,
+        "expected": 60,
+        "tolerance": 0.03
+      }
+    },
+    {
+      "kind": "flow-frame-size",
+      "passed": true,
+      "diagnostic": "every staged frame is 1280x800",
+      "details": {
+        "expected": {
+          "width": 1280,
+          "height": 800
+        },
+        "first": {
+          "width": 1280,
+          "height": 800
+        },
+        "mismatched": []
+      }
+    },
+    {
+      "kind": "flow-frame-count",
+      "passed": true,
+      "diagnostic": "150 frames at 30 fps: the round ended after 5.02 s, within the 60 s ceiling",
+      "details": {
+        "frameCount": 150,
+        "fps": 30,
+        "expectedFrames": 1800,
+        "stop": {
+          "requested": "round-end",
+          "reason": "round-ended",
+          "cutAtMs": 1789735539704,
+          "playingSeconds": 5.015817165374756,
+          "droppedFrames": 25
+        },
+        "resample": {
+          "method": "hold-last-frame",
+          "uniqueFramesUsed": 150,
+          "heldFrames": 0,
+          "maxConsecutiveHold": 0,
+          "sourceFrames": 495,
+          "coveredMs": 5015.817165374756,
+          "tailPadMs": 0
+        }
+      }
+    },
+    {
+      "kind": "flow-delivered-rate",
+      "passed": true,
+      "diagnostic": "the compositor delivered 98.5 frames per second, at least the 45 the recipe requires",
+      "details": {
+        "deliveredFps": 98.48843841641322,
+        "minimum": 45,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)",
+        "visual": "host-gpu",
+        "maxConsecutiveHold": 0
+      }
+    }
+  ],
+  "tools": {
+    "node": "v24.7.0",
+    "playwright": "1.62.0",
+    "producer": {
+      "chromium": "151.0.7922.34"
+    },
+    "ffmpeg": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobe": "ffprobe version 9.0.1 Copyright (c) 2007-2026 the FFmpeg developers"
+  },
+  "outputs": {
+    "files": [
+      {
+        "filename": "capture.mp4",
+        "format": "mp4",
+        "width": 1280,
+        "height": 800,
+        "frameCount": 150,
+        "durationSeconds": 5,
+        "codec": "h264",
+        "pixelFormat": "yuv420p",
+        "averageFrameRate": 30,
+        "container": {
+          "faststart": true,
+          "moovOffset": 32,
+          "mdatOffset": 2627,
+          "measuredBy": "mp4-box-order"
+        },
+        "byteSize": 348028,
+        "sha256": "a381c16e2c3d524f43e85e38077bb66cb50e988d7e32844139c29eeaa3be8759",
+        "construction": {
+          "method": "ffmpeg",
+          "codecRequested": "libx264",
+          "pixelFormatRequested": "yuv420p",
+          "faststartRequested": true
+        },
+        "verification": {
+          "status": "passed",
+          "expected": {
+            "width": 1280,
+            "height": 800,
+            "frameCount": 150,
+            "durationSeconds": 5,
+            "averageFrameRate": 30,
+            "faststart": true
+          },
+          "tolerances": {
+            "averageFrameRate": 0.03,
+            "durationSeconds": 0.016666666666666666,
+            "frameDurationConsistency": 0.5
+          },
+          "measuredBy": {
+            "stream": "ffprobe",
+            "container": "mp4-box-order"
+          }
+        }
+      }
+    ],
+    "rawFrames": {
+      "retained": false,
+      "directory": null,
+      "pattern": null,
+      "frameCount": 150,
+      "byteSize": null,
+      "sha256": null
+    },
+    "totalByteSize": 348028,
+    "budgetBytes": 100000000,
+    "withinBudget": true
+  },
+  "determinism": {
+    "scenarioInputs": "fixed by the recipe and recorded producer inputs/metadata",
+    "scheduleAndDimensions": "fixed by the recipe and recorded effective frame schedule/viewport",
+    "rawFrameEquality": "may be compared only within a pinned supported environment",
+    "encodedByteEqualityAcrossEnvironments": false
+  },
+  "timing": {
+    "startedAt": "2026-09-18T12:45:30.296Z",
+    "completedAt": "2026-09-18T12:45:42.929Z"
+  },
+  "diagnostics": []
+}
