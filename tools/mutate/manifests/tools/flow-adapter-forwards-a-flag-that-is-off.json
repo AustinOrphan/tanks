@@ -1,14 +1,14 @@
 {
   "id": "flow-adapter-forwards-a-flag-that-is-off",
   "file": "tools/capture/flow-adapter.mjs",
-  "find": "    ...FLOW_FLAG_IDS.filter((id) => variant.flags[id] === true).flatMap((id) => ['--flag', id]),",
-  "replace": "    ...FLOW_FLAG_IDS.filter((id) => variant.flags[id] !== undefined).flatMap((id) => ['--flag', id]),",
+  "find": "      if (value === undefined || value === false) return [];",
+  "replace": "      if (value === undefined) return [];",
   "expect": "killed",
   "tests": [
     "tools/capture/flow-adapter.test.ts"
   ],
   "killedBy": [
-    "buildFlowArguments (issue #815) builds the recorder argv from the recipe, flags only when on, in the allowlist order"
+    "a valued flag reaches the recorder as its value (issues #773, #815) passes a switch as its id and a choice as id=value, and an unset flag not at all"
   ],
-  "why": "The baseline half of the matched pair says `pp1Roles: false` explicitly. Forwarding a flag that is off would switch the experiment on in both halves."
+  "why": "The baseline half of a matched pair says its flag is false explicitly. Forwarding it would put `pp1Roles=false` on the page, which the recorder refuses outright -- and if it did not, the experiment would be switched on in the half that exists to be without it."
 }
