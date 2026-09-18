@@ -32,6 +32,7 @@ const blockedFireParam = params.get('blockedFire') as import('../../src/presenta
 const arrivalParam = params.get('arrival') as import('../../src/presentation/arrival-language').ArrivalLanguage | null;
 // Forwarded to BOTH branches, for the reason the motion note above gives.
 const shellTrailParam = params.get('shellTrail') as import('../../src/presentation/shell-trail').ShellTrailStyle | null;
+const enemyRoleParam = params.get('enemyRole') as import('../../src/presentation/enemy-role').EnemyRoleCue | null;
 
 // `scene` selects one of MOMENTS's scripted timelines over the default posed gallery.
 // Looking the id up directly in MOMENTS (rather than checking against a hardcoded list)
@@ -82,6 +83,7 @@ const g = moment
       mineWarn: mineWarnParam,
       identityMarker: identityMarkerParam,
       shellTrail: shellTrailParam,
+      enemyRole: enemyRoleParam,
       motion: motionParam,
     });
 

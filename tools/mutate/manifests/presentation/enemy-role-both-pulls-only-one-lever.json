@@ -1,0 +1,14 @@
+{
+  "id": "enemy-role-both-pulls-only-one-lever",
+  "file": "src/presentation/enemy-role.ts",
+  "find": "  if (cue === 'riser' || cue === 'both') return 'riser';",
+  "replace": "  if (cue === 'riser') return 'riser';",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/enemy-role.test.ts"
+  ],
+  "why": "`both` stops pulling its mine lever, so the approved arm (issue #773) silently renders the weapon cue alone. The arm still draws, still reports success, and is evidence for a claim nobody made -- and the mine half is the one the pp1Roles experiment moves.",
+  "killedBy": [
+    "enemy role cues: the vocabulary routes each cue to exactly one lever, and `both` to one of each"
+  ]
+}

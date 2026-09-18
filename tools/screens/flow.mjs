@@ -44,7 +44,26 @@ export function campaignArenaId(level) {
  * arbitrary URL fragment, and `flow.test.ts` checks each id against the registry so a
  * renamed flag fails a test here rather than becoming an unknown parameter on the page.
  */
-export const FLOW_FLAG_IDS = Object.freeze(['pp1Roles']);
+export const FLOW_FLAGS = Object.freeze({
+  /** Issue #358's PP1 role-first ordnance matrix. A switch: present or absent. */
+  pp1Roles: true,
+  /**
+   * Issue #773's non-colour role cue. A CHOICE, so the allowlist names its values.
+   *
+   * HARDCODED for the reason the gallery CLI hardcodes the same list: this file is `.mjs` and
+   * cannot import the TypeScript that owns the vocabulary. `ENEMY_ROLE_CUES`
+   * (src/presentation/enemy-role.ts) is the source of truth, and `flow.test.ts` pins the two
+   * together in both directions, so a lever added there without a change here fails a test
+   * rather than becoming a capture nobody can request.
+   */
+  enemyRole: Object.freeze(['girth', 'flare', 'dome', 'deck', 'riser', 'crown', 'both']),
+  /**
+   * Issue #630's second identity channel, so a role cue can be judged beside an owner cue --
+   * which is exactly what #773's evidence list asks for. Hardcoded and pinned like the above.
+   */
+  identityMarker: Object.freeze(['arcs', 'shape', 'roof']),
+});
+export const FLOW_FLAG_IDS = Object.freeze(Object.keys(FLOW_FLAGS));
 
 /** The drivers a flow accepts. `autoplay` is the scripted player (`?autoplay=1`). */
 export const FLOW_DRIVERS = Object.freeze(['autoplay']);
@@ -188,8 +207,16 @@ export function validateFlowInputs({ level, seed, driver, flags }) {
   if (!FLOW_DRIVERS.includes(driver)) throw new Error(`driver must be one of ${FLOW_DRIVERS.join(', ')}`);
   if (!isPlainObject(flags)) throw new Error('flags must be a plain object');
   for (const [id, value] of Object.entries(flags)) {
-    if (!FLOW_FLAG_IDS.includes(id)) throw new Error(`flags.${id} is not a flow flag (${FLOW_FLAG_IDS.join(', ')})`);
-    if (typeof value !== 'boolean') throw new Error(`flags.${id} must be a boolean`);
+    const allowed = FLOW_FLAGS[id];
+    if (allowed === undefined) throw new Error(`flags.${id} is not a flow flag (${FLOW_FLAG_IDS.join(', ')})`);
+    // A switch takes a boolean; a choice takes one of ITS OWN values, never an arbitrary
+    // string. The page would read an unknown value as absent, so a capture would record the
+    // arm it asked for and show the board without it.
+    if (allowed === true) {
+      if (typeof value !== 'boolean') throw new Error(`flags.${id} must be a boolean`);
+    } else if (!allowed.includes(value)) {
+      throw new Error(`flags.${id} must be one of ${allowed.join(', ')}`);
+    }
   }
   return { level, seed, driver, flags: { ...flags } };
 }
@@ -203,7 +230,11 @@ export function buildFlowUrl(inputs) {
   const { level, seed, driver, flags } = validateFlowInputs(inputs);
   const params = [['dev', '1'], ['replay', '1'], ['level', String(level)], ['seed', String(seed)]];
   if (driver === 'autoplay') params.push(['autoplay', '1']);
-  for (const id of FLOW_FLAG_IDS) if (flags[id] === true) params.push([id, '1']);
+  for (const id of FLOW_FLAG_IDS) {
+    const value = flags[id];
+    if (value === undefined || value === false) continue;
+    params.push([id, value === true ? '1' : value]);
+  }
   return `?${params.map(([key, value]) => `${key}=${value}`).join('&')}`;
 }
 

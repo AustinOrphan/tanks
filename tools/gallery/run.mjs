@@ -175,7 +175,6 @@ async function run(browser) {
   // captureGame's own `args.scene === 'game'` branch (above, in capture()) has already
   // returned, so 'game' never lands in it.
   const q = () => `http://localhost:${PORT}/tools/gallery/index.html?${galleryQuery(args)}`;
-
   /**
    * The GAME's canvas, not the Customize panel's.
    *

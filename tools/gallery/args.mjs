@@ -67,6 +67,8 @@ export const DEFAULTS = {
   skin: 'solid',
   mineWarn: null,
   identityMarker: null,
+  /** Issue #357's role cues: barrel | band | both. Only meaningful where tanks are posed. */
+  enemyRole: null,
   /**
    * Which experimental shell bounce-trail to draw (issue #688), matching the game's own
    * `?dev=1&shellTrail=<style>`. Only meaningful where a shell is in the frame -- see the
@@ -295,6 +297,16 @@ export function parseArgs(argv) {
     }
   }
 
+  if (out.enemyRole !== null) {
+    // Hardcoded for --mineWarn's reason: this file is .mjs and cannot import the TypeScript
+    // that owns the vocabulary. ENEMY_ROLE_CUES (src/presentation/enemy-role.ts) is the source
+    // of truth, and args.test.ts pins the two together in both directions.
+    const cues = ['girth', 'flare', 'dome', 'deck', 'riser', 'crown', 'both'];
+    if (!cues.includes(out.enemyRole)) {
+      throw new Error(`--enemyRole must be one of ${cues.join('|')}, got '${out.enemyRole}'`);
+    }
+  }
+
   if (out.arrival !== null) {
     // Hardcoded for --mineWarn's and --identityMarker's reason: this file is .mjs and
     // cannot import the TypeScript that owns the vocabulary. ARRIVAL_LANGUAGES
@@ -467,6 +479,7 @@ export function galleryQuery(args, extra = {}) {
   if (args.motion !== 'full') p.set('motion', args.motion);
   if (args.identityMarker !== null) p.set('identityMarker', args.identityMarker);
   if (args.shellTrail !== null) p.set('shellTrail', args.shellTrail);
+  if (args.enemyRole !== null) p.set('enemyRole', args.enemyRole);
   if (args.arrival !== null) p.set('arrival', args.arrival);
   if (args.blockedFire !== null) p.set('blockedFire', args.blockedFire);
   if (args.hull) p.set('hull', args.hull);

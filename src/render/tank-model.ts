@@ -279,19 +279,20 @@ export const TURRET_FILLET = 0.09;
  * turret's circumference and profile arc length, and re-deriving either by hand would
  * go stale the moment TURRET_R or TURRET_FILLET moved.
  */
-export function turretProfile(): THREE.Vector2[] {
-  const half = TURRET_H / 2;
+export function turretProfile(tall = 1, wide = 1): THREE.Vector2[] {
+  const half = (TURRET_H * tall) / 2;
+  const r = TURRET_R * wide;
   const pts: THREE.Vector2[] = [
     new THREE.Vector2(0, -half),
-    new THREE.Vector2(TURRET_R, -half),
-    new THREE.Vector2(TURRET_R, half - TURRET_FILLET),
+    new THREE.Vector2(r, -half),
+    new THREE.Vector2(r, half - TURRET_FILLET),
   ];
   const STEPS = 5;
   for (let i = 1; i <= STEPS; i++) {
     const a = (i / STEPS) * (Math.PI / 2);
     pts.push(
       new THREE.Vector2(
-        TURRET_R - TURRET_FILLET + TURRET_FILLET * Math.cos(a),
+        r - TURRET_FILLET + TURRET_FILLET * Math.cos(a),
         half - TURRET_FILLET + TURRET_FILLET * Math.sin(a),
       ),
     );
@@ -307,8 +308,8 @@ export function turretProfile(): THREE.Vector2[] {
  * a square turret and a square hull are one silhouette. Round it and the turret
  * separates from the body, which is what makes the tank legible when it rotates.
  */
-export function turretGeometry(): THREE.LatheGeometry {
-  return new THREE.LatheGeometry(turretProfile(), TURRET_SEGMENTS);
+export function turretGeometry(tall = 1, wide = 1): THREE.LatheGeometry {
+  return new THREE.LatheGeometry(turretProfile(tall, wide), TURRET_SEGMENTS);
 }
 
 /**
@@ -318,15 +319,16 @@ export function turretGeometry(): THREE.LatheGeometry {
  * One lathe rather than two cylinders, so the step is a real edge in the silhouette
  * rather than a seam between meshes that can drift apart.
  */
-export function barrelProfile(): THREE.Vector2[] {
+export function barrelProfile(girth = 1, flare = 1): THREE.Vector2[] {
+  const r = BARREL_R * girth;
   const breech = TURRET_R * 0.3; // seated inside the turret
   const muzzle = TURRET_R + BARREL_OUT;
   const flareStart = muzzle - MUZZLE_LEN;
-  const rMuzzle = BARREL_R * MUZZLE_FLARE;
+  const rMuzzle = r * MUZZLE_FLARE * flare;
   return [
     new THREE.Vector2(0, breech), // closed at the breech
-    new THREE.Vector2(BARREL_R, breech),
-    new THREE.Vector2(BARREL_R, flareStart),
+    new THREE.Vector2(r, breech),
+    new THREE.Vector2(r, flareStart),
     new THREE.Vector2(rMuzzle, flareStart), // step out
     new THREE.Vector2(rMuzzle, muzzle),
     new THREE.Vector2(0, muzzle), // and closed at the tip
@@ -348,8 +350,8 @@ export function barrelProfile(): THREE.Vector2[] {
  */
 export const BARREL_SEAM_PHI = Math.PI / 2;
 
-export function barrelGeometry(): THREE.LatheGeometry {
-  return new THREE.LatheGeometry(barrelProfile(), BARREL_SEGMENTS, BARREL_SEAM_PHI);
+export function barrelGeometry(girth = 1, flare = 1): THREE.LatheGeometry {
+  return new THREE.LatheGeometry(barrelProfile(girth, flare), BARREL_SEGMENTS, BARREL_SEAM_PHI);
 }
 
 /**
@@ -392,6 +394,23 @@ export function trackGeometry(): THREE.ExtrudeGeometry {
 /** Which of `entities.ts`'s two nested groups a part belongs under. */
 export type TankPartParent = 'visual' | 'turret';
 
+/**
+ * Per-tank shape levers for issue #357's role cues, each a multiple of the shipped value so
+ * an empty object is the shipped tank exactly. An OBJECT rather than positional arguments:
+ * these are being compared against each other, so the set changes while the prototype runs,
+ * and a caller that wants only the third should not have to name the first two.
+ */
+export interface TankShape {
+  /** Barrel tube thickness. */
+  readonly barrelGirth?: number;
+  /** Muzzle flare, on top of the shipped MUZZLE_FLARE. */
+  readonly muzzleFlare?: number;
+  /** Turret dome height. */
+  readonly turretTall?: number;
+  /** Turret dome radius. */
+  readonly turretWide?: number;
+}
+
 export interface TankPart {
   /**
    * The mesh name the game gives this part, reused verbatim by the exporter so a node in
@@ -417,7 +436,17 @@ export interface TankPart {
  * the canonical model has no business reproducing. `parent` records the nesting so an
  * exporter can rebuild the same hierarchy without the reasons for it.
  */
-export function tankParts(): TankPart[] {
+/**
+ * @param barrelGirth issue #357's weapon-class cue as a multiple of the shipped tube, 1 for
+ * the shipped gun. Defaulted so every existing caller -- the exporter included -- keeps
+ * emitting the model unchanged.
+ */
+/**
+ * @param shape issue #357's prototype levers, all 1 for the shipped tank. Defaulted so every
+ * existing caller -- the exporter included -- keeps emitting the model unchanged.
+ */
+export function tankParts(shape: TankShape = {}): TankPart[] {
+  const { barrelGirth = 1, muzzleFlare = 1, turretTall = 1, turretWide = 1 } = shape;
   const parts: TankPart[] = [
     {
       name: 'hull',
@@ -438,14 +467,14 @@ export function tankParts(): TankPart[] {
   }
   parts.push({
     name: 'turret',
-    geometry: turretGeometry(),
+    geometry: turretGeometry(turretTall, turretWide),
     position: new THREE.Vector3(0, 0, 0),
     rotationZ: 0,
     parent: 'turret',
   });
   parts.push({
     name: 'barrel',
-    geometry: barrelGeometry(),
+    geometry: barrelGeometry(barrelGirth, muzzleFlare),
     // The profile runs along the lathe's own +y from breech to muzzle, so rotating -90deg
     // about z lays it along local +x already positioned -- no offset to keep in step with
     // the length, which is how the barrel got shorter when the turret grew.

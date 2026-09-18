@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TANK_KINDS } from '../sim/config';
 import { BLOCKED_FIRE_CUES } from '../presentation/blocked-fire';
+import { ENEMY_ROLE_CUES } from '../presentation/enemy-role';
 import {
   parseDevFlags,
   parseDeveloperMode,
@@ -593,6 +594,38 @@ describe('parseDevFlags: arrival (issue #230 -- spawn and death told apart)', ()
 
   it('does not disturb the boolean flags', () => {
     expect(parseDevFlags('?dev=1&arrival=opposed')).toEqual({ ...DEV_FLAGS_OFF, arrival: 'opposed' });
+  });
+});
+
+describe('parseDevFlags: enemyRole (issues #357, #773 -- the non-colour role cue)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?enemyRole=both').enemyRole).toBeNull();
+  });
+
+  it('is null when absent -- the shipped board carries role in hue alone', () => {
+    expect(parseDevFlags('?dev=1').enemyRole).toBeNull();
+  });
+
+  it('accepts each cue -- population: every value in ENEMY_ROLE_CUES', () => {
+    // From the vocabulary rather than a copy of it: a lever added to the comparison without
+    // a parse is a flag the CLI documents and the page ignores.
+    for (const v of ENEMY_ROLE_CUES) {
+      expect(parseDevFlags(`?dev=1&enemyRole=${v}`).enemyRole).toBe(v);
+    }
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 8 forms below', () => {
+    // `barrel` and `band` are the first vocabulary's names, which #678's own body still shows
+    // in its example command; `muzzle`, `flair` and `block` are what someone who read the
+    // findings would type. Accepting any of them would draw a lever under a name the flag
+    // does not document, and the comparison would be of something nobody asked for.
+    for (const v of ['', 'BOTH', 'barrel', 'band', 'muzzle', 'flair', 'block', 'all']) {
+      expect(parseDevFlags(`?dev=1&enemyRole=${encodeURIComponent(v)}`).enemyRole).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&enemyRole=both')).toEqual({ ...DEV_FLAGS_OFF, enemyRole: 'both' });
   });
 });
 

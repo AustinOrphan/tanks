@@ -306,3 +306,20 @@ describe('runFlow: the recorder run and the result handed to the runner (issue #
     expect(failed.map((a: any) => a.kind)).toEqual(['flow-build-identity']);
   });
 });
+
+describe('a valued flag reaches the recorder as its value (issues #773, #815)', () => {
+  it('passes a switch as its id and a choice as id=value, and an unset flag not at all', () => {
+    const armed = recipe({ variant: { level: 1, driver: 'autoplay', flags: { enemyRole: 'both', identityMarker: 'roof' } } });
+    const args = buildFlowArguments(armed, 'tmp/x');
+    expect(args.filter((a: string, i: number) => args[i - 1] === '--flag'))
+      .toEqual(['enemyRole=both', 'identityMarker=roof']);
+    const mixed = recipe({ variant: { level: 1, driver: 'autoplay', flags: { pp1Roles: true, enemyRole: 'flare' } } });
+    const mixedArgs = buildFlowArguments(mixed, 'tmp/x');
+    expect(mixedArgs.filter((a: string, i: number) => mixedArgs[i - 1] === '--flag'))
+      .toEqual(['pp1Roles', 'enemyRole=flare']);
+    // A flag set false is a flag the page must not see: it would switch the arm on in the
+    // half of a matched pair that exists to be without it.
+    const off = recipe({ variant: { level: 1, driver: 'autoplay', flags: { pp1Roles: false } } });
+    expect(buildFlowArguments(off, 'tmp/x')).not.toContain('--flag');
+  });
+});

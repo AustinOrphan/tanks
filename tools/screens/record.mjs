@@ -85,8 +85,12 @@ export function parseRecordArgs(argv) {
     if (value === undefined || value.startsWith('--')) throw new Error(`--${name} needs a value`);
     i++;
     if (name === 'flag') {
-      if (!FLOW_FLAG_IDS.includes(value)) throw new Error(`--flag ${value} is not a flow flag (${FLOW_FLAG_IDS.join(', ')})`);
-      flags.push(value);
+      // `--flag pp1Roles` is a switch; `--flag enemyRole=both` is a choice. The value half is
+      // checked by validateFlowInputs below, against that flag's own vocabulary.
+      const eq = value.indexOf('=');
+      const id = eq === -1 ? value : value.slice(0, eq);
+      if (!FLOW_FLAG_IDS.includes(id)) throw new Error(`--flag ${id} is not a flow flag (${FLOW_FLAG_IDS.join(', ')})`);
+      flags.push([id, eq === -1 ? true : value.slice(eq + 1)]);
       continue;
     }
     if (values.has(name)) throw new Error(`--${name} given twice`);
@@ -105,7 +109,7 @@ export function parseRecordArgs(argv) {
     level: num('level'),
     seed: num('seed'),
     driver: values.get('driver'),
-    flags: Object.fromEntries(flags.map((id) => [id, true])),
+    flags: Object.fromEntries(flags),
   });
   const seconds = num('seconds');
   const fps = num('fps');
