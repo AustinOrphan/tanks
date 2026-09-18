@@ -214,12 +214,19 @@ shells travel straight, and this game's do not.
 
 **This was measured rather than assumed, and the answer is reassuring.** `openingShots` in
 `tools/mapgen/measure.ts` counts ordered spawn pairs with no direct line but a live
-one-bounce firing solution. Across **all 24 shipped (board, N) combinations and all 177
-accepted generated boards** across three rulesets at three player counts, the count is
-**zero**. The measure is not dead -- its control hands it a stub between two points and gets
-a bank line, then removes the stub and gets a direct line instead. So the rule the research
-asks for is already satisfied everywhere it has been checked, and enforcing it would be
-insurance rather than a fix.
+one-bounce firing solution. The count is **zero** across all **24 shipped (board, N)
+combinations** and all **176 accepted (ruleset, seed, N) combinations** drawn from 60 distinct
+generated boards -- 3 rulesets x 20 seeds, evaluated at 2, 3 and 4 players, with 4 of the 180
+refused by the acceptance tier. The measure is not dead: its control hands it a stub between
+two points and gets a bank line, then removes the stub and gets a direct line instead.
+
+**Two things this does NOT establish, and the second is the important one.** A board accepted
+at three player counts is three combinations of one board, so the denominator counts boards
+repeatedly and is not 176 independent samples. And every board in that population had already
+passed `allPairsConcealed`, which forbids a direct spawn-to-spawn line -- so `spawnDirectPairs`
+is forced to 0 throughout and `bankOnly` is the only free variable. What the zero shows is that
+on these geometries the direct-line rule happens to exclude the one-bounce line as well. It is
+not evidence that bank lines between spawns are rare in general.
 
 **Validate the board twice, with destructibles solid and with them gone.** Four lenses state
 this. `versus-board.ts` already gates egress on the destructible-free layout, and the quality
@@ -371,12 +378,21 @@ available to bounce off, so it maximises carom by accident. Carom opportunity is
 **not** a proxy for a well-designed board, and a generator that optimised for it would
 converge on confetti. It belongs in the table as a descriptor, not in a fitness function.
 
-**Only `rooms` lands inside the shipped bands.** `scatter` is outside on sight (0.15 against
-a shipped floor of 0.17) and bank (0.40 against a shipped ceiling of 0.29); `topology` is
-outside on wall fraction (0.55 against 0.37) and legal area (0.21 against 0.28). That is not
-a verdict on which plays better -- nobody has played any of them -- but it is the one
-statement the calibration supports: of the three, `rooms` is the family that produces boards
-resembling the ones already shipped.
+**`rooms` is the family that moves TOWARD the shipped bands, and no tested setting reaches
+them.** `scatter` is outside on sight (0.15 against a shipped floor of 0.17) and bank (0.40
+against a shipped ceiling of 0.29); `topology` is outside on wall fraction (0.55 against 0.37)
+and legal area (0.21 against 0.28). `rooms` is inside on legal area, bottleneck and carom --
+but at its default fill share its wall fraction is 0.05 against a shipped floor of 0.08, and
+the picture below shows why: the vocabulary pieces are small against the 4-cell room they sit
+in, so the board reads as scattered pieces rather than as rooms.
+
+Raising the fill share moves it the right way on every column at once (0.90 gives wall 0.07,
+legal 0.69, open 0.31, neck 2.43, sight 0.35) and still does not reach the shipped wall-
+fraction floor. So the claim the data supports is about DIRECTION, not arrival: of the three
+families, `rooms` is the one whose measures approach the shipped bands as its knob rises, and
+closing the remaining gap needs a vocabulary designed against the room size rather than the
+prototype's. That is issue #821's job. None of this is a verdict on which plays better --
+nobody has played any of them.
 
 ![A board from the rooms ruleset: small cover pieces stamped into a sparse lattice, with wide continuous lanes between them](https://raw.githubusercontent.com/AustinOrphan/tanks/pr-media/map-generation-rules/rooms-seed1.png)
 
