@@ -1428,7 +1428,10 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       "ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own " +
       "outline. On the turret crown instead: 'roof' leaves the ring exactly as shipped " +
       'and counts the slot in blades, trading the ring\'s area for a surface nothing can ' +
-      'occlude. The shipped default carries identity in hue alone.',
+      'occlude. In an FFA match the same mark is drawn beside that player in the HUD stock ' +
+      'strip (issue #778), so the ground and the readout can be judged as a pair; teams ' +
+      'entries are unchanged, since they already carry the A/B/C letter. The shipped ' +
+      'default carries identity in hue alone.',
   },
   enemyRole: {
     kind: 'valued',
