@@ -260,6 +260,31 @@ describe('runFlow: the recorder run and the result handed to the runner (issue #
     await expect(validateProducerResult(result, { recipe: ctx.recipe, outputDirectory: ctx.outputDirectory })).resolves.toBeDefined();
   });
 
+  it('lists the frames the recorder actually wrote, not the window the recipe asked for', async () => {
+    // The regression this pins: under a round-end stop the round decides the count. Deriving
+    // it from the recipe listed frames nobody wrote, and the shared validator reported a
+    // missing file rather than the short round behind it.
+    const report = await fixtureReport();
+    report.producer.timing.frameCount = 75;
+    report.producer.timing.stop = { requested: 'round-end', reason: 'round-ended', cutAtMs: 1, playingSeconds: 2.5, droppedFrames: 9 };
+    const ctx = await context({ recipe: recipe({ schedule: { kind: 'realtime', durationSeconds: 4, stop: 'round-end' } }) });
+    const result = await runFlow(ctx, {
+      runProcess: recorderThatWrites(report, 75),
+      inspectSourceState: vi.fn(async () => ({ requestedRef: null, commitSha: SHA, dirty: false })),
+    });
+    expect(result.rawFrames).toHaveLength(75);
+    expect(result.capture.frameSchedule).toEqual({ kind: 'frames', frameCount: 75 });
+    expect(result.assertions.filter((a: any) => !a.passed)).toEqual([]);
+    await expect(validateProducerResult(result, { recipe: ctx.recipe, outputDirectory: ctx.outputDirectory })).resolves.toBeDefined();
+  });
+
+  it('refuses a report with no usable frame count', async () => {
+    const report = await fixtureReport();
+    report.producer.timing.frameCount = 0;
+    await expect(runFlow(await context(), { runProcess: recorderThatWrites(report, 1) }))
+      .rejects.toThrow(/reported a frame count of 0/);
+  });
+
   it('wraps a recorder failure, a missing report, and a report for another flow', async () => {
     const failing = vi.fn(async () => { throw new Error('exit code 1'); });
     await expect(runFlow(await context(), { runProcess: failing })).rejects.toThrow(/flow capture failed: exit code 1/);

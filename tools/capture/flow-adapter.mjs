@@ -239,8 +239,16 @@ export async function runFlow(context, deps = {}) {
       `flow capture reported flow '${report?.producer?.flowId}' for recipe '${context.recipe.producer.scenarioId}'`,
     );
   }
+  // The count the RECORDER produced, not the one the recipe's window implies: a round-end
+  // recipe stops when the round does, and the frame-count assertion below is what holds that
+  // against the recipe's ceiling. Deriving it from the recipe here would list frames the
+  // recorder never wrote, and the shared validator would report a missing file instead of the
+  // short round that caused it. Checked with the report, before the git call below.
+  const frameCount = report.producer?.timing?.frameCount;
+  if (!Number.isInteger(frameCount) || frameCount < 1) {
+    throw new Error(`flow capture reported a frame count of ${frameCount}`);
+  }
   const source = await inspect(context.root, null, { signal: context.signal });
-  const frameCount = context.recipe.schedule.durationSeconds * context.recipe.playback.intendedFps;
   return {
     schemaVersion: PRODUCER_RESULT_SCHEMA_VERSION,
     producer: { kind: 'flow', scenarioId: context.recipe.producer.scenarioId },
