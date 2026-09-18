@@ -166,12 +166,20 @@ it.
 
 ## Constraints a generator has to satisfy, measured rather than assumed
 
-**A generated board still needs exactly one authored `P`.** Versus placement is geometric --
-`pickVersusSpawnCell` derives spawns from the grid, which is why the machinery works on a
-board with no author -- but `loadArena` still *seeds* that derivation from the authored `P`
-cell. A 33x27 board with no spawn letter at all loads with zero players at 2, 3 and 4, and
-`evaluateVersusBoard` then reports `suitable: false` over 0 pairs. So P1's cell is the one
-authored spawn decision on a generated board and every other start is a consequence of it.
+**A generated board needs a `P`, and it does not matter where.** The authored spawn letter is
+a TRIGGER, not a seed. A 33x27 board with no spawn letter loads with zero players at 2, 3 and
+4, and `evaluateVersusBoard` then reports `suitable: false` over 0 pairs -- so the letter has
+to be there. But its POSITION is ignored: the same board with `P` at cell (4, 2) and at cell
+(30, 25) produces byte-identical player positions at every player count, because versus
+placement derives every spawn from the geometry. `versus-spawns.ts` says so in as many words:
+"In versus the authored `P` is now ignored entirely for placement." The campaign path is the
+contrast -- there the same two boards start the player 17 world units apart.
+
+An earlier draft of this document had this backwards, calling P1's cell "the one authored
+spawn decision" that every other start follows from. It was corrected by an adversarial review
+of the rule sets, which checked the claim rather than accepting it. The correction makes
+generation EASIER, not harder: a generator has to emit a spawn letter somewhere legal and owes
+the placement no thought at all.
 
 **Rotational symmetry is what the dedicated boards actually use.** vs-duel-01 and
 vs-quad-01 both measure 0.00 rotational asymmetry. No shipped board is mirror-symmetric.

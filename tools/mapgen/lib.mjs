@@ -87,15 +87,21 @@ export function mirrorH(cells) {
 /**
  * Finish a board: stamp the single authored `P` and hand back an `Arena`.
  *
- * ONE `P` IS NOT OPTIONAL, and this was measured rather than assumed. `loadArena`'s versus
- * branch derives every spawn but the first geometrically -- which is why versus placement
- * works on a board with no author -- but it still SEEDS that derivation from the authored
- * `P` cell, and a board with no spawn letter at all loads with zero players (checked on a
- * 33x27 generated board at 2, 3 and 4 players: 0 placed every time, and
- * `evaluateVersusBoard` then reports `suitable: false` over 0 pairs).
+ * ONE `P` IS NOT OPTIONAL, BUT ITS POSITION IS IGNORED. Both halves were measured rather than
+ * assumed, and an earlier version of this comment had the second half backwards.
  *
- * So P1's cell is the ONE authored spawn decision on a generated board, and every other
- * start is a consequence of it. `anchor` is where to put it, in cells.
+ * The letter is required: a 33x27 board with no spawn letter at all loads with ZERO players at
+ * 2, 3 and 4, and `evaluateVersusBoard` then reports `suitable: false` over 0 pairs. It is a
+ * trigger for the versus placement branch, nothing more.
+ *
+ * Where it sits does nothing. The same board with `P` at cell (4, 2) and at cell (30, 25)
+ * produces byte-identical player positions at every player count -- versus placement derives
+ * every spawn from the geometry, and `versus-spawns.ts` states it outright: "In versus the
+ * authored `P` is now ignored entirely for placement." The campaign path is the contrast:
+ * those same two boards start a campaign player 17 world units apart.
+ *
+ * So `anchor` picks a cell that must be legal and need not be good. A ruleset should keep it
+ * clear of walls and otherwise spend no effort on it.
  */
 export function toArena(cells, anchor, board = BOARD) {
   const [ac, ar] = anchor;
