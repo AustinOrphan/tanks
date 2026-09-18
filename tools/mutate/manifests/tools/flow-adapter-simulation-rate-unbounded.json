@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-simulation-rate-unbounded",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "  const rateOk = sim.available === true && rate !== null && Math.abs(rate - SIMULATION_TICK_RATE) <= SIMULATION_TICK_RATE * SIMULATION_RATE_TOLERANCE;",
+  "replace": "  const rateOk = sim.available === true && rate !== null;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "judgeFlowReport: every gate, both ways (issue #815) fails the clamp gate on one clamped frame, and the rate gate outside 3% of 60"
+  ],
+  "why": "The measured tick rate against wall clock is the normal-speed proof. Without the bound any rate, including a slow-motion one, would pass."
+}

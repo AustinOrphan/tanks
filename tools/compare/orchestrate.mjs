@@ -152,6 +152,14 @@ export async function compareRefs(options, deps = {}) {
   ]);
   const baseEntry = requireRecipe(baseRegistry, base, options.recipe);
   const headEntry = requireRecipe(headRegistry, head, options.recipe);
+  // A flow recipe records the real application at wall-clock pace (issue #815); two runs
+  // differ by timing jitter alone, so a pixel diff between them says nothing about the refs.
+  if (baseEntry.recipe.producer.kind === 'flow' || headEntry.recipe.producer.kind === 'flow') {
+    throw new Error(
+      `${options.recipe} is a flow recipe: two real-time captures differ by timing jitter, so a pixel `
+        + 'diff says nothing about the refs; capture each ref with npm run capture and review the MP4 pair',
+    );
+  }
   const compatibility = checkRecipeCompatibility(baseEntry, headEntry);
   if (!compatibility.compatible) {
     throw new Error(describeIncompatibility(options.recipe, base, head, compatibility));

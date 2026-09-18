@@ -1,0 +1,16 @@
+{
+  "id": "bank-ticks-forgets-a-reset",
+  "file": "tools/screens/flow.mjs",
+  "find": "  return ticks < state.last ? { total: state.total + state.last, last: ticks } : { total: state.total, last: ticks };",
+  "replace": "  return { total: state.total, last: ticks };",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts",
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "bankTicks: ticks sum across world rebuilds (issue #815) adds monotonic samples and banks a reset",
+    "simulationFromSamples (issue #815) rates ticks against page-side time, banking a reset"
+  ],
+  "why": "The replay surface restarts at 0 on a lost life or a new level. Without banking, a healthy round that lost a life inside the window would read as a simulation running backwards."
+}

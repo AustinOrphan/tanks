@@ -84,6 +84,17 @@ function validateCapture(result, recipe) {
         `reported ${schedule.frameCount}; recipe requests ${recipe.schedule.frameCount}`,
       );
     }
+    // A realtime window (issue #815) promises exactly durationSeconds x intendedFps frames;
+    // the recorder lays every capture onto that timeline, so any other count is a bug there.
+    if (recipe.schedule.kind === 'realtime') {
+      const expected = recipe.schedule.durationSeconds * recipe.playback.intendedFps;
+      if (schedule.frameCount !== expected) {
+        fail(
+          'capture.frameSchedule.frameCount',
+          `reported ${schedule.frameCount}; a ${recipe.schedule.durationSeconds} s window at ${recipe.playback.intendedFps} fps is ${expected}`,
+        );
+      }
+    }
   } else fail('capture.frameSchedule.kind', "must be 'still' or 'frames'");
 }
 

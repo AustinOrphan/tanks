@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-ignores-a-clamped-frame",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "    'flow-no-clamped-frames',\n    clamped === 0,",
+  "replace": "    'flow-no-clamped-frames',\n    clamped !== null,",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "judgeFlowReport: every gate, both ways (issue #815) fails the clamp gate on one clamped frame, and the rate gate outside 3% of 60"
+  ],
+  "why": "One clamped frame is simulated time lost against the clock. The gate exists so a stalled capture cannot pass as normal speed on its mean tick rate alone."
+}

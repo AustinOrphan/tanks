@@ -1,0 +1,14 @@
+{
+  "id": "reproduce-hides-a-dirty-checkout",
+  "file": "tools/capture/manifest.mjs",
+  "find": "    note: source.dirty\n      ? 'the checkout was dirty when this was captured; these commands reproduce the commit, not this tree'\n      : null,",
+  "replace": "    note: null,",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/manifest.test.ts"
+  ],
+  "killedBy": [
+    "reproduction (issue #815) says so when the checkout was dirty, and when no Playwright version was resolved"
+  ],
+  "why": "The reproduction command names a commit. When the tree was dirty it reproduces the commit, not the capture, and a reviewer has to be told which."
+}

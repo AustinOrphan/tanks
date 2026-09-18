@@ -1,0 +1,14 @@
+{
+  "id": "timing-stats-ignores-the-clamp",
+  "file": "tools/screens/flow.mjs",
+  "find": "    if (gap > clampMs) {\n      clampedFrames++;",
+  "replace": "    if (false) {\n      clampedFrames++;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "timingStats: the clamp is the contract (issue #815) counts a gap past 250 ms as a clamped frame and the excess as simulated time lost"
+  ],
+  "why": "A frame gap past the driver's 250 ms clamp costs the simulation wall time it never makes up. Not counting it is how a capture that lost simulated time would still claim normal speed."
+}

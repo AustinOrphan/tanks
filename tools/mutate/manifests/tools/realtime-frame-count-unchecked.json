@@ -1,0 +1,14 @@
+{
+  "id": "realtime-frame-count-unchecked",
+  "file": "tools/capture/producer.mjs",
+  "find": "    if (recipe.schedule.kind === 'realtime') {\n      const expected = recipe.schedule.durationSeconds * recipe.playback.intendedFps;",
+  "replace": "    if (false) {\n      const expected = recipe.schedule.durationSeconds * recipe.playback.intendedFps;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/producer.test.ts"
+  ],
+  "killedBy": [
+    "a realtime window fixes the frame count (issue #815) rejects a frames result whose count is not the window times the rate, naming both"
+  ],
+  "why": "A realtime window promises exactly durationSeconds x intendedFps frames; a recorder that produced fewer would publish a shorter clip under the window the recipe states."
+}

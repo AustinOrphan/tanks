@@ -1,0 +1,14 @@
+{
+  "id": "flow-gif-optional-for-every-producer",
+  "file": "tools/capture/schema.mjs",
+  "find": "  const optional = new Set(recipe.producer.kind === 'flow' && recipe.schedule.kind !== 'still' ? ['gif'] : []);",
+  "replace": "  const optional = new Set(recipe.schedule.kind !== 'still' ? ['gif'] : []);",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow recipes (issue #815) lets a flow leave the GIF out, but not the MP4, and never a still"
+  ],
+  "why": "Only a flow may leave the GIF out; the gallery's temporal recipes keep both artifacts, and this rule is what keeps that contract from quietly loosening for every producer."
+}

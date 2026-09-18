@@ -1,0 +1,15 @@
+{
+  "id": "flow-adapter-passes-an-unlabelled-build",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "  const buildOk = build.known === true && build.commit === source.commitSha;",
+  "replace": "  const buildOk = build.known !== true || build.commit === source.commitSha;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "judgeFlowReport: every gate, both ways (issue #815) fails build identity for an unlabelled build and for a build from another commit, naming the rebuild",
+    "runFlow: the recorder run and the result handed to the runner (issue #815) carries a failed gate through as a failed assertion rather than hiding it"
+  ],
+  "why": "A bundle that does not know its commit cannot be tied to the checkout the manifest records; passing it would file a capture of who-knows-what under HEAD's SHA."
+}

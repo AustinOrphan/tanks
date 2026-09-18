@@ -44,6 +44,8 @@ on:
         required: true
         type: choice
         options:
+          - flow.campaign-round.pp1roles-off
+          - flow.campaign-round.pp1roles-on
           - gallery.ai-last-seen.normal
           - gallery.ai-tracking.normal
           - gallery.drive.normal

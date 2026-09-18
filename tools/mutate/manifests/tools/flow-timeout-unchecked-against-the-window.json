@@ -1,0 +1,14 @@
+{
+  "id": "flow-timeout-unchecked-against-the-window",
+  "file": "tools/capture/schema.mjs",
+  "find": "    if (recipe.timeoutMs < needed) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow recipes (issue #815) refuses every combination the flow producer cannot honour, at validation"
+  ],
+  "why": "A window that does not fit the recipe's timeout fails mid-recording with a killed browser instead of at validation, which is the unclear failure the issue rules out."
+}

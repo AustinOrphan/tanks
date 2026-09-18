@@ -1,0 +1,14 @@
+{
+  "id": "realtime-schedule-open-to-every-producer",
+  "file": "tools/capture/schema.mjs",
+  "find": "  } else if (recipe.schedule.kind === 'realtime') {\n    fail('schedule.kind', `'realtime' is the flow producer's schedule; '${recipe.producer.kind}' does not record wall clock`);\n  }",
+  "replace": "  }",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow recipes (issue #815) keeps realtime for the flow producer alone"
+  ],
+  "why": "A gallery moment is advanced by tick, never by wall clock; a moment recipe with a realtime schedule would promise timing evidence its producer cannot give."
+}

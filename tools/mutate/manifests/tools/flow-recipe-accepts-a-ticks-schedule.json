@@ -1,0 +1,14 @@
+{
+  "id": "flow-recipe-accepts-a-ticks-schedule",
+  "file": "tools/capture/schema.mjs",
+  "find": "    if (recipe.schedule.kind !== 'realtime') fail('schedule.kind', \"must be 'realtime' for a flow recipe\");",
+  "replace": "    void recipe;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow recipes (issue #815) refuses every combination the flow producer cannot honour, at validation"
+  ],
+  "why": "The flow producer records wall clock only. A flow recipe with a tick schedule would validate, list, and then fail inside the adapter far from the field that asked for it."
+}

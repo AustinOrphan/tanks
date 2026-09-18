@@ -85,3 +85,23 @@ describe('normalized capture producer result', () => {
     })).rejects.toThrow(/escapes the producer output directory/);
   });
 });
+
+describe('a realtime window fixes the frame count (issue #815)', () => {
+  it('rejects a frames result whose count is not the window times the rate, naming both', async () => {
+    const { outputDirectory, frame } = await fixture();
+    const flow = CAPTURE_RECIPES.find((entry: any) => entry.recipe.id === 'flow.campaign-round.pp1roles-off').recipe;
+    const short = {
+      ...result(frame),
+      producer: { kind: 'flow', scenarioId: 'campaign-round' },
+      capture: { viewport: flow.viewport, frameSchedule: { kind: 'frames', frameCount: 599 } },
+    };
+    await expect(validateProducerResult(short, { recipe: flow, outputDirectory }))
+      .rejects.toThrow(/reported 599; a 20 s window at 30 fps is 600/);
+    // The negative control: the same short count under a plain `frames` recipe of 599 is accepted
+    // at this check (it fails later, on the raw-frame count, which is not this rule).
+    const frames = structuredClone(flow);
+    frames.schedule = { kind: 'frames', frameCount: 599 };
+    await expect(validateProducerResult(short, { recipe: frames, outputDirectory }))
+      .rejects.not.toThrow(/a 20 s window/);
+  });
+});

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "capture": {
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    }
+  },
+  "producer": {
+    "kind": "flow",
+    "flowId": "campaign-round",
+    "title": "A campaign round from a fresh save",
+    "inputs": {
+      "level": 1,
+      "seed": 7,
+      "driver": "autoplay",
+      "flags": {}
+    },
+    "url": "?dev=1&replay=1&level=1&seed=7&autoplay=1",
+    "dist": {
+      "indexSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "assets": [
+        "index-6gEDgiHL.js",
+        "index-DCXTDbBc.css"
+      ]
+    },
+    "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1",
+      "build": {
+        "commit": "ffffffffffffffffffffffffffffffffffffffff",
+        "known": true
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+        "disarmed"
+      ],
+      "unknownParams": []
+    },
+    "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+    },
+    "readiness": {
+      "readyAfterMs": 500,
+      "countdownMs": 3000,
+      "surfaceAtStart": "playing",
+      "surfaceAtEnd": "playing"
+    },
+    "timing": {
+      "policy": "real-time: the production game loop at wall-clock pace, recorded from the compositor screencast and resampled to a constant frame rate by holding the last frame",
+      "requestedSeconds": 4,
+      "fps": 30,
+      "frameCount": 120,
+      "recording": {
+        "startedAtMs": 1000,
+        "stoppedAtMs": 5001,
+        "wallMs": 4001
+      },
+      "simulation": {
+        "available": true,
+        "samples": 5,
+        "ticks": 240,
+        "seconds": 4.0018000000119205,
+        "ticksPerSecond": 59.97301214435631,
+        "resets": 0,
+        "surfaces": [
+          "playing",
+          "playing",
+          "playing",
+          "playing",
+          "playing"
+        ]
+      },
+      "render": {
+        "frames": 481,
+        "spanMs": 3999.8,
+        "fps": 120.006000300015,
+        "gapP50Ms": 8.299999999999727,
+        "gapP95Ms": 9.299999999999727,
+        "gapMaxMs": 9.400000000000091,
+        "clampMs": 250,
+        "clampedFrames": 0,
+        "simTimeLostMs": 0,
+        "measuredUnder": "cdp-screencast",
+        "note": "headless animation frames are not display-throttled; a rate above the display rate is a headless artefact"
+      },
+      "screencast": {
+        "format": "jpeg",
+        "quality": 90,
+        "framesReceived": 392,
+        "fps": 98.05551289472257,
+        "gapP50Ms": 8.404016494750977,
+        "gapP95Ms": 17.189979553222656,
+        "gapMaxMs": 18.36085319519043,
+        "bytes": 30178266,
+        "firstFrameEpochSeconds": 1
+      },
+      "resample": {
+        "method": "hold-last-frame",
+        "uniqueFramesUsed": 120,
+        "heldFrames": 0,
+        "maxConsecutiveHold": 0,
+        "sourceFrames": 392,
+        "coveredMs": 3987.537145614624,
+        "tailPadMs": 12.462854385375977
+      }
+    },
+    "frames": {
+      "expected": {
+        "width": 1280,
+        "height": 800
+      },
+      "first": {
+        "width": 1280,
+        "height": 800
+      },
+      "mismatched": []
+    },
+    "browser": {
+      "version": "151.0.0.0",
+      "headless": true,
+      "visual": "host-gpu",
+      "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)",
+      "launchArgs": [
+        "--ignore-gpu-blocklist",
+        "--use-angle=metal"
+      ]
+    },
+    "pageErrors": []
+  },
+  "toolVersions": {
+    "chromium": "151.0.0.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "flow-inputs-accept-a-level-past-the-campaign",
+  "file": "tools/screens/flow.mjs",
+  "find": "  if (!Number.isInteger(level) || level < 1 || level > CAMPAIGN_LEVEL_COUNT) {",
+  "replace": "  if (!Number.isInteger(level) || level < 1) {",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts",
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow inputs and the URL they build (issue #815) refuses what the page would silently substitute: seed 0, a level past the campaign, a fraction",
+    "flow recipes (issue #815) refuses every combination the flow producer cannot honour, at validation"
+  ],
+  "why": "The game clamps a level jump past the campaign to the last level rather than refusing it; a capture labelled with the requested level would show another."
+}

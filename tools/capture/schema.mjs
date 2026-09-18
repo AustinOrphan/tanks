@@ -9,6 +9,14 @@ import {
   parseArgs,
 } from '../gallery/args.mjs';
 import { SCREEN_STATE_IDS } from '../screens/states.mjs';
+import {
+  FLOW_IDS,
+  FLOW_VISUALS,
+  REALTIME_MAX_SECONDS,
+  REALTIME_MIN_SECONDS,
+  REALTIME_READINESS_BUDGET_MS,
+  validateFlowInputs,
+} from '../screens/flow.mjs';
 
 export const RECIPE_SCHEMA_VERSION = 1;
 export const MANIFEST_SCHEMA_VERSION = 1;
@@ -92,6 +100,11 @@ function validateProducer(recipe) {
   if (producer.kind === 'screen' && !SCREEN_STATE_IDS.includes(producer.scenarioId)) {
     fail('producer.scenarioId', `is not a known screen state (${SCREEN_STATE_IDS.join(', ')})`);
   }
+  // And for flows (issue #815): a flow in `tools/screens/flow.mjs`, which owns the storage it
+  // boots with and the steps that reach the recording start.
+  if (producer.kind === 'flow' && !FLOW_IDS.includes(producer.scenarioId)) {
+    fail('producer.scenarioId', `is not a known flow (${FLOW_IDS.join(', ')})`);
+  }
 }
 
 function validateFixture(recipe) {
@@ -100,7 +113,30 @@ function validateFixture(recipe) {
   integerAt(fixture.seed, 'fixture.seed', { min: 0, max: 0xffff_ffff });
 }
 
+/**
+ * A flow recipe's structured inputs (issue #815). The seed is `fixture.seed`, as for every
+ * recipe; the variant carries the level, the driver and the experiment's flags, so the two
+ * manifests of a matched pair differ in exactly one recorded field. The URL is built from
+ * these by `buildFlowUrl`; a recipe never supplies query text.
+ */
+function validateFlowVariant(recipe) {
+  const variant = exactKeys(recipe.variant, 'variant', ['level', 'driver', 'flags'], ['minimumDeliveredFps']);
+  try {
+    validateFlowInputs({ level: variant.level, seed: recipe.fixture.seed, driver: variant.driver, flags: variant.flags });
+  } catch (error) {
+    const field = /^(level|seed|driver|flags(?:\.[A-Za-z0-9&_-]+)?)/.exec(error.message)?.[1] ?? 'variant';
+    fail(field === 'seed' ? 'fixture.seed' : `variant.${field}`, error.message);
+  }
+  if (Object.hasOwn(variant, 'minimumDeliveredFps')) {
+    numberAt(variant.minimumDeliveredFps, 'variant.minimumDeliveredFps', { min: 1, max: 240 });
+  }
+}
+
 function validateVariant(recipe) {
+  if (recipe.producer.kind === 'flow') {
+    validateFlowVariant(recipe);
+    return;
+  }
   if (recipe.producer.kind !== 'moment') {
     exactKeys(recipe.variant, 'variant', []);
     return;
@@ -178,7 +214,16 @@ function validateSchedule(recipe) {
     integerAt(schedule.frameCount, 'schedule.frameCount', { min: 1, max: 1_000_000 });
     return;
   }
-  if (schedule.kind !== 'ticks') fail('schedule.kind', "must be 'still', 'frames', or 'ticks'");
+  // A wall-clock window (issue #815): the page runs at its own pace for this many seconds
+  // and the output holds `durationSeconds * playback.intendedFps` frames. Only the flow
+  // producer records this way, and it records only this way; both directions are checked in
+  // `validateKindRules`.
+  if (schedule.kind === 'realtime') {
+    exactKeys(schedule, 'schedule', ['kind', 'durationSeconds']);
+    numberAt(schedule.durationSeconds, 'schedule.durationSeconds', { min: REALTIME_MIN_SECONDS, max: REALTIME_MAX_SECONDS });
+    return;
+  }
+  if (schedule.kind !== 'ticks') fail('schedule.kind', "must be 'still', 'frames', 'realtime', or 'ticks'");
   exactKeys(
     schedule,
     'schedule',
@@ -201,6 +246,13 @@ function validatePlayback(recipe) {
     return;
   }
   numberAt(playback.intendedFps, 'playback.intendedFps', { min: 1, max: 240 });
+  if (recipe.schedule.kind === 'realtime') {
+    const frames = recipe.schedule.durationSeconds * playback.intendedFps;
+    if (!Number.isInteger(frames)) {
+      fail('playback.intendedFps', `must give a whole frame count over ${recipe.schedule.durationSeconds} s (got ${frames})`);
+    }
+    if (playback.rate !== 1) fail('playback.rate', 'must be 1 for a realtime schedule; the page plays at its own pace');
+  }
   if (recipe.schedule.kind === 'ticks') {
     const derived = (recipe.schedule.tickRate * recipe.schedule.subdivisions * playback.rate)
       / recipe.schedule.step;
@@ -239,14 +291,44 @@ function validateArtifacts(recipe) {
   const expected = recipe.schedule.kind === 'still'
     ? new Map([['png', 'capture.png']])
     : new Map([['mp4', 'capture.mp4'], ['gif', 'preview.gif']]);
-  if (seenFormats.size !== expected.size) {
+  // A flow's MP4 is the review artifact and its GIF only a preview (issue #815); at a
+  // real-time capture's size and length a GIF is tens of megabytes, so a flow may leave it out.
+  const optional = new Set(recipe.producer.kind === 'flow' && recipe.schedule.kind !== 'still' ? ['gif'] : []);
+  const required = [...expected.keys()].filter((format) => !optional.has(format));
+  if (seenFormats.size < required.length || seenFormats.size > expected.size) {
     fail('artifacts', `must request exactly ${[...expected.keys()].join(' and ')} for this schedule`);
   }
   for (const [format, filename] of expected) {
     const found = recipe.artifacts.find((artifact) => artifact.format === format);
+    if (!found && optional.has(format)) continue;
     if (!found || found.filename !== filename) {
       fail('artifacts', `${format} must use the canonical filename ${filename}`);
     }
+  }
+}
+
+/**
+ * What one producer kind can and cannot ask for, refused at validation so `--list` never
+ * shows a recipe no producer could run (issue #815). The flow producer records only wall
+ * clock, under full motion, and evaluates no simulation events; nothing else records wall
+ * clock at all.
+ */
+function validateKindRules(recipe) {
+  const flow = recipe.producer.kind === 'flow';
+  if (flow) {
+    if (recipe.schedule.kind !== 'realtime') fail('schedule.kind', "must be 'realtime' for a flow recipe");
+    if (recipe.expectations.events.length > 0) fail('expectations.events', 'must be empty for a flow recipe; a flow evaluates no simulation events');
+    if (!FLOW_VISUALS.includes(recipe.profile.visual)) fail('profile.visual', `must be one of ${FLOW_VISUALS.join(', ')} for a flow recipe`);
+    if (recipe.profile.motion !== 'full' || recipe.profile.reducedMotion) {
+      fail('profile.motion', "must be 'full' with reducedMotion false for a flow recipe; a real-time capture records motion");
+    }
+    if (recipe.profile.capability !== 'headless-desktop') fail('profile.capability', "must be 'headless-desktop' for a flow recipe");
+    const needed = recipe.schedule.durationSeconds * 1000 + REALTIME_READINESS_BUDGET_MS;
+    if (recipe.timeoutMs < needed) {
+      fail('timeoutMs', `must allow the ${recipe.schedule.durationSeconds} s window plus ${REALTIME_READINESS_BUDGET_MS} ms to reach the round (at least ${needed})`);
+    }
+  } else if (recipe.schedule.kind === 'realtime') {
+    fail('schedule.kind', `'realtime' is the flow producer's schedule; '${recipe.producer.kind}' does not record wall clock`);
   }
 }
 
@@ -313,6 +395,7 @@ export function validateRecipe(value) {
   stringAt(recipe.altText, 'altText', { max: 500 });
   integerAt(recipe.timeoutMs, 'timeoutMs', { min: 1_000, max: 10 * 60_000 });
   integerAt(recipe.outputBudgetBytes, 'outputBudgetBytes', { min: 1, max: 1_000_000_000 });
+  validateKindRules(recipe);
   return recipe;
 }
 

@@ -1,0 +1,16 @@
+{
+  "id": "flow-inputs-accept-seed-zero",
+  "file": "tools/screens/flow.mjs",
+  "find": "  if (!Number.isInteger(seed) || seed < 1 || seed > 0xffff_ffff) {",
+  "replace": "  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff) {",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts",
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow inputs and the URL they build (issue #815) refuses what the page would silently substitute: seed 0, a level past the campaign, a fraction",
+    "flow recipes (issue #815) refuses every combination the flow producer cannot honour, at validation"
+  ],
+  "why": "The page rejects seed 0 and derives a seed from the clock instead, so a recipe naming seed 0 would record a reproducible-looking seed that reproduces nothing."
+}

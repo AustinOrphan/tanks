@@ -11,6 +11,22 @@ function recipe(index = 0): Record<string, any> {
   return structuredClone(CAPTURE_RECIPES[index].recipe);
 }
 
+/** A valid flow recipe (issue #815), built from a gallery one so every shared field is real. */
+function flowRecipe(): Record<string, any> {
+  const flow = recipe();
+  flow.id = 'test.flow.round';
+  flow.producer = { kind: 'flow', scenarioId: 'campaign-round' };
+  flow.fixture = { id: 'campaign-round', seed: 7 };
+  flow.variant = { level: 1, driver: 'autoplay', flags: {} };
+  flow.profile = { visual: 'host-gpu', motion: 'full', capability: 'headless-desktop', reducedMotion: false };
+  flow.schedule = { kind: 'realtime', durationSeconds: 2 };
+  flow.playback = { rate: 1, intendedFps: 30 };
+  flow.artifacts = [{ format: 'mp4', filename: 'capture.mp4' }];
+  flow.expectations = { events: [], allowUnexpectedEvents: true };
+  flow.timeoutMs = 120_000;
+  return flow;
+}
+
 function reverseKeys(value: any): any {
   if (Array.isArray(value)) return value.map(reverseKeys);
   if (value && typeof value === 'object') {
@@ -67,6 +83,10 @@ describe('capture recipe schema', () => {
       'screen.ending.campaign-complete',
       'screen.ending.practice-cleared',
       'screen.ending.practice-failed',
+      // The `flow` producer's matched pair (issue #815): the two halves differ in one field,
+      // variant.flags.pp1Roles, which is the point of shipping them as a pair.
+      'flow.campaign-round.pp1roles-off',
+      'flow.campaign-round.pp1roles-on',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });
@@ -127,11 +147,11 @@ describe('capture recipe schema', () => {
     unknown.producer.kind = 'shell';
     expect(() => validateRecipe(unknown)).toThrow(/must be one of moment, screen, flow, replay/);
 
-    // `flow` and `replay` only. `screen` was in this list until issue #561 implemented it,
-    // and it is the case this loop exists to describe: a kind starts as a name the schema
-    // accepts and the registry refuses, and graduates to one both accept. Leaving it here
-    // would have asserted that a producer with a real adapter is unimplemented.
-    for (const kind of ['flow', 'replay']) {
+    // `replay` only. `screen` was in this list until issue #561 implemented it, and `flow`
+    // until issue #815 did; it is the case this loop exists to describe: a kind starts as a
+    // name the schema accepts and the registry refuses, and graduates to one both accept.
+    // Leaving one here would assert that a producer with a real adapter is unimplemented.
+    for (const kind of ['replay']) {
       const future = recipe();
       future.producer.kind = kind;
       future.variant = {};
@@ -152,6 +172,17 @@ describe('capture recipe schema', () => {
     madeUp.producer.scenarioId = 'screen.not-a-state';
     madeUp.variant = {};
     expect(() => validateRecipe(madeUp)).toThrow(/is not a known screen state/);
+
+    // ...and the flow producer (issue #815), which validates its flow the same way and its
+    // structured inputs through the flow module's own allowlist.
+    expect(() => validateRecipe(flowRecipe())).not.toThrow();
+    expect(() => producerForKind('flow')).not.toThrow();
+    const noSuchFlow = flowRecipe();
+    noSuchFlow.producer.scenarioId = 'campaign-menu';
+    expect(() => validateRecipe(noSuchFlow)).toThrow(/is not a known flow/);
+    const offList = flowRecipe();
+    offList.variant.flags = { aimRay: true };
+    expect(() => validateRecipe(offList)).toThrow(/variant\.flags\.aimRay.*not a flow flag/);
   });
 
   it('rejects invalid producer options instead of forwarding arbitrary gallery arguments', () => {
@@ -223,5 +254,70 @@ describe('capture recipe schema', () => {
   it('rejects non-JSON canonical values rather than hashing implementation accidents', () => {
     expect(() => canonicalStringify({ bad: undefined })).toThrow(/not a JSON value/);
     expect(() => canonicalStringify({ bad: Number.NaN })).toThrow(/non-finite/);
+  });
+});
+
+describe('flow recipes (issue #815)', () => {
+  it('refuses every combination the flow producer cannot honour, at validation', () => {
+    const cases: Array<[string, (r: Record<string, any>) => void, RegExp]> = [
+      ['a ticks schedule', (r) => { r.schedule = { kind: 'ticks', startTick: 0, endTick: 'scenario', step: 1, subdivisions: 1, tickRate: 60 }; r.playback.intendedFps = 60; }, /schedule\.kind: must be 'realtime' for a flow/],
+      ['a frames schedule', (r) => { r.schedule = { kind: 'frames', frameCount: 60 }; }, /schedule\.kind: must be 'realtime' for a flow/],
+      ['a playback rate other than 1', (r) => { r.playback.rate = 2; }, /playback\.rate: must be 1 for a realtime/],
+      ['a fractional frame count', (r) => { r.playback.intendedFps = 7; r.schedule.durationSeconds = 2.5; }, /whole frame count/],
+      ['a window longer than the ceiling', (r) => { r.schedule.durationSeconds = 61; }, /schedule\.durationSeconds/],
+      ['simulation event expectations', (r) => { r.expectations.events = [{ type: 'fire', tick: 1, count: 1 }]; }, /expectations\.events: must be empty/],
+      ['a renderer it does not know', (r) => { r.profile.visual = 'metal'; }, /profile\.visual: must be one of software-gl, host-gpu/],
+      ['reduced motion', (r) => { r.profile.reducedMotion = true; }, /profile\.motion/],
+      ['another capability', (r) => { r.profile.capability = 'phone'; }, /profile\.capability/],
+      ['a timeout the window cannot fit', (r) => { r.timeoutMs = 61_000; }, /timeoutMs: must allow the 2 s window plus 60000 ms/],
+      ['a seed of 0', (r) => { r.fixture.seed = 0; }, /fixture\.seed: seed must be/],
+      ['a level past the campaign', (r) => { r.variant.level = 6; }, /variant\.level: level must be/],
+      ['a driver it has no policy for', (r) => { r.variant.driver = 'human'; }, /variant\.driver: driver must be/],
+      ['a raw query smuggled as a field', (r) => { r.variant.query = 'dev=1'; }, /variant\.query.*not an allowed field/],
+      ['an unreadable delivered-rate gate', (r) => { r.variant.minimumDeliveredFps = 0; }, /variant\.minimumDeliveredFps/],
+    ];
+    for (const [name, change, message] of cases) {
+      const flow = flowRecipe();
+      change(flow);
+      expect(() => validateRecipe(flow), name).toThrow(message);
+    }
+  });
+
+  it('keeps realtime for the flow producer alone', () => {
+    const moment = recipe(1); // a temporal gallery recipe, so artifacts already fit a clip
+    moment.schedule = { kind: 'realtime', durationSeconds: 2 };
+    moment.playback = { rate: 1, intendedFps: 30 };
+    expect(() => validateRecipe(moment)).toThrow(/'realtime' is the flow producer's schedule/);
+  });
+
+  it('lets a flow leave the GIF out, but not the MP4, and never a still', () => {
+    expect(() => validateRecipe(flowRecipe())).not.toThrow();
+    const withGif = flowRecipe();
+    withGif.artifacts.push({ format: 'gif', filename: 'preview.gif' });
+    expect(() => validateRecipe(withGif)).not.toThrow();
+    const gifOnly = flowRecipe();
+    gifOnly.artifacts = [{ format: 'gif', filename: 'preview.gif' }];
+    expect(() => validateRecipe(gifOnly)).toThrow(/mp4 must use the canonical filename/);
+    const still = flowRecipe();
+    still.artifacts = [{ format: 'png', filename: 'capture.png' }];
+    expect(() => validateRecipe(still)).toThrow(/artifacts/);
+    // The negative control: the gallery's temporal recipes still need both.
+    const moment = recipe(1);
+    moment.artifacts = [{ format: 'mp4', filename: 'capture.mp4' }];
+    expect(() => validateRecipe(moment)).toThrow(/must request exactly mp4 and gif/);
+  });
+
+  it('ships the matched pair differing in exactly variant.flags.pp1Roles', () => {
+    const off = CAPTURE_RECIPES.find((e: any) => e.recipe.id === 'flow.campaign-round.pp1roles-off').recipe;
+    const on = CAPTURE_RECIPES.find((e: any) => e.recipe.id === 'flow.campaign-round.pp1roles-on').recipe;
+    const strip = (r: any) => {
+      const copy = structuredClone(r);
+      delete copy.id; delete copy.title; delete copy.description; delete copy.altText;
+      delete copy.variant.flags;
+      return copy;
+    };
+    expect(strip(off)).toEqual(strip(on));
+    expect(off.variant.flags).toEqual({ pp1Roles: false });
+    expect(on.variant.flags).toEqual({ pp1Roles: true });
   });
 });

@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-output-escapes-tmp",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "  if (!/^tmp\\/[A-Za-z0-9._/-]+$/.test(outputRelative) || outputRelative.includes('..')) {\n    throw new Error('flow adapter output must be an isolated relative tmp/ path');\n  }",
+  "replace": "  void outputRelative;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "buildFlowArguments (issue #815) refuses another producer, another schedule, and an output path outside tmp/"
+  ],
+  "why": "The output path reaches a child process's argv; the gallery and screen adapters apply the same containment rule for the same reason."
+}

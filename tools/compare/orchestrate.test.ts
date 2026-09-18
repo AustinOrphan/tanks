@@ -153,6 +153,14 @@ describe('compareRefs: refusing before it spends anything', () => {
     expect(events).toEqual([]); // nothing created, nothing to clean up
   });
 
+  it('refuses a flow recipe before any worktree: two real-time runs differ by jitter (issue #815)', async () => {
+    const root = await freshRoot();
+    const { deps, events } = harness();
+    await expect(compareRefs({ ...options(root), recipe: 'flow.campaign-round.pp1roles-off' }, deps))
+      .rejects.toThrow(/is a flow recipe: two real-time captures differ by timing jitter/);
+    expect(events).toEqual([]);
+  });
+
   it('refuses a recipe missing on one side, before any worktree', async () => {
     const root = await freshRoot();
     const empty = createRegistry([]);

@@ -52,6 +52,27 @@ function playback(recipe, artifacts, frameSchedule) {
   };
 }
 
+/**
+ * The commands that make this capture again (issue #815). Structured and rendered: the
+ * Playwright pin is the one the prerequisites check enforces, the build line is how the page
+ * learns its own commit (`VITE_BUILD_SHA`, src/game/dev-diagnostics.ts), and the capture
+ * line pins the source ref. A dirty checkout is said so: the commands reproduce the commit.
+ */
+export function reproduction(recipe, source, prerequisites) {
+  const playwright = prerequisites.playwright?.version ?? null;
+  return {
+    install: [
+      playwright === null ? 'npm i --no-save playwright@<the version .github/workflows/ci.yml pins>' : `npm i --no-save playwright@${playwright}`,
+      'npx playwright install chromium',
+    ],
+    build: `VITE_BUILD_SHA=${source.commitSha} npm run build`,
+    capture: `npm run capture -- --recipe ${recipe.id} --source-ref ${source.commitSha}`,
+    note: source.dirty
+      ? 'the checkout was dirty when this was captured; these commands reproduce the commit, not this tree'
+      : null,
+  };
+}
+
 export function buildManifest(input) {
   const {
     entry,
@@ -99,6 +120,7 @@ export function buildManifest(input) {
       frameSchedule,
     },
     playback: playback(recipe, artifacts, frameSchedule),
+    reproduce: reproduction(recipe, source, prerequisites),
     assertions: producerResult.assertions,
     tools: {
       node: process.version,

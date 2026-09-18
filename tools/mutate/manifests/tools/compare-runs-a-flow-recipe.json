@@ -1,0 +1,14 @@
+{
+  "id": "compare-runs-a-flow-recipe",
+  "file": "tools/compare/orchestrate.mjs",
+  "find": "  if (baseEntry.recipe.producer.kind === 'flow' || headEntry.recipe.producer.kind === 'flow') {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/compare/orchestrate.test.ts"
+  ],
+  "killedBy": [
+    "compareRefs: refusing before it spends anything refuses a flow recipe before any worktree: two real-time runs differ by jitter (issue #815)"
+  ],
+  "why": "Two real-time captures differ by timing jitter alone; a pixel diff between them would be published as evidence about two refs while saying nothing about them."
+}
