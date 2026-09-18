@@ -52,7 +52,7 @@ export const PERSISTED_DATA: readonly PersistedDatum[] = Object.freeze([
     store: 'settings',
     exported: true,
     contents:
-      'Player settings: sound mute and volume, touch control scheme and fire mode, device vibration and controller rumble preferences, motion/flash preference, interface scale',
+      'Player settings: sound mute and volume, touch control scheme and fire mode, device vibration and controller rumble preferences, controller layout (stick preset and rebound buttons, per controller type), motion/flash preference, interface scale, render quality preset',
   },
   { key: ACHIEVEMENTS_KEY, store: 'achievements', exported: true, contents: 'Earned achievements' },
   {

@@ -1,0 +1,14 @@
+{
+  "id": "layout-capture-reads-pads-of-another-profile",
+  "file": "src/game/controller-layout.ts",
+  "find": "        if (padProfile === null || padProfile.id !== profile.id) continue;",
+  "replace": "        if (padProfile === null) continue;",
+  "expect": "killed",
+  "why": "A capture waits for a press on a pad of the profile being configured. A press on a pad of another profile would be named against the wrong bindable list, and would bind a button the configured pad may not have.",
+  "tests": [
+    "src/game/controller-layout.test.ts"
+  ],
+  "killedBy": [
+    "a catalogue profile goes through the same pane (issue #754) capture ignores a pad of another profile, even a press on an index it could bind"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "persisted-settings-description-omits-controller-layouts",
+  "file": "src/game/persistence-inventory.ts",
+  "find": "controller layout (stick preset and rebound buttons, per controller type), motion/flash preference",
+  "replace": "motion/flash preference",
+  "expect": "killed",
+  "why": "The privacy policy's sentence for the settings key must name everything the key stores. A field the store gains without the sentence naming it is what this guards, with the controller layouts of issue #754 as the case that slipped through.",
+  "tests": [
+    "src/game/persistence-inventory.test.ts"
+  ],
+  "killedBy": [
+    "persistence inventory: the settings description names every field the settings store writes",
+    "persistence inventory: the privacy policies PRIVACY.md lists every current key with the inventory's description, in inventory order",
+    "persistence inventory: the privacy policies public/privacy.html lists every current key with the inventory's description, in inventory order"
+  ]
+}

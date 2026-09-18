@@ -10,6 +10,7 @@
   ],
   "killedBy": [
     "resolveEffectiveProfile (issue #754) refuses a binding onto another action's button, so Confirm can never also fire (#494)",
-    "resolveEffectiveProfile (issue #754) never leaves two of the nine actions on one button, over every single and paired binding"
+    "resolveEffectiveProfile (issue #754) never leaves two of the nine actions on one button, over every single and paired binding",
+    "resolveEffectiveProfile on a catalogue profile (issue #754) refuses a binding onto another of its own actions' buttons, and keeps its own button"
   ]
 }

@@ -1,0 +1,14 @@
+{
+  "id": "effective-profile-reader-reads-every-pad-as-standard",
+  "file": "src/input/gamepad-profile.ts",
+  "find": "    const layout = layoutFor(profile.id);",
+  "replace": "    const layout = layoutFor('standard');",
+  "expect": "killed",
+  "why": "A layout is stored per logical profile id. A reader that looked up the standard layout for every pad would read a catalogue pad (issue #606) through another profile's bindings, and the standard pad's own layout would move with it.",
+  "tests": [
+    "src/input/gamepad-profile.test.ts"
+  ],
+  "killedBy": [
+    "createEffectiveProfileReader (issue #754) asks the lookup for the pad's own profile id"
+  ]
+}

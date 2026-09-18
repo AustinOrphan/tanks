@@ -6,7 +6,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createHud, type Hud } from './hud';
 import { layoutModel, type LayoutRequest } from './controller-layout';
-import { RECOMMENDED_LAYOUT, STANDARD_PROFILE } from '../input/gamepad-profile';
+import { BINDABLE_ACTIONS, RECOMMENDED_LAYOUT, STANDARD_PROFILE } from '../input/gamepad-profile';
 
 let hud: Hud | null = null;
 afterEach(() => {
@@ -39,6 +39,25 @@ const escape = (): void => {
 };
 
 const standard = (capturing: 'fire' | null = null) => layoutModel(STANDARD_PROFILE, RECOMMENDED_LAYOUT, capturing, '');
+/** Something stored, so Reset is enabled and reachable. */
+const southpaw = (capturing: 'fire' | null = null) =>
+  layoutModel(STANDARD_PROFILE, { preset: 'southpaw', bindings: {} }, capturing, '');
+
+const pressActive = (key: string): void => {
+  (document.activeElement as HTMLElement).dispatchEvent(
+    new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+  );
+};
+
+/** The pane's controls in drawn order: the preset, the five rows, Cancel while a capture waits, Reset, Back. */
+const controlsInOrder = (root: HTMLElement, waiting: boolean): HTMLElement[] =>
+  [
+    '.hud-layout-preset',
+    ...BINDABLE_ACTIONS.map((action) => `.hud-layout-bind[data-action="${action}"]`),
+    ...(waiting ? ['.hud-layout-cancel'] : []),
+    '.hud-layout-reset',
+    '.hud-layout-back',
+  ].map((sel) => q<HTMLElement>(root, sel));
 
 describe('the controller layout pane (issue #754)', () => {
   it('opens from Settings, replacing it, and Back lands where Settings was opened from', () => {
@@ -133,5 +152,29 @@ describe('the controller layout pane (issue #754)', () => {
     (document.activeElement as HTMLElement | null)?.blur();
     expect(h.act('confirm')).toBe(true);
     expect(q(root, '.hud-layout').contains(document.activeElement), 'focus went outside the pane').toBe(true);
+  });
+
+  it('the arrow keys reach the preset, every row, Reset and Back in order, from the container', () => {
+    // Keyboard reach is the pane's own to prove: `hud.navigation.test.ts`'s walk stops at the
+    // openers on the Main Menu, so a row that stopped being focusable would fail no test there.
+    const { hud: h, root } = mount();
+    openLayout(root);
+    h.setControllerLayout(southpaw());
+    expect(document.activeElement, 'the pane opens focused as a container').toBe(q(root, '.hud-layout'));
+    for (const control of controlsInOrder(root, false)) {
+      pressActive('ArrowDown');
+      expect(document.activeElement).toBe(control);
+    }
+  });
+
+  it("a controller's D-pad reaches the same controls, Cancel included while a capture waits", () => {
+    const { hud: h, root } = mount();
+    openLayout(root);
+    h.setControllerLayout(southpaw('fire'));
+    (document.activeElement as HTMLElement | null)?.blur();
+    for (const control of controlsInOrder(root, true)) {
+      expect(h.act('down')).toBe(true);
+      expect(document.activeElement).toBe(control);
+    }
   });
 });

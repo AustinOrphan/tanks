@@ -33,7 +33,7 @@ The stored data is organized into the following keys:
 | `tanks.stats.run.v1` | Game statistics for the campaign run in progress |
 | `tanks.run.v2` | Active campaign run: current level, remaining lives |
 | `tanks.custom.v1` | Chosen tank color and paint customization |
-| `tanks.settings.v1` | Player settings: sound mute and volume, touch control scheme and fire mode, device vibration and controller rumble preferences, motion/flash preference, interface scale |
+| `tanks.settings.v1` | Player settings: sound mute and volume, touch control scheme and fire mode, device vibration and controller rumble preferences, controller layout (stick preset and rebound buttons, per controller type), motion/flash preference, interface scale, render quality preset |
 | `tanks.achievements.v1` | Earned achievements |
 | `tanks.versus.v1` | Versus match setup: mode, player count, lives, friendly fire, arena, and which player slots are people or computer players (never which controller anyone uses) |
 

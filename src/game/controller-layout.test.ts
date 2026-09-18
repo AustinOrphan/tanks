@@ -368,3 +368,54 @@ describe('renderControllerLayout (issue #754)', () => {
     expect(requests).toEqual([]);
   });
 });
+
+/**
+ * A catalogue profile, every index off the standard ones (issue #754). The shipped catalogue
+ * is empty (#606 owns its first entry), so the pane's half of the mechanism is proved on a
+ * fixture here, as `gamepad-profile.test.ts` proves the resolver's half.
+ */
+const CATALOGUE_PROFILE: ControlProfile = {
+  id: 'fixture-six-axis',
+  label: 'Test fixture: a six-axis pad',
+  axes: { moveX: 0, moveY: 1, aimX: 4, aimY: 5 },
+  buttons: { fire: 6, mine: 7, confirm: 0, back: 1, pause: 8, up: 2, down: 3, left: 4, right: 5 },
+  bindable: [
+    { id: 'a', index: 0 },
+    { id: 'b', index: 1 },
+    { id: 'l', index: 6 },
+    { id: 'r', index: 7 },
+    { id: 'start', index: 8 },
+    { id: 'z', index: 9 },
+  ],
+};
+
+describe('a catalogue profile goes through the same pane (issue #754)', () => {
+  it('is modelled from its own buttons and names, with both presets', () => {
+    const model = layoutModel(CATALOGUE_PROFILE, layout({ fire: 'z' }), null, '');
+    expect(model.profileName).toBe('Controller');
+    expect(model.presets).toEqual(['recommended', 'southpaw']);
+    expect(model.rows.map((row) => row.controlName)).toEqual(['Z', 'R', 'A', 'B', 'Start']);
+    expect(model.customised).toBe(true);
+  });
+
+  it('rebinds by swapping with the action on that button, both halves in one layout', () => {
+    const r = rebind(CATALOGUE_PROFILE, RECOMMENDED_LAYOUT, 'fire', 'a');
+    expect(r).toEqual({
+      kind: 'bound',
+      layout: { preset: 'recommended', bindings: { fire: 'a', confirm: 'l' } },
+      displaced: 'confirm',
+    });
+    if (r.kind !== 'bound') throw new Error('unreachable');
+    const buttons = resolveEffectiveProfile(CATALOGUE_PROFILE, r.layout).profile.buttons;
+    expect([buttons.fire, buttons.confirm]).toEqual([0, 6]);
+  });
+
+  it('capture ignores a pad of another profile, even a press on an index it could bind', () => {
+    // A standard pad's A is index 0, which this profile's list names too. The press must not
+    // count: it would be named against the wrong list, on a pad the pane is not configuring.
+    const capture = createBindingCapture('fire', CATALOGUE_PROFILE);
+    expect(capture.step(frame(standardPad()))).toEqual({ kind: 'waiting' });
+    expect(capture.step(frame(standardPad([0])))).toEqual({ kind: 'waiting' });
+    expect(capture.step(frame(standardPad([9])))).toEqual({ kind: 'waiting' });
+  });
+});

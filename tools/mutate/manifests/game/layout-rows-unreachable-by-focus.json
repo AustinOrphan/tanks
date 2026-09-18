@@ -1,0 +1,15 @@
+{
+  "id": "layout-rows-unreachable-by-focus",
+  "file": "src/game/controller-layout.ts",
+  "find": "    rowBtn.dataset.action = action;",
+  "replace": "    rowBtn.dataset.action = action;\n    rowBtn.tabIndex = -1;",
+  "expect": "killed",
+  "why": "Every row is a control the arrow keys and a controller's D-pad reach through the HUD's focus walk. A row taken out of the tab order still answers a click, so the pointer tests keep passing while a keyboard or controller can no longer choose an action to rebind.",
+  "tests": [
+    "src/game/hud.controller-layout.test.ts"
+  ],
+  "killedBy": [
+    "the controller layout pane (issue #754) the arrow keys reach the preset, every row, Reset and Back in order, from the container",
+    "the controller layout pane (issue #754) a controller's D-pad reaches the same controls, Cancel included while a capture waits"
+  ]
+}
