@@ -48,6 +48,8 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     { parent: 317, children: [427, 468, 428, 429] },
     { parent: 325, children: [470] },
     { parent: 341, children: [335, 342, 343] },
+    // #815: focused temporal application-capture leaf split from #326 to unblock #720.
+    { parent: 326, children: [815] },
     {
       parent: 355,
       children: [223, 229, 233, 237, 332, 356, 357, 358, 359, 360, 367, 371, 372],
@@ -107,6 +109,8 @@ export const RELATIONSHIP_MIGRATION = Object.freeze({
     { issue: 327, blockers: [318, 319, 320, 321] },
     { issue: 335, blockers: [342] },
     { issue: 343, blockers: [335, 342] },
+    // #720's only remaining executable criterion depends on #815's temporal app capture path.
+    { issue: 720, blockers: [815] },
     { issue: 351, blockers: [321] },
     { issue: 352, blockers: [321] },
     { issue: 360, blockers: [233, 323, 357, 358, 367] },
