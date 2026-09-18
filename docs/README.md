@@ -67,7 +67,7 @@ status.
 | [console-release.md](research/console-release.md) | `commercial-direction` | Feasibility of shipping on Steam, Switch, or PlayStation: store fees and Deck criteria, NDA-gated console toolchains, and the tree's gaps at the time (shell, Steamworks, content depth). |
 | [mobile-release.md](research/mobile-release.md) | `mixed` | Feasibility of wrapping the game as an Android/iOS app: offline bundle, touch controls, storage keys, safe-area and WebGL2 gaps, store policies, and the unmeasured phone frame time. |
 | [multiplayer.md](research/multiplayer.md) | `mixed` | Multiplayer feasibility: the immutable deterministic sim as a netcode foundation, the game layer's then single-player assumptions, cross-engine float determinism, and the couch-first ordering. |
-| [pp1-roles-evidence.md](research/pp1-roles-evidence.md) | `public-prototype` | Evidence package for the pp1Roles experiment: arm inputs against shipped defaults, matched deterministic measurements, the matched pair to play, and why no normal-speed clip exists. |
+| [pp1-roles-evidence.md](research/pp1-roles-evidence.md) | `public-prototype` | Evidence package for the pp1Roles experiment: arm inputs against shipped defaults, matched deterministic measurements, four matched normal-speed captures, and how to play the pair. |
 
 ## Implementation record
 

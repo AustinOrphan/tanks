@@ -29,8 +29,10 @@ compositions, arenas, spawns, aim or reaction timing. Shipped balance is unchang
   in `src/sim/config/data/tank-defs.json`.
 - **Roles:** the approved role descriptions in #358's "Current PP1 experiment arm" table.
 
-**The arm is on only with `?dev=1&pp1Roles=1`.** Caps are stamped on each tank when it
-spawns, and only in campaign worlds. Without the flag, every kind keeps its authored value.
+**The arm is on only with `?dev=1&pp1Roles=1`.** Caps are stamped in one pass over the built
+roster (`src/sim/arena.ts`, deliberately not at each spawn site: "stamping at each is how one
+gets missed"), and only in campaign worlds. Without the flag, every kind keeps its authored
+value.
 
 | Kind | Approved role to validate | Shell cap: shipped → arm (band) | Mine capacity: shipped → arm | Weapon, shipped | Mine-laying ability, shipped | AI profile, shipped |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -59,8 +61,9 @@ column is the shipped profile name, not the "key AI behaviour" judgment.
 - The AI dispatcher lays a mine only for a kind with the `MINE_LAYER` ability
   (`src/sim/ai/index.ts`, the `hasAbility(tank.kind, TankAbility.MINE_LAYER)` guard).
 - Brown's abilities are empty, and Green's are `BANK_SHOT_AIM` only.
-- Both kinds' profiles are `STATIONARY`, which dispatches to `brownDecision`, and that
-  decision always returns `mine: false`.
+- Both kinds' profiles -- Brown's `STATIC_BASIC` and Green's `RICOCHET_SNIPER` -- carry the
+  `STATIONARY` behaviour, which dispatches to `brownDecision`, and both of that function's
+  returns set `mine: false`.
 
 So the arm's Brown and Green mine change has no effect on AI play in any encounter. The
 measurements agree: both kinds read `0.0000` mean live mines in both arms. **Of the arm's
@@ -95,8 +98,9 @@ PRs' published tables exactly, number for number.
   Green spawns only in arena-04, so its rows rest on 3 encounters. The harness's own comment
   says arena-03 "adds olive"; the grid shows it also has no Teal.
 - **Length:** each encounter runs until the world's status leaves `playing` (a win or a loss)
-  or for 60 s of simulated time, whichever comes first. The 180-tick countdown is excluded
-  from every rate.
+  or for 60 s of simulated time, whichever comes first. The 180-tick countdown is skipped for
+  the per-tick ordnance samples; shots, refusals and deaths are counted unconditionally, which
+  is the same thing in effect, because movement and fire are both blocked during it.
 - **World rules:** `createWorldFor(arena, seed, { pp1Roles })` with every other rule at its
   default. That matches the page's campaign world with no other developer flags set.
 - **The driver:** the scripted player, `decidePlayerInput` in `src/sim/ai/player-profile.ts`.
@@ -210,26 +214,66 @@ These are stated at the strength 12 scripted encounters allow.
 
 ## Normal-speed captures
 
-**This package contains no normal-speed captures.** #720 asks for matched captures made with
-the shared capture architecture at wall-clock playback speed. That architecture cannot make
-them today, and the change that would let it belongs to another open issue:
+**Four captures, two matched pairs**, made by `npm run capture` through the shared capture
+pipeline (issue #815's `flow` producer) from a build stamped with the commit they were taken
+at. Each publishes an H.264 MP4 and a `capture.json` whose assertions are the evidence that
+the clip is what it says it is.
 
-- **The screen producer only takes stills.** `tools/capture/screen-adapter.mjs` refuses any
-  schedule other than `still` with "screen captures are stills; a moving application surface
-  is issue #326". #326 is open and marked `human-required`.
-- **Gallery clips don't fit either.** Its normal-speed clips (`gallery.*.normal`) advance
-  hand-built moment worlds one tick per frame. They cannot open a campaign level with the
-  scripted player and the `pp1Roles` flag.
-- **Neither does gallery burst capture.** #720 rules it out as timing evidence, because its
-  frames are spaced by capture time.
-- **Capture is not paced by the clock:** `tools/capture/README.md` ("Determinism boundary")
-  says captures advance by tick and interpolation, never by wall-clock or
-  `requestAnimationFrame` pacing.
-- **`capture:compare` compares two git refs,** but this pair is one ref with a flag on and off.
+| Recipe | Level (arena) | Arm | Clip | Round | Ended |
+| --- | --- | --- | --- | --- | --- |
+| `flow.campaign-round.pp1roles-off` | 1 (`arena-01`) | shipped | 150 frames, 5.0 s | 302 ticks | Level Cleared |
+| `flow.campaign-round.pp1roles-on` | 1 (`arena-01`) | `pp1Roles=1` | 165 frames, 5.5 s | 333 ticks | Level Cleared |
+| `flow.campaign-roster.pp1roles-off` | 4 (`arena-04`) | shipped | 1524 frames, 50.8 s | 3050 ticks | Level Failed |
+| `flow.campaign-roster.pp1roles-on` | 4 (`arena-04`) | `pp1Roles=1` | 558 frames, 18.6 s | 1117 ticks | Level Failed |
 
-So a timing-faithful gameplay clip is new capture work, and it needs a decision on #326 first.
-Until then, the matched pair below is playable at normal speed in any build, which is the
-condition #358's human review names.
+Every clip is 1280x800 at 30 fps, seed 1, the scripted player, recorded from the end of the
+round-start countdown to the last frame before the outcome panel. Within a pair the only
+difference is the flag, which each manifest records as `producer.requestedInputs`.
+
+**Why two levels.** Level 1 holds Brown, Grey and Teal -- three of the five kinds the arm
+touches, including Teal, whose mine removal is the only one that changes AI play. Level 4 is
+the first board holding every kind it touches, and it is where the difference is largest.
+
+**What the pairs show, as durations.** These are one scripted player on one seed, not a
+difficulty measurement; the deterministic numbers above are that.
+
+- **Level 1:** both arms clear it. The arm takes 31 more ticks, about half a second.
+- **Level 4:** both arms fail. The baseline survives 3050 ticks, the arm 1117 -- under a third
+  as long. The 12-encounter harness recorded the opposite direction overall (player deaths
+  26 to 22 in the arm's favour), so these two clips are a different sample, not a contradiction
+  of it: one seed, one board, one policy.
+
+**What each manifest asserts.** Eleven checks pass on every capture. The ones carrying the
+timing claim:
+
+- `flow-simulation-rate`: the replay surface advanced 59.98 to 60.18 ticks per wall-clock
+  second across the four, against a 60 Hz simulation.
+- `flow-no-clamped-frames`: no animation frame crossed the game's 250 ms catch-up clamp, so no
+  simulated time was lost against the clock.
+- `flow-still-playing`: the round was playing at every sample and at the cut.
+- `flow-world-identity`: the round's own seed and arena match the recipe's level.
+- `flow-build-identity`: the page named the commit being captured, read from its diagnostics
+  report rather than assumed.
+- `flow-delivered-rate`: the compositor delivered 99 to 100 frames per second against the
+  recipe's floor of 45, and no output frame is a repeat of the one before it.
+
+**To make them again**, on any machine with a GPU:
+
+```sh
+VITE_BUILD_SHA=$(git rev-parse HEAD) npm run build
+npm run capture -- --recipe flow.campaign-round.pp1roles-off --source-ref $(git rev-parse HEAD)
+```
+
+...and the same for the other three recipe ids. Each manifest carries its own `reproduce`
+block with these commands filled in. A build that cannot name its commit fails
+`flow-build-identity` rather than being filed under the wrong one, and a machine without a GPU
+fails `flow-delivered-rate` with the rate it measured rather than publishing choppy footage.
+
+**What these are not.** A scripted player, not a person: see
+[Scripted evidence and human evidence](#scripted-evidence-and-human-evidence). Two real-time
+captures of the same recipe differ by timing jitter, so they are reviewed as clips and
+manifests, never diffed pixel by pixel -- `npm run capture:compare` refuses a flow recipe for
+that reason.
 
 ## Playing the matched pair
 
@@ -240,17 +284,28 @@ build as well as under `npm run dev`:
 - Neither `parseDevFlags` nor `vite.config.ts` checks the build environment.
 - Not tried against the published site.
 
-**`level` is 1-based.** The level system's `start` getter returns
-`campaignLevels[min(level - 1, last)]`, and `campaign.json` maps level-0N to arena-0N.
+**Open the page with the arm and the seed, then pick the level on screen.**
 
-| Level (arena) | Baseline | Experiment arm |
-| --- | --- | --- |
-| 1 (`arena-01`) | `?dev=1&level=1&seed=1` | `?dev=1&level=1&seed=1&pp1Roles=1` |
-| 2 (`arena-02`) | `?dev=1&level=2&seed=1` | `?dev=1&level=2&seed=1&pp1Roles=1` |
-| 3 (`arena-03`) | `?dev=1&level=3&seed=1` | `?dev=1&level=3&seed=1&pp1Roles=1` |
-| 4 (`arena-04`) | `?dev=1&level=4&seed=1` | `?dev=1&level=4&seed=1&pp1Roles=1` |
+| Arm | URL |
+| --- | --- |
+| Baseline | `?dev=1&seed=1` |
+| Experiment | `?dev=1&seed=1&pp1Roles=1` |
 
-Use seeds `2` and `3` for the harness's other encounters.
+Then press **Levels** on the Main Menu and choose the level. Use seeds `2` and `3` for the
+harness's other encounters.
+
+**`?level=N` is NOT the way in, and this is worth knowing before a review session.** The flag
+moves the level system's `start`, which is what **Continue** resumes -- but a **New Game**
+deliberately lands on level one whatever the flag says (`campaign-new` in `loop.ts`, issue
+#428). Measured on the built page: `?dev=1&level=4&seed=1` followed by New Game plays
+`arena-01`, silently, and only the arena id in a developer trace says so. The same URL
+followed by Continue plays `arena-04`, but Continue appears only when a run is already
+active. Level Select has neither problem: it names the level on screen and reaches any
+unlocked one. The capture recipes take that path for the same reason.
+
+**Either way the session is a practice attempt,** not a campaign run: a developer level jump
+and a Level Select pick both leave the run alone (`isDevJump` in `levels.ts`). The arm still
+applies -- it reaches every campaign world, and only the sandbox is excluded.
 
 **Options:**
 - **To watch the scripted player** instead of playing, add `&autoplay=1`.
@@ -306,7 +361,7 @@ npm run preview    # then open the URLs above on the printed address
 | Whether players can name each enemy's threat and counterplay | Nothing | All of it |
 | Ricochet, baiting, retreat, cover and mine decisions | Nothing | All of it |
 | Whether removing Brown, Teal and Green mines improves role clarity | Only Teal's removal is exercised; Brown's and Green's cannot change AI play | Teal's effect on clarity, and whether Brown's and Green's entries mean anything |
-| Difficulty against the shipped campaign | A coarse direction: player deaths 26 → 22, resolved 7 → 9 of 12 | The difficulty judgment itself |
+| Difficulty against the shipped campaign | A coarse direction: player deaths 26 → 22, resolved 7 → 9 of 12; two normal-speed clips per board on levels 1 and 4 | The difficulty judgment itself |
 
 **The scripted player is a fixed policy.** It does not learn the arm, avoid the cap or change
 tactics. Its numbers show what the budgets do to one unchanging opponent, which is a
@@ -321,7 +376,7 @@ different question from what they do to a person.
 - **Only the top of each band has been measured.** The lower-bound arm has never been run.
 - **Harness world versus page campaign:** the harness world is not the page's campaign flow;
   see [Playing the matched pair](#playing-the-matched-pair).
-- **No normal-speed clip exists,** for the reasons in
-  [Normal-speed captures](#normal-speed-captures).
+- **The clips are two boards, one seed and one scripted policy.** Levels 2, 3 and 5 have no
+  clip, and no clip is human play. See [Normal-speed captures](#normal-speed-captures).
 - **A saved replay does not identify its arm,** and the trace validity check would accept one
   rebuilt at shipped caps.
