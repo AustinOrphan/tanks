@@ -794,7 +794,12 @@ export function runTestsReal(testFiles, root = process.cwd()) {
     // Set by the parent for POOL WORKERS only -- see `vitestWorkersPerJob`. Absent for a
     // serial run, which keeps vitest's own sizing and the whole machine.
     const share = process.env.MUTATE_VITEST_WORKERS;
-    const poolArgs = share ? [`--maxWorkers=${share}`, `--minWorkers=${share}`] : [];
+    // A CEILING, which is all this needs: the failure being prevented is oversubscription, and
+    // vitest's worker floor is 1 anyway. It was `--maxWorkers` AND `--minWorkers` until vitest 5
+    // removed the latter -- an unknown option there is a CAC parse error, so vitest exits 1
+    // before writing any report and every entry in the shard reads as FATAL, which is what
+    // happened on this repository's four mutation shards when vitest 5 was first proposed.
+    const poolArgs = share ? [`--maxWorkers=${share}`] : [];
     const res = spawnSync(vitestBin, ['run', ...testFiles, ...poolArgs, '--reporter=json', `--outputFile=${outFile}`], {
       cwd: root,
       encoding: 'utf8',
