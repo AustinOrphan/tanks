@@ -11,7 +11,7 @@
   },
   "source": {
     "requestedRef": "HEAD",
-    "commitSha": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+    "commitSha": "830e3f53e2fc0047f464127951b664dd27ba4a6d",
     "dirty": false
   },
   "producer": {
@@ -44,16 +44,16 @@
         },
         "url": "?dev=1&replay=1&level=1&seed=1&autoplay=1",
         "dist": {
-          "indexSha256": "d88b9c86ebccb2be02184ded280884ee97fbb585b8099cdba459e4c616262c96",
+          "indexSha256": "4fa0d56995613bef0d355f7e04745acece922fd68e7347160afdc657213d6260",
           "assets": [
-            "index-D2iOmdjq.js",
+            "index-BWiv7Tgw.js",
             "index-DCXTDbBc.css"
           ]
         },
         "diagnostics": {
           "url": "/?dev=1&seed=1&level=1&autoplay=1&replay=1",
           "build": {
-            "commit": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+            "commit": "830e3f53e2fc0047f464127951b664dd27ba4a6d",
             "known": true
           },
           "developerMode": true,
@@ -70,8 +70,8 @@
           "practice": true
         },
         "readiness": {
-          "readyAfterMs": 3222,
-          "countdownMs": 2911,
+          "readyAfterMs": 3221,
+          "countdownMs": 2901,
           "surfaceAtStart": "playing",
           "surfaceAtEnd": "playing",
           "endedAs": "menu"
@@ -82,23 +82,23 @@
           "stop": {
             "requested": "round-end",
             "reason": "round-ended",
-            "cutAtMs": 1789735539704,
-            "playingSeconds": 5.015817165374756,
-            "droppedFrames": 25
+            "cutAtMs": 1789736153168,
+            "playingSeconds": 5.006742000579834,
+            "droppedFrames": 26
           },
           "fps": 30,
           "frameCount": 150,
           "recording": {
-            "startedAtMs": 1789735534668,
-            "stoppedAtMs": 1789735539956,
-            "wallMs": 5288
+            "startedAtMs": 1789736148137,
+            "stoppedAtMs": 1789736153421,
+            "wallMs": 5284
           },
           "simulation": {
             "available": true,
             "samples": 21,
-            "ticks": 302,
-            "seconds": 5.034699999988079,
-            "ticksPerSecond": 59.983713031703,
+            "ticks": 303,
+            "seconds": 5.0295,
+            "ticksPerSecond": 60.24455711303311,
             "resets": 0,
             "surfaces": [
               "playing",
@@ -126,11 +126,11 @@
           },
           "render": {
             "frames": 634,
-            "spanMs": 5274.500000000001,
-            "fps": 120.01137548582803,
-            "gapP50Ms": 8.300000000000182,
-            "gapP95Ms": 9.200000000000728,
-            "gapMaxMs": 9.400000000000546,
+            "spanMs": 5275.1,
+            "fps": 119.9977251616083,
+            "gapP50Ms": 8.299999999999272,
+            "gapP95Ms": 9.299999999999272,
+            "gapMaxMs": 9.399999999999636,
             "clampMs": 250,
             "clampedFrames": 0,
             "simTimeLostMs": 0,
@@ -140,21 +140,21 @@
           "screencast": {
             "format": "jpeg",
             "quality": 90,
-            "framesReceived": 495,
-            "fps": 98.48843841641322,
-            "gapP50Ms": 8.350133895874023,
-            "gapP95Ms": 17.12179183959961,
-            "gapMaxMs": 17.568111419677734,
-            "bytes": 41504415,
-            "firstFrameEpochSeconds": 1789735534.677003
+            "framesReceived": 496,
+            "fps": 98.86668814623836,
+            "gapP50Ms": 8.347034454345703,
+            "gapP95Ms": 17.225980758666992,
+            "gapMaxMs": 17.670869827270508,
+            "bytes": 41672981,
+            "firstFrameEpochSeconds": 1789736148.145635
           },
           "resample": {
             "method": "hold-last-frame",
             "uniqueFramesUsed": 150,
             "heldFrames": 0,
             "maxConsecutiveHold": 0,
-            "sourceFrames": 495,
-            "coveredMs": 5015.817165374756,
+            "sourceFrames": 496,
+            "coveredMs": 5006.742000579834,
             "tailPadMs": 0
           }
         },
@@ -224,8 +224,8 @@
       "npm i --no-save playwright@1.62.0",
       "npx playwright install chromium"
     ],
-    "build": "VITE_BUILD_SHA=c9b96cd26b98c78baefe7f265825fe2f3b5490a7 npm run build",
-    "capture": "npm run capture -- --recipe flow.campaign-round.pp1roles-off --source-ref c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+    "build": "VITE_BUILD_SHA=830e3f53e2fc0047f464127951b664dd27ba4a6d npm run build",
+    "capture": "npm run capture -- --recipe flow.campaign-round.pp1roles-off --source-ref 830e3f53e2fc0047f464127951b664dd27ba4a6d",
     "note": null
   },
   "assertions": [
@@ -273,17 +273,17 @@
     {
       "kind": "flow-build-identity",
       "passed": true,
-      "diagnostic": "the page names build c9b96cd26b98c78baefe7f265825fe2f3b5490a7, the checkout being captured",
+      "diagnostic": "the page names build 830e3f53e2fc0047f464127951b664dd27ba4a6d, the checkout being captured",
       "details": {
         "pageBuild": {
-          "commit": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+          "commit": "830e3f53e2fc0047f464127951b664dd27ba4a6d",
           "known": true
         },
-        "checkout": "c9b96cd26b98c78baefe7f265825fe2f3b5490a7",
+        "checkout": "830e3f53e2fc0047f464127951b664dd27ba4a6d",
         "dist": {
-          "indexSha256": "d88b9c86ebccb2be02184ded280884ee97fbb585b8099cdba459e4c616262c96",
+          "indexSha256": "4fa0d56995613bef0d355f7e04745acece922fd68e7347160afdc657213d6260",
           "assets": [
-            "index-D2iOmdjq.js",
+            "index-BWiv7Tgw.js",
             "index-DCXTDbBc.css"
           ]
         }
@@ -313,8 +313,8 @@
         "surfaceAtStart": "playing",
         "surfaceAtEnd": "playing",
         "samples": 21,
-        "readyAfterMs": 3222,
-        "countdownMs": 2911
+        "readyAfterMs": 3221,
+        "countdownMs": 2901
       }
     },
     {
@@ -324,18 +324,18 @@
       "details": {
         "clampedFrames": 0,
         "simTimeLostMs": 0,
-        "renderFps": 120.01137548582803,
-        "gapMaxMs": 9.400000000000546
+        "renderFps": 119.9977251616083,
+        "gapMaxMs": 9.399999999999636
       }
     },
     {
       "kind": "flow-simulation-rate",
       "passed": true,
-      "diagnostic": "the simulation advanced 59.98 ticks per wall-clock second over 5.03 s",
+      "diagnostic": "the simulation advanced 60.24 ticks per wall-clock second over 5.03 s",
       "details": {
-        "ticksPerSecond": 59.983713031703,
-        "ticks": 302,
-        "seconds": 5.034699999988079,
+        "ticksPerSecond": 60.24455711303311,
+        "ticks": 303,
+        "seconds": 5.0295,
         "samples": 21,
         "resets": 0,
         "expected": 60,
@@ -361,7 +361,7 @@
     {
       "kind": "flow-frame-count",
       "passed": true,
-      "diagnostic": "150 frames at 30 fps: the round ended after 5.02 s, within the 60 s ceiling",
+      "diagnostic": "150 frames at 30 fps: the round ended after 5.01 s, within the 60 s ceiling",
       "details": {
         "frameCount": 150,
         "fps": 30,
@@ -369,17 +369,17 @@
         "stop": {
           "requested": "round-end",
           "reason": "round-ended",
-          "cutAtMs": 1789735539704,
-          "playingSeconds": 5.015817165374756,
-          "droppedFrames": 25
+          "cutAtMs": 1789736153168,
+          "playingSeconds": 5.006742000579834,
+          "droppedFrames": 26
         },
         "resample": {
           "method": "hold-last-frame",
           "uniqueFramesUsed": 150,
           "heldFrames": 0,
           "maxConsecutiveHold": 0,
-          "sourceFrames": 495,
-          "coveredMs": 5015.817165374756,
+          "sourceFrames": 496,
+          "coveredMs": 5006.742000579834,
           "tailPadMs": 0
         }
       }
@@ -387,9 +387,9 @@
     {
       "kind": "flow-delivered-rate",
       "passed": true,
-      "diagnostic": "the compositor delivered 98.5 frames per second, at least the 45 the recipe requires",
+      "diagnostic": "the compositor delivered 98.9 frames per second, at least the 45 the recipe requires",
       "details": {
-        "deliveredFps": 98.48843841641322,
+        "deliveredFps": 98.86668814623836,
         "minimum": 45,
         "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)",
         "visual": "host-gpu",
@@ -421,11 +421,11 @@
         "container": {
           "faststart": true,
           "moovOffset": 32,
-          "mdatOffset": 2627,
+          "mdatOffset": 2611,
           "measuredBy": "mp4-box-order"
         },
-        "byteSize": 348028,
-        "sha256": "a381c16e2c3d524f43e85e38077bb66cb50e988d7e32844139c29eeaa3be8759",
+        "byteSize": 345718,
+        "sha256": "af65a7fa78ad595ef28a65ea7ecabefe414603c5b022e7e7dde78ee8656a86f0",
         "construction": {
           "method": "ffmpeg",
           "codecRequested": "libx264",
@@ -462,7 +462,7 @@
       "byteSize": null,
       "sha256": null
     },
-    "totalByteSize": 348028,
+    "totalByteSize": 345718,
     "budgetBytes": 100000000,
     "withinBudget": true
   },
@@ -473,8 +473,8 @@
     "encodedByteEqualityAcrossEnvironments": false
   },
   "timing": {
-    "startedAt": "2026-09-18T12:45:30.296Z",
-    "completedAt": "2026-09-18T12:45:42.929Z"
+    "startedAt": "2026-09-18T12:55:43.758Z",
+    "completedAt": "2026-09-18T12:55:56.434Z"
   },
   "diagnostics": []
 }
