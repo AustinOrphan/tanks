@@ -1,0 +1,14 @@
+{
+  "id": "stock-strip-marker-drawn-for-a-teams-entry",
+  "file": "src/game/hud.ts",
+  "find": "if (identityMarker !== null && entry.team === undefined) {",
+  "replace": "if (identityMarker !== null) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The mark is FFA-only by the owner's direction on #234, and the guard that makes it so is one clause easily read as redundant beside the `identityMarker !== null` it sits with. Dropping it puts a per-slot shape on a teams entry, which already carries the A/B/C letter as its non-colour channel -- so the entry would state its side twice in two different vocabularies, and a 2v2 would show four different marks for two teams. That is worse than the colour-only strip this arm exists to improve on, and it is invisible in FFA, which is where every capture is taken.",
+  "killedBy": [
+    "hud: identity mark in the stock strip (issue #778) leaves TEAMS untouched -- the letter is already that entry second channel"
+  ]
+}

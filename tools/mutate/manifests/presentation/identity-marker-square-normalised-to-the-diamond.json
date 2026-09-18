@@ -1,0 +1,15 @@
+{
+  "id": "identity-marker-square-normalised-to-the-diamond",
+  "file": "src/presentation/identity-marker.ts",
+  "find": "    case 2: return { kind: 'polygon', sides: 4, rotation: -Math.PI / 4 };",
+  "replace": "    case 2: return { kind: 'polygon', sides: 4, rotation: 0 };",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity-marker.test.ts"
+  ],
+  "why": "Slot 3's `-PI/4` is the whole reason it reads as a SQUARE rather than as the diamond slot 4 used to be, and a rotation looks like free normalisation to anyone tidying the table -- zero is the obvious value and it is wrong. At zero the corners sit on the axes and the outline becomes the rotated square the starburst was introduced to replace, which is one polygon wearing two names the moment a fourth player joins. Guarded by a property rather than by quoting the constant back: the case asserts no vertex lands on an axis, which the square passes and the diamond cannot.",
+  "killedBy": [
+    "identity markers: the shared per-slot table (issue #778) gives the four slots four DIFFERENT outlines -- the property the style exists for",
+    "identity markers: the shared per-slot table (issue #778) keeps the square a SQUARE, which is the collision the starburst was added to remove"
+  ]
+}

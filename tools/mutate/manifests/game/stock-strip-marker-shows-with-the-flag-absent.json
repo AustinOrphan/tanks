@@ -1,0 +1,14 @@
+{
+  "id": "stock-strip-marker-shows-with-the-flag-absent",
+  "file": "src/game/hud.ts",
+  "find": "const identityMarker: IdentityMarkerStyle | null = opts.identityMarker ?? null;",
+  "replace": "const identityMarker: IdentityMarkerStyle | null = opts.identityMarker ?? 'shape';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The arm's load-bearing default: absent means the shipped strip, so every existing HUD test and every ordinary page load is untouched by construction. A default of `'shape'` ships an unruled experiment to players and silently moves the control the #234 comparison is measured against, which would make the captures compare an arm to itself. Caught by the case that mounts an explicitly-null HUD beside a bare `createHud(root)` and asserts the strip's markup is byte-identical between them.",
+  "killedBy": [
+    "hud: identity mark in the stock strip (issue #778) draws nothing at all without the flag, and leaves the strip byte-identical"
+  ]
+}

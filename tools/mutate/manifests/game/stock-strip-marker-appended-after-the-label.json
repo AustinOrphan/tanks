@@ -1,0 +1,14 @@
+{
+  "id": "stock-strip-marker-appended-after-the-label",
+  "file": "src/game/hud.ts",
+  "find": "span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));",
+  "replace": "span.insertAdjacentHTML('beforeend', identityMarkerIcon(identityMarker, entry.slot));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "THIS ONE ALREADY SURVIVED ONCE, which is why it is here. The first version of its test asserted `firstElementChild` was the mark -- but the entry's label is a TEXT node, so the mark is the entry's only ELEMENT wherever it sits, and the assertion passed just as happily with the mark appended after the label. The case now reads `firstChild`, which is the node-wise question actually being asked. A mark trailing its own label reads as belonging to the next player along in a four-entry strip, which is precisely the misattribution the pairing exists to remove.",
+  "killedBy": [
+    "hud: identity mark in the stock strip (issue #778) puts the mark AHEAD of the label, and keeps one per entry across a rebuild"
+  ]
+}

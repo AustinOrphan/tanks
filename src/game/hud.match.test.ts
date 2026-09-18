@@ -964,8 +964,12 @@ describe('hud: identity mark in the stock strip (issue #778)', () => {
     const { hud: h, root } = mountMark('shape');
     h.setStatus(versusStatus(ffa));
     for (const entry of entries(root)) {
-      expect(entry.firstElementChild?.classList.contains('hud-stock-marker'), entry.textContent)
-        .toBe(true);
+      // `firstChild`, NOT `firstElementChild`. The label is a TEXT node, so the mark is the
+      // entry's only ELEMENT wherever it sits -- `firstElementChild` finds it just as
+      // happily when it has been appended after the label, and the assertion measures
+      // nothing. Proven by mutation: switching `afterbegin` to `beforeend` passed the
+      // element-wise form and fails this one.
+      expect(entry.firstChild?.nodeName.toLowerCase(), entry.textContent).toBe('svg');
     }
     // The strip is rebuilt from scratch on every status, so a mark appended rather than
     // rebuilt would double here -- the same failure the cue arms record for their own DOM.
