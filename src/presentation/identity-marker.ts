@@ -109,3 +109,90 @@ export function identityMarkerSpin(bodyAngle: number): number {
   return bodyAngle;
 }
 
+
+/**
+ * WHICH SLOT GETS WHICH MARK, as a description rather than as geometry (issue #778).
+ *
+ * This table used to live inside `render/identity-marker.ts` as a private `spec` array,
+ * which was correct while the arena ring was its only consumer. It is not correct now that
+ * the HUD draws the same mark: two consumers reading two copies is the second-source-of-
+ * truth problem `identity.ts` already exists to prevent, and the failure mode is specific
+ * and silent -- the strip would keep claiming a square for slot 3 after the ring moved to
+ * something else, which is precisely the pairing #234 asks the owner to rule on.
+ *
+ * So it is a DESCRIPTION, not a path and not a BufferGeometry. `render/identity-marker.ts`
+ * extrudes it into a 3D annulus band; `game/hud.ts` projects it into a 2D SVG outline. Each
+ * consumer owns its own units, weights and tolerances, and neither owns the answer to
+ * "which shape is slot 3".
+ *
+ * The circle is `circle` here rather than a 48-gon, even though the ring builds it as one.
+ * A renderer approximating a curve with segments is a rendering decision; an SVG draws a
+ * real `<circle>` and should not inherit a tessellation count it has no use for.
+ */
+export type MarkerOutline =
+  | { readonly kind: 'circle' }
+  | { readonly kind: 'polygon'; readonly sides: number; readonly rotation: number }
+  | { readonly kind: 'star'; readonly points: number };
+
+/**
+ * The slot index wrapped into the variants that exist, including for a negative slot.
+ *
+ * `((n % m) + m) % m` rather than `n % m`, because JavaScript's `%` keeps the sign of the
+ * dividend: `-1 % 4` is `-1`, which would index off the front of every table here.
+ */
+export function markerVariant(slot: number): number {
+  return ((slot % MARKER_VARIANTS) + MARKER_VARIANTS) % MARKER_VARIANTS;
+}
+
+/**
+ * How many marks the COUNTING styles draw for a slot: `arcs` breaks the ring into this many
+ * arcs, `roof` puts this many blades on the turret crown. One-based, so slot 1 reads as one.
+ *
+ * Shared because both styles answer the same question and drifted apart once already --
+ * they were separate `+ 1` expressions in two functions, and nothing would have failed if
+ * one had been changed alone.
+ */
+export function markerCount(slot: number): number {
+  return markerVariant(slot) + 1;
+}
+
+/**
+ * The gap between two `arcs` runs, as a FRACTION of each run's angular step.
+ *
+ * A fraction rather than a fixed angle, and the reason is the whole point of the style: at
+ * four arcs a fixed gap eats most of the ring, and at one it is invisible. Shared so the
+ * arena ring and the HUD glyph break the ring at the same place -- a glyph whose gaps sat
+ * elsewhere would still count correctly and still look like a different mark.
+ */
+export const MARKER_ARC_GAP = 0.28;
+
+/**
+ * The outline the `shape` style gives a slot: circle, triangle, square, starburst.
+ *
+ * The rotations are load-bearing and are NOT free to normalise. The triangle points up
+ * (`-PI/2` puts its first vertex up-screen). The square is turned by `-PI/4`, which puts
+ * its CORNERS on the diagonals and its edges flat to the screen -- turn it any other way
+ * and it becomes the diamond that slot 4 used to be, which is the collision the starburst
+ * was introduced to remove. See `render/identity-marker.ts` for why the starburst replaced
+ * that diamond and why it is the one outline not corrected for perpendicular weight.
+ */
+export function shapeOutlineFor(slot: number): MarkerOutline {
+  switch (markerVariant(slot)) {
+    case 0: return { kind: 'circle' };
+    case 1: return { kind: 'polygon', sides: 3, rotation: -Math.PI / 2 };
+    case 2: return { kind: 'polygon', sides: 4, rotation: -Math.PI / 4 };
+    default: return { kind: 'star', points: 6 };
+  }
+}
+
+/**
+ * Vertex angles of a regular n-gon, first vertex at `rotation`.
+ *
+ * Here rather than beside either consumer because both need the same vertices in the same
+ * order: the ring walks them to build a band, the HUD walks them to build `points` on an
+ * SVG polygon. A second implementation is how the two outlines start disagreeing by a
+ * half-step without either looking wrong on its own.
+ */
+export function polygonAngles(sides: number, rotation: number): number[] {
+  return Array.from({ length: sides }, (_, i) => rotation + (i * 2 * Math.PI) / sides);
+}

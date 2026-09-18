@@ -4,6 +4,9 @@ import { createHud, type GameplayStatus, type Hud, type VersusStock } from './hu
 import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
 import { configFor } from '../sim/config';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
+import {
+  IDENTITY_MARKER_STYLES, type IdentityMarkerStyle, markerCount, shapeOutlineFor,
+} from '../presentation/identity-marker';
 
 
 let hud: Hud | null = null;
@@ -833,5 +836,159 @@ describe('standard VS ordnance limits (issue #268)', () => {
       (b) => (b.textContent ?? '').toLowerCase(),
     );
     expect(labels.some((l) => l.includes('shell') || l.includes('mine'))).toBe(false);
+  });
+});
+
+/**
+ * THE IDENTITY MARK IN THE STOCK STRIP (issue #778).
+ *
+ * The strip tells players apart by hue alone, which is the largest colour-only gap left in
+ * #630 and #327. This arm draws the same mark that slot wears on the ground, so #234 can be
+ * ruled on the PAIR rather than on either half.
+ *
+ * This is the strip's side of the shared table; `render/identity-marker.test.ts` holds the
+ * ring's. Both derive their expectations from `shapeOutlineFor`/`markerCount` rather than
+ * quoting shapes, so a slot cannot move in one and stay put in the other.
+ */
+describe('hud: identity mark in the stock strip (issue #778)', () => {
+  const entries = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-stock-entry')) as HTMLElement[];
+  const marks = (root: HTMLElement): SVGElement[] =>
+    Array.from(root.querySelectorAll('.hud-stock-marker')) as unknown as SVGElement[];
+
+  function mountMark(identityMarker: IdentityMarkerStyle | null): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, { identityMarker });
+    hud.setState('playing');
+    return { hud, root };
+  }
+
+  const ffa = [{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }, { slot: 2, stock: 3 }, { slot: 3, stock: 1 }];
+
+  it('draws nothing at all without the flag, and leaves the strip byte-identical', () => {
+    // The acceptance criterion this file owns: absent means the shipped strip. Asserted as
+    // an EQUALITY between an unflagged HUD and an explicitly-null one, and then against the
+    // literal markup, so an addition to this path fails here rather than in a capture.
+    const { hud: off, root: offRoot } = mountMark(null);
+    off.setStatus(versusStatus(ffa));
+    const plain = document.createElement('div');
+    document.body.appendChild(plain);
+    const bare = createHud(plain);
+    bare.setState('playing');
+    bare.setStatus(versusStatus(ffa));
+    const strip = (r: HTMLElement): string =>
+      (r.querySelector('.hud-versus-stocks') as HTMLElement).innerHTML;
+    expect(strip(offRoot), 'an explicit null differs from an absent option').toBe(strip(plain));
+    expect(marks(offRoot)).toHaveLength(0);
+    // Scoped to the STRIP: the shell carries its own icons (the achievement padlock, the
+    // rotate glyphs), so a document-wide svg count would be asserting someone else's DOM.
+    expect((offRoot.querySelector('.hud-versus-stocks') as HTMLElement)
+      .querySelectorAll('svg')).toHaveLength(0);
+    expect(entries(offRoot).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2', 'P3 3', 'P4 1']);
+    bare.dispose();
+  });
+
+  it('gives every FFA entry the outline its slot wears in the arena', () => {
+    const { hud: h, root } = mountMark('shape');
+    h.setStatus(versusStatus(ffa));
+    expect(marks(root), 'one mark per entry').toHaveLength(4);
+    for (const [slot, mark] of marks(root).entries()) {
+      const outline = shapeOutlineFor(slot);
+      if (outline.kind === 'circle') {
+        expect(mark.querySelector('circle'), `slot ${slot} is not a circle`).not.toBeNull();
+        expect(mark.querySelector('polygon'), `slot ${slot} drew a polygon too`).toBeNull();
+        continue;
+      }
+      const poly = mark.querySelector('polygon');
+      expect(poly, `slot ${slot} drew no polygon`).not.toBeNull();
+      // A closed SVG polygon does NOT repeat its first point, so the corner count is the
+      // table's own number: `sides` for an n-gon, `2 * points` for the alternating star.
+      const want = outline.kind === 'polygon' ? outline.sides : outline.points * 2;
+      const got = (poly as Element).getAttribute('points')!.trim().split(/\s+/).length / 2;
+      expect(got, `slot ${slot} (${outline.kind}) drew ${got} corners`).toBe(want);
+    }
+  });
+
+  it('counts the arcs and the blades the table counts, for the two counting styles', () => {
+    for (const style of ['arcs', 'roof'] as const) {
+      const { hud: h, root } = mountMark(style);
+      h.setStatus(versusStatus(ffa));
+      for (const [slot, mark] of marks(root).entries()) {
+        expect(mark.querySelectorAll('path'), `${style} slot ${slot}`)
+          .toHaveLength(markerCount(slot));
+      }
+      h.dispose();
+    }
+  });
+
+  it('covers all three styles, so the pairing holds whichever the owner picks', () => {
+    for (const style of IDENTITY_MARKER_STYLES) {
+      const { hud: h, root } = mountMark(style);
+      h.setStatus(versusStatus(ffa));
+      expect(marks(root), `${style} drew no mark`).toHaveLength(4);
+      for (const mark of marks(root)) {
+        expect(mark.innerHTML.length, `${style} drew an empty mark`).toBeGreaterThan(0);
+      }
+      h.dispose();
+    }
+  });
+
+  it('leaves TEAMS untouched -- the letter is already that entry second channel', () => {
+    const { hud: h, root } = mountMark('shape');
+    h.setStatus(versusStatus([
+      { slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 },
+    ]));
+    expect(marks(root), 'a teams entry grew a mark').toHaveLength(0);
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 A 3', 'P2 B 3']);
+  });
+
+  it('adds no second name for the player, and nothing focusable', () => {
+    // The a11y criterion: the entry already says "P1", so the mark carries no name of its
+    // own. A `role`/`aria-label` here would be the duplicate announcement, and a focusable
+    // SVG would put a stop on every entry in the tab ring.
+    const { hud: h, root } = mountMark('shape');
+    h.setStatus(versusStatus(ffa));
+    for (const mark of marks(root)) {
+      expect(mark.getAttribute('aria-hidden')).toBe('true');
+      expect(mark.getAttribute('aria-label')).toBeNull();
+      expect(mark.getAttribute('role')).toBeNull();
+      expect(mark.getAttribute('focusable')).toBe('false');
+      expect(mark.getAttribute('tabindex')).toBeNull();
+    }
+    // The text the screen reader gets is exactly what it was without the flag.
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2', 'P3 3', 'P4 1']);
+  });
+
+  it('puts the mark AHEAD of the label, and keeps one per entry across a rebuild', () => {
+    const { hud: h, root } = mountMark('shape');
+    h.setStatus(versusStatus(ffa));
+    for (const entry of entries(root)) {
+      // `firstChild`, NOT `firstElementChild`. The label is a TEXT node, so the mark is the
+      // entry's only ELEMENT wherever it sits -- `firstElementChild` finds it just as
+      // happily when it has been appended after the label, and the assertion measures
+      // nothing. Proven by mutation: switching `afterbegin` to `beforeend` passed the
+      // element-wise form and fails this one.
+      expect(entry.firstChild?.nodeName.toLowerCase(), entry.textContent).toBe('svg');
+    }
+    // The strip is rebuilt from scratch on every status, so a mark appended rather than
+    // rebuilt would double here -- the same failure the cue arms record for their own DOM.
+    h.setStatus(versusStatus(ffa.map((e) => ({ ...e, stock: e.stock - 1 }))));
+    expect(marks(root)).toHaveLength(4);
+  });
+
+  it('paints on currentColor, so forced colours repaints it instead of dropping it', () => {
+    // A `background` is dropped outright under forced colours, which is the exact condition
+    // a non-colour channel exists to survive -- and is why hud.css.test.ts refuses one in
+    // any `hud-stock-` rule. Asserted on the markup: the stroke names currentColor and no
+    // literal colour is written into the glyph at all.
+    const { hud: h, root } = mountMark('shape');
+    h.setStatus(versusStatus(ffa));
+    for (const mark of marks(root)) {
+      expect(mark.innerHTML).toContain('currentColor');
+      expect(mark.innerHTML, 'a literal colour would not survive forced colours')
+        .not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i);
+      expect(mark.innerHTML, 'a fill would read as a blob at strip size').toContain('fill="none"');
+    }
   });
 });

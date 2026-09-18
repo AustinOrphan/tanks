@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import {
   type IdentityMarkerStyle,
-  MARKER_VARIANTS,
+  MARKER_ARC_GAP,
+  markerCount,
+  polygonAngles,
+  shapeOutlineFor,
 } from '../presentation/identity-marker';
 
 /**
@@ -27,7 +30,7 @@ export function identityRoofGeometry(
   inner: number,
   outer: number,
 ): THREE.BufferGeometry {
-  const count = (((slot % MARKER_VARIANTS) + MARKER_VARIANTS) % MARKER_VARIANTS) + 1;
+  const count = markerCount(slot);
   // 44 degrees, not 30. The first build used a thin 30-degree wedge and it read as
   // spindly at the shipped camera -- a hairline scratch on the crown rather than a mark.
   // A blade is also foreshortened to 0.78 of its width across one axis (sin 51), so the
@@ -44,11 +47,6 @@ export function identityRoofGeometry(
     return Array.from({ length: 7 }, (_, i) => c - half + (2 * half * i) / 6);
   });
   return bandGeometry(runs, inner, outer);
-}
-
-/** Vertex angles of a regular n-gon, first vertex pointing along -Z (up-screen). */
-function polygonAngles(sides: number, rotation: number): number[] {
-  return Array.from({ length: sides }, (_, i) => rotation + (i * 2 * Math.PI) / sides);
 }
 
 /**
@@ -206,7 +204,6 @@ export function identityMarkerGeometry(
   segments: number,
 ): THREE.BufferGeometry | null {
   if (style === null) return null;
-  const variant = ((slot % MARKER_VARIANTS) + MARKER_VARIANTS) % MARKER_VARIANTS;
 
   if (style === 'arcs') {
     // `variant + 1` arcs, evenly spaced, with a gap that is a fixed FRACTION of each arc
@@ -214,9 +211,9 @@ export function identityMarkerGeometry(
     // one it is invisible. A single arc still carries a gap -- a closed ring and a
     // nearly-closed one read differently, and "slot 1 is the unbroken one" would be a
     // rule the player has to be told rather than one they can see.
-    const count = variant + 1;
+    const count = markerCount(slot);
     const step = (Math.PI * 2) / count;
-    const gap = step * 0.28;
+    const gap = step * MARKER_ARC_GAP;
     const perArc = Math.max(2, Math.round(segments / count));
     const runs = Array.from({ length: count }, (_, k) => {
       const from = k * step + gap / 2 - Math.PI / 2;
@@ -250,7 +247,8 @@ export function identityMarkerGeometry(
   // tank. A starburst is topologically different from every other slot rather than a
   // rotation of one, so it survives both problems, and its points project OUTWARD past
   // the hull silhouette, which is exactly the visibility the diamond lacked.
-  if (variant === 3) {
+  const outline = shapeOutlineFor(slot);
+  if (outline.kind === 'star') {
     // The starburst is NOT weight-corrected, and that is deliberate rather than an
     // oversight. Its edges run radially from a valley to a point, so they are not a
     // tangential band at all and `cos(PI / n)` does not describe them; its weight is the
@@ -270,7 +268,7 @@ export function identityMarkerGeometry(
     // valley all the way to `inner` collapses the band to zero width between points, so
     // the mark separates into six distinct teeth instead of one wobbly ring, which is the
     // only version of "star" that reads once the hull has eaten the far half of it.
-    const points = 6;
+    const points = outline.points;
     const valley = inner;
     const verts: [number, number][] = [];
     for (let i = 0; i < points * 2; i++) {
@@ -281,12 +279,13 @@ export function identityMarkerGeometry(
     return starBand(verts, inner);
   }
 
-  const spec: ReadonlyArray<{ sides: number; rotation: number }> = [
-    { sides: segments, rotation: -Math.PI / 2 },
-    { sides: 3, rotation: -Math.PI / 2 },
-    { sides: 4, rotation: -Math.PI / 4 },
-  ];
-  const { sides, rotation } = spec[variant];
+  // `circle` is the one outline whose side count is a RENDERING decision rather than a
+  // property of the mark: the shared table says "a circle", and this is where a curve
+  // becomes however many segments the ring was asked for. The rotation is the triangle's
+  // so a 48-gon's first vertex still lands up-screen, which keeps the shipped geometry
+  // byte-identical to the private `spec` array this replaced.
+  const sides = outline.kind === 'circle' ? segments : outline.sides;
+  const rotation = outline.kind === 'circle' ? -Math.PI / 2 : outline.rotation;
   ({ inner, outer } = bandForSides(sides));
   const angles = polygonAngles(sides, rotation);
   // Closed: the first vertex repeated, so the last edge is drawn like every other one.

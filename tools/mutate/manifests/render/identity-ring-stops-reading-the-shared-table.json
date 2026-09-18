@@ -1,0 +1,16 @@
+{
+  "id": "identity-ring-stops-reading-the-shared-table",
+  "file": "src/render/identity-marker.ts",
+  "find": "  const sides = outline.kind === 'circle' ? segments : outline.sides;",
+  "replace": "  const sides = outline.kind === 'circle' ? segments : 4;",
+  "expect": "killed",
+  "tests": [
+    "src/render/identity-marker.test.ts"
+  ],
+  "why": "The ring's half of the #778 pairing: the arena outline is whatever `shapeOutlineFor` says, not a number this file keeps for itself. Hard-coding four sides is what re-privatising the table looks like in practice -- the ring keeps drawing something plausible while the HUD strip goes on drawing the triangle the table still names, so the two halves disagree for slot 2 and the owner rules #234 on a pairing that does not exist. Killed three ways, which is the point: the #660 weight and edge-clearance cases fail beside the #778 table case, because a triangle silently becoming a square breaks the tuned geometry as well as the contract.",
+  "killedBy": [
+    "identity markers: the ring follows the shared table (issue #778) builds the outline the table names, for every slot",
+    "identity marker: every shape reads at one weight (issue #660) draws circle, triangle and square to the same perpendicular ink",
+    "identity marker: every shape reads at one weight (issue #660) sizes each shape so its EDGES clear the tank, without any corner running away"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "stock-strip-marker-fills-instead-of-strokes",
+  "file": "src/game/hud.ts",
+  "find": "  'fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.18\"",
+  "replace": "  'fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"0.18\"",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "A filled mark is a solid blob at strip size, where the glyph is under a line-height tall: the triangle and the starburst stop being distinguishable outlines and read as two similar lumps, which loses exactly the recognition the `shape` style is a candidate for. `fill=\"none\"` also keeps the mark honest under forced colours, where a filled shape is repainted as one flat mass. The anchor carries `stroke-width=\"0.18\"` deliberately -- the achievement padlock a few lines above uses the same `fill=\"none\" stroke=\"currentColor\"` opening, and an anchor without the width mutates the padlock instead, which no case here covers.",
+  "killedBy": [
+    "hud: identity mark in the stock strip (issue #778) paints on currentColor, so forced colours repaints it instead of dropping it"
+  ]
+}
