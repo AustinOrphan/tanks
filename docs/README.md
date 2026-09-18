@@ -44,7 +44,7 @@ These are the only plans and specifications that state current direction.
 | [Public prototype and campaign direction](superpowers/specs/2026-08-22-project-direction.md) | `active` | Public Prototype 1.0 boundary and high-level campaign direction | issues #264, #294, #298 |
 | [UI/UX direction for Public Prototype 1.0](superpowers/specs/2026-08-23-ui-ux-direction.md) | `active` | Authoritative Public Prototype 1.0 UI architecture, navigation, interaction, responsive, accessibility, and visual-system direction | issues #117, #226, #227, #228, #230, #234, #238, #240, #258, #260, #261, #267, #268, #269, #274, #276, #279, #281, #289, #290, #315, #316, #317, #318, #319, #320, #321, #322, #323, #324, #325, #326, #327; PR #329 |
 | [The seam hud.ts hands to an extracted pane](superpowers/specs/2026-09-16-hud-pane-host-design.md) | `active` | What an extracted HUD pane module receives from hud.ts, how it registers, where its markup lives, and how the first extraction proves no behaviour change | issues #556, #765; PR #779 |
-| [Map generation rules: what makes a board good, and how we would know](superpowers/specs/2026-09-17-map-generation-rules-design.md) | `proposed` | A three-tier rule set for generating versus maps -- generative rules, the shipped acceptance filter, and a new measured quality tier calibrated on shipped boards. | -- |
+| [Map generation rules: what makes a board good, and how we would know](superpowers/specs/2026-09-17-map-generation-rules-design.md) | `proposed` | A three-tier rule set for generating versus maps -- generative rules, the shipped acceptance filter, and a new measured quality tier calibrated on shipped boards. | issues #819, #820, #821, #822 |
 
 ## Backlog topics
 
