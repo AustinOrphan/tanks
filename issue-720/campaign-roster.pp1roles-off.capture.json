@@ -1,0 +1,666 @@
+{
+  "schemaVersion": 1,
+  "status": "success",
+  "recipe": {
+    "id": "flow.campaign-roster.pp1roles-off",
+    "version": 1,
+    "contentHash": "470b2c3ea8232e5e590d9a6d0f3e57156806c797eb95c7e6228b153fad687382",
+    "title": "Campaign level 4 at normal speed, pp1Roles off",
+    "description": "The baseline half of the full-roster pair: campaign level 4, seed 1, the scripted player, shipped role budgets. Level 4 is the first campaign board holding every kind the arm touches (brown, grey, teal, olive and green), which is why the pair for issue #720 is shot here as well as on level 1. The whole round at wall-clock pace under a 60 s ceiling, recorded from the compositor and resampled to 30 fps.",
+    "altText": "One round of the scripted player against level 4's full roster under the shipped budgets, seen from the game camera."
+  },
+  "source": {
+    "requestedRef": "HEAD",
+    "commitSha": "f617b8416cb91b5279604d05147e9a3a2d849327",
+    "dirty": false
+  },
+  "producer": {
+    "kind": "flow",
+    "scenarioId": "campaign-round",
+    "requestedInputs": {
+      "fixture": {
+        "id": "campaign-round",
+        "seed": 1
+      },
+      "variant": {
+        "level": 4,
+        "driver": "autoplay",
+        "flags": {
+          "pp1Roles": false
+        },
+        "minimumDeliveredFps": 45
+      }
+    },
+    "metadata": {
+      "flow": {
+        "kind": "flow",
+        "flowId": "campaign-round",
+        "title": "A campaign round at a chosen level",
+        "inputs": {
+          "level": 4,
+          "seed": 1,
+          "driver": "autoplay",
+          "flags": {}
+        },
+        "storage": [
+          "tanks.dev.tanks.progress.v1",
+          "tanks.dev.tanks.achievements.v1"
+        ],
+        "url": "?dev=1&replay=1&level=4&seed=1&autoplay=1",
+        "dist": {
+          "indexSha256": "1c271e0a032d7a2f3aeb4e08ed0de7ace99591fa551a9768671bdea49c3d8b39",
+          "assets": [
+            "index-B0XU9kxg.js",
+            "index-DCXTDbBc.css"
+          ]
+        },
+        "diagnostics": {
+          "url": "/?dev=1&seed=1&level=4&autoplay=1&replay=1",
+          "build": {
+            "commit": "f617b8416cb91b5279604d05147e9a3a2d849327",
+            "known": true
+          },
+          "developerMode": true,
+          "requestedNotInEffect": [],
+          "inEffectUnrequested": [
+            "disarmed"
+          ],
+          "unknownParams": []
+        },
+        "world": {
+          "seed": 1,
+          "arenaId": "arena-04",
+          "expectedArenaId": "arena-04",
+          "practice": true
+        },
+        "readiness": {
+          "readyAfterMs": 3402,
+          "countdownMs": 2894,
+          "surfaceAtStart": "playing",
+          "surfaceAtEnd": "playing",
+          "endedAs": "menu",
+          "endedWith": "Level Failed"
+        },
+        "timing": {
+          "policy": "real-time: the production game loop at wall-clock pace, recorded from the compositor screencast and resampled to a constant frame rate by holding the last frame",
+          "requestedSeconds": 60,
+          "stop": {
+            "requested": "round-end",
+            "reason": "round-ended",
+            "cutAtMs": 1789742389240,
+            "playingSeconds": 50.61236906051636,
+            "droppedFrames": 26
+          },
+          "fps": 30,
+          "frameCount": 1518,
+          "recording": {
+            "startedAtMs": 1789742338603,
+            "stoppedAtMs": 1789742389494,
+            "wallMs": 50891
+          },
+          "simulation": {
+            "available": true,
+            "samples": 202,
+            "ticks": 3039,
+            "seconds": 50.6355,
+            "ticksPerSecond": 60.01718162158959,
+            "resets": 0,
+            "surfaces": [
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing",
+              "playing"
+            ]
+          },
+          "render": {
+            "frames": 6107,
+            "spanMs": 50879.1,
+            "fps": 120.00998445334135,
+            "gapP50Ms": 8.299999999999272,
+            "gapP95Ms": 9.200000000000728,
+            "gapMaxMs": 9.400000000001455,
+            "clampMs": 250,
+            "clampedFrames": 0,
+            "simTimeLostMs": 0,
+            "measuredUnder": "cdp-screencast",
+            "note": "headless animation frames are not display-throttled; a rate above the display rate is a headless artefact"
+          },
+          "screencast": {
+            "format": "jpeg",
+            "quality": 90,
+            "framesReceived": 5055,
+            "fps": 99.85701309411178,
+            "gapP50Ms": 8.37397575378418,
+            "gapP95Ms": 17.215967178344727,
+            "gapMaxMs": 24.511098861694336,
+            "bytes": 367075513,
+            "firstFrameEpochSeconds": 1789742338.611722
+          },
+          "resample": {
+            "method": "hold-last-frame",
+            "uniqueFramesUsed": 1518,
+            "heldFrames": 0,
+            "maxConsecutiveHold": 0,
+            "sourceFrames": 5055,
+            "coveredMs": 50612.36906051636,
+            "tailPadMs": 0
+          }
+        },
+        "frames": {
+          "expected": {
+            "width": 1280,
+            "height": 800
+          },
+          "first": {
+            "width": 1280,
+            "height": 800
+          },
+          "mismatched": []
+        },
+        "browser": {
+          "version": "151.0.7922.34",
+          "headless": true,
+          "visual": "host-gpu",
+          "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)",
+          "launchArgs": [
+            "--ignore-gpu-blocklist",
+            "--use-angle=metal"
+          ]
+        },
+        "pageErrors": []
+      }
+    }
+  },
+  "capture": {
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "host-gpu",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "requestedSchedule": {
+      "kind": "realtime",
+      "durationSeconds": 60,
+      "stop": "round-end"
+    },
+    "frameSchedule": {
+      "kind": "frames",
+      "frameCount": 1518
+    }
+  },
+  "playback": {
+    "rate": 1,
+    "intendedFps": 30,
+    "intendedDurationSeconds": 50.6,
+    "sourceOfTruth": "capture.mp4",
+    "effective": {
+      "mp4": {
+        "averageFrameRate": 30,
+        "durationSeconds": 50.6,
+        "playbackRate": 1,
+        "faststart": true
+      }
+    }
+  },
+  "reproduce": {
+    "install": [
+      "npm i --no-save playwright@1.62.0",
+      "npx playwright install chromium"
+    ],
+    "build": "VITE_BUILD_SHA=f617b8416cb91b5279604d05147e9a3a2d849327 npm run build",
+    "capture": "npm run capture -- --recipe flow.campaign-roster.pp1roles-off --source-ref f617b8416cb91b5279604d05147e9a3a2d849327",
+    "note": null
+  },
+  "assertions": [
+    {
+      "kind": "flow-report-identity",
+      "passed": true,
+      "diagnostic": "recorded flow 'campaign-round' with the requested level, seed, driver and flags",
+      "details": {
+        "requested": {
+          "level": 4,
+          "seed": 1,
+          "driver": "autoplay",
+          "flags": {}
+        },
+        "reported": {
+          "level": 4,
+          "seed": 1,
+          "driver": "autoplay",
+          "flags": {}
+        }
+      }
+    },
+    {
+      "kind": "page-errors",
+      "passed": true,
+      "diagnostic": "no uncaught page errors",
+      "details": {
+        "errors": []
+      }
+    },
+    {
+      "kind": "flow-config-effective",
+      "passed": true,
+      "diagnostic": "the page opened developer mode and refused none of the requested parameters",
+      "details": {
+        "developerMode": true,
+        "requestedNotInEffect": [],
+        "inEffectUnrequested": [
+          "disarmed"
+        ],
+        "unknownParams": [],
+        "url": "/?dev=1&seed=1&level=4&autoplay=1&replay=1"
+      }
+    },
+    {
+      "kind": "flow-build-identity",
+      "passed": true,
+      "diagnostic": "the page names build f617b8416cb91b5279604d05147e9a3a2d849327, the checkout being captured",
+      "details": {
+        "pageBuild": {
+          "commit": "f617b8416cb91b5279604d05147e9a3a2d849327",
+          "known": true
+        },
+        "checkout": "f617b8416cb91b5279604d05147e9a3a2d849327",
+        "dist": {
+          "indexSha256": "1c271e0a032d7a2f3aeb4e08ed0de7ace99591fa551a9768671bdea49c3d8b39",
+          "assets": [
+            "index-B0XU9kxg.js",
+            "index-DCXTDbBc.css"
+          ]
+        }
+      }
+    },
+    {
+      "kind": "flow-world-identity",
+      "passed": true,
+      "diagnostic": "the round is seed 1 on arena-04, level 4's arena",
+      "details": {
+        "reported": {
+          "seed": 1,
+          "arenaId": "arena-04",
+          "practice": true
+        },
+        "expected": {
+          "seed": 1,
+          "arenaId": "arena-04"
+        }
+      }
+    },
+    {
+      "kind": "flow-still-playing",
+      "passed": true,
+      "diagnostic": "the round was playing at every sample and at the end of the 60 s window",
+      "details": {
+        "surfaceAtStart": "playing",
+        "surfaceAtEnd": "playing",
+        "samples": 202,
+        "readyAfterMs": 3402,
+        "countdownMs": 2894
+      }
+    },
+    {
+      "kind": "flow-no-clamped-frames",
+      "passed": true,
+      "diagnostic": "no animation frame crossed the 250 ms catch-up clamp; simulated time kept pace with the clock",
+      "details": {
+        "clampedFrames": 0,
+        "simTimeLostMs": 0,
+        "renderFps": 120.00998445334135,
+        "gapMaxMs": 9.400000000001455
+      }
+    },
+    {
+      "kind": "flow-simulation-rate",
+      "passed": true,
+      "diagnostic": "the simulation advanced 60.02 ticks per wall-clock second over 50.64 s",
+      "details": {
+        "ticksPerSecond": 60.01718162158959,
+        "ticks": 3039,
+        "seconds": 50.6355,
+        "samples": 202,
+        "resets": 0,
+        "expected": 60,
+        "tolerance": 0.03
+      }
+    },
+    {
+      "kind": "flow-frame-size",
+      "passed": true,
+      "diagnostic": "every staged frame is 1280x800",
+      "details": {
+        "expected": {
+          "width": 1280,
+          "height": 800
+        },
+        "first": {
+          "width": 1280,
+          "height": 800
+        },
+        "mismatched": []
+      }
+    },
+    {
+      "kind": "flow-frame-count",
+      "passed": true,
+      "diagnostic": "1518 frames at 30 fps: the round ended after 50.61 s, within the 60 s ceiling",
+      "details": {
+        "frameCount": 1518,
+        "fps": 30,
+        "expectedFrames": 1800,
+        "stop": {
+          "requested": "round-end",
+          "reason": "round-ended",
+          "cutAtMs": 1789742389240,
+          "playingSeconds": 50.61236906051636,
+          "droppedFrames": 26
+        },
+        "resample": {
+          "method": "hold-last-frame",
+          "uniqueFramesUsed": 1518,
+          "heldFrames": 0,
+          "maxConsecutiveHold": 0,
+          "sourceFrames": 5055,
+          "coveredMs": 50612.36906051636,
+          "tailPadMs": 0
+        }
+      }
+    },
+    {
+      "kind": "flow-delivered-rate",
+      "passed": true,
+      "diagnostic": "the compositor delivered 99.9 frames per second, at least the 45 the recipe requires",
+      "details": {
+        "deliveredFps": 99.85701309411178,
+        "minimum": 45,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)",
+        "visual": "host-gpu",
+        "maxConsecutiveHold": 0
+      }
+    }
+  ],
+  "tools": {
+    "node": "v24.7.0",
+    "playwright": "1.62.0",
+    "producer": {
+      "chromium": "151.0.7922.34"
+    },
+    "ffmpeg": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobe": "ffprobe version 9.0.1 Copyright (c) 2007-2026 the FFmpeg developers"
+  },
+  "outputs": {
+    "files": [
+      {
+        "filename": "capture.mp4",
+        "format": "mp4",
+        "width": 1280,
+        "height": 800,
+        "frameCount": 1518,
+        "durationSeconds": 50.6,
+        "codec": "h264",
+        "pixelFormat": "yuv420p",
+        "averageFrameRate": 30,
+        "container": {
+          "faststart": true,
+          "moovOffset": 32,
+          "mdatOffset": 18323,
+          "measuredBy": "mp4-box-order"
+        },
+        "byteSize": 3897184,
+        "sha256": "8a452e3d5ed833f5ef4f32e7cff9e9e13960f03d6f7764c2386b31ccd7bda507",
+        "construction": {
+          "method": "ffmpeg",
+          "codecRequested": "libx264",
+          "pixelFormatRequested": "yuv420p",
+          "faststartRequested": true
+        },
+        "verification": {
+          "status": "passed",
+          "expected": {
+            "width": 1280,
+            "height": 800,
+            "frameCount": 1518,
+            "durationSeconds": 50.6,
+            "averageFrameRate": 30,
+            "faststart": true
+          },
+          "tolerances": {
+            "averageFrameRate": 0.03,
+            "durationSeconds": 0.016666666666666666,
+            "frameDurationConsistency": 0.5
+          },
+          "measuredBy": {
+            "stream": "ffprobe",
+            "container": "mp4-box-order"
+          }
+        }
+      }
+    ],
+    "rawFrames": {
+      "retained": false,
+      "directory": null,
+      "pattern": null,
+      "frameCount": 1518,
+      "byteSize": null,
+      "sha256": null
+    },
+    "totalByteSize": 3897184,
+    "budgetBytes": 100000000,
+    "withinBudget": true
+  },
+  "determinism": {
+    "scenarioInputs": "fixed by the recipe and recorded producer inputs/metadata",
+    "scheduleAndDimensions": "fixed by the recipe and recorded effective frame schedule/viewport",
+    "rawFrameEquality": "may be compared only within a pinned supported environment",
+    "encodedByteEqualityAcrossEnvironments": false
+  },
+  "timing": {
+    "startedAt": "2026-09-18T14:38:53.921Z",
+    "completedAt": "2026-09-18T14:40:21.149Z"
+  },
+  "diagnostics": []
+}
