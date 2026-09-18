@@ -13,7 +13,7 @@
     "versusResultFromWorld FFA won by P2 reports SLOT 1, not slot 0",
     "versusResultFromWorld FFA won by the last of four slots reports SLOT 3",
     "versusResultFromWorld Teams double wipeout is a DRAW",
-    "versusResultFromWorld Teams won by team +0 reports that team",
+    "versusResultFromWorld Teams won by team 0 reports that team",
     "versusResultFromWorld Teams won by team 1 reports that team",
     "versusResultFromWorld a teams world reports a TEAM, never a slot"
   ]
