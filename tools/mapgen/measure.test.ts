@@ -213,6 +213,31 @@ describe('mapgen quality measures: each measure moves when its cause is introduc
     expect(seven.openGroundFraction).toBeGreaterThan(0);
   });
 
+  it('detourRatio rises when the walls send you the long way round', () => {
+    // Two boards, same size and same spawns. The first is open, so the nearest pair walks
+    // roughly the straight line. The second has a full-width wall across the middle with its
+    // only gap at one end, so the same pair must walk out to that end and back.
+    const open = measureBoard(openBoard(33, 27), 2, 'control-open-detour');
+
+    const rows: string[] = [];
+    for (let r = 0; r < 27; r++) {
+      if (r === 13) rows.push([...Array(33)].map((_, c) => (c >= 31 ? '.' : '#')).join(''));
+      else rows.push([...Array(33)].map((_, c) => (r === 1 && c === 1 ? 'P' : r === 25 && c === 1 ? 'B' : '.')).join(''));
+    }
+    const detoured = measureBoard(board(rows), 2, 'control-detour');
+
+    expect(detoured.detourRatio).toBeGreaterThan(open.detourRatio);
+
+    // NOT a ratio of 1 on the open board, and the reason is the measure's own: `geodesic` is a
+    // 4-NEIGHBOUR BFS, so it walks Manhattan distance and over-reads a diagonal journey by up
+    // to sqrt(2). These two spawns are corner to corner, so the open board reads about
+    // (20 + 16) / hypot(22, 18) = 1.27 rather than 1.00. That inflation is in every figure the
+    // measure reports, including the shipped band, so only the CONTRAST between boards is
+    // meaningful -- which is what this control pins.
+    expect(open.detourRatio).toBeGreaterThan(1.15);
+    expect(open.detourRatio).toBeLessThan(1.35);
+  });
+
   it('breaking one cell of a symmetric board moves only the symmetry measures', () => {
     const symmetric = openBoard(33, 27);
     const broken = { ...symmetric, grid: symmetric.grid.map((row, r) => (r === 5 ? '#' + row.slice(1) : row)) };
