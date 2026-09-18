@@ -86,7 +86,7 @@ function createFetch(
 describe('relationship migration plan', () => {
   it('keeps the reviewed repository ledger unambiguous, acyclic, and evidence-complete', () => {
     const expanded = expandRelationshipPlan(RELATIONSHIP_MIGRATION);
-    expect(expanded.parentEdges).toHaveLength(108);
+    expect(expanded.parentEdges).toHaveLength(109);
     expect(expanded.parentEdges).toEqual(expect.arrayContaining([
       // #721's five leaves, split on 2026-09-14.
       { parent: 721, child: 734 },
@@ -94,6 +94,8 @@ describe('relationship migration plan', () => {
       { parent: 721, child: 736 },
       { parent: 721, child: 737 },
       { parent: 721, child: 738 },
+      // #815: focused temporal application-capture leaf under #326.
+      { parent: 326, child: 815 },
       // #248's three leaves, split by its 2026-09-14 triage clarification.
       { parent: 248, child: 729 },
       { parent: 248, child: 730 },
@@ -123,7 +125,7 @@ describe('relationship migration plan', () => {
       { parent: 317, child: 429 },
       { parent: 325, child: 470 },
     ]));
-    expect(expanded.dependencyEdges).toHaveLength(164);
+    expect(expanded.dependencyEdges).toHaveLength(165);
     expect(expanded.dependencyEdges).toEqual(expect.arrayContaining([
       { issue: 735, blocker: 734 },
       { issue: 736, blocker: 734 },
@@ -141,6 +143,7 @@ describe('relationship migration plan', () => {
       { issue: 260, blocker: 316 },
       { issue: 276, blocker: 275 },
       { issue: 335, blocker: 342 },
+      { issue: 720, blocker: 815 },
       { issue: 468, blocker: 427 },
       { issue: 428, blocker: 468 },
       { issue: 428, blocker: 470 },
@@ -185,8 +188,13 @@ describe('relationship migration plan', () => {
     // reads (164 -> 173). It adds 5 new issue numbers (#734-#738; #721 was already a child
     // of #288), 5 parent writes, 6 blocked-by writes and 9 verification reads: initialApply
     // 707 + 9 + 5 + 5 + 6 + 9 = 741, planThenApply 741 + 173 = 914.
+    // #815 adds one parent edge (#326 -> #815) and one blocked-by edge (#720 blocked by
+    // #815). #720 is already in the graph; #815 is the only new issue number. Because #720
+    // becomes a newly blocked issue, inspection reads rise by two total (one parent + one
+    // blocked-by inspection): 173 -> 175. Initial apply adds 2 inspections + 1 issue read +
+    // 2 writes + 2 verification reads = 7 requests; plan-then-apply adds the 2 plan reads too.
     expect({ inspectionReads, initialApply, planThenApply: inspectionReads + initialApply })
-      .toEqual({ inspectionReads: 173, initialApply: 741, planThenApply: 914 });
+      .toEqual({ inspectionReads: 175, initialApply: 748, planThenApply: 923 });
   });
 
   it('expands a reviewed plan and rejects ambiguous parents, duplicates, and cycles', () => {
