@@ -108,6 +108,18 @@ describe('recordFlow releases what it opened (issue #815)', () => {
     expect(f.server.close).toHaveBeenCalledOnce();
   });
 
+  it('reads every option it was given, so none is undefined at the recording', async () => {
+    // The regression this pins: `stop` was parsed, passed and used, but left out of
+    // `recordFlow`'s own destructuring, so it was `undefined` at the line that reads it --
+    // past every point the fakes below reach, and only visible in a real capture.
+    const source = await (await import('node:fs/promises')).readFile(new URL('./record.mjs', import.meta.url), 'utf8');
+    const destructured = /const \{ ([^}]+) \} = options;/.exec(source)?.[1] ?? '';
+    const taken = new Set(destructured.split(',').map((name) => name.trim()));
+    for (const name of Object.keys(parseRecordArgs(ARGV))) {
+      expect(taken.has(name), `recordFlow never reads options.${name}`).toBe(true);
+    }
+  });
+
   it('refuses to start without a built page', async () => {
     const dist = await mkdtemp(join(tmpdir(), 'flow-nodist-'));
     const f = fakes('never');

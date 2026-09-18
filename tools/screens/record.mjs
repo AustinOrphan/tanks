@@ -370,7 +370,7 @@ export async function recordFlow(options, deps = {}) {
   const chromiumLoader = deps.loadChromium ?? loadChromium;
   const serve = deps.serve ?? serveDist;
   const run = deps.runProcess ?? runProcess;
-  const { flow, inputs, seconds, fps, frameCount, viewport, visual, dist, out, report, timeout, signal } = options;
+  const { flow, inputs, seconds, fps, frameCount, viewport, visual, stop, dist, out, report, timeout, signal } = options;
   if (!existsSync(resolve(dist, 'index.html'))) throw new Error(`no index.html under ${dist}; build first`);
   await mkdir(out, { recursive: true });
   const url = buildFlowUrl(inputs);
