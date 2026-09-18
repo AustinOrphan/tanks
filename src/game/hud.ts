@@ -279,6 +279,13 @@ import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
 import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
+import {
+  type IdentityMarkerStyle,
+  MARKER_ARC_GAP,
+  markerCount,
+  polygonAngles,
+  shapeOutlineFor,
+} from '../presentation/identity-marker';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import type { HullColorId, SkinId, AccentId } from '../presentation/customization';
 import { createCustomizePane, CUSTOMIZE_BODY } from './customize-pane';
@@ -1423,6 +1430,106 @@ const ACHIEVEMENT_LOCK_ICON =
   '</svg>';
 
 /**
+ * The identity MARK for one player slot, as an inline SVG outline (issue #778).
+ *
+ * WHY AN SVG AND NOT A STYLED BOX. The mark has to survive forced colours, where the UA
+ * replaces every authored colour outright -- which is the condition that makes a hue-only
+ * strip fail in the first place, so a cue that dies there answers nothing. A `background`
+ * is dropped in that mode; a STROKE on `currentColor` is repainted with the UA's own text
+ * colour and keeps its shape. That is also why `hud.css.test.ts` refuses any `background`
+ * in a `hud-stock-` rule, and why this draws geometry rather than styling a box.
+ *
+ * WHY IT READS THE SHARED TABLE. `shapeOutlineFor`, `markerCount` and `MARKER_ARC_GAP` are
+ * the same values `render/identity-marker.ts` extrudes into the arena ring. Two copies is
+ * the failure this pairing exists to rule out: a strip still claiming a square for slot 3
+ * after the ring moved on would look right and be wrong, and #234 would be ruling on a
+ * pairing that no longer existed.
+ *
+ * SIZES ARE THIS FILE'S OWN, and deliberately not shared. The arena's radii are tuned
+ * against a constraint that does not exist here -- every outline's edge has to clear
+ * `TANK_RADIUS` so the hull does not swallow it. A glyph has no hull. What IS preserved is
+ * the ORDER those radii encode, triangle out past starburst past square past circle, which
+ * is what makes the four read as one size rather than four.
+ */
+const MARKER_GLYPH_STROKE =
+  'fill="none" stroke="currentColor" stroke-width="0.18" stroke-linejoin="round" stroke-linecap="round"';
+
+/** Corner reach per outline in the glyph's unit box; see `identityMarkerIcon`. */
+const MARKER_GLYPH_R = { circle: 0.78, 3: 0.98, 4: 0.86, star: 0.92, arc: 0.82, blade: 0.9 } as const;
+
+/** How deep the starburst's valleys cut, as a fraction of its points. */
+const MARKER_GLYPH_VALLEY = 0.44;
+
+/** Where a roof blade starts, so the glyph reads as spokes rather than as a filled fan. */
+const MARKER_GLYPH_HUB = 0.3;
+
+const markerNum = (n: number): string => n.toFixed(4);
+const markerXY = (angle: number, r: number): string =>
+  `${markerNum(Math.cos(angle) * r)} ${markerNum(Math.sin(angle) * r)}`;
+
+function identityMarkerIcon(style: IdentityMarkerStyle, slot: number): string {
+  let body: string;
+  if (style === 'arcs') {
+    // The ring broken into `markerCount` runs, with the gap taken as the same FRACTION of
+    // each step the arena uses -- so three arcs here sit where three arcs sit there.
+    const count = markerCount(slot);
+    const step = (Math.PI * 2) / count;
+    const gap = step * MARKER_ARC_GAP;
+    const r = MARKER_GLYPH_R.arc;
+    body = Array.from({ length: count }, (_, k) => {
+      const from = k * step + gap / 2 - Math.PI / 2;
+      const to = (k + 1) * step - gap / 2 - Math.PI / 2;
+      // A single arc spans more than a semicircle once the gap is taken out of a full
+      // turn, and SVG needs telling: without the large-arc flag it draws the short way
+      // round and slot 1 renders as the minor arc of its own ring.
+      const large = to - from > Math.PI ? 1 : 0;
+      return `<path d="M ${markerXY(from, r)} A ${markerNum(r)} ${markerNum(r)} 0 ${large} 1 `
+        + `${markerXY(to, r)}" ${MARKER_GLYPH_STROKE}/>`;
+    }).join('');
+  } else if (style === 'roof') {
+    // The crown's blades as their AXES. The arena draws each one as a 44-degree sector,
+    // which at strip size is the same two or three pixels a stroke already covers; the
+    // count is what this style carries and the count is what survives the shrink.
+    const count = markerCount(slot);
+    const r = MARKER_GLYPH_R.blade;
+    body = Array.from({ length: count }, (_, k) => {
+      const a = -Math.PI / 2 + (k * 2 * Math.PI) / count;
+      return `<path d="M ${markerXY(a, MARKER_GLYPH_HUB)} L ${markerXY(a, r)}" `
+        + `${MARKER_GLYPH_STROKE}/>`;
+    }).join('');
+  } else {
+    const outline = shapeOutlineFor(slot);
+    if (outline.kind === 'circle') {
+      body = `<circle cx="0" cy="0" r="${markerNum(MARKER_GLYPH_R.circle)}" `
+        + `${MARKER_GLYPH_STROKE}/>`;
+    } else if (outline.kind === 'polygon') {
+      const r = outline.sides === 3 ? MARKER_GLYPH_R[3]
+        : outline.sides === 4 ? MARKER_GLYPH_R[4]
+        : MARKER_GLYPH_R.circle;
+      const pts = polygonAngles(outline.sides, outline.rotation)
+        .map((a) => markerXY(a, r)).join(' ');
+      body = `<polygon points="${pts}" ${MARKER_GLYPH_STROKE}/>`;
+    } else {
+      const r = MARKER_GLYPH_R.star;
+      const valley = r * MARKER_GLYPH_VALLEY;
+      const pts = Array.from({ length: outline.points * 2 }, (_, i) => {
+        const a = -Math.PI / 2 + (i * Math.PI) / outline.points;
+        return markerXY(a, i % 2 === 0 ? r : valley);
+      }).join(' ');
+      body = `<polygon points="${pts}" ${MARKER_GLYPH_STROKE}/>`;
+    }
+  }
+  // No accessible name and not focusable: the entry's own text already says which player
+  // this is, and a second name for the same fact is the duplicate announcement
+  // `hud.a11y.test.ts` exists to catch.
+  // -1.1 rather than -1: the triangle's corners reach 0.98 and half a stroke adds 0.09, so
+  // a unit box clips exactly the three points that make it a triangle. Widening the box is
+  // robust where `overflow: visible` is a per-renderer courtesy.
+  return '<svg class="hud-stock-marker" viewBox="-1.1 -1.1 2.2 2.2" aria-hidden="true" '
+    + `focusable="false">${body}</svg>`;
+}
+
+/**
  * What `createHud` may be handed besides its root. Optional as a whole and optional
  * field by field, because `createHud(root)` is the shape ~200 existing tests call and
  * a required dependency would have made this change a rewrite of all of them rather
@@ -1483,6 +1590,16 @@ export interface HudOptions {
    * See presentation/stock-cue.ts.
    */
   readonly stockCue?: StockCue | null;
+  /**
+   * Issue #778's identity marker in the stock strip: the same mark that slot wears in the
+   * arena, so the owner can rule on the pairing #234 asked for. `null` (and absent, which is
+   * every injected HUD) is the shipped strip, which carries identity in hue alone.
+   *
+   * FFA ONLY, which is the owner's direction on #234. A teams entry already carries a second
+   * non-colour channel -- the A/B/C letter beside the player number -- so a mark there would
+   * be a third name for a side the reader has already been told twice.
+   */
+  readonly identityMarker?: IdentityMarkerStyle | null;
   /**
    * Is the developer master gate on (issue #243)? Absent -- every existing test, and every
    * ordinary page load -- means no, and no developer UI is built into the surface at all.
@@ -3152,6 +3269,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // hex string. It was REACHABLE between #281's descriptor landing and TEAM_COLORS
       // gaining its third entry: a 2v1v1 rendered team 2's stock white, which is also the
       // unstyled-slot placeholder.
+      // Issue #778: the mark this slot wears in the arena, ahead of its label, so the
+      // strip and the ground ring can be ruled on as a pair (#234). AFTER the two branches
+      // above, because `textContent =` would drop a child written before it.
+      //
+      // FFA ONLY, by `entry.team === undefined` -- the same test the label and the colour
+      // below already branch on. A teams entry carries the A/B/C letter as its non-colour
+      // channel, so a mark there would be a third name for a side already stated twice.
+      if (identityMarker !== null && entry.team === undefined) {
+        span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));
+      }
       const hex = entry.team !== undefined ? (TEAM_COLORS[entry.team] ?? 0xffffff) : (IDENTITY_RING_COLORS[entry.slot] ?? 0xffffff);
       span.style.color = cssColor(hex);
       versusStocksEl.appendChild(span);
@@ -3161,6 +3288,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   /** Issue #230's stock-loss cue arm, or `null` for the shipped strip -- see presentation/stock-cue.ts. */
   const stockCue: StockCue | null = opts.stockCue ?? null;
+  /**
+   * Issue #778's identity mark in the stock strip, or `null` for the shipped strip, which
+   * carries identity in hue alone. See presentation/identity-marker.ts for the shared table
+   * this and the arena ring both read.
+   */
+  const identityMarker: IdentityMarkerStyle | null = opts.identityMarker ?? null;
   /**
    * The stock losses still worth drawing, by slot: WHEN each arrived (`performance.now()`) and the
    * stock it dropped FROM. Kept here rather than on an element, because `renderVersusStocks`

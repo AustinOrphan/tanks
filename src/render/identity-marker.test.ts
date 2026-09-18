@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { identityMarkerGeometry, identityRoofGeometry } from './identity-marker';
 import {
   IDENTITY_MARKER_STYLES,
+  MARKER_ARC_GAP,
+  markerCount,
+  shapeOutlineFor,
   identityMarkerSpin,
   isIdentityMarkerStyle,
   marksTurretRoof,
@@ -362,5 +365,60 @@ describe('identity marker: it does not spin with the hull (issue #630)', () => {
     group.updateMatrixWorld(true);
     const at1 = local.clone().applyMatrix4(mesh.matrixWorld);
     expect(at0.distanceTo(at1)).toBeGreaterThan(0.1);
+  });
+});
+
+/**
+ * THE RING FOLLOWS THE SHARED TABLE (issue #778).
+ *
+ * The per-slot table moved to `presentation/identity-marker.ts` so the HUD stock strip can
+ * draw the same mark. This side asserts the ring still does what the table says; the strip's
+ * own half is in `game/hud.match.test.ts`. Between them a slot cannot change in one place
+ * and stay put in the other, which is the disagreement the move exists to make impossible.
+ *
+ * Measured from the BUFFER rather than from the call: the expectation is derived from
+ * `shapeOutlineFor` and compared against the vertices three.js actually produced, so
+ * re-privatising the table into this file would fail here rather than quietly pass.
+ */
+describe('identity markers: the ring follows the shared table (issue #778)', () => {
+  const samples = (g: THREE.BufferGeometry): number => g.getAttribute('position').count / 2;
+
+  it('builds the outline the table names, for every slot', () => {
+    // A band is two vertices per sample -- inner and outer -- and a CLOSED outline repeats
+    // its first vertex, so an n-gon is n+1 samples. The star alternates point and valley,
+    // so it is 2p+1. Both fall out of the table rather than being quoted as constants.
+    for (let slot = 0; slot < 8; slot++) {
+      const outline = shapeOutlineFor(slot);
+      const want = outline.kind === 'circle' ? 48 + 1
+        : outline.kind === 'polygon' ? outline.sides + 1
+        : outline.points * 2 + 1;
+      const geo = identityMarkerGeometry('shape', slot, 0.7, 0.8, 48);
+      expect(geo, `slot ${slot} built no marker`).not.toBeNull();
+      expect(samples(geo as THREE.BufferGeometry), `slot ${slot} (${outline.kind})`).toBe(want);
+    }
+  });
+
+  it('breaks the ring into the number of arcs the table counts, at the shared gap', () => {
+    for (let slot = 0; slot < 8; slot++) {
+      const count = markerCount(slot);
+      // `bandGeometry` samples each arc `perArc + 1` times, and `identityMarkerGeometry`
+      // picks `perArc` from the ring's own segment budget -- so the sample total is a
+      // function of the COUNT, and a slot drawing the wrong number of arcs moves it.
+      const perArc = Math.max(2, Math.round(48 / count));
+      const geo = identityMarkerGeometry('arcs', slot, 0.7, 0.8, 48) as THREE.BufferGeometry;
+      expect(samples(geo), `slot ${slot} drew ${count} arcs`).toBe(count * (perArc + 1));
+    }
+    // The gap is a fraction of each step, so it shrinks with the count rather than eating
+    // the ring -- the property that makes one arc and four arcs both legible.
+    expect(MARKER_ARC_GAP).toBeGreaterThan(0);
+    expect(MARKER_ARC_GAP).toBeLessThan(1);
+  });
+
+  it('puts the number of blades on the crown the table counts', () => {
+    for (let slot = 0; slot < 8; slot++) {
+      // Seven samples per blade, from `identityRoofGeometry`'s own sector construction.
+      const geo = identityRoofGeometry(slot, 0.07, 0.32);
+      expect(samples(geo), `slot ${slot}`).toBe(markerCount(slot) * 7);
+    }
   });
 });

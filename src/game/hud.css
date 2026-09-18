@@ -3304,6 +3304,29 @@
   display: none;
 }
 
+/* ---- Identity mark in the stock strip (issue #778, `?dev=1&identityMarker=`) ------ */
+
+/* A TEMPORARY OPEN-QUESTION ARM, like the cue arms below: it pairs each FFA entry with the
+ * mark that slot wears on the ground so #234 can be ruled on the pair rather than on the
+ * strip alone. With no flag the element is never rendered, so the shipped strip is
+ * untouched by construction.
+ *
+ * STROKE, NEVER `background`, for the same reason stated below and enforced by
+ * hud.css.test.ts for every `hud-stock-` rule: forced colours drops a background outright,
+ * which is the exact condition a non-colour channel exists to survive. The outline takes
+ * `currentColor`, so it inherits the entry's own inline tint in the ordinary case and the
+ * UA's replacement text colour under forced colours -- with no rule of its own in either,
+ * which is what keeps the single forced-colors block the only one in this file. */
+.hud-stock-marker {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  /* Sits on the digits' optical centre rather than their baseline: the label is
+   * `P1 3`, all cap-height and figures, so a mark aligned to the baseline reads low. */
+  vertical-align: -0.09em;
+  margin-right: 0.28em;
+}
+
 /* ---- Stock-loss cue arms (issue #230, `?dev=1&stockCue=`) ------------------------- */
 
 /* A TEMPORARY OPEN-QUESTION ARM SET: one of these three ships unconditionally once chosen, and

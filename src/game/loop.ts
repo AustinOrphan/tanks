@@ -1295,6 +1295,11 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // developer flag no injected HUD in a test has an opinion about. `null` is the shipped
         // strip, with no cue.
         stockCue: devFlags.stockCue,
+        // Issue #778's identity mark in the stock strip, bound for the same reason as the
+        // four above: a developer flag no injected HUD in a test has an opinion about. The
+        // renderer is handed the same flag for the arena ring; this is the HUD half of the
+        // pairing #234 asks the owner to rule on.
+        identityMarker: devFlags.identityMarker,
         // Issue #243's developer shell. The EFFECTIVE GATE, read from the same `search`
         // the flags came from: `parseDevFlags` returns `DEV_FLAGS_OFF` for a bare
         // `?dev=1`, so nothing on `devFlags` can distinguish "developer mode, nothing
