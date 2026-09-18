@@ -9,6 +9,7 @@
     "src/game/hud.controller-layout.test.ts"
   ],
   "killedBy": [
-    "the controller layout pane (issue #754) is a panel a controller can act in: Confirm with nothing focused lands inside the pane"
+    "the controller layout pane (issue #754) is a panel a controller can act in: Confirm with nothing focused lands inside the pane",
+    "the controller layout pane (issue #754) a controller's D-pad reaches the same controls, Cancel included while a capture waits"
   ]
 }

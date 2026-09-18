@@ -12,6 +12,7 @@
   ],
   "killedBy": [
     "resolveEffectiveProfile (issue #754) swaps the movement and aim pairs for Southpaw, and moves no button",
-    "createGamepadReader: the player's layout (issue #754) drives with the right stick and aims with the left under Southpaw"
+    "createGamepadReader: the player's layout (issue #754) drives with the right stick and aims with the left under Southpaw",
+    "resolveEffectiveProfile on a catalogue profile (issue #754) swaps its own stick pairs under Southpaw, and binds onto a button only it names"
   ]
 }

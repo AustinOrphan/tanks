@@ -5,6 +5,13 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { LEGACY_KEYS, PERSISTED_DATA } from './persistence-inventory';
 import { SAVE_IMPORT_KEYS, SAVE_KEYS } from './save';
+import {
+  DEFAULT_SETTINGS,
+  SETTINGS_KEY,
+  type AudioSettings,
+  type InputSettings,
+  type PresentationSettings,
+} from './settings';
 
 const read = (path: string): string => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
@@ -79,4 +86,39 @@ describe('persistence inventory: the privacy policies', () => {
       expect(named.filter((key) => !CURRENT.includes(key) && !LEGACY.includes(key))).toEqual([]);
     });
   }
+});
+
+describe('persistence inventory: the settings description', () => {
+  /**
+   * One phrase per field the settings store writes under its key. A field added to
+   * `PlayerSettings` fails the typecheck until it is named here, and fails the test below
+   * until the policy's sentence names it too -- which is how the controller layouts of
+   * issue #754 and the quality preset of issue #540 were both stored for a while under a
+   * sentence that did not mention them.
+   */
+  const NAMED_AS: Record<keyof AudioSettings | keyof InputSettings | keyof PresentationSettings, RegExp> = {
+    muted: /sound mute/,
+    volume: /\bvolume\b/,
+    touchScheme: /touch control scheme/,
+    fireMode: /fire mode/,
+    deviceHaptics: /device vibration/,
+    controllerRumble: /controller rumble/,
+    controllerLayouts: /controller layout/,
+    motion: /motion\/flash/,
+    uiScale: /interface scale/,
+    quality: /render quality/,
+  };
+
+  it('names every field the settings store writes', () => {
+    const settings = PERSISTED_DATA.find((datum) => datum.key === SETTINGS_KEY);
+    expect(settings).toBeDefined();
+    // The runtime shape too, so an optional field the type lets `NAMED_AS` omit still counts.
+    const fields = [DEFAULT_SETTINGS.audio, DEFAULT_SETTINGS.input, DEFAULT_SETTINGS.presentation]
+      .flatMap((group) => Object.keys(group))
+      .sort();
+    expect(fields).toEqual(Object.keys(NAMED_AS).sort());
+    for (const field of fields) {
+      expect(settings?.contents, field).toMatch(NAMED_AS[field as keyof typeof NAMED_AS]);
+    }
+  });
 });

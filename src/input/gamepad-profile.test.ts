@@ -463,6 +463,37 @@ describe('resolveEffectiveProfile (issue #754)', () => {
   });
 });
 
+describe('resolveEffectiveProfile on a catalogue profile (issue #754)', () => {
+  // The mechanism is the same for every profile the catalogue may gain (#606): a preset
+  // swaps the PROFILE'S OWN axis pairs, and a binding is judged against ITS bindable list.
+  // Resolved on a profile whose indices all differ from the standard ones, so a resolver
+  // that reached for `STANDARD_PROFILE` anywhere would show it.
+  const profile: ControlProfile = {
+    ...FIXTURE_PROFILE,
+    bindable: [
+      { id: 'a', index: 0 },
+      { id: 'l', index: 6 },
+      { id: 'z', index: 9 },
+    ],
+  };
+
+  it('swaps its own stick pairs under Southpaw, and binds onto a button only it names', () => {
+    const r = resolveEffectiveProfile(profile, layout('southpaw', { fire: 'z' }));
+    expect(r.preset).toBe('southpaw');
+    expect(r.profile.axes).toEqual({ moveX: 4, moveY: 5, aimX: 0, aimY: 1 });
+    expect(r.profile.buttons.fire).toBe(9);
+    expect(r.refused).toEqual([]);
+  });
+
+  it("refuses a binding onto another of its own actions' buttons, and keeps its own button", () => {
+    // Index 0 is this profile's Confirm, as it is the standard profile's; the assertion is
+    // on the button Fire KEEPS, which is 6 here and never the standard 7.
+    const r = resolveEffectiveProfile(profile, layout('recommended', { fire: 'a' }));
+    expect(r.refused).toEqual([{ action: 'fire', control: 'a', reason: 'collision' }]);
+    expect(r.profile.buttons.fire).toBe(6);
+  });
+});
+
 describe('createEffectiveProfileReader (issue #754)', () => {
   it('re-resolves when the looked-up layout changes, and returns the cached profile while it does not', () => {
     let current: ControlLayout = RECOMMENDED_LAYOUT;
@@ -483,7 +514,10 @@ describe('createEffectiveProfileReader (issue #754)', () => {
       return RECOMMENDED_LAYOUT;
     });
     read(STANDARD_PROFILE);
-    expect(asked).toEqual(['standard']);
+    read(FIXTURE_PROFILE);
+    // Both ids, in order. A reader that asked for the standard layout whatever the pad
+    // would read a catalogue pad through another profile's stored layout.
+    expect(asked).toEqual(['standard', 'fixture-six-axis']);
   });
 });
 

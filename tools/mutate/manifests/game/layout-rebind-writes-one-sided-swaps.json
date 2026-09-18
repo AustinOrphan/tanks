@@ -12,6 +12,7 @@
   "killedBy": [
     "rebind (issue #754) moves the displaced action onto the button being left, in the same layout",
     "rebind (issue #754) every single rebind on the standard profile stores a layout the resolver takes whole",
-    "the controller layout pane is painted, written and captured for by the page (issue #754) captures the next NEW press and stores both halves of the swap it makes"
+    "the controller layout pane is painted, written and captured for by the page (issue #754) captures the next NEW press and stores both halves of the swap it makes",
+    "a catalogue profile goes through the same pane (issue #754) rebinds by swapping with the action on that button, both halves in one layout"
   ]
 }
