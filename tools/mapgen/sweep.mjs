@@ -33,8 +33,15 @@ const arg = (flag, fallback) => {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 };
 const SEEDS = Number(arg('--seeds', '20'));
-const COUNTS = [2, 3, 4];
+const COUNTS = process.argv.includes('--variants') ? [4] : [2, 3, 4];
 const PNG_DIR = arg('--png', null);
+/**
+ * `--variants` sweeps ONE RULE AT A TIME instead of comparing rulesets: each ruleset declares
+ * a short list of single-knob variants, and the table shows which measures that knob actually
+ * moves. A rule whose whole parameter range leaves every column flat is not a rule, and this
+ * is how that gets found out before it is written into a specification.
+ */
+const VARIANTS = process.argv.includes('--variants');
 
 /** The acceptance tier: the shipped rules, called exactly as the shipped catalog sweep calls them. */
 function accepts(arena, n) {
@@ -62,10 +69,22 @@ const mean = (xs) => (xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : Na
 const f = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '  --');
 
 const rows = [];
+const jobs = [];
 for (const key of Object.keys(RULESETS)) {
   const ruleset = RULESETS[key];
+  if (VARIANTS) {
+    for (const v of ruleset.variants ?? [{ label: 'default', opts: {} }]) {
+      jobs.push({ label: `${key} ${v.label}`, generate: (s) => ruleset.generate(s, v.opts) });
+    }
+  } else {
+    jobs.push({ label: key, generate: (s) => ruleset.generate(s) });
+  }
+}
+
+for (const job of jobs) {
+  const key = job.label;
   const boards = [];
-  for (let s = 1; s <= SEEDS; s++) boards.push({ seed: s, arena: ruleset.generate(s) });
+  for (let s = 1; s <= SEEDS; s++) boards.push({ seed: s, arena: job.generate(s) });
 
   for (const n of COUNTS) {
     const verdicts = boards.map((b) => ({ ...b, verdict: accepts(b.arena, n) }));
@@ -87,11 +106,11 @@ for (const key of Object.keys(RULESETS)) {
   }
 }
 
-console.log('ruleset       N  acc/drawn  wall  dstr  cov  legal  corr  open  neck  rout  pMin  sprd  pts  sight  bank  rot');
+console.log('ruleset            N  acc/drawn  wall  dstr  cov  legal  corr  open  neck  rout  pMin  sprd  pts  sight  bank  rot');
 for (const r of rows) {
   const g = (field, d = 2) => f(mean(r.m.map((m) => m[field])), d);
   console.log([
-    r.ruleset.padEnd(12),
+    r.ruleset.padEnd(17),
     String(r.playerCount),
     `${String(r.accepted).padStart(3)}/${String(r.drawn).padEnd(3)}`,
     g('wallFraction'), g('destructibleFraction'),
