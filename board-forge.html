@@ -1,0 +1,1571 @@
+<title>Tanks Board Forge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #f3f4f0;
+    --surface: #ffffff;
+    --surface-2: #e9ebe5;
+    --ink: #1b1f1c;
+    --muted: #666f68;
+    --line: #d6dbd3;
+    --accent: #3d6b4f;
+    --accent-soft: #e2ece5;
+    --good: #3d6b4f;
+    --warn: #9c5a2a;
+    --bad: #9a3b30;
+
+    /* The board keeps the game's own palette in both themes -- it is a picture of the
+       renderer's output, not a UI surface, and recolouring it would misreport the map. */
+    --board-floor: #16181a;
+    --board-grid: #24282a;
+    --board-solid: #7d8a78;
+    --board-destructible: #96684a;
+    --board-spawn: #e8c454;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #14171a;
+      --surface: #1b1f22;
+      --surface-2: #23282b;
+      --ink: #e7eae5;
+      --muted: #8d978f;
+      --line: #2c3236;
+      --accent: #7bb08d;
+      --accent-soft: #23322a;
+      --good: #7bb08d;
+      --warn: #d09155;
+      --bad: #d97b6c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14171a;
+    --surface: #1b1f22;
+    --surface-2: #23282b;
+    --ink: #e7eae5;
+    --muted: #8d978f;
+    --line: #2c3236;
+    --accent: #7bb08d;
+    --accent-soft: #23322a;
+    --good: #7bb08d;
+    --warn: #d09155;
+    --bad: #d97b6c;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding-inline: 16px;
+    padding-block: 0 148px;
+  }
+
+  header.bar {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 30;
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    margin-inline: -16px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-family: "Chakra Petch", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .brand span { color: var(--accent); }
+
+  select, button, input {
+    font: inherit;
+    color: inherit;
+  }
+  .pill {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 11px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  select.pill { padding-right: 24px; }
+
+  .boardwrap {
+    margin-block: 14px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--board-floor);
+    line-height: 0;
+    touch-action: none;
+  }
+  canvas { width: 100%; height: auto; display: block; }
+
+  .verdict {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    margin-bottom: 12px;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+  .dot.ok { background: var(--good); }
+  .dot.no { background: var(--bad); }
+
+  h2 {
+    font-family: "Chakra Petch", system-ui, sans-serif;
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 22px 0 9px;
+    font-weight: 600;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--muted);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .metric.in { border-left-color: var(--good); }
+  .metric.out { border-left-color: var(--warn); }
+  .metric .k {
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+  }
+  .metric .v {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 19px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em;
+  }
+  .metric .band {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row + .row { margin-top: 9px; }
+  label.ctl {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  input[type=range] { accent-color: var(--accent); flex: 1 1 110px; min-width: 90px; }
+  .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    min-width: 2.4em;
+    text-align: right;
+    display: inline-block;
+  }
+
+  button.act {
+    background: var(--accent);
+    color: var(--paper);
+    border: none;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-weight: 600;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  button.act:disabled { opacity: .45; cursor: default; }
+  button.ghost {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 13px;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  .dock {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 40;
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+    padding: 9px 12px;
+    padding-bottom: calc(9px + env(safe-area-inset-bottom, 0px));
+  }
+  .dock .inner { max-width: 640px; margin: 0 auto; display: flex; gap: 5px; align-items: center; }
+  .tool {
+    flex: 1 1 0;
+    min-width: 0;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 8px 2px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 9.5px;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    font-family: "Chakra Petch", system-ui, sans-serif;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .tool[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+  .swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0,0,0,.25); box-sizing: border-box; }
+  button.step { padding: 2px 9px; font-size: 15px; line-height: 1.1; }
+
+  .sympop {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+    z-index: 39;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 11px 12px;
+  }
+  .sympop .inner { max-width: 640px; margin: 0 auto; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    background: var(--board-floor);
+    color: #cfd6cd;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .saved { display: flex; flex-direction: column; gap: 7px; }
+  .saveitem {
+    display: flex; align-items: center; gap: 9px;
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; background: var(--surface);
+  }
+  .saveitem .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .saveitem .mt { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px; color: var(--muted); }
+  .note { font-size: 12px; color: var(--muted); }
+  .note code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px; }
+  .busy { opacity: .5; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="bar">
+    <h1 class="brand">Board <span>Forge</span></h1>
+    <select class="pill" id="size" aria-label="Board size"></select>
+    <select class="pill" id="players" aria-label="Players"></select>
+    <button class="pill" id="sizeToggle" aria-expanded="false">Size&hellip;</button>
+  </header>
+
+  <div class="panel" id="sizePanel" hidden style="margin-top:12px">
+    <div class="row">
+      <label class="ctl">cols <button class="ghost step" data-d="-2" data-t="cols">&minus;</button><span class="num" id="colsV">33</span><button class="ghost step" data-d="2" data-t="cols">+</button></label>
+      <label class="ctl">rows <button class="ghost step" data-d="-2" data-t="rows">&minus;</button><span class="num" id="rowsV">27</span><button class="ghost step" data-d="2" data-t="rows">+</button></label>
+    </div>
+    <p class="note" id="sizeNote" style="margin-bottom:0"></p>
+  </div>
+
+  <div class="boardwrap">
+    <canvas id="board" aria-label="Arena board. Drag to paint."></canvas>
+  </div>
+
+  <div class="verdict" id="verdict"><span class="dot"></span><span id="verdictText">Measuring…</span></div>
+
+  <div class="panel" id="spawnPanel" style="margin-bottom:14px">
+    <div class="row">
+      <span class="note" id="spawnState" style="flex:1 1 180px"></span>
+      <button class="ghost" id="clearSpawns">Use derived</button>
+    </div>
+    <p class="note" id="spawnNote" style="margin-bottom:0"></p>
+  </div>
+
+  <h2>Measured against the eight shipped boards</h2>
+  <div class="grid" id="metrics"></div>
+  <p class="note" id="measureNote"></p>
+
+  <h2>Roll a board</h2>
+  <div class="panel">
+    <div class="row">
+      <label class="ctl">spines <input type="range" id="gCount" min="3" max="14" value="7"><span class="num" id="gCountV">7</span></label>
+    </div>
+    <div class="row">
+      <label class="ctl">length <input type="range" id="gLen" min="6" max="24" value="14"><span class="num" id="gLenV">14</span></label>
+    </div>
+    <div class="row">
+      <label class="ctl">destructible <input type="range" id="gDes" min="0" max="50" value="20"><span class="num" id="gDesV">20%</span></label>
+    </div>
+    <div class="row">
+      <button class="act" id="roll">Roll</button>
+      <button class="ghost" id="reroll">Reroll seed</button>
+      <button class="ghost" id="clearBoard">Clear</button>
+      <span class="note">seed <span class="num" id="seedV">1</span></span>
+    </div>
+    <p class="note" style="margin-bottom:0">Long continuous walls joined only at their ends, 3-cell corridors between them, two reserved open plazas. The <code>spines</code> rule set. A roll is always 180-degree symmetric; to make one four-fold, roll it and then Fold at Radial x4.</p>
+  </div>
+
+  <h2>Saved boards</h2>
+  <div class="panel">
+    <div class="row">
+      <input class="pill" id="saveName" placeholder="name this board" style="flex:1 1 140px;border-radius:8px;text-align:left">
+      <button class="act" id="save">Save</button>
+    </div>
+    <div class="saved" id="savedList" style="margin-top:10px"></div>
+    <p class="note" id="dbNote" style="margin-bottom:0"></p>
+  </div>
+
+  <h2>Grid</h2>
+  <div class="panel">
+    <textarea id="out" readonly spellcheck="false"></textarea>
+    <div class="row" style="margin-top:9px">
+      <button class="ghost" id="copyGrid">Copy grid</button>
+      <button class="ghost" id="copyJson">Copy arenas.json entry</button>
+      <span class="note" id="copied"></span>
+    </div>
+  </div>
+</div>
+
+<div class="sympop" id="symPop" hidden>
+  <div class="inner">
+    <div class="chips" id="symChips"></div>
+    <div class="row" style="margin-top:9px">
+      <button class="ghost" id="foldBtn">Fold board into symmetry</button>
+    </div>
+    <p class="note" id="symNote" style="margin:8px 0 0"></p>
+  </div>
+</div>
+
+<div class="dock">
+  <div class="inner">
+    <button class="tool" id="tSolid" aria-pressed="true"><span class="swatch" style="background:#7d8a78"></span>Wall</button>
+    <button class="tool" id="tDest" aria-pressed="false"><span class="swatch" style="background:#96684a"></span>Soft</button>
+    <button class="tool" id="tErase" aria-pressed="false"><span class="swatch" style="background:#16181a"></span>Erase</button>
+    <button class="tool" id="tSpawn" aria-pressed="false"><span class="swatch" style="background:transparent;border:3px solid #e8c454"></span>Spawn</button>
+    <button class="tool" id="tSym" aria-pressed="true"><span class="swatch" style="background:linear-gradient(135deg,#7d8a78 50%,#3d6b4f 50%)"></span><span id="symLabel">Rot x2</span></button>
+    <button class="tool" id="tUndo" aria-pressed="false"><span class="swatch" style="background:var(--surface);border-color:var(--line)"></span>Undo</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------------------------------------------------------------------------
+   Tanks! board forge.
+
+   The sim constants and the geometry below are ports of the repository's own
+   (src/sim/constants.ts, collision.ts, versus-board.ts, tools/mapgen/measure.ts).
+   Where this page approximates rather than ports, it says so in the UI: the
+   repository's `tools/mapgen` remains the authority for any number that is
+   going into a document.
+--------------------------------------------------------------------------- */
+
+const CELL = 2 / 3;           // world units per grid cell
+const TANK_R = 0.5;           // tank radius; a tank is 1.0 across
+const BULLET_R = 0.1;
+const HIT_R = TANK_R + BULLET_R;
+const BOUNCES = 1;            // a normal shell bounces once
+const TRACE = 6 * 1.5;        // NORMAL_SPEED * AI_SHOT_LOOKAHEAD = 9 world units
+
+const FLOOR = 0, SOLID = 1, DEST = 2;
+const SPAWN_TOOL = 9;   // not a cell value -- spawns live beside the grid, not in it
+const MAX_SPAWNS = 4;
+
+/**
+ * Symmetry operators available while painting.
+ *
+ * `rot2` is the one the shipped VS boards use -- vs-duel-01 and vs-quad-01 both measure 0.00
+ * rotational asymmetry, and no shipped board is mirror-symmetric. A mirror hands each player
+ * the other's cover on the opposite side, so a right-handed approach becomes a left-handed
+ * one; a rotation gives both the same approach pointing a different way. That is the argument
+ * for rotation, not a rule -- nobody has measured mirror against rotation in any game.
+ *
+ * RADIAL ABOVE 2 DOES NOT FIT A RECTANGLE, and the page shows where rather than hiding it. A
+ * cell's images under an N-fold rotation lie on a circle about the board's centre, so only
+ * cells inside the largest inscribed circle have all N images on the board; outside it, images
+ * fall off the edge and are dropped. The canvas draws that circle whenever N > 2. Images also
+ * land between cells for N not a multiple of 4 and are rounded, so a 3-fold board is 3-fold to
+ * the nearest cell and not exactly.
+ */
+const SYMS = [
+  { id: "none",  label: "Off",     short: "Off" },
+  { id: "mirh",  label: "Mirror |", short: "Mir |" },
+  { id: "mirv",  label: "Mirror --", short: "Mir --" },
+  { id: "mirb",  label: "Mirror both", short: "Mir +" },
+  { id: "rot2",  label: "Radial x2", short: "Rot x2" },
+  { id: "rot3",  label: "Radial x3", short: "Rot x3" },
+  { id: "rot4",  label: "Radial x4", short: "Rot x4" },
+  { id: "rot6",  label: "Radial x6", short: "Rot x6" },
+];
+const symFold = (id) => (id.startsWith("rot") ? +id.slice(3) : 0);
+
+const SIZES = [
+  { label: "33 x 27  (arena-01, vs-quad-01)", cols: 33, rows: 27 },
+  { label: "27 x 21  (vs-duel-01)", cols: 27, rows: 21 },
+  { label: "27 x 17  (vs-tri-01)", cols: 27, rows: 17 },
+  { label: "45 x 33  (arena-04, arena-05)", cols: 45, rows: 33 },
+];
+
+/* Bands measured across all 8 shipped boards at 2, 3 and 4 players by
+   `npx vite-node tools/mapgen/calibrate.mjs`. A figure outside a band is not
+   wrong -- it means the board is unlike everything shipped, which is a reason
+   to look at it rather than to reject it. */
+const BANDS = {
+  wall:   { lo: 0.08, hi: 0.37, label: "wall cells",        fmt: 2 },
+  dshare: { lo: 0.11, hi: 0.50, label: "soft / wall mass",  fmt: 2 },
+  legal:  { lo: 0.28, hi: 0.78, label: "tank-legal area",   fmt: 2 },
+  corr:   { lo: 0.01, hi: 0.84, label: "corridor share",    fmt: 2 },
+  open:   { lo: 0.01, hi: 0.57, label: "open ground",       fmt: 2 },
+  neck:   { lo: 1.33, hi: 6.00, label: "bottleneck width",  fmt: 2 },
+  sight:  { lo: 0.17, hi: 0.43, label: "in direct view",    fmt: 2 },
+  bank:   { lo: 0.09, hi: 0.29, label: "bank-shot offer",   fmt: 2 },
+  rot:    { lo: 0.00, hi: 0.33, label: "rot. asymmetry",    fmt: 2 },
+};
+
+/* ---------------------------- state ---------------------------- */
+let S = {
+  cols: 33, rows: 27,
+  cells: null,
+  players: 4,
+  tool: SOLID,
+  sym: "rot2",
+  seed: 1,
+  /* Hand-placed spawns, in cells. Empty means "let the geometry decide", which is what the
+     game itself does. See `spawnsFor` for why both modes exist. */
+  spawns: [],
+};
+const undoStack = [];
+
+function blank(cols, rows) { return new Uint8Array(cols * rows); }
+function idx(c, r) { return r * S.cols + c; }
+S.cells = blank(S.cols, S.rows);
+
+function pushUndo() {
+  undoStack.push({ cells: S.cells.slice(), cols: S.cols, rows: S.rows, spawns: S.spawns.map((p) => ({ ...p })) });
+  if (undoStack.length > 40) undoStack.shift();
+}
+
+/* ------------------------- wall geometry ------------------------- */
+/* Solid cells merge into maximal rectangles, exactly as `loadArena` merges
+   them, because a seam between two abutting boxes can bounce a shell that
+   should have flown straight along the wall. Destructible cells never merge:
+   each one is its own destruction unit. */
+function wallBoxes(cells, cols, rows) {
+  const boxes = [];
+  const used = new Uint8Array(cols * rows);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      if (cells[i] !== SOLID || used[i]) continue;
+      let w = 1;
+      while (c + w < cols && cells[r * cols + c + w] === SOLID && !used[r * cols + c + w]) w++;
+      let h = 1;
+      grow: while (r + h < rows) {
+        for (let k = 0; k < w; k++) {
+          const j = (r + h) * cols + c + k;
+          if (cells[j] !== SOLID || used[j]) break grow;
+        }
+        h++;
+      }
+      for (let rr = r; rr < r + h; rr++) for (let cc = c; cc < c + w; cc++) used[rr * cols + cc] = 1;
+      boxes.push({ minX: c * CELL, minY: r * CELL, maxX: (c + w) * CELL, maxY: (r + h) * CELL, soft: false });
+    }
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (cells[r * cols + c] !== DEST) continue;
+      boxes.push({ minX: c * CELL, minY: r * CELL, maxX: (c + 1) * CELL, maxY: (r + 1) * CELL, soft: true });
+    }
+  }
+  return boxes;
+}
+
+function circleHitsBox(x, y, radius, b) {
+  const cx = Math.max(b.minX, Math.min(x, b.maxX));
+  const cy = Math.max(b.minY, Math.min(y, b.maxY));
+  const dx = x - cx, dy = y - cy;
+  return dx * dx + dy * dy < radius * radius;
+}
+
+/* --------------------- tank-legal lattice --------------------- */
+/* Points at least `radius` from every wall box and from the board edge. A cell
+   is not a tank: cellSize is 0.667 and a tank is 1.0 across, so a one-cell gap
+   is "open floor" to a cell-based fill and holds no legal tank centre at all. */
+function lattice(boxes, cols, rows, radius) {
+  const W = cols * CELL, H = rows * CELL;
+  const step = CELL / 6;
+  const nx = Math.max(1, Math.floor(W / step)), ny = Math.max(1, Math.floor(H / step));
+  const legal = new Uint8Array(nx * ny);
+  for (let i = 0; i < nx; i++) {
+    const x = (i + 0.5) * step;
+    if (x - radius < 0 || x + radius > W) continue;
+    for (let j = 0; j < ny; j++) {
+      const y = (j + 0.5) * step;
+      if (y - radius < 0 || y + radius > H) continue;
+      legal[i * ny + j] = 1;
+    }
+  }
+  for (const b of boxes) {
+    const i0 = Math.max(0, Math.floor((b.minX - radius) / step) - 1);
+    const i1 = Math.min(nx - 1, Math.ceil((b.maxX + radius) / step) + 1);
+    const j0 = Math.max(0, Math.floor((b.minY - radius) / step) - 1);
+    const j1 = Math.min(ny - 1, Math.ceil((b.maxY + radius) / step) + 1);
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const k = i * ny + j;
+        if (!legal[k]) continue;
+        if (circleHitsBox((i + 0.5) * step, (j + 0.5) * step, radius, b)) legal[k] = 0;
+      }
+    }
+  }
+  let count = 0;
+  for (let k = 0; k < legal.length; k++) count += legal[k];
+  return { nx, ny, step, legal, count };
+}
+
+function bfs(lat, source) {
+  const { nx, ny, legal } = lat;
+  const dist = new Int32Array(nx * ny).fill(-1);
+  if (source < 0 || !legal[source]) return dist;
+  const q = new Int32Array(lat.count + 1);
+  let head = 0, tail = 0;
+  q[tail++] = source; dist[source] = 0;
+  while (head < tail) {
+    const k = q[head++];
+    const i = (k / ny) | 0, j = k - i * ny, d = dist[k] + 1;
+    if (i > 0 && legal[k - ny] && dist[k - ny] < 0) { dist[k - ny] = d; q[tail++] = k - ny; }
+    if (i < nx - 1 && legal[k + ny] && dist[k + ny] < 0) { dist[k + ny] = d; q[tail++] = k + ny; }
+    if (j > 0 && legal[k - 1] && dist[k - 1] < 0) { dist[k - 1] = d; q[tail++] = k - 1; }
+    if (j < ny - 1 && legal[k + 1] && dist[k + 1] < 0) { dist[k + 1] = d; q[tail++] = k + 1; }
+  }
+  return dist;
+}
+
+function nearestLegal(lat, x, y, reach) {
+  const span = Math.ceil(reach / lat.step);
+  const ci = Math.floor(x / lat.step), cj = Math.floor(y / lat.step);
+  let best = -1, bd = Infinity;
+  for (let i = Math.max(0, ci - span); i <= Math.min(lat.nx - 1, ci + span); i++) {
+    for (let j = Math.max(0, cj - span); j <= Math.min(lat.ny - 1, cj + span); j++) {
+      const k = i * lat.ny + j;
+      if (!lat.legal[k]) continue;
+      const dx = (i + 0.5) * lat.step - x, dy = (j + 0.5) * lat.step - y;
+      const d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = k; }
+    }
+  }
+  return best;
+}
+
+const ptOf = (lat, k) => {
+  const i = (k / lat.ny) | 0;
+  return { x: (i + 0.5) * lat.step, y: (k - i * lat.ny + 0.5) * lat.step };
+};
+
+/* ------------------------ shells ------------------------ */
+function raySegVsBox(fx, fy, tx, ty, b) {
+  const dx = tx - fx, dy = ty - fy;
+  let t0 = 0, t1 = 1, nx = 0, ny = 0;
+  for (let axis = 0; axis < 2; axis++) {
+    const d = axis ? dy : dx, o = axis ? fy : fx;
+    const lo = axis ? b.minY : b.minX, hi = axis ? b.maxY : b.maxX;
+    if (Math.abs(d) < 1e-12) { if (o < lo || o > hi) return null; continue; }
+    let tA = (lo - o) / d, tB = (hi - o) / d, sign = -1;
+    if (tA > tB) { const s = tA; tA = tB; tB = s; sign = 1; }
+    if (tA > t0) { t0 = tA; nx = axis ? 0 : sign; ny = axis ? sign : 0; }
+    if (tB < t1) t1 = tB;
+    if (t0 > t1) return null;
+  }
+  if (t0 <= 1e-9 || t0 > 1) return null;
+  return { t: t0, nx, ny };
+}
+
+/* The shell polyline, the way the sim flies it: straight until a wall, then one
+   reflection. `[muzzle, bounce…, end]` -- the FIRST segment is direct fire and
+   everything after it is only reachable by banking. */
+function shellPath(fx, fy, angle, boxes) {
+  const pts = [{ x: fx, y: fy }];
+  let sx = fx, sy = fy;
+  let tx = fx + Math.cos(angle) * TRACE, ty = fy + Math.sin(angle) * TRACE;
+  let left = BOUNCES;
+  for (let iter = 0; iter < 6; iter++) {
+    let best = null;
+    for (const b of boxes) {
+      const h = raySegVsBox(sx, sy, tx, ty, b);
+      if (h && (!best || h.t < best.t)) best = h;
+    }
+    if (!best) break;
+    const px = sx + (tx - sx) * best.t, py = sy + (ty - sy) * best.t;
+    pts.push({ x: px, y: py });
+    if (left <= 0) { sx = px; sy = py; tx = px; ty = py; break; }
+    left--;
+    let rx = tx - px, ry = ty - py;
+    if (best.nx) rx = -rx; else ry = -ry;
+    sx = px + (best.nx ? Math.sign(rx) : 0) * 1e-6;
+    sy = py + (best.ny ? Math.sign(ry) : 0) * 1e-6;
+    tx = sx + rx; ty = sy + ry;
+  }
+  pts.push({ x: tx, y: ty });
+  return pts;
+}
+
+function segDist(px, py, ax, ay, bx, by) {
+  const abx = bx - ax, aby = by - ay;
+  const len2 = abx * abx + aby * aby;
+  let t = len2 === 0 ? 0 : ((px - ax) * abx + (py - ay) * aby) / len2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const dx = ax + t * abx - px, dy = ay + t * aby - py;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function clearLine(ax, ay, bx, by, boxes) {
+  for (const b of boxes) if (raySegVsBox(ax, ay, bx, by, b)) return false;
+  return true;
+}
+
+/* ------------------------ spawns ------------------------ */
+/* Derived from the geometry, not authored -- the game derives every spawn but
+   the first the same way, which is why its machinery works on a board with no
+   author. This is a simplification of `pickVersusSpawnCell`: greedy max-min
+   path distance over tank-legal ground, preferring starts nobody can see. */
+/**
+ * Which spawns a measurement should use.
+ *
+ * TWO MODES, AND THE DIFFERENCE MATTERS. The GAME derives every versus spawn from the board's
+ * geometry and ignores the authored letter's position entirely -- moving `P` from one corner
+ * to the other produces byte-identical starts. So "derived" is what will really happen, and
+ * it is the default.
+ *
+ * Hand-placed spawns are therefore a WHAT-IF: they answer "how would this board measure if
+ * players started here", which is the right question while authoring and the wrong one for
+ * predicting a match. The page says which mode it is in rather than quietly blending them.
+ */
+function spawnsFor(lat, boxes, n) {
+  if (S.spawns.length >= 2) {
+    const placed = [];
+    for (const sp of S.spawns) {
+      const x = (sp.c + 0.5) * CELL, y = (sp.r + 0.5) * CELL;
+      const k = nearestLegal(lat, x, y, 1.2);
+      placed.push(k >= 0 ? { k, ...ptOf(lat, k), placed: true } : { k: -1, x, y, placed: true, stuck: true });
+    }
+    return placed;
+  }
+  return deriveSpawns(lat, boxes, n);
+}
+
+function deriveSpawns(lat, boxes, n) {
+  const legalIdx = [];
+  for (let k = 0; k < lat.legal.length; k++) if (lat.legal[k]) legalIdx.push(k);
+  if (!legalIdx.length) return [];
+  const first = legalIdx[0];
+  const d0 = bfs(lat, first);
+  let far = first, fd = -1;
+  for (const k of legalIdx) if (d0[k] > fd) { fd = d0[k]; far = k; }
+  const picks = [far];
+  const dists = [bfs(lat, far)];
+  while (picks.length < n) {
+    let best = -1, bestScore = -1;
+    for (const k of legalIdx) {
+      let m = Infinity;
+      for (const d of dists) { const v = d[k]; if (v < 0) { m = -1; break; } if (v < m) m = v; }
+      if (m <= 0) continue;
+      const p = ptOf(lat, k);
+      let seen = 0;
+      for (const q of picks) {
+        const pq = ptOf(lat, q);
+        if (clearLine(p.x, p.y, pq.x, pq.y, boxes)) seen++;
+      }
+      const score = m - seen * 1e4;
+      if (score > bestScore) { bestScore = score; best = k; }
+    }
+    if (best < 0) break;
+    picks.push(best);
+    dists.push(bfs(lat, best));
+  }
+  return picks.map((k) => ({ k, ...ptOf(lat, k) }));
+}
+
+/* ------------------------ measure ------------------------ */
+function measure() {
+  const { cols, rows, cells } = S;
+  const boxes = wallBoxes(cells, cols, rows);
+  const solidOnly = boxes.filter((b) => !b.soft);
+  const lat = lattice(boxes, cols, rows, TANK_R);
+  const solidLat = lattice(solidOnly, cols, rows, TANK_R);
+  const W = cols * CELL, H = rows * CELL;
+
+  let wall = 0, soft = 0;
+  for (let i = 0; i < cells.length; i++) { if (cells[i]) wall++; if (cells[i] === DEST) soft++; }
+  const total = cols * rows;
+
+  // corridor / open ground: 8 probes, 1.5 tank diameters
+  const reach = Math.max(2, Math.round(1.5 * 2 * TANK_R / lat.step));
+  const DIRS = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+  let probed = 0, corr = 0, open = 0;
+  for (let i = 0; i < lat.nx; i += 3) {
+    for (let j = 0; j < lat.ny; j += 3) {
+      if (!lat.legal[i * lat.ny + j]) continue;
+      probed++;
+      let clear = 0;
+      for (const [di, dj] of DIRS) {
+        let ok = true;
+        for (let s = 1; s <= reach && ok; s++) {
+          const ni = i + di * s, nj = j + dj * s;
+          if (ni < 0 || nj < 0 || ni >= lat.nx || nj >= lat.ny || !lat.legal[ni * lat.ny + nj]) ok = false;
+        }
+        if (ok) clear++;
+      }
+      if (clear <= 2) corr++;
+      if (clear >= 6) open++;
+    }
+  }
+
+  const spawns = spawnsFor(solidLat, solidOnly, S.players);
+  const manual = S.spawns.length >= 2;
+  const stuck = spawns.filter((sp) => sp.stuck).length;
+
+  // connectivity + bottleneck width, over SOLID-ONLY space: a player may mine
+  // through a destructible, so the solid layout is the topology no play changes.
+  let connected = spawns.length === (manual ? S.spawns.length : S.players) && !stuck;
+  if (connected) {
+    const d = bfs(solidLat, spawns[0].k);
+    for (const s of spawns) if (d[s.k] < 0) connected = false;
+  }
+  let neck = 0;
+  if (connected) {
+    const rungs = [2 * TANK_R];
+    for (let k = 2; k * CELL <= Math.min(W, H); k++) rungs.push(k * CELL);
+    for (const rung of rungs) {
+      const wide = lattice(solidOnly, cols, rows, rung / 2 - solidLat.step);
+      const nodes = spawns.map((s) => nearestLegal(wide, s.x, s.y, 2.0));
+      if (nodes.some((k) => k < 0)) break;
+      const d = bfs(wide, nodes[0]);
+      if (nodes.some((k) => d[k] < 0)) break;
+      neck = rung;
+    }
+  }
+
+  // sightlines and carom, sampled on a 2-unit grid snapped to legal ground
+  const sample = [];
+  const seen = new Set();
+  for (let x = 1; x < W; x += 2) {
+    for (let y = 1; y < H; y += 2) {
+      const k = nearestLegal(lat, x, y, 1.0);
+      if (k < 0 || seen.has(k)) continue;
+      seen.add(k);
+      sample.push(ptOf(lat, k));
+    }
+  }
+  let pairs = 0, visible = 0;
+  for (let a = 0; a < sample.length; a++) {
+    for (let b = a + 1; b < sample.length; b++) {
+      pairs++;
+      if (clearLine(sample[a].x, sample[a].y, sample[b].x, sample[b].y, boxes)) visible++;
+    }
+  }
+  const RAYS = 180;
+  let inReach = 0, blocked = 0, bankOnly = 0;
+  for (let a = 0; a < sample.length; a++) {
+    const direct = new Uint8Array(sample.length), banked = new Uint8Array(sample.length);
+    for (let t = 0; t < RAYS; t++) {
+      const path = shellPath(sample[a].x, sample[a].y, (t / RAYS) * Math.PI * 2, boxes);
+      for (let b = 0; b < sample.length; b++) {
+        if (b === a) continue;
+        for (let s = 0; s + 1 < path.length; s++) {
+          if (segDist(sample[b].x, sample[b].y, path[s].x, path[s].y, path[s+1].x, path[s+1].y) > HIT_R) continue;
+          if (s === 0) direct[b] = 1; else banked[b] = 1;
+          break;
+        }
+      }
+    }
+    for (let b = 0; b < sample.length; b++) {
+      if (b === a) continue;
+      const dx = sample[a].x - sample[b].x, dy = sample[a].y - sample[b].y;
+      if (Math.sqrt(dx*dx + dy*dy) > TRACE) continue;
+      inReach++;
+      if (direct[b]) continue;
+      blocked++;
+      if (banked[b]) bankOnly++;
+    }
+  }
+
+  let rot = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (cells[r * cols + c] !== cells[(rows - 1 - r) * cols + (cols - 1 - c)]) rot++;
+    }
+  }
+
+  // opening shots: can a spawn shoot another at t=0, directly or off one bounce?
+  let openingDirect = 0, openingBank = 0;
+  for (let a = 0; a < spawns.length; a++) {
+    const direct = new Uint8Array(spawns.length), banked = new Uint8Array(spawns.length);
+    for (let t = 0; t < RAYS; t++) {
+      const path = shellPath(spawns[a].x, spawns[a].y, (t / RAYS) * Math.PI * 2, boxes);
+      for (let b = 0; b < spawns.length; b++) {
+        if (b === a) continue;
+        for (let s = 0; s + 1 < path.length; s++) {
+          if (segDist(spawns[b].x, spawns[b].y, path[s].x, path[s].y, path[s+1].x, path[s+1].y) > HIT_R) continue;
+          if (s === 0) direct[b] = 1; else banked[b] = 1;
+          break;
+        }
+      }
+    }
+    for (let b = 0; b < spawns.length; b++) {
+      if (b === a) continue;
+      if (direct[b]) openingDirect++; else if (banked[b]) openingBank++;
+    }
+  }
+
+  return {
+    spawns, connected, boxes, manual, stuck,
+    wall: wall / total,
+    dshare: wall ? soft / wall : 0,
+    legal: lat.count / (lat.nx * lat.ny),
+    corr: probed ? corr / probed : 0,
+    open: probed ? open / probed : 0,
+    neck,
+    sight: pairs ? visible / pairs : 0,
+    bank: blocked ? bankOnly / blocked : 0,
+    rot: rot / total,
+    samplePoints: sample.length,
+    openingDirect, openingBank,
+  };
+}
+
+/* ------------------------ generator ------------------------ */
+function mulberry(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function generateSpines(seed, cols, rows, opts) {
+  const rnd = mulberry(seed);
+  const ri = (n) => Math.floor(rnd() * n);
+  const cells = blank(cols, rows);
+  const at = (c, r) => cells[r * cols + c];
+  const minClear = 4, count = opts.count, minLen = Math.max(4, opts.len - 6), maxLen = opts.len + 6;
+  const plaza = { c: 6 + ri(Math.max(1, cols - 18)), r: 6 + ri(Math.max(1, Math.floor(rows / 2) - 8)) };
+  const PR = 3;
+  const inPlaza = (c, r) => (Math.abs(c - plaza.c) <= PR && Math.abs(r - plaza.r) <= PR)
+    || (Math.abs(c - (cols - 1 - plaza.c)) <= PR && Math.abs(r - (rows - 1 - plaza.r)) <= PR);
+  const placed = [];
+  const rot = () => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    if (r * cols + c >= (rows * cols) / 2) return;
+    cells[(rows - 1 - r) * cols + (cols - 1 - c)] = cells[r * cols + c];
+  } };
+  const connected = () => {
+    let start = -1, openN = 0;
+    for (let i = 0; i < cells.length; i++) if (cells[i] !== SOLID) { openN++; if (start < 0) start = i; }
+    if (start < 0) return false;
+    const seenA = new Uint8Array(cells.length);
+    const st = [start]; seenA[start] = 1; let got = 0;
+    while (st.length) {
+      const k = st.pop(); got++;
+      const r = (k / cols) | 0, c = k - r * cols;
+      const nb = [[r+1,c],[r-1,c],[r,c+1],[r,c-1]];
+      for (const [nr, nc] of nb) {
+        if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+        const j = nr * cols + nc;
+        if (seenA[j] || cells[j] === SOLID) continue;
+        seenA[j] = 1; st.push(j);
+      }
+    }
+    return got === openN;
+  };
+  let made = 0, tries = 0;
+  while (made < count && tries < 3000) {
+    tries++;
+    const c0 = 1 + ri(cols - 2), r0 = 1 + ri(Math.max(1, Math.floor(rows / 2)));
+    const len = minLen + ri(maxLen - minLen + 1);
+    const horiz = rnd() < 0.5;
+    const shape = [];
+    for (let i = 0; i < len; i++) shape.push(horiz ? [c0 + i, r0] : [c0, r0 + i]);
+    if (rnd() < 0.55) {
+      const arm = 3 + ri(6), sign = rnd() < 0.5 ? 1 : -1;
+      const [ec, er] = shape[shape.length - 1];
+      for (let i = 1; i <= arm; i++) shape.push(horiz ? [ec, er + sign * i] : [ec + sign * i, er]);
+    }
+    const head = shape[0], tail = shape[shape.length - 1];
+    let ok = true, joins = 0;
+    for (const [c, r] of shape) {
+      if (c < 1 || r < 1 || c >= cols - 1 || r >= rows - 1 || inPlaza(c, r) || at(c, r)) { ok = false; break; }
+      let near = false;
+      for (const [pc, pr] of placed) {
+        if (Math.max(Math.abs(pc - c), Math.abs(pr - r)) < minClear) { near = true; break; }
+      }
+      if (!near) {
+        const ic = cols - 1 - c, ir = rows - 1 - r;
+        near = shape.some(([sc, sr]) => Math.max(Math.abs(sc - ic), Math.abs(sr - ir)) < minClear);
+      }
+      if (near) {
+        const atEnd = Math.max(Math.abs(c - head[0]), Math.abs(r - head[1])) <= 1
+          || Math.max(Math.abs(c - tail[0]), Math.abs(r - tail[1])) <= 1;
+        if (!atEnd) { ok = false; break; }
+        joins++;
+      }
+    }
+    if (!ok || joins > 3) continue;
+    const kind = rnd() < opts.soft ? DEST : SOLID;
+    for (const [c, r] of shape) cells[r * cols + c] = kind;
+    rot();
+    if (connected()) { for (const cell of shape) placed.push(cell); made++; }
+    else { for (const [c, r] of shape) cells[r * cols + c] = FLOOR; rot(); }
+  }
+  rot();
+  return cells;
+}
+
+/* ------------------------ rendering ------------------------ */
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+let lastMeasure = null;
+
+function draw() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = canvas.clientWidth || 360;
+  const px = cssW / S.cols;
+  const cssH = px * S.rows;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  canvas.style.height = cssH + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const css = getComputedStyle(document.documentElement);
+  ctx.fillStyle = css.getPropertyValue("--board-floor").trim() || "#16181a";
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  ctx.strokeStyle = css.getPropertyValue("--board-grid").trim() || "#24282a";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let c = 0; c <= S.cols; c++) { ctx.moveTo(c * px, 0); ctx.lineTo(c * px, cssH); }
+  for (let r = 0; r <= S.rows; r++) { ctx.moveTo(0, r * px); ctx.lineTo(cssW, r * px); }
+  ctx.stroke();
+
+  const solid = css.getPropertyValue("--board-solid").trim() || "#7d8a78";
+  const dest = css.getPropertyValue("--board-destructible").trim() || "#96684a";
+  for (let r = 0; r < S.rows; r++) {
+    for (let c = 0; c < S.cols; c++) {
+      const v = S.cells[r * S.cols + c];
+      if (!v) continue;
+      ctx.fillStyle = v === SOLID ? solid : dest;
+      ctx.fillRect(c * px, r * px, px + 0.5, px + 0.5);
+    }
+  }
+
+  // The symmetry guide: the axis a mirror folds about, or the circle inside which an N-fold
+  // rotation actually closes on the board.
+  if (S.sym !== "none") {
+    ctx.save();
+    ctx.strokeStyle = "rgba(125,138,120,.32)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    const cx = (S.cols / 2) * px, cy = (S.rows / 2) * px;
+    const n = symFold(S.sym);
+    if (S.sym === "mirh" || S.sym === "mirb") { ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cssH); ctx.stroke(); }
+    if (S.sym === "mirv" || S.sym === "mirb") { ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cssW, cy); ctx.stroke(); }
+    if (n > 2) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.min(cssW, cssH) / 2, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let k = 0; k < n; k++) {
+        const a = (2 * Math.PI * k) / n;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(a) * Math.min(cssW, cssH) / 2, cy + Math.sin(a) * Math.min(cssW, cssH) / 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  if (lastMeasure && lastMeasure.spawns) {
+    const scale = px / CELL;
+    const ringColors = ["#e8c454", "#6eb2e8", "#d66c6c", "#8ace8a"];
+    lastMeasure.spawns.forEach((sp, i) => {
+      const colour = sp.stuck ? "#d97b6c" : ringColors[i % 4];
+      ctx.strokeStyle = colour;
+      // A hand-placed spawn is drawn solid, a derived one dashed, so the picture says which
+      // set the numbers under it were computed from.
+      ctx.setLineDash(lastMeasure.manual ? [] : [3, 3]);
+      ctx.lineWidth = lastMeasure.manual ? 2.5 : 2;
+      ctx.beginPath();
+      ctx.arc(sp.x * scale, sp.y * scale, TANK_R * scale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (sp.stuck) {
+        ctx.beginPath();
+        ctx.moveTo((sp.x - TANK_R * 0.6) * scale, (sp.y - TANK_R * 0.6) * scale);
+        ctx.lineTo((sp.x + TANK_R * 0.6) * scale, (sp.y + TANK_R * 0.6) * scale);
+        ctx.stroke();
+      }
+    });
+  }
+}
+
+/* ------------------------ painting ------------------------ */
+let painting = false, paintVal = SOLID, lastCell = -1;
+
+function cellFromEvent(ev) {
+  const rect = canvas.getBoundingClientRect();
+  const t = ev.touches ? ev.touches[0] : ev;
+  const px = rect.width / S.cols;
+  const c = Math.floor((t.clientX - rect.left) / px);
+  const r = Math.floor((t.clientY - rect.top) / px);
+  if (c < 0 || r < 0 || c >= S.cols || r >= S.rows) return -1;
+  return r * S.cols + c;
+}
+
+function toggleSpawnAt(i) {
+  const r = (i / S.cols) | 0, c = i - r * S.cols;
+  const at = S.spawns.findIndex((sp) => sp.c === c && sp.r === r);
+  if (at >= 0) S.spawns.splice(at, 1);
+  else if (S.spawns.length < MAX_SPAWNS) S.spawns.push({ c, r });
+  else { S.spawns.shift(); S.spawns.push({ c, r }); }
+  draw();
+  scheduleMeasure();
+}
+
+/** Every cell the current operator maps (c, r) onto, the cell itself included. */
+function imagesOf(c, r) {
+  const out = [[c, r]];
+  const push = (cc, rr) => {
+    cc = Math.round(cc); rr = Math.round(rr);
+    if (cc < 0 || rr < 0 || cc >= S.cols || rr >= S.rows) return;
+    if (!out.some(([a, b]) => a === cc && b === rr)) out.push([cc, rr]);
+  };
+  const mh = S.cols - 1 - c, mv = S.rows - 1 - r;
+  if (S.sym === "mirh") push(mh, r);
+  else if (S.sym === "mirv") push(c, mv);
+  else if (S.sym === "mirb") { push(mh, r); push(c, mv); push(mh, mv); }
+  else {
+    const n = symFold(S.sym);
+    if (n >= 2) {
+      // Rotate about the board's centre in grid space. Cells are square in world units, so a
+      // grid rotation IS a world rotation; only 90-degree multiples land back on the lattice,
+      // and everything else is rounded to the nearest cell.
+      const ox = (S.cols - 1) / 2, oy = (S.rows - 1) / 2;
+      const dx = c - ox, dy = r - oy;
+      for (let k = 1; k < n; k++) {
+        const a = (2 * Math.PI * k) / n;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        push(ox + dx * ca - dy * sa, oy + dx * sa + dy * ca);
+      }
+    }
+  }
+  return out;
+}
+
+function paintAt(i) {
+  if (i < 0 || i === lastCell) return;
+  lastCell = i;
+  const r = (i / S.cols) | 0, c = i - r * S.cols;
+  for (const [cc, rr] of imagesOf(c, r)) S.cells[rr * S.cols + cc] = paintVal;
+  draw();
+  scheduleMeasure();
+}
+
+/**
+ * Fold the whole board under the current operator: take the cells of one fundamental domain
+ * and stamp their images over everything else. This is what makes a radial mode useful on a
+ * board that already exists -- a rolled board is 180-degree symmetric, and folding it at x4
+ * turns it into a four-fold one rather than making you repaint it.
+ */
+function foldBoard() {
+  const n = symFold(S.sym);
+  if (S.sym === "none") return;
+  pushUndo();
+  const src = S.cells.slice();
+  const ox = (S.cols - 1) / 2, oy = (S.rows - 1) / 2;
+  const inDomain = (c, r) => {
+    if (S.sym === "mirh") return c <= ox;
+    if (S.sym === "mirv") return r <= oy;
+    if (S.sym === "mirb") return c <= ox && r <= oy;
+    if (n === 2) return r * S.cols + c <= ((S.rows * S.cols) / 2 | 0);
+    const a = Math.atan2(r - oy, c - ox);
+    const t = a < 0 ? a + 2 * Math.PI : a;
+    return t < (2 * Math.PI) / n;
+  };
+  for (let r = 0; r < S.rows; r++) {
+    for (let c = 0; c < S.cols; c++) {
+      if (!inDomain(c, r)) continue;
+      const v = src[r * S.cols + c];
+      for (const [cc, rr] of imagesOf(c, r)) S.cells[rr * S.cols + cc] = v;
+    }
+  }
+  draw();
+  scheduleMeasure();
+}
+
+function startPaint(ev) {
+  ev.preventDefault();
+  const i = cellFromEvent(ev);
+  if (i < 0) return;
+  pushUndo();
+  if (S.tool === SPAWN_TOOL) { toggleSpawnAt(i); return; }
+  painting = true;
+  lastCell = -1;
+  paintVal = S.tool;
+  paintAt(i);
+}
+canvas.addEventListener("mousedown", startPaint);
+canvas.addEventListener("touchstart", startPaint, { passive: false });
+canvas.addEventListener("mousemove", (ev) => { if (painting) { ev.preventDefault(); paintAt(cellFromEvent(ev)); } });
+canvas.addEventListener("touchmove", (ev) => { if (painting) { ev.preventDefault(); paintAt(cellFromEvent(ev)); } }, { passive: false });
+const endPaint = () => { painting = false; lastCell = -1; };
+window.addEventListener("mouseup", endPaint);
+window.addEventListener("touchend", endPaint);
+window.addEventListener("touchcancel", endPaint);
+
+/* ------------------------ UI ------------------------ */
+const els = {
+  metrics: document.getElementById("metrics"),
+  verdict: document.getElementById("verdict"),
+  verdictText: document.getElementById("verdictText"),
+  out: document.getElementById("out"),
+  note: document.getElementById("measureNote"),
+  savedList: document.getElementById("savedList"),
+  dbNote: document.getElementById("dbNote"),
+  copied: document.getElementById("copied"),
+};
+
+const sizeSel = document.getElementById("size");
+SIZES.forEach((s, i) => {
+  const o = document.createElement("option");
+  o.value = String(i); o.textContent = s.label;
+  sizeSel.appendChild(o);
+});
+const customOpt = document.createElement("option");
+customOpt.value = "custom";
+customOpt.textContent = "custom size";
+sizeSel.appendChild(customOpt);
+sizeSel.value = "0";
+sizeSel.addEventListener("change", () => {
+  if (sizeSel.value === "custom") { document.getElementById("sizePanel").hidden = false; syncSize(); return; }
+  const z = SIZES[+sizeSel.value];
+  resize(z.cols, z.rows);
+});
+
+const playersSel = document.getElementById("players");
+[2, 3, 4].forEach((n) => {
+  const o = document.createElement("option");
+  o.value = String(n); o.textContent = n + " players";
+  playersSel.appendChild(o);
+});
+playersSel.value = "4";
+playersSel.addEventListener("change", () => { S.players = +playersSel.value; scheduleMeasure(); });
+
+const tools = [
+  ["tSolid", SOLID], ["tDest", DEST], ["tErase", FLOOR], ["tSpawn", SPAWN_TOOL],
+];
+tools.forEach(([id, val]) => {
+  document.getElementById(id).addEventListener("click", () => {
+    S.tool = val;
+    tools.forEach(([oid]) => document.getElementById(oid).setAttribute("aria-pressed", String(oid === id)));
+  });
+});
+const symBtn = document.getElementById("tSym");
+const symPop = document.getElementById("symPop");
+const symChips = document.getElementById("symChips");
+
+for (const opt of SYMS) {
+  const b = document.createElement("button");
+  b.className = "chip";
+  b.type = "button";
+  b.textContent = opt.label;
+  b.dataset.id = opt.id;
+  b.setAttribute("aria-pressed", String(opt.id === S.sym));
+  b.addEventListener("click", () => { setSym(opt.id); });
+  symChips.appendChild(b);
+}
+
+function setSym(id) {
+  S.sym = id;
+  for (const b of symChips.children) b.setAttribute("aria-pressed", String(b.dataset.id === id));
+  const opt = SYMS.find((o) => o.id === id);
+  document.getElementById("symLabel").textContent = opt.short;
+  symBtn.setAttribute("aria-pressed", String(id !== "none"));
+  const n = symFold(id);
+  document.getElementById("foldBtn").disabled = id === "none";
+  document.getElementById("symNote").textContent = id === "none"
+    ? "Painting affects one cell. Nothing is mirrored."
+    : n > 2
+      ? `Every stroke is repeated ${n} times around the board's centre. A rectangle cannot hold `
+        + `${n}-fold symmetry everywhere: only cells inside the circle drawn on the board have all `
+        + `${n} images on it, and images land between cells and are rounded. Boards outside the `
+        + `circle are painted singly.`
+      : n === 2
+        ? "Every stroke is repeated at the opposite point through the centre. This is what the "
+          + "shipped VS boards use -- both dedicated ones measure exactly 0.00 rotational asymmetry."
+        : "Every stroke is repeated across the axis. No shipped board is mirror-symmetric: a mirror "
+          + "hands each player the other's cover on the opposite hand.";
+  draw();
+}
+
+symBtn.addEventListener("click", () => {
+  symPop.hidden = !symPop.hidden;
+});
+document.getElementById("foldBtn").addEventListener("click", () => { foldBoard(); });
+document.getElementById("tUndo").addEventListener("click", () => {
+  const prev = undoStack.pop();
+  if (!prev) return;
+  S.cells = prev.cells; S.cols = prev.cols; S.rows = prev.rows;
+  S.spawns = prev.spawns;
+  syncSize();
+  draw(); scheduleMeasure();
+});
+
+/* Resize, keeping whatever already fits. A resize that blanked the board would make the
+   steppers unusable for their real purpose -- finding the size a drawing wants to be. */
+function resize(cols, rows) {
+  cols = Math.max(11, Math.min(61, cols));
+  rows = Math.max(9, Math.min(45, rows));
+  if (cols === S.cols && rows === S.rows) return;
+  pushUndo();
+  const next = blank(cols, rows);
+  for (let r = 0; r < Math.min(rows, S.rows); r++) {
+    for (let c = 0; c < Math.min(cols, S.cols); c++) next[r * cols + c] = S.cells[r * S.cols + c];
+  }
+  S.cells = next; S.cols = cols; S.rows = rows;
+  S.spawns = S.spawns.filter((sp) => sp.c < cols && sp.r < rows);
+  syncSize();
+  draw(); scheduleMeasure();
+}
+
+function syncSize() {
+  document.getElementById("colsV").textContent = String(S.cols);
+  document.getElementById("rowsV").textContent = String(S.rows);
+  const i = SIZES.findIndex((z) => z.cols === S.cols && z.rows === S.rows);
+  sizeSel.value = i >= 0 ? String(i) : "custom";
+  const w = (S.cols * CELL).toFixed(1), h = (S.rows * CELL).toFixed(1);
+  document.getElementById("sizeNote").textContent =
+    `${w} x ${h} world units. Odd counts give the 180-degree rotation a true centre cell; `
+    + `the four shipped sizes are all odd. Resizing keeps whatever still fits.`;
+}
+
+document.getElementById("sizeToggle").addEventListener("click", (ev) => {
+  const panel = document.getElementById("sizePanel");
+  panel.hidden = !panel.hidden;
+  ev.currentTarget.setAttribute("aria-expanded", String(!panel.hidden));
+});
+for (const btn of document.querySelectorAll("button.step")) {
+  btn.addEventListener("click", () => {
+    const d = +btn.dataset.d;
+    resize(S.cols + (btn.dataset.t === "cols" ? d : 0), S.rows + (btn.dataset.t === "rows" ? d : 0));
+  });
+}
+document.getElementById("clearSpawns").addEventListener("click", () => {
+  if (!S.spawns.length) return;
+  pushUndo();
+  S.spawns = [];
+  draw(); scheduleMeasure();
+});
+
+const bindRange = (id, vid, fmt) => {
+  const el = document.getElementById(id), out = document.getElementById(vid);
+  const sync = () => { out.textContent = fmt(el.value); };
+  el.addEventListener("input", sync); sync();
+  return el;
+};
+const gCount = bindRange("gCount", "gCountV", (v) => v);
+const gLen = bindRange("gLen", "gLenV", (v) => v);
+const gDes = bindRange("gDes", "gDesV", (v) => v + "%");
+
+function roll() {
+  pushUndo();
+  S.cells = generateSpines(S.seed, S.cols, S.rows, {
+    count: +gCount.value, len: +gLen.value, soft: +gDes.value / 100,
+  });
+  draw(); scheduleMeasure();
+}
+document.getElementById("roll").addEventListener("click", roll);
+document.getElementById("clearBoard").addEventListener("click", () => {
+  // Walls only. Spawns have their own control, and wiping both on one tap would make a
+  // misfire expensive. Undo restores it either way.
+  pushUndo();
+  S.cells = blank(S.cols, S.rows);
+  draw();
+  scheduleMeasure();
+});
+document.getElementById("reroll").addEventListener("click", () => {
+  S.seed = (S.seed % 9999) + 1;
+  document.getElementById("seedV").textContent = String(S.seed);
+  roll();
+});
+
+/* ------------------------ measure loop ------------------------ */
+let measureTimer = null;
+function scheduleMeasure() {
+  if (measureTimer) clearTimeout(measureTimer);
+  els.verdict.classList.add("busy");
+  measureTimer = setTimeout(runMeasure, 260);
+}
+
+function runMeasure() {
+  measureTimer = null;
+  let m;
+  try { m = measure(); }
+  catch (e) { els.verdictText.textContent = "Could not measure this board."; els.verdict.classList.remove("busy"); return; }
+  lastMeasure = m;
+  els.verdict.classList.remove("busy");
+  draw();
+
+  const el = document.getElementById("spawnState");
+  const noteEl = document.getElementById("spawnNote");
+  document.getElementById("clearSpawns").disabled = !S.spawns.length;
+  if (m.manual) {
+    el.textContent = `Measuring ${S.spawns.length} spawn${S.spawns.length === 1 ? "" : "s"} you placed.`;
+    noteEl.textContent = "A what-if. The game derives versus spawns from the board's geometry and "
+      + "ignores where the letter sits, so these are not where a match will actually start — "
+      + "they answer how the board would measure if players began here. Tap a ring to remove it.";
+  } else {
+    el.textContent = `Measuring ${m.spawns.length} derived spawn${m.spawns.length === 1 ? "" : "s"}.`;
+    noteEl.textContent = "What the game will really do: versus spawns are derived from the geometry. "
+      + "Use the Spawn tool to place your own and measure a what-if instead.";
+  }
+
+  const problems = [];
+  if (m.stuck) problems.push(`${m.stuck} placed spawn(s) have no room for a tank`);
+  else if (!m.manual && m.spawns.length < S.players) problems.push(`only ${m.spawns.length} of ${S.players} spawns fit`);
+  else if (!m.connected) problems.push("spawns cannot all reach each other");
+  if (m.openingDirect) problems.push(`${m.openingDirect} spawn pair(s) in direct line of fire at the start`);
+  if (m.openingBank) problems.push(`${m.openingBank} spawn pair(s) open to a bank shot at the start`);
+  if (m.neck > 0 && m.neck < 1.333 - 1e-6) problems.push("the tightest passage is under a legal corridor");
+
+  const dot = els.verdict.querySelector(".dot");
+  if (problems.length) {
+    dot.className = "dot no";
+    els.verdictText.textContent = problems.join(" · ");
+  } else {
+    dot.className = "dot ok";
+    const who = m.manual ? `${m.spawns.length} placed` : `${S.players} derived`;
+    els.verdictText.textContent = `playable with ${who} · every spawn reachable · nobody has an opening shot`;
+  }
+
+  els.metrics.innerHTML = "";
+  for (const key of Object.keys(BANDS)) {
+    const band = BANDS[key];
+    const v = m[key];
+    const inBand = v >= band.lo - 1e-9 && v <= band.hi + 1e-9;
+    const d = document.createElement("div");
+    d.className = "metric " + (inBand ? "in" : "out");
+    d.innerHTML = `<span class="k"></span><span class="v"></span> <span class="band"></span>`;
+    d.querySelector(".k").textContent = band.label;
+    d.querySelector(".v").textContent = v.toFixed(band.fmt);
+    d.querySelector(".band").textContent = `${band.lo.toFixed(2)}–${band.hi.toFixed(2)}`;
+    els.metrics.appendChild(d);
+  }
+  els.note.textContent = `Bands are the range across the eight shipped boards at 2, 3 and 4 players. Outside a band is not wrong — it means unlike anything shipped. Sampled from ${m.samplePoints} points at 180 rays; tools/mapgen is the authority for a figure going into a document.`;
+
+  els.out.value = gridText();
+}
+
+function gridText() {
+  const ch = [".", "#", "x"];
+  const rows = [];
+  for (let r = 0; r < S.rows; r++) {
+    let line = "";
+    for (let c = 0; c < S.cols; c++) line += ch[S.cells[r * S.cols + c]];
+    rows.push(line);
+  }
+  // The single authored spawn the loader seeds every other start from.
+  if (lastMeasure && lastMeasure.spawns && lastMeasure.spawns.length) {
+    const s = lastMeasure.spawns[0];
+    const c = Math.min(S.cols - 1, Math.max(0, Math.floor(s.x / CELL)));
+    const r = Math.min(S.rows - 1, Math.max(0, Math.floor(s.y / CELL)));
+    rows[r] = rows[r].slice(0, c) + "P" + rows[r].slice(c + 1);
+  }
+  return rows.join("\n");
+}
+
+function jsonEntry(name) {
+  return JSON.stringify({
+    id: name || "vs-new-01",
+    cols: S.cols, rows: S.rows, cellSize: 0.6666666666666666,
+    legend: { "#": "solid", x: "destructible" },
+    grid: gridText().split("\n"),
+    notes: ["Authored in Board Forge."],
+    claims: [],
+  }, null, 2);
+}
+
+async function copy(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    els.copied.textContent = label + " copied";
+  } catch (e) {
+    els.out.value = text; els.out.select?.();
+    els.copied.textContent = "select the text above to copy";
+  }
+  setTimeout(() => { els.copied.textContent = ""; }, 2600);
+}
+document.getElementById("copyGrid").addEventListener("click", () => copy(gridText(), "Grid"));
+document.getElementById("copyJson").addEventListener("click", () =>
+  copy(jsonEntry(document.getElementById("saveName").value.trim()), "Entry"));
+
+/* ------------------------ saving ------------------------ */
+let db = null;
+async function initDb() {
+  db = await window.claude?.use?.("db") ?? null;
+  if (!db) {
+    els.dbNote.textContent = "Saving is unavailable in this view — copy the grid instead.";
+    document.getElementById("save").disabled = true;
+    return;
+  }
+  els.dbNote.textContent = "Saved boards are kept with this page, so they are here next time and can be pulled into the repo.";
+  watchSaved();
+}
+
+function watchSaved() {
+  try {
+    db.collection("boards").orderBy("savedAt", "desc").limit(40).onSnapshot((snap) => {
+      const docs = (snap && snap.docs) || [];
+      els.savedList.innerHTML = "";
+      if (!docs.length) {
+        const p = document.createElement("p");
+        p.className = "note"; p.style.margin = "0";
+        p.textContent = "Nothing saved yet.";
+        els.savedList.appendChild(p);
+        return;
+      }
+      for (const doc of docs) {
+        const d = (doc.data && doc.data()) || null;
+        if (!d) continue;
+        const row = document.createElement("div");
+        row.className = "saveitem";
+        const nm = document.createElement("span");
+        nm.className = "nm"; nm.textContent = d.name || "untitled";
+        const mt = document.createElement("span");
+        mt.className = "mt"; mt.textContent = `${d.cols}x${d.rows}`;
+        const load = document.createElement("button");
+        load.className = "ghost"; load.textContent = "Open";
+        load.addEventListener("click", () => {
+          pushUndo();
+          S.cols = d.cols; S.rows = d.rows;
+          S.cells = Uint8Array.from(d.cells || []);
+          S.spawns = Array.isArray(d.spawns) ? d.spawns.map((sp) => ({ c: sp.c, r: sp.r })) : [];
+          if (typeof d.sym === "string" && SYMS.some((o) => o.id === d.sym)) setSym(d.sym);
+          syncSize();
+          draw(); scheduleMeasure();
+        });
+        row.append(nm, mt, load);
+        els.savedList.appendChild(row);
+      }
+    }, (err) => {
+      els.dbNote.textContent = err && err.code === "revoked"
+        ? "Saved boards are no longer available in this view."
+        : "Lost the connection to saved boards — reopen the page to retry.";
+    });
+  } catch (e) {
+    els.dbNote.textContent = "Could not list saved boards.";
+  }
+}
+
+document.getElementById("save").addEventListener("click", async () => {
+  if (!db) return;
+  const name = document.getElementById("saveName").value.trim() || "untitled board";
+  const id = "b" + Date.now().toString(36);
+  try {
+    await db.doc("boards/" + id).set({
+      name, cols: S.cols, rows: S.rows,
+      cells: Array.from(S.cells),
+      spawns: S.spawns.map((sp) => ({ ...sp })),
+      sym: S.sym,
+      grid: gridText(),
+      savedAt: Date.now(),
+      players: S.players,
+    });
+    els.dbNote.textContent = "Saved.";
+  } catch (e) {
+    els.dbNote.textContent = "Could not save that board.";
+  }
+});
+
+/* ------------------------ boot ------------------------ */
+function boot() {
+  // Open on a rolled board rather than an empty grid, so the first look shows
+  // what the page does.
+  S.cells = generateSpines(S.seed, S.cols, S.rows, { count: 7, len: 14, soft: 0.2 });
+  setSym(S.sym);
+  syncSize();
+  draw();
+  runMeasure();
+  initDb();
+}
+window.addEventListener("resize", () => { draw(); });
+boot();
+</script>
