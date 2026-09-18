@@ -22,3 +22,14 @@ This is a simulation, not a person with colour-vision deficiency looking at a sc
 
 `strip-off-*` is the shipped strip: hue only, no marker. It is the control and it is where the
 problem is visible.
+
+## Full frames
+
+`frame-<style>-<condition>.png` for style in `off`, `shape` and condition in `normal`,
+`deuteranopia`, `greyscale`. Arena and HUD together, at 1280x800.
+
+These are the frames the ruling turns on. The STRIP already names each player in text, so the
+strip was never colour-only. The ARENA ring is, and `frame-off-deuteranopia.png` is where that
+shows: two of the four rings render as the same yellow, so two tanks cannot be told apart at
+all. `frame-shape-deuteranopia.png` is the same board, where those two are a square and a
+triangle.
