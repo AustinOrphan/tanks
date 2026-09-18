@@ -48,6 +48,8 @@ on:
         options:
           - flow.campaign-round.pp1roles-off
           - flow.campaign-round.pp1roles-on
+          - flow.campaign-roster.pp1roles-off
+          - flow.campaign-roster.pp1roles-on
           - gallery.ai-last-seen.normal
           - gallery.ai-tracking.normal
           - gallery.drive.normal

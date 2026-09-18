@@ -3,6 +3,7 @@
 // case names the way a capture could mislead that it catches.
 import { describe, it, expect } from 'vitest';
 import {
+  ACHIEVEMENT_IDS,
   CAMPAIGN_LEVEL_COUNT,
   FLOW_DRIVER_PARAMS,
   FLOW_FLAG_IDS,
@@ -22,14 +23,47 @@ import {
   validateFlowInputs,
 } from './flow.mjs';
 import { FLAG_REGISTRY } from '../../src/game/devflags';
+import { ACHIEVEMENTS } from '../../src/game/achievements';
 
 const inputs = (over: Record<string, unknown> = {}) => ({ level: 1, seed: 7, driver: 'autoplay', flags: {}, ...over });
 
 describe('the flow catalogue (issue #815)', () => {
   it('names the campaign round, and refuses a flow it does not know', () => {
     expect(FLOW_IDS).toEqual(['campaign-round']);
-    expect(findFlow('campaign-round').storage).toEqual({});
     expect(() => findFlow('campaign-menu')).toThrow(/unknown flow 'campaign-menu'/);
+  });
+
+  it('boots with every level unlocked and every achievement already earned', () => {
+    // Level Select renders one button per UNLOCKED level, so a recipe naming level 4 needs
+    // four of them; `?dev=1` reads the developer namespace, hence the prefixed keys. The
+    // achievements are seeded so none unlocks mid-capture and lays a toast over the board.
+    const storage = findFlow('campaign-round').storage;
+    expect(Object.keys(storage).sort()).toEqual(['tanks.dev.tanks.achievements.v1', 'tanks.dev.tanks.progress.v1']);
+    expect(JSON.parse(storage['tanks.dev.tanks.progress.v1']).levelId)
+      .toBe(`level-0${CAMPAIGN_LEVEL_COUNT}`);
+    expect(JSON.parse(storage['tanks.dev.tanks.achievements.v1']).earned).toEqual([...ACHIEVEMENT_IDS]);
+  });
+
+  it('seeds the achievement ids the game actually defines', () => {
+    // Read from achievements.ts, not restated here: a new achievement must be seeded the day
+    // it ships, or the capture after it lands opens with a toast.
+    expect(ACHIEVEMENT_IDS.length).toBeGreaterThan(10);
+    expect(ACHIEVEMENT_IDS).toContain('boots-on-ground');
+    expect(ACHIEVEMENT_IDS).toContain('campaigner');
+    expect(ACHIEVEMENT_IDS.map((id: string) => ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean))
+      .toHaveLength(ACHIEVEMENTS.length);
+  });
+
+  it('reaches the level the recipe names through Level Select, by accessible name', () => {
+    // The regression this pins: a flow that pressed New Game got level one whatever the
+    // recipe asked for, because `campaign-new` lands on level one by design (issue #428).
+    const flow = findFlow('campaign-round');
+    expect(flow.open.map((step: any) => Object.values(step)[0])).toEqual(['Space', '.hud-splash']);
+    for (const level of [1, 3, 5]) {
+      const clicks = flow.start({ level }).map((step: any) => step.click).filter(Boolean);
+      expect(clicks).toEqual(['.hud-levelselect-open', `.hud-level-btn[aria-label="Level ${level}"]`]);
+    }
+    expect(flow.start({ level: 2 }).some((step: any) => step.click === '.hud-new-game')).toBe(false);
   });
 
   it('reads the campaign the game reads: five levels, level 1 on arena-01', () => {

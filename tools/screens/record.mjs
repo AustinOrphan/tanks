@@ -168,6 +168,17 @@ const SURFACE_IN = `(() => {
   return s.playing && s.panelHidden && s.canvas ? 'playing' : (s.panelHidden ? 'not-playing' : 'menu');
 })()`;
 
+/**
+ * What the screen says once a round is over: the outcome panel's own heading ("Level
+ * Cleared", "Level Failed", "Game Over"). A clip whose round ended is evidence of an
+ * OUTCOME, and a reviewer should not have to infer which one from the last frame.
+ */
+const OUTCOME_IN = `(() => {
+  const title = document.querySelector('.hud-title');
+  const text = title === null ? '' : (title.textContent ?? '').trim();
+  return text === '' ? null : text;
+})()`;
+
 const TICK_SAMPLE_IN = `(() => {
   const replay = globalThis.__tanks && globalThis.__tanks.replay;
   const surface = ${SURFACE_IN};
@@ -203,21 +214,23 @@ const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
  * Drive the flow to the recording start. Throws, naming what was seen, when the round does not
  * report `playing` within `timeout`.
  */
-async function reachPlaying(page, flow, timeout) {
-  const steps = [
-    { press: 'Space' },
-    { waitHidden: '.hud-splash' },
+async function reachPlaying(page, flow, inputs, timeout) {
+  // The flow's own way past the splash, then the diagnostics detour every flow wants (the
+  // page's account of which build it is and which parameters it accepted), then the flow's
+  // own way into gameplay.
+  for (const step of flow.open) await runStep(page, step, timeout);
+  const detour = [
     { click: '.hud-devtools-open' },
     { waitVisible: '.hud-devtools' },
     { click: '.hud-diag-copy' },
     { waitVisible: '.hud-diag-out' },
   ];
-  for (const step of steps) await runStep(page, step, timeout);
+  for (const step of detour) await runStep(page, step, timeout);
   const diagnosticsText = await page.evaluate("document.querySelector('.hud-diag-out').value");
   const diagnostics = parseDiagnostics(diagnosticsText);
-  for (const step of [{ click: '.hud-devtools-back' }, { waitVisible: '.hud-new-game' }]) await runStep(page, step, timeout);
+  await runStep(page, { click: '.hud-devtools-back' }, timeout);
   const startedAt = Date.now();
-  await runStep(page, { click: '.hud-new-game' }, timeout);
+  for (const step of flow.start(inputs)) await runStep(page, step, timeout);
   const waitFor = async (predicate, what) => {
     try {
       await page.waitForFunction(`(() => { const s = ${PLAYING_IN}; return ${predicate}; })()`, undefined, { timeout });
@@ -292,6 +305,7 @@ async function recordWindow(page, context, { seconds, viewport, out, signal, sto
   await Promise.all(writes);
   const raf = await page.evaluate('globalThis.__flowRaf ? globalThis.__flowRaf.slice() : []');
   const surfaceAtEnd = await page.evaluate(SURFACE_IN);
+  const outcome = surfaceAtEnd === 'playing' ? null : await page.evaluate(OUTCOME_IN);
   await cdp.detach().catch(() => {});
   const first = frames[0]?.timestamp ?? 0;
   return {
@@ -301,6 +315,7 @@ async function recordWindow(page, context, { seconds, viewport, out, signal, sto
     samples,
     raf,
     surfaceAtEnd,
+    outcome,
     startedAtMs,
     stoppedAtMs,
   };
@@ -402,7 +417,7 @@ export async function recordFlow(options, deps = {}) {
       }, Object.entries(flow.storage));
     }
     await page.goto(`${base}${url}`, { waitUntil: 'load' });
-    const { diagnostics, readyAfterMs, countdownMs, practice } = await reachPlaying(page, flow, timeout);
+    const { diagnostics, readyAfterMs, countdownMs, practice } = await reachPlaying(page, flow, inputs, timeout);
     const world = await page.evaluate(WORLD_IN);
     const renderer = await page.evaluate(RENDERER_IN);
     const recorded = await recordWindow(page, context, { seconds, viewport, out, signal, stop });
@@ -427,6 +442,7 @@ export async function recordFlow(options, deps = {}) {
       flowId: flow.id,
       title: flow.title,
       inputs,
+      storage: Object.keys(flow.storage),
       url,
       dist: fingerprint,
       diagnostics,
@@ -437,6 +453,7 @@ export async function recordFlow(options, deps = {}) {
         surfaceAtStart: 'playing',
         surfaceAtEnd: window.samples.length > 0 ? window.samples[window.samples.length - 1].surface : recorded.surfaceAtEnd,
         endedAs: window.endedAs,
+        endedWith: recorded.outcome,
       },
       timing: {
         policy: 'real-time: the production game loop at wall-clock pace, recorded from the compositor screencast and resampled to a constant frame rate by holding the last frame',

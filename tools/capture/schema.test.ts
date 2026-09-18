@@ -87,6 +87,9 @@ describe('capture recipe schema', () => {
       // variant.flags.pp1Roles, which is the point of shipping them as a pair.
       'flow.campaign-round.pp1roles-off',
       'flow.campaign-round.pp1roles-on',
+      // ...and the same pair on the first board holding every kind the arm touches.
+      'flow.campaign-roster.pp1roles-off',
+      'flow.campaign-roster.pp1roles-on',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });

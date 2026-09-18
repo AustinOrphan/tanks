@@ -1,0 +1,14 @@
+{
+  "id": "flow-reaches-level-one-whatever-the-recipe-names",
+  "file": "tools/screens/flow.mjs",
+  "find": "      { click: `.hud-level-btn[aria-label=\"Level ${level}\"]` },",
+  "replace": "      { click: '.hud-new-game' },",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "the flow catalogue (issue #815) reaches the level the recipe names through Level Select, by accessible name"
+  ],
+  "why": "New Game lands on level one whatever the level flag says (`campaign-new` in loop.ts, issue #428), so a flow that pressed it would record level one under a recipe naming any other level. The adapter's world-identity gate catches it at capture time; this catches it in a unit test."
+}

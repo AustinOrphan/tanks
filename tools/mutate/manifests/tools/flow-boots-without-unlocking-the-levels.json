@@ -1,0 +1,14 @@
+{
+  "id": "flow-boots-without-unlocking-the-levels",
+  "file": "tools/screens/flow.mjs",
+  "find": "      'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-05' }),",
+  "replace": "      'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-01' }),",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "the flow catalogue (issue #815) boots with every level unlocked and every achievement already earned"
+  ],
+  "why": "Level Select renders one button per unlocked level. Seeding less progress than the campaign has leaves a recipe naming a later level with no button to click, which fails as a selector timeout rather than as the missing unlock it is."
+}
