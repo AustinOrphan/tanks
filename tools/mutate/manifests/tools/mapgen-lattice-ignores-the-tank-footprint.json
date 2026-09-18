@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-lattice-ignores-the-tank-footprint",
+  "file": "tools/mapgen/measure.ts",
+  "find": "        if (circleVsAABB({ x, y }, radius, b).hit) legal[k] = 0;",
+  "replace": "        if (circleVsAABB({ x, y }, radius, b)) legal[k] = 0;",
+  "expect": "killed",
+  "why": "Drops `.hit`, restoring the exact defect this module shipped with for one commit. `circleVsAABB` returns a `Hit` OBJECT, so the condition is true whether or not the circle touched the box, and every point in each wall's rasterised neighbourhood -- the box grown by `radius` plus a step, square corners and all -- is marked illegal instead of the rounded footprint a tank really has. The mutation is subtle on purpose: the lattice still looks broadly right, because that neighbourhood mostly IS the blocked region, and a first calibration run over all 8 shipped boards at 3 player counts produced plausible numbers under it. What it actually costs is the rounded corners and one step of margin everywhere, which shows up as a 3-cell doorway reading impassable to anything wider than a 2-cell one. Pinned on the doorway control rather than on a shipped board for that reason.",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: each measure moves when its cause is introduced bottleneckWidth reads the doorway it was given, in cells"
+  ]
+}

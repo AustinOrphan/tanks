@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-route-block-is-one-radius-not-a-diameter",
+  "file": "tools/mapgen/measure.ts",
+  "find": "          markDisc(solidLat, blocked, node, 2 * TANK_RADIUS);",
+  "replace": "          markDisc(solidLat, blocked, node, TANK_RADIUS);",
+  "expect": "killed",
+  "why": "Blocks one tank RADIUS along a taken route instead of one DIAMETER. The block is not the ground the first tank's hull covers, it is where a SECOND tank's centre may not go, and two tanks overlap whenever their centres are closer than 2 * TANK_RADIUS. At one radius the first route runs down one side of a 3-cell doorway's 1.0-wide legal band and leaves the other side open for a tank that would have been driving through it, so the doorway counts as TWO routes when it is plainly one. Pins that the route measure reasons about two bodies rather than one.",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: each measure moves when its cause is introduced a single doorway drops routeCount to one -- the route measure is wired"
+  ]
+}
