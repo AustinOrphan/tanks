@@ -50,8 +50,11 @@ export const ENEMY_ROLE_CUES = [
   'deck',    // a flat bar on the deck ahead of the turret, varying in width
   'riser',   // the same bar raised into a block, so it casts and reads in silhouette
   'crown',   // turret diameter
-  // The two that measured best, together -- the only way to see whether two cues on one
-  // 40px silhouette read as a grammar or as noise.
+  // THE APPROVED ARM (issue #773): the two that measured best, together -- the only way to
+  // see whether two cues on one 40px silhouette read as a grammar or as noise. `flare` and
+  // `riser` are the pair #678's comparison found clearest and the owner approved on
+  // 2026-09-15; this value pulled `girth` and `deck` until then, which is what the first
+  // three-lever vocabulary meant by it, before the six-lever comparison had a verdict.
   'both',
 ] as const;
 
@@ -63,15 +66,15 @@ export function isEnemyRoleCue(value: unknown): value is EnemyRoleCue {
 
 /** Which lever a cue pulls; `both` pulls the two that measured best. */
 export function weaponLever(cue: EnemyRoleCue | null): 'girth' | 'flare' | 'dome' | null {
-  if (cue === 'girth' || cue === 'both') return 'girth';
-  if (cue === 'flare') return 'flare';
+  if (cue === 'girth') return 'girth';
+  if (cue === 'flare' || cue === 'both') return 'flare';
   if (cue === 'dome') return 'dome';
   return null;
 }
 
 export function mineLever(cue: EnemyRoleCue | null): 'deck' | 'riser' | 'crown' | null {
-  if (cue === 'deck' || cue === 'both') return 'deck';
-  if (cue === 'riser') return 'riser';
+  if (cue === 'deck') return 'deck';
+  if (cue === 'riser' || cue === 'both') return 'riser';
   if (cue === 'crown') return 'crown';
   return null;
 }

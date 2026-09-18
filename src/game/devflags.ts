@@ -20,6 +20,9 @@ import {
 } from '../presentation/arrival-language';
 import { STOCK_CUES, isStockCue, type StockCue } from '../presentation/stock-cue';
 import {
+  ENEMY_ROLE_CUES, isEnemyRoleCue, type EnemyRoleCue,
+} from '../presentation/enemy-role';
+import {
   VERSUS_ACTION_LAYOUTS, isVersusActionLayout, type VersusActionLayout,
 } from '../presentation/versus-actions';
 import {
@@ -413,6 +416,17 @@ export interface DevFlags {
    */
   identityMarker: IdentityMarkerStyle | null;
   /**
+   * Which experimental non-colour ROLE cue to draw on every tank (issues #357, #773). `null`
+   * -- absent or unrecognised -- keeps the shipped board, where what an enemy does is carried
+   * by hue alone.
+   *
+   * The six single levers are #678's comparison, kept so a later arm can be measured against
+   * the same three states; `both` is the approved arm, the muzzle flare for weapon class and
+   * the raised deck block for mine load together. Presentation only: the cue reads what a
+   * tank already is and changes no simulation value. See presentation/enemy-role.ts.
+   */
+  enemyRole: EnemyRoleCue | null;
+  /**
    * Which experimental shell BOUNCE-TRAIL to draw (issue #688). `null` draws none, which is
    * the shipped render: today only the ricochet sound says how many bounces a shell has left.
    * `segments` puts one more neutral dash behind each shell than its remaining bounces. An
@@ -549,6 +563,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   backdrop: null,
   mineWarn: null,
   identityMarker: null,
+  enemyRole: null,
   shellTrail: null,
   arrival: null,
   stockCue: null,
@@ -764,6 +779,13 @@ function asIdentityMarker(params: URLSearchParams): IdentityMarkerStyle | null {
   return isIdentityMarkerStyle(raw) ? raw : null;
 }
 
+/** One of the named role cues, or null when absent or unrecognised. */
+function asEnemyRole(params: URLSearchParams): EnemyRoleCue | null {
+  const raw = params.get('enemyRole');
+  if (raw === null) return null;
+  return isEnemyRoleCue(raw) ? raw : null;
+}
+
 /** One of the named shell bounce-trail treatments, or null when absent or unrecognised. */
 function asShellTrail(params: URLSearchParams): ShellTrailStyle | null {
   const raw = params.get('shellTrail');
@@ -915,6 +937,7 @@ export function parseDevFlags(search: string): DevFlags {
     backdrop: asBackdrop(params),
     mineWarn: asMineWarn(params),
     identityMarker: asIdentityMarker(params),
+    enemyRole: asEnemyRole(params),
     shellTrail: asShellTrail(params),
     arrival: asArrival(params),
     stockCue: asStockCue(params),
@@ -1406,6 +1429,17 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       "outline. On the turret crown instead: 'roof' leaves the ring exactly as shipped " +
       'and counts the slot in blades, trading the ring\'s area for a surface nothing can ' +
       'occlude. The shipped default carries identity in hue alone.',
+  },
+  enemyRole: {
+    kind: 'valued',
+    values: [...ENEMY_ROLE_CUES],
+    description:
+      'Draws what an enemy DOES without using colour (issues #357, #773). The shipped board ' +
+      'gives every kind one silhouette and separates them by hue alone. Six single levers ' +
+      "carry the same three states so they can be compared: 'girth', 'flare' and 'dome' " +
+      "carry weapon class, 'deck', 'riser' and 'crown' carry mine load. 'both' is the " +
+      'approved arm -- the muzzle flare and the raised deck block together. Every value is ' +
+      'a multiple of a shipped measurement, so with the flag absent no tank moves a vertex.',
   },
   menuTransition: {
     kind: 'valued',

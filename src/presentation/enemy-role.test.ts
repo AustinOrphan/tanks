@@ -27,8 +27,12 @@ describe('enemy role cues: the vocabulary', () => {
       const levers = [weaponLever(cue), mineLever(cue)].filter(Boolean);
       expect(levers.length, `${cue} pulls ${levers.length} levers`).toBe(cue === 'both' ? 2 : 1);
     }
-    expect(weaponLever('both')).toBe('girth');
-    expect(mineLever('both')).toBe('deck');
+    // THE APPROVED ARM (issue #773): the muzzle flare and the raised deck block, which are the
+    // two #678's comparison found clearest. This asserts the pair, not just that two levers are
+    // pulled: `both` meant girth and deck under the first three-lever vocabulary, and shipping
+    // the arm means it now means what the measurement chose.
+    expect(weaponLever('both')).toBe('flare');
+    expect(mineLever('both')).toBe('riser');
     // Absent is the shipped board: hue alone, nothing drawn.
     expect([weaponLever(null), mineLever(null)]).toEqual([null, null]);
   });

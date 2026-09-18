@@ -793,6 +793,16 @@ export function createEntityViews(
   function makeTank(
     kind: TankKind,
     controlledBy?: number,
+    /**
+     * This tank's own active-mine budget, when a session overrode the roster's (`Tank.mineCap`,
+     * issue #358). Absent means the roster's, which is what `configFor(kind)` gives.
+     *
+     * PASSED RATHER THAN LOOKED UP, because the mine cue states a fact about THIS tank. Under
+     * `?dev=1&pp1Roles=1` Brown, Teal and Green carry `mineCap: 0` while their roster entries
+     * still say 2, so a cue keyed on the kind would draw a mine block on a tank that cannot lay
+     * one -- a cue contradicting the thing it exists to report.
+     */
+    mineCap?: number,
   ): { group: THREE.Group; turret: THREE.Object3D; barrel: THREE.Object3D; visual: THREE.Group } {
     const group = new THREE.Group();
     // Everything that should shrink/grow with the spawn animation's tankScale --
@@ -886,8 +896,11 @@ export function createEntityViews(
     // than from its kind: the cues answer "what does this do", so they have to move when the
     // roster does. `configFor` is the same resolved config the sim fires from.
     const cfg = configFor(kind);
+    // Weapon class has no per-tank override anywhere in `Tank`, so the roster's bullet type IS
+    // this tank's; the mine budget does (`Tank.mineCap`), and `?? cfg.mineCapacity` is the same
+    // resolution the simulation makes when it decides whether a mine may be laid.
     const weapon = weaponShapeFor(weaponLever(enemyRole), cfg.weapon.bulletType);
-    const mines = mineShapeFor(mineLever(enemyRole), cfg.mineCapacity);
+    const mines = mineShapeFor(mineLever(enemyRole), mineCap ?? cfg.mineCapacity);
     const girth = weapon.barrelGirth ?? 1;
     const parts = tankParts({
       barrelGirth: girth,
@@ -1291,7 +1304,7 @@ export function createEntityViews(
       }
       if (!view) {
         const gen = t.kind === 'player' ? styleFor(slot).gen : 0;
-        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen, ring: null, roof: null, spawn: null };
+        view = { ...makeTank(t.kind, t.controlledBy, t.mineCap), kind: t.kind, gen, ring: null, roof: null, spawn: null };
         tankViews.set(t.id, view);
       }
       // Identity ring: WHO, not WHAT style -- see presentation/identity.ts's IDENTITY_RING_COLORS. Only a

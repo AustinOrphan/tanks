@@ -192,6 +192,7 @@ export interface GameDeps {
       identityMarker?: import('../presentation/identity-marker').IdentityMarkerStyle | null;
       shellTrail?: import('../presentation/shell-trail').ShellTrailStyle | null;
       arrival?: import('../presentation/arrival-language').ArrivalLanguage | null;
+      enemyRole?: import('../presentation/enemy-role').EnemyRoleCue | null;
       playerColor?: string;
       playerSkin?: SkinId;
       playerAccent?: string | null;
@@ -1984,6 +1985,7 @@ export function startGameWith(
     identityMarker: deps.devFlags.identityMarker,
     shellTrail: deps.devFlags.shellTrail,
     arrival: deps.devFlags.arrival,
+    enemyRole: deps.devFlags.enemyRole,
     // The paint shop's saved colour, skin and accent, applied from the first frame.
     playerColor: deps.customization.hexFor(deps.customization.hull()),
     playerSkin: deps.customization.skin(),

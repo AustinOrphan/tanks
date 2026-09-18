@@ -10,6 +10,7 @@ import { createEntityViews, type EntityViews } from './entities';
 import type { MineWarnStyle } from './mine-warning';
 import type { IdentityMarkerStyle } from '../presentation/identity-marker';
 import type { ArrivalLanguage } from '../presentation/arrival-language';
+import type { EnemyRoleCue } from '../presentation/enemy-role';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
@@ -108,6 +109,9 @@ export interface RendererOptions {
   /** Experimental arrival/destruction language (`arrival` dev flag, issue #230); absent =
    *  the shipped pair, which both expand a ring. */
   readonly arrival?: ArrivalLanguage | null;
+  /** Experimental non-colour role cue (`enemyRole` dev flag, issues #357/#773); absent =
+   *  the shipped board, where what a tank does is carried by hue alone. */
+  readonly enemyRole?: EnemyRoleCue | null;
   /** Experimental shell bounce-trail (`shellTrail` dev flag, issue #688); absent = none
    *  drawn, which is the shipped render. */
   readonly shellTrail?: ShellTrailStyle | null;
@@ -171,7 +175,7 @@ export function createRenderer(
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary, options.quality);
   const entities: EntityViews = createEntityViews(
     ctx.scene, ctx.textures, options.mineWarn ?? null, options.identityMarker ?? null,
-    options.arrival ?? null,
+    options.arrival ?? null, options.enemyRole ?? null,
   );
   if (options.playerColor || options.playerSkin || options.playerAccent) {
     entities.setPlayerStyle(

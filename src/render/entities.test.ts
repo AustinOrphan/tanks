@@ -2934,3 +2934,77 @@ describe('entity views — a stock respawn snaps to the selected spawn point (#2
     views.dispose();
   });
 });
+
+describe('enemy role cues read the tank, not its kind (issues #357, #773)', () => {
+  /** A world holding one tank of `kind`, with `mineCap` overridden when given. */
+  function worldWith(kind: Tank['kind'], mineCap?: number): World {
+    const tank = { ...makeTank(1, kind, 5, 5), ...(mineCap === undefined ? {} : { mineCap }) };
+    const spawns: Spawn[] = [{ kind, pos: { x: 5, y: 5 }, angle: 0 }];
+    return createWorld({ walls: [], tanks: [tank], spawns, lives: 3 });
+  }
+
+  const mineBlocks = (scene: THREE.Scene): THREE.Mesh[] => {
+    const found: THREE.Mesh[] = [];
+    scene.traverse((o) => { if (o.name === 'mine-block') found.push(o as THREE.Mesh); });
+    return found;
+  };
+
+  const widthOfBlock = (scene: THREE.Scene): number => {
+    const [block] = mineBlocks(scene);
+    const geo = block.geometry as THREE.BoxGeometry;
+    geo.computeBoundingBox();
+    const box = geo.boundingBox as THREE.Box3;
+    return box.max.x - box.min.x;
+  };
+
+  it('draws no mine block for a tank whose session took its mines away', () => {
+    // THE CASE THIS EXISTS FOR: `?dev=1&pp1Roles=1` stamps `mineCap: 0` on Brown, Teal and
+    // Green (issue #358) while their roster entries still read 2. A cue keyed on the kind
+    // would draw a mine block on a tank that cannot lay one -- the cue contradicting the one
+    // thing it exists to report. Keyed on the tank, the deck is clean.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+    const w = worldWith('teal', 0);
+    views.sync(w, w, 0);
+    expect(mineBlocks(scene)).toHaveLength(0);
+    views.dispose();
+  });
+
+  it('draws the roster block when the session overrides nothing', () => {
+    // The control for the case above, and the proof the absence there is the override rather
+    // than a cue that never draws: the same kind, the same cue, no `mineCap`.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+    const w = worldWith('teal');
+    views.sync(w, w, 0);
+    expect(mineBlocks(scene)).toHaveLength(1);
+    views.dispose();
+  });
+
+  it('sizes the block by the tank\'s own budget, so a raised cap reads wider', () => {
+    // Two tanks of the SAME kind, one carrying a larger budget than its roster: the block is
+    // an area, so a bigger budget must be a visibly bigger block, not merely present.
+    const scenes = [2, 4].map((cap) => {
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+      const w = worldWith('teal', cap);
+      views.sync(w, w, 0);
+      return { scene, views };
+    });
+    expect(widthOfBlock(scenes[1].scene)).toBeGreaterThan(widthOfBlock(scenes[0].scene));
+    for (const s of scenes) s.views.dispose();
+  });
+
+  it('draws nothing at all with no cue asked for, whatever the tank carries', () => {
+    // The shipped board: the flag absent means no tank moves a vertex, including one whose
+    // session gave it an unusual budget.
+    for (const cap of [undefined, 0, 4]) {
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene);
+      const w = worldWith('teal', cap);
+      views.sync(w, w, 0);
+      expect(mineBlocks(scene), `mineCap ${cap}`).toHaveLength(0);
+      views.dispose();
+    }
+  });
+});
