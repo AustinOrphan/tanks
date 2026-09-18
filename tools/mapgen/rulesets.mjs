@@ -225,6 +225,147 @@ function topology(seed, opts = {}) {
   return toArena(cells, anchor, board);
 }
 
+
+/**
+ * RUNS RULESET: carve the pathways first, then build the cover out of long straight bars and
+ * L-bends rather than blocks.
+ *
+ * This is an owner design ruling, taken as a directive rather than derived: deliberate
+ * pathways should be created rather than left to emerge, and longer straights and L shapes
+ * should be encouraged. Both halves are implemented literally, and both have independent
+ * support in the genre survey, which is why they are worth testing rather than merely
+ * recording:
+ *
+ *   PATHWAYS FIRST is `loop-skeleton-first` (arena-fps-flow, graded measured) and
+ *   `carve-the-spawn-circuit-first` (pcg-techniques): lay a closed circulation loop on the
+ *   tank layer BEFORE placing any wall, mark those cells protected, and let the wall placer
+ *   work around them. A route that exists because it was drawn is a different object from one
+ *   that exists because the clutter happened to leave a gap -- which is exactly what
+ *   `scatter` produces and why it reads as confetti.
+ *
+ *   LONG STRAIGHTS AND Ls is `cover-as-offset-bars-with-long-flat-faces` (tank-lineage),
+ *   which reports Wii Tanks and Battle City cover as axis-aligned runs of 3-8 tank widths,
+ *   one cell thick, OFFSET between adjacent rows rather than aligned. It is also
+ *   `reflector-faces-for-bank-shots`: a bank shot needs a flat unbroken face of meaningful
+ *   length to come off, and a board made of 2x2 blocks offers almost none.
+ *
+ * WHAT THIS PREDICTS, to be checked rather than assumed: against `rooms`, longer faces and a
+ * carved loop should raise wall fraction toward the shipped floor of 0.08 and lengthen the
+ * longest sightline, while the protected loop holds bottleneck width at the carved lane width
+ * and keeps route count at or above 2. If the bars behave like `scatter`'s blocks instead --
+ * same measures, different shapes -- then piece SHAPE does not matter and only density does,
+ * which would itself be worth knowing.
+ */
+function runs(seed, opts = {}) {
+  const {
+    board = BOARD,
+    pieces = 16,
+    destructibleShare = 0.22,
+    laneHalfWidth = 1,   // 1 -> a 3-cell lane, the comfortable corridor
+    minRun = 4,
+    maxRun = 8,
+  } = opts;
+  const r = rng(seed);
+  const cells = blankCells(board);
+  const anchor = [2, 2];
+
+  // ---- step 1: the deliberate pathway ----
+  // A closed rectangular circuit inset from the frame, plus one cross spur, carved to
+  // `laneHalfWidth * 2 + 1` cells and marked PROTECTED so no piece may land on it. The circuit
+  // is what makes every route on the board one somebody drew.
+  const protectedCells = cells.map((row) => row.map(() => false));
+  const inset = 3;
+  const top = inset;
+  const bottom = board.rows - 1 - inset;
+  const left = inset;
+  const right = board.cols - 1 - inset;
+  const protect = (c0, r0, c1, r1) => {
+    for (let rr = Math.max(0, r0 - laneHalfWidth); rr <= Math.min(board.rows - 1, r1 + laneHalfWidth); rr++) {
+      for (let cc = Math.max(0, c0 - laneHalfWidth); cc <= Math.min(board.cols - 1, c1 + laneHalfWidth); cc++) {
+        protectedCells[rr][cc] = true;
+      }
+    }
+  };
+  protect(left, top, right, top);        // the circuit's four sides
+  protect(left, bottom, right, bottom);
+  protect(left, top, left, bottom);
+  protect(right, top, right, bottom);
+  const midRow = (top + bottom) >> 1;
+  const midCol = (left + right) >> 1;
+  // One spur across the middle, so the circuit is not a single ring with a dead interior.
+  if (r.next() < 0.5) protect(left, midRow, right, midRow);
+  else protect(midCol, top, midCol, bottom);
+
+  // ---- step 2: cover as long runs and L-bends ----
+  // Every piece is ONE CELL THICK. That is deliberate and is what makes it a bar rather than a
+  // block: a 1-cell wall is 0.667 wide, so it stops a tank, presents a long flat face to bank
+  // off, and costs far less floor than a 2-cell-thick wall of the same length.
+  const candidates = [];
+  for (let rr = 1; rr < board.rows - 1; rr++) {
+    for (let cc = 1; cc < board.cols - 1; cc++) {
+      if (rr * board.cols + cc >= (board.rows * board.cols) / 2) continue;
+      candidates.push([cc, rr]);
+    }
+  }
+  r.shuffle(candidates);
+
+  /** The cells a piece would occupy: a straight run, or an L with two arms. */
+  const shapeOf = (cc, rr) => {
+    const len = minRun + r.int(maxRun - minRun + 1);
+    const horizontal = r.next() < 0.5;
+    const out = [];
+    for (let i = 0; i < len; i++) out.push(horizontal ? [cc + i, rr] : [cc, rr + i]);
+    if (r.next() < 0.45) {
+      // An L: a second arm off the far end, turning either way.
+      const arm = Math.max(2, Math.floor(len / 2)) + r.int(2);
+      const [ec, er] = out[out.length - 1];
+      const sign = r.next() < 0.5 ? 1 : -1;
+      for (let i = 1; i <= arm; i++) out.push(horizontal ? [ec, er + sign * i] : [ec + sign * i, er]);
+    }
+    return out;
+  };
+
+  const fits = (shape) => {
+    for (const [cc, rr] of shape) {
+      if (cc < 1 || rr < 1 || cc >= board.cols - 1 || rr >= board.rows - 1) return false;
+      if (protectedCells[rr][cc]) return false;
+      // Keep the spawn anchor's neighbourhood clear, and keep a one-cell gap from anything
+      // already placed -- including from this piece's own rotated image, which `rotate180`
+      // will put at the antipode.
+      if (Math.abs(cc - anchor[0]) <= 3 && Math.abs(rr - anchor[1]) <= 3) return false;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = rr + dr;
+          const nc = cc + dc;
+          if (nr < 0 || nc < 0 || nr >= board.rows || nc >= board.cols) continue;
+          if (cells[nr][nc] !== '.') return false;
+          const ir = board.rows - 1 - nr;
+          const ic = board.cols - 1 - nc;
+          if (shape.some(([sc, sr]) => sc === ic && sr === ir)) return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  let placed = 0;
+  for (const [cc, rr] of candidates) {
+    if (placed >= pieces) break;
+    const shape = shapeOf(cc, rr);
+    if (!fits(shape)) continue;
+    const ch = r.next() < destructibleShare ? 'x' : '#';
+    for (const [sc, sr] of shape) cells[sr][sc] = ch;
+    rotate180(cells);
+    if (cellsConnected(cells)) {
+      placed++;
+    } else {
+      for (const [sc, sr] of shape) cells[sr][sc] = '.';
+      rotate180(cells);
+    }
+  }
+  return toArena(rotate180(cells), anchor, board);
+}
+
 export const RULESETS = {
   scatter: {
     name: 'scatter',
@@ -258,6 +399,19 @@ export const RULESETS = {
       { label: 'chords=3', opts: {} },
       { label: 'chords=6', opts: { extraEdges: 6 } },
       { label: 'plaza=4', opts: { plazaRadius: 4 } },
+    ],
+  },
+  runs: {
+    name: 'runs',
+    summary: 'carve a protected circulation circuit first, then cover as 1-cell-thick runs of 4-8 cells and L-bends',
+    prediction: 'longer flat faces and a drawn loop: wall fraction toward the shipped floor, a longer longest-sightline than rooms, bottleneck held at the carved lane width, route count at or above 2',
+    generate: runs,
+    variants: [
+      { label: 'pieces=10', opts: { pieces: 10 } },
+      { label: 'pieces=16', opts: {} },
+      { label: 'pieces=24', opts: { pieces: 24 } },
+      { label: 'run=6-12', opts: { minRun: 6, maxRun: 12 } },
+      { label: 'lane=5cell', opts: { laneHalfWidth: 2 } },
     ],
   },
 };

@@ -413,6 +413,56 @@ than the lanes joining them.*
 same merged wall geometry the game collides against. Grey is solid, brown destructible, rings
 are the spawns `loadArena` really picked.*
 
+### A fourth ruleset, from a design ruling
+
+A ruling given while this document was in review: **deliberate pathways should be created
+rather than left to emerge, and longer straights and L shapes should be encouraged.**
+
+Both halves have independent support in the survey, which is why they were implemented and
+measured rather than only recorded. Pathways-first is `loop-skeleton-first` (arena-fps-flow,
+graded measured) and `carve-the-spawn-circuit-first` (pcg-techniques): lay the circulation
+loop on the tank layer *before* placing any wall and protect those cells. Long straights and
+Ls is `cover-as-offset-bars-with-long-flat-faces` (tank-lineage), which reports Wii Tanks and
+Battle City cover as axis-aligned runs of 3-8 tank widths, one cell thick, offset between
+rows -- and `reflector-faces-for-bank-shots`, since a bank shot needs a flat unbroken face to
+come off and a board of 2x2 blocks offers almost none.
+
+`runs` implements both literally: carve a protected 3-cell circuit plus one spur, then place
+cover as one-cell-thick runs of 4 to 8 cells with an L-bend on roughly half of them.
+
+| ruleset | wall | legal | corr | open | neck | rout | long | sight | bank |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| shipped band (8 boards) | 0.08-0.37 | 0.28-0.78 | 0.01-0.84 | 0.01-0.57 | 1.33-6.00 | 1.00-2.33 | 0.60-0.82 | 0.17-0.43 | 0.09-0.29 |
+| scatter (null) | 0.18 | 0.40 | 0.53 | 0.02 | 1.57 | 1.54 | -- | **0.15** | **0.40** |
+| rooms | **0.05** | 0.74 | 0.04 | 0.43 | 3.13 | 2.42 | -- | **0.45** | 0.28 |
+| topology | **0.55** | **0.21** | 0.66 | 0.00 | 1.96 | 1.47 | -- | 0.20 | 0.27 |
+| **runs** | 0.14 | 0.50 | 0.19 | 0.16 | 2.26 | 1.65 | 0.71 | 0.23 | 0.23 |
+| **runs**, longer bars | 0.13 | 0.55 | 0.12 | 0.23 | 2.46 | 1.78 | 0.72 | 0.27 | 0.19 |
+
+Bold marks a figure outside the shipped band. **`runs` is the only ruleset of the four that
+lands inside every band**, and the variant with 6-12 cell runs does too. The ruling is
+therefore supported by the measurement and not only by taste.
+
+![A board from the runs ruleset with longer bars: one-cell-thick walls in long straight runs and L-bends, with open approach lanes between them](https://raw.githubusercontent.com/AustinOrphan/tanks/pr-media/map-generation-rules/runs-p32-long.png)
+
+*`runs` with 6-12 cell runs, 4 players. The L-bends are the visible difference from every
+other ruleset here, and they are what a flat face long enough to bank off looks like on a
+grid.*
+
+**Two honest qualifications.**
+
+The piece-count knob is **dead above about 16 pieces**: 16, 24 and 32 produce identical
+figures in every column, because the one-cell gap between pieces plus the protected circuit
+plus the connectivity check saturate the half-board before the request is met. That is the
+same saturation `scatter`'s block count showed, found the same way, and it means density is
+not the lever here -- run LENGTH is.
+
+The **pathway is not yet legible**. The carved circuit is protected from pieces, but the rest
+of the interior is open too, so the drawn route does not read as a route -- it reads as more
+open floor. Making a pathway legible needs the non-pathway space to be denser than the
+pathway, and the density knob is exactly the one that saturates. That is unresolved and is
+carried into issue #821.
+
 ### Individual rules, swept one at a time
 
 Comparing whole rulesets hides which rule inside one is doing the work, so each ruleset also
@@ -462,12 +512,13 @@ acceptance tier's live edge is concealment at 3 and 4 players, not connectivity.
 moment a quality measure becomes a gate, a generator can be tuned against it and the measure
 stops describing the board and starts describing the generator.
 
-**2. Pursue the template-grammar family, and not the other two** (issue #821). Of the three rulesets
-built, `rooms` is the only one whose boards land inside the shipped bands on wall fraction,
-legal area, sightline and carom. `scatter` is outside on two measures and is the baseline
-anyway; `topology` is half again as walled as the most walled shipped board. This is a
-statement about where to spend the next effort, not a verdict about play -- nobody has played
-any of them.
+**2. Pursue `runs` -- long bars, L-bends and carved pathways -- and not the other three**
+(issue #821). It is the only one of the four landing inside every shipped band, and the one
+whose shapes a player would recognise as authored. `rooms` is the runner-up and the family to
+borrow the room/lane lattice from. `scatter` is outside the band on two measures and is the
+baseline anyway; `topology` is half again as walled as the most walled shipped board. This is
+a statement about where to spend the next effort, not a verdict about play -- nobody has
+played any of them.
 
 **3. Do not put carom in a fitness function.** The null ruleset maximises bank gain by
 accident, at 0.40 against a shipped ceiling of 0.29. Optimising for it converges on confetti.
