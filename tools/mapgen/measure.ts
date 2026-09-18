@@ -268,16 +268,41 @@ export interface BoardMeasures {
   /** Fraction of legal area with 2 or fewer of 8 directions clear for 1.5 tank diameters:
    *  corridors, pockets and dead ends, as against rooms you can circle in. NOT the same as
    *  "can be cornered" -- a straight corridor with two exits scores here too. High means the
-   *  board is made of lanes, which is a style, not a fault. */
+   *  board is made of lanes, which is a style, not a fault. It stops registering above a
+   *  5-cell band; see `openGroundFraction` for the measured table and the blind band between
+   *  the two. */
   readonly corridorAreaFraction: number;
   /**
    * Fraction of legal area with 6 or more of 8 clear -- open ground with room to manoeuvre.
    *
-   * EDGE-SENSITIVE, by design and worth knowing before reading it: the probe reaches 1.5
-   * tank diameters, so every legal point within 1.5 units of the board's own frame loses the
-   * directions pointing at it. A completely empty 22x18 board measures 0.68 here, not 1.0,
-   * and the missing third is its own rim. Compare boards of the same size, or read the
-   * contrast against `corridorAreaFraction` rather than the absolute number.
+   * THESE TWO FRACTIONS DO NOT PARTITION THE BOARD, and the gap between them is wide enough
+   * to matter. The probe reaches 1.5 tank diameters along each of 8 rays, and the DIAGONAL
+   * rays are what set the bar: clearing them needs 1.5 world units to each side, so 3.0 units
+   * of legal band before a point can reach 6 of 8. Measured on full-width floor bands of
+   * increasing width, walled above and below, on the standard 33x27 board:
+   *
+   *   band   world   corridor   open      legal band = w * 0.667 - 1.0
+   *    2     1.333     1.00     0.00      0.333  -- the minimum corridor
+   *    3     2.000     1.00     0.00      1.000  -- the comfortable corridor
+   *    4     2.667     0.80     0.00      1.667
+   *    5     3.333     0.29     0.00      2.222
+   *    6     4.000     0.00     0.00      2.889  <-- NEITHER. A blind band.
+   *    7     4.667     0.00     0.16      3.556  -- open first registers
+   *    9     6.000     0.00     0.34      5.000
+   *   13     8.667     0.00     0.52      7.778
+   *
+   * So a room 5 or 6 cells across reads as neither a corridor nor open ground: it falls out
+   * of both columns and shows up only in `legalAreaFraction`. A board built entirely from
+   * 6-cell rooms would measure 0.00 and 0.00 and look, from these two numbers alone, like it
+   * had no floor worth describing. Read them beside `legalAreaFraction`, never as a split of
+   * it, and treat `open` as "at least 7 cells across in both axes" rather than as "roomy".
+   *
+   * ALSO EDGE-SENSITIVE: every legal point within 1.5 units of the board's own frame loses
+   * the rays pointing at it, so a completely empty 22x18 board measures 0.68 rather than 1.0
+   * and the missing third is its rim. Compare boards of one size.
+   *
+   * The 5-6 blind band was found by an adversarial review of the candidate rule sets and then
+   * measured here; `measure.test.ts` pins both ends of it.
    */
   readonly openGroundFraction: number;
 

@@ -181,6 +181,38 @@ describe('mapgen quality measures: each measure moves when its cause is introduc
     expect(pillars.coverPieces).toBeGreaterThan(20);
   });
 
+  it('a 6-cell room registers as neither corridor nor open ground -- the blind band', () => {
+    // The two fractions do not partition the board. The probe's diagonal rays need 1.5 world
+    // units to each side, so open ground cannot register below 3.0 units of legal band, while
+    // corridor stops registering above about 2.2. A 6-cell band sits in the gap and scores
+    // 0.00 on both, which is worth a control because the pair reads like a split of the legal
+    // area and is not one.
+    const band = (w: number): Arena => {
+      const rows: string[] = [];
+      const top = Math.floor((27 - w) / 2);
+      for (let r = 0; r < 27; r++) {
+        const inBand = r >= top && r < top + w;
+        let row = '';
+        for (let c = 0; c < 33; c++) row += inBand ? (r === top && c === 1 ? 'P' : '.') : '#';
+        rows.push(row);
+      }
+      return board(rows);
+    };
+
+    const three = measureBoard(band(3), 2, 'band-3');
+    expect(three.corridorAreaFraction).toBeGreaterThan(0.9);
+    expect(three.openGroundFraction).toBe(0);
+
+    const six = measureBoard(band(6), 2, 'band-6');
+    expect(six.corridorAreaFraction).toBe(0);
+    expect(six.openGroundFraction).toBe(0);
+    // It is not that the band is empty -- there is plenty of legal ground in it.
+    expect(six.legalAreaFraction).toBeGreaterThan(0.1);
+
+    const seven = measureBoard(band(7), 2, 'band-7');
+    expect(seven.openGroundFraction).toBeGreaterThan(0);
+  });
+
   it('breaking one cell of a symmetric board moves only the symmetry measures', () => {
     const symmetric = openBoard(33, 27);
     const broken = { ...symmetric, grid: symmetric.grid.map((row, r) => (r === 5 ? '#' + row.slice(1) : row)) };
