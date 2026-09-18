@@ -366,6 +366,163 @@ function runs(seed, opts = {}) {
   return toArena(rotate180(cells), anchor, board);
 }
 
+
+/**
+ * SPINES RULESET: a few very long CONTINUOUS walls, the corridors they leave between them, and
+ * reserved open spaces.
+ *
+ * The second owner ruling, verbatim: "Open spaces and corridors are good. Long continuous
+ * walls are good." `runs` implemented the first ruling (deliberate pathways, longer straights
+ * and Ls) and measured inside every shipped band, but it failed this one in two specific ways
+ * this ruleset exists to fix.
+ *
+ * FAULT 1 -- `runs` FORBIDS ALL JOINS, so its walls are isolated bars that never become long
+ * continuous runs. The same rule also saturated the board: asking for 16, 24 or 32 pieces gave
+ * byte-identical measurements because the one-cell gap filled the half-board at about 16 and
+ * the surplus request was silently dropped.
+ *
+ * THE JOIN RULE is the crux, because the two obvious rules are both wrong. Forbid every join
+ * and walls can never be continuous, which is fault 1. Permit every join and the walls fuse
+ * into a maze with no corridors left between them. So joins are permitted ONLY AT AN ENDPOINT:
+ * a new spine may meet an existing one at its own first or last cell -- making an L, a T or a
+ * Z -- and everywhere else must keep `minClear` cells of separation. Continuity is bought at
+ * the ends; corridors are protected along the length.
+ *
+ * FAULT 2 -- `runs` CARVED A PATHWAY AND IT WAS NOT LEGIBLE, because the rest of the interior
+ * was open too, so a drawn route read as more open floor. This ruleset does not carve a route
+ * at all. A corridor here is legible because it is BOUNDED: `minClear` is the distance between
+ * two spines, so the space between them is a lane with wall on both sides, which is what makes
+ * it read as a lane rather than as floor. Open space is legible for the opposite reason -- a
+ * reserved plaza has no wall in it at all.
+ *
+ * `minClear` is 4 cells of Chebyshev separation between wall cells, which leaves 3 free cells
+ * between two spines: 2.0 world units, the comfortable corridor the arena-geometry spec calls
+ * today's standard. At 3 it would leave 2 free cells -- 1.333, the tight minimum -- which that
+ * spec names as its own biggest playtest risk and which is where a reactive no-pathfinding bot
+ * jams. The number is the taxonomy's, not a tuning choice.
+ */
+function spines(seed, opts = {}) {
+  const {
+    board = BOARD,
+    count = 7,
+    minLen = 8,
+    maxLen = 20,
+    minClear = 4,
+    plazaRadius = 3,
+    destructibleShare = 0.2,
+  } = opts;
+  const r = rng(seed);
+  const cells = blankCells(board);
+  const anchor = [2, 2];
+
+  // ---- reserved open space ----
+  // One plaza in the first half; the rotation gives its partner. Kept clear of every spine, so
+  // the board has somewhere that is deliberately open rather than merely unbuilt.
+  const plaza = {
+    c: 6 + r.int(Math.max(1, board.cols - 18)),
+    r: 6 + r.int(Math.max(1, Math.floor(board.rows / 2) - 8)),
+  };
+  const inPlaza = (cc, rr) => {
+    if (Math.abs(cc - plaza.c) <= plazaRadius && Math.abs(rr - plaza.r) <= plazaRadius) return true;
+    const ic = board.cols - 1 - plaza.c;
+    const ir = board.rows - 1 - plaza.r;
+    return Math.abs(cc - ic) <= plazaRadius && Math.abs(rr - ir) <= plazaRadius;
+  };
+
+  const wallCells = [];
+  const isWall = (cc, rr) => cc >= 0 && rr >= 0 && cc < board.cols && rr < board.rows && cells[rr][cc] !== '.';
+
+  /** Chebyshev distance from (cc, rr) to the nearest placed wall cell, capped at `minClear`. */
+  const clearance = (cc, rr) => {
+    let best = minClear;
+    for (const [wc, wr] of wallCells) {
+      const d = Math.max(Math.abs(wc - cc), Math.abs(wr - rr));
+      if (d < best) best = d;
+      if (best === 0) break;
+    }
+    return best;
+  };
+
+  /** A straight run of `len` cells from (cc, rr), optionally turning once into an L or Z. */
+  const spineShape = (cc, rr) => {
+    const len = minLen + r.int(maxLen - minLen + 1);
+    const horizontal = r.next() < 0.5;
+    const out = [];
+    for (let i = 0; i < len; i++) out.push(horizontal ? [cc + i, rr] : [cc, rr + i]);
+    // Turn on roughly half, and turn TWICE on a third of those -- an L and a Z. A Z is what
+    // makes a corridor bend, which is what stops a spine from also being a full-board sightline.
+    if (r.next() < 0.55) {
+      const arm = 3 + r.int(6);
+      const [ec, er] = out[out.length - 1];
+      const sign = r.next() < 0.5 ? 1 : -1;
+      for (let i = 1; i <= arm; i++) out.push(horizontal ? [ec, er + sign * i] : [ec + sign * i, er]);
+      if (r.next() < 0.35) {
+        const arm2 = 3 + r.int(6);
+        const [fc, fr] = out[out.length - 1];
+        for (let i = 1; i <= arm2; i++) out.push(horizontal ? [fc + sign * i, fr] : [fc, fr + sign * i]);
+      }
+    }
+    return out;
+  };
+
+  /**
+   * THE JOIN RULE. Every cell of the candidate must either keep `minClear` from every placed
+   * wall cell, or be close to one ONLY at the candidate's own first or last cell -- an
+   * end-join. A violation anywhere in the middle is a wall running alongside another with no
+   * corridor left between them, which is the maze this rule exists to prevent.
+   */
+  const fits = (shape) => {
+    const head = shape[0];
+    const tail = shape[shape.length - 1];
+    let joins = 0;
+    for (const [cc, rr] of shape) {
+      // Stay off the frame, out of the plazas, and away from the authored spawn.
+      if (cc < 1 || rr < 1 || cc >= board.cols - 1 || rr >= board.rows - 1) return false;
+      if (inPlaza(cc, rr)) return false;
+      if (Math.abs(cc - anchor[0]) <= 3 && Math.abs(rr - anchor[1]) <= 3) return false;
+      if (isWall(cc, rr)) return false;
+      // The candidate's own rotated image counts as a placed wall: `rotate180` will put it
+      // there, and a spine running alongside its own image leaves no corridor either.
+      const ic = board.cols - 1 - cc;
+      const ir = board.rows - 1 - rr;
+      const nearOwnImage = shape.some(([sc, sr]) => Math.max(Math.abs(sc - ic), Math.abs(sr - ir)) < minClear);
+      if (clearance(cc, rr) < minClear || nearOwnImage) {
+        const atEnd = Math.max(Math.abs(cc - head[0]), Math.abs(rr - head[1])) <= 1
+          || Math.max(Math.abs(cc - tail[0]), Math.abs(rr - tail[1])) <= 1;
+        if (!atEnd) return false;
+        joins++;
+      }
+    }
+    // At most one end-join per spine, so a spine joins the structure rather than being absorbed
+    // into it at both ends and sealing a pocket.
+    return joins <= 3;
+  };
+
+  let placed = 0;
+  let attempts = 0;
+  while (placed < count && attempts < 4000) {
+    attempts++;
+    const cc = 1 + r.int(board.cols - 2);
+    const rr = 1 + r.int(Math.max(1, Math.floor(board.rows / 2)));
+    const shape = spineShape(cc, rr);
+    if (!fits(shape)) continue;
+    // A whole spine is solid or a whole spine is destructible -- never a mix. A destructible
+    // cell is a destruction UNIT, and a spine speckled with them reads as damage rather than
+    // as terrain a mine can open.
+    const ch = r.next() < destructibleShare ? 'x' : '#';
+    for (const [sc, sr] of shape) cells[sr][sc] = ch;
+    rotate180(cells);
+    if (cellsConnected(cells)) {
+      for (const cell of shape) wallCells.push(cell);
+      placed++;
+    } else {
+      for (const [sc, sr] of shape) cells[sr][sc] = '.';
+      rotate180(cells);
+    }
+  }
+  return toArena(rotate180(cells), anchor, board);
+}
+
 export const RULESETS = {
   scatter: {
     name: 'scatter',
@@ -412,6 +569,20 @@ export const RULESETS = {
       { label: 'pieces=24', opts: { pieces: 24 } },
       { label: 'run=6-12', opts: { minRun: 6, maxRun: 12 } },
       { label: 'lane=5cell', opts: { laneHalfWidth: 2 } },
+    ],
+  },
+  spines: {
+    name: 'spines',
+    summary: 'a few very long continuous walls joined only at their ends, 3-cell corridors between them, reserved plazas',
+    prediction: 'long continuous walls and bounded lanes: corridor share up and open ground down against runs, bottleneck held near 2.0 by the clearance rule, and bank offer up because a long spine is a long flat face',
+    generate: spines,
+    variants: [
+      { label: 'count=5', opts: { count: 5 } },
+      { label: 'count=7', opts: {} },
+      { label: 'count=10', opts: { count: 10 } },
+      { label: 'len=12-24', opts: { minLen: 12, maxLen: 24 } },
+      { label: 'clear=3cell', opts: { minClear: 3 } },
+      { label: 'plaza=5', opts: { plazaRadius: 5 } },
     ],
   },
 };
