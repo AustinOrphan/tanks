@@ -590,3 +590,24 @@ auto-merge policy is its own decision and pull request.
 every workflow uses today and which Dependabot updates in place. A third-party action must be
 pinned by full commit SHA, with the version in a trailing comment. The same test enforces
 both across every workflow file.
+
+**A major usually arrives needing source changes,** which is why it arrives alone. Three of
+the first four did: jsdom 30 needed a `hud.css` test change (#801), TypeScript 6 a
+`hud.diagnostics` type change (#810), and Vitest 5 a change to `tools/mutate/run.mjs` and one
+mutation entry (#811). Commit those on the update branch, so the fix and the version move
+together and CI proves them together.
+
+**Verified against the first runs (2026-09-17 and 2026-09-18).** Nine update pull requests
+opened, which is the catch-up burst and not the weekly rate: every package was behind when
+the configuration landed. They confirmed the four properties this file claims above.
+
+- **The workspace is covered.** The Vitest major (#811) changed `tools/mutate/package.json`
+  beside the root manifest and the single lockfile.
+- **Grouping and separation hold.** Four grouped pull requests -- tooling (#799, #809), the
+  `three` pair (#800), the Actions tags (#804) -- and four majors each on their own (#801,
+  #803, #810, #811).
+- **The ignores bind.** TypeScript 7 was proposed (#802), the hold landed (#808), and the
+  next run proposed TypeScript 6 instead (#810). `@types/node` stopped at the floor major.
+  No update has touched the `engines` floor, which still reads what `af1cb40` set.
+- **Nothing merged itself.** Each of the eight merged pull requests ran the same eight
+  required checks as any other and passed them, and a person merged each one.
