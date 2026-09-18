@@ -410,6 +410,33 @@ function spines(seed, opts = {}) {
     minClear = 4,
     plazaRadius = 3,
     destructibleShare = 0.2,
+    /**
+     * How many cells thick a spine is, across its run.
+     *
+     * 1 was the original and it is why this generator built nothing a shipped board is made of.
+     * A wall cell counts as INTERIOR when all four of its orthogonal neighbours are walled, and
+     * a 1-cell bar can never have one -- nor can a 2-cell bar, since every cell in it still
+     * faces floor. Three cells across is the thinnest mass that can, and it is 2.0 world units:
+     * two tank widths, a block to circle rather than a line to shoot past.
+     *
+     * Measured: every one of the 8 shipped boards has an interior share between 0.09 and 0.34,
+     * and `scatter`, `rooms`, `runs` and `spines` at thickness 1 all measure exactly 0.00.
+     * At 2 it is still 0.00 -- a two-cell bar has no enclosed cell either -- and at 3 it is
+     * 0.25, inside the shipped band, with every gameplay measure also still in band.
+     *
+     * DEFAULT 1, DELIBERATELY, BECAUSE THE IMPLEMENTATION IS NOT GOOD ENOUGH YET. Thickening
+     * here grows each cell of a shape sideways, and `fits` then has to clear the whole widened
+     * shape at `minClear`, so long runs stop fitting and the board fills with short fat slabs
+     * instead of the long continuous walls the ruleset exists to make. Pushing `minLen` up to
+     * 16-28 does not recover them: the placement search simply rejects more, leaving 4 or 5
+     * pieces on the board. The statistic improves while the board gets worse, which is the
+     * failure mode the whole quality tier is supposed to catch and here does not.
+     *
+     * Doing it properly means changing the SEARCH, not the shape: measure clearance from a
+     * spine's edge rather than its centre line, and place thick spines before thin ones. That
+     * is issue #821's work, and the knob is left here as the evidence for it.
+     */
+    thickness = 1,
   } = opts;
   const r = rng(seed);
   const cells = blankCells(board);
@@ -461,6 +488,22 @@ function spines(seed, opts = {}) {
         const [fc, fr] = out[out.length - 1];
         for (let i = 1; i <= arm2; i++) out.push(horizontal ? [fc + sign * i, fr] : [fc, fr + sign * i]);
       }
+    }
+    if (thickness > 1) {
+      // Widen across the run: for each cell, add cells perpendicular to the direction it came
+      // from, so a corner thickens into a corner rather than into a blot.
+      const grown = out.slice();
+      for (let i = 0; i < out.length; i++) {
+        const [cc, rr] = out[i];
+        const prev = out[i - 1] ?? out[i + 1] ?? [cc, rr];
+        const alongC = cc !== prev[0];
+        for (let t = 1; t < thickness; t++) {
+          const nc = alongC ? cc : cc + t;
+          const nr = alongC ? rr + t : rr;
+          if (!grown.some(([a, b]) => a === nc && b === nr)) grown.push([nc, nr]);
+        }
+      }
+      return grown;
     }
     return out;
   };
@@ -583,6 +626,9 @@ export const RULESETS = {
       { label: 'len=12-24', opts: { minLen: 12, maxLen: 24 } },
       { label: 'clear=3cell', opts: { minClear: 3 } },
       { label: 'plaza=5', opts: { plazaRadius: 5 } },
+      { label: 'thick=2', opts: { thickness: 2 } },
+      { label: 'thick=3', opts: { thickness: 3 } },
+      { label: 'thick=3 n=5', opts: { thickness: 3, count: 5 } },
     ],
   },
 };
