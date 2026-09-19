@@ -56,7 +56,7 @@ export const FLOW_FLAGS = Object.freeze({
    * together in both directions, so a lever added there without a change here fails a test
    * rather than becoming a capture nobody can request.
    */
-  enemyRole: Object.freeze(['girth', 'flare', 'dome', 'deck', 'riser', 'crown', 'both']),
+  enemyRole: Object.freeze(['girth', 'flare', 'dome', 'hull', 'deck', 'riser', 'crown', 'both']),
   /**
    * Issue #630's second identity channel, so a role cue can be judged beside an owner cue --
    * which is exactly what #773's evidence list asks for. Hardcoded and pinned like the above.

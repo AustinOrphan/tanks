@@ -1,0 +1,14 @@
+{
+  "id": "hull-lever-ignored-by-the-model",
+  "file": "src/render/tank-model.ts",
+  "find": "      geometry: hullGeometry(hullCorner, hullNose),",
+  "replace": "      geometry: hullGeometry(),",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "killedBy": [
+    "tank geometry draws the shipped hull when the role lever is unpulled, vertex for vertex"
+  ],
+  "why": "Drops the hull lever on the floor: `tankParts` would accept `hullCorner` and `hullNose` and draw the shipped hull regardless, so issue #831's arm would render as the shipped tank and be ranked against the other six levers as though it read poorly. A lever that silently does nothing is the worst outcome for a comparison whose whole purpose is to rank levers against each other -- it would be recorded as measured and rejected. Killed by the control half of the identity test, which pulls the lever and requires the vertex buffer to move."
+}

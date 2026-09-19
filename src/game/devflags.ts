@@ -1437,12 +1437,14 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...ENEMY_ROLE_CUES],
     description:
-      'Draws what an enemy DOES without using colour (issues #357, #773). The shipped board ' +
-      'gives every kind one silhouette and separates them by hue alone. Six single levers ' +
-      "carry the same three states so they can be compared: 'girth', 'flare' and 'dome' " +
-      "carry weapon class, 'deck', 'riser' and 'crown' carry mine load. 'both' is the " +
-      'approved arm -- the muzzle flare and the raised deck block together. Every value is ' +
-      'a multiple of a shipped measurement, so with the flag absent no tank moves a vertex.',
+      'Draws what an enemy DOES without using colour (issues #357, #773, #831). The shipped ' +
+      'board gives every kind one silhouette and separates them by hue alone. Seven single ' +
+      "levers carry the same three states so they can be compared: 'girth', 'flare', 'dome' " +
+      "and 'hull' carry weapon class, 'deck', 'riser' and 'crown' carry mine load. 'both' is " +
+      'the approved arm -- the muzzle flare and the raised deck block together. Every value ' +
+      'but one is a multiple of a shipped measurement; \'hull\' sets the plan outline\'s ' +
+      'corner radius and nose taper directly, because both are clamped and the shipped nose ' +
+      'already sits at its ceiling. With the flag absent no tank moves a vertex.',
   },
   menuTransition: {
     kind: 'valued',

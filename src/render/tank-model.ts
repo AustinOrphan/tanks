@@ -370,10 +370,25 @@ export const BODY_WIDTH = HULL_WIDTH - TRACK_W * TRACK_PROUD * 2;
  */
 export const TURRET_GROUP_Y = HULL_RIDE + TANK_BODY_H + TURRET_H / 2 - TURRET_SEAT;
 
-/** The hull body, already stood up: the extrude is built in XY and rotated onto the deck. */
-export function hullGeometry(): THREE.ExtrudeGeometry {
+/**
+ * The hull body, already stood up: the extrude is built in XY and rotated onto the deck.
+ *
+ * `corner` and `nose` are the two plan parameters issue #831's role cue spends, and they are
+ * the only two it CAN spend. `HULL_LEN` and `BODY_WIDTH` are not arguments and must not become
+ * them: the width is pinned to `TANK_RADIUS * 2` exactly so the drawn tank cannot misreport the
+ * collider, the plan ratio is bounded to (0.8, 1.3) because a long narrow hull would need a
+ * different collider rather than a different number, and `HULL_LEN` also sizes the tracks
+ * (`trackGeometry`), so a hull that changed length would detach from them.
+ *
+ * Both default to the module constants, so every existing caller draws the shipped hull and an
+ * unpulled lever is vertex-identical.
+ */
+export function hullGeometry(
+  corner: number = HULL_CORNER,
+  nose: number = HULL_NOSE,
+): THREE.ExtrudeGeometry {
   const geo = beveledExtrude(
-    hullPlan(HULL_LEN, BODY_WIDTH, HULL_CORNER, HULL_NOSE),
+    hullPlan(HULL_LEN, BODY_WIDTH, corner, nose),
     TANK_BODY_H,
     HULL_BEVEL,
   );
@@ -409,6 +424,15 @@ export interface TankShape {
   readonly turretTall?: number;
   /** Turret dome radius. */
   readonly turretWide?: number;
+  /**
+   * Hull plan corner radius and nose taper (issue #831) -- ABSOLUTE, not multipliers, unlike
+   * every other field here. `hullPlan` clamps both (`nose` through `clamp01`, `round` to
+   * `min(round, halfW * 0.9, halfL * 0.45)` = 0.45 on this hull), and the shipped nose is
+   * already at its ceiling of 1, so a multiplier could not express the states. Omitted means
+   * `HULL_CORNER` and `HULL_NOSE`.
+   */
+  readonly hullCorner?: number;
+  readonly hullNose?: number;
 }
 
 export interface TankPart {
@@ -446,11 +470,14 @@ export interface TankPart {
  * existing caller -- the exporter included -- keeps emitting the model unchanged.
  */
 export function tankParts(shape: TankShape = {}): TankPart[] {
-  const { barrelGirth = 1, muzzleFlare = 1, turretTall = 1, turretWide = 1 } = shape;
+  const {
+    barrelGirth = 1, muzzleFlare = 1, turretTall = 1, turretWide = 1,
+    hullCorner = HULL_CORNER, hullNose = HULL_NOSE,
+  } = shape;
   const parts: TankPart[] = [
     {
       name: 'hull',
-      geometry: hullGeometry(),
+      geometry: hullGeometry(hullCorner, hullNose),
       position: new THREE.Vector3(0, HULL_RIDE + TANK_BODY_H / 2, 0),
       rotationZ: 0,
       parent: 'visual',

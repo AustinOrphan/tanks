@@ -30,6 +30,21 @@ import type { BulletType } from '../sim/types';
  * tracks are #286's, and `TREAD_IDENTITY_BLEND` already leans them toward identity. That
  * leaves the barrel and the hull side.
  *
+ * THAT SENTENCE WAS ABOUT DECAL SURFACES, AND IT MISSED THE BIGGEST MASS ON THE TANK (issue
+ * #831). Reading "the barrel and the hull side" as the whole remaining budget skipped the
+ * hull's own PLAN OUTLINE, which is not a surface to print on but a silhouette to reshape. It
+ * was never rendered and therefore never rejected: the ceiling argument above says no
+ * silhouette change can separate brown from grey, which is true and is a statement about those
+ * two kinds being temporally distinguished, not a finding that reshaping the hull reads poorly.
+ * The hull is also the one part that never turns away from a camera looking down at 51
+ * degrees, which is what killed the flank `band`.
+ *
+ *  - `hull` puts WEAPON CLASS on the hull's nose taper and corner radius: a wedge, the shipped
+ *    body, a lozenge. It spends neither width nor length -- both are pinned, `HULL_WIDTH` to
+ *    `TANK_RADIUS * 2` exactly and the plan ratio to (0.8, 1.3), because a hull that misreports
+ *    the collider is the bug `tank-model.ts` records -- so it spends the two plan parameters
+ *    that are free of both.
+ *
  *  - `barrel` puts WEAPON CLASS on the barrel: standard shell, zero-bounce rocket, two-bounce
  *    ricochet. The one channel that is semantically the weapon, so it needs no legend, and the
  *    one the player is asking about when a shell is already in the air.
@@ -42,10 +57,11 @@ import type { BulletType } from '../sim/types';
  * Absent means the shipped board: hue alone.
  */
 export const ENEMY_ROLE_CUES = [
-  // WEAPON CLASS, three ways of saying the same three states.
+  // WEAPON CLASS, four ways of saying the same three states.
   'girth',   // barrel tube thickness
   'flare',   // muzzle size
   'dome',    // turret height
+  'hull',    // hull nose taper and corner radius (issue #831)
   // MINE LOAD, three ways.
   'deck',    // a flat bar on the deck ahead of the turret, varying in width
   'riser',   // the same bar raised into a block, so it casts and reads in silhouette
@@ -65,10 +81,11 @@ export function isEnemyRoleCue(value: unknown): value is EnemyRoleCue {
 }
 
 /** Which lever a cue pulls; `both` pulls the two that measured best. */
-export function weaponLever(cue: EnemyRoleCue | null): 'girth' | 'flare' | 'dome' | null {
+export function weaponLever(cue: EnemyRoleCue | null): 'girth' | 'flare' | 'dome' | 'hull' | null {
   if (cue === 'girth') return 'girth';
   if (cue === 'flare' || cue === 'both') return 'flare';
   if (cue === 'dome') return 'dome';
+  if (cue === 'hull') return 'hull';
   return null;
 }
 
@@ -126,14 +143,60 @@ export function mineBlockFor(mineCapacity: number): number {
  * shipped tank does not move a vertex.
  */
 export function weaponShapeFor(
-  lever: 'girth' | 'flare' | 'dome' | null, bulletType: BulletType,
-): { barrelGirth?: number; muzzleFlare?: number; turretTall?: number } {
+  lever: 'girth' | 'flare' | 'dome' | 'hull' | null, bulletType: BulletType,
+): { barrelGirth?: number; muzzleFlare?: number; turretTall?: number; hullNose?: number; hullCorner?: number } {
   if (lever === null) return {};
   const step = bulletType === 'fast' ? -1 : bulletType === 'ricochet' ? 1 : 0;
   if (lever === 'girth') return { barrelGirth: [0.78, 1, 1.4][step + 1] };
   if (lever === 'flare') return { muzzleFlare: [0.7, 1, 1.55][step + 1] };
+  if (lever === 'hull') return hullShapeFor(step);
   return { turretTall: [0.72, 1, 1.4][step + 1] };
 }
+
+/**
+ * The hull lever, as ABSOLUTE plan parameters rather than multipliers -- the only lever here
+ * that is, and the clamps are why.
+ *
+ * TWO FEATURES, NOT TWO ENDS OF ONE SCALE, and that is forced rather than chosen. Every other
+ * weapon lever runs a single number from below the shipped value to above it, with the
+ * standard shell in the middle. The hull cannot: `hullPlan` clamps BOTH of its free parameters
+ * at or below where the shipped hull already sits, so nothing can be blunter than shipped.
+ *
+ *   nose  is `clamp01`-ed and the shipped value is already 1, the ceiling.
+ *   round is clamped to `min(round, halfW * 0.9, halfL * 0.45)`. On this hull that is
+ *         `min(round, 0.394, 0.225)` = 0.225, and the shipped HULL_CORNER of 0.3 is ALREADY
+ *         clamped to it. A first version of this lever asked for 0.45 at the `ricochet` end
+ *         and rendered vertex-identical to the shipped hull, because both clamp to 0.225.
+ *         The mapping's own ordering test passed while the geometry did not move -- the test
+ *         was asserting the ordering of these numbers rather than of the shapes they make.
+ *
+ * So the shipped hull is the BLUNTEST state available, and both other states must be sharper
+ * than it. They are separated by WHICH feature sharpens, which is also the clearer semantic:
+ *
+ *   fast      a tapered nose  -- a dart. It goes where it is pointed and does not come back.
+ *   normal    the shipped hull, vertex for vertex.
+ *   ricochet  squared corners -- a brick. The shape that bounces off things.
+ *
+ * Measured against the shipped outline, the two states displace a worst vertex by 19.0% and
+ * 18.9% of the hull's width respectively, so neither dominates the other and both are an order
+ * of magnitude clearer than the clamped version they replace.
+ */
+function hullShapeFor(step: -1 | 0 | 1): { hullNose: number; hullCorner: number } {
+  // The corner stays at the shipped value for `fast` so its only change is the nose, and the
+  // nose stays at the shipped 1 for `ricochet` so its only change is the corner. One feature
+  // each, which is what makes the two states tell each other apart.
+  if (step === -1) return { hullNose: 0.62, hullCorner: HULL_PLAN_CORNER };
+  if (step === 1) return { hullNose: 1, hullCorner: 0.06 };
+  return { hullNose: 1, hullCorner: HULL_PLAN_CORNER };
+}
+
+/**
+ * The shipped hull's corner radius, repeated here because presentation may not import render
+ * -- the renderer is an implementation, not a contract, and `dependency-direction.test.ts`
+ * enforces it. `entities.test.ts` pins this against `HULL_CORNER` itself, so the two cannot
+ * drift apart silently.
+ */
+const HULL_PLAN_CORNER = 0.3;
 
 /**
  * The same, for mine load. `crown` is the odd one: it spends the turret's DIAMETER, which is

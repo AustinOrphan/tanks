@@ -1,0 +1,14 @@
+{
+  "id": "hull-lever-moves-the-shipped-tank",
+  "file": "src/presentation/enemy-role.ts",
+  "find": "  if (step === 1) return { hullNose: 1, hullCorner: 0.06 };\n  return { hullNose: 1, hullCorner: HULL_PLAN_CORNER };",
+  "replace": "  if (step === 1) return { hullNose: 1, hullCorner: 0.06 };\n  return { hullNose: 1, hullCorner: 0.2 };",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/enemy-role.test.ts"
+  ],
+  "killedBy": [
+    "enemy role cues: the mapping is the number the player needs separates the hull lever's three states by WHICH feature sharpens, not by an ordering"
+  ],
+  "why": "Moves the STANDARD shell's hull off the shipped corner radius. 0.2 is under hullPlan's 0.225 clamp, so unlike the shipped 0.3 it is actually honoured -- the mutation really does reshape the tank rather than being eaten. The states stay distinct and the board still looks plausible; what breaks is the property every arm of issue #357 rests on, that the standard shell IS the shipped tank, so pulling a lever leaves a normal-shell tank vertex-identical and moves only the other two states. Under the mutation the lever silently restyles most of the roster, and the seven-way comparison would be ranking a different tank than the one it claims."
+}
