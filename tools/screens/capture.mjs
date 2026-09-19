@@ -82,9 +82,19 @@ async function measure(/** @type {any} */ page, /** @type {readonly string[]} */
  */
 export async function captureState(browser, base, state, { width, height, dpr, timeout, hideGame = false }) {
   const pageErrors = [];
+  // A touchscreen is a CAPABILITY, not a viewport (issue #844). `control-relevance.ts`
+  // decides which control settings are worth showing from `PlatformCapabilities.touch`, so a
+  // narrow desktop context and a phone render different controls at the same size: with
+  // `hasTouch` off, `touchScheme` and `fireMode` are OMITTED rather than merely restyled.
+  // Both flags together, because `isMobile` alone does not add touch points and `hasTouch`
+  // alone leaves the mobile viewport meta unapplied -- a half-configured context would
+  // photograph something no real device produces.
+  const touch = state.touch === true;
   const context = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: dpr,
+    hasTouch: touch,
+    isMobile: touch,
     javaScriptEnabled: state.javascript !== 'off',
     // Deterministic by construction rather than by hope: the same reduced-motion answer
     // every run, so a transition cannot be caught mid-flight on a slow machine and not

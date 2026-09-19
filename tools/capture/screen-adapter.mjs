@@ -18,6 +18,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PRODUCER_RESULT_SCHEMA_VERSION } from './producer.mjs';
 import { runProcess } from './process.mjs';
+// The catalogue, to check a recipe's capability against the state it names. Reading it is
+// enough; the runner is still spawned as a child process, so nothing about the execution
+// boundary changes.
+import { findScreenState } from '../screens/states.mjs';
 
 /**
  * Screens are DOM, not simulation, so most of the moment profile's vocabulary does not
@@ -26,8 +30,25 @@ import { runProcess } from './process.mjs';
  */
 function assertScreenProfile(recipe) {
   const { profile } = recipe;
-  if (profile.capability !== 'headless-desktop') {
+  // Two capabilities, and everything else still refused by name (issue #844). The refusal is
+  // the load-bearing half: a capability this producer cannot honour must fail loudly rather
+  // than quietly capturing a desktop frame, because a desktop frame looks like a perfectly
+  // good screenshot of whatever was asked for.
+  if (profile.capability !== 'headless-desktop' && profile.capability !== 'headless-touch') {
     throw new Error(`screen producer does not support capability profile '${profile.capability}'`);
+  }
+  // The touchscreen lives on the STATE, because the layout sweep reads the catalogue and
+  // never sees a recipe. So the two can disagree, and a disagreement is silent in exactly
+  // the way that matters: a `headless-touch` recipe naming a non-touch state captures the
+  // desktop pane and files it as touch evidence. Refuse both directions.
+  const state = findScreenState(recipe.producer.scenarioId);
+  if (state !== null) {
+    const wantsTouch = profile.capability === 'headless-touch';
+    if (wantsTouch !== (state.touch === true)) {
+      throw new Error(
+        `capability '${profile.capability}' disagrees with state '${state.id}' (touch: ${state.touch === true})`,
+      );
+    }
   }
   if (recipe.schedule.kind !== 'still') {
     throw new Error('screen captures are stills; a moving application surface is issue #326');

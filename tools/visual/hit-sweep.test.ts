@@ -66,8 +66,12 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // the practice board and failed, since a live board offers only the driving controls the
     // collector excludes, so there was nothing to press. 29 since issue #842, which added three
     // interactive Settings states -- focused, pressed and rumble-refused -- and a Settings pane
-    // IS swept whatever put it on screen.
-    expect(hitSweepStates()).toHaveLength(29);
+    // IS swept whatever put it on screen. 30 since issue #844's `screen.settings.touch`, by that
+    // same rule, and it is the one addition that changes what the sweep MEASURES rather than
+    // only how the pane was reached: `measureHitTargets` honours the catalogue's touch flag, so
+    // this state contributes `.hud-scheme-toggle` and `.hud-firemode-toggle`, two hit targets
+    // no other swept state has because `control-relevance.ts` omits them without a touchscreen.
+    expect(hitSweepStates()).toHaveLength(30);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 

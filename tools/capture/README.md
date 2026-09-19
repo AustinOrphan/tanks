@@ -95,6 +95,7 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.settings.focused` | `screen.settings.focused` | `capture.png` | still |
 | `screen.settings.pressed` | `screen.settings.pressed` | `capture.png` | still |
 | `screen.settings.rumble-refused` | `screen.settings.rumble-refused` | `capture.png` | still |
+| `screen.settings.touch` | `screen.settings.touch` | `capture.png` | still |
 | `flow.campaign-round.pp1roles-off` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |
 | `flow.campaign-round.pp1roles-on` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |
 | `flow.campaign-roster.pp1roles-off` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |

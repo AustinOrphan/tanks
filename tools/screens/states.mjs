@@ -185,6 +185,19 @@ const state = (s) => Object.freeze({
    * saying something about how the page was ASKED for, and that belongs in the record.
    */
   query: '',
+  /**
+   * Whether the browser context reports a TOUCHSCREEN (issue #844).
+   *
+   * Not a viewport. `control-relevance.ts` decides which control settings are worth showing
+   * from `PlatformCapabilities.touch`, so `touchScheme` and `fireMode` are OMITTED entirely
+   * on a device without one -- a phone-sized desktop context photographs a Settings pane
+   * missing two controls a real phone shows. Declared per state rather than derived from
+   * width, because that is the distinction the production code actually makes.
+   *
+   * It belongs on the STATE, not only on the capture recipe, so the layout sweep honours it
+   * too: `sweep.mjs` iterates this catalogue and never sees a recipe.
+   */
+  touch: false,
   steps: [],
   measure: [],
   ...s,
@@ -332,6 +345,24 @@ export const SCREEN_STATES = Object.freeze([
     // -- the bottom controls already measured here stay on screen either way. A negative y
     // is content above the scroll origin, which no scrollbar reaches.
     measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
+  }),
+  state({
+    id: 'screen.settings.touch',
+    title: 'Settings on a touchscreen',
+    description:
+      'The same pane on a device with a touchscreen, where two controls exist that the '
+      + 'desktop capture does not offer at all.',
+    storage: MID_CAMPAIGN,
+    touch: true,
+    steps: [...PAST_SPLASH, { click: '.hud-settings-open' }, { waitVisible: '.hud-settings' }],
+    // The two touch-only controls are the POINT of this state, and they are measured rather
+    // than merely photographed so the difference is asserted and not left to the eye:
+    // `control-relevance.ts` gives `touchScheme` and `fireMode` to a device with a
+    // touchscreen and OMITS them otherwise, so on the desktop capture of `screen.settings`
+    // these two selectors are absent. A capture that silently lost its touch context would
+    // photograph the desktop pane, which looks like a perfectly good Settings screenshot --
+    // the measurement is what tells the two apart.
+    measure: ['.hud-settings', '.hud-scheme-toggle', '.hud-firemode-toggle'],
   }),
   state({
     id: 'screen.settings.focused',
