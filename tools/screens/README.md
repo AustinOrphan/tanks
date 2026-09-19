@@ -115,8 +115,13 @@ refuses to.
 A test reads the viewport queries `hud.css` declares, and fails when two layouts meet the same
 queries without one naming the other in `sameQueriesAs` and saying what still tells them apart.
 
-**What it is not.** It is not #326's regression suite, and it commits no baselines. It is not a
+**What it is not.** It is not the required gate, it commits no baselines, and it is not a
 required check. A full sweep is several hundred captures on software GL.
+
+The gate is `npm run screens:check` (issue #846), which runs one bounded subset at one viewport
+against committed baselines inside the required `visual` job (issue #847). This sweep is the
+broad on-demand matrix beside it, and the two answer different questions: the gate asks whether
+a screen changed, the sweep asks what a screen looks like everywhere.
 
 ## Failure screens are produced by failing, never by injecting markup
 

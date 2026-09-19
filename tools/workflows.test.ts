@@ -468,7 +468,13 @@ describe('canonical verification commands in workflows', () => {
     // deploy re-runs, and that bare number went stale unnoticed more than once. Recomputed
     // here by the doc's own stated rule: every named step of ci.yml's three checking jobs
     // except the runner set-up and artefact steps, counted once per distinct `run:` command.
-    const NOT_CHECKS = ['Install Playwright', 'Cache Playwright browsers', 'Install chromium', 'Upload screenshots'];
+    // 'Upload screen-gate evidence' joins the artefact steps for issue #847: the doc's own
+    // rule is "every named step ... except the runner set-up and artefact steps", and an
+    // upload checks nothing -- it carries away what a check already decided.
+    const NOT_CHECKS = [
+      'Install Playwright', 'Cache Playwright browsers', 'Install chromium',
+      'Upload screenshots', 'Upload screen-gate evidence',
+    ];
     const checks = (job: string): string[] =>
       [...job.matchAll(/^ {6}- name: (.+)$/gm)].map((m) => m[1]).filter((name) => !NOT_CHECKS.includes(name));
     const runOf = (job: string, name: string): string => /^\s+run: (.+)$/m.exec(namedStep(job, name))?.[1] ?? name;
