@@ -9,6 +9,6 @@
   ],
   "why": "Seeds a mid-campaign save under the state that photographs a FIRST load. The picture would be identical -- the splash does not read the save -- so nothing visual would catch it, and the caption beside it would describe a returning player looking at a screen only a new one sees. The catalogue's captions are what a reviewer reads, so a state whose storage contradicts its description is worse than one with no storage at all.",
   "killedBy": [
-    "screen states (issue #561) keeps the two pre-UI states pre-UI, rather than merely undismissed"
+    "the screen-state catalogue keeps the two pre-UI states pre-UI, rather than merely undismissed"
   ]
 }

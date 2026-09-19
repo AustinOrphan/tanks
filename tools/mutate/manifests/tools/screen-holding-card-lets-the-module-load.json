@@ -9,6 +9,6 @@
   ],
   "why": "Lets the module load for the one state that must not have it. `boot()` removes `#boot-loading` the moment it runs, so without the hold the capture waits for an element the page has already deleted and times out -- or worse, on a fast enough machine, catches it mid-removal. The state is the only way the catalogue photographs the page BEFORE the application exists, and 'holding' is the whole of what makes it that.",
   "killedBy": [
-    "screen states (issue #561) keeps the two pre-UI states pre-UI, rather than merely undismissed"
+    "the screen-state catalogue keeps the two pre-UI states pre-UI, rather than merely undismissed"
   ]
 }
