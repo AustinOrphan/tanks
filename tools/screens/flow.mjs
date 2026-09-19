@@ -48,6 +48,16 @@ export const FLOW_FLAGS = Object.freeze({
   /** Issue #358's PP1 role-first ordnance matrix. A switch: present or absent. */
   pp1Roles: true,
   /**
+   * Issue #372's AI contact overlay. A switch.
+   *
+   * Here because it is the one flag that makes AI TARGETING legible in a recording: it rings
+   * each AI with its contact state and labels the committed target id with its remaining
+   * commitment and memory ticks. #359's evidence criteria ask for retarget reasons to be
+   * "available in developer evidence" and for target changes to be demonstrable in
+   * normal-speed play, and without this a recording shows tanks moving and nothing about why.
+   */
+  aiContact: true,
+  /**
    * Issue #773's non-colour role cue. A CHOICE, so the allowlist names its values.
    *
    * HARDCODED for the reason the gallery CLI hardcodes the same list: this file is `.mjs` and
@@ -268,7 +278,7 @@ function isPlainObject(value) {
  * Validate the structured inputs a flow is driven by. Shared by the recipe schema and by the
  * recorder's own argument parsing, so the two cannot disagree about what is allowed.
  */
-export function validateFlowInputs({ level, seed, driver, flags, mode, players }) {
+export function validateFlowInputs({ level, seed, driver, flags, mode, players, bots }) {
   if (!Number.isInteger(level) || level < 1 || level > CAMPAIGN_LEVEL_COUNT) {
     throw new Error(`level must be a whole number in [1, ${CAMPAIGN_LEVEL_COUNT}]`);
   }
@@ -289,11 +299,30 @@ export function validateFlowInputs({ level, seed, driver, flags, mode, players }
   if (players !== undefined && (!Number.isInteger(players) || players < 2 || players > 4)) {
     throw new Error('players must be a whole number in [2, 4]');
   }
-  // Both or neither: `mode` alone plays the board with one tank and no stock strip at all,
-  // and `players` alone is campaign co-op, which is a different capture wearing this one's
-  // name. A half-specified versus round is the failure that would look like a success.
-  if ((mode === undefined) !== (players === undefined)) {
-    throw new Error('mode and players must be given together');
+  // ONE-WAY, not both-or-neither. `mode` without `players` plays the board with a single
+  // tank and no stock strip at all -- a versus recipe recording a session that is not one --
+  // so a mode always names its player count.
+  //
+  // `players` WITHOUT `mode` is the opposite: it is couch co-op, which devflags.ts describes
+  // as "how many player-controlled tanks share the world". That is a real configuration and
+  // a capture #359 asks for by name, so refusing it would make co-op evidence unrecordable.
+  // The first draft of this file did refuse it, and #359's own acceptance criteria are what
+  // proved that wrong.
+  // How many of those slots the computer drives. Separate from `players` because they are
+  // separate questions -- `players=4&bots=3` is one person against three, `bots=players` is
+  // a fully autonomous match -- and #359 wants BOTH shapes on record: co-op pressure
+  // distribution, and VS-bot target changes.
+  if (bots !== undefined && (!Number.isInteger(bots) || bots < 0 || bots > 4)) {
+    throw new Error('bots must be a whole number in [0, 4]');
+  }
+  // The page CLAMPS bots against the resolved player count rather than rejecting, so a
+  // recipe asking for more bots than slots would silently record a different match than it
+  // names. Refused here, where the recipe can still be corrected.
+  if (bots !== undefined && players !== undefined && bots > players) {
+    throw new Error(`bots (${bots}) cannot exceed players (${players})`);
+  }
+  if (mode !== undefined && players === undefined) {
+    throw new Error('mode needs players: a versus round names how many tanks share the board');
   }
   if (!isPlainObject(flags)) throw new Error('flags must be a plain object');
   for (const [id, value] of Object.entries(flags)) {
@@ -308,7 +337,7 @@ export function validateFlowInputs({ level, seed, driver, flags, mode, players }
       throw new Error(`flags.${id} must be one of ${allowed.join(', ')}`);
     }
   }
-  return { level, seed, driver, flags: { ...flags }, mode, players };
+  return { level, seed, driver, flags: { ...flags }, mode, players, bots };
 }
 
 /**
@@ -317,10 +346,12 @@ export function validateFlowInputs({ level, seed, driver, flags, mode, players }
  * the replay surface the recorder reads the tick count and the world identity from.
  */
 export function buildFlowUrl(inputs) {
-  const { level, seed, driver, flags, mode, players } = validateFlowInputs(inputs);
+  const { level, seed, driver, flags, mode, players, bots } = validateFlowInputs(inputs);
   const params = [['dev', '1'], ['replay', '1'], ['level', String(level)], ['seed', String(seed)]];
   // Session shape before driver and flags, the order the campaign parameters already follow.
-  if (mode !== undefined) params.push(['mode', mode], ['players', String(players)]);
+  if (mode !== undefined) params.push(['mode', mode]);
+  if (players !== undefined) params.push(['players', String(players)]);
+  if (bots !== undefined) params.push(['bots', String(bots)]);
   if (driver === 'autoplay') params.push(['autoplay', '1']);
   for (const id of FLOW_FLAG_IDS) {
     const value = flags[id];
@@ -331,7 +362,7 @@ export function buildFlowUrl(inputs) {
 }
 
 /** The query parameters a flow always carries for itself, as opposed to the experiment's flags. */
-export const FLOW_DRIVER_PARAMS = Object.freeze(['dev', 'replay', 'level', 'seed', 'mode', 'players', 'autoplay']);
+export const FLOW_DRIVER_PARAMS = Object.freeze(['dev', 'replay', 'level', 'seed', 'mode', 'players', 'bots', 'autoplay']);
 
 /**
  * Which compositor frame each output frame shows, at a constant `fps` from `start`.

@@ -365,11 +365,15 @@ describe('the versus flow (issue #234)', () => {
       .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1');
   });
 
-  it('refuses half a versus round, which is the failure that would look like a success', () => {
-    // `mode` alone plays the board with one tank and no stock strip; `players` alone is
-    // campaign co-op. Either would record a capture that is not what its recipe claims.
-    expect(() => validateFlowInputs(vs({ players: undefined }))).toThrow(/given together/);
-    expect(() => validateFlowInputs(vs({ mode: undefined }))).toThrow(/given together/);
+  it('refuses a mode with no player count, and ALLOWS a player count with no mode', () => {
+    // One-way, and the asymmetry is the point. `mode` alone plays the board with a single
+    // tank and no stock strip, so a versus recipe would record a session that is not one.
+    expect(() => validateFlowInputs(vs({ players: undefined }))).toThrow(/mode needs players/);
+    // `players` alone is couch co-op -- a real configuration, and one #359 asks to capture
+    // by name. Refusing it would make co-op evidence unrecordable.
+    expect(validateFlowInputs(vs({ mode: undefined })).players).toBe(4);
+    expect(buildFlowUrl(vs({ mode: undefined })))
+      .toBe('?dev=1&replay=1&level=4&seed=7&players=4&autoplay=1');
   });
 
   it('holds players and mode to the page own ranges, not a superset', () => {
@@ -388,6 +392,22 @@ describe('the versus flow (issue #234)', () => {
     expect(steps.at(-1)).toEqual({ waitVisible: '.hud-versus-stocks:not(.hud-versus-stocks--hidden)' });
     expect(steps.some((s: Record<string, string>) => s.click === '.hud-levelselect-open')).toBe(true);
     expect(steps.some((s: Record<string, string>) => s.click === '.hud-level-btn[aria-label="Level 4"]')).toBe(true);
+  });
+
+  it('carries a bot count, and refuses more bots than slots', () => {
+    // #359 wants two shapes on record: co-op pressure distribution, and VS-bot target
+    // changes. `bots` is what separates them from an idle lobby, so it is an input rather
+    // than something a capture hopes the page defaults to.
+    expect(buildFlowUrl(vs({ bots: 4 })))
+      .toBe('?dev=1&replay=1&level=4&seed=7&mode=ffa&players=4&bots=4&autoplay=1');
+    expect(buildFlowUrl({ level: 4, seed: 7, driver: 'autoplay', flags: {}, players: 4, bots: 3 }))
+      .toBe('?dev=1&replay=1&level=4&seed=7&players=4&bots=3&autoplay=1');
+    // The PAGE clamps bots against the resolved player count instead of rejecting, so a
+    // recipe asking for more would quietly record a different match than it names.
+    expect(() => validateFlowInputs(vs({ players: 2, bots: 4 }))).toThrow(/cannot exceed players/);
+    for (const bad of [-1, 5, 1.5, '2']) {
+      expect(() => validateFlowInputs(vs({ bots: bad })), String(bad)).toThrow(/bots must be/);
+    }
   });
 
   it('seeds the same progress and achievements the campaign flow does', () => {
