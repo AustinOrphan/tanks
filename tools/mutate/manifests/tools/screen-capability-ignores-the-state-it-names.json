@@ -8,7 +8,7 @@
     "tools/screens/states.test.ts"
   ],
   "killedBy": [
-    "refuses a capability that disagrees with the state it names (issue #844)"
+    "the screen capture adapter refuses a capability that disagrees with the state it names (issue #844)"
   ],
   "why": "Accepts a recipe whose capability contradicts the state it names. A `headless-touch` recipe pointed at a desktop state then captures the DESKTOP pane and files it as touch evidence -- and it looks like a perfectly good Settings screenshot, because the only difference is that control-relevance.ts omits `touchScheme` and `fireMode` without a touchscreen. The touch flag lives on the state so the layout sweep honours it too, which is exactly what lets the two disagree."
 }
