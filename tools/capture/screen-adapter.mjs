@@ -35,6 +35,18 @@ function assertScreenProfile(recipe) {
   // `reducedMotion` is not a knob here and saying so is the honest form. The runner always
   // emulates reduced motion, because a crossfade caught mid-flight is the difference
   // between a capture that reproduces and one that does not.
+  //
+  // Measured rather than assumed, when issue #843 asked whether a full-motion variant could
+  // land: `screen.launch` measures `.hud-splash-hint`, which runs `hud-splash-pulse 2s
+  // ease-in-out infinite` between opacity 0.55 and 1 and has NO rest state to settle to --
+  // `.hud--reduced-motion .hud-splash-hint` is the only rule that gives it one. `WATCHED` in
+  // the runner records `opacity`. So a full-motion still of that state, 1 of the 44
+  // `screen.*` states and the only one measuring that element, could not reproduce: by
+  // construction, not by bad luck.
+  //
+  // Scoped to THIS producer. Full motion is captured elsewhere in the framework -- the flow
+  // producer sets `reducedMotion: 'no-preference'` and records video, where there is no
+  // settle point to converge on.
   if (!profile.reducedMotion) {
     throw new Error('screen captures are taken under reduced motion; set profile.reducedMotion');
   }

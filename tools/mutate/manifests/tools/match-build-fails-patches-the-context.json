@@ -9,6 +9,6 @@
   ],
   "why": "Issue #700. The `match-build-fails` override falls through to the `getContext` patch the other modes use, so `getContext('webgl2')` returns null and the renderer is never constructed. That is #669's typed, fatal context failure again, not the untyped failure after the context exists that reaches the recoverable overlay. Killed by the case that requires getContext left alone and createFramebuffer throwing a plain Error.",
   "killedBy": [
-    "steps.mjs: the WebGL override each mode installs match-build-fails leaves getContext alone and makes framebuffer allocation throw an UNTYPED error (issue #700)"
+    "steps.mjs: the WebGL override each mode installs match-build-fails leaves getContext alone and makes a render-target call throw an UNTYPED error (issue #700)"
   ]
 }

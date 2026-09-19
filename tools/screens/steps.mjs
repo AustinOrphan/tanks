@@ -26,14 +26,34 @@ export function webglOverrideSource(mode) {
   if (!WEBGL_MODES.includes(mode)) throw new Error(`unknown webgl mode '${mode}'`);
   if (mode === 'match-build-fails') {
     // The context is left alone, so the renderer is constructed and #669's typed context
-    // failure never fires. The FIRST framebuffer allocation after it -- the environment map
-    // `createScene` builds right after the renderer -- then throws an untyped Error, which
-    // `classifyStartupFailure` reads as "we do not know" at the match boundary: the
-    // recoverable overlay (issue #700). Measured before choosing it: createFramebuffer,
-    // framebufferTexture2D, linkProgram and drawElements each reached `.hud-alert` with Retry
-    // and Back to menu, and each was called exactly once. The earliest of the four is used.
+    // failure never fires. A render-target allocation AFTER it then throws an untyped Error,
+    // which `classifyStartupFailure` reads as "we do not know" at the match boundary: the
+    // recoverable overlay (issue #700).
+    //
+    // WHY NOT `createFramebuffer`, which this used until issue #851. The override has to
+    // throw from BELOW the one statement `scene.ts` wraps in `RenderContextUnavailableError`
+    // -- `new THREE.WebGLRenderer(...)` -- because #325 made that wrap fatal and fatal takes
+    // the full-page "this browser cannot run Tanks!" state at both boundaries. three 0.186
+    // allocates a framebuffer inside that constructor, so the old override started throwing
+    // one statement too early and the capture landed on the fatal page instead. It was
+    // invisible for as long as it was because nothing in required CI runs this state.
+    //
+    // RE-MEASURED on three 0.186, same method as the original. First call site, and whether
+    // the overlay is reached:
+    //
+    //   createFramebuffer      12 calls   new WebGLRenderer          FATAL page
+    //   texImage2D             16 calls   new WebGLTexture           FATAL page
+    //   framebufferTexture2D   16 calls   setupRenderTarget          overlay  <- used
+    //   createProgram           8 calls   acquireProgram             overlay
+    //   linkProgram             8 calls   acquireProgram             overlay
+    //   drawElements         3963 calls   renderBufferDirect         overlay
+    //
+    // `framebufferTexture2D` is the earliest of the four that still lands on the overlay,
+    // which keeps this override as close to the original intent -- the first render-target
+    // allocation after the context -- as the renderer's own internals now allow. Note the
+    // call counts: the original comment recorded each as called exactly once, and none is.
     return `(() => {
-    WebGL2RenderingContext.prototype.createFramebuffer = function () {
+    WebGL2RenderingContext.prototype.framebufferTexture2D = function () {
       throw new Error('capture: building the match failed after the context was created');
     };
   })()`;
