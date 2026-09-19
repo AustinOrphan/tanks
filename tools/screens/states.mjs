@@ -83,6 +83,11 @@ export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked', 
  */
 export const STEP_KINDS = Object.freeze([
   'click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl', 'fakeGamepads', 'scroll', 'playUntil',
+  // Issue #842: the interactive states `tools/uikit/primitive-states.mjs` produced one-shot.
+  // Both VERIFY they engaged rather than assuming it -- a state that silently failed to engage
+  // photographs the rest state, and a reviewer cannot tell that picture from a control that
+  // simply has no rule for it.
+  'focusKeyboard', 'pressHold',
 ]);
 
 /**
@@ -327,6 +332,66 @@ export const SCREEN_STATES = Object.freeze([
     // -- the bottom controls already measured here stay on screen either way. A negative y
     // is content above the scroll origin, which no scrollbar reaches.
     measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
+  }),
+  state({
+    id: 'screen.settings.focused',
+    title: 'Settings, a control holding keyboard focus',
+    description:
+      'The focus ring on a shipped control, reached the way a keyboard user reaches it '
+      + '(issue #842). `:focus-visible` is the state being shown, and Chromium does not '
+      + 'reliably apply it to a programmatic `element.focus()` -- so the step focuses, steps '
+      + 'off with Shift+Tab and back on with Tab, then reads `document.activeElement` back. A '
+      + 'focus that failed to engage would photograph the rest state, which looks exactly '
+      + 'like a control with no focus rule.',
+    storage: MID_CAMPAIGN,
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-settings-open' },
+      { waitVisible: '.hud-settings' },
+      { focusKeyboard: '.hud-settings-controllers' },
+    ],
+    measure: ['.hud-settings', '.hud-settings-controllers'],
+  }),
+  state({
+    id: 'screen.settings.pressed',
+    title: 'Settings, a control held down',
+    description:
+      'The pressed look of a shipped button, held rather than clicked (issue #842). A '
+      + '`mouse.down()` followed by an `up()` in the same place is a CLICK -- capturing this '
+      + 'on New Game started a game and lost the screen underneath it -- so the step presses '
+      + 'and does not release, and the page teardown is the release. `:active` is read back '
+      + 'from the element, because a press that missed and a button with no active rule '
+      + 'produce the same picture.',
+    storage: MID_CAMPAIGN,
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-settings-open' },
+      { waitVisible: '.hud-settings' },
+      { pressHold: '.hud-settings-controllers' },
+    ],
+    measure: ['.hud-settings', '.hud-settings-controllers'],
+  }),
+  state({
+    id: 'screen.settings.rumble-refused',
+    title: 'Settings, rumble refused with its reason',
+    description:
+      'The first settings control that is ever disabled, beside the sentence saying why '
+      + '(issues #227, #842). A capture machine has no gamepad and no vibration motor, so the '
+      + 'refusal is the honest state of this browser rather than one staged for the shot. '
+      + '`control-relevance.ts` records the rule it demonstrates -- a TRANSIENT absence is '
+      + 'shown and explained, not omitted -- and `describeDisabledReason` points the '
+      + "control's `aria-describedby` at the note, so the reason reaches a screen reader "
+      + 'through the control rather than only sitting near it.',
+    storage: MID_CAMPAIGN,
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-settings-open' },
+      { waitVisible: '.hud-settings' },
+      // The note carries `--hidden` until the refusal is known, so waiting on it is what
+      // proves the disabled state arrived rather than the shot being taken before it did.
+      { waitVisible: '.hud-rumble-note' },
+    ],
+    measure: ['.hud-settings', '.hud-rumble-toggle', '.hud-rumble-note'],
   }),
   state({
     id: 'screen.settings.controller-layout',

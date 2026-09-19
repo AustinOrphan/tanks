@@ -83,6 +83,11 @@ describe('capture recipe schema', () => {
       'screen.ending.campaign-complete',
       'screen.ending.practice-cleared',
       'screen.ending.practice-failed',
+      // Issue #842: the interactive states, which `tools/uikit/primitive-states.mjs`
+      // produced one-shot and without a committed baseline.
+      'screen.settings.focused',
+      'screen.settings.pressed',
+      'screen.settings.rumble-refused',
       // The `flow` producer's matched pair (issue #815): the two halves differ in one field,
       // variant.flags.pp1Roles, which is the point of shipping them as a pair.
       'flow.campaign-round.pp1roles-off',

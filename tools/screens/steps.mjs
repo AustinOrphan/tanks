@@ -194,6 +194,59 @@ async function playUntil(page, target) {
 }
 
 /**
+ * Focus a control the way a KEYBOARD user does, and prove it engaged (issue #842).
+ *
+ * `element.focus()` is a programmatic focus, and Chromium does not always apply
+ * `:focus-visible` to one -- so a shot labelled "focused" could arrive with no ring on it. The
+ * sequence that works is focus, step OFF with Shift+Tab, step back on with Tab, so the last
+ * move is a real keyboard focus change.
+ *
+ * THEN IT IS READ BACK. `tools/uikit/primitive-states.mjs` measured `document.activeElement`
+ * after focusing for exactly this reason, and that check survives here: a focus that silently
+ * failed would photograph the rest state, which is indistinguishable from a control that has
+ * no focus rule. Failing names the selector rather than leaving the caller a picture to squint
+ * at.
+ */
+async function focusKeyboard(page, selector, timeout) {
+  await page.waitForFunction(visibleIn(selector), undefined, { timeout });
+  await page.evaluate((sel) => document.querySelector(sel)?.focus(), selector);
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const engaged = await page.evaluate(
+    (sel) => document.activeElement === document.querySelector(sel),
+    selector,
+  );
+  if (!engaged) {
+    throw new Error(`focusKeyboard: '${selector}' did not take focus -- the shot would be the rest state`);
+  }
+}
+
+/**
+ * Press a control and HOLD it, so `:active` can be photographed, and prove it engaged.
+ *
+ * MOUSE DOWN WITHOUT AN UP, deliberately, and it is the trap `tools/uikit/README.md` records:
+ * a `mouse.down()` followed by a `mouse.up()` in the same place is a CLICK, and capturing the
+ * pressed state of New Game that way started a game and lost the screen underneath it. A state
+ * that wants the pressed look therefore ends holding the button; the page is torn down after
+ * the shot, which is the release.
+ *
+ * `:active` is asked of the element afterwards, for the same reason `focusKeyboard` reads
+ * `activeElement` back.
+ */
+async function pressHold(page, selector, timeout) {
+  await page.waitForFunction(visibleIn(selector), undefined, { timeout });
+  const box = await page.locator(selector).first().boundingBox();
+  if (box === null) throw new Error(`pressHold: '${selector}' has no box to press`);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  const engaged = await page.evaluate((sel) => document.querySelector(sel)?.matches(':active') ?? false, selector);
+  if (!engaged) {
+    await page.mouse.up();
+    throw new Error(`pressHold: '${selector}' did not go :active -- the shot would be the rest state`);
+  }
+}
+
+/**
  * Run one declarative step. An unknown kind is an error, never a skipped line.
  *
  * Returns nothing, except for `{ playUntil }`, which returns what it cost -- simulated ticks
@@ -206,6 +259,8 @@ export async function runStep(page, step, timeout) {
   }
   const [kind] = kinds;
   if (kind === 'press') return void (await page.keyboard.press(step.press));
+  if (kind === 'focusKeyboard') return focusKeyboard(page, step.focusKeyboard, timeout);
+  if (kind === 'pressHold') return pressHold(page, step.pressHold, timeout);
   // Its own budget in simulated ticks, not `timeout`: a played match is minutes of wall-clock
   // on software GL, and a wall-clock timeout would read as a broken selector.
   if (kind === 'playUntil') return playUntil(page, step.playUntil);

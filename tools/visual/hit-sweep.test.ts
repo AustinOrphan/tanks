@@ -61,11 +61,13 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     ]);
     // 25 since issue #754's Controller Layout state: a Settings pane, so it is swept. 26 since
     // issue #766: the Controllers extra became `screen.controllers`, and `screen.controllers.pads`
-    // joined it, so the pane is swept once without pads and once with two. 27 since issue
-    // #841: unchanged at 26, because all three states that issue added declare no menu. The
-    // first attempt swept the practice board and failed -- a live board offers only the
-    // driving controls the collector excludes, so there was nothing to press.
-    expect(hitSweepStates()).toHaveLength(26);
+    // joined it, so the pane is swept once without pads and once with two. Still 26 after issue
+    // #841, because all three states that issue added declare no menu: its first attempt swept
+    // the practice board and failed, since a live board offers only the driving controls the
+    // collector excludes, so there was nothing to press. 29 since issue #842, which added three
+    // interactive Settings states -- focused, pressed and rumble-refused -- and a Settings pane
+    // IS swept whatever put it on screen.
+    expect(hitSweepStates()).toHaveLength(29);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 
