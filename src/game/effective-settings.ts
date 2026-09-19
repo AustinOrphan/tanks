@@ -54,7 +54,12 @@ export interface EffectiveSettings {
   /** The resolved reduced-motion/flash policy. The only reduced-motion answer in the game. */
   readonly reducedMotion: boolean;
   readonly uiScale: UiScale;
-  /** `uiScale` as a multiplier -- 100 -> 1, 125 -> 1.25. The form #290/#321 will multiply by. */
+  /**
+   * `uiScale` as a multiplier -- 100 -> 1, 125 -> 1.25. NOTHING MULTIPLIES BY IT YET: #321 is
+   * closed and did not land a consumer, and #290 is the issue that would. Reading the older
+   * form of this comment is what made issue #843 assume a seeded `uiScale` would change a
+   * capture; it does not, so treat this as derived-but-unused until #290 wires it up.
+   */
   readonly uiScaleFactor: number;
   /**
    * Which render-quality preset a new session should build with. A `QualityPreset` id, not
