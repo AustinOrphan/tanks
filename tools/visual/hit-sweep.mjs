@@ -170,9 +170,18 @@ export const COLLECT_CONTROLS = () => {
  * into a failure line rather than an empty pass.
  */
 export async function measureHitTargets(browser, base, state, viewport, timeout = 20000) {
+  // The catalogue's touchscreen flag reaches this sweep too (issue #844), and it matters more
+  // here than anywhere else: `control-relevance.ts` OMITS `touchScheme` and `fireMode` without
+  // a touchscreen, so a touch state swept on a desktop context would measure a Settings pane
+  // missing the two controls it exists to show -- and report a clean pass for having measured
+  // the others. Hit targets are exactly what a touchscreen changes, so this is the one sweep
+  // that must not photograph the wrong device.
+  const touch = state.touch === true;
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: viewport.dpr,
+    hasTouch: touch,
+    isMobile: touch,
     reducedMotion: 'reduce',
     colorScheme: 'dark',
   });
