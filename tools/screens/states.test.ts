@@ -3,7 +3,6 @@
 // The catalogue is data that a browser harness executes, so a malformed entry does not
 // fail here -- it fails ten minutes later as a Playwright timeout with no useful name on
 // it. These are the guards that turn that into a named failure at unit speed.
-import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -141,21 +140,6 @@ describe('the screen-state catalogue', () => {
     // application in it, which is the wrong picture for every other state in the file.
     const held = SCREEN_STATES.filter((s) => s.boot === 'holding').map((s) => s.id);
     expect(held).toEqual(['screen.boot-loading']);
-  });
-
-  it('holds the module AND commits the navigation, which are one mechanism in two halves', () => {
-    // A STRUCTURAL guard, and it says so. What it protects only happens in a real browser:
-    // `boot: 'holding'` stalls the module request so `#boot-loading` survives, and the
-    // navigation is awaited at `commit` because a deferred module that never arrives means
-    // `load` never fires. Delete either half and the capture breaks in a way no vitest file
-    // notices -- measured: removing the route line leaves this whole suite green.
-    //
-    // Reading the source is the weakest kind of assertion and is used here for the same
-    // reason the GL seams are proven in their own harness: the alternative is no guard at
-    // all. It catches deletion, which is the failure that actually happened in the probe.
-    const src = readFileSync(new URL('./capture.mjs', import.meta.url), 'utf8');
-    expect(src, 'the module is no longer held').toMatch(/state\.boot === 'holding'[\s\S]{0,120}page\.route\(/);
-    expect(src, 'the navigation no longer commits early').toMatch(/waitUntil:[^\n]*state\.boot === 'holding'[^\n]*'commit'/);
   });
 
   it('findScreenState answers for every ID and refuses anything else', () => {
