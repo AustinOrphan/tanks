@@ -89,6 +89,9 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.ending.campaign-complete` | `screen.ending.campaign-complete` | `capture.png` | still |
 | `screen.ending.practice-cleared` | `screen.ending.practice-cleared` | `capture.png` | still |
 | `screen.ending.practice-failed` | `screen.ending.practice-failed` | `capture.png` | still |
+| `screen.settings.focused` | `screen.settings.focused` | `capture.png` | still |
+| `screen.settings.pressed` | `screen.settings.pressed` | `capture.png` | still |
+| `screen.settings.rumble-refused` | `screen.settings.rumble-refused` | `capture.png` | still |
 | `flow.campaign-round.pp1roles-off` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |
 | `flow.campaign-round.pp1roles-on` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |
 | `flow.campaign-roster.pp1roles-off` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |

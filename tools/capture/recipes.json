@@ -1188,7 +1188,7 @@
       "events": [],
       "allowUnexpectedEvents": true
     },
-    "title": "Developer Configuration — Sandbox",
+    "title": "Developer Configuration \u2014 Sandbox",
     "description": "The Sandbox group scrolled into view: the tank multiset built by a count per kind.",
     "altText": "Screenshot of the Tanks! developer configuration menu, Sandbox group.",
     "timeoutMs": 60000,
@@ -2171,6 +2171,153 @@
     "title": "Practice failed",
     "description": "The same attempt lost: the pair to practice-cleared, and a different panel.",
     "altText": "Screenshot of the Tanks! practice failed ending screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.settings.focused",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.settings.focused"
+    },
+    "fixture": {
+      "id": "screen.settings.focused",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Settings, a control holding keyboard focus",
+    "description": "A shipped control showing its focus ring, reached by a real keyboard focus change.",
+    "altText": "Screenshot of the Tanks! settings screen with a button showing its keyboard focus ring.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.settings.pressed",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.settings.pressed"
+    },
+    "fixture": {
+      "id": "screen.settings.pressed",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Settings, a control held down",
+    "description": "A shipped button held down, so its pressed styling is visible rather than clicked past.",
+    "altText": "Screenshot of the Tanks! settings screen with a button in its pressed state.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.settings.rumble-refused",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.settings.rumble-refused"
+    },
+    "fixture": {
+      "id": "screen.settings.rumble-refused",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Settings, rumble refused with its reason",
+    "description": "The disabled rumble toggle beside the sentence explaining why it is refused.",
+    "altText": "Screenshot of the Tanks! settings screen showing the disabled rumble control and its explanation.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
   },

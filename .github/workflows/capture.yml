@@ -86,6 +86,9 @@ on:
           - screen.records.stats.empty
           - screen.settings
           - screen.settings.controller-layout
+          - screen.settings.focused
+          - screen.settings.pressed
+          - screen.settings.rumble-refused
           - screen.startup.match-failed
           - screen.startup.probe-blocked
           - screen.startup.unsupported-render

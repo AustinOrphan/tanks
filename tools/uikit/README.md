@@ -16,8 +16,26 @@ the resolution order this script shares.
 
 A **one-shot evidence producer** for issue #321's closeout, not a gate. Nothing in CI runs
 it, it writes no committed baseline, and it is not the durable `screen.*` recipe work —
-that, its baselines and the broader screen-state matrix are issue #326's. When #326 lands
-something that subsumes this, delete it.
+that, its baselines and the broader screen-state matrix are issue #326's.
+
+**Partly subsumed as of issue #842, and kept for the rest.** Three of the interactive states
+this produced are now committed `screen.*` recipes with baselines, built on two new step kinds
+that carry the traps recorded below: `screen.settings.focused` (a real keyboard focus change,
+with `document.activeElement` read back), `screen.settings.pressed` (a press held rather than
+clicked, with `:active` read back) and `screen.settings.rumble-refused` (the disabled control
+beside the sentence explaining it).
+
+What still has no recipe, and is why this file is not deleted:
+
+- **`:hover`.** No step kind hovers, and a still of a hover state needs one.
+- **The comparison BETWEEN controls.** Each capture keeps its own rest reading so the primary,
+  the quiet slab and the small quiet button can be ranked against each other. A `screen.*`
+  recipe measures one surface; the hierarchy question is across surfaces.
+- **The `unstyled` verdict.** The computed-property diff below distinguishes "this control has
+  no rule for that state" from "the state failed to engage". A recipe's measurement records
+  geometry, not which properties moved.
+
+Delete this when those three have recipes, not before.
 
 ## Why it measures instead of only photographing
 
