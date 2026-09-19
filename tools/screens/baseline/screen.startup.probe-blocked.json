@@ -1,0 +1,26 @@
+{
+  "state": "screen.startup.probe-blocked",
+  "measurements": [
+    {
+      "selector": "[role=\"alert\"]",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "This browser cannot run Tanks!Something stopped the game from checking whether this browser can draw it — often an extension, or a privacy mode that blocks graphics access. Try disabling extensions fo",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

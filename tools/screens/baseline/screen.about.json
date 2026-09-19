@@ -1,0 +1,89 @@
+{
+  "state": "screen.about",
+  "measurements": [
+    {
+      "selector": ".hud-about",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "About & Legal\n      Tanks! is a browser arena shooter.\n      It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-about-line",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 517,
+        "y": 107,
+        "w": 245,
+        "h": 18
+      },
+      "text": "Tanks! is a browser arena shooter.",
+      "style": {
+        "display": "block",
+        "opacity": "0.9",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-about-links",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 296,
+        "y": 203,
+        "w": 688,
+        "h": 44
+      },
+      "text": "Project websiteOpens a new tabTanks! GitHub repositoryOpens a new tab",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-legal-toggle",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 296,
+        "y": 328,
+        "w": 688,
+        "h": 44
+      },
+      "text": "PrivacyShow",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

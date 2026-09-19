@@ -1,0 +1,89 @@
+{
+  "state": "screen.controllers",
+  "measurements": [
+    {
+      "selector": ".hud-controllers",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Controllers\n      \n      Player 1Keyboard / Mouse / TouchKeyboardNone\n      \n      Only controllers your browser reports appear here. Not listed? Press a button on it, or reconnect it.\n      \n      Ba",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(11, 14, 20, 0.86)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#hud-controllers-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 557,
+        "y": 236,
+        "w": 166,
+        "h": 38
+      },
+      "text": "Controllers",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "32px",
+        "margin-top": "21.44px",
+        "margin-bottom": "21.44px"
+      }
+    },
+    {
+      "selector": ".hud-controller-rows",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 537,
+        "y": 305,
+        "w": 206,
+        "h": 168
+      },
+      "text": "Player 1Keyboard / Mouse / TouchKeyboardNone",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-controllers-back",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 604,
+        "y": 541,
+        "w": 72,
+        "h": 44
+      },
+      "text": "Back",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

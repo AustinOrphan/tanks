@@ -1,0 +1,68 @@
+{
+  "state": "screen.devtools.diagnostics",
+  "measurements": [
+    {
+      "selector": ".hud-devtools",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Developer Tools\n      Developer mode is on for this page.\n      It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-diag-out",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 443,
+        "y": 656,
+        "w": 394,
+        "h": 18
+      },
+      "text": "",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "12px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-diag-copy",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 564,
+        "y": 220,
+        "w": 153,
+        "h": 44
+      },
+      "text": "Copy Diagnostics",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

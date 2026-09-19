@@ -24,6 +24,8 @@
     "screens": "node tools/screens/run.mjs",
     "screens:sweep": "node tools/screens/sweep.mjs",
     "screens:compare": "node tools/screens/compare.mjs",
+    "screens:check": "node tools/screens/check.mjs",
+    "screens:accept": "node tools/screens/accept.mjs",
     "roundtrip": "node tools/visual/roundtrip.mjs dist",
     "portability": "node tools/portability/check.mjs dist",
     "test:gl": "node tools/gl/run.mjs",

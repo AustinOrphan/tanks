@@ -1,0 +1,89 @@
+{
+  "state": "screen.pause.versus",
+  "measurements": [
+    {
+      "selector": ".hud-panel",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Paused\n      The arena waits.\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Continue Campaign\n      Start Match\n      Resume\n      \n      Choose Level\n      \n      Practi",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-quit",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 581,
+        "y": 567,
+        "w": 118,
+        "h": 44
+      },
+      "text": "Main Menu",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "15px",
+        "margin-top": "10px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-change-setup",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 575,
+        "y": 365,
+        "w": 130,
+        "h": 44
+      },
+      "text": "Change Setup",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-settings-open",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 590,
+        "y": 439,
+        "w": 100,
+        "h": 44
+      },
+      "text": "Settings",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "15px",
+        "margin-top": "2px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

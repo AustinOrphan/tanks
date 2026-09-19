@@ -1,0 +1,110 @@
+{
+  "state": "screen.controllers.pads",
+  "measurements": [
+    {
+      "selector": ".hud-controllers",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Controllers\n      \n      Player 1Keyboard / Mouse / TouchKeyboardNoneXbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd) (index 0)HuiJia  USB GamePad (index 1) — not supported\n     ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(11, 14, 20, 0.86)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#hud-controllers-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 557,
+        "y": 161,
+        "w": 166,
+        "h": 38
+      },
+      "text": "Controllers",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "32px",
+        "margin-top": "21.44px",
+        "margin-bottom": "21.44px"
+      }
+    },
+    {
+      "selector": ".hud-controller-rows",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 324,
+        "y": 230,
+        "w": 633,
+        "h": 276
+      },
+      "text": "Player 1Keyboard / Mouse / TouchKeyboardNoneXbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd) (index 0)HuiJia  USB GamePad (index 1) — not supported",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#hud-controllers-unsupported",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 486,
+        "y": 574,
+        "w": 308,
+        "h": 32
+      },
+      "text": "HuiJia  USB GamePad (index 1) isn't supported: Tanks can't read its buttons in this browser.",
+      "style": {
+        "display": "block",
+        "opacity": "0.7",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "13.6px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-controllers-back",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 604,
+        "y": 616,
+        "w": 72,
+        "h": 44
+      },
+      "text": "Back",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

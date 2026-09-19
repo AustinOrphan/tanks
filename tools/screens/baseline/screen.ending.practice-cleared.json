@@ -1,0 +1,110 @@
+{
+  "state": "screen.ending.practice-cleared",
+  "measurements": [
+    {
+      "selector": ".hud-panel",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Level Cleared\n      \n      Level attempt: 0 kills · 0 deaths · -- accuracy\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Continue Campaign\n      Start New Campaign\n      Retry\n ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 444,
+        "y": 260,
+        "w": 391,
+        "h": 66
+      },
+      "text": "Level Cleared",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "56px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-action",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 586,
+        "y": 366,
+        "w": 107,
+        "h": 47
+      },
+      "text": "Retry",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(6, 52, 15)",
+        "background-color": "rgb(99, 221, 125)",
+        "font-size": "20px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-choose-level",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 571,
+        "y": 429,
+        "w": 138,
+        "h": 44
+      },
+      "text": "Choose Level",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "15px",
+        "margin-top": "2px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-practice-level",
+      "present": true,
+      "visible": false,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "text": "Practice This Level",
+      "style": {
+        "display": "none",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "15px",
+        "margin-top": "2px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "state": "screen.devtools.controller-selftest",
+  "measurements": [
+    {
+      "selector": ".hud-selftest",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Controller Self-Test\n      Every gamepad this page can see, exactly as the browser reports it — no mapping applied. Move a stick or press a button and the row for it moves.\n      A controller does not",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-selftest-pads",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 378,
+        "y": 219,
+        "w": 524,
+        "h": 791
+      },
+      "text": "Index 0 — Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)mapping: standard · axes: 4 · buttons: 17supported (standard mapping)Axis 00.62Axis 1-0.41Axis 20.00Axis 30.00Button 00.",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-selftest-pad",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 378,
+        "y": 219,
+        "w": 524,
+        "h": 419
+      },
+      "text": "Index 0 — Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)mapping: standard · axes: 4 · buttons: 17supported (standard mapping)Axis 00.62Axis 1-0.41Axis 20.00Axis 30.00Button 00.",
+      "style": {
+        "display": "list-item",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "16px"
+      }
+    },
+    {
+      "selector": ".hud-selftest-channel",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 388,
+        "y": 313,
+        "w": 504,
+        "h": 15
+      },
+      "text": "Axis 00.62",
+      "style": {
+        "display": "grid",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "12.8px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-selftest-copy",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 580,
+        "y": 1038,
+        "w": 120,
+        "h": 44
+      },
+      "text": "Copy Report",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

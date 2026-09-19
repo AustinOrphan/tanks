@@ -1,0 +1,68 @@
+{
+  "state": "screen.launch",
+  "measurements": [
+    {
+      "selector": ".hud-splash",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "TANKS!\n      Press any key or tap to begin",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(14, 17, 22, 0.92)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-splash-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 505,
+        "y": 339,
+        "w": 271,
+        "h": 85
+      },
+      "text": "TANKS!",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(242, 245, 250)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "72px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-splash-hint",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 530,
+        "y": 442,
+        "w": 220,
+        "h": 20
+      },
+      "text": "Press any key or tap to begin",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(174, 182, 194)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "17px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

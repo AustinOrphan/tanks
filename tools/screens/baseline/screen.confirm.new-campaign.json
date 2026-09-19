@@ -1,0 +1,68 @@
+{
+  "state": "screen.confirm.new-campaign",
+  "measurements": [
+    {
+      "selector": ".hud-confirm",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Start a new campaign?\n      Mission 3 -- 2 lives left. Starting a new campaign replaces it. This cannot be undone.\n      \n        Keep playing\n        Start new campaign",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-confirm-body",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 428,
+        "y": 400,
+        "w": 423,
+        "h": 36
+      },
+      "text": "Mission 3 -- 2 lives left. Starting a new campaign replaces it. This cannot be undone.",
+      "style": {
+        "display": "block",
+        "opacity": "0.9",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-confirm-actions",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 490,
+        "y": 448,
+        "w": 301,
+        "h": 44
+      },
+      "text": "Keep playing\n        Start new campaign",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

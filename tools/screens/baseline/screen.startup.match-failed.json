@@ -1,0 +1,110 @@
+{
+  "state": "screen.startup.match-failed",
+  "measurements": [
+    {
+      "selector": ".hud-alert",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "That match could not start.\n      Something went wrong while loading the match. Try again, or go back to the menu.\n      \n      Retry\n      Back to menu",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-alert-body",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 408,
+        "y": 372,
+        "w": 464,
+        "h": 36
+      },
+      "text": "Something went wrong while loading the match. Try again, or go back to the menu.",
+      "style": {
+        "display": "block",
+        "opacity": "0.9",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-alert-retry",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 603,
+        "y": 420,
+        "w": 74,
+        "h": 44
+      },
+      "text": "Retry",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-alert-dismiss",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 576,
+        "y": 476,
+        "w": 127,
+        "h": 44
+      },
+      "text": "Back to menu",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-panel",
+      "present": true,
+      "visible": false,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "text": "TANKS!\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Continue Campaign\n      Start Campaign\n      \n      \n      Choose Level\n      \n      Practice This Level\n     ",
+      "style": {
+        "display": "none",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}
