@@ -3479,6 +3479,12 @@
   border-width: 2px;
 }
 
+/* The count beside a single pip, where a full row will not fit (issue #835). The pip keeps the
+ * shape channel and the cue's target; this states the number exactly. */
+.hud-stock-pip-count {
+  margin-left: 4px;
+}
+
 .hud-stock-pip.hud-stock-cue {
   animation: hud-stock-pip-empty var(--hud-duration-slow) ease-out 1 both;
 }

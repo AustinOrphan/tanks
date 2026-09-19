@@ -626,12 +626,22 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
       expect(shrunk.style.getPropertyValue('--hud-pip')).toBe('9px');
       four.root.remove();
 
-      // Four players at FIVE stocks: no legible pip fits, so the entry states the digit. The
-      // count stays readable, which is the whole requirement.
+      // Four players at FIVE stocks: no legible row fits, so the entry keeps ONE full-size pip
+      // and states the count as a digit. Not a bare digit -- that would drop the shape channel
+      // the arm exists for AND leave the loss cue with nothing to swell, since the cue is the
+      // pip bursting.
       const five = mountCue('pips');
       five.hud.setStatus(versusStatus([0, 1, 2, 3].map((slot) => ({ slot, stock: 5 }))));
-      expect(five.root.querySelectorAll('.hud-stock-pip')).toHaveLength(0);
+      expect(five.root.querySelectorAll('.hud-stock-pip')).toHaveLength(4);   // one per entry
       expect(entries(five.root).map((e) => e.textContent)).toEqual(['P1 5', 'P2 5', 'P3 5', 'P4 5']);
+      const single = five.root.querySelector('.hud-stock-pips') as HTMLElement;
+      expect(single.style.getPropertyValue('--hud-pip')).toBe('');   // full size, not shrunk
+
+      // And the cue still has something to animate, which the bare digit did not.
+      five.hud.setStatus(versusStatus([{ slot: 0, stock: 4 }, { slot: 1, stock: 5 }, { slot: 2, stock: 5 }, { slot: 3, stock: 5 }]));
+      const [p1, p2] = entries(five.root);
+      expect(p1.querySelectorAll('.hud-stock-cue')).toHaveLength(1);
+      expect(p2.querySelectorAll('.hud-stock-cue')).toHaveLength(0);
     } finally {
       Object.defineProperty(window, 'matchMedia', { configurable: true, value: wide });
     }

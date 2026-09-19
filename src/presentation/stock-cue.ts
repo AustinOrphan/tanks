@@ -77,22 +77,46 @@ export const STOCK_CUE_MS = 700;
  *     4      4      over by 59     7/2
  *     4      5      over by 111    6/1
  *
- * THE LAST TWO ROWS ARE WHY THIS RETURNS `null` RATHER THAN A SMALLER NUMBER. Shrinking fits
- * them arithmetically, at 7px and 6px with about ONE pixel of margin -- fragile against any
- * change to a label or a font, and self-defeating: `pips` is the arm that turns the count into
- * shape, and twenty 6px dots do not read as a count. Below 8px the arm stops doing its job, so
- * it hands the strip back to the digit, which states the count exactly and always fits.
+ * THE LAST TWO ROWS ARE WHY THIS FALLS BACK RATHER THAN SHRINKING FURTHER. They fit
+ * arithmetically at 7px and 6px with about ONE pixel of margin -- fragile against any change to
+ * a label or a font, and self-defeating: `pips` is the arm that turns the count into shape, and
+ * twenty 6px dots do not read as a count. Below 8px the arm stops doing its job.
+ *
+ * What it falls back TO is one full-size pip plus the digit, not a bare digit -- see
+ * `PipLayout`. The shape channel survives and so does the cue's target.
  *
  * Only consulted on a narrow viewport. At desktop widths the strip has room and every arm draws
  * at its full size, which is where the #230 comparison is mostly read.
  */
-export function narrowPipSize(slots: number, total: number): { pip: number; gap: number } | null {
-  if (slots <= 2) return { pip: 10, gap: 3 };
-  if (slots === 3) return total <= 4 ? { pip: 10, gap: 3 } : { pip: 9, gap: 2 };
+export function narrowPipLayout(slots: number, total: number): PipLayout {
+  if (slots <= 2) return { kind: 'row', pip: 10, gap: 3 };
+  if (slots === 3) {
+    return total <= 4 ? { kind: 'row', pip: 10, gap: 3 } : { kind: 'row', pip: 9, gap: 2 };
+  }
   // Four players. Three stocks still carries a 9px pip; four and five do not reach 8px.
-  if (total <= 3) return { pip: 9, gap: 2 };
-  return null;
+  if (total <= 3) return { kind: 'row', pip: 9, gap: 2 };
+  return { kind: 'one', pip: 10 };
 }
+
+/**
+ * How the pips arm draws one entry.
+ *
+ * `row` is the arm proper: one pip per stock the match started with, at the given size.
+ *
+ * `one` is the crowded fallback: a SINGLE pip, at full size, followed by the count as a digit.
+ * A bare digit was the first answer and it was wrong twice over. It drops the shape channel
+ * entirely, which is the one thing this arm exists to provide -- and it leaves the loss cue
+ * with nothing to animate, because the cue IS the pip swelling and bursting a ring. An entry
+ * that cannot burst is not a degraded arm, it is the absence of one, and #230 would have been
+ * ranking a blank.
+ *
+ * One full-size pip plus the digit measures 205.1px at four players against the 254.1px budget,
+ * 49px of room, so the glyph does not even need shrinking to fit. The count stays exact, the
+ * shape stays present, and the cue keeps its target.
+ */
+export type PipLayout =
+  | { kind: 'row'; pip: number; gap: number }
+  | { kind: 'one'; pip: number };
 
 /**
  * The widest viewport that counts as narrow for the rule above, matching the phone tier the

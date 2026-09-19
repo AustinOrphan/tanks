@@ -278,7 +278,7 @@ import { equalizeMenuRows } from './menu-row-width';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
-import { STOCK_CUE_MS, type StockCue, narrowPipSize, NARROW_STRIP_QUERY } from '../presentation/stock-cue';
+import { STOCK_CUE_MS, type StockCue, narrowPipLayout, NARROW_STRIP_QUERY, type PipLayout } from '../presentation/stock-cue';
 import {
   type IdentityMarkerStyle,
   MARKER_ARC_GAP,
@@ -3456,19 +3456,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // the measured table in `stock-cue.ts`, and where no legible size fits -- four players at
       // four or five stocks -- the arm hands this entry back to the shipped digit rather than
       // drawing dots too small to count. The digit is the same text the no-cue strip writes.
-      const size = isNarrowViewport() ? narrowPipSize(slots, total) : { pip: 10, gap: 3 };
-      if (size === null) {
-        span.append(`${entry.stock}`);
-        return;
-      }
+      const layout: PipLayout = isNarrowViewport()
+        ? narrowPipLayout(slots, total)
+        : { kind: 'row', pip: 10, gap: 3 };
       const pips = document.createElement('span');
       pips.className = 'hud-stock-pips';
-      if (size.pip !== 10) {
-        pips.style.setProperty('--hud-pip', `${size.pip}px`);
-        pips.style.setProperty('--hud-pip-gap', `${size.gap}px`);
+      if (layout.pip !== 10) pips.style.setProperty('--hud-pip', `${layout.pip}px`);
+      if (layout.kind === 'row' && layout.gap !== 3) {
+        pips.style.setProperty('--hud-pip-gap', `${layout.gap}px`);
       }
       pips.setAttribute('role', 'img');
       pips.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
+      if (layout.kind === 'one') {
+        // ONE pip and the count as a digit. The pip is hollow once the player is out, the same
+        // read a lost pip carries in the row, and it is what the cue animates -- a bare digit
+        // would leave the loss with nothing to swell or burst, which is the arm's whole cue.
+        const pip = document.createElement('span');
+        pip.className = 'hud-stock-pip';
+        if (entry.stock <= 0) pip.classList.add('hud-stock-pip--lost');
+        if (running !== null) cueEl(pip);
+        pips.appendChild(pip);
+        span.appendChild(pips);
+        const count = document.createElement('span');
+        count.className = 'hud-stock-pip-count';
+        count.textContent = `${entry.stock}`;
+        span.appendChild(count);
+        return;
+      }
       for (let i = 0; i < total; i++) {
         const pip = document.createElement('span');
         pip.className = 'hud-stock-pip';
