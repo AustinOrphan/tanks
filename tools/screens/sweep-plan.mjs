@@ -211,7 +211,7 @@ export function compareManifests({ base, head, baseControl, headControl, only = 
   const bc = baseControl === undefined ? null : index(baseControl);
   const hc = headControl === undefined ? null : index(headControl);
   const selected = (/** @type {string} */ key) => {
-    const [state, layout] = key.split(' ');
+    const [state, layout] = key.split('\u0000');
     return (only.states === undefined || only.states.includes(state))
       && (only.layouts === undefined || only.layouts.includes(layout));
   };
