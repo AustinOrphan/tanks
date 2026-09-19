@@ -1,0 +1,14 @@
+{
+  "id": "capture-match-failure-throws-inside-the-renderer",
+  "file": "tools/screens/steps.mjs",
+  "find": "    WebGL2RenderingContext.prototype.framebufferTexture2D = function () {",
+  "replace": "    WebGL2RenderingContext.prototype.createFramebuffer = function () {",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/steps.test.ts"
+  ],
+  "why": "Moves the match-failure override back to `createFramebuffer`, which is the exact regression issue #851 was filed for. three 0.186 allocates a framebuffer inside `new THREE.WebGLRenderer(...)` -- the ONE statement `scene.ts` wraps in `RenderContextUnavailableError` -- so the throw fires one statement too early, is classified FATAL, and the capture photographs the full-page 'this browser cannot run Tanks!' screen instead of the recoverable overlay it is named for. Measured on three 0.186: `createFramebuffer` (12 calls, first inside the renderer constructor) and `texImage2D` (16, same) reach the fatal page; `framebufferTexture2D` (16, first at `setupRenderTarget`), `createProgram` and `linkProgram` (8 each, at `acquireProgram`) and `drawElements` (3963) reach the overlay. The defect survived for as long as it did because no required check runs this state -- it is reachable only through `capture.yml`'s one-recipe dispatch -- which is the gap #840's subset and #847 exist to close.",
+  "killedBy": [
+    "steps.mjs: the WebGL override each mode installs match-build-fails leaves getContext alone and makes a render-target call throw an UNTYPED error (issue #700)"
+  ]
+}

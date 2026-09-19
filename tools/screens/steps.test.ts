@@ -16,13 +16,24 @@ function run(mode: string) {
   const realCreateFramebuffer = function createFramebuffer() {
     return 'real framebuffer';
   };
+  // Both, so a case can assert which ONE the mode replaces and which it leaves alone. Issue
+  // #851: `createFramebuffer` moved inside three's renderer constructor, where a throw is
+  // classified fatal, so the choice between these two is the whole mechanism.
+  const realFramebufferTexture2D = function framebufferTexture2D() {
+    return 'real framebufferTexture2D';
+  };
   const HTMLCanvasElement = { prototype: { getContext: realGetContext } };
-  const WebGL2RenderingContext = { prototype: { createFramebuffer: realCreateFramebuffer } };
+  const WebGL2RenderingContext = {
+    prototype: { createFramebuffer: realCreateFramebuffer, framebufferTexture2D: realFramebufferTexture2D },
+  };
   new Function('HTMLCanvasElement', 'WebGL2RenderingContext', webglOverrideSource(mode))(
     HTMLCanvasElement,
     WebGL2RenderingContext,
   );
-  return { HTMLCanvasElement, WebGL2RenderingContext, realGetContext, realCreateFramebuffer };
+  return {
+    HTMLCanvasElement, WebGL2RenderingContext,
+    realGetContext, realCreateFramebuffer, realFramebufferTexture2D,
+  };
 }
 
 /**
@@ -94,16 +105,26 @@ describe('steps.mjs: advancePlay, the verdict of a played step', () => {
 });
 
 describe('steps.mjs: the WebGL override each mode installs', () => {
-  it('match-build-fails leaves getContext alone and makes framebuffer allocation throw an UNTYPED error (issue #700)', () => {
+  it('match-build-fails leaves getContext alone and makes a render-target call throw an UNTYPED error (issue #700)', () => {
     // Negative controls: patching getContext instead is what #669 turns into a typed, fatal
     // failure (the full page, not the overlay); throwing a typed error would be classified
     // the same way. Both are the regression this mode exists to avoid.
-    const { HTMLCanvasElement, WebGL2RenderingContext, realGetContext, realCreateFramebuffer } = run('match-build-fails');
+    const {
+      HTMLCanvasElement, WebGL2RenderingContext, realGetContext,
+      realCreateFramebuffer, realFramebufferTexture2D,
+    } = run('match-build-fails');
     expect(HTMLCanvasElement.prototype.getContext).toBe(realGetContext);
-    expect(WebGL2RenderingContext.prototype.createFramebuffer).not.toBe(realCreateFramebuffer);
+    expect(WebGL2RenderingContext.prototype.framebufferTexture2D).not.toBe(realFramebufferTexture2D);
+    // AND `createFramebuffer` is left alone, which is the half issue #851 is about: three
+    // 0.186 calls it inside `new THREE.WebGLRenderer(...)`, the one statement `scene.ts`
+    // wraps in `RenderContextUnavailableError`, so a throw there is FATAL and the capture
+    // lands on the full-page state instead of the recoverable overlay. Asserted as an
+    // equality rather than left implicit: going back to it is the regression, and it is a
+    // one-word edit away.
+    expect(WebGL2RenderingContext.prototype.createFramebuffer).toBe(realCreateFramebuffer);
     let thrown: unknown = null;
     try {
-      WebGL2RenderingContext.prototype.createFramebuffer();
+      WebGL2RenderingContext.prototype.framebufferTexture2D();
     } catch (err) {
       thrown = err;
     }
