@@ -1,0 +1,14 @@
+{
+  "id": "screen-capture-stops-holding-the-module",
+  "file": "tools/screens/capture.mjs",
+  "find": "    if (state.boot === 'holding') await page.route('**/*.js', () => {});",
+  "replace": "",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "why": "Stops holding the module, which is the half of the mechanism that only runs in a real browser. MEASURED: before its guard existed this mutation left the entire vitest suite green, because nothing outside a capture run observes it. The guard that catches it reads the source and says so -- the weakest kind of assertion, used here for the reason the GL seams live in their own harness: the alternative was no guard at all.",
+  "killedBy": [
+    "screen states (issue #561) holds the module AND commits the navigation, which are one mechanism in two halves"
+  ]
+}
