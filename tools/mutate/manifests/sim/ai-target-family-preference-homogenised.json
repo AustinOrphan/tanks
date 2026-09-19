@@ -1,0 +1,14 @@
+{
+  "id": "ai-target-family-preference-homogenised",
+  "file": "src/sim/ai/targeting.ts",
+  "find": "  const preferred = cfg.ai.preferredDistance;",
+  "replace": "  const preferred = 9;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/target-selection.test.ts"
+  ],
+  "why": "Reads one preferred range for every kind instead of the profile's own, which is exactly the way unifying target selection into a single policy could have homogenised it -- every family reading the same ranking function becoming every family making the same choice. The constant is grey's own value, so the kinds that sit near it still behave, and only a fixture that puts two materially different families against ONE candidate pair separates them. Issue #359's criterion 6 is the claim; this is the mutation that makes it mean something.",
+  "killedBy": [
+    "committed opponent selection still picks per FAMILY: two kinds facing one pair choose differently"
+  ]
+}
