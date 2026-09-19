@@ -84,18 +84,39 @@ try {
   // same reason the guard below is generous -- a bare TimeoutError with no check output
   // reads as a broken harness rather than a slow one.
   //
-  // THE THIRD RAISE, 120s -> 600s, is three r186's (issue #800). The budget stopped being
-  // about this repository's code: what the page waits on is the BROWSER PARSING AND
-  // EVALUATING vite's pre-bundled `three`, and that bundle grew from 3.93 MB to 5.96 MB.
-  // Measured on the 4 GB CI-shaped box with no GPU, importing the pre-bundled module alone
-  // from an already-warm dep cache: 17.8s on 0.169 against 92.9s on 0.186, five times
-  // longer for one and a half times the bytes. The whole page load tracks it -- 17.8s
-  // against 93.0s -- and only 7.1s of that is requests; the rest is main-thread work before
-  // `load`. CI's `visual` job failed on exactly this, twice, with no check having run.
+  // THE THIRD RAISE, 120s -> 600s, is three r186's (issue #800), and its original rationale
+  // was WRONG about the mechanism. That rationale said the page waits on the browser parsing
+  // and evaluating vite's pre-bundled `three` -- 17.8s on 0.169 against 92.9s on 0.186. Issue
+  // #812 re-measured it on this tree (vite 8.3.0, node 24, one box, three restored and read
+  // back between arms) and the dependency is not the cost:
+  //
+  //                                        0.169.0        0.186.0      ratio
+  //   harness page to `load`               8,158 ms      48,246 ms      5.9x
+  //   `load` to `__glResults`             93.5-97.9 s   218.0-220.5 s   2.3x
+  //   requests during load                 100            100           1.0x
+  //   of those, three-related                1              1           same
+  //   content-length total                 9.19 MB       11.23 MB       1.22x
+  //   deps/three.js                        1,120,664 B   1,895,457 B    1.69x
+  //   in-page import of deps/three.js,
+  //     first load, proven uncached          104.3 ms      193.0 ms     1.85x
+  //
+  // So the regression IS real -- the page takes about six times longer to load -- but the
+  // pre-bundled dependency accounts for ~89 ms of roughly 40,000 ms, about 0.2% of it. The
+  // request count is identical in both arms and only one request is three's, so it is not a
+  // module storm either, and transfer grew 1.22x against a 5.9x slowdown. The cost is in the
+  // browser's work on the application's own module graph, which is the other 99 requests; #812
+  // holds what has and has not been ruled out.
+  //
+  // A SECOND regression the original note missed: the GL phase AFTER `load` also more than
+  // doubled, 93.5-97.9s to 218.0-220.5s, which no bundle size explains.
+  //
+  // WHY 600s SURVIVES THAT CORRECTION. A whole run on 0.186 is about 48s to `load` plus 218s
+  // to results, so ~266s; 600s is ~2.3x that, which is the margin a hang ceiling wants and
+  // matches the guard below. The number was right; only the reason for it was not.
   //
   // This is a DEVELOPMENT SERVER cost, not a shipped one: the production build tree-shakes
   // the same import down to a 1.17 MB bundle, and `npm run visual` (which runs against
-  // `dist`) was unaffected. It is the ceiling for a hang, matching the guard below.
+  // `dist`) was unaffected.
   await page.goto(`${BASE}tools/gl/harness.html`, { waitUntil: 'load', timeout: 600000 });
   // A LIVENESS guard, not an assertion: nothing about the checks depends on this number,
   // and a harness that hangs is caught just as well at 600s as at 30s. It has now been
