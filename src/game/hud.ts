@@ -278,7 +278,7 @@ import { equalizeMenuRows } from './menu-row-width';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
-import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
+import { STOCK_CUE_MS, type StockCue, narrowPipLayout, NARROW_STRIP_QUERY, type PipLayout } from '../presentation/stock-cue';
 import {
   type IdentityMarkerStyle,
   MARKER_ARC_GAP,
@@ -3318,7 +3318,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       } else {
         const started = stockCueStarts.get(entry.slot);
         const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
-        fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, running, now);
+        fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, running, now, stocks.length);
       }
       // teams: TEAM_COLORS[team]; ffa (no `team` on the entry): IDENTITY_RING_COLORS[
       // slot] -- the SAME dispatch entities.ts's own ring/tint colouring uses at its
@@ -3368,6 +3368,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * re-attaches a running cue at its elapsed time.
    */
   const stockCueStarts = new Map<number, { at: number; from: number }>();
+  /**
+   * Whether the viewport is narrow enough for issue #835's pip sizing.
+   *
+   * A MEDIA QUERY LIST, not a layout read. The strip is rebuilt on every status that moves, and
+   * measuring its width each time would force a reflow inside the HUD path; `matches` is a
+   * cached boolean the engine updates. Guarded because `matchMedia` is absent in some test
+   * environments, where the shipped full-size pip is the right answer.
+   */
+  const narrowStrip = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia(NARROW_STRIP_QUERY)
+    : null;
+  const isNarrowViewport = (): boolean => narrowStrip?.matches ?? false;
   /**
    * The pips arm's denominator: each slot's stock when this match's strip began. `VersusStock`
    * carries no starting stock, so it is remembered from the first push of a match, and taken
@@ -3421,6 +3433,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     entry: VersusStock,
     running: { at: number; from: number } | null,
     now: number,
+    slots: number,
   ): void {
     const delay = running === null ? '' : `${-Math.round(now - running.at)}ms`;
     const cueEl = (el: HTMLElement | SVGElement): HTMLElement | SVGElement => {
@@ -3438,10 +3451,38 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const arm = stockCue === 'marks' && entry.team !== undefined ? 'pips' : stockCue;
     if (arm === 'pips') {
       const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
+      // ISSUE #835: the strip is a nowrap flex row with no scrolling, so a strip too wide for
+      // the viewport clips its last entry silently. On a narrow viewport the pip is sized from
+      // the measured table in `stock-cue.ts`, and where no legible size fits -- four players at
+      // four or five stocks -- the arm hands this entry back to the shipped digit rather than
+      // drawing dots too small to count. The digit is the same text the no-cue strip writes.
+      const layout: PipLayout = isNarrowViewport()
+        ? narrowPipLayout(slots, total)
+        : { kind: 'row', pip: 10, gap: 3 };
       const pips = document.createElement('span');
       pips.className = 'hud-stock-pips';
+      if (layout.pip !== 10) pips.style.setProperty('--hud-pip', `${layout.pip}px`);
+      if (layout.kind === 'row' && layout.gap !== 3) {
+        pips.style.setProperty('--hud-pip-gap', `${layout.gap}px`);
+      }
       pips.setAttribute('role', 'img');
       pips.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
+      if (layout.kind === 'one') {
+        // ONE pip and the count as a digit. The pip is hollow once the player is out, the same
+        // read a lost pip carries in the row, and it is what the cue animates -- a bare digit
+        // would leave the loss with nothing to swell or burst, which is the arm's whole cue.
+        const pip = document.createElement('span');
+        pip.className = 'hud-stock-pip';
+        if (entry.stock <= 0) pip.classList.add('hud-stock-pip--lost');
+        if (running !== null) cueEl(pip);
+        pips.appendChild(pip);
+        span.appendChild(pips);
+        const count = document.createElement('span');
+        count.className = 'hud-stock-pip-count';
+        count.textContent = `${entry.stock}`;
+        span.appendChild(count);
+        return;
+      }
       for (let i = 0; i < total; i++) {
         const pip = document.createElement('span');
         pip.className = 'hud-stock-pip';
