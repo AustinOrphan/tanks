@@ -333,4 +333,43 @@ describe('the screen capture adapter', () => {
     capability.profile = { ...capability.profile, capability: 'real-device' };
     expect(() => buildScreenArguments(capability, 'tmp/f.png')).toThrow(/capability profile/);
   });
+
+  it('refuses a capability that disagrees with the state it names (issue #844)', () => {
+    // The touchscreen lives on the STATE, because the layout sweep reads the catalogue and
+    // never sees a recipe. That makes the two able to disagree, and a disagreement is silent
+    // in the worst way: a `headless-touch` recipe pointed at a desktop state captures the
+    // desktop pane -- a perfectly good-looking Settings screenshot -- and files it as touch
+    // evidence. `control-relevance.ts` OMITS `touchScheme` and `fireMode` without a
+    // touchscreen, so the two frames differ by two missing controls and nothing else flags it.
+    const desktopStateTouchRecipe = recipeFor('screen.settings');
+    desktopStateTouchRecipe.profile = { ...desktopStateTouchRecipe.profile, capability: 'headless-touch' };
+    expect(() => buildScreenArguments(desktopStateTouchRecipe, 'tmp/f.png')).toThrow(/disagrees with state/);
+
+    // And the other direction, which is the likelier accident: a touch state whose recipe was
+    // copied from a desktop one and never had its capability changed.
+    const touchStateDesktopRecipe = recipeFor('screen.settings.touch');
+    touchStateDesktopRecipe.profile = { ...touchStateDesktopRecipe.profile, capability: 'headless-desktop' };
+    expect(() => buildScreenArguments(touchStateDesktopRecipe, 'tmp/f.png')).toThrow(/disagrees with state/);
+
+    // The pairing that is correct stays accepted, so this is a refusal and not a ban.
+    expect(() => buildScreenArguments(recipeFor('screen.settings.touch'), 'tmp/f.png')).not.toThrow();
+    expect(() => buildScreenArguments(recipeFor('screen.settings'), 'tmp/f.png')).not.toThrow();
+  });
+
+  it('gives exactly the states that declare a touchscreen the controls that need one', () => {
+    // The population, stated: of the screen catalogue, only the states below declare `touch`.
+    // A state that quietly gained or lost it would change what its capture shows without any
+    // other signal, because the flag reaches Playwright's context rather than the page.
+    const touchStates = SCREEN_STATES.filter((s: any) => s.touch === true).map((s: any) => s.id);
+    expect(touchStates).toEqual(['screen.settings.touch']);
+
+    // And it is measured, not merely rendered: the two controls that exist only with a
+    // touchscreen are in the state's `measure` list, so the capture's report carries the
+    // difference rather than leaving it to whoever looks at the PNG.
+    const touch = SCREEN_STATES.find((s: any) => s.id === 'screen.settings.touch') as any;
+    expect(touch.measure).toContain('.hud-scheme-toggle');
+    expect(touch.measure).toContain('.hud-firemode-toggle');
+    const desktop = SCREEN_STATES.find((s: any) => s.id === 'screen.settings') as any;
+    expect(desktop.measure).not.toContain('.hud-scheme-toggle');
+  });
 });

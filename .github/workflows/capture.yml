@@ -92,6 +92,7 @@ on:
           - screen.settings.focused
           - screen.settings.pressed
           - screen.settings.rumble-refused
+          - screen.settings.touch
           - screen.startup.match-failed
           - screen.startup.probe-blocked
           - screen.startup.unsupported-render
