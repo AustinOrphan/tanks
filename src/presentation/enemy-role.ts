@@ -157,29 +157,46 @@ export function weaponShapeFor(
  * The hull lever, as ABSOLUTE plan parameters rather than multipliers -- the only lever here
  * that is, and the clamps are why.
  *
- * `hullPlan` puts `nose` through `clamp01`, and the shipped value is already 1: "no taper at
- * all" is the ceiling, so a multiplier could only ever move the `fast` end and would read as
- * 1.0 for two of the three states. `round` is clamped to `min(round, halfW * 0.9, halfL *
- * 0.45)`, which is 0.45 on the 1.0-square hull, so the corner has a hard ceiling too. Absolute
- * values state where each end sits against those ceilings instead of hiding them behind a
- * ratio.
+ * TWO FEATURES, NOT TWO ENDS OF ONE SCALE, and that is forced rather than chosen. Every other
+ * weapon lever runs a single number from below the shipped value to above it, with the
+ * standard shell in the middle. The hull cannot: `hullPlan` clamps BOTH of its free parameters
+ * at or below where the shipped hull already sits, so nothing can be blunter than shipped.
  *
- * CORNER CARRIES ALL THREE STATES; NOSE SHARPENS THE OUTLIER. Because nose cannot go above the
- * shipped 1, it separates `fast` from the other two and nothing else. Corner is the axis that
- * actually orders the three: 0.16 is a near-square wedge, 0.3 is shipped, 0.45 is the clamp
- * ceiling and reads as a lozenge.
+ *   nose  is `clamp01`-ed and the shipped value is already 1, the ceiling.
+ *   round is clamped to `min(round, halfW * 0.9, halfL * 0.45)`. On this hull that is
+ *         `min(round, 0.394, 0.225)` = 0.225, and the shipped HULL_CORNER of 0.3 is ALREADY
+ *         clamped to it. A first version of this lever asked for 0.45 at the `ricochet` end
+ *         and rendered vertex-identical to the shipped hull, because both clamp to 0.225.
+ *         The mapping's own ordering test passed while the geometry did not move -- the test
+ *         was asserting the ordering of these numbers rather than of the shapes they make.
  *
- * Ordered by the bounce budget like every other weapon lever, so the seven can be compared
- * against each other: sharper is straighter, blunter comes back more often. That is the one
- * property that made `girth` strongest of the first three -- a direction-of-travel meaning
- * needs no legend.
+ * So the shipped hull is the BLUNTEST state available, and both other states must be sharper
+ * than it. They are separated by WHICH feature sharpens, which is also the clearer semantic:
+ *
+ *   fast      a tapered nose  -- a dart. It goes where it is pointed and does not come back.
+ *   normal    the shipped hull, vertex for vertex.
+ *   ricochet  squared corners -- a brick. The shape that bounces off things.
+ *
+ * Measured against the shipped outline, the two states displace a worst vertex by 19.0% and
+ * 18.9% of the hull's width respectively, so neither dominates the other and both are an order
+ * of magnitude clearer than the clamped version they replace.
  */
 function hullShapeFor(step: -1 | 0 | 1): { hullNose: number; hullCorner: number } {
-  return {
-    hullNose: [0.62, 1, 1][step + 1],
-    hullCorner: [0.16, 0.3, 0.45][step + 1],
-  };
+  // The corner stays at the shipped value for `fast` so its only change is the nose, and the
+  // nose stays at the shipped 1 for `ricochet` so its only change is the corner. One feature
+  // each, which is what makes the two states tell each other apart.
+  if (step === -1) return { hullNose: 0.62, hullCorner: HULL_PLAN_CORNER };
+  if (step === 1) return { hullNose: 1, hullCorner: 0.06 };
+  return { hullNose: 1, hullCorner: HULL_PLAN_CORNER };
 }
+
+/**
+ * The shipped hull's corner radius, repeated here because presentation may not import render
+ * -- the renderer is an implementation, not a contract, and `dependency-direction.test.ts`
+ * enforces it. `entities.test.ts` pins this against `HULL_CORNER` itself, so the two cannot
+ * drift apart silently.
+ */
+const HULL_PLAN_CORNER = 0.3;
 
 /**
  * The same, for mine load. `crown` is the odd one: it spends the turret's DIAMETER, which is

@@ -62,7 +62,7 @@ describe('enemy role cues: the mapping is the number the player needs', () => {
     }
   });
 
-  it('orders the hull lever by the same budget, on the axis that can carry three states', () => {
+  it('separates the hull lever\'s three states by WHICH feature sharpens, not by an ordering', () => {
     // `hull` is the one weapon lever whose states are ABSOLUTE plan parameters rather than
     // multipliers, so it cannot join the sweep above: its shipped value is HULL_CORNER, not 1.
     // The reason is the clamps. `hullPlan` puts `nose` through `clamp01` and the shipped nose
@@ -74,9 +74,21 @@ describe('enemy role cues: the mapping is the number the player needs', () => {
     const nose = (t: 'fast' | 'normal' | 'ricochet') =>
       weaponShapeFor('hull', t).hullNose as number;
 
-    // CORNER carries all three states, ordered by the bounce budget like every other lever.
-    expect(corner('fast')).toBeLessThan(corner('normal'));
-    expect(corner('normal')).toBeLessThan(corner('ricochet'));
+    // NOT AN ORDERING, and that is the finding rather than a compromise. `hullPlan` clamps the
+    // corner to min(round, halfW * 0.9, halfL * 0.45) = 0.225 on this hull, and the shipped 0.3
+    // is already clamped to it, so nothing can be blunter than shipped. A first version asked
+    // for 0.45 at the `ricochet` end and rendered VERTEX-IDENTICAL to shipped; this test passed
+    // anyway, because it compared the mapping's numbers instead of the shapes they make.
+    //
+    // So the three states are separated by WHICH feature sharpens, and what must hold is that
+    // all three are distinct and that neither non-shipped state is blunter than shipped.
+    expect(corner('ricochet')).toBeLessThan(corner('normal'));
+    expect(corner('fast'), 'fast changes the nose, not the corner').toBe(corner('normal'));
+    expect(nose('fast')).toBeLessThan(nose('normal'));
+    expect(nose('ricochet'), 'ricochet changes the corner, not the nose').toBe(nose('normal'));
+
+    const sig = (t: 'fast' | 'normal' | 'ricochet') => `${corner(t)}|${nose(t)}`;
+    expect(new Set([sig('fast'), sig('normal'), sig('ricochet')]).size, 'three distinct states').toBe(3);
     // The shipped tank must not move a vertex, so the standard shell is the shipped hull.
     //
     // LITERALS, not the render constants, and deliberately: presentation may not import
@@ -88,14 +100,16 @@ describe('enemy role cues: the mapping is the number the player needs', () => {
     // numbers stopped being the shipped ones.
     expect(corner('normal'), 'the standard shell is the shipped hull').toBe(0.3);
     expect(nose('normal'), 'the standard shell is the shipped hull').toBe(1);
-    // NOSE sharpens the outlier and cannot do more: it is at its own ceiling for two states.
-    expect(nose('fast')).toBeLessThan(nose('normal'));
-    expect(nose('ricochet')).toBe(nose('normal'));
-
-    // Neither end may exceed a clamp, because a value the clamp eats is a state that silently
-    // reads as its neighbour.
+    // No state may ask for a corner the clamp would eat, because a value the clamp eats is a
+    // state that silently renders as its neighbour -- which is exactly what happened.
+    // A state that intends to CHANGE the corner must ask for a value the clamp will honour. A
+    // state that intends to keep the shipped corner may pass the shipped value through, clamp
+    // and all -- it renders as shipped either way, which is the intent.
+    const CORNER_CEILING = 0.225;   // min(halfW * 0.9, halfL * 0.45) on the shipped hull
     for (const t of ['fast', 'normal', 'ricochet'] as const) {
-      expect(corner(t), `${t} corner above the 0.45 clamp`).toBeLessThanOrEqual(0.45);
+      if (corner(t) !== corner('normal')) {
+        expect(corner(t), `${t} asks for a corner the clamp would eat`).toBeLessThanOrEqual(CORNER_CEILING);
+      }
       expect(nose(t), `${t} nose above the clamp01 ceiling`).toBeLessThanOrEqual(1);
       expect(nose(t), `${t} nose below zero`).toBeGreaterThan(0);
     }
