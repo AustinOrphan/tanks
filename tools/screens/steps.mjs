@@ -22,6 +22,40 @@ import { STEP_KINDS, WEBGL_MODES } from './states.mjs';
  * uses elsewhere keep working, so a failure state still renders the rest of the page the
  * way a player would meet it.
  */
+/**
+ * Answer the entry script's request according to a state's `entry` mode (issue #781).
+ *
+ * SHARED, and that is the point. This began as four lines inside `captureState`, and the
+ * layout sweep's own driver -- which navigates for itself -- did not get them, so both
+ * failure states timed out in all four viewports of the required `visual` job: the page
+ * simply booted normally and the card never appeared. The touch flag had the same shape of
+ * bug one issue earlier. One implementation, called by every driver that navigates.
+ *
+ * Both modes ANSWER the request, which is what separates them from `boot: 'holding'`: that
+ * never replies, so the page waits on its card forever. A 404 completes and fires a resource
+ * `error` whose target is the script element; a body that cannot parse completes and fires
+ * one whose `filename` is the script's `src`. `index.html`'s inline guard keys on exactly
+ * that difference to choose which card to draw, so mixing the two up photographs the wrong
+ * card and still looks correct.
+ *
+ * @param {any} page a Playwright page, before it has navigated
+ * @param {string | undefined} entry one of `ENTRY_MODES`
+ */
+export async function applyEntryMode(page, entry) {
+  if (entry === 'refused') {
+    await page.route('**/*.js', (route) => route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' }));
+  } else if (entry === 'unparseable') {
+    await page.route('**/*.js', (route) => route.fulfill({
+      status: 200,
+      contentType: 'text/javascript',
+      // Unbalanced on purpose: this has to fail at PARSE time, not throw at run time. A body
+      // that parses and then throws reports a different error shape and reaches the guard's
+      // other branch.
+      body: 'export const broken = (((;',
+    }));
+  }
+}
+
 export function webglOverrideSource(mode) {
   if (!WEBGL_MODES.includes(mode)) throw new Error(`unknown webgl mode '${mode}'`);
   if (mode === 'match-build-fails') {

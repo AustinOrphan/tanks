@@ -76,6 +76,8 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.confirm.new-campaign` | `screen.confirm.new-campaign` | `capture.png` | still |
 | `screen.startup.unsupported-render` | `screen.startup.unsupported-render` | `capture.png` | still |
 | `screen.startup.probe-blocked` | `screen.startup.probe-blocked` | `capture.png` | still |
+| `screen.startup.entry-refused` | `screen.startup.entry-refused` | `capture.png` | still |
+| `screen.startup.entry-unparseable` | `screen.startup.entry-unparseable` | `capture.png` | still |
 | `screen.startup.match-failed` | `screen.startup.match-failed` | `capture.png` | still |
 | `screen.no-script` | `screen.no-script` | `capture.png` | still |
 | `screen.launch` | `screen.launch` | `capture.png` | still |

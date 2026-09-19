@@ -108,15 +108,23 @@ export function buildScreenArguments(recipe, outputRelative) {
  * assertion channel is what turns that into a failed capture instead of a saved picture of
  * a broken screen.
  */
-function pageErrorAssertion(pageErrors) {
-  return {
-    kind: 'page-errors',
-    passed: pageErrors.length === 0,
-    diagnostic: pageErrors.length === 0
-      ? 'no uncaught page errors'
-      : `uncaught page error(s): ${pageErrors.join(' | ')}`,
-    details: { errors: pageErrors },
-  };
+export function pageErrorAssertion(pageErrors, entry) {
+  // ONE EXEMPTION, and it is declared rather than inferred (issue #781). A state with
+  // `entry: 'unparseable'` photographs the card the page draws when the entry bundle cannot
+  // parse -- so the uncaught error is the SUBJECT of the capture, not a symptom of a broken
+  // one. Everything else keeps the rule exactly: an uncaught error means the picture is of a
+  // page that was still falling over.
+  //
+  // Keyed on the entry mode rather than a free-form "expect errors" flag, so the exemption
+  // cannot spread: it is available only to the one state kind whose whole point is the error,
+  // and a state that started failing for an unrelated reason would still fail this.
+  const expected = entry === 'unparseable';
+  const passed = expected ? true : pageErrors.length === 0;
+  let diagnostic;
+  if (pageErrors.length === 0) diagnostic = 'no uncaught page errors';
+  else if (expected) diagnostic = `expected page error(s) for an unparseable entry: ${pageErrors.join(' | ')}`;
+  else diagnostic = `uncaught page error(s): ${pageErrors.join(' | ')}`;
+  return { kind: 'page-errors', passed, diagnostic, details: { errors: pageErrors, expected } };
 }
 
 /**
@@ -183,7 +191,7 @@ export async function runScreenState(context, deps = {}) {
       frameSchedule: { kind: 'still', frameCount: 1 },
     },
     assertions: [
-      pageErrorAssertion(report.producer.pageErrors ?? []),
+      pageErrorAssertion(report.producer.pageErrors ?? [], report.producer.entry),
       measuredElementsAssertion(measurements),
     ],
     metadata: {

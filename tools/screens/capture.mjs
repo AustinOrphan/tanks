@@ -11,7 +11,7 @@
  */
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from '../visual/static-server.mjs';
-import { runStep, webglOverrideSource } from './steps.mjs';
+import { runStep, webglOverrideSource, applyEntryMode } from './steps.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 
 const MIME = {
@@ -116,6 +116,10 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     // `load`, because a `type="module"` script is deferred and both `load` and
     // `domcontentloaded` wait for one that is never going to arrive.
     if (state.boot === 'holding') await page.route('**/*.js', () => {});
+    // Issue #781's two entry failures, applied BEFORE navigation: what these photograph is
+    // decided by how the very first request is answered. Shared with the layout sweep's own
+    // driver, which navigates separately -- see `applyEntryMode`.
+    await applyEntryMode(page, state.entry);
     if (state.webgl !== 'ok') await page.addInitScript(webglOverrideSource(state.webgl));
     if (Object.keys(state.storage).length > 0) {
       // localStorage needs an origin, so the first visit exists only to get one. The
@@ -159,6 +163,9 @@ export async function captureState(browser, base, state, { width, height, dpr, t
         webgl: state.webgl,
         javascript: state.javascript,
         boot: state.boot,
+        // Carried so the adapter can tell an uncaught error that IS the subject from one
+        // that merely happened (issue #781).
+        entry: state.entry,
         measurements,
         pageErrors,
         played,

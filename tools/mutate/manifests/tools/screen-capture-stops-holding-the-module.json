@@ -1,13 +1,13 @@
 {
   "id": "screen-capture-stops-holding-the-module",
   "file": "tools/screens/capture.mjs",
-  "find": "    if (state.boot === 'holding') await page.route('**/*.js', () => {});\n    if (state.webgl !== 'ok')",
-  "replace": "    if (state.webgl !== 'ok')",
+  "find": "    if (state.boot === 'holding') await page.route('**/*.js', () => {});",
+  "replace": "    void state.boot;",
   "expect": "killed",
   "tests": [
     "tools/screens/capture.test.ts"
   ],
-  "why": "Stops holding the module, which is the half of the mechanism that only runs in a real browser. MEASURED: before its guard existed this mutation left the entire vitest suite green, because nothing outside a capture run observes it. The guard that catches it reads the source and says so -- the weakest kind of assertion, used here for the reason the GL seams live in their own harness: the alternative was no guard at all.",
+  "why": "Stops holding the module, which is the half of the mechanism that only runs in a real browser. MEASURED: before its guard existed this mutation left the entire vitest suite green, because nothing outside a capture run observes it. The guard that catches it reads the source and says so -- the weakest kind of assertion, used here for the reason the GL seams live in their own harness: the alternative was no guard at all. Re-anchored for issue #781: the find string used to span this line AND the webgl line below it, and the two entry-failure routes now sit between them. Anchored on the holding route alone so a neighbour cannot move it again.",
   "killedBy": [
     "capture.mjs: the seams no vitest run can execute (issue #841) holds the module AND commits the navigation, which are one mechanism in two halves"
   ]

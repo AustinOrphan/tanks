@@ -13,7 +13,7 @@
  * by the gate itself.
  */
 import { findScreenState, SCREEN_STATES } from '../screens/states.mjs';
-import { runStep } from '../screens/steps.mjs';
+import { runStep, applyEntryMode } from '../screens/steps.mjs';
 
 /**
  * The four viewports #686 measured, and the reason each is here: the smallest supported
@@ -190,6 +190,10 @@ export async function measureHitTargets(browser, base, state, viewport, timeout 
     const page = await context.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
     const url = `${base}${state.query ?? ''}`;
+    // The catalogue's entry mode reaches this driver too (issue #781). Without it both
+    // failure states boot normally here and time out waiting for a card that never appears --
+    // which is exactly what the `visual` job reported, in all four viewports.
+    await applyEntryMode(page, state.entry);
     if (Object.keys(state.storage).length > 0) {
       await page.goto(url, { waitUntil: 'load' });
       await page.evaluate((entries) => {

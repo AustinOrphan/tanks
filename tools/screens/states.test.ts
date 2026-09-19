@@ -5,6 +5,7 @@
 // it. These are the guards that turn that into a named failure at unit speed.
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -12,10 +13,11 @@ import {
   SCREEN_STATE_IDS,
   STEP_KINDS,
   WEBGL_MODES,
+  ENTRY_MODES,
   GAMEPAD_FIXTURES,
   findScreenState,
 } from './states.mjs';
-import { buildScreenArguments, runScreenState } from '../capture/screen-adapter.mjs';
+import { buildScreenArguments, runScreenState, pageErrorAssertion } from '../capture/screen-adapter.mjs';
 import { CAPTURE_RECIPES } from '../capture/registry.mjs';
 import { DEVELOPER_KEY_PREFIX } from '../../src/game/storage';
 
@@ -116,6 +118,11 @@ describe('the screen-state catalogue', () => {
     const noSplashNeeded = new Set([
       'screen.startup.unsupported-render',
       'screen.startup.probe-blocked',
+      // Issue #781: the same kind as the two above, one step earlier. The entry bundle never
+      // runs at all, so there is no application to draw a splash -- the inline guard in
+      // index.html replaces the page instead.
+      'screen.startup.entry-refused',
+      'screen.startup.entry-unparseable',
       'screen.no-script',
       'screen.launch',
       'screen.boot-loading',
@@ -199,6 +206,82 @@ describe('the screen-state catalogue', () => {
       .filter((entry: any) => entry.recipe.producer.kind === 'screen')
       .map((entry: any) => entry.recipe.producer.scenarioId);
     expect(recipeStates.slice().sort()).toEqual([...SCREEN_STATE_IDS].sort());
+  });
+});
+
+describe('the entry-failure states (issue #781)', () => {
+  it('declares a known entry mode on every state, and a failing one on exactly two', () => {
+    for (const state of SCREEN_STATES) {
+      expect(ENTRY_MODES, `${state.id} has an unknown entry mode`).toContain((state as any).entry);
+    }
+    const failing = SCREEN_STATES.filter((s: any) => s.entry !== 'ok').map((s: any) => s.id);
+    expect(failing).toEqual(['screen.startup.entry-refused', 'screen.startup.entry-unparseable']);
+    // The control the issue asks for, at catalogue level: every OTHER state is a normal load,
+    // so none of them can be photographing a failure card. Measured rather than assumed --
+    // a state that quietly gained a failing entry would change what it photographs with no
+    // other signal, because the flag acts on the request before the page exists.
+    const cardWatchers = SCREEN_STATES
+      .filter((s: any) => s.measure.some((m: string) => m.includes('boot-entry-failure-card')))
+      .map((s: any) => s.id);
+    expect(cardWatchers).toEqual(failing);
+  });
+
+  it('has EVERY driver that navigates apply the entry mode, not just the capture one', () => {
+    // THE THIRD TIME a new state field reached one driver and not the other. `captureState`
+    // and `measureHitTargets` both navigate for themselves, so a field applied in one is
+    // silently absent from the other: #857's touch flag, then this issue's entry mode, which
+    // shipped and failed the required `visual` job with "never reached its surface" in all
+    // four viewports -- the page simply booted normally and the card never appeared.
+    //
+    // Read as TEXT on purpose. The bug is not that `applyEntryMode` is wrong; it is that a
+    // driver never calls it, and nothing about a correct call site is observable from inside
+    // the other one. Negative control: deleting either call fails this.
+    const drivers = ['../screens/capture.mjs', '../visual/hit-sweep.mjs'];
+    for (const rel of drivers) {
+      const src = readFileSync(new URL(rel, import.meta.url), 'utf8');
+      expect(src, `${rel} never applies the entry mode`).toMatch(/applyEntryMode\(/);
+      expect(src, `${rel} does not import it`).toMatch(/import \{[^}]*applyEntryMode[^}]*\}/);
+    }
+    // And the shared implementation is the only place the routing itself lives, so the two
+    // cannot drift: neither driver should be fulfilling the script request on its own.
+    for (const rel of drivers) {
+      const src = readFileSync(new URL(rel, import.meta.url), 'utf8');
+      expect(src, `${rel} routes the entry script itself instead of sharing`).not.toMatch(/contentType: 'text\/javascript'/);
+    }
+  });
+
+  it('does not measure the holding card, which these two states REMOVE rather than hide', () => {
+    // `screen.no-script` can measure `#boot-loading` because scripting off leaves the static
+    // markup in place. Here the card's own code runs `app.innerHTML = ''` first, so the
+    // element is gone -- and `measuredElementsAssertion` fails any selector matching nothing,
+    // correctly. Measured on a real capture before this was written: 4/5 visible, the fifth
+    // reporting `present: false`.
+    for (const id of ['screen.startup.entry-refused', 'screen.startup.entry-unparseable']) {
+      const state = findScreenState(id)!;
+      expect(state.measure, `${id} measures the removed holding card`).not.toContain('#boot-loading');
+      expect(state.measure).toContain('#boot-entry-failure-card button');
+    }
+  });
+
+  it('excuses an uncaught error ONLY for the unparseable entry, and names it as expected', () => {
+    const errors = ["SyntaxError: Unexpected token ';'"];
+
+    // The subject of that state IS the uncaught error, so the capture is of a page working
+    // as designed rather than one falling over.
+    const excused = pageErrorAssertion(errors, 'unparseable');
+    expect(excused.passed).toBe(true);
+    expect(excused.diagnostic).toMatch(/expected page error/);
+    expect(excused.details.errors).toEqual(errors);
+
+    // THE CONTROL, and the reason the exemption is keyed on the mode rather than a flag: its
+    // own SIBLING does not get it. A refused entry never runs any script, so an uncaught
+    // error there is a real defect and must still fail.
+    expect(pageErrorAssertion(errors, 'refused').passed).toBe(false);
+    expect(pageErrorAssertion(errors, 'ok').passed).toBe(false);
+    expect(pageErrorAssertion(errors, undefined).passed).toBe(false);
+
+    // And the exemption is not a blanket pass: with no errors it still reports the clean case.
+    expect(pageErrorAssertion([], 'unparseable').diagnostic).toBe('no uncaught page errors');
   });
 });
 

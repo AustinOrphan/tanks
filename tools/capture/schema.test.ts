@@ -70,6 +70,8 @@ describe('capture recipe schema', () => {
       'screen.confirm.new-campaign',
       'screen.startup.unsupported-render',
       'screen.startup.probe-blocked',
+      'screen.startup.entry-refused',
+      'screen.startup.entry-unparseable',
       'screen.startup.match-failed',
       'screen.no-script',
       'screen.pause.versus',

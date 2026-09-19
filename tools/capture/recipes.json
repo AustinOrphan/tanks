@@ -1540,6 +1540,104 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.startup.entry-refused",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.startup.entry-refused"
+    },
+    "fixture": {
+      "id": "screen.startup.entry-refused",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Entry bundle refused",
+    "description": "The branded card index.html draws when the entry bundle never arrives, reached by answering the script request with a 404.",
+    "altText": "Screenshot of the Tanks! startup failure card reading that the game could not load, with a Reload button.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.startup.entry-unparseable",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.startup.entry-unparseable"
+    },
+    "fixture": {
+      "id": "screen.startup.entry-unparseable",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Entry bundle unparseable",
+    "description": "The branded card index.html draws when the bundle arrives but cannot parse, reached by answering the script request with JavaScript that fails to parse.",
+    "altText": "Screenshot of the Tanks! startup failure card reading that the game could not start, with a Reload button.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.startup.match-failed",
     "producer": {
       "kind": "screen",
