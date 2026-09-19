@@ -2397,5 +2397,152 @@
     "altText": "One round of the scripted player against level 4's full roster under the PP1 role budgets, seen from the game camera.",
     "timeoutMs": 180000,
     "outputBudgetBytes": 100000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.launch",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.launch"
+    },
+    "fixture": {
+      "id": "screen.launch",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Launch splash",
+    "description": "The title screen a first load opens on, before any key or tap dismisses it.",
+    "altText": "Screenshot of the Tanks! launch splash, showing the title and the prompt to press any key.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.boot-loading",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.boot-loading"
+    },
+    "fixture": {
+      "id": "screen.boot-loading",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Boot holding card",
+    "description": "The holding card index.html ships in its own markup, photographed while the bundle is still arriving.",
+    "altText": "Screenshot of the Tanks! boot holding card, showing the word Tanks! on an otherwise empty page.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.practice",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.practice"
+    },
+    "fixture": {
+      "id": "screen.practice",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Practice, mid-round",
+    "description": "A practice round in play, reached by picking a level from the grid.",
+    "altText": "Screenshot of a Tanks! practice round in play, with the Practice chip in the topbar.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
   }
 ]

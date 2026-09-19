@@ -6,7 +6,7 @@ import { HIT_EXTRA_STATES, hitSweepExclusion, hitSweepStates } from './hit-sweep
 /**
  * Issue #710: the `visual` gate sweeps menu hit targets, and WHICH surfaces it sweeps is
  * decided here rather than in `verify.mjs`, which runs on import. The population below is
- * the screen-state catalogue as it stands: 38 states, 13 excluded, 25 swept, plus 1 extra.
+ * the screen-state catalogue as it stands: 41 states, 15 excluded, 26 swept, plus 1 extra.
  */
 
 /** Every excluded catalogue state, by the rule that removes it. */
@@ -30,6 +30,9 @@ const EXCLUDED = {
     'screen.ending.mission-clear.played',
     'screen.ending.campaign-over.played',
   ],
+  // Issue #841's two pre-UI states. Neither has a control to press.
+  'the boot holding card, which has no application in it yet': ['screen.boot-loading'],
+  'the launch splash, dismissed by any key rather than by a control': ['screen.launch'],
 };
 
 describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
@@ -53,15 +56,21 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     ]);
     // 25 since issue #754's Controller Layout state: a Settings pane, so it is swept. 26 since
     // issue #766: the Controllers extra became `screen.controllers`, and `screen.controllers.pads`
-    // joined it, so the pane is swept once without pads and once with two.
-    expect(hitSweepStates()).toHaveLength(26);
+    // joined it, so the pane is swept once without pads and once with two. 27 since issue
+    // #841's `screen.practice`: a live HUD with a pause control, so it IS swept -- unlike that
+    // issue's two pre-UI states, which have no control to press and are excluded above.
+    expect(hitSweepStates()).toHaveLength(27);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 
   it('sweeps a state added to the catalogue without being told to', () => {
     // An allowlist would pass the two cases above against today's catalogue and silently skip
     // tomorrow's screen. Negative control: filtering by a fixed id list fails this.
-    const added = { ...SCREEN_STATES[0], id: 'screen.a-future-screen' };
+    // The first state the sweep ACCEPTS, not `SCREEN_STATES[0]`: the catalogue's first entry
+    // is whatever was added most recently at the top, and issue #841 made it an excluded
+    // pre-UI state -- which turned this case into an assertion about insertion order.
+    const sweepable = SCREEN_STATES.find((s) => hitSweepExclusion(s) === null);
+    const added = { ...sweepable, id: 'screen.a-future-screen' };
     expect(hitSweepStates([added]).map((s) => s.id)[0]).toBe('screen.a-future-screen');
   });
 

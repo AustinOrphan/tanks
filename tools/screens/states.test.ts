@@ -106,17 +106,40 @@ describe('the screen-state catalogue', () => {
   it('reaches a rendered UI past the Launch splash, or is a state that has no UI to reach', () => {
     // The splash covers everything until a key dismisses it, so a state that expects HUD
     // markup and never presses one photographs the splash instead -- a mistake that costs
-    // a full capture run to notice. The exemptions are exact: the boot failure screens
-    // REPLACE the page before a splash exists, and the no-script card never boots at all.
+    // a full capture run to notice.
+    //
+    // TWO KINDS OF EXEMPTION, kept apart because they are different claims. The first three
+    // have NO UI to reach: the boot failure screens REPLACE the page before a splash exists,
+    // and the no-script card never boots at all. The last two are the opposite -- what they
+    // photograph is precisely what the other states press past (issue #841), so dismissing
+    // it would destroy the subject rather than reveal it.
     const noSplashNeeded = new Set([
       'screen.startup.unsupported-render',
       'screen.startup.probe-blocked',
       'screen.no-script',
+      'screen.launch',
+      'screen.boot-loading',
     ]);
     for (const state of SCREEN_STATES) {
       const dismisses = state.steps.some((s) => s.press === 'Space');
       expect(dismisses, `${state.id} never leaves the Launch splash`).toBe(!noSplashNeeded.has(state.id));
     }
+  });
+
+  it('keeps the two pre-UI states pre-UI, rather than merely undismissed', () => {
+    // The exemption above only says these do not press Space. This says what they ARE, so a
+    // state that quietly grew a click sequence could not keep the exemption: the launch
+    // splash is reached on a fresh load with no save, and the holding card is reached by
+    // never letting the module run at all.
+    const launch = SCREEN_STATES.find((s) => s.id === 'screen.launch');
+    expect(Object.keys(launch.storage), 'a seeded save is not a first load').toEqual([]);
+    expect(launch.boot, 'the launch splash needs a booted page').toBe('done');
+    const holding = SCREEN_STATES.find((s) => s.id === 'screen.boot-loading');
+    expect(holding.boot, 'the holding card is gone the moment boot runs').toBe('holding');
+    // And nothing else holds the module: `boot: 'holding'` photographs a page with no
+    // application in it, which is the wrong picture for every other state in the file.
+    const held = SCREEN_STATES.filter((s) => s.boot === 'holding').map((s) => s.id);
+    expect(held).toEqual(['screen.boot-loading']);
   });
 
   it('findScreenState answers for every ID and refuses anything else', () => {

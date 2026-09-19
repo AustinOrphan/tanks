@@ -75,6 +75,12 @@ export function hitSweepExclusion(state) {
   // of the same ending already puts in front of this sweep, so sweeping it again buys no
   // new control to press.
   if (state.steps.some((step) => 'playUntil' in step)) return 'a played ending, whose panel its pushed-outcome state already sweeps';
+  // Issue #841. Neither pre-UI state has a control to press: the holding card is served
+  // markup with no application behind it, and the launch splash takes ANY key rather than
+  // offering a target. Excluded by what they are rather than by id, so a future state that
+  // holds the module or opens on the splash inherits the rule.
+  if (state.boot === 'holding') return 'the boot holding card, which has no application in it yet';
+  if (state.id === 'screen.launch') return 'the launch splash, dismissed by any key rather than by a control';
   return null;
 }
 
