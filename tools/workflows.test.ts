@@ -906,6 +906,28 @@ describe('capture.yml: the on-demand capture workflow', () => {
     expect(offered).toHaveLength(ids.length);
   });
 
+  it('builds before it sweeps, and stands the capture step aside while it does', () => {
+    // The sweep mode (issue #845) renders the BUILT application: `screens:sweep` reads `dist`,
+    // unlike `npm run capture`, which builds its own. Drop the build step and a dispatched
+    // sweep still starts, still installs a browser, and fails several minutes in with a
+    // missing-dist message that points nowhere near the cause. Drop the guard on the capture
+    // step and a sweep ALSO runs a capture of whatever recipe the form happened to carry,
+    // overwriting capture.log and shipping a bundle that is half one thing and half another.
+    // Neither is visible in review: both files still parse and every other mode still works.
+    const modes = CAPTURE.slice(CAPTURE.indexOf('      mode:'), CAPTURE.indexOf('      recipe:'));
+    expect([...modes.matchAll(/^ {10}- (\S+)$/gm)].map((m) => m[1])).toEqual(['capture', 'compare', 'sweep']);
+
+    expect(CAPTURE, 'the sweep has no build step').toMatch(
+      /- name: Build for the sweep\n\s+if: inputs\.mode == 'sweep'\n\s+run: npm run build\n/,
+    );
+    expect(CAPTURE, 'the sweep step is not gated to sweep mode').toMatch(
+      /- name: Run sweep\n\s+if: inputs\.mode == 'sweep'\n/,
+    );
+    expect(CAPTURE, 'the capture step still runs during a sweep').toMatch(
+      /- name: Run capture\n\s+id: run\n\s+if: inputs\.mode != 'sweep'\n/,
+    );
+  });
+
   it('grants no write permission', () => {
     // `permissions:` at the top level, so no job can widen it. The workflow pushes nothing,
     // opens nothing and comments nowhere -- issue #343's security section.
