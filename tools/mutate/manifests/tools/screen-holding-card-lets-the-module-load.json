@@ -1,8 +1,8 @@
 {
   "id": "screen-holding-card-lets-the-module-load",
   "file": "tools/screens/states.mjs",
-  "find": "    boot: 'holding',\n    steps: [{ waitVisible: '#boot-loading' }],",
-  "replace": "    steps: [{ waitVisible: '#boot-loading' }],",
+  "find": "    boot: 'holding',\n    menu: 'none',\n    steps: [{ waitVisible: '#boot-loading' }],",
+  "replace": "    menu: 'none',\n    steps: [{ waitVisible: '#boot-loading' }],",
   "expect": "killed",
   "tests": [
     "tools/screens/states.test.ts"

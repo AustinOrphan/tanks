@@ -6,7 +6,7 @@ import { HIT_EXTRA_STATES, hitSweepExclusion, hitSweepStates } from './hit-sweep
 /**
  * Issue #710: the `visual` gate sweeps menu hit targets, and WHICH surfaces it sweeps is
  * decided here rather than in `verify.mjs`, which runs on import. The population below is
- * the screen-state catalogue as it stands: 41 states, 15 excluded, 26 swept, plus 1 extra.
+ * the screen-state catalogue as it stands: 41 states, 16 excluded, 25 swept, plus 1 extra.
  */
 
 /** Every excluded catalogue state, by the rule that removes it. */
@@ -30,9 +30,14 @@ const EXCLUDED = {
     'screen.ending.mission-clear.played',
     'screen.ending.campaign-over.played',
   ],
-  // Issue #841's two pre-UI states. Neither has a control to press.
-  'the boot holding card, which has no application in it yet': ['screen.boot-loading'],
-  'the launch splash, dismissed by any key rather than by a control': ['screen.launch'],
+  // Issue #841's three menu-less states. MEASURED, not assumed: `screen.practice` was swept
+  // on the first attempt and reported "no controls measured" in all four viewports, because
+  // a live board's only controls are the driving ones the collector leaves out.
+  'a state with no menu: nothing here is a hit target': [
+    'screen.boot-loading',
+    'screen.launch',
+    'screen.practice',
+  ],
 };
 
 describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
@@ -57,9 +62,10 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // 25 since issue #754's Controller Layout state: a Settings pane, so it is swept. 26 since
     // issue #766: the Controllers extra became `screen.controllers`, and `screen.controllers.pads`
     // joined it, so the pane is swept once without pads and once with two. 27 since issue
-    // #841's `screen.practice`: a live HUD with a pause control, so it IS swept -- unlike that
-    // issue's two pre-UI states, which have no control to press and are excluded above.
-    expect(hitSweepStates()).toHaveLength(27);
+    // #841: unchanged at 26, because all three states that issue added declare no menu. The
+    // first attempt swept the practice board and failed -- a live board offers only the
+    // driving controls the collector excludes, so there was nothing to press.
+    expect(hitSweepStates()).toHaveLength(26);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 

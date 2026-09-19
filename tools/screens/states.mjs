@@ -157,6 +157,21 @@ const state = (s) => Object.freeze({
    */
   boot: 'done',
   /**
+   * Whether this state puts a MENU in front of the player (issue #841).
+   *
+   * `'present'` -- almost every state -- means there are controls to press, which is what
+   * the visual gate's hit sweep exists to measure. `'none'` says there are not, and the
+   * three states that say it say it for three different reasons: the holding card has no
+   * application in it, the launch splash takes any key rather than offering a target, and a
+   * live board offers only the driving controls the collector excludes by design.
+   *
+   * Declared rather than inferred. The sweep reports "no controls measured" as a FAILURE --
+   * correctly, because for every other state that means the surface never opened -- so a
+   * state with genuinely none has to say so. Measured the hard way: `screen.practice` was
+   * swept on the first attempt and failed in all four viewports.
+   */
+  menu: 'present',
+  /**
    * A query string, with its leading `?`, appended to the page URL (issue #591).
    *
    * Needed because two of what this catalogue photographs are only reachable by URL: a
@@ -186,6 +201,7 @@ export const SCREEN_STATES = Object.freeze([
      * gap it filled.
      */
     boot: 'holding',
+    menu: 'none',
     steps: [{ waitVisible: '#boot-loading' }],
     measure: ['#boot-loading'],
   }),
@@ -207,6 +223,7 @@ export const SCREEN_STATES = Object.freeze([
      * and stops that being a silent assumption: if boot ever gains an await, this state
      * fails with a named selector instead of photographing an empty page.
      */
+    menu: 'none',
     steps: [{ waitVisible: '.hud-splash' }],
     measure: ['.hud-splash', '.hud-splash-title', '.hud-splash-hint'],
   }),
@@ -261,6 +278,11 @@ export const SCREEN_STATES = Object.freeze([
       { click: '.hud-level-btn[aria-label="Level 1"]' },
       { waitVisible: '.hud-practice' },
     ],
+    // No menu: a live board's only controls are the on-screen driving ones, which the hit
+    // collector leaves out because they are not menu targets. The pause OVERLAY has buttons
+    // and is swept -- `screen.pause.campaign` is that state -- but the board behind it has
+    // none at all.
+    menu: 'none',
     // The chip is the assertion: it is present and unhidden only in a practice session, so
     // a capture that silently started a campaign run would fail rather than look right.
     measure: ['.hud-practice', '.hud-topbar', '.hud-lives', '.hud-enemies'],

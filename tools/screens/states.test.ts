@@ -140,6 +140,9 @@ describe('the screen-state catalogue', () => {
     // application in it, which is the wrong picture for every other state in the file.
     const held = SCREEN_STATES.filter((s) => s.boot === 'holding').map((s) => s.id);
     expect(held).toEqual(['screen.boot-loading']);
+    // And both declare that they have no menu, which is what keeps the visual gate's hit
+    // sweep off them -- it reads "no controls measured" as a failed surface otherwise.
+    expect([launch.menu, holding.menu]).toEqual(['none', 'none']);
   });
 
   it('findScreenState answers for every ID and refuses anything else', () => {
