@@ -32,7 +32,7 @@ const inputs = (over: Record<string, unknown> = {}) => ({ level: 1, seed: 7, dri
 
 describe('the flow catalogue (issue #815)', () => {
   it('names the campaign round, and refuses a flow it does not know', () => {
-    expect(FLOW_IDS).toEqual(['campaign-round']);
+    expect(FLOW_IDS).toEqual(['campaign-round', 'versus-round']);
     expect(() => findFlow('campaign-menu')).toThrow(/unknown flow 'campaign-menu'/);
   });
 
@@ -337,5 +337,65 @@ describe('stopsAtSample: whether a poll ends the recording (issue #815)', () => 
 
   it('refuses a policy it does not know, rather than recording on', () => {
     expect(() => stopsAtSample('first-kill', 'menu')).toThrow(/unknown stop policy 'first-kill'/);
+  });
+});
+
+/**
+ * THE VERSUS FLOW (issue #234's normal-speed review).
+ *
+ * `?dev=1&mode=ffa` keeps the CAMPAIGN level system (loop.ts), so this flow takes the same
+ * Level Select route the campaign one does and the `level` input keeps meaning what it means
+ * everywhere else. What changes is the SHAPE of the session: the stock strip is on and
+ * `players` tanks share the board.
+ */
+describe('the versus flow (issue #234)', () => {
+  const vs = (over: Record<string, unknown> = {}) =>
+    ({ level: 4, seed: 7, driver: 'autoplay', flags: {}, mode: 'ffa', players: 4, ...over });
+
+  it('carries the session shape in the URL, before the driver and the flags', () => {
+    expect(buildFlowUrl(vs())).toBe('?dev=1&replay=1&level=4&seed=7&mode=ffa&players=4&autoplay=1');
+    expect(buildFlowUrl(vs({ flags: { identityMarker: 'shape' } })))
+      .toBe('?dev=1&replay=1&level=4&seed=7&mode=ffa&players=4&autoplay=1&identityMarker=shape');
+  });
+
+  it('leaves the campaign URL untouched, which is the regression that matters', () => {
+    // The versus parameters are ABSENT rather than defaulted, so every existing recipe and
+    // every existing manifest still builds the same query it always did.
+    expect(buildFlowUrl({ level: 1, seed: 7, driver: 'autoplay', flags: {} }))
+      .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1');
+  });
+
+  it('refuses half a versus round, which is the failure that would look like a success', () => {
+    // `mode` alone plays the board with one tank and no stock strip; `players` alone is
+    // campaign co-op. Either would record a capture that is not what its recipe claims.
+    expect(() => validateFlowInputs(vs({ players: undefined }))).toThrow(/given together/);
+    expect(() => validateFlowInputs(vs({ mode: undefined }))).toThrow(/given together/);
+  });
+
+  it('holds players and mode to the page own ranges, not a superset', () => {
+    for (const bad of [1, 5, 0, 2.5, '4']) {
+      expect(() => validateFlowInputs(vs({ players: bad })), String(bad)).toThrow(/players must be/);
+    }
+    for (const bad of ['coop', 'campaign', '', 'FFA']) {
+      expect(() => validateFlowInputs(vs({ mode: bad })), String(bad)).toThrow(/mode must be one of/);
+    }
+  });
+
+  it('waits for the stock strip, so a mode that was ignored fails instead of recording', () => {
+    // The strip is the only element that says the session really is versus-shaped. Without
+    // this step a dropped `mode` would record a campaign board under a versus recipe id.
+    const steps = findFlow('versus-round').start({ level: 4 });
+    expect(steps.at(-1)).toEqual({ waitVisible: '.hud-versus-stocks:not(.hud-versus-stocks--hidden)' });
+    expect(steps.some((s: Record<string, string>) => s.click === '.hud-levelselect-open')).toBe(true);
+    expect(steps.some((s: Record<string, string>) => s.click === '.hud-level-btn[aria-label="Level 4"]')).toBe(true);
+  });
+
+  it('seeds the same progress and achievements the campaign flow does', () => {
+    // Level Select renders one button per unlocked level, and an achievement unlocking
+    // mid-capture lays a toast over the board. Both flows pay the same price for the same
+    // route, so they seed the same keys.
+    const versus = findFlow('versus-round');
+    const campaign = findFlow('campaign-round');
+    expect(Object.keys(versus.storage).sort()).toEqual(Object.keys(campaign.storage).sort());
   });
 });
