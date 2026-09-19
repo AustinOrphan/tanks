@@ -1,0 +1,14 @@
+{
+  "id": "screen-capability-ignores-the-state-it-names",
+  "file": "tools/capture/screen-adapter.mjs",
+  "find": "    if (wantsTouch !== (state.touch === true)) {\n      throw new Error(\n        `capability '${profile.capability}' disagrees with state '${state.id}' (touch: ${state.touch === true})`,\n      );\n    }",
+  "replace": "    void wantsTouch;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "refuses a capability that disagrees with the state it names (issue #844)"
+  ],
+  "why": "Accepts a recipe whose capability contradicts the state it names. A `headless-touch` recipe pointed at a desktop state then captures the DESKTOP pane and files it as touch evidence -- and it looks like a perfectly good Settings screenshot, because the only difference is that control-relevance.ts omits `touchScheme` and `fireMode` without a touchscreen. The touch flag lives on the state so the layout sweep honours it too, which is exactly what lets the two disagree."
+}
