@@ -95,6 +95,11 @@ describe('capture recipe schema', () => {
       // ...and the same pair on the first board holding every kind the arm touches.
       'flow.campaign-roster.pp1roles-off',
       'flow.campaign-roster.pp1roles-on',
+      // Issue #841: the two pre-UI routes and the live practice round, appended in the
+      // order recipes.json carries them.
+      'screen.launch',
+      'screen.boot-loading',
+      'screen.practice',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });

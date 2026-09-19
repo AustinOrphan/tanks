@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-drives-a-menuless-state",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  if (state.menu === 'none') return 'a state with no menu: nothing here is a hit target';\n  return null;",
+  "replace": "  return null;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Sweeps the three states that have no menu for menu hit targets. There is nothing to press in any of them -- the holding card has no application in it, the launch splash takes any key rather than offering a target, and a live board offers only the driving controls the collector excludes by design -- and the sweep reports \"no controls measured\" as a FAILURE, correctly, because for every other state that means the surface never opened. MEASURED: `screen.practice` was swept on the first attempt and failed in all four viewports, which is why the rule is keyed on a declared `menu` rather than on the two ids that were obvious before CI said otherwise.",
+  "killedBy": [
+    "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule"
+  ]
+}

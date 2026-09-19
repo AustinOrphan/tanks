@@ -78,6 +78,9 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.startup.probe-blocked` | `screen.startup.probe-blocked` | `capture.png` | still |
 | `screen.startup.match-failed` | `screen.startup.match-failed` | `capture.png` | still |
 | `screen.no-script` | `screen.no-script` | `capture.png` | still |
+| `screen.launch` | `screen.launch` | `capture.png` | still |
+| `screen.boot-loading` | `screen.boot-loading` | `capture.png` | still |
+| `screen.practice` | `screen.practice` | `capture.png` | still |
 | `screen.pause.versus` | `screen.pause.versus` | `capture.png` | still |
 | `screen.pause.campaign` | `screen.pause.campaign` | `capture.png` | still |
 | `screen.controllers` | `screen.controllers` | `capture.png` | still |
