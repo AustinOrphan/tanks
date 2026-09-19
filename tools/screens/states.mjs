@@ -935,7 +935,8 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-alert-retry' },
     ],
     // `.hud-panel` is measured EXPECTING it to be hidden, which is why this state reports
-    // 3 of 4 visible rather than 4 of 4. The layer stack swaps surfaces, so the menu is not
+    // 4 of 5 visible rather than 5 of 5. (3 of 4 until issue #685 added Retry beside
+    // Back to menu; the count is restated here because a stale one reads as a defect.) The layer stack swaps surfaces, so the menu is not
     // drawn behind the alert; its 0x0 box is the record of that, and an earlier draft of
     // this feature claimed the opposite in player-facing copy. Remove it here and the next
     // reader has to rediscover the fact by hand.
