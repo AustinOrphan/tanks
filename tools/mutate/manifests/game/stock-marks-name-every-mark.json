@@ -1,0 +1,14 @@
+{
+  "id": "stock-marks-name-every-mark",
+  "file": "src/game/hud.ts",
+  "find": "    + '\" viewBox=\"-1.1 -1.1 2.2 2.2\" aria-hidden=\"true\" focusable=\"false\">'\n    + shapeOutlineBody(slot, attrs, MARKER_FILL_R) + '</svg>';",
+  "replace": "    + '\" viewBox=\"-1.1 -1.1 2.2 2.2\" role=\"img\" aria-label=\"stock\" focusable=\"false\">'\n    + shapeOutlineBody(slot, attrs, MARKER_FILL_R) + '</svg>';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Gives every mark an accessible name of its own. The row already carries one -- `3 of 3 stocks` -- which is the whole quantity said once; naming each mark as well makes a five-stock entry announce itself six times, and the five extra announcements carry no information the first does not. The same rule #778's leading marker follows, and for the same reason.",
+  "killedBy": [
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) names the count once for the row, not once per mark"
+  ]
+}
