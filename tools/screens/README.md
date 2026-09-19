@@ -169,9 +169,96 @@ check.** The argument, rather than the assumption:
 - The two defects this style of capture has actually caught would **not** have been caught
   by a pixel baseline. The `<noscript>` overlap (PR #560) had no baseline to differ from,
   and the tally spacing was found by reading a measured box, not by diffing an image.
-- The **measurement** half is deterministic and assertable, so it is the half worth gating
-  — and choosing what to assert, with baselines, across responsive breakpoints is issue
-  #326's scope, which this deliberately leaves open rather than pre-empting.
+- The **measurement** half is deterministic and assertable, so it is the half worth gating.
+
+## The required gate, decided
+
+**Owner decision, 2026-09-19 (issue #840).** The paragraph above used to end by deferring the
+choice to #326. It is made now, and the five children building the gate build against this
+rather than re-litigating it.
+
+### What it asserts
+
+**The measurements block, and never pixels.** Each state's `metadata.screen.measurements`
+entry carries `present`, `visible`, the element `box`, its `text`, and seven watched computed
+properties — `display`, `opacity`, `color`, `background-color`, `font-size`, `margin-top`,
+`margin-bottom`. That already covers most of what a pixel diff would catch, on the selectors a
+state names, and it is deterministic across CI images in a way font rasterisation is not.
+
+PNGs are still captured, and uploaded on failure as human evidence. They are never compared.
+
+The one state that would most reward a pixel baseline is the 3D board, and it is exactly the
+one where pixels are least trustworthy: measured at **1660 KB** against 40–80 KB for a menu
+screen, and rendered through SwiftShader.
+
+### What is in it
+
+**Every state except the two played endings.** Thirty-nine of forty-one. Each state is a
+distinct surface, so the "name the distinct risk it protects" rule maps one-to-one.
+
+`screen.ending.mission-clear.played` and `screen.ending.campaign-over.played` are out.
+Measured: **22.9 s each**, against 5.9 s for the pushed-outcome twin that asserts the same
+panel, and 1.4 s for an ordinary state. That is the argument `hit-sweep.mjs` already uses to
+exclude them from the menu sweep.
+
+### What it may cost
+
+| | Budget | Measured |
+|---|---|---|
+| wall clock | 180 s | 127 s for 36 states, a fresh browser each |
+| committed baseline | 100 KB | 53 KB of JSON |
+| failure artifacts | 25 MB, 14-day retention | 13 MB if every state failed at once |
+
+The headroom is for the runner being slower than a developer machine, and for `sweep.mjs`'s
+shared browser not being adopted yet.
+
+### Where it runs
+
+**A step inside the existing required `visual` job**, not a fourth required check. That job
+already pays for `npm ci`, Playwright, a cached Chromium and a build — about two minutes a
+separate job would repeat — and it already bundles four distinct tools, naming the failing one
+in its log.
+
+**Promote it to its own required check when any of these becomes true**, and not before:
+
+- the subset exceeds its 180 s budget;
+- it fails independently of the other four tools often enough to want a separate retry;
+- someone needs to re-run it alone.
+
+Promotion means editing the `Protect main` ruleset, which records exactly
+`verify (floor)`, `verify (current)` and `visual` today, and CLAUDE.md alongside it.
+
+### How a baseline changes
+
+**CI compares; it never writes.** A baseline moves only by running the accept command
+locally, committing the result, and reading the diff.
+
+```sh
+npm run screens:accept -- --state screen.settings
+```
+
+Because the baseline is JSON, the pull-request diff *is* the review:
+
+```diff
+   "selector": ".hud-practice",
+   "box": {
+-    "w": 114,
++    "w": 132,
+   },
+   "style": {
+-    "font-size": "18px",
++    "font-size": "20px",
+```
+
+That is what pins #326's "a successful test run is not automatic approval of a changed
+design": the run cannot approve anything, because the run cannot write.
+
+### One member does not capture yet
+
+`screen.startup.match-failed` times out waiting for `.hud-alert` after `breakWebgl:
+'match-build-fails'`. Verified pre-existing at `b0035077`, before the 2026-09-19 merges, and
+invisible because nothing in required CI exercises it. It stays a listed member; the required
+check waits for it to pass.
 
 ## Known gap
 
