@@ -100,6 +100,12 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     // seed visits first only to get an origin, and a capture whose flag is in the URL must
     // carry it on the visit that actually boots.
     const url = `${base}${state.query ?? ''}`;
+    // Issue #841's holding card. The module request is answered by nobody, so `boot()`
+    // never runs and never removes `#boot-loading` -- the one state that photographs the
+    // page BEFORE the application exists. Navigation is awaited at `commit` rather than
+    // `load`, because a `type="module"` script is deferred and both `load` and
+    // `domcontentloaded` wait for one that is never going to arrive.
+    if (state.boot === 'holding') await page.route('**/*.js', () => {});
     if (state.webgl !== 'ok') await page.addInitScript(webglOverrideSource(state.webgl));
     if (Object.keys(state.storage).length > 0) {
       // localStorage needs an origin, so the first visit exists only to get one. The
@@ -110,7 +116,7 @@ export async function captureState(browser, base, state, { width, height, dpr, t
         for (const [k, v] of entries) localStorage.setItem(k, v);
       }, Object.entries(state.storage));
     }
-    await page.goto(url, { waitUntil: 'load' });
+    await page.goto(url, { waitUntil: state.boot === 'holding' ? 'commit' : 'load' });
 
     // What each `{ playUntil }` step cost (issue #617): simulated ticks and wall-clock, kept
     // in the report so a played capture's price is recorded every time it runs, not once.
@@ -142,6 +148,7 @@ export async function captureState(browser, base, state, { width, height, dpr, t
         title: state.title,
         webgl: state.webgl,
         javascript: state.javascript,
+        boot: state.boot,
         measurements,
         pageErrors,
         played,

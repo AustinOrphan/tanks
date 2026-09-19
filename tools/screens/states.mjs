@@ -148,6 +148,30 @@ const state = (s) => Object.freeze({
   webgl: 'ok',
   javascript: 'on',
   /**
+   * Whether the page is allowed to finish booting before it is photographed (issue #841).
+   *
+   * `'done'` -- every state but one -- lets the module load and run, which is what removes
+   * the `#boot-loading` holding card. `'holding'` stalls the module request in the RUNNER
+   * so the card is still in the document: it is the only way to photograph the thing a
+   * player sees while the bundle is still arriving, and it needs no production seam.
+   */
+  boot: 'done',
+  /**
+   * Whether this state puts a MENU in front of the player (issue #841).
+   *
+   * `'present'` -- almost every state -- means there are controls to press, which is what
+   * the visual gate's hit sweep exists to measure. `'none'` says there are not, and the
+   * three states that say it say it for three different reasons: the holding card has no
+   * application in it, the launch splash takes any key rather than offering a target, and a
+   * live board offers only the driving controls the collector excludes by design.
+   *
+   * Declared rather than inferred. The sweep reports "no controls measured" as a FAILURE --
+   * correctly, because for every other state that means the surface never opened -- so a
+   * state with genuinely none has to say so. Measured the hard way: `screen.practice` was
+   * swept on the first attempt and failed in all four viewports.
+   */
+  menu: 'present',
+  /**
    * A query string, with its leading `?`, appended to the page URL (issue #591).
    *
    * Needed because two of what this catalogue photographs are only reachable by URL: a
@@ -163,6 +187,46 @@ const state = (s) => Object.freeze({
 
 export const SCREEN_STATES = Object.freeze([
   // ---- The application routes ------------------------------------------------------
+  state({
+    id: 'screen.boot-loading',
+    title: 'Boot holding card',
+    description:
+      'What a player on a slow connection sees while the bundle is still arriving: the '
+      + 'holding card index.html ships in its own markup, before any of the application '
+      + 'exists. Elsewhere this element is only ever measured for its ABSENCE.',
+    /**
+     * The module never arrives, so `boot()` never runs and never removes the card. Held in
+     * the runner rather than by a flag on the page: there is nothing to add to production
+     * for this, and a seam that existed only to be photographed would be worse than the
+     * gap it filled.
+     */
+    boot: 'holding',
+    menu: 'none',
+    steps: [{ waitVisible: '#boot-loading' }],
+    measure: ['#boot-loading'],
+  }),
+  state({
+    id: 'screen.launch',
+    title: 'Launch splash',
+    description:
+      'The title screen a first load opens on, before any key or tap dismisses it. The one '
+      + 'route the catalogue could not reach by construction: every other state begins by '
+      + 'pressing Space to get PAST this.',
+    /**
+     * NO STORAGE, deliberately. The shell shows Launch on a fresh load, and seeding a save
+     * here would photograph the same splash while claiming a returning player -- a caption
+     * that is not true of the picture.
+     *
+     * `waitVisible` rather than an empty step list. Boot is synchronous all the way from
+     * `main.ts` through `boot()` to the state machine opening at `launch`, so the splash is
+     * up by the time `load` fires and an empty list would work today. The wait costs nothing
+     * and stops that being a silent assumption: if boot ever gains an await, this state
+     * fails with a named selector instead of photographing an empty page.
+     */
+    menu: 'none',
+    steps: [{ waitVisible: '.hud-splash' }],
+    measure: ['.hud-splash', '.hud-splash-title', '.hud-splash-hint'],
+  }),
   state({
     id: 'screen.main-menu',
     title: 'Main Menu, mid-campaign',
@@ -185,6 +249,43 @@ export const SCREEN_STATES = Object.freeze([
     storage: MID_CAMPAIGN,
     steps: [...PAST_SPLASH, { click: '.hud-levelselect-open' }, { waitVisible: '.hud-levelselect' }],
     measure: ['.hud-levelselect', '.hud-levels', '.hud-levels-note'],
+  }),
+  state({
+    id: 'screen.practice',
+    title: 'Practice, mid-round',
+    description:
+      'A practice round in play. The ninth AppRoute kind, and the only one the catalogue '
+      + 'never reached: the two practice ENDING panels photograph how a practice run '
+      + 'finishes, not what it looks like while it is running.',
+    storage: MID_CAMPAIGN,
+    /**
+     * Through Level Select, because that is what actually starts a practice session: a
+     * level picked from the grid runs as PRACTICE rather than as a campaign run, which is
+     * why the topbar chip below reads "Practice" and the campaign Lives/Enemies stats do
+     * not. Reached the same way `screen.levels` reaches the grid, then one level further.
+     *
+     * READINESS is explicit -- the chip, not a sleep. The arena behind it is NOT pinned:
+     * the start countdown is drawn in the 3D scene rather than the DOM, so there is no
+     * selector to wait for its end and the digit showing depends on how long the click took.
+     * That is a content-determinism problem for whoever commits a baseline over this state
+     * (#846), not a readiness one, and it is recorded here rather than left to be discovered
+     * from a diff.
+     */
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-levelselect-open' },
+      { waitVisible: '.hud-levelselect' },
+      { click: '.hud-level-btn[aria-label="Level 1"]' },
+      { waitVisible: '.hud-practice' },
+    ],
+    // No menu: a live board's only controls are the on-screen driving ones, which the hit
+    // collector leaves out because they are not menu targets. The pause OVERLAY has buttons
+    // and is swept -- `screen.pause.campaign` is that state -- but the board behind it has
+    // none at all.
+    menu: 'none',
+    // The chip is the assertion: it is present and unhidden only in a practice session, so
+    // a capture that silently started a campaign run would fail rather than look right.
+    measure: ['.hud-practice', '.hud-topbar', '.hud-lives', '.hud-enemies'],
   }),
   state({
     id: 'screen.records.stats',
