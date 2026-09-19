@@ -1,8 +1,8 @@
 {
   "id": "hit-sweep-drives-the-boot-holding-card",
   "file": "tools/visual/hit-sweep.mjs",
-  "find": "  if (state.boot === 'holding') return 'the boot holding card, which has no application in it yet';",
-  "replace": "",
+  "find": "  if (state.boot === 'holding') return 'the boot holding card, which has no application in it yet';\n  if (state.id === 'screen.launch')",
+  "replace": "  if (state.id === 'screen.launch')",
   "expect": "killed",
   "tests": [
     "tools/visual/hit-sweep.test.ts"

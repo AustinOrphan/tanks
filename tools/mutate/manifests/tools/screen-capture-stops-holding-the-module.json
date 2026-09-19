@@ -1,8 +1,8 @@
 {
   "id": "screen-capture-stops-holding-the-module",
   "file": "tools/screens/capture.mjs",
-  "find": "    if (state.boot === 'holding') await page.route('**/*.js', () => {});",
-  "replace": "",
+  "find": "    if (state.boot === 'holding') await page.route('**/*.js', () => {});\n    if (Object.keys(state.storage).length > 0) {",
+  "replace": "    if (Object.keys(state.storage).length > 0) {",
   "expect": "killed",
   "tests": [
     "tools/screens/states.test.ts"
