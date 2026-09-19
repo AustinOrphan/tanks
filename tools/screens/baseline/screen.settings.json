@@ -8,7 +8,7 @@
       "box": {
         "x": 0,
         "y": 0,
-        "w": 1298,
+        "w": 1280,
         "h": 800
       },
       "text": "Settings\n      \n        Audio\n        \n          Mute (M)\n          \n          \n        \n      \n      \n        Controls\n        \n          \n          Aim: Stick\n          \n          Fire: Tap to fire\n",
@@ -17,7 +17,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(10, 12, 16, 0.72)",
-        "font-size": "20px",
+        "font-size": "16px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
