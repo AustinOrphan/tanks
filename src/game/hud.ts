@@ -1457,6 +1457,38 @@ const MARKER_GLYPH_STROKE =
 /** Corner reach per outline in the glyph's unit box; see `identityMarkerIcon`. */
 const MARKER_GLYPH_R = { circle: 0.78, 3: 0.98, 4: 0.86, star: 0.92, arc: 0.82, blade: 0.9 } as const;
 
+interface MarkerRadii {
+  readonly circle: number; readonly 3: number; readonly 4: number; readonly star: number;
+}
+
+/**
+ * The same four outlines sized for FILL rather than for stroke (issue #230's `marks` arm).
+ *
+ * A separate table, and not a tidy-up waiting to happen. The set above is tuned so the
+ * outlines' CORNERS sit level, which is the right axis when the shape is a thin line: what
+ * the eye measures on a hollow mark is how far it reaches. Filled, the eye measures ink as
+ * well, and corner-level shapes are not area-level -- a square whose corners match a
+ * circle's radius encloses a third less ink, which is how the first build of this arm
+ * rendered: P3's squares read visibly smaller than P1's circles at the same nominal size.
+ *
+ * NEITHER AXIS ALONE WORKS, which is the same finding #660 recorded for the outlines --
+ * "a triangle cannot match a circle on both axes at once; icon sets solve it by hand rather
+ * than by formula". Matching AREA gives the triangle a 1.73R width against the circle's
+ * 1.29R and it dominates the row; matching WIDTH starves it of ink and it disappears. So
+ * each radius here is the geometric mean of the two, which is a judgement rather than a
+ * derivation and is exactly what the capture is for:
+ *
+ *            equal-area   equal-width   mean (used)
+ *   circle       0.643        0.700        0.670
+ *   square       0.806        0.990        0.893
+ *   triangle     1.000        0.808        0.899
+ *   star         0.992        0.808        0.895
+ *
+ * The largest corner reach is 0.899, which leaves room for half of a 0.18 stroke inside the
+ * 1.1 viewBox.
+ */
+const MARKER_FILL_R: MarkerRadii = { circle: 0.67, 3: 0.899, 4: 0.893, star: 0.895 };
+
 /** How deep the starburst's valleys cut, as a fraction of its points. */
 const MARKER_GLYPH_VALLEY = 0.44;
 
@@ -1466,6 +1498,54 @@ const MARKER_GLYPH_HUB = 0.3;
 const markerNum = (n: number): string => n.toFixed(4);
 const markerXY = (angle: number, r: number): string =>
   `${markerNum(Math.cos(angle) * r)} ${markerNum(Math.sin(angle) * r)}`;
+
+/**
+ * The `shape` outline for one slot as SVG body, with the caller's presentation attributes.
+ *
+ * Extracted so the leading identity marker (issue #778) and the `marks` stock arm (issue #230)
+ * draw the SAME outline from the same code rather than from the same table twice. They
+ * differ only in their attributes: the marker is always stroked hollow, a held stock mark is filled.
+ */
+function shapeOutlineBody(
+  slot: number, attrs: string, radii: MarkerRadii = MARKER_GLYPH_R,
+): string {
+  const outline = shapeOutlineFor(slot);
+  if (outline.kind === 'circle') {
+    return `<circle cx="0" cy="0" r="${markerNum(radii.circle)}" ${attrs}/>`;
+  }
+  if (outline.kind === 'polygon') {
+    const r = outline.sides === 3 ? radii[3] : outline.sides === 4 ? radii[4] : radii.circle;
+    const pts = polygonAngles(outline.sides, outline.rotation)
+      .map((a) => markerXY(a, r)).join(' ');
+    return `<polygon points="${pts}" ${attrs}/>`;
+  }
+  const r = radii.star;
+  const valley = r * MARKER_GLYPH_VALLEY;
+  const pts = Array.from({ length: outline.points * 2 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / outline.points;
+    return markerXY(a, i % 2 === 0 ? r : valley);
+  }).join(' ');
+  return `<polygon points="${pts}" ${attrs}/>`;
+}
+
+/**
+ * One stock, drawn as the slot's identity outline (issue #230's `marks` arm).
+ *
+ * HELD IS FILLED, LOST IS HOLLOW -- the same read `pips` gets from its border width, and the
+ * reason this arm suppresses the separate leading marker: an outlined mark beside an outlined
+ * lost stock is two hollow copies of one shape, and slot 1's circle made them identical.
+ *
+ * Fill AND stroke, not fill alone, so a held mark keeps the same silhouette as a lost one at
+ * the same size rather than appearing to grow when it is filled.
+ */
+function identityStockMark(slot: number, held: boolean): string {
+  const attrs = held
+    ? `fill="currentColor" stroke="currentColor" stroke-width="0.18" stroke-linejoin="round"`
+    : `fill="none" stroke="currentColor" stroke-width="0.18" stroke-linejoin="round"`;
+  return '<svg class="hud-stock-mark' + (held ? '' : ' hud-stock-mark--lost')
+    + '" viewBox="-1.1 -1.1 2.2 2.2" aria-hidden="true" focusable="false">'
+    + shapeOutlineBody(slot, attrs, MARKER_FILL_R) + '</svg>';
+}
 
 function identityMarkerIcon(style: IdentityMarkerStyle, slot: number): string {
   let body: string;
@@ -1498,26 +1578,7 @@ function identityMarkerIcon(style: IdentityMarkerStyle, slot: number): string {
         + `${MARKER_GLYPH_STROKE}/>`;
     }).join('');
   } else {
-    const outline = shapeOutlineFor(slot);
-    if (outline.kind === 'circle') {
-      body = `<circle cx="0" cy="0" r="${markerNum(MARKER_GLYPH_R.circle)}" `
-        + `${MARKER_GLYPH_STROKE}/>`;
-    } else if (outline.kind === 'polygon') {
-      const r = outline.sides === 3 ? MARKER_GLYPH_R[3]
-        : outline.sides === 4 ? MARKER_GLYPH_R[4]
-        : MARKER_GLYPH_R.circle;
-      const pts = polygonAngles(outline.sides, outline.rotation)
-        .map((a) => markerXY(a, r)).join(' ');
-      body = `<polygon points="${pts}" ${MARKER_GLYPH_STROKE}/>`;
-    } else {
-      const r = MARKER_GLYPH_R.star;
-      const valley = r * MARKER_GLYPH_VALLEY;
-      const pts = Array.from({ length: outline.points * 2 }, (_, i) => {
-        const a = -Math.PI / 2 + (i * Math.PI) / outline.points;
-        return markerXY(a, i % 2 === 0 ? r : valley);
-      }).join(' ');
-      body = `<polygon points="${pts}" ${MARKER_GLYPH_STROKE}/>`;
-    }
+    body = shapeOutlineBody(slot, MARKER_GLYPH_STROKE);
   }
   // No accessible name and not focusable: the entry's own text already says which player
   // this is, and a second name for the same fact is the duplicate announcement
@@ -3276,7 +3337,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // FFA ONLY, by `entry.team === undefined` -- the same test the label and the colour
       // below already branch on. A teams entry carries the A/B/C letter as its non-colour
       // channel, so a mark there would be a third name for a side already stated twice.
-      if (identityMarker !== null && entry.team === undefined) {
+      // NOT while the `marks` arm runs (issue #230): that arm already draws this slot's
+      // outline once per stock, so a leading copy would state the identity twice and, worse,
+      // sit beside a hollow LOST mark of the same shape -- which for slot 1 is the same
+      // circle drawn the same way, and reads as a second identity mark rather than as a
+      // spent stock. Measured on a real frame before this guard existed.
+      if (identityMarker !== null && entry.team === undefined && stockCue !== 'marks') {
         span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));
       }
       const hex = entry.team !== undefined ? (TEAM_COLORS[entry.team] ?? 0xffffff) : (IDENTITY_RING_COLORS[entry.slot] ?? 0xffffff);
@@ -3357,13 +3423,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     now: number,
   ): void {
     const delay = running === null ? '' : `${-Math.round(now - running.at)}ms`;
-    const cueEl = (el: HTMLElement): HTMLElement => {
+    const cueEl = (el: HTMLElement | SVGElement): HTMLElement | SVGElement => {
       el.classList.add('hud-stock-cue');
       el.style.animationDelay = delay;
       return el;
     };
     span.append(label);
-    if (stockCue === 'pips') {
+    // `marks` is an FFA proposition: it spends the SLOT's identity outline, and in teams the
+    // identity a player shares is their TEAM. Two teammates drawn with different outlines
+    // would claim they are different sides while wearing one colour, and the A/B/C letter
+    // beside the number already answers the question the outline would be asking. So teams
+    // falls back to `pips` -- the same count, drawn in the neutral dot -- which keeps the arm
+    // a complete stock-loss cue in both modes instead of silently having none in one.
+    const arm = stockCue === 'marks' && entry.team !== undefined ? 'pips' : stockCue;
+    if (arm === 'pips') {
       const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
       const pips = document.createElement('span');
       pips.className = 'hud-stock-pips';
@@ -3380,6 +3453,32 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       span.appendChild(pips);
       return;
     }
+    if (arm === 'marks') {
+      // The same contract `pips` keeps -- one unit per stock the match STARTED with, held
+      // ones solid and lost ones hollow, so the denominator survives -- with the unit
+      // replaced by this slot's identity outline. One channel carries both facts.
+      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
+      const row = document.createElement('span');
+      row.className = 'hud-stock-marks';
+      // ONE name for the row, not one per mark: the marks are a single quantity, and naming
+      // each of five would read the player's stock count out five times.
+      row.setAttribute('role', 'img');
+      row.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
+      row.innerHTML = Array.from(
+        { length: total }, (_, i) => identityStockMark(entry.slot, i < entry.stock),
+      ).join('');
+      if (running !== null) {
+        // The marks that emptied on THIS loss: from the stock now held up to the stock held
+        // before it. Bounded by `total` because a rematch can raise the count above the
+        // baseline this cue was armed against.
+        for (let i = entry.stock; i < Math.min(running.from, total); i++) {
+          const mark = row.children[i];
+          if (mark !== undefined) cueEl(mark as SVGElement);
+        }
+      }
+      span.appendChild(row);
+      return;
+    }
     const count = document.createElement('span');
     count.className = 'hud-stock-count';
     count.textContent = String(entry.stock);
@@ -3387,7 +3486,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (running === null) return;
     const cue = document.createElement('span');
     cue.setAttribute('aria-hidden', 'true');
-    if (stockCue === 'strike') {
+    if (arm === 'strike') {
       cue.className = 'hud-stock-cue--struck';
       cue.textContent = String(running.from);
       // The new number drops in behind the struck one, so it animates too, on the same clock.

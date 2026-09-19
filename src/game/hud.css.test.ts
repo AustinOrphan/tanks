@@ -2920,6 +2920,8 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     '.hud-stock-count.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue::after',
+    // Issue #230's `marks` arm, held to the same bar as the three above.
+    '.hud-stock-mark.hud-stock-cue',
   ];
 
   /** The body of the rule whose selector is exactly `selector`, at the start of a line. */

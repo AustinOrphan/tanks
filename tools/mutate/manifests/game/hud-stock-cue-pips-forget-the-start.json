@@ -1,13 +1,13 @@
 {
   "id": "hud-stock-cue-pips-forget-the-start",
   "file": "src/game/hud.ts",
-  "find": "      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);",
-  "replace": "      const total = entry.stock;",
+  "find": "    if (arm === 'pips') {\n      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);",
+  "replace": "    if (arm === 'pips') {\n      const total = entry.stock;",
   "expect": "killed",
   "tests": [
     "src/game/hud.match.test.ts"
   ],
-  "why": "The pips arm draws only the stocks remaining (issue #230), so a lost stock leaves no hollow pip behind and the pip that just emptied has nowhere to be drawn. That removes the arm's permanent channel -- shape saying how many are gone -- and leaves a shrinking row that reads like a count going down rather than a stock being knocked out.",
+  "why": "The pips arm draws only the stocks remaining (issue #230), so a lost stock leaves no hollow pip behind and the pip that just emptied has nowhere to be drawn. That removes the arm's permanent channel -- shape saying how many are gone -- and leaves a shrinking row that reads like a count going down rather than a stock being knocked out. ANCHOR WIDENED by issue #230's `marks` arm: that arm keeps the same denominator and so repeats this line verbatim, which made the old one-line anchor match twice and mutate whichever came first. The branch test above it is what makes this the pips one.",
   "killedBy": [
     "hud: stock-loss cue arms (issue #230) pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue"
   ]

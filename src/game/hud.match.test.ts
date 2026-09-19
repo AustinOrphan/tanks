@@ -992,3 +992,136 @@ describe('hud: identity mark in the stock strip (issue #778)', () => {
     }
   });
 });
+
+/**
+ * THE `marks` STOCK ARM (issue #230), proposed after #833 paired the strip with the ground
+ * ring and the pairing turned out to state the player's identity three times per entry.
+ *
+ * It replaces the pip with the slot's own identity outline, so one channel carries both which
+ * player this is and how many stocks are left, and suppresses the separate leading marker
+ * while it runs. The cases below pin the three things that makes true: the outline comes from
+ * the shared table, the leading marker goes away, and the denominator still survives a loss.
+ */
+describe('hud: identity-shaped stocks, the `marks` arm (issue #230)', () => {
+  const entries = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-stock-entry')) as HTMLElement[];
+  const allMarks = (root: HTMLElement): SVGElement[] =>
+    Array.from(root.querySelectorAll('.hud-stock-mark')) as unknown as SVGElement[];
+
+  function mountMarks(
+    opts: { stockCue?: StockCue | null; identityMarker?: IdentityMarkerStyle | null },
+  ): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, opts);
+    hud.setState('playing');
+    return { hud, root };
+  }
+
+  const four = [
+    { slot: 0, stock: 3 }, { slot: 1, stock: 3 }, { slot: 2, stock: 3 }, { slot: 3, stock: 3 },
+  ];
+
+  it('draws one mark per stock, in the outline the shared table gives that slot', () => {
+    const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+    h.setStatus(versusStatus(four));
+    expect(allMarks(root), 'four entries at three stocks').toHaveLength(12);
+    for (const [i, entry] of entries(root).entries()) {
+      const marks = Array.from(entry.querySelectorAll('.hud-stock-mark'));
+      expect(marks, `slot ${i}`).toHaveLength(3);
+      const outline = shapeOutlineFor(i);
+      for (const mark of marks) {
+        if (outline.kind === 'circle') {
+          expect(mark.querySelector('circle'), `slot ${i} is not a circle`).not.toBeNull();
+          continue;
+        }
+        const poly = mark.querySelector('polygon');
+        expect(poly, `slot ${i} drew no polygon`).not.toBeNull();
+        const want = outline.kind === 'polygon' ? outline.sides : outline.points * 2;
+        const got = (poly as Element).getAttribute('points')!.trim().split(/\s+/).length / 2;
+        expect(got, `slot ${i} (${outline.kind})`).toBe(want);
+      }
+    }
+  });
+
+  it('suppresses the leading marker, which is the whole point of the arm', () => {
+    // Both flags on. The arm already draws this slot's outline once per stock, so a leading
+    // copy would state the identity twice -- and sit beside a hollow LOST mark of the same
+    // shape, which for slot 1 is the same circle drawn the same way.
+    const { hud: h, root } = mountMarks({ stockCue: 'marks', identityMarker: 'shape' });
+    h.setStatus(versusStatus(four));
+    expect(root.querySelectorAll('.hud-stock-marker'), 'a leading marker survived').toHaveLength(0);
+    expect(allMarks(root), 'but the stocks are still drawn').toHaveLength(12);
+  });
+
+  it('still shows the leading marker under every OTHER arm', () => {
+    // The negative control for the case above: the suppression is keyed on `marks`, not on
+    // "a stock cue is running", so choosing `pips` or `strike` leaves #778's marker alone.
+    for (const cue of ['pips', 'strike', 'badge'] as const) {
+      const { hud: h, root } = mountMarks({ stockCue: cue, identityMarker: 'shape' });
+      h.setStatus(versusStatus(four));
+      expect(root.querySelectorAll('.hud-stock-marker'), `${cue} dropped the marker`).toHaveLength(4);
+      h.dispose();
+    }
+  });
+
+  it('keeps the denominator: a lost stock goes hollow rather than disappearing', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+    h.setStatus(versusStatus(four));
+    h.setStatus(versusStatus(four.map((e) => (e.slot === 0 ? { ...e, stock: 2 } : e))));
+    const first = entries(root)[0];
+    // Three marks still, because the match STARTED at three -- the count is readable as
+    // "two of three" rather than as an unlabelled two.
+    expect(first.querySelectorAll('.hud-stock-mark'), 'the denominator moved').toHaveLength(3);
+    expect(first.querySelectorAll('.hud-stock-mark--lost'), 'the lost stock').toHaveLength(1);
+    // The mark that just emptied is the one carrying the cue, and it is the LAST one.
+    const marks = Array.from(first.querySelectorAll('.hud-stock-mark'));
+    expect(marks[2].classList.contains('hud-stock-cue'), 'the emptied mark is not cued').toBe(true);
+    expect(marks[0].classList.contains('hud-stock-cue'), 'a held mark is cued').toBe(false);
+  });
+
+  it('names the count once for the row, not once per mark', () => {
+    const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+    h.setStatus(versusStatus(four));
+    const rows = Array.from(root.querySelectorAll('.hud-stock-marks'));
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      expect(row.getAttribute('role')).toBe('img');
+      expect(row.getAttribute('aria-label')).toBe('3 of 3 stocks');
+    }
+    // Every individual mark is hidden, so the row's one name is the only announcement --
+    // five marks each naming themselves would read the count out five times.
+    for (const mark of allMarks(root)) expect(mark.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('paints in currentColor with no literal colour and no background', () => {
+    // A held mark is FILLED and a lost one hollow, and both must survive forced colours --
+    // which is why the fill is an SVG attribute on currentColor and not a CSS background.
+    const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+    h.setStatus(versusStatus(four));
+    for (const mark of allMarks(root)) {
+      expect(mark.innerHTML).toContain('currentColor');
+      expect(mark.innerHTML).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i);
+    }
+    const held = allMarks(root)[0];
+    expect(held.innerHTML, 'a held stock is filled').toContain('fill="currentColor"');
+  });
+
+  it('leaves teams and the shipped strip alone', () => {
+    const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+    h.setStatus(versusStatus([{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]));
+    // Teams falls back to the neutral dot: the A/B/C letter is already that entry's
+    // non-colour channel, and two teammates drawn with different outlines would claim to be
+    // different sides while wearing one colour. The COUNT is still cued, so the arm stays a
+    // complete stock-loss cue in both modes rather than having none in one.
+    expect(allMarks(root), 'a teams entry grew identity marks').toHaveLength(0);
+    expect(root.querySelectorAll('.hud-stock-pip'), 'teams lost its cue entirely').toHaveLength(6);
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 A ', 'P2 B ']);
+    h.dispose();
+    const plain = mountMarks({ stockCue: null });
+    plain.hud.setStatus(versusStatus(four));
+    expect(allMarks(plain.root)).toHaveLength(0);
+    expect(entries(plain.root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 3', 'P3 3', 'P4 3']);
+  });
+});

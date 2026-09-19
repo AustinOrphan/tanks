@@ -15,6 +15,18 @@
  *  - `pips`   -- the digit becomes one pip per stock the match started with. Remaining stocks
  *                are filled, lost ones hollow, and the pip that just emptied swells and bursts
  *                a ring. Shape carries the count, and it stays readable after the cue ends.
+ *  - `marks`  -- the same idea as `pips`, with the pip replaced by the slot's own IDENTITY
+ *                outline (issue #234's `shape`: circle, triangle, square, starburst). One
+ *                channel does both jobs -- which player, and how many stocks -- so the entry
+ *                states its identity once instead of three times, and the separate leading
+ *                marker is suppressed while this arm runs. Proposed after #833 paired the
+ *                strip with the ground ring and the pairing turned out to say "P1" twice.
+ *
+ *                THE TRADE IS COUNTING AGAINST RECOGNITION, and it is the thing to judge: a
+ *                count wants uniform simple units, which is exactly why `pips` is a dot,
+ *                while identity wants maximally distinct ones. Five starbursts in a row may
+ *                read as texture rather than as a number, and that is what a capture has to
+ *                answer rather than an argument.
  *  - `strike` -- the old number, struck through, lifts away above the new one.
  *  - `badge`  -- a small outlined "−1" appears under the entry and drifts down as it fades.
  *
@@ -22,7 +34,7 @@
  * background, which in the mockups made a filled pip identical to a hollow one and erased a
  * strike line drawn as a fill.
  */
-export const STOCK_CUES = ['pips', 'strike', 'badge'] as const;
+export const STOCK_CUES = ['pips', 'marks', 'strike', 'badge'] as const;
 
 export type StockCue = (typeof STOCK_CUES)[number];
 
