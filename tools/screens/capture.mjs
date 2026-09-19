@@ -11,7 +11,7 @@
  */
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from '../visual/static-server.mjs';
-import { runStep, webglOverrideSource } from './steps.mjs';
+import { runStep, webglOverrideSource, applyEntryMode } from './steps.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 
 const MIME = {
@@ -116,28 +116,10 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     // `load`, because a `type="module"` script is deferred and both `load` and
     // `domcontentloaded` wait for one that is never going to arrive.
     if (state.boot === 'holding') await page.route('**/*.js', () => {});
-    // Issue #781's two entry failures. Applied BEFORE navigation, because what these
-    // photograph is decided by how the very first request is answered -- there is no later
-    // moment to intervene, and by the time the page has loaded the guard has already run.
-    //
-    // Both ANSWER the request, which is what separates them from `boot: 'holding'` above:
-    // holding never replies at all, so the page waits forever on the card. A 404 completes
-    // and fires a resource `error` whose target is the script element; a body that cannot
-    // parse completes and fires an error whose `filename` is the script's `src`. The inline
-    // guard in index.html keys on exactly that difference to choose which card to draw, so
-    // getting the two mixed up would photograph the wrong one and still look correct.
-    if (state.entry === 'refused') {
-      await page.route('**/*.js', (route) => route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' }));
-    } else if (state.entry === 'unparseable') {
-      await page.route('**/*.js', (route) => route.fulfill({
-        status: 200,
-        contentType: 'text/javascript',
-        // Unbalanced on purpose: this has to fail at PARSE time, not throw at run time. A
-        // body that parses and then throws reports a different error shape and would reach
-        // the guard's other branch.
-        body: 'export const broken = (((;',
-      }));
-    }
+    // Issue #781's two entry failures, applied BEFORE navigation: what these photograph is
+    // decided by how the very first request is answered. Shared with the layout sweep's own
+    // driver, which navigates separately -- see `applyEntryMode`.
+    await applyEntryMode(page, state.entry);
     if (state.webgl !== 'ok') await page.addInitScript(webglOverrideSource(state.webgl));
     if (Object.keys(state.storage).length > 0) {
       // localStorage needs an origin, so the first visit exists only to get one. The

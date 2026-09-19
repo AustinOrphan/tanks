@@ -5,6 +5,7 @@
 // it. These are the guards that turn that into a named failure at unit speed.
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -223,6 +224,30 @@ describe('the entry-failure states (issue #781)', () => {
       .filter((s: any) => s.measure.some((m: string) => m.includes('boot-entry-failure-card')))
       .map((s: any) => s.id);
     expect(cardWatchers).toEqual(failing);
+  });
+
+  it('has EVERY driver that navigates apply the entry mode, not just the capture one', () => {
+    // THE THIRD TIME a new state field reached one driver and not the other. `captureState`
+    // and `measureHitTargets` both navigate for themselves, so a field applied in one is
+    // silently absent from the other: #857's touch flag, then this issue's entry mode, which
+    // shipped and failed the required `visual` job with "never reached its surface" in all
+    // four viewports -- the page simply booted normally and the card never appeared.
+    //
+    // Read as TEXT on purpose. The bug is not that `applyEntryMode` is wrong; it is that a
+    // driver never calls it, and nothing about a correct call site is observable from inside
+    // the other one. Negative control: deleting either call fails this.
+    const drivers = ['../screens/capture.mjs', '../visual/hit-sweep.mjs'];
+    for (const rel of drivers) {
+      const src = readFileSync(new URL(rel, import.meta.url), 'utf8');
+      expect(src, `${rel} never applies the entry mode`).toMatch(/applyEntryMode\(/);
+      expect(src, `${rel} does not import it`).toMatch(/import \{[^}]*applyEntryMode[^}]*\}/);
+    }
+    // And the shared implementation is the only place the routing itself lives, so the two
+    // cannot drift: neither driver should be fulfilling the script request on its own.
+    for (const rel of drivers) {
+      const src = readFileSync(new URL(rel, import.meta.url), 'utf8');
+      expect(src, `${rel} routes the entry script itself instead of sharing`).not.toMatch(/contentType: 'text\/javascript'/);
+    }
   });
 
   it('does not measure the holding card, which these two states REMOVE rather than hide', () => {
