@@ -66,7 +66,23 @@ export const LAYOUTS = Object.freeze([
     risk: 'Desktop and TV. It meets the same queries as 1280x800, but its viewport-relative sizes differ: the title\'s `20vmin` is 216px here and 160px there.',
     sameQueriesAs: '1280x800',
   }),
+  Object.freeze({
+    name: '2560x1440',
+    width: 2560, height: 1440, dpr: 1,
+    risk: 'The only layout that reaches the CEILING of the launch title\'s `clamp(72px, 20vmin, 240px)`: 20vmin is 288px here and is cut to 240px, while every other layout lands at or below 216px. The floor is already exercised by 320x568 and 360x640; without this one the upper bound is never taken.',
+    sameQueriesAs: '1920x1080',
+  }),
 ]);
+
+// WHY 1280x720 IS NOT HERE. It was considered with 2560x1440 (issue #845) and earns no
+// capture: it flips no query -- it lands in the same signature group as 844x390, 1280x800,
+// 1920x1080 and 2560x1440 -- and it reaches no clamp bound. Both quantities hud.css varies by
+// viewport HEIGHT sit strictly inside the range the matrix already covers: `20vmin` is 144px,
+// between 1280x800@200%'s 80px and 768x1024's 153.6px, and `max-height: 58vh` is 417.6px,
+// between 844x390's 226.2px and 1280x800's 464px. A layout that only interpolates between two
+// captured ones cannot fail in a way they both pass, so it would cost a capture per state and
+// buy nothing. Add it if a rule ever keys on height directly -- today none does; hud.css
+// declares no `min-height` or `max-height` media query at all.
 
 /**
  * The width and orientation queries in a stylesheet, in the order they appear, deduplicated.

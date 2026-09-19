@@ -29,12 +29,18 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: capture one ref, or compare a base against a head
+        description: >-
+          capture one ref, compare a base against a head, or sweep every screen state across
+          the whole layout matrix. `sweep` ignores `recipe`, `ref`, `base` and `head` -- it
+          renders the checked-out tree at every layout in tools/screens/sweep-plan.mjs. It is
+          here rather than on push or PR for the reason issue #326 gives: the broad matrix is
+          worth having on demand and not worth paying for on every change.
         required: true
         type: choice
         options:
           - capture
           - compare
+          - sweep
       recipe:
         description: >-
           Which committed recipe to run. This list is the allowlist, and
@@ -201,6 +207,15 @@ jobs:
                 if ! valid_ref "$r"; then echo "::error::invalid ref '$r'" >&2; exit 1; fi
               done
               ;;
+            sweep)
+              # A sweep has no ref arguments at all: `screens:sweep` renders the tree that is
+              # checked out. Rejecting them is the honest answer -- silently ignoring a ref
+              # someone passed would produce a bundle of the WRONG commit that still looks
+              # like evidence, which is the failure this workflow exists to avoid.
+              if [ -n "$REF" ] || [ -n "$BASE" ] || [ -n "$HEAD_REF" ]; then
+                echo "::error::sweep mode takes no refs; it sweeps the checked-out tree. Leave 'ref', 'base' and 'head' blank." >&2; exit 1
+              fi
+              ;;
             *) echo "::error::Unknown mode: $MODE" >&2; exit 1 ;;
           esac
 
@@ -239,6 +254,24 @@ jobs:
             echo "ffprobe=$(ffprobe -version 2>/dev/null | head -1 || echo 'not found')"
           } >> "$GITHUB_OUTPUT"
 
+      # The sweep renders the BUILT application, so it needs a `dist` the other two modes never
+      # ask for -- `npm run capture` builds its own. Conditional, so capture and compare do not
+      # pay for a build they do not use.
+      - name: Build for the sweep
+        if: inputs.mode == 'sweep'
+        run: npm run build
+
+      # No `env:` block and no interpolation, because this step reads no input: a sweep takes
+      # its states and layouts from the committed matrix, not from the dispatch form. The
+      # redirect-then-`cat`-then-`exit` shape is the capture step's, for the same reason given
+      # below -- a pipe would launder the exit code and report a partial sweep as a success.
+      - name: Run sweep
+        if: inputs.mode == 'sweep'
+        run: |
+          npm run screens:sweep -- --out capture-out/sweep > capture.log 2>&1 || status=$?
+          cat capture.log
+          exit "${status:-0}"
+
       # Straight to a file and back out through `|| status=$?`, for the reason measure.yml
       # states: a `run:` block is `bash -e {0}`, so a bare failing call would exit the step
       # before the log is printed -- on precisely the failure worth reading. A pipe would
@@ -246,6 +279,7 @@ jobs:
       # this issue's acceptance criteria.
       - name: Run capture
         id: run
+        if: inputs.mode != 'sweep'
         env:
           MODE: ${{ inputs.mode }}
           RECIPE: ${{ inputs.recipe }}
