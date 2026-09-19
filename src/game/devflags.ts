@@ -1406,9 +1406,11 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...STOCK_CUES],
     description:
-      'Marks a lost versus stock on the stock strip (issue #230), one of three shortlisted arms: '
-      + '\'pips\' turns the count into pips that empty, \'strike\' lifts the old number away '
-      + 'struck through, and \'badge\' drops a "−1" under the entry. The shipped strip only '
+      'Marks a lost versus stock on the stock strip (issue #230), one of four shortlisted arms: '
+      + '\'pips\' turns the count into pips that empty, \'marks\' draws those pips as the '
+      + 'slot\'s own identity outline so one channel carries both who and how many (FFA only; '
+      + 'teams falls back to \'pips\'), \'strike\' lifts the old number away struck through, '
+      + 'and \'badge\' drops a "−1" under the entry. The shipped strip only '
       + 'changes the digit. Temporary: deleted once an arm is chosen.',
   },
   shellTrail: {

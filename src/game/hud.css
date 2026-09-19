@@ -3327,6 +3327,57 @@
   margin-right: 0.28em;
 }
 
+/* ---- Identity-shaped stocks (issue #230's `marks` arm, `?dev=1&stockCue=marks`) --- */
+
+/* B. Marks: `pips`, with the dot replaced by this slot's own identity outline (#234's
+ * `shape`). Held stocks are filled, lost ones hollow -- the same read the pip gets from its
+ * border width, drawn in the fill so the silhouette does not change size between the two.
+ *
+ * NO `background` here either, and for the same reason as the arms below: forced colours
+ * drops it, and a filled mark would become identical to a hollow one at exactly the moment
+ * the count matters most. The fill is an SVG attribute on `currentColor`, not a CSS
+ * background, so forced colours repaints it instead.
+ *
+ * The leading identity marker is suppressed by hud.ts while this arm runs, so `em` sizing
+ * here is measured against an entry that has one fewer glyph than the `pips` arm does. */
+.hud-stock-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.hud-stock-mark {
+  display: block;
+  flex: none;
+  width: 0.62em;
+  height: 0.62em;
+}
+
+/* The mark that just emptied swells and settles. Scale only -- it must not move off its own
+ * place in the row, because its POSITION is what says which stock was lost. */
+.hud-stock-mark.hud-stock-cue {
+  animation: hud-stock-mark-empty var(--hud-duration-slow) ease-out 1 both;
+}
+
+@keyframes hud-stock-mark-empty {
+  0% { transform: scale(1); opacity: 1; }
+  45% { transform: scale(1.5); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Reduced motion keeps the INFORMATION -- this one just emptied -- and drops the movement,
+ * the same trade every arm below makes. A hold-then-settle on opacity marks the same mark
+ * for the same duration with no transform at all. */
+@keyframes hud-stock-mark-empty--still {
+  0%, 70% { opacity: 0.4; transform: none; }
+  100% { opacity: 1; transform: none; }
+}
+
+.hud--reduced-motion .hud-stock-mark.hud-stock-cue {
+  animation-name: hud-stock-mark-empty--still;
+}
+
 /* ---- Stock-loss cue arms (issue #230, `?dev=1&stockCue=`) ------------------------- */
 
 /* A TEMPORARY OPEN-QUESTION ARM SET: one of these three ships unconditionally once chosen, and

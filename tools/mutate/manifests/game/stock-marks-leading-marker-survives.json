@@ -1,0 +1,14 @@
+{
+  "id": "stock-marks-leading-marker-survives",
+  "file": "src/game/hud.ts",
+  "find": "if (identityMarker !== null && entry.team === undefined && stockCue !== 'marks') {",
+  "replace": "if (identityMarker !== null && entry.team === undefined) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The clause that makes the arm worth having. `marks` draws this slot's outline once per stock, so a leading copy states the identity a second time -- and lands next to a hollow LOST mark of the same shape. For slot 1 those are the same circle drawn the same way, so an entry that has lost a stock appears to carry two identity marks instead of one and a spent stock. Measured on a real frame with both flags on, before this guard existed; it is the defect that prompted the arm.",
+  "killedBy": [
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) suppresses the leading marker, which is the whole point of the arm"
+  ]
+}

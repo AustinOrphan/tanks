@@ -1,0 +1,14 @@
+{
+  "id": "stock-marks-lose-the-denominator",
+  "file": "src/game/hud.ts",
+  "find": "      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);\n      const row = document.createElement('span');",
+  "replace": "      const total = entry.stock;\n      const row = document.createElement('span');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Drops the denominator, so a player on two of three stocks draws two marks rather than two solid and one hollow. The count then reads as an unlabelled quantity: two marks means nothing without knowing the match started at three, and the LOSS -- the thing this whole flag exists to cue -- becomes a mark quietly vanishing between frames rather than one emptying in place. `pips` keeps the same denominator for the same reason, and its own entry guards the same line; the anchor here carries the following line because the two branches are otherwise identical.",
+  "killedBy": [
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) keeps the denominator: a lost stock goes hollow rather than disappearing"
+  ]
+}

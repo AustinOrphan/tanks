@@ -1,0 +1,14 @@
+{
+  "id": "stock-marks-drawn-for-a-teams-entry",
+  "file": "src/game/hud.ts",
+  "find": "const arm = stockCue === 'marks' && entry.team !== undefined ? 'pips' : stockCue;",
+  "replace": "const arm = stockCue;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "`marks` is an FFA proposition: it spends the SLOT's outline, and in teams the identity a player shares is their TEAM. Without the fallback, two teammates are drawn with different outlines while wearing one colour -- the readout claiming they are different sides. The fallback is to `pips` rather than to the bare digit deliberately, so the arm stays a complete stock-loss cue in both modes and can be compared against the other three in teams as well.",
+  "killedBy": [
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) leaves teams and the shipped strip alone"
+  ]
+}
