@@ -98,7 +98,10 @@ export function parseRecordArgs(argv) {
   }
   const required = ['flow', 'level', 'seed', 'driver', 'seconds', 'fps', 'w', 'h', 'dpr', 'visual', 'stop', 'dist', 'out', 'report', 'timeout'];
   for (const name of required) if (!values.has(name)) throw new Error(`--${name} is required`);
-  const known = new Set(required);
+  // OPTIONAL, and a pair: a versus flow needs both, every other flow needs neither.
+  // `validateFlowInputs` enforces that, so this only has to admit them.
+  const optional = ['mode', 'players'];
+  const known = new Set([...required, ...optional]);
   for (const name of values.keys()) if (!known.has(name)) throw new Error(`unknown option --${name}`);
   const num = (name) => {
     const n = Number(values.get(name));
@@ -110,6 +113,11 @@ export function parseRecordArgs(argv) {
     seed: num('seed'),
     driver: values.get('driver'),
     flags: Object.fromEntries(flags),
+    // `undefined`, not null or a default: `validateFlowInputs` distinguishes absent from
+    // present and refuses one without the other, and a default here would make every
+    // campaign recording claim to be a two-player versus round.
+    mode: values.has('mode') ? values.get('mode') : undefined,
+    players: values.has('players') ? num('players') : undefined,
   });
   const seconds = num('seconds');
   const fps = num('fps');

@@ -121,11 +121,25 @@ function validateFixture(recipe) {
  * these by `buildFlowUrl`; a recipe never supplies query text.
  */
 function validateFlowVariant(recipe) {
-  const variant = exactKeys(recipe.variant, 'variant', ['level', 'driver', 'flags'], ['minimumDeliveredFps']);
+  // `mode` and `players` are OPTIONAL and come as a pair -- a versus round names both, every
+  // other recipe names neither. `validateFlowInputs` is what enforces the pairing, so this
+  // only has to admit them; listing them as optional keys keeps a recipe naming just one of
+  // them a schema error rather than a silently campaign-shaped capture.
+  const variant = exactKeys(
+    recipe.variant, 'variant', ['level', 'driver', 'flags'], ['minimumDeliveredFps', 'mode', 'players'],
+  );
   try {
-    validateFlowInputs({ level: variant.level, seed: recipe.fixture.seed, driver: variant.driver, flags: variant.flags });
+    validateFlowInputs({
+      level: variant.level, seed: recipe.fixture.seed, driver: variant.driver, flags: variant.flags,
+      mode: Object.hasOwn(variant, 'mode') ? variant.mode : undefined,
+      players: Object.hasOwn(variant, 'players') ? variant.players : undefined,
+    });
   } catch (error) {
-    const field = /^(level|seed|driver|flags(?:\.[A-Za-z0-9&_-]+)?)/.exec(error.message)?.[1] ?? 'variant';
+    // `mode` and `players` join the mapper for the reason the other four are in it: without
+    // them the message "mode must be one of ffa, teams" falls to the `?? 'variant'` default
+    // and reports a field the recipe does not have, which sends a reader looking for a typo
+    // in the wrong place.
+    const field = /^(level|seed|driver|mode|players|flags(?:\.[A-Za-z0-9&_-]+)?)/.exec(error.message)?.[1] ?? 'variant';
     fail(field === 'seed' ? 'fixture.seed' : `variant.${field}`, error.message);
   }
   if (Object.hasOwn(variant, 'minimumDeliveredFps')) {

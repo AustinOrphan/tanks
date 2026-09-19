@@ -69,6 +69,13 @@ export const FLOW_FLAG_IDS = Object.freeze(Object.keys(FLOW_FLAGS));
 export const FLOW_DRIVERS = Object.freeze(['autoplay']);
 
 /**
+ * The versus modes a flow may ask for. `teams` is here because the PAGE accepts it, so a
+ * recipe naming it would otherwise be refused for a reason about this file rather than about
+ * the game. No shipped recipe uses it yet.
+ */
+export const VERSUS_MODES = Object.freeze(['ffa', 'teams']);
+
+/**
  * The renderers a flow may ask for. `software-gl` is the SwiftShader every screen capture
  * uses; `host-gpu` asks headless Chromium for the machine's GPU. Which one actually rendered
  * is recorded in the report, never assumed: the delivered frame rate is what a gate reads.
@@ -139,6 +146,49 @@ export const REALTIME_READINESS_BUDGET_MS = 60_000;
  * and a catalogue of one keeps the id space real (a recipe names a flow the way a screen
  * recipe names a state) without inventing flows nothing captures yet.
  */
+/**
+ * The storage both Level Select flows seed, and the steps both take to reach a level.
+ *
+ * SHARED RATHER THAN REPEATED, and the manifest is what made that the right call: three
+ * mutation entries anchor on these exact lines, and a second verbatim copy made every one of
+ * them ambiguous -- `applyAt` refuses an anchor it can find twice. Extracting them keeps each
+ * entry pointing at one place AND widens what it proves, since both flows now fail together
+ * if the seeding or the route is broken.
+ *
+ * Enough progress that Level Select offers every campaign level: the pane renders one button
+ * per UNLOCKED level, and under `?dev=1` the page reads the developer namespace, so these are
+ * the developer-prefixed keys (`storage.ts`). No run is seeded: a practice pick neither reads
+ * nor writes one.
+ *
+ * THE ACHIEVEMENTS ARE SEEDED TOO, and that is not tidiness. Progress alone leaves the
+ * progress-shaped achievements unearned, so the first seconds of play unlock them and lay
+ * toasts over the board -- an artifact of the fixture rather than of the game, and on a short
+ * round they cover most of the clip. A player who had reached this progress would already hold
+ * them. Every id is seeded: a capture is of PLAY, not of a notification.
+ */
+const LEVEL_SELECT_STORAGE = Object.freeze({
+  'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-05' }),
+  'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: ACHIEVEMENT_IDS }),
+});
+
+/** Dismiss the launch splash. Both flows open the same way. */
+const PAST_SPLASH = Object.freeze([
+  Object.freeze({ press: 'Space' }),
+  Object.freeze({ waitHidden: '.hud-splash' }),
+]);
+
+/**
+ * Reach one campaign level through Level Select.
+ *
+ * By accessible name, not by position: the grid renders a bare digit per unlocked level and
+ * issue #629 gave each one this label.
+ */
+const levelSelectSteps = (level) => [
+  { click: '.hud-levelselect-open' },
+  { waitVisible: '.hud-levelselect' },
+  { click: `.hud-level-btn[aria-label="Level ${level}"]` },
+];
+
 export const FLOWS = Object.freeze([
   Object.freeze({
     id: 'campaign-round',
@@ -175,6 +225,30 @@ export const FLOWS = Object.freeze([
       { click: `.hud-level-btn[aria-label="Level ${level}"]` },
     ],
   }),
+  Object.freeze({
+    id: 'versus-round',
+    title: 'A versus round at a chosen player count',
+    description:
+      'Boot the built page as a VERSUS session with the requested player count, dismiss the '
+      + 'launch splash, pick the requested level from Level Select, and record from the moment '
+      + 'the round is playing and its start countdown has cleared.',
+    /**
+     * A versus session under `?dev=1&mode=ffa` still runs the CAMPAIGN level system
+     * (`hud.ts`'s `HudSessionKind` note), so Level Select is the way in here too and `level`
+     * keeps meaning what it means everywhere else. What changes is the SHAPE of the session:
+     * the stock strip is on, campaign stats are off, and `players` tanks share the board.
+     */
+    storage: LEVEL_SELECT_STORAGE,
+    open: PAST_SPLASH,
+    start: ({ level }) => [
+      ...levelSelectSteps(level),
+      // The strip is the thing a versus capture exists to show, and it is the only element
+      // that says the session really is versus-shaped rather than a campaign board wearing
+      // the flag. Waiting on it here turns "the mode parameter was ignored" from a capture
+      // nobody notices into a flow that fails before it records a frame.
+      { waitVisible: '.hud-versus-stocks:not(.hud-versus-stocks--hidden)' },
+    ],
+  }),
 ]);
 export const FLOW_IDS = Object.freeze(FLOWS.map((flow) => flow.id));
 
@@ -194,7 +268,7 @@ function isPlainObject(value) {
  * Validate the structured inputs a flow is driven by. Shared by the recipe schema and by the
  * recorder's own argument parsing, so the two cannot disagree about what is allowed.
  */
-export function validateFlowInputs({ level, seed, driver, flags }) {
+export function validateFlowInputs({ level, seed, driver, flags, mode, players }) {
   if (!Number.isInteger(level) || level < 1 || level > CAMPAIGN_LEVEL_COUNT) {
     throw new Error(`level must be a whole number in [1, ${CAMPAIGN_LEVEL_COUNT}]`);
   }
@@ -205,6 +279,22 @@ export function validateFlowInputs({ level, seed, driver, flags }) {
     throw new Error('seed must be a whole number in [1, 4294967295]');
   }
   if (!FLOW_DRIVERS.includes(driver)) throw new Error(`driver must be one of ${FLOW_DRIVERS.join(', ')}`);
+  // OPTIONAL, and only a versus flow supplies them. Both are real developer flags (`mode`,
+  // `players`), so the page validates them a second time -- a value this accepted but the
+  // page did not would quietly record the shipped campaign board instead of the arm, which
+  // is why the ranges here are the page's own rather than a superset of them.
+  if (mode !== undefined && !VERSUS_MODES.includes(mode)) {
+    throw new Error(`mode must be one of ${VERSUS_MODES.join(', ')}`);
+  }
+  if (players !== undefined && (!Number.isInteger(players) || players < 2 || players > 4)) {
+    throw new Error('players must be a whole number in [2, 4]');
+  }
+  // Both or neither: `mode` alone plays the board with one tank and no stock strip at all,
+  // and `players` alone is campaign co-op, which is a different capture wearing this one's
+  // name. A half-specified versus round is the failure that would look like a success.
+  if ((mode === undefined) !== (players === undefined)) {
+    throw new Error('mode and players must be given together');
+  }
   if (!isPlainObject(flags)) throw new Error('flags must be a plain object');
   for (const [id, value] of Object.entries(flags)) {
     const allowed = FLOW_FLAGS[id];
@@ -218,7 +308,7 @@ export function validateFlowInputs({ level, seed, driver, flags }) {
       throw new Error(`flags.${id} must be one of ${allowed.join(', ')}`);
     }
   }
-  return { level, seed, driver, flags: { ...flags } };
+  return { level, seed, driver, flags: { ...flags }, mode, players };
 }
 
 /**
@@ -227,8 +317,10 @@ export function validateFlowInputs({ level, seed, driver, flags }) {
  * the replay surface the recorder reads the tick count and the world identity from.
  */
 export function buildFlowUrl(inputs) {
-  const { level, seed, driver, flags } = validateFlowInputs(inputs);
+  const { level, seed, driver, flags, mode, players } = validateFlowInputs(inputs);
   const params = [['dev', '1'], ['replay', '1'], ['level', String(level)], ['seed', String(seed)]];
+  // Session shape before driver and flags, the order the campaign parameters already follow.
+  if (mode !== undefined) params.push(['mode', mode], ['players', String(players)]);
   if (driver === 'autoplay') params.push(['autoplay', '1']);
   for (const id of FLOW_FLAG_IDS) {
     const value = flags[id];
@@ -239,7 +331,7 @@ export function buildFlowUrl(inputs) {
 }
 
 /** The query parameters a flow always carries for itself, as opposed to the experiment's flags. */
-export const FLOW_DRIVER_PARAMS = Object.freeze(['dev', 'replay', 'level', 'seed', 'autoplay']);
+export const FLOW_DRIVER_PARAMS = Object.freeze(['dev', 'replay', 'level', 'seed', 'mode', 'players', 'autoplay']);
 
 /**
  * Which compositor frame each output frame shows, at a constant `fps` from `start`.
