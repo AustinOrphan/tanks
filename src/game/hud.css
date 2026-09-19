@@ -3452,19 +3452,26 @@
 }
 
 /* A. Pips: one per starting stock. The pip just lost swells, bursts a ring, and empties. */
+/* `--hud-pip` and `--hud-pip-gap` default to the shipped size and are overridden per strip on
+ * a narrow viewport (issue #835), where four players at three stocks overflowed a 390px phone
+ * and clipped the last pip silently. The sizes come from the measured table in
+ * `presentation/stock-cue.ts`; below 8px the arm falls back to the digit instead, in the
+ * builder, because CSS cannot swap the content. */
 .hud-stock-pips {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--hud-pip-gap, 3px);
   vertical-align: middle;
 }
 
 .hud-stock-pip {
   position: relative;
   box-sizing: border-box;
-  width: 10px;
-  height: 10px;
-  border: 5px solid currentColor;
+  width: var(--hud-pip, 10px);
+  height: var(--hud-pip, 10px);
+  /* A FILLED pip is a border as wide as its own radius, so it scales with the pip rather than
+   * leaving a hole when the pip shrinks. */
+  border: calc(var(--hud-pip, 10px) / 2) solid currentColor;
   border-radius: 50%;
 }
 

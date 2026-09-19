@@ -603,6 +603,40 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
     expect(p1.querySelector('.hud-stock-pips')?.getAttribute('aria-label')).toBe('2 of 3 stocks');
   });
 
+  it('pips: a narrow viewport shrinks the pip, and hands back the digit when none fits (#835)', () => {
+    // The strip is a nowrap flex row with no wrapping or scrolling, so a strip wider than the
+    // viewport clips its last entry SILENTLY -- four players at three stocks measured 345px in
+    // a 390px viewport on main. Driven through the public boundary because the hazard is
+    // composition: the sizing is decided in the builder that `renderVersusStocks` calls for
+    // every entry on every status that moves.
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const wide = window.matchMedia;
+    try {
+      // jsdom's matchMedia always reports false, so the narrow branch has to be asked for.
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (q: string) => ({ matches: q === '(max-width: 480px)', media: q, addEventListener() {}, removeEventListener() {} }),
+      });
+
+      // Four players at three stocks: pips, shrunk to the 9px the measurement allows.
+      const four = mountCue('pips');
+      four.hud.setStatus(versusStatus([0, 1, 2, 3].map((slot) => ({ slot, stock: 3 }))));
+      const shrunk = four.root.querySelector('.hud-stock-pips') as HTMLElement;
+      expect(shrunk, 'four players at three stocks still draws pips').not.toBeNull();
+      expect(shrunk.style.getPropertyValue('--hud-pip')).toBe('9px');
+      four.root.remove();
+
+      // Four players at FIVE stocks: no legible pip fits, so the entry states the digit. The
+      // count stays readable, which is the whole requirement.
+      const five = mountCue('pips');
+      five.hud.setStatus(versusStatus([0, 1, 2, 3].map((slot) => ({ slot, stock: 5 }))));
+      expect(five.root.querySelectorAll('.hud-stock-pip')).toHaveLength(0);
+      expect(entries(five.root).map((e) => e.textContent)).toEqual(['P1 5', 'P2 5', 'P3 5', 'P4 5']);
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: wide });
+    }
+  });
+
   it.each(['pips', 'strike', 'badge'] as const)(
     '%s: a cue still running survives the rebuild another slot\'s loss causes, resumed at its elapsed time',
     (arm) => {
