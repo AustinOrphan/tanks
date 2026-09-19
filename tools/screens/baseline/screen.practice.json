@@ -1,0 +1,89 @@
+{
+  "state": "screen.practice",
+  "measurements": [
+    {
+      "selector": ".hud-practice",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 18,
+        "y": 12,
+        "w": 114,
+        "h": 25
+      },
+      "text": "Practice",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(255, 255, 255, 0.14)",
+        "font-size": "18px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-topbar",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 49
+      },
+      "text": "Practice\n      \n      Lives: 3\n      \n      Enemies: 3\n      Level: 1",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-lives",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 206,
+        "y": 14,
+        "w": 12,
+        "h": 21
+      },
+      "text": "3",
+      "style": {
+        "display": "inline-block",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "18px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-enemies",
+      "present": true,
+      "visible": false,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "text": "3",
+      "style": {
+        "display": "inline",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "18px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "state": "screen.devtools.production-save",
+  "measurements": [
+    {
+      "selector": ".hud-devtools",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Developer Tools\n      Developer mode is on for this page.\n      It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-devns",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 426,
+        "y": 648,
+        "w": 428,
+        "h": 32
+      },
+      "text": "Saving to the PRODUCTION keys. Changes here affect the real save.",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(255, 180, 180)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "13.6px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-devreset",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 551,
+        "y": 692,
+        "w": 177,
+        "h": 44
+      },
+      "text": "Reset Developer Data",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(255, 180, 180)",
+        "background-color": "rgba(255, 90, 90, 0.18)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-devtools-back",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 604,
+        "y": 804,
+        "w": 72,
+        "h": 44
+      },
+      "text": "Back",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "state": "screen.customize",
+  "measurements": [
+    {
+      "selector": ".hud-customize",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Customize\n      \n      \n      \n      \n        \n        \n        \n        \n      \n      \n        Hull\n        \n      \n      \n        Skin\n        SolidRacing stripesCamoCloudsCheckerplateFlowTwo-tone\n ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-preview",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 510,
+        "y": 181,
+        "w": 260,
+        "h": 190
+      },
+      "text": "",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

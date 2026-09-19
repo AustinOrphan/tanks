@@ -1,0 +1,110 @@
+{
+  "state": "screen.main-menu",
+  "measurements": [
+    {
+      "selector": ".hud-panel",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "TANKS!\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Mission 3 -- 2 lives left\n      \n      Continue Campaign\n      Start New Campaign\n      \n      \n      Choose Level\n      \n  ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 531,
+        "y": 180,
+        "w": 219,
+        "h": 66
+      },
+      "text": "TANKS!",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "56px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-run-summary",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 557,
+        "y": 260,
+        "w": 166,
+        "h": 18
+      },
+      "text": "Mission 3 -- 2 lives left",
+      "style": {
+        "display": "block",
+        "opacity": "0.85",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "2px"
+      }
+    },
+    {
+      "selector": ".hud-continue",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 518,
+        "y": 294,
+        "w": 245,
+        "h": 47
+      },
+      "text": "Continue Campaign",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(6, 52, 15)",
+        "background-color": "rgb(79, 208, 106)",
+        "font-size": "20px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-new-game",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 547,
+        "y": 355,
+        "w": 186,
+        "h": 44
+      },
+      "text": "Start New Campaign",
+      "style": {
+        "display": "block",
+        "opacity": "0.85",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "15px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

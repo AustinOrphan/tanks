@@ -1,0 +1,68 @@
+{
+  "state": "screen.records.achievements",
+  "measurements": [
+    {
+      "selector": ".hud-achievements",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Records\n      \n      \n        Stats\n        Achievements\n      \n      0 of 14 earned\n      \n      Locked. First BloodDestroy a tank with a shell.Locked. MarksmanDestroy 25 tanks with shells.Locked. Gu",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(11, 14, 20, 0.86)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-achievement-list",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 449,
+        "y": 239,
+        "w": 382,
+        "h": 472
+      },
+      "text": "Locked. First BloodDestroy a tank with a shell.Locked. MarksmanDestroy 25 tanks with shells.Locked. GunslingerDestroy 100 tanks with shells.Locked. SapperDestroy 10 tanks with mines.Locked. Demolition",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-achievements-count",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 588,
+        "y": 195,
+        "w": 105,
+        "h": 18
+      },
+      "text": "0 of 14 earned",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "16px",
+        "margin-bottom": "16px"
+      }
+    }
+  ]
+}

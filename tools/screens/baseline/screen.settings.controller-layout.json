@@ -1,0 +1,110 @@
+{
+  "state": "screen.settings.controller-layout",
+  "measurements": [
+    {
+      "selector": ".hud-layout",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Controller Layout\n      Choose an action, then press the controller button you want for it. A button another action uses swaps with it.\n      Standard controllerNo controller is visible yet. A browser",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#hud-layout-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 511,
+        "y": 35,
+        "w": 258,
+        "h": 38
+      },
+      "text": "Controller Layout",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "32px",
+        "margin-top": "21.44px",
+        "margin-bottom": "21.44px"
+      }
+    },
+    {
+      "selector": ".hud-layout-preset",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 555,
+        "y": 183,
+        "w": 171,
+        "h": 44
+      },
+      "text": "Sticks: Recommended",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-layout-bindings",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 554,
+        "y": 237,
+        "w": 172,
+        "h": 252
+      },
+      "text": "Fire: RT / R2Mine: LT / L2Confirm: A / CrossBack: B / CirclePause: Menu / Options",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-layout-reset",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 550,
+        "y": 499,
+        "w": 180,
+        "h": 44
+      },
+      "text": "Reset to Recommended",
+      "style": {
+        "display": "block",
+        "opacity": "0.45",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

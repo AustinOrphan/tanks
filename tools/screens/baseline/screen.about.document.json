@@ -1,0 +1,68 @@
+{
+  "state": "screen.about.document",
+  "measurements": [
+    {
+      "selector": ".hud-about",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "About & Legal\n      Tanks! is a browser arena shooter.\n      It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#hud-legal-body-privacy",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 296,
+        "y": 378,
+        "w": 688,
+        "h": 1660
+      },
+      "text": "Privacy PolicyThe full text of PRIVACY.md in this repository.Last updated: 2026-09-17This policy covers the Tanks! browser game (the \"game\" or \"app\"), published at austinorphan.com/tanks/.SummaryThe g",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "13px",
+        "margin-top": "6px",
+        "margin-bottom": "10px"
+      }
+    },
+    {
+      "selector": ".hud-legal-table",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 306,
+        "y": 753,
+        "w": 668,
+        "h": 333
+      },
+      "text": "Data the game storesKeyContentstanks.progress.v1Highest level cleared in the campaigntanks.stats.v1Lifetime and per-attempt game statisticstanks.stats.run.v1Game statistics for the campaign run in pro",
+      "style": {
+        "display": "table",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "12px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

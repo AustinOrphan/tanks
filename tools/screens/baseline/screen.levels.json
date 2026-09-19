@@ -1,0 +1,68 @@
+{
+  "state": "screen.levels",
+  "measurements": [
+    {
+      "selector": ".hud-levelselect",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Levels\n      12\n      \n      Clear a level to add it here.\n      Back",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(11, 14, 20, 0.86)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-levels",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 591,
+        "y": 368,
+        "w": 98,
+        "h": 44
+      },
+      "text": "12",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "4px"
+      }
+    },
+    {
+      "selector": ".hud-levels-note",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 556,
+        "y": 439,
+        "w": 168,
+        "h": 16
+      },
+      "text": "Clear a level to add it here.",
+      "style": {
+        "display": "block",
+        "opacity": "0.7",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "13.6px",
+        "margin-top": "13.6px",
+        "margin-bottom": "13.6px"
+      }
+    }
+  ]
+}

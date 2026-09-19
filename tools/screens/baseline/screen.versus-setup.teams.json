@@ -1,0 +1,89 @@
+{
+  "state": "screen.versus-setup.teams",
+  "measurements": [
+    {
+      "selector": ".hud-versus-setup",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Versus Setup\n      \n        Mode\n        FFATeams\n        \n        \n      \n      \n        Players\n        234\n      \n      \n        Map\n        Arena 12/3/4 players · FFA and TeamsSparse destructibles",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(11, 14, 20, 0.86)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-versus-map-row",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 272,
+        "y": 277,
+        "w": 736,
+        "h": 371
+      },
+      "text": "Arena 12/3/4 players · FFA and TeamsSparse destructibles on a mid-size board; cover is mostly permanent, lanes stay stable.Arena 22/3/4 players · FFA and TeamsDestructible-heavy centre; opens up as a ",
+      "style": {
+        "display": "grid",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-versus-map-card",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 272,
+        "y": 277,
+        "w": 240,
+        "h": 122
+      },
+      "text": "Arena 12/3/4 players · FFA and TeamsSparse destructibles on a mid-size board; cover is mostly permanent, lanes stay stable.",
+      "style": {
+        "display": "grid",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-versus-friendlyfire-btn",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 574,
+        "y": 764,
+        "w": 132,
+        "h": 44
+      },
+      "text": "Friendly fire: Off",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

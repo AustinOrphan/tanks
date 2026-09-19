@@ -1,0 +1,131 @@
+{
+  "state": "screen.devtools",
+  "measurements": [
+    {
+      "selector": ".hud-devtools",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Developer Tools\n      Developer mode is on for this page.\n      It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#hud-devtools-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 522,
+        "y": 35,
+        "w": 237,
+        "h": 38
+      },
+      "text": "Developer Tools",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "32px",
+        "margin-top": "21.44px",
+        "margin-bottom": "21.44px"
+      }
+    },
+    {
+      "selector": ".hud-selftest-open",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 559,
+        "y": 256,
+        "w": 163,
+        "h": 44
+      },
+      "text": "Controller Self-Test",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-diag-copy",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 564,
+        "y": 368,
+        "w": 153,
+        "h": 44
+      },
+      "text": "Copy Diagnostics",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-diag-pin",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 566,
+        "y": 424,
+        "w": 148,
+        "h": 44
+      },
+      "text": "Pin Current Seed",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-devtools-back",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 604,
+        "y": 860,
+        "w": 72,
+        "h": 44
+      },
+      "text": "Back",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

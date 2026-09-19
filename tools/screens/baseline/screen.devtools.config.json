@@ -1,0 +1,110 @@
+{
+  "state": "screen.devtools.config",
+  "measurements": [
+    {
+      "selector": ".hud-devcfg",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Configuration\n      Every developer parameter this build knows, and what the URL you are building would actually do. Nothing here applies until you press Apply and Reload.\n      PlaytestArmed Sandbox2",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-devcfg-presets",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 160,
+        "y": 155,
+        "w": 960,
+        "h": 44
+      },
+      "text": "PlaytestArmed Sandbox2-player VS4-player VSAll BotsVisual Debug",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-devcfg-group",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 160,
+        "y": 219,
+        "w": 960,
+        "h": 974
+      },
+      "text": "Gameplaylevel — unsetJumps straight to a level, or to the sandbox rig, instead of resuming the active run.−+UnsetsandboxinvincibleMakes the player unkillable: shells detonate harmlessly, blasts wash o",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "16px"
+      }
+    },
+    {
+      "selector": ".hud-devcfg-namespace",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 160,
+        "y": 6940,
+        "w": 514,
+        "h": 32
+      },
+      "text": "Saved data namespace after reload: developer. A developer page keeps its own saves and cannot see a production one.",
+      "style": {
+        "display": "block",
+        "opacity": "0.7",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "13.6px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-devcfg-url",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 160,
+        "y": 6972,
+        "w": 960,
+        "h": 14
+      },
+      "text": "?dev=1",
+      "style": {
+        "display": "block",
+        "opacity": "0.8",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "12px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

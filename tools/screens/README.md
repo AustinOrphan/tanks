@@ -193,8 +193,12 @@ screen, and rendered through SwiftShader.
 
 ### What is in it
 
-**Every state except the two played endings.** Thirty-nine of forty-one. Each state is a
-distinct surface, so the "name the distinct risk it protects" rule maps one-to-one.
+**Every state except the two played endings.** Each state is a distinct surface, so the
+"name the distinct risk it protects" rule maps one-to-one.
+
+A RULE, not a list, and deliberately: this paragraph first said "thirty-nine of forty-one" and
+the catalogue outgrew that within a day. `subsetStates` in `baseline.mjs` derives the set, so a
+state added tomorrow is covered without anyone remembering to edit a number.
 
 `screen.ending.mission-clear.played` and `screen.ending.campaign-over.played` are out.
 Measured: **22.9 s each**, against 5.9 s for the pushed-outcome twin that asserts the same
@@ -236,6 +240,29 @@ locally, committing the result, and reading the diff.
 ```sh
 npm run screens:accept -- --state screen.settings
 ```
+
+## The six commands
+
+| To | Run |
+| --- | --- |
+| list the screen recipes | `node -e "import('./tools/screens/states.mjs').then(m=>console.log(m.SCREEN_STATE_IDS.join('\n')))"` |
+| run one recipe locally | `npm run screens -- --state screen.settings --dist dist` |
+| run the bounded required suite | `npm run screens:check -- --dist dist` |
+| inspect expected/actual/diff | read `screens-check-out/<state>/` — `expected.json`, `actual.json`, `diff.txt`, `source.json`, `capture.png` |
+| accept a reviewed baseline change | `npm run screens:accept -- --state <id>` (or `--all`) |
+| request the full on-demand matrix | `npm run screens:sweep` — every state at every layout, which is not this gate |
+
+`screens:check` compares and never writes. `screens:accept` is the only thing that rewrites a
+baseline, which is why it is a separate command rather than a flag: a `--update` on the
+checking command is one habit away from a run that approves its own change, and CI runs the
+checking command.
+
+`capture.png` sits beside a failure as evidence for a person reading it. There is deliberately
+no `expected.png` to compare it against — pixels are not the channel.
+
+**A page error fails a state on its own**, whatever its measurements did. The sweep's
+`measurementsSha256` hashes the measurements alone, so a screen that started throwing would
+keep its hash and pass; an uncaught error is a defect regardless of what the layout did.
 
 Because the baseline is JSON, the pull-request diff *is* the review:
 
