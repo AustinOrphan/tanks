@@ -103,9 +103,23 @@ try {
   // So the regression IS real -- the page takes about six times longer to load -- but the
   // pre-bundled dependency accounts for ~89 ms of roughly 40,000 ms, about 0.2% of it. The
   // request count is identical in both arms and only one request is three's, so it is not a
-  // module storm either, and transfer grew 1.22x against a 5.9x slowdown. The cost is in the
-  // browser's work on the application's own module graph, which is the other 99 requests; #812
-  // holds what has and has not been ruled out.
+  // module storm either, and transfer grew 1.22x against a 5.9x slowdown.
+  //
+  // WHERE IT DOES GO, read from the browser's own timing rather than by subtraction:
+  //
+  //                                        0.169.0        0.186.0
+  //   responseEnd (the HTML document)        85.7 ms        94.1 ms
+  //   summed resource duration (UPPER
+  //     bound; requests overlap)          9,863 ms       13,522 ms
+  //   domContentLoaded                    7,931 ms       48,169 ms
+  //   slowest single resource               169 ms          221 ms
+  //
+  // The document arrives in under 100 ms and no single request stalls. Every extra second falls
+  // between `responseEnd` and `domContentLoaded`, and the summed fetch is an upper bound of
+  // 13.5s across OVERLAPPING requests -- so the bulk is MAIN-THREAD EVALUATION of the
+  // application's own module graph, not fetching and not the dependency. Issue #812 holds the
+  // tables and what is still unexplained: why evaluating those modules got ~6x slower when the
+  // dependency they all import got 89 ms slower.
   //
   // A SECOND regression the original note missed: the GL phase AFTER `load` also more than
   // doubled, 93.5-97.9s to 218.0-220.5s, which no bundle size explains.
