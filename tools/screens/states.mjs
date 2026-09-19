@@ -52,6 +52,27 @@
 export const WEBGL_MODES = Object.freeze(['ok', 'unsupported', 'probe-blocked', 'match-build-fails']);
 
 /**
+ * How the entry script's request is answered (issue #781).
+ *
+ * `index.html` carries an inline guard that draws a branded card when the entry bundle never
+ * arrives or never parses, and the two failures produce DIFFERENT cards: a resource `error`
+ * whose target is the entry script says "could not load", while a parse error whose
+ * `filename` matches the script's `src` says "could not start". Neither was reachable from
+ * this catalogue before, because a state could seed storage and break WebGL but had no way to
+ * refuse or corrupt a response.
+ *
+ *  - `ok`            -- the script is served normally. Every state but two.
+ *  - `refused`       -- answered 404, so the request completes and fails. The "could not
+ *                       load" card.
+ *  - `unparseable`   -- answered 200 with JavaScript that cannot parse. The "could not
+ *                       start" card.
+ *
+ * Distinct from `boot: 'holding'`, which never answers the request at all: that photographs
+ * the page still WAITING, and these photograph it having given up.
+ */
+export const ENTRY_MODES = Object.freeze(['ok', 'refused', 'unparseable']);
+
+/**
  * Steps, in order. Each is a single-key record so an unknown step is a loud failure in the
  * runner rather than a silently skipped line.
  *
@@ -198,6 +219,14 @@ const state = (s) => Object.freeze({
    * too: `sweep.mjs` iterates this catalogue and never sees a recipe.
    */
   touch: false,
+  /**
+   * How the entry script's request is answered (issue #781). One of `ENTRY_MODES`.
+   *
+   * Declared per state rather than inferred, for the reason `boot` gives: what a capture
+   * photographs here is decided BEFORE the page is asked for, and a declared field is the
+   * only place that decision is visible to someone reading the catalogue.
+   */
+  entry: 'ok',
   steps: [],
   measure: [],
   ...s,
@@ -222,6 +251,56 @@ export const SCREEN_STATES = Object.freeze([
     menu: 'none',
     steps: [{ waitVisible: '#boot-loading' }],
     measure: ['#boot-loading'],
+  }),
+  // The two ways the entry bundle can fail a player (issue #781). Kept beside the holding
+  // card on purpose: all three photograph the page BEFORE the application exists, and the
+  // difference between them is only what happened to one request. `#boot-loading` is measured
+  // by all three, because these two are the states where it is RETIRED rather than absent --
+  // the card's own guard reads it, then `app.innerHTML = ''` takes it out.
+  state({
+    id: 'screen.startup.entry-refused',
+    title: 'Entry bundle refused',
+    description:
+      'What a player sees when the entry bundle never arrives -- a dropped connection, a bad '
+      + 'deploy, a cache serving a 404. The inline guard in index.html draws its own card, '
+      + 'because at this point none of the application has run.',
+    entry: 'refused',
+    menu: 'present',
+    steps: [{ waitVisible: '#boot-entry-failure-card' }],
+    // NOT `#boot-loading`. The card's own code runs `app.innerHTML = ''` before drawing, so
+    // the holding card is REMOVED rather than hidden -- and the adapter fails any measured
+    // selector that matches nothing, correctly, because a state measuring an absent element
+    // is measuring nothing. `screen.no-script` can measure it because scripting off leaves
+    // the static markup in place; here it is genuinely gone, and the picture shows that.
+    measure: [
+      '#boot-entry-failure-card',
+      '#boot-entry-failure-card h1',
+      '#boot-entry-failure-card p',
+      '#boot-entry-failure-card button',
+    ],
+  }),
+  state({
+    id: 'screen.startup.entry-unparseable',
+    title: 'Entry bundle unparseable',
+    description:
+      'What a player sees when the bundle arrives but cannot run -- a truncated file, or a '
+      + 'proxy that answered with something that is not JavaScript. A DIFFERENT card from the '
+      + 'refused one: "could not start" rather than "could not load", and the wording is the '
+      + 'only thing that tells a player which happened.',
+    entry: 'unparseable',
+    menu: 'present',
+    steps: [{ waitVisible: '#boot-entry-failure-card' }],
+    // NOT `#boot-loading`. The card's own code runs `app.innerHTML = ''` before drawing, so
+    // the holding card is REMOVED rather than hidden -- and the adapter fails any measured
+    // selector that matches nothing, correctly, because a state measuring an absent element
+    // is measuring nothing. `screen.no-script` can measure it because scripting off leaves
+    // the static markup in place; here it is genuinely gone, and the picture shows that.
+    measure: [
+      '#boot-entry-failure-card',
+      '#boot-entry-failure-card h1',
+      '#boot-entry-failure-card p',
+      '#boot-entry-failure-card button',
+    ],
   }),
   state({
     id: 'screen.launch',

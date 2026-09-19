@@ -71,7 +71,11 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // only how the pane was reached: `measureHitTargets` honours the catalogue's touch flag, so
     // this state contributes `.hud-scheme-toggle` and `.hud-firemode-toggle`, two hit targets
     // no other swept state has because `control-relevance.ts` omits them without a touchscreen.
-    expect(hitSweepStates()).toHaveLength(30);
+    // 32 since issue #781 added the two entry-bundle failure cards. They are SWEPT rather than
+    // excluded, on evidence: the card offers a Reload button, and a real capture measured it at
+    // 95x47 CSS px, clearing the 44px floor this sweep exists to enforce. Excluding them would
+    // have left the only control on a page a player can actually land on unmeasured.
+    expect(hitSweepStates()).toHaveLength(32);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 
