@@ -174,12 +174,70 @@ describe('committed opponent selection', () => {
     expect(resolveOpponent(w, ai, configFor('grey'))).toBeUndefined();
   });
 
+  it('reacquires a target that dies and RESPAWNS, rather than staying blind to it', () => {
+    // The half of rule 5 composition alone does not prove (issue #359, criterion 4). Death
+    // dropping the commitment is covered above; what is not covered is what happens when the
+    // same id comes back. `stepRespawns` revives a tank IN PLACE -- same id, `alive` back to
+    // true -- so an implementation that remembered "id 2 was lost" rather than re-reading
+    // `isTargetable` every time would leave the AI permanently blind to a living opponent,
+    // and every existing case here would still pass.
+    const ai = tank(1, 'grey', { x: 0, y: 0 });
+    const target = tank(2, 'player', { x: 9, y: 0 });
+    const w = world([ai, target]);
+    commitTarget(w, ai);
+    expect(ai.aiTargetId, 'did not commit in the first place').toBe(2);
+
+    target.alive = false;
+    expect(commitTarget(w, ai)).toBe('target-lost');
+    expect(ai.aiTargetId).toBeUndefined();
+
+    // Respawn: the SAME id, alive again, which is what the world actually does.
+    target.alive = true;
+    commitTarget(w, ai);
+    expect(ai.aiTargetId, 'stayed blind to a revived opponent').toBe(2);
+    expect((ai.aiTargetTicks ?? 0) > 0, 'reacquired without arming a fresh span').toBe(true);
+    expect(resolveOpponent(w, ai, configFor('grey'))?.id).toBe(2);
+  });
+
+  it('keeps a merely IDLE opponent targetable, so a disconnect leaves nothing stale', () => {
+    // The other invalidation the criterion names. A disconnected slot is not removed from
+    // `world.tanks` and is not killed -- it simply stops supplying input -- so there is
+    // nothing to invalidate and the AI must go on treating it as a live opponent. Asserted
+    // rather than assumed, because "disconnect" reads like a state the sim has and does not.
+    const idle = tank(2, 'player', { x: 9, y: 0 }, { desiredMove: { x: 0, y: 0 } });
+    expect(isTargetable(world([tank(1, 'grey', { x: 0, y: 0 }), idle]), tank(1, 'grey', { x: 0, y: 0 }), idle)).toBe(true);
+  });
+
   it('never leaves a live AI pointed at a corpse', () => {
     // resolveOpponent re-checks `alive` because a target can die to a blast resolved later
     // in the SAME tick than the commitment was written.
     const ai = tank(1, 'grey', { x: 0, y: 0 }, { aiTargetId: 2, aiTargetTicks: 50 });
     const dead = tank(2, 'player', { x: 9, y: 0 }, { alive: false });
     expect(resolveOpponent(world([ai, dead]), ai, configFor('grey'))).toBeUndefined();
+  });
+
+  it('still picks per FAMILY: two kinds facing one pair choose differently', () => {
+    // Issue #359, criterion 6. Selection was unified into one policy, which is exactly the
+    // change that could have homogenised it -- every kind reading the same ranking function
+    // could easily have become every kind making the same choice. What keeps them apart is
+    // that the ranking is parameterised by each profile's own `preferredDistance`.
+    //
+    // Read from the config rather than quoted, so re-tuning a profile moves this with it;
+    // the case asserts the two kinds DIVERGE, which is the property, and skips if a future
+    // tuning pass ever makes their preferences equal.
+    const far = configFor('green').ai.preferredDistance;   // RICOCHET_SNIPER, 12 at writing
+    const near = configFor('teal').ai.preferredDistance;   // MOBILE_MINE_LAYER, 7.5
+    expect(far, 'the two families no longer differ; pick another pair').not.toBeCloseTo(near, 6);
+
+    const build = (kind: Tank['kind']) => {
+      const ai = tank(1, kind, { x: 0, y: 0 });
+      const w = world([ai, tank(2, 'player', { x: near, y: 0 }), tank(3, 'player', { x: far, y: 0 })]);
+      commitTarget(w, ai);
+      return ai.aiTargetId;
+    };
+    // Each commits to the opponent standing at its OWN preferred range, from one fixture.
+    expect(build('green'), 'the long-range family did not take the far opponent').toBe(3);
+    expect(build('teal'), 'the close-range family did not take the near opponent').toBe(2);
   });
 
   it('prefers the opponent nearest the profile PREFERRED range, not the nearest one', () => {
