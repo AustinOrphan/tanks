@@ -7,8 +7,12 @@
   "tests": [
     "src/game/hud.match.test.ts"
   ],
-  "why": "The pips arm draws only the stocks remaining (issue #230), so a lost stock leaves no hollow pip behind and the pip that just emptied has nowhere to be drawn. That removes the arm's permanent channel -- shape saying how many are gone -- and leaves a shrinking row that reads like a count going down rather than a stock being knocked out. ANCHOR WIDENED by issue #230's `marks` arm: that arm keeps the same denominator and so repeats this line verbatim, which made the old one-line anchor match twice and mutate whichever came first. The branch test above it is what makes this the pips one.",
+  "why": "The pips arm draws only the stocks remaining (issue #230), so a lost stock leaves no hollow pip behind and the pip that just emptied has nowhere to be drawn. That removes the arm's permanent channel -- shape saying how many are gone -- and leaves a shrinking row that reads like a count going down rather than a stock being knocked out. ANCHOR WIDENED by issue #230's `marks` arm: that arm keeps the same denominator and so repeats this line verbatim, which made the old one-line anchor match twice and mutate whichever came first. The branch test above it is what makes this the pips one. The killedBy list was remeasured when the anchor was widened: five cases in the pips block fail, not the one originally recorded.",
   "killedBy": [
-    "hud: stock-loss cue arms (issue #230) pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue"
+    "hud: stock-loss cue arms (issue #230) pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue",
+    "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
+    "hud: stock-loss cue arms (issue #230) pips: a cue is gone once STOCK_CUE_MS has passed",
+    "hud: stock-loss cue arms (issue #230) a rematch that resets stocks upward is not a loss, and starts a new pip count",
+    "hud: stock-loss cue arms (issue #230) pips: a rebuild with no new status after STOCK_CUE_MS -- a pause -- draws no cue"
   ]
 }
