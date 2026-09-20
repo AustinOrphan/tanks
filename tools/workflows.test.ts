@@ -82,6 +82,7 @@ const MUTATION_FLOOR = read('.github/workflows/mutation-floor.yml');
 const ENGINES = read('.github/workflows/engines.yml');
 const ISSUE_METADATA = read('.github/workflows/issue-metadata.yml');
 const ISSUE_RELATIONSHIPS = read('.github/workflows/issue-relationship-migration.yml');
+const ISSUE_GRAPH = read('.github/workflows/issue-graph-snapshot.yml');
 const CAPTURE = read('.github/workflows/capture.yml');
 const BASELINE_RUN = read('tools/baseline/run.mjs');
 const COMMAND_REFERENCE = read('docs/agent/commands-and-operations.md');
@@ -1129,5 +1130,83 @@ describe('scenario-sweep.yml: the on-demand generated-scenario sweep (issue #760
   it('bounds its runtime and keeps its output', () => {
     expect(SWEEP).toMatch(/timeout-minutes: \d+/);
     expect(SWEEP).toContain('retention-days: 14');
+  });
+});
+
+describe('issue graph snapshot export (issue #437)', () => {
+  const snapshot = jobBlock(ISSUE_GRAPH, 'snapshot');
+
+  it('loads substantive workflow and package-command inputs', () => {
+    // Without this the assertions below all pass on an empty read -- the same vacuity trap
+    // this file's `?raw` note records.
+    expect(ISSUE_GRAPH.length).toBeGreaterThan(1000);
+    expect(snapshot).not.toBe('');
+    expect(SCRIPTS['issues:snapshot']).toBe('node tools/issues/run.mjs snapshot');
+  });
+
+  it('writes and uploads THE SAME path, which is the drift this pairing invites', () => {
+    // The export names an `--out` and the upload names a `path`. They are two literals in
+    // two steps with nothing connecting them, so a rename in one is invisible until a
+    // scheduled run uploads nothing -- and `if-no-files-found: error` is what makes that
+    // loud rather than an empty artifact. Both are pinned here, to each other.
+    const out = /--out (\S+)/.exec(snapshot);
+    const path = /^\s*path: (\S+)$/m.exec(snapshot);
+    expect(out, 'no --out in the export step').not.toBeNull();
+    expect(path, 'no path in the upload step').not.toBeNull();
+    expect((path as RegExpExecArray)[1]).toBe((out as RegExpExecArray)[1]);
+    expect(snapshot).toContain('if-no-files-found: error');
+  });
+
+  it('is READ-ONLY, which is the whole premise of the tokenless view', () => {
+    // #437: "Runtime browser code receives no GitHub token", and the producer that replaces
+    // it uses least privilege -- repository metadata and Issues read access only. A write
+    // scope appearing here would not break the export; it would quietly make a read-only
+    // job able to mutate the repository it reports on.
+    expect(ISSUE_GRAPH).toContain('permissions: {}');
+    expect(snapshot).toContain('contents: read');
+    expect(snapshot).toContain('issues: read');
+    expect(snapshot).not.toMatch(/^\s*(contents|issues|pull-requests|packages|id-token): write$/m);
+  });
+
+  it('refreshes on a schedule and on demand, and never on a pull request', () => {
+    // A per-PR export would be pure noise: the graph it reads is repository state, not
+    // branch state, so every run on every PR would produce the same file.
+    expect(ISSUE_GRAPH).toContain("cron: '41 5 * * *'");
+    expect(ISSUE_GRAPH).toMatch(/^\s*workflow_dispatch:\s*$/m);
+    expect(ISSUE_GRAPH).not.toMatch(/^\s*pull_request(_target)?:/m);
+    expect(ISSUE_GRAPH).not.toMatch(/^\s*push:/m);
+  });
+
+  it('does not commit the snapshot it generates', () => {
+    // #437 asks for a cadence "that does not create noisy commits", and a daily commit of a
+    // file whose `generatedAt` always differs is exactly that. The artifact is the delivery.
+    expect(ISSUE_GRAPH).not.toMatch(/git (add|commit|push)/);
+    expect(ISSUE_GRAPH).not.toContain('peter-evans/create-pull-request');
+    expect(snapshot).toContain('actions/upload-artifact@');
+  });
+
+  it('installs no dependencies, because the export chain reaches none', () => {
+    // Asserted rather than left as a comment: every import from `tools/issues/run.mjs`
+    // through snapshot.mjs, metadata.mjs and queue.mjs resolves to a `node:` builtin or a
+    // sibling `.mjs`. If that stops being true, this job fails at runtime with a module
+    // resolution error and this line is the one that should have caught it first.
+    // Against the EXECUTABLE commands, not the file text: this workflow's own comment
+    // explains why it skips `npm ci`, and a naive text match flagged that prose as a
+    // violation. The first draft of this line did exactly that.
+    const commands = executableRunCommands(ISSUE_GRAPH);
+    expect(commands.length, 'no run: steps parsed; this would pass vacuously').toBeGreaterThan(0);
+    for (const command of commands) expect(command).not.toMatch(/npm (ci|install)/);
+    const chain = ['run.mjs', 'snapshot.mjs', 'metadata.mjs', 'queue.mjs']
+      .map((name) => read(`tools/issues/${name}`));
+    expect(chain.every((source) => source.length > 500), 'a source read empty').toBe(true);
+    for (const source of chain) {
+      for (const match of source.matchAll(/^import .*? from '([^']+)';$/gm)) {
+        const specifier = match[1];
+        expect(
+          specifier.startsWith('node:') || specifier.startsWith('./'),
+          `${specifier} would need an install`,
+        ).toBe(true);
+      }
+    }
   });
 });
