@@ -1,0 +1,14 @@
+{
+  "id": "frontier-lays-out-a-chain-over-a-reported-cycle",
+  "file": "tools/issues/frontier.mjs",
+  "find": "  if ((snapshot?.cycles ?? []).length > 0) return [];",
+  "replace": "  if ((snapshot?.cycles ?? []).length > 9999) return [];",
+  "expect": "killed",
+  "why": "Removes the cycle refusal in `longestDependencyChain` in the way a real bug would -- a bound nothing reaches rather than a deleted line. A longest path is undefined on a cyclic graph, and #437 states that cycles must fail generation or display an unmistakable diagnostic and never masquerade as a valid DAG. Under the mutation the function returns a confident, plausible-looking chain instead of nothing.",
+  "tests": [
+    "tools/issues/frontier.test.ts"
+  ],
+  "killedBy": [
+    "frontier: the longest dependency chain, which is not a critical path refuses to answer at all when the snapshot reports a cycle"
+  ]
+}
