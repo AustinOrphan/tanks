@@ -37,6 +37,8 @@
  *   state?: string,
  *   title?: string,
  *   body?: string,
+ *   html_url?: string,
+ *   assignees?: unknown[],
  *   labels?: GhLabel[],
  *   milestone?: { number?: number, title?: string } | null,
  *   pull_request?: unknown,
@@ -419,8 +421,19 @@ const hasImplementationBreakdown = (issue) =>
   markdownSections(issue?.body, 'Implementation breakdown')
     .some((section) => /^\s*-\s*\[[ xX]\]\s+#\d+/m.test(section));
 
-/** @param {GhIssue[]} issues @returns {number[][]} */
-function findDependencyCycles(issues) {
+/**
+ * Exported for `snapshot.mjs` (issue #437), so the published dependency map and the audit
+ * report the same cycles -- including this function's de-duplication, which the
+ * `cycle-detector-reports-a-cycle-twice` mutation entry pins. A map that disagreed with the
+ * audit about whether a cycle exists would be worse than one that did not check.
+ *
+ * The node ORDER within a returned cycle follows `graph.keys()`, so it depends on the order
+ * the issues arrived in. That is invisible to the audit, which only formats the members, but
+ * it is not to a file that gets committed; `snapshot.mjs` normalises before publishing.
+ *
+ * @param {GhIssue[]} issues @returns {number[][]}
+ */
+export function findDependencyCycles(issues) {
   const issueNumbers = new Set(issues.map(issueNumber).filter((number) => number !== null));
   /** @type {Map<number, number[]>} */
   const graph = new Map();
