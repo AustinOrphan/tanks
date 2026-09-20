@@ -903,11 +903,20 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
   // also fails the wide-body test, and the fixtures showed what that costs: with clearance
   // alone, the narrow bands hugging every wall face joined separate gaps into one run, so a
   // board with TWO routes through the same wall still reported its tunnel as unavoidable --
-  // blocking the merged run blocked both gaps at once.
+  // blocking the merged run blocked both gaps at once. The same clearance-only rule made the
+  // band along the board's FRAME one run around the whole board, reporting a 19.00-unit
+  // corridor on a board 20 units wide at every tunnel length it was given.
   //
   // A corridor has wall on BOTH sides. A point counts only when some opposite pair of
   // directions is blocked within the wide radius: true in a tunnel, false against a wall
   // face, where one side is open room.
+  //
+  // THAT SUBSUMES THE FRAME CASE, which is worth stating because an explicit frame guard
+  // stood here first and the mutation harness proved it dead -- disabling it changed not one
+  // figure on any fixture or shipped board. A point by the frame has open room on its other
+  // side, so the pair test already rejects it. What survives is better than the guard was: a
+  // genuine lane between the board edge and a wall DOES count, which the guard would have
+  // thrown away.
   const span = Math.max(1, Math.round(wideRadius / solidLat.step));
   const OPPOSED: ReadonlyArray<readonly [number, number]> = [[1, 0], [0, 1], [1, 1], [1, -1]];
   const blockedAt = (i: number, j: number) =>
@@ -921,7 +930,6 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     const y = (j + 0.5) * solidLat.step;
     // The board's own frame is not a corridor wall; without this the rim is one run around
     // the whole board, which swamped everything inside it.
-    if (x < wideRadius || y < wideRadius || x > width - wideRadius || y > height - wideRadius) continue;
     for (const [di, dj] of OPPOSED) {
       if (blockedAt(i + di * span, j + dj * span) && blockedAt(i - di * span, j - dj * span)) {
         narrow[k] = 1;
