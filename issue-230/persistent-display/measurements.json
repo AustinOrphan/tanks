@@ -1,0 +1,98 @@
+[
+  {
+    "label": "digit.desktop",
+    "arm": "digit",
+    "viewport": "1280x800@2",
+    "media": "none",
+    "before": "P1 3 | P2 3",
+    "after": "P1 3 | P2 2",
+    "changed": true,
+    "ticks": 1860,
+    "strip": "78x20",
+    "errors": 0
+  },
+  {
+    "label": "pips.desktop",
+    "arm": "pips",
+    "viewport": "1280x800@2",
+    "media": "none",
+    "before": "3 of 3 stocks | 3 of 3 stocks",
+    "after": "3 of 3 stocks | 2 of 3 stocks",
+    "changed": true,
+    "ticks": 1860,
+    "strip": "130x20",
+    "errors": 0
+  },
+  {
+    "label": "digit.phone",
+    "arm": "digit",
+    "viewport": "390x844@3",
+    "media": "none",
+    "before": "P1 3 | P2 3",
+    "after": "P1 3 | P2 2",
+    "changed": true,
+    "ticks": 1861,
+    "strip": "78x20",
+    "errors": 0
+  },
+  {
+    "label": "pips.phone",
+    "arm": "pips",
+    "viewport": "390x844@3",
+    "media": "none",
+    "before": "3 of 3 stocks | 3 of 3 stocks",
+    "after": "3 of 3 stocks | 2 of 3 stocks",
+    "changed": true,
+    "ticks": 1859,
+    "strip": "130x20",
+    "errors": 0
+  },
+  {
+    "label": "digit.desktop.forced",
+    "arm": "digit",
+    "viewport": "1280x800@2",
+    "media": "forced",
+    "before": "P1 3 | P2 3",
+    "after": "P1 3 | P2 2",
+    "changed": true,
+    "ticks": 1860,
+    "strip": "78x20",
+    "errors": 0
+  },
+  {
+    "label": "digit.desktop.reduced",
+    "arm": "digit",
+    "viewport": "1280x800@2",
+    "media": "reduced",
+    "before": "P1 3 | P2 3",
+    "after": "P1 3 | P2 2",
+    "changed": true,
+    "ticks": 1860,
+    "strip": "78x20",
+    "errors": 0
+  },
+  {
+    "label": "pips.desktop.forced",
+    "arm": "pips",
+    "viewport": "1280x800@2",
+    "media": "forced",
+    "before": "3 of 3 stocks | 3 of 3 stocks",
+    "after": "3 of 3 stocks | 2 of 3 stocks",
+    "changed": true,
+    "ticks": 1860,
+    "strip": "130x20",
+    "errors": 0
+  },
+  {
+    "label": "pips.desktop.reduced",
+    "arm": "pips",
+    "viewport": "1280x800@2",
+    "media": "reduced",
+    "before": "3 of 3 stocks | 3 of 3 stocks",
+    "after": "3 of 3 stocks | 2 of 3 stocks",
+    "changed": true,
+    "ticks": 1860,
+    "strip": "130x20",
+    "errors": 0
+  }
+]
