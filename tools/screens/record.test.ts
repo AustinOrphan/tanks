@@ -143,3 +143,29 @@ describe('recordFlow: what a finished round reports (issue #720)', () => {
     expect(source).toMatch(/endedWith: recorded\.outcome,/);
   });
 });
+
+/**
+ * Issue #877. Screen CAPTURE got this in issue #875 and screen RECORDING did not, which is the pair that made issue #860 look like an intermittent local fault.
+ *
+ * A source-text assertion, like `tools/screens/capture.test.ts`'s, because what it guards
+ * happens only in a real browser. It lives HERE rather than in
+ * `tools/shared/audio-context.test.ts`'s sweep because this file already imports the module:
+ * the mutation harness measures an entry through Vitest's own dependency graph, and a test
+ * that only reads a file as text relates to nothing.
+ */
+describe('record.mjs: removing the AudioContext constructor before boot', () => {
+  it('installs the override on the recording context, unconditionally, before it navigates', () => {
+    const src = readFileSync(new URL('./record.mjs', import.meta.url), 'utf8');
+    // Exactly four spaces: the body's own indentation. `\s*` would accept the call nested
+    // inside an `if`, which is the one shape this exists to reject -- an override only some
+    // machines installed would let two machines photograph different pages, which is
+    // precisely the divergence these gates exist to catch.
+    const call = /^ {4}await context\.addInitScript\(audioContextOverrideSource\(\)\);$/m;
+    expect(src, 'the override is gone, conditional, or no longer on its own line').toMatch(call);
+    const at = src.search(call);
+    const firstGoto = src.indexOf('.goto(');
+    expect(at, 'the override call was not found').toBeGreaterThan(-1);
+    expect(firstGoto, 'no navigation was found').toBeGreaterThan(-1);
+    expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
+  });
+});

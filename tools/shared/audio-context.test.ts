@@ -58,6 +58,16 @@ describe('audio-context.mjs: removing the AudioContext constructor before boot',
  * missed `tools/visual/hit-sweep.mjs`, the hit-target driver that navigates separately from
  * `verify.mjs`'s own two page paths -- the same shape of miss issues #781 and #844 each hit
  * in that file. A hand-maintained list would have shipped that gap again.
+ *
+ * WHAT IS AND IS NOT MUTATION-MEASURED. This sweep reads each tool as TEXT, so Vitest's
+ * dependency graph relates it to none of them, and `tools/mutate` refuses an entry whose
+ * declared tests do not reach the file it mutates -- such an entry could only ever report
+ * SURVIVES. Four of the ten therefore carry a manifest entry, in the test file that already
+ * IMPORTS the module: `screens/capture.mjs`, `screens/record.mjs`, `bench/runs.mjs` and
+ * `visual/hit-sweep.mjs`. The other six are CLI entry points that call `main()` at the top
+ * level, so importing one from a test would run it; they are covered by this sweep and by a
+ * manual control (delete the install, watch the sweep fail), not by the harness. Giving them
+ * a main-guard is issue #881.
  */
 const TOOLS = fileURLToPath(new URL('..', import.meta.url));
 
