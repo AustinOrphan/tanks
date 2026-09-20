@@ -1,0 +1,14 @@
+{
+  "id": "snapshot-counts-an-unread-flag-as-a-missing-edge",
+  "file": "tools/issues/snapshot.mjs",
+  "find": "      blockedByUnknown: shaped.filter(\n        (issue) => !issue.blockedByLoaded && issue.declaredBlockedBy > 0,\n      ).length,",
+  "replace": "      blockedByUnknown: shaped.filter((issue) => !issue.blockedByLoaded).length,",
+  "expect": "killed",
+  "why": "Counts the bare `blockedByLoaded` flag instead of pairing it with GitHub's own count -- which is exactly what the first version of this file did. `enrichOpenIssueRelationships` only reads blockers when the dependency summary is above zero or the issue is `agent-ready`/`priority:now`, so an ordinary unblocked issue carries `blockedByLoaded: false` too. Under the mutation the published map reports every unblocked issue as a hole in the data, burying the issues whose blockers really are unknown. The gap is not hypothetical: the mutation is the bug this file shipped in its first draft, and the named test is what caught it.",
+  "tests": [
+    "tools/issues/snapshot.test.ts"
+  ],
+  "killedBy": [
+    "buildSnapshot counts each way the graph is incomplete, against the issue population"
+  ]
+}

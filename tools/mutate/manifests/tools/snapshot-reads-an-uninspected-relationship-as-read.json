@@ -1,0 +1,14 @@
+{
+  "id": "snapshot-reads-an-uninspected-relationship-as-read",
+  "file": "tools/issues/snapshot.mjs",
+  "find": "    blockedByLoaded: relationships.blockersLoaded === true,",
+  "replace": "    blockedByLoaded: true,",
+  "expect": "killed",
+  "why": "Claims every blocked-by list was read. The `reconcile` path marks each issue it did not inspect `loaded: false`/`blockersLoaded: false` while the list payload still says the issue has blockers, so under the mutation an issue known to be blocked is published with an empty, authoritative-looking blocker list -- the most damaging thing a dependency map can get wrong, because it presents blocked work as ready to start.",
+  "tests": [
+    "tools/issues/snapshot.test.ts"
+  ],
+  "killedBy": [
+    "snapshotIssue reports an unread relationship as unknown rather than as empty"
+  ]
+}
