@@ -1,0 +1,14 @@
+{
+  "id": "capture-lets-the-platform-hint-glyphs",
+  "file": "tools/screens/capture.mjs",
+  "find": "      '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox',\n      '--font-render-hinting=none',",
+  "replace": "      '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox',",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/capture.test.ts"
+  ],
+  "killedBy": [
+    "capture.mjs: the seams no vitest run can execute (issue #841) asks Chromium not to hint, which is what makes a baseline portable between platforms"
+  ],
+  "why": "Hands every text-sized box back to the platform's rasteriser. Linux hints glyph advances through FreeType and macOS does not, so the same bundled face measures differently on each -- bundling the typeface (#864) fixed WHICH face is used, not how it is rasterised. Measured: the gate's first cross-platform run disagreed on 161 values, 106 by 1-2px, with every failing state's evidence screenshot already rendering in Plex. The cruel part is that the machine dropping this line would never see it fail: the flag is a no-op on macOS, so a local check stays green while the required Linux check goes red."
+}

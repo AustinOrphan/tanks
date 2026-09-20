@@ -31,11 +31,31 @@ const MIME = {
  */
 export const serve = (/** @type {string} */ dist) => serveStatic(dist, MIME);
 
-/** Chromium with software GL, the configuration every screen capture has used. */
+/**
+ * Chromium with software GL, the configuration every screen capture has used.
+ *
+ * `--font-render-hinting=none` is the cross-PLATFORM half, and it is why a baseline captured
+ * on one operating system can be checked on another. Bundling the typeface (#864) removed the
+ * difference in which FACE was used; it does not touch how that face is RASTERISED. On Linux
+ * FreeType hints glyphs by default, which rounds advance widths to the pixel grid; macOS does
+ * not hint at all. Same font file, same string, different advances -- so text-sized boxes
+ * disagree by a pixel or two, and a shrink-to-fit container or a line that wraps amplifies
+ * that into the larger differences.
+ *
+ * MEASURED: the gate's first cross-platform run disagreed on 161 values, 106 of them by 1-2px,
+ * with every failing state's evidence screenshot already rendering in Plex -- the signature of
+ * a rasteriser difference rather than a font-selection one. The flag is a NO-OP on macOS,
+ * verified by capturing with `none`, `full` and the default and getting byte-identical boxes,
+ * which is exactly why it is safe: it asks Linux to stop hinting rather than asking macOS to
+ * start, so the committed baselines do not move on the machine that wrote them.
+ */
 export async function launchBrowser() {
   const chromium = await loadChromium();
   return chromium.launch({
-    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'],
+    args: [
+      '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox',
+      '--font-render-hinting=none',
+    ],
   });
 }
 
@@ -154,6 +174,27 @@ export async function captureState(browser, base, state, { width, height, dpr, t
         requestAnimationFrame(() => requestAnimationFrame(() => done(undefined)));
         setTimeout(() => done(undefined), 500);
       }));
+    }
+
+    // Fonts BEFORE measurement (issue #861). The bundled faces are `font-display: block`, so
+    // during the block period layout uses the FALLBACK's metrics -- `system-ui`, the
+    // platform-dependent thing #864 bundled a typeface to escape. Nothing waited, so whether
+    // a state was measured before or after its face arrived was a race.
+    //
+    // HONESTY about what this did and did not explain: the first cross-platform run of this
+    // gate disagreed on 161 values, and this was the first suspect. It is NOT the cause --
+    // the evidence screenshots from that run show every failing state already rendering in
+    // Plex, so the faces had loaded. The race is real and worth closing anyway; it is simply
+    // not what those 161 values were. See the hinting flag in `launchBrowser` for that.
+    //
+    // Bounded, and non-fatal on timeout: scripting-off pages have no `document.fonts` worth
+    // waiting on, and a face that never loads should still photograph rather than hang.
+    if (state.javascript !== 'off') {
+      await page.evaluate(() => {
+        const fonts = document.fonts;
+        if (!fonts || typeof fonts.ready?.then !== 'function') return undefined;
+        return Promise.race([fonts.ready, new Promise((done) => setTimeout(done, 5000))]);
+      }).catch(() => {});
     }
 
     const measurements = await measure(page, state.measure);

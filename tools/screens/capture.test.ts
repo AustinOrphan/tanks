@@ -37,6 +37,20 @@ describe('capture.mjs: the seams no vitest run can execute (issue #841)', () => 
     expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
   });
 
+  it('asks Chromium not to hint, which is what makes a baseline portable between platforms', () => {
+    // STRUCTURAL, for a flag whose effect only exists on another operating system. Linux hints
+    // glyph advances through FreeType and macOS does not, so the same bundled face measures
+    // differently on each -- the residue the typeface bundling could not reach, because it
+    // changes the RASTERISER rather than the font. Dropping this line turns every text-sized
+    // box back into a per-platform number, and the machine that captured the baseline would
+    // never notice: the flag is a no-op where it runs.
+    const src = readFileSync(new URL('./capture.mjs', import.meta.url), 'utf8');
+    expect(src, 'the hinting flag is gone').toMatch(/--font-render-hinting=none/);
+    // Inside launchBrowser's args, not merely mentioned in a comment somewhere.
+    const launch = /export async function launchBrowser\(\)[\s\S]*?\n}/.exec(src)?.[0] ?? '';
+    expect(launch, 'the flag is not in the launch arguments').toMatch(/--font-render-hinting=none/);
+  });
+
   it('holds the module AND commits the navigation, which are one mechanism in two halves', () => {
     // A STRUCTURAL guard, and it says so. What it protects happens only in a real browser:
     // `boot: 'holding'` stalls the module request so `#boot-loading` survives to be
