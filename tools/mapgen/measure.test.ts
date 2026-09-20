@@ -339,13 +339,21 @@ describe('mapgen quality measures: the gap taxonomy (issue #822)', () => {
     // these are strictly nested fractions of one denominator. Asserted rather than assumed:
     // if any rung were ever built against a different wall set or a different denominator,
     // the nesting is the first thing that breaks and the only thing that shows it.
+    //
+    // STRICTLY ordered, not `<=`, and the difference is the whole pin. A first draft used
+    // `toBeLessThanOrEqual`, under which collapsing rung 3 onto rung 2 -- measuring the
+    // "comfortable corridor" with the minimum corridor's body -- SURVIVES, because equal
+    // satisfies it. Every shipped board separates the three rungs by a wide margin
+    // (arena-01: 0.945 / 0.718 / 0.522), so strict costs nothing and pins which rung each
+    // field is built from.
+    //
     // Population: all 8 shipped boards at N=2.
     for (const def of ARENA_DEFS) {
       const m = measureBoard(def, 2, def.id);
-      expect(m.roomFraction, `${def.id} room <= wide`).toBeLessThanOrEqual(m.wideCorridorFraction);
-      expect(m.wideCorridorFraction, `${def.id} wide <= min`).toBeLessThanOrEqual(m.minCorridorFraction);
+      expect(m.roomFraction, `${def.id} room < wide`).toBeLessThan(m.wideCorridorFraction);
+      expect(m.wideCorridorFraction, `${def.id} wide < min`).toBeLessThan(m.minCorridorFraction);
       expect(m.minCorridorFraction, `${def.id} min <= 1`).toBeLessThanOrEqual(1);
-      expect(m.roomFraction, `${def.id} room >= 0`).toBeGreaterThanOrEqual(0);
+      expect(m.roomFraction, `${def.id} room > 0`).toBeGreaterThan(0);
     }
   });
 
