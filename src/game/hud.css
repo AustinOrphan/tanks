@@ -1,3 +1,56 @@
+/* ---- Bundled typeface (issue #326's gate, decided 2026-09-19) --------------------
+ *
+ * The HUD used to ask for `system-ui` and `ui-monospace`, which resolve to a different
+ * face on every platform -- San Francisco here, DejaVu or Liberation on the Ubuntu CI
+ * runner. That is not only a look-and-feel question: text METRICS differ with the face, so
+ * the box of every text-bearing element moves, and the screen gate's first real CI run
+ * disagreed on 38 of 42 states for exactly that reason. 154 of the 154 differences were
+ * box geometry; the watched style properties held.
+ *
+ * Bundling removes the variable. IBM Plex Sans and Plex Mono, both SIL OFL and vendored
+ * beside this file with their licence, chosen together so the monospace half -- six
+ * declarations on the developer panes, whose screens are in the checked subset -- closes
+ * with the same decision.
+ *
+ * VENDORED, NOT UNDER `public/`, and the difference is load-bearing. Files in `public/`
+ * are copied verbatim and are opaque to the bundler, so they need the manual
+ * `import.meta.env.BASE_URL` wrapper `audio/manifest.ts` documents -- and the portability
+ * check's asset regex covers `audio|assets`, not a new `fonts` directory, so a wrong path
+ * there would fail silently under the Pages sub-path. Referenced from CSS, Vite hashes
+ * each file and rewrites the URL relative to `base: './'`, which is the behaviour that
+ * already makes every other bundled asset subpath-portable.
+ *
+ * `font-display: block` rather than `swap`: a swap repaints the whole HUD in a fallback
+ * face and then again in Plex, which is a layout shift on the one surface whose layout
+ * this change exists to pin. These are 14-44 KB local files, so the block period is
+ * short and no glyph is ever painted in the wrong metrics.
+ */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  /* One variable file for the whole weight axis. Two static weights would leave every
+   * other weight to synthesis, which is per-engine and would reintroduce the variance. */
+  src: url('./fonts/ibm-plex-sans-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('./fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  /* Plex Mono ships no variable build, so the two weights the developer panes actually
+   * use are declared by hand rather than left to synthesis. */
+  src: url('./fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
 /* ---- Design tokens (issue #321) -------------------------------------------------
  *
  * One place for the values the HUD repeats, named for the ROLE they play rather than
@@ -104,10 +157,21 @@
    * narrow-viewport blocks retune them per breakpoint and a `:root` value could not. */
   --hud-safe-inset: 14px;
 
-  /* Type. */
-  --hud-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --hud-weight-normal: 700;
-  --hud-weight-strong: 800;
+  /* Type. The fallbacks stay behind the bundled faces: if a woff2 ever fails to load the
+   * HUD is still readable, it simply stops being metric-identical across platforms. */
+  --hud-font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Tokenised by issue #326's font change. This was six identical literals before, which
+   * is exactly the repeated ROLE the token rule exists for -- and a swap that reached only
+   * the sans would have left every developer pane on a platform-dependent face. */
+  --hud-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* RETUNED for Plex's axis, which stops at 700 (owner decision, 2026-09-19). The old
+   * scale asked for 700 as its NORMAL, 800 as strong and 900 for the title -- above the
+   * axis, so the browser would clamp or synthesise, per engine, which is the variance
+   * this whole change removes. Shifted down rather than compressed at the top: clamping
+   * everything to 700 would have made `strong` equal to `normal` and left a token that
+   * expresses no difference. With a real text face bundled, 500 reads as body weight. */
+  --hud-weight-normal: 500;
+  --hud-weight-strong: 700;
 
   /* The primary action's drop shadow, which the slab and its pressed state both draw.
    * The green and its text colour beside it stay literals: after the extraction below
@@ -1218,7 +1282,8 @@
 .hud-title {
   margin: 0;
   font-size: 56px;
-  font-weight: 900;
+  /* 700, not 900: Plex's axis ends at 700 and a heavier request would be synthesised. */
+  font-weight: 700;
   letter-spacing: 2px;
   text-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
 }
@@ -1799,7 +1864,7 @@
 .hud-devcfg-copyfield {
   width: 100%;
   max-width: 60rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--hud-font-mono);
   font-size: 0.75em;
   color: var(--hud-text);
   background: var(--hud-scrim-panel);
@@ -1823,7 +1888,7 @@
   margin: 0;
   max-width: 60rem;
   overflow-wrap: anywhere;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--hud-font-mono);
   font-size: 0.75em;
   opacity: 0.8;
 }
@@ -2033,7 +2098,7 @@
 }
 
 .hud-gallery-link {
-  font-family: ui-monospace, monospace;
+  font-family: var(--hud-font-mono);
   resize: none;
 }
 
@@ -2048,7 +2113,7 @@
 .hud-gallery-command {
   flex: 1;
   min-width: 0;
-  font-family: ui-monospace, monospace;
+  font-family: var(--hud-font-mono);
   resize: none;
 }
 
@@ -2205,7 +2270,7 @@
 .hud-selftest-report {
   width: 100%;
   max-width: 52ch;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--hud-font-mono);
   font-size: 0.75em;
   color: var(--hud-text);
   background: var(--hud-scrim-panel);
@@ -2238,7 +2303,7 @@
 .hud-diag-out {
   width: 100%;
   max-width: 52ch;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--hud-font-mono);
   font-size: 0.75em;
   color: var(--hud-text);
   background: var(--hud-scrim-panel);

@@ -138,7 +138,15 @@ export interface BootDeps {
 const PAGE_CSS =
   'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
   'gap:1rem;height:100%;padding:2rem;box-sizing:border-box;color:#d8dde6;' +
-  'font:16px/1.6 system-ui,sans-serif;text-align:center';
+  // 'IBM Plex Sans' FIRST, ahead of the same fallback the HUD keeps. These screens replace
+  // the page before the HUD exists, but the bundle has already run by the time `boot()`
+  // shows one, so hud.css's @font-face is declared and the face is available.
+  //
+  // Not cosmetic: the screen gate captures all three of these states, and text metrics are
+  // what made 38 of 42 baselines disagree between macOS and the CI runner. Left on
+  // `system-ui` these three would keep disagreeing after every other screen was fixed --
+  // measured, they were three of the four pre-HUD states that failed that run.
+  "font:16px/1.6 'IBM Plex Sans',system-ui,sans-serif;text-align:center";
 const TITLE_CSS = 'margin:0;font-size:1.25rem;font-weight:600;color:#f0f3f8';
 const DETAIL_CSS = 'margin:0;max-width:34rem';
 const ACTION_CSS =
