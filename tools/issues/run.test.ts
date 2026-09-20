@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -907,5 +907,93 @@ describe('issue-graph snapshot export', () => {
       write: () => undefined,
       read: () => '{"fresh":true}\n',
     })).not.toThrow();
+  });
+});
+
+describe('frontier report', () => {
+  const snapshot = {
+    version: 1,
+    generatedAt: '2026-09-20T00:00:00.000Z',
+    source: { repo: 'owner/name', ref: null },
+    counts: {},
+    cycles: [],
+    issues: [
+      {
+        number: 1, title: 'ready', url: '', state: 'open', labels: ['priority:now', 'size:s'],
+        milestone: 'PP1', assignees: 0, parent: null, parentSource: 'unknown',
+        children: [], childrenLoaded: true, subIssueProgress: { total: 0, completed: 0 },
+        blockedBy: [], blockedByLoaded: true, declaredBlockedBy: 0, declaredBlocking: 1,
+      },
+      {
+        number: 2, title: 'blocked', url: '', state: 'open', labels: ['human-required'],
+        milestone: 'PP1', assignees: 0, parent: null, parentSource: 'unknown',
+        children: [], childrenLoaded: true, subIssueProgress: { total: 0, completed: 0 },
+        blockedBy: [{ number: 1, state: 'open' }], blockedByLoaded: true,
+        declaredBlockedBy: 1, declaredBlocking: 0,
+      },
+    ],
+  };
+
+  const runFrontier = (argv: string[], file: string) => {
+    const reports: string[] = [];
+    return main({
+      argv: [...argv, '--in', file],
+      env: {},
+      // THE CONTROL FOR THE WHOLE MODE: reading a snapshot must touch no network at all,
+      // which is what makes it #437's tokenless consumer. A fetch that throws turns any
+      // stray request into a failure instead of a slow test.
+      fetchImpl: (() => { throw new Error('the frontier must not reach the network with --in'); }) as never,
+      log: (report: string) => reports.push(report),
+    }).then((code) => ({ code, reports }));
+  };
+
+  it('reads a snapshot file and reaches no network at all', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tanks-frontier-'));
+    try {
+      const file = join(dir, 'graph.json');
+      writeFileSync(file, JSON.stringify(snapshot));
+      const { code, reports } = await runFrontier(['frontier', '--repo', 'owner/name'], file);
+      expect(code).toBe(0);
+      const text = reports.join('\n');
+      expect(text).toContain('**1 ready / 1 blocked / 0 unknown**, of 2 open issues in scope');
+      expect(text).toContain('- #1 [now/s] ready');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('filters by milestone and excluded labels from the command line', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tanks-frontier-'));
+    try {
+      const file = join(dir, 'graph.json');
+      writeFileSync(file, JSON.stringify(snapshot));
+      const { reports } = await runFrontier(
+        ['frontier', '--repo', 'owner/name', '--milestone', 'PP1', '--exclude-labels', 'human-required'],
+        file,
+      );
+      const text = reports.join('\n');
+      expect(text).toContain('milestone PP1');
+      // #2 carries human-required, so the population drops from 2 to 1 -- and the headline
+      // has to move with it, or the filter is cosmetic.
+      expect(text).toContain('of 1 open issues in scope');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('names frontier in the usage it refuses an unknown mode with', async () => {
+    await expect(main({ argv: ['frontierx'], env: {}, fetchImpl: (() => { throw new Error('no'); }) as never, log: () => {} }))
+      .rejects.toThrow(/snapshot\|frontier/);
+  });
+
+  it('refuses the flags that need a value', async () => {
+    const quiet = () => {};
+    const dead = (() => { throw new Error('no'); }) as never;
+    await expect(main({ argv: ['frontier', '--in'], env: {}, fetchImpl: dead, log: quiet }))
+      .rejects.toThrow(/--in requires a path/);
+    await expect(main({ argv: ['frontier', '--milestone'], env: {}, fetchImpl: dead, log: quiet }))
+      .rejects.toThrow(/--milestone requires a title/);
+    await expect(main({ argv: ['frontier', '--exclude-labels'], env: {}, fetchImpl: dead, log: quiet }))
+      .rejects.toThrow(/--exclude-labels requires a comma-separated list/);
   });
 });

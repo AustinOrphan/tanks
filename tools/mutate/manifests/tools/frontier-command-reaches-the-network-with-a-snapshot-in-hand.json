@@ -1,0 +1,14 @@
+{
+  "id": "frontier-command-reaches-the-network-with-a-snapshot-in-hand",
+  "file": "tools/issues/run.mjs",
+  "find": "    const snapshot = args.input === undefined",
+  "replace": "    const snapshot = true",
+  "expect": "killed",
+  "why": "Makes the `frontier` mode build a snapshot live even when `--in` handed it one, which quietly turns #437's tokenless consumer into a token'd producer. It is not a performance nit: an anonymous live build FAILS at this repository's size (73 open issues exhaust the 60-per-hour unauthenticated budget partway through enrichment), so the mutation converts a command that works with no credentials at all into one that errors for anyone without a token. The test injects a `fetchImpl` that throws, so any request at all fails the run.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "frontier report reads a snapshot file and reaches no network at all"
+  ]
+}

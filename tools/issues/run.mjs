@@ -12,6 +12,7 @@ import {
 } from './metadata.mjs';
 import { planQueueReconciliation, renderQueuePlan } from './queue.mjs';
 import { buildSnapshot, renderSnapshotSummary } from './snapshot.mjs';
+import { renderFrontier } from './frontier.mjs';
 
 const API_VERSION = '2022-11-28';
 
@@ -403,6 +404,10 @@ function parseArguments(argv) {
   let dryRun = false;
   let out;
   let ref;
+  let input;
+  let milestone;
+  /** @type {string[]} */
+  let excludeLabels = [];
 
   while (args.length > 0) {
     const flag = args.shift();
@@ -421,6 +426,22 @@ function parseArguments(argv) {
       if (!ref) throw new Error('--ref requires a commit-ish');
       continue;
     }
+    if (flag === '--in') {
+      input = args.shift();
+      if (!input) throw new Error('--in requires a path to a snapshot JSON');
+      continue;
+    }
+    if (flag === '--milestone') {
+      milestone = args.shift();
+      if (!milestone) throw new Error('--milestone requires a title');
+      continue;
+    }
+    if (flag === '--exclude-labels') {
+      const value = args.shift();
+      if (!value) throw new Error('--exclude-labels requires a comma-separated list');
+      excludeLabels = value.split(',').map((label) => label.trim()).filter(Boolean);
+      continue;
+    }
     if (flag === '--dry-run') {
       dryRun = true;
       continue;
@@ -428,7 +449,7 @@ function parseArguments(argv) {
     throw new Error(`unknown argument: ${flag}`);
   }
 
-  return { mode, repository, dryRun, out, ref };
+  return { mode, repository, dryRun, out, ref, input, milestone, excludeLabels };
 }
 
 /** Where `snapshot` writes when `--out` is absent. Untracked, like every other tool's output. */
@@ -483,9 +504,10 @@ export async function main({
   now = () => new Date().toISOString(),
 } = {}) {
   const args = parseArguments(argv);
-  if (!['audit', 'event', 'reconcile', 'snapshot'].includes(args.mode ?? '')) {
+  if (!['audit', 'event', 'reconcile', 'snapshot', 'frontier'].includes(args.mode ?? '')) {
     throw new Error(
-      'usage: node tools/issues/run.mjs <audit|event|reconcile|snapshot> [--repo owner/name] [--dry-run] [--out path] [--ref sha]',
+      'usage: node tools/issues/run.mjs <audit|event|reconcile|snapshot|frontier> [--repo owner/name] '
+      + '[--dry-run] [--out path] [--ref sha] [--in snapshot.json] [--milestone title] [--exclude-labels a,b]',
     );
   }
 
@@ -529,6 +551,27 @@ export async function main({
     // in diffs, and a single line would make every change look like a rewrite.
     writeFile(path, `${JSON.stringify(snapshot, null, 2)}\n`);
     const report = renderSnapshotSummary(snapshot, path);
+    log(report.trimEnd());
+    appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
+    return 0;
+  }
+
+  if (args.mode === 'frontier') {
+    // TWO SOURCES, and `--in` is the interesting one: it reads a snapshot someone else
+    // produced -- the artifact the scheduled export uploads, say -- and needs no token and
+    // no network at all. That is #437's tokenless consumer in its smallest possible form.
+    // Without `--in` it builds a snapshot live, which is the convenience path and carries
+    // the same rate-limit caveat the `snapshot` mode documents.
+    const snapshot = args.input === undefined
+      ? buildSnapshot(
+        await enrichOpenIssueRelationships(repository, await listOpenIssues(repository, request), request),
+        { repo: repository, ref: args.ref ?? env.GITHUB_SHA ?? null, generatedAt: now(), labelsOf: issueLabelNames },
+      )
+      : JSON.parse(readFileSync(args.input, 'utf8'));
+    const report = renderFrontier(snapshot, {
+      milestone: args.milestone ?? null,
+      excludeLabels: args.excludeLabels,
+    });
     log(report.trimEnd());
     appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
     return 0;
