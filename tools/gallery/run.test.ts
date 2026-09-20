@@ -13,8 +13,14 @@ import { describe, expect, it } from 'vitest';
 // MEASURED here, because this tool's `main()` is the cheapest to recover from: with the guard
 // removed, the import really does run it, and this suite then reports a clean FAILURE rather
 // than a hang -- the gallery finishes in about a second and a half, so the source assertion
-// below is what catches it. A longer tool holds the unit suite for as long as it runs instead.
-// The first draft of this comment claimed a hang for all five; one control disproved it.
+// below is what catches it.
+//
+// Two claims this comment made and lost. It first said an unguarded import would HANG, for all
+// five tools; this control disproved that. It then said a LONGER tool would hold the suite for
+// as long as it runs; issue #881's sixth tool, the audio renderer, disproved that too -- its
+// `main()` is async and nothing awaits it at module scope, so the import returns at once
+// whatever the tool would go on to do. The guard's value is that the tool does not RUN: no
+// vite, no Chromium, no output directory written while a unit suite is the thing in flight.
 import './run.mjs';
 
 describe('run.mjs: the seams no vitest run can execute', () => {
