@@ -87,21 +87,35 @@ function browserDrivers(): string[] {
   return found.sort();
 }
 
-/** Tools that navigate to the app, with how many install sites each one needs. */
-const GUARDED: Record<string, number> = {
-  'audio/render.mjs': 1,
-  'bench/runs.mjs': 1,
-  'gallery/run.mjs': 1,
-  'screens/capture.mjs': 1,
-  'screens/record.mjs': 1,
-  'uikit/forced-colors.mjs': 1,
-  'uikit/primitive-states.mjs': 1,
-  'visual/hit-sweep.mjs': 1,
-  'visual/roundtrip.mjs': 1,
-  // TWO, and that is the point of pinning a count rather than "contains the call": the
-  // clearance sweep builds its own context and the board sweep builds a bare page, and a
-  // guard on one of them advertises coverage of both.
-  'visual/verify.mjs': 2,
+/**
+ * Tools that navigate to the app, with the EXACT line each install site must be, leading
+ * spaces included.
+ *
+ * Pinning the whole line rather than "contains the call" is what makes the install
+ * unconditional. `if (process.env.WEDGED) await page.addInitScript(...)` and an indented
+ * block wrap both change the line, and a substring check accepts either -- which would let
+ * one machine photograph a page with an audio stack and another photograph a page without,
+ * the exact divergence these gates exist to catch. `tools/screens/capture.test.ts` pins its
+ * indentation for the same reason, and records that the guard DID once ship wrapped in an
+ * environment check before the indent was pinned.
+ */
+const GUARDED: Record<string, string[]> = {
+  'audio/render.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
+  'bench/runs.mjs': ['  await context.addInitScript(audioContextOverrideSource());'],
+  'gallery/run.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
+  'screens/capture.mjs': ['    await page.addInitScript(audioContextOverrideSource());'],
+  'screens/record.mjs': ['    await context.addInitScript(audioContextOverrideSource());'],
+  'uikit/forced-colors.mjs': ['    await page.addInitScript(audioContextOverrideSource());'],
+  'uikit/primitive-states.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
+  'visual/hit-sweep.mjs': ['  await context.addInitScript(audioContextOverrideSource());'],
+  'visual/roundtrip.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
+  // TWO, and that is the point of listing sites rather than counting calls: the clearance
+  // sweep builds its own context and the board sweep builds a bare page, and a guard on one
+  // of them advertises coverage of both.
+  'visual/verify.mjs': [
+    '    await context.addInitScript(audioContextOverrideSource());',
+    '        await page.addInitScript(audioContextOverrideSource());',
+  ],
 };
 
 /** Tools that never navigate to the app, each carrying its reason in the source. */
@@ -150,10 +164,20 @@ describe('the AudioContext override reaches every tool that boots the app', () =
   });
 
   it.each(Object.entries(GUARDED))(
-    '%s installs the override before every navigation',
-    (file, installs) => {
+    '%s installs the override, unconditionally, before every navigation',
+    (file, sites) => {
       const src = readFileSync(join(TOOLS, file), 'utf8');
-      expect(src.split(INSTALL).length - 1, `${file}: wrong number of install sites`).toBe(installs);
+      const lines = src.split('\n');
+      for (const site of sites) {
+        expect(
+          lines.filter((line) => line === site).length,
+          `${file}: expected exactly one line \`${site.trim()}\` at ${site.length - site.trimStart().length} spaces`,
+        ).toBe(1);
+      }
+      // Every occurrence has to BE one of the pinned lines, so a conditional or re-indented
+      // copy elsewhere in the file cannot make up the count.
+      expect(src.split(INSTALL).length - 1, `${file}: an install site that is not one of the pinned lines`)
+        .toBe(sites.length);
       expect(unguardedNavigations(src), `${file}: navigates before the override is installed`).toEqual([]);
     },
   );
