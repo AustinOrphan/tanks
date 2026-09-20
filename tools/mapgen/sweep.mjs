@@ -4,6 +4,7 @@ import { loadArena } from '../../src/sim/arena';
 import { measureBoard } from './measure';
 import { RULESETS } from './rulesets.mjs';
 import { writeBoardPng } from './render.mjs';
+import { expressiveRange, renderExpressiveRange } from './expressive-range.mjs';
 
 /**
  * Generate boards from every ruleset over a seed sample, filter them through the SHIPPED
@@ -26,6 +27,12 @@ import { writeBoardPng } from './render.mjs';
  *   npx vite-node tools/mapgen/sweep.mjs                 # table over the default seeds
  *   npx vite-node tools/mapgen/sweep.mjs --seeds 40      # a wider sample
  *   npx vite-node tools/mapgen/sweep.mjs --png DIR       # also write one board per ruleset
+ *   npx vite-node tools/mapgen/sweep.mjs --axes a,b      # pick the expressive-range axes
+ *
+ * THE TABLE IS MEANS, AND A MEAN HIDES A GENERATOR'S WHOLE PROBLEM: a ruleset that emits one
+ * board twenty times and a ruleset that emits twenty different boards print the same row.
+ * The expressive-range block after the table is the fix (issue #822) -- per-axis spread, and
+ * how much of a fixed two-axis grid each ruleset's sample actually reaches.
  */
 
 const arg = (flag, fallback) => {
@@ -131,3 +138,22 @@ for (const r of rows) {
   const why = Object.entries(r.refusals).map(([k, v]) => `${k} ${v}`).join(', ');
   if (why) console.log(`  ${r.ruleset} N=${r.playerCount} refused: ${why}`);
 }
+
+// ---- expressive range (issue #822) ----
+// The grid is FIXED, from `SHIPPED_RANGES`, so two rulesets are scored against the same
+// space. A grid scaled to each sample would be covered 100% by every ruleset including one
+// that emits the same board twenty times.
+const [AX, AY] = arg('--axes', 'wallFraction,openSightFraction').split(',');
+console.log();
+console.log(`EXPRESSIVE RANGE over a fixed ${AX} x ${AY} grid -- what the means above hide:`);
+for (const r of rows) {
+  if (r.m.length === 0) continue;
+  const range = expressiveRange(r.m, { x: AX, y: AY, bins: 8 });
+  for (const line of renderExpressiveRange(range, `${r.ruleset} N=${r.playerCount}`)) console.log(line);
+}
+console.log();
+console.log('coverage = occupied cells / 64. entropy = how evenly the sample fills what it');
+console.log('reaches, 0 = one cell, 1 = even over the whole grid. Read the axis correlation');
+console.log('FIRST: on the shipped boards every candidate axis pair runs |r| 0.78-0.95, so a');
+console.log('two-axis grid over them is close to one-dimensional and coverage is bounded by a');
+console.log('diagonal band rather than by the ruleset. See expressive-range.mjs.');
