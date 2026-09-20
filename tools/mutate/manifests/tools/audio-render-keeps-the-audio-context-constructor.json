@@ -1,0 +1,14 @@
+{
+  "id": "audio-render-keeps-the-audio-context-constructor",
+  "file": "tools/audio/render.mjs",
+  "find": "    await page.addInitScript(audioContextOverrideSource());\n    page.on('pageerror', (e) => console.error('page error:', String(e)));",
+  "replace": "    page.on('pageerror', (e) => console.error('page error:', String(e)));",
+  "expect": "killed",
+  "tests": [
+    "tools/audio/render.test.ts"
+  ],
+  "killedBy": [
+    "render.mjs: the seams no vitest run can execute installs the AudioContext override before the synth navigation"
+  ],
+  "why": "Leaves the two real `AudioContext`s the app builds at boot -- Howler's, when `createAudioEngine` first touches `Howler.volume()`, and `engine.ts`'s `ensureCtx`. On a host whose audio service never connects each constructor returns only after an internal 20-second timeout, so the page blocks for ~40 s before `load` fires and `npm run audio` wedges. This tool renders through `OfflineAudioContext`, which the override leaves alone, so removing the override costs the stall and buys nothing: measured at 0 of 61,739 and 0 of 480,690 samples changed across the override."
+}
