@@ -76,7 +76,11 @@ describe('simulationFromSamples (issue #815)', () => {
 describe('recordFlow releases what it opened (issue #815)', () => {
   function fakes(failAt: 'launch' | 'goto' | 'never') {
     const server = { address: () => ({ port: 4321 }), close: vi.fn((cb: () => void) => cb()) };
-    const context = { newPage: vi.fn(async () => page), close: vi.fn(async () => {}) };
+    const context = {
+      addInitScript: vi.fn(async () => {}),
+      newPage: vi.fn(async () => page),
+      close: vi.fn(async () => {}),
+    };
     const page = {
       on: vi.fn(),
       goto: vi.fn(async () => { if (failAt === 'goto') throw new Error('net::ERR_CONNECTION_REFUSED'); }),
@@ -85,7 +89,7 @@ describe('recordFlow releases what it opened (issue #815)', () => {
     };
     const browser = { newContext: vi.fn(async () => context), close: vi.fn(async () => {}), version: () => '0.0.0' };
     const chromium = { launch: vi.fn(async () => { if (failAt === 'launch') throw new Error('no chromium'); return browser; }) };
-    return { server, browser, context, chromium };
+    return { server, browser, context, page, chromium };
   }
 
   async function options() {
@@ -99,6 +103,21 @@ describe('recordFlow releases what it opened (issue #815)', () => {
     await expect(recordFlow(await options(), { serve: async () => f.server, loadChromium: async () => f.chromium })).rejects.toThrow(/no chromium/);
     expect(f.server.close).toHaveBeenCalledOnce();
     expect(f.browser.close).not.toHaveBeenCalled();
+  });
+
+  it('installs the AudioContext override before it navigates (issue #877)', async () => {
+    // The BEHAVIOURAL half of the source-text assertion below. A fake seam that does not
+    // carry what production calls on it gives the call zero coverage -- which is how this
+    // suite went red when the override arrived, rather than confirming it.
+    const f = fakes('goto');
+    await expect(
+      recordFlow(await options(), { serve: async () => f.server, loadChromium: async () => f.chromium }),
+    ).rejects.toThrow(/ERR_CONNECTION_REFUSED/);
+    expect(f.context.addInitScript, 'the override was never installed').toHaveBeenCalledOnce();
+    expect(
+      f.context.addInitScript.mock.invocationCallOrder[0],
+      'the page navigated before the override was installed',
+    ).toBeLessThan(f.page.goto.mock.invocationCallOrder[0]);
   });
 
   it('closes the context, the browser and the server when the page cannot be reached', async () => {
@@ -141,5 +160,31 @@ describe('recordFlow: what a finished round reports (issue #720)', () => {
     // ...and what it reads is the panel's own heading, not a guess from the surface class.
     expect(source).toMatch(/const OUTCOME_IN = `\(\(\) => \{\n\s+const title = document\.querySelector\('\.hud-title'\);/);
     expect(source).toMatch(/endedWith: recorded\.outcome,/);
+  });
+});
+
+/**
+ * Issue #877. Screen CAPTURE got this in issue #875 and screen RECORDING did not, which is the pair that made issue #860 look like an intermittent local fault.
+ *
+ * A source-text assertion, like `tools/screens/capture.test.ts`'s, because what it guards
+ * happens only in a real browser. It lives HERE rather than in
+ * `tools/shared/audio-context.test.ts`'s sweep because this file already imports the module:
+ * the mutation harness measures an entry through Vitest's own dependency graph, and a test
+ * that only reads a file as text relates to nothing.
+ */
+describe('record.mjs: removing the AudioContext constructor before boot', () => {
+  it('installs the override on the recording context, unconditionally, before it navigates', () => {
+    const src = readFileSync(new URL('./record.mjs', import.meta.url), 'utf8');
+    // Exactly four spaces: the body's own indentation. `\s*` would accept the call nested
+    // inside an `if`, which is the one shape this exists to reject -- an override only some
+    // machines installed would let two machines photograph different pages, which is
+    // precisely the divergence these gates exist to catch.
+    const call = /^ {4}await context\.addInitScript\(audioContextOverrideSource\(\)\);$/m;
+    expect(src, 'the override is gone, conditional, or no longer on its own line').toMatch(call);
+    const at = src.search(call);
+    const firstGoto = src.indexOf('.goto(');
+    expect(at, 'the override call was not found').toBeGreaterThan(-1);
+    expect(firstGoto, 'no navigation was found').toBeGreaterThan(-1);
+    expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
   });
 });

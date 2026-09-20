@@ -31,6 +31,7 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from './static-server.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
@@ -275,6 +276,8 @@ async function main() {
   const base = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+  await page.addInitScript(audioContextOverrideSource());
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
 

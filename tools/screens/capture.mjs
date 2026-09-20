@@ -11,7 +11,8 @@
  */
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from '../visual/static-server.mjs';
-import { runStep, webglOverrideSource, audioContextOverrideSource, applyEntryMode } from './steps.mjs';
+import { runStep, webglOverrideSource, applyEntryMode } from './steps.mjs';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 
 const MIME = {

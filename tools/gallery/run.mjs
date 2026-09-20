@@ -44,6 +44,7 @@ import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync
 import { execFileSync } from 'node:child_process';
 import { parseArgs, safeLabel, gridShape, galleryQuery, GALLERY_ARMS } from './args.mjs';
 import { enterGameplay, GAME_CANVAS } from './enter-gameplay.mjs';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 
 const PORT = 5599;
@@ -141,6 +142,8 @@ async function run(browser) {
     deviceScaleFactor: args.dpr,
   });
   page.setDefaultTimeout(30000);
+  // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+  await page.addInitScript(audioContextOverrideSource());
   const errors = [];
   let producerReport = null;
   page.on('pageerror', (e) => errors.push(String(e)));

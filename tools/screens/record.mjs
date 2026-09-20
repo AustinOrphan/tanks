@@ -29,6 +29,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runProcess } from '../capture/process.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 import { serve as serveDist } from './capture.mjs';
 import {
@@ -418,6 +419,8 @@ export async function recordFlow(options, deps = {}) {
       deviceScaleFactor: viewport.devicePixelRatio,
       reducedMotion: 'no-preference',
     });
+    // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+    await context.addInitScript(audioContextOverrideSource());
     const page = await context.newPage();
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(String(error?.message ?? error)));

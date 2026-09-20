@@ -71,6 +71,14 @@ try {
   browser = await chromium.launch({
     args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'],
   });
+  // NO AudioContext override here, deliberately (issue #877). This page is
+  // `tools/gl/harness.html`, not the app: nothing on it runs the boot path, so neither of
+  // the two constructions that made the app wedge (Howler's, and `engine.ts`'s `ensureCtx`)
+  // happens. `harness.ts` DOES import `src/audio/synth`, `music` and `music-data` -- the
+  // table in #877 has that wrong -- but every context it builds is an
+  // `OfflineAudioContext` (harness.ts's `renderOffline`), which the override leaves alone
+  // and which never touches the audio device. Installing it here would therefore change
+  // nothing except what a reader has to verify.
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(String(e)));

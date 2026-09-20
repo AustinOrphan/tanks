@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { SCREEN_STATE_IDS, SCREEN_STATES, STEP_KINDS } from '../screens/states.mjs';
@@ -102,5 +104,31 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
   it('seeds recorded stats for the armed reset, without which Reset stats is disabled', () => {
     const armed = HIT_EXTRA_STATES.find((s) => s.id === 'extra.settings.reset-armed');
     expect(Object.keys(armed?.storage ?? {})).toContain('tanks.stats.v1');
+  });
+});
+
+/**
+ * Issue #877. This driver navigates for ITSELF, separately from `verify.mjs`, so a guard added to its caller does not reach it -- the shape of bug issues #781 and #844 both hit in this file.
+ *
+ * A source-text assertion, like `tools/screens/capture.test.ts`'s, because what it guards
+ * happens only in a real browser. It lives HERE rather than in
+ * `tools/shared/audio-context.test.ts`'s sweep because this file already imports the module:
+ * the mutation harness measures an entry through Vitest's own dependency graph, and a test
+ * that only reads a file as text relates to nothing.
+ */
+describe('hit-sweep.mjs: removing the AudioContext constructor before boot', () => {
+  it('installs the override on the hit-target context, unconditionally, before it navigates', () => {
+    const src = readFileSync(new URL('./hit-sweep.mjs', import.meta.url), 'utf8');
+    // Exactly two spaces: the body's own indentation. `\s*` would accept the call nested
+    // inside an `if`, which is the one shape this exists to reject -- an override only some
+    // machines installed would let two machines photograph different pages, which is
+    // precisely the divergence these gates exist to catch.
+    const call = /^ {2}await context\.addInitScript\(audioContextOverrideSource\(\)\);$/m;
+    expect(src, 'the override is gone, conditional, or no longer on its own line').toMatch(call);
+    const at = src.search(call);
+    const firstGoto = src.indexOf('.goto(');
+    expect(at, 'the override call was not found').toBeGreaterThan(-1);
+    expect(firstGoto, 'no navigation was found').toBeGreaterThan(-1);
+    expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
   });
 });

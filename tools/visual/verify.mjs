@@ -23,6 +23,7 @@ import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 import { clearanceFailures, insetLabel } from './clearance.mjs';
 import { hitTargetFailures } from './hit-targets.mjs';
 import { HIT_VIEWPORTS, hitSweepStates, measureHitTargets } from './hit-sweep.mjs';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from './static-server.mjs';
 
@@ -152,6 +153,8 @@ async function measureClearance(browser, base, vp, inset) {
       viewport: { width: vp.width, height: vp.height },
       deviceScaleFactor: vp.dpr,
     });
+    // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+    await context.addInitScript(audioContextOverrideSource());
     try {
       const page = await context.newPage();
       const cdp = await context.newCDPSession(page);
@@ -681,6 +684,8 @@ async function main() {
       for (let attempt = 1; attempt <= 2; attempt++) {
         if (page) await page.close();
         page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+        // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+        await page.addInitScript(audioContextOverrideSource());
         errors = [];
         page.on('pageerror', (e) => errors.push(String(e)));
         await page.goto(base, { waitUntil: 'load' });
