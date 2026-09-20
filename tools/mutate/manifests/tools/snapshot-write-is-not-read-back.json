@@ -1,0 +1,14 @@
+{
+  "id": "snapshot-write-is-not-read-back",
+  "file": "tools/issues/run.mjs",
+  "find": "  if (written !== body) {",
+  "replace": "  if (written !== body && false) {",
+  "expect": "killed",
+  "why": "Neuters the read-back in `writeSnapshotFile`, leaving the write unverified. A zero exit code is not evidence that a file changed: a full disk, a path that resolved somewhere unexpected, or an injected writer that quietly does nothing all leave the run green while the consumer keeps reading an older snapshot -- and a dependency map is exactly the artefact nobody re-opens to check. The mutation keeps the comparison so the variable is still read, and only disables the throw, so it is the GUARD that is removed rather than the whole block.",
+  "tests": [
+    "tools/issues/run.test.ts"
+  ],
+  "killedBy": [
+    "issue-graph snapshot export fails loudly when the write did not take"
+  ]
+}

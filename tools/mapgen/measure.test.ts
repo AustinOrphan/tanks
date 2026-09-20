@@ -324,6 +324,122 @@ describe('mapgen quality measures: the duplicated lattice agrees with the shippe
   });
 });
 
+describe('mapgen quality measures: the dead-end budget (issue #822)', () => {
+  /**
+   * `deadEndAreaFraction` is "<= 1 of 8 directions clear" off the same probe
+   * `corridorAreaFraction` uses at "<= 2". A threshold one bucket narrower is exactly the
+   * kind of change that can be wrong in a way every summary number hides, so the controls
+   * below are a board where the answer is known by construction and a PAIR that differs
+   * only in arrangement.
+   */
+
+  /** The same 18 wall cells, twice: as a blind alley, and as bars that enclose nothing. */
+  const pocketBoard = (depth: number): Arena => {
+    const grid = openBoard(22, 18).grid.map((row) => [...row]);
+    for (let r = 3; r <= 3 + depth; r++) { grid[r][9] = '#'; grid[r][12] = '#'; }
+    for (let c = 9; c <= 12; c++) grid[3 + depth + 1][c] = '#';
+    return board(grid.map((row) => row.join('')));
+  };
+  const barsBoard = (depth: number): Arena => {
+    const grid = openBoard(22, 18).grid.map((row) => [...row]);
+    for (let r = 3; r <= 3 + depth; r++) { grid[r][5] = '#'; grid[r][16] = '#'; }
+    for (let c = 9; c <= 12; c++) grid[14][c] = '#';
+    return board(grid.map((row) => row.join('')));
+  };
+  const wallCells = (a: Arena) => a.grid.join('').split('').filter((ch) => ch === '#').length;
+
+  it('reads exactly zero on empty rectangles, so the board rim contributes nothing', () => {
+    // The rim DOES cost rays -- `openGroundFraction`'s own comment says an empty 22x18
+    // measures 0.68 rather than 1.0 for that reason -- and the first draft of this measure's
+    // doc comment assumed it would inflate the dead-end count too. It does not: a board
+    // corner keeps three clear directions, so it cannot reach "<= 1". Pinned at three sizes
+    // because a rim effect would shrink with board area rather than vanish.
+    for (const [cols, rows] of [[22, 18], [33, 27], [45, 33]] as const) {
+      const m = measureBoard(openBoard(cols, rows), 2, `empty-${cols}x${rows}`);
+      expect(m.deadEndAreaFraction, `${cols}x${rows}`).toBe(0);
+      expect(m.corridorAreaFraction, `${cols}x${rows}`).toBe(0);
+      // ...and this is where the rim actually lands, shrinking with size as a rim must.
+      expect(m.degreeProfile[3], `${cols}x${rows} rim`).toBeGreaterThan(0);
+    }
+    const small = measureBoard(openBoard(22, 18), 2, 'small');
+    const large = measureBoard(openBoard(45, 33), 2, 'large');
+    expect(large.degreeProfile[3]).toBeLessThan(small.degreeProfile[3]);
+  });
+
+  it('separates a pocket from bars of identical wall area, where corridorAreaFraction does not', () => {
+    // THE CONTROL THAT MATTERS. Both boards carry the same wall cells on the same 22x18
+    // rectangle; only the arrangement differs, so wall area cannot explain any gap.
+    const pocket = measureBoard(pocketBoard(6), 2, 'pocket');
+    const bars = measureBoard(barsBoard(6), 2, 'bars');
+    expect(wallCells(pocketBoard(6))).toBe(wallCells(barsBoard(6)));
+    expect(pocket.wallFraction).toBeCloseTo(bars.wallFraction, 10);
+
+    // The enclosing arrangement scores substantially higher.
+    expect(pocket.deadEndAreaFraction).toBeGreaterThan(bars.deadEndAreaFraction * 1.5);
+
+    // And the negative control for the whole measure: `corridorAreaFraction` does NOT make
+    // this distinction -- it moves the OTHER way and rates the harmless arrangement as more
+    // corridor-like. If `deadEndAreaFraction` were ever reduced to a copy of it, or to any
+    // monotone function of it, this assertion is what fails.
+    expect(bars.corridorAreaFraction).toBeGreaterThan(pocket.corridorAreaFraction);
+  });
+
+  it('counts pockets rather than their depth, which is a limit and not a defect', () => {
+    // Stated as an assertion so the limitation cannot quietly stop being true: the points
+    // ALONG an alley have two clear directions, in and out, so only its end scores. A rule
+    // that wants to bound alley length needs the articulation-point filter #822 describes,
+    // which this change does not implement.
+    const shallow = measureBoard(pocketBoard(2), 2, 'depth-2');
+    const deep = measureBoard(pocketBoard(10), 2, 'depth-10');
+    const shallowPoints = shallow.deadEndAreaFraction * shallow.probedPoints;
+    const deepPoints = deep.deadEndAreaFraction * deep.probedPoints;
+    // Five times the alley, within one probed point of the same absolute count.
+    expect(Math.abs(deepPoints - shallowPoints)).toBeLessThanOrEqual(1);
+    // ...while `corridorAreaFraction`, which DOES see the alley's length, nearly triples.
+    expect(deep.corridorAreaFraction).toBeGreaterThan(shallow.corridorAreaFraction * 2);
+  });
+
+  it('degreeProfile is a distribution whose thresholds reproduce all three fractions', () => {
+    // The three fractions are thresholds on this one histogram. Asserting the identity is
+    // what stops a future edit moving one threshold and leaving the others describing a
+    // different cut of the same probe. Swept over every shipped board at N=2.
+    for (const def of ARENA_DEFS) {
+      const m = measureBoard(def, 2, def.id);
+      const sum = m.degreeProfile.reduce((s, v) => s + v, 0);
+      expect(sum, `${def.id} sums to 1`).toBeCloseTo(1, 10);
+      expect(m.degreeProfile.length, `${def.id} has 9 buckets`).toBe(9);
+
+      const at = (lo: number, hi: number) =>
+        m.degreeProfile.slice(lo, hi + 1).reduce((s, v) => s + v, 0);
+      expect(at(0, 1), `${def.id} deadEnd`).toBeCloseTo(m.deadEndAreaFraction, 10);
+      expect(at(0, 2), `${def.id} corridor`).toBeCloseTo(m.corridorAreaFraction, 10);
+      expect(at(6, 8), `${def.id} open`).toBeCloseTo(m.openGroundFraction, 10);
+    }
+  });
+
+  it('ranks the versus-authored boards far above the campaign ones, which needs reading before it is used', () => {
+    // CALIBRATION, not a gate -- #822 is explicit that a quality measure which gates stops
+    // describing the board. Measured at N=2 over all 8 shipped boards:
+    //
+    //   arena-01 0.0000   arena-02 0.0000   arena-03 0.0042   arena-04 0.0009
+    //   arena-05 0.0000   vs-duel-01 0.0735 vs-tri-01 0.4020  vs-quad-01 0.0487
+    //
+    // The three boards authored FOR versus are the only ones above 0.005, and vs-tri-01 is
+    // two orders of magnitude above the genre budget (2.5%) this measure came from. That is
+    // reported, not interpreted: vs-tri-01 is the smallest shipped board at 27x17 and the
+    // probe reach is 1.5 tank diameters, so "densely furnished" and "full of pockets" are
+    // not yet distinguished at that size. What is asserted here is only the ORDERING, which
+    // is what a calibration band needs and what a wired measure must produce.
+    const at2 = Object.fromEntries(ARENA_DEFS.map((d) => [d.id, measureBoard(d, 2, d.id).deadEndAreaFraction]));
+    const campaign = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
+    const versus = ['vs-duel-01', 'vs-tri-01', 'vs-quad-01'];
+    const worstCampaign = Math.max(...campaign.map((id) => at2[id]));
+    const bestVersus = Math.min(...versus.map((id) => at2[id]));
+    expect(worstCampaign).toBeLessThan(0.01);
+    expect(bestVersus).toBeGreaterThan(worstCampaign * 5);
+  });
+});
+
 describe('mapgen quality measures: the gap taxonomy (issue #822)', () => {
   /** The same rectangle split by a solid wall, with a hole of `holeCells` in the middle. */
   const splitBoard = (holeCells: number): Arena => {

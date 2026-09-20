@@ -41,6 +41,7 @@
     "issues:maintain": "node tools/issues/run.mjs event",
     "issues:reconcile": "node tools/issues/run.mjs reconcile",
     "issues:relationships": "node tools/issues/migrate-relationships.mjs",
+    "issues:snapshot": "node tools/issues/run.mjs snapshot",
     "docs:check": "node tools/docs/check.mjs",
     "docs:index": "node tools/docs/index.mjs",
     "lint:css": "node tools/css-integrity/run.mjs",

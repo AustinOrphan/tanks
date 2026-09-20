@@ -1,0 +1,14 @@
+{
+  "id": "frontier-treats-an-unread-blocker-list-as-empty",
+  "file": "tools/issues/frontier.mjs",
+  "find": "  const unread = issue?.blockedByLoaded === false ? declared : Math.max(0, declared - seen);",
+  "replace": "  const unread = 0;",
+  "expect": "killed",
+  "why": "Drops the whole unread-blocker accounting, so an issue GitHub says is blocked but whose blocker list was never fetched reports as READY. This is the single most damaging thing the #437 dependency view could get wrong: it would put blocked work on the executable frontier and send a maintainer to start something that cannot move. The `reconcile` path really does produce these records -- it marks every issue it did not inspect `blockedByLoaded: false` while the list payload still carries a blocker count -- so this is a reachable state and not a defensive branch.",
+  "tests": [
+    "tools/issues/frontier.test.ts"
+  ],
+  "killedBy": [
+    "frontier: unknown is never ready refuses to call an issue ready when GitHub says it has blockers nobody read"
+  ]
+}

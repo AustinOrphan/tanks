@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-dead-end-budget-is-the-corridor-threshold",
+  "file": "tools/mapgen/measure.ts",
+  "find": "      if (open <= 1) deadEndLike++;",
+  "replace": "      if (open <= 2) deadEndLike++;",
+  "expect": "killed",
+  "why": "Widens the dead-end budget's threshold to `corridorAreaFraction`'s, making the new measure a duplicate of the blunt proxy issue #822 says it replaces. `corridorAreaFraction` collapses a straight lane with two exits and a pocket with one into the same bucket; `deadEndAreaFraction` is the same 8-ray probe one bucket narrower, and that one bucket is the entire measure. Run manually before this entry existed: the mutation fails 4 of the 42 tests in measure.test.ts, including the control pair of boards that carry IDENTICAL wall cells arranged as a blind alley and as bars enclosing nothing -- the pair on which `corridorAreaFraction` moves the wrong way (0.028 against 0.067) while the dead-end figure roughly doubles (0.0052 against 0.0027).",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: the dead-end budget (issue #822) separates a pocket from bars of identical wall area, where corridorAreaFraction does not"
+  ]
+}

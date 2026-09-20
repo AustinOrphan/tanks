@@ -266,3 +266,34 @@ export function buildSnapshot(issues, { repo, ref = null, generatedAt, labelsOf 
     issues: shaped,
   };
 }
+
+/**
+ * The line a maintainer reads instead of the file.
+ *
+ * Every figure carries its denominator, because the three "unknown" counts are the ones that
+ * decide whether the map can be trusted at all, and "3 unknown" against 71 issues and against
+ * 4 issues are different reports. The counts are printed even when they are zero: a missing
+ * row reads as "not measured", which is the one thing this summary must never imply.
+ *
+ * @param {ReturnType<typeof buildSnapshot>} snapshot @param {string} path @returns {string}
+ */
+export function renderSnapshotSummary(snapshot, path) {
+  const { counts } = snapshot;
+  /** @param {number} value */
+  const of = (value) => `${value} of ${counts.issues}`;
+  return [
+    `## Issue graph snapshot v${snapshot.version}`,
+    '',
+    `Wrote \`${path}\` for \`${snapshot.source.repo}\`${snapshot.source.ref === null ? '' : ` at \`${snapshot.source.ref}\``}, generated ${snapshot.generatedAt}.`,
+    '',
+    `- **${counts.issues} issues**, ${counts.open} open`,
+    `- ${counts.dependencyEdges} blocked-by edge(s), ${counts.parentEdges} parent edge(s)`,
+    `- ${of(counts.blockedByUnknown)} blocked by something the run did not read`,
+    `- ${of(counts.childrenUnknown)} with sub-issues the run did not read`,
+    `- ${of(counts.parentUnknown)} with no parent from either side`,
+    `- ${of(counts.blockedByIncomplete)} read fewer blockers than GitHub counted`,
+    `- ${counts.edgesOutsideSnapshot} edge(s) point outside the snapshot`,
+    `- ${snapshot.cycles.length} cycle(s)${snapshot.cycles.length === 0 ? '' : `: ${snapshot.cycles.map((cycle) => cycle.map((number) => `#${number}`).join(' → ')).join('; ')}`}`,
+    '',
+  ].join('\n');
+}

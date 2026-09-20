@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   auditOpenIssues,
@@ -11,6 +11,7 @@ import {
   renderAuditReport,
 } from './metadata.mjs';
 import { planQueueReconciliation, renderQueuePlan } from './queue.mjs';
+import { buildSnapshot, renderSnapshotSummary } from './snapshot.mjs';
 
 const API_VERSION = '2022-11-28';
 
@@ -400,12 +401,24 @@ function parseArguments(argv) {
   const mode = args.shift();
   let repository;
   let dryRun = false;
+  let out;
+  let ref;
 
   while (args.length > 0) {
     const flag = args.shift();
     if (flag === '--repo') {
       repository = args.shift();
       if (!repository) throw new Error('--repo requires owner/name');
+      continue;
+    }
+    if (flag === '--out') {
+      out = args.shift();
+      if (!out) throw new Error('--out requires a path');
+      continue;
+    }
+    if (flag === '--ref') {
+      ref = args.shift();
+      if (!ref) throw new Error('--ref requires a commit-ish');
       continue;
     }
     if (flag === '--dry-run') {
@@ -415,7 +428,47 @@ function parseArguments(argv) {
     throw new Error(`unknown argument: ${flag}`);
   }
 
-  return { mode, repository, dryRun };
+  return { mode, repository, dryRun, out, ref };
+}
+
+/** Where `snapshot` writes when `--out` is absent. Untracked, like every other tool's output. */
+export const DEFAULT_SNAPSHOT_PATH = 'tmp/issue-graph.json';
+
+/**
+ * Write, then read back and compare (issue #437).
+ *
+ * A zero exit code is not evidence that a file changed: a full disk, a path that resolved
+ * somewhere unexpected, or a seam that quietly did nothing all leave a run looking green
+ * while the consumer reads yesterday's snapshot -- and a dependency map is exactly the kind
+ * of artefact nobody re-opens to check. The read-back costs one stat and one read of a file
+ * we just wrote, and turns all three into a loud failure.
+ *
+ * The three `fs` calls are injectable for ONE reason: the guard's own failure branch cannot
+ * be reached through a working filesystem, and a branch no test can enter is a branch that
+ * is not really there. The default path -- real `fs`, round-tripped -- is exercised too, so
+ * the seam is not standing in for the thing under test.
+ *
+ * @param {string} path @param {string} body
+ * The seam types are narrowed to what this function calls, not to `typeof writeFileSync`
+ * and friends: those are overloaded declarations, and a two-line fake in a test does not
+ * satisfy every overload even though it satisfies every call made here.
+ *
+ * @param {{
+ *   write?: (path: string, body: string) => unknown,
+ *   read?: (path: string, encoding: 'utf8') => unknown,
+ *   mkdir?: (path: string, options: { recursive: boolean }) => unknown,
+ * }} [fs]
+ */
+export function writeSnapshotFile(path, body, fs = {}) {
+  const { write = writeFileSync, read = readFileSync, mkdir = mkdirSync } = fs;
+  mkdir(dirname(resolve(path)), { recursive: true });
+  write(path, body);
+  const written = String(read(path, 'utf8'));
+  if (written !== body) {
+    throw new Error(
+      `snapshot write to ${path} did not take: wrote ${body.length} byte(s), read back ${written.length}`,
+    );
+  }
 }
 
 export async function main({
@@ -423,10 +476,17 @@ export async function main({
   env = process.env,
   fetchImpl = globalThis.fetch,
   log = console.log,
+  // Injected so `snapshot` is testable without touching a disk or a clock, and so the
+  // timestamp in the file is the run's rather than whatever the shaping code happened to
+  // read. `buildSnapshot` itself stays pure.
+  writeFile = writeSnapshotFile,
+  now = () => new Date().toISOString(),
 } = {}) {
   const args = parseArguments(argv);
-  if (!['audit', 'event', 'reconcile'].includes(args.mode ?? '')) {
-    throw new Error('usage: node tools/issues/run.mjs <audit|event|reconcile> [--repo owner/name] [--dry-run]');
+  if (!['audit', 'event', 'reconcile', 'snapshot'].includes(args.mode ?? '')) {
+    throw new Error(
+      'usage: node tools/issues/run.mjs <audit|event|reconcile|snapshot> [--repo owner/name] [--dry-run] [--out path] [--ref sha]',
+    );
   }
 
   const repository = resolveRepository({ explicit: args.repository, env });
@@ -445,6 +505,32 @@ export async function main({
     log(
       `#${payload.issue.number}: add [${changes.add.join(', ')}], remove [${changes.remove.join(', ')}]`,
     );
+    return 0;
+  }
+
+  if (args.mode === 'snapshot') {
+    // No token requirement, deliberately -- but do not read that as "this works anonymously".
+    // #437's tokenless half is the CONSUMER. Measured against this repository on 2026-09-20,
+    // an anonymous run FAILS: 73 open issues need more relationship reads than the 60-per-hour
+    // unauthenticated budget allows, and it stopped with a 403 partway through enrichment.
+    // The mode still does not refuse a missing token, because a smaller repository fits inside
+    // that budget and the 403 is already an unambiguous error; what it must not do is pretend,
+    // so a partial read is never silently published.
+    const listedIssues = await listOpenIssues(repository, request);
+    const enriched = await enrichOpenIssueRelationships(repository, listedIssues, request);
+    const snapshot = buildSnapshot(enriched, {
+      repo: repository,
+      ref: args.ref ?? env.GITHUB_SHA ?? null,
+      generatedAt: now(),
+      labelsOf: issueLabelNames,
+    });
+    const path = args.out ?? DEFAULT_SNAPSHOT_PATH;
+    // Two spaces and a trailing newline: the file is committed or published, so it is read
+    // in diffs, and a single line would make every change look like a rewrite.
+    writeFile(path, `${JSON.stringify(snapshot, null, 2)}\n`);
+    const report = renderSnapshotSummary(snapshot, path);
+    log(report.trimEnd());
+    appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
     return 0;
   }
 

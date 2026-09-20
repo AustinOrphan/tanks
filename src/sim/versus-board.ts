@@ -79,17 +79,24 @@ function countOpenFloor(arena: Arena): number {
  * headroom before this needs retuning" pattern versus-spawns.ts's own >5-world-unit
  * separation bound used (that bound's own comment states the reasoning explicitly).
  *
- * MEASURED, NOT DISCRIMINATING ON SHIPPED DATA: every one of the 5 shipped arenas
- * clears this at every N in {2, 3, 4} by more than an order of magnitude (the
- * tightest, 185.50, is over 10x the bound by construction) -- 0 of 15 (arena, N)
- * combinations fail it. That is stated plainly rather than implied: shipped arenas are
- * all 33x27 or 45x33 and were never designed to be tight for 2-4 players, so no
- * threshold derived from their own numbers can currently reject one of them. The bound
- * exists for boards this module has not seen yet -- a future generated or hand-authored
- * small arena -- and `versus-board.test.ts`'s synthetic fixture proves it CAN reject a
- * board (small-pillar-room fails it at N=3 and N=4 while passing separation and
- * concealment cleanly), so it is a real, checkable gate rather than a decorative one
- * that happens to word "minimum" without ever applying.
+ * MEASURED, NOT DISCRIMINATING ON SHIPPED DATA -- BUT THE HEADROOM IS NEARLY GONE.
+ * Re-derived over `versusBoardCatalog()` on the current tree: all 8 shipped arenas clear
+ * this at every N in {2, 3, 4}, so 0 of 24 (arena, N) combinations fail it. What has
+ * changed is the margin. This comment used to say the tightest figure was arena-02's
+ * 185.50, "over 10x the bound"; the tightest is now **72.25, at vs-tri-01 @ N=4, which is
+ * 4.01x**. The 185.50 above is still the number this constant was DERIVED from in 2026-08,
+ * and that derivation is why it is 18; it is no longer a description of the shipped fleet.
+ *
+ * The old reasoning for why nothing fails -- "shipped arenas are all 33x27 or 45x33 and
+ * were never designed to be tight" -- no longer holds either. Three boards were authored
+ * FOR versus and are smaller: vs-duel-01 is 27x21, vs-tri-01 is 27x17, vs-quad-01 is 33x27.
+ * `versus-board.test.ts` states the consequence precisely: at 72.25 against a bound of 72,
+ * its 4x assertion has 0.25 cells of open floor left, so the next furnished small board is
+ * where issue #418's re-derivation stops being optional.
+ *
+ * The bound is still a real, checkable gate rather than a decorative one:
+ * `versus-board.test.ts`'s synthetic small-pillar-room fixture fails it at N=3 and N=4
+ * while passing separation and concealment cleanly.
  */
 export const MIN_OPEN_FLOOR_PER_PLAYER = 18;
 
@@ -131,7 +138,19 @@ export interface VersusBoardVerdict {
    * `playerCount` means every player can reach every other without changing the map.
    */
   readonly spawnsInLargestRegion: number;
-  /** `spawnsInLargestRegion === playerCount`. */
+  /**
+   * TWO conditions, not one: `solidlyConnected` -- every spawn standing on tank-legal
+   * space and all of them sharing the largest region of it -- AND `fatalEscapes === 0`.
+   * See `evaluateSpawnEgress`.
+   *
+   * This line documented only the first half until issue #818, and the two really do
+   * disagree on shipped data: measured across all 24 (arena, N) combinations in
+   * `versusBoardCatalog()`, `spawnsInLargestRegion === playerCount` differs from `egressOk`
+   * on 2 of them -- vs-duel-01 at N=3 (3/3 spawns in the largest region, 1 fatal escape)
+   * and at N=4 (4/4, 2 fatal escapes). Both are false here and true under the old wording.
+   * A tool written against the old wording pinned the wrong predicate and failed on exactly
+   * those two combinations, which is what found this.
+   */
   readonly egressOk: boolean;
   /**
    * How many spawns share no destructible-free region with any other spawn -- i.e. must
@@ -444,7 +463,7 @@ export interface VersusBoardCatalogRow extends VersusBoardVerdict {
 /**
  * Every (arena, N) verdict in the catalog -- the measurement a future map-selection
  * menu would consult to decide which maps to offer at a given player count.
- * `arenas` defaults to `ARENA_DEFS` (the 5 shipped boards) and `playerCounts` to `[2,
+ * `arenas` defaults to `ARENA_DEFS` (8 shipped boards) and `playerCounts` to `[2,
  * 3, 4]` (versus mode's own supported range -- `devflags.ts`'s `players` flag rejects
  * anything outside 1-4), but both are parameters rather than hardcoded so
  * `versus-board.test.ts` can run the same function against synthetic fixtures.

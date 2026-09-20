@@ -1,0 +1,14 @@
+{
+  "id": "frontier-counts-an-unread-blocker-as-unlocked",
+  "file": "tools/issues/frontier.mjs",
+  "find": "    return unknown.length === 0 && open.length === 1 && open[0] === number;",
+  "replace": "    return open.length === 1 && open[0] === number;",
+  "expect": "killed",
+  "why": "Lets `unlockedByClosing` promise that closing an issue makes a downstream issue ready when that downstream issue still has blockers nobody read. `immediate` exists precisely to be the honest half of the pair -- `downstream` is reach, `immediate` is the claim a maintainer acts on -- so an overcount here is worse than no number at all. The same unknown-is-never-ready rule as the first entry, at the level where it turns into advice.",
+  "tests": [
+    "tools/issues/frontier.test.ts"
+  ],
+  "killedBy": [
+    "frontier: what closing an issue would unlock does not count an issue whose remaining blocker is merely unread"
+  ]
+}
