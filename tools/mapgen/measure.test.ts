@@ -323,3 +323,96 @@ describe('mapgen quality measures: the duplicated lattice agrees with the shippe
     expect(mine.unreachablePairs === 0).toBe(theirs.spawnsInLargestRegion === n);
   });
 });
+
+describe('mapgen quality measures: the gap taxonomy (issue #822)', () => {
+  /** The same rectangle split by a solid wall, with a hole of `holeCells` in the middle. */
+  const splitBoard = (holeCells: number): Arena => {
+    const grid = openBoard(22, 18).grid.map((row) => [...row]);
+    const mid = 9;
+    for (let c = 0; c < 22; c++) grid[mid][c] = '#';
+    for (let k = 0; k < holeCells; k++) grid[mid][10 + k] = '.';
+    return board(grid.map((row) => row.join('')));
+  };
+
+  it('keeps the three rungs nested on every shipped board', () => {
+    // A body of 4 cells fitting implies one of 3 fits at the same centre, and so on down, so
+    // these are strictly nested fractions of one denominator. Asserted rather than assumed:
+    // if any rung were ever built against a different wall set or a different denominator,
+    // the nesting is the first thing that breaks and the only thing that shows it.
+    // Population: all 8 shipped boards at N=2.
+    for (const def of ARENA_DEFS) {
+      const m = measureBoard(def, 2, def.id);
+      expect(m.roomFraction, `${def.id} room <= wide`).toBeLessThanOrEqual(m.wideCorridorFraction);
+      expect(m.wideCorridorFraction, `${def.id} wide <= min`).toBeLessThanOrEqual(m.minCorridorFraction);
+      expect(m.minCorridorFraction, `${def.id} min <= 1`).toBeLessThanOrEqual(1);
+      expect(m.roomFraction, `${def.id} room >= 0`).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('calls a one-cell hole a slit and a three-cell door not, changing nothing else', () => {
+    // THE ISOLATING CONTROL. Both boards are the same 22x18 rectangle split by the same
+    // solid wall; only the hole's width differs. A shell crosses a one-cell gap and no tank
+    // can enter it, which is exactly what a slit is.
+    const slit = measureBoard(splitBoard(1), 2, 'one-cell');
+    const door = measureBoard(splitBoard(3), 2, 'three-cell');
+
+    expect(slit.slitCellFraction).toBeGreaterThan(0);
+    expect(door.slitCellFraction).toBe(0);
+
+    // ...and the rest of the taxonomy barely moves, which is what makes the line above a
+    // measurement of the GAP rather than of the two boards being different. If
+    // `slitCellFraction` were counting something else -- cells the wall covers, say, or open
+    // floor generally -- these three would have to move with it.
+    expect(slit.minCorridorFraction).toBeCloseTo(door.minCorridorFraction, 2);
+    expect(slit.wideCorridorFraction).toBeCloseTo(door.wideCorridorFraction, 2);
+    expect(slit.roomFraction).toBeCloseTo(door.roomFraction, 2);
+    expect(Math.abs(slit.openFloorCells - door.openFloorCells)).toBeLessThanOrEqual(2);
+  });
+
+  it('finds no slits on an open rectangle, where there is no gap to be one', () => {
+    // The construction control for the other direction: a board with no walls has no gap a
+    // tank cannot enter, so a non-zero reading here would mean the cell-to-lattice mapping
+    // is wrong rather than that a slit was found.
+    for (const [cols, rows] of [[22, 18], [33, 27]] as const) {
+      const m = measureBoard(openBoard(cols, rows), 2, `empty-${cols}x${rows}`);
+      expect(m.slitCellFraction, `${cols}x${rows}`).toBe(0);
+      // ...and most of an empty board is room-width by construction.
+      expect(m.roomFraction, `${cols}x${rows}`).toBeGreaterThan(0.7);
+    }
+  });
+
+  it('reports where the shipped boards sit against the imported 60% budget, without gating on it', () => {
+    // CALIBRATION. #822 states its budget as "at least 60% of tank-navigable positions in a
+    // corridor 3 cells or wider". Measured at N=2 over all 8 shipped boards:
+    //
+    //   arena-01 0.718  arena-02 0.767  arena-03 0.712  arena-04 0.832
+    //   arena-05 0.848  vs-duel-01 0.473  vs-tri-01 0.198  vs-quad-01 0.626
+    //
+    // SIX of the eight clear it. The two that do not are the two smallest boards authored
+    // for versus, and that is reported rather than read as a defect -- a budget imported
+    // from another game's scale does not transfer to a 27x17 board without being re-derived
+    // against boards people have actually played here.
+    //
+    // Slits, the same 8 boards: every campaign arena reads exactly 0.0000, and only
+    // vs-duel-01 (0.0268) and vs-tri-01 (0.0554) have any shell-only geometry at all. #822
+    // wants slits "bounded but NON-ZERO", so on that half of the rule six of the eight
+    // shipped boards are the ones outside it.
+    const rows = ARENA_DEFS.map((d) => ({ id: d.id, m: measureBoard(d, 2, d.id) }));
+    const campaign = rows.filter((r) => r.id.startsWith('arena-'));
+    const versus = rows.filter((r) => r.id.startsWith('vs-'));
+
+    // Asserted as an ORDERING and a population, not as the budget itself.
+    expect(campaign).toHaveLength(5);
+    expect(versus).toHaveLength(3);
+    for (const r of campaign) {
+      expect(r.m.wideCorridorFraction, `${r.id} clears 0.60`).toBeGreaterThan(0.6);
+      expect(r.m.slitCellFraction, `${r.id} has no slits`).toBe(0);
+    }
+    const narrowestCampaign = Math.min(...campaign.map((r) => r.m.wideCorridorFraction));
+    const narrowestVersus = Math.min(...versus.map((r) => r.m.wideCorridorFraction));
+    expect(narrowestVersus).toBeLessThan(narrowestCampaign);
+    // At least one board has the shell-only geometry #822 asks for, so "non-zero" is
+    // reachable on a real board rather than a property nothing here exhibits.
+    expect(Math.max(...versus.map((r) => r.m.slitCellFraction))).toBeGreaterThan(0.01);
+  });
+});

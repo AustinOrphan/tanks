@@ -359,6 +359,54 @@ export interface BoardMeasures {
    *   2.667+ a room rather than a corridor
    */
   readonly bottleneckWidth: number;
+
+  // ---- gap taxonomy (TANK space, issue #822) ----
+  /**
+   * The three below are NESTED fractions of the same denominator, `legalAreaFraction`'s own
+   * legal-point count: the fraction of tank-legal area where a body of 2, 3 and 4 cells
+   * would also fit. A wider body fitting implies every narrower one fits at the same centre,
+   * so `roomFraction <= wideCorridorFraction <= minCorridorFraction <= 1` always.
+   *
+   * They put a number on the arena-geometry spec's own taxonomy, whose rungs these are:
+   *
+   *   2 cells  1.333  the minimum legal corridor -- a tank (1.0) with 0.333 to spare
+   *   3 cells  2.000  the comfortable corridor, today's standard lane
+   *   4 cells  2.667  a room rather than a corridor
+   *
+   * `wideCorridorFraction` is the one #822's budget is stated against: at least 60% of
+   * tank-navigable positions in a 3-cell lane or wider.
+   *
+   * MEASURED AGAINST EVERY WALL, destructibles included, which is where this departs from
+   * `bottleneckWidth` directly above. That measure uses solid-only space because it asks
+   * what topology no play can change; this one asks what the board is like to drive into at
+   * the start, so a destructible is a wall until someone removes it.
+   */
+  readonly minCorridorFraction: number;
+  /** See `minCorridorFraction`. The 3-cell rung, and #822's 60% budget. */
+  readonly wideCorridorFraction: number;
+  /** See `minCorridorFraction`. The 4-cell rung: a room rather than a lane. */
+  readonly roomFraction: number;
+
+  // ---- gap taxonomy (CELL space) ----
+  /** Open-floor (`.`) cells -- the denominator for `slitCellFraction`. The same count
+   *  `versus-board.ts`'s `openFloorPerPlayer` divides, carried here so a reader does not
+   *  have to cross modules to check the fraction below. */
+  readonly openFloorCells: number;
+  /**
+   * Fraction of open-floor cells containing NO tank-legal point at all: a SLIT, which a
+   * shell crosses and no tank can enter (issue #822).
+   *
+   * This is the one measure in the file that is a fraction of cells rather than of tank
+   * space, and it has to be: a slit is by definition invisible in tank space, so measuring
+   * it there would report zero by construction. It is the concrete form of the module's
+   * TWO SPACES rule -- a one-cell gap is open floor to a cell-based flood fill and contains
+   * no legal tank centre.
+   *
+   * WANTED NON-ZERO, not minimised. #822 asks for slits "bounded but non-zero": they are
+   * what lets a board be shot through without being driven through, and a board with none
+   * has no such geometry anywhere.
+   */
+  readonly slitCellFraction: number;
   /**
    * Mean over pairs of how many ROUTE-DISJOINT ways there are from one spawn to the other,
    * counted up to `ROUTE_CAP`. 1.0 means every pair is joined by a single corridor.
@@ -674,6 +722,51 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     bottleneck = rung;
   }
 
+  // ---- gap taxonomy (issue #822) ----
+  // The SAME construction `bottleneckWidth` just used, asking about AREA instead of
+  // connectivity: rebuild the legal lattice for a wider body and count what survives. A
+  // point legal for a wide body is legal for a narrow one at the same centre, so these are
+  // strictly nested fractions of `lat.legalCount` and never need a separate denominator.
+  //
+  // Against `lat`'s own wall set -- every wall, destructibles included -- and NOT
+  // `solidWalls`, which is the one place this departs from `bottleneckWidth`. That measure
+  // asks what topology no play can change, so it discounts destructibles; a taxonomy of the
+  // gaps a player drives into at the start is about the board as built. Both are stated
+  // rather than left for a reader to infer from which lattice each one happened to reuse.
+  //
+  // Each radius is pulled one lattice step below the rung's half-width for the reason the
+  // bottleneck ladder gives: a passage exactly that wide must read passable, not alias shut.
+  const gapRung = (cells: number) =>
+    tankLattice(arena, walls, (cells * arena.cellSize) / 2 - lat.step).legalCount;
+  const minCorridorCount = gapRung(2);
+  const wideCorridorCount = gapRung(3);
+  const roomCount = gapRung(4);
+
+  // A SLIT is a gap a shell crosses and no tank can enter: open floor in cell space with no
+  // tank-legal point anywhere inside it. #822 wants these "bounded but non-zero" -- they are
+  // what makes a board shootable through without being drivable through, and a board with
+  // none of them has no such geometry at all.
+  let openCells = 0;
+  let slitCells = 0;
+  const latIdx = idxOf(lat.nx, lat.ny);
+  for (let r = 0; r < arena.rows; r++) {
+    for (let c = 0; c < arena.cols; c++) {
+      if (arena.grid[r][c] !== '.') continue;
+      openCells++;
+      const i0 = Math.floor((c * arena.cellSize) / lat.step);
+      const i1 = Math.min(lat.nx - 1, Math.ceil(((c + 1) * arena.cellSize) / lat.step) - 1);
+      const j0 = Math.floor((r * arena.cellSize) / lat.step);
+      const j1 = Math.min(lat.ny - 1, Math.ceil(((r + 1) * arena.cellSize) / lat.step) - 1);
+      let reachable = false;
+      for (let i = Math.max(0, i0); i <= i1 && !reachable; i++) {
+        for (let j = Math.max(0, j0); j <= j1 && !reachable; j++) {
+          if (lat.legal[latIdx(i, j)] === 1) reachable = true;
+        }
+      }
+      if (!reachable) slitCells++;
+    }
+  }
+
   // ---- sightlines and carom ----
   // A fixed stratified sample: legal points nearest each node of a 2-world-unit grid over
   // the board. Deterministic, evenly spread, and about 90-130 points on shipped sizes --
@@ -782,6 +875,11 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     pathSpread: pathMean > 0 ? (Math.max(...pairPaths) - Math.min(...pairPaths)) / pathMean : 0,
     detourRatio: pairPaths.length ? Math.min(...pairPaths) / Math.sqrt(width * width + height * height) : 0,
     bottleneckWidth: bottleneck,
+    minCorridorFraction: lat.legalCount ? minCorridorCount / lat.legalCount : 0,
+    wideCorridorFraction: lat.legalCount ? wideCorridorCount / lat.legalCount : 0,
+    roomFraction: lat.legalCount ? roomCount / lat.legalCount : 0,
+    openFloorCells: openCells,
+    slitCellFraction: openCells ? slitCells / openCells : 0,
     routeCount: mean(routeCounts),
     secondRouteDetour: mean(secondDetours),
     singleRoutePairs,
