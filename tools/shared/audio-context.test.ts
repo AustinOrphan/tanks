@@ -100,7 +100,10 @@ function browserDrivers(): string[] {
  * environment check before the indent was pinned.
  */
 const GUARDED: Record<string, string[]> = {
-  'audio/render.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
+  // FOUR spaces where every other one-site tool has two: issue #881 wrapped this file's
+  // whole body in `main()`, so its own two became four. The line is pinned, not the call,
+  // which is why that re-indent had to be noticed here rather than passing silently.
+  'audio/render.mjs': ['    await page.addInitScript(audioContextOverrideSource());'],
   'bench/runs.mjs': ['  await context.addInitScript(audioContextOverrideSource());'],
   'gallery/run.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
   'screens/capture.mjs': ['    await page.addInitScript(audioContextOverrideSource());'],
