@@ -2955,6 +2955,48 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     expect(ruleBody('.hud-stock-pip.hud-stock-cue::after')).toMatch(/animation-delay:\s*inherit/);
   });
 
+  it('asks for the BUNDLED faces first, in both token stacks (issue #326)', () => {
+    // The whole reason these are bundled: `system-ui` and `ui-monospace` resolve to a
+    // different face per platform, and text METRICS move with the face. The screen gate's
+    // first CI run disagreed on 38 of 42 states, and 154 of 154 differences were box
+    // geometry. Unguarded until now -- nothing in this file asserted a font stack at all.
+    const text = stripComments(css);
+    const sans = /--hud-font:\s*([^;]+);/.exec(text)?.[1] ?? '';
+    const mono = /--hud-font-mono:\s*([^;]+);/.exec(text)?.[1] ?? '';
+    expect(sans, 'the sans stack no longer leads with Plex').toMatch(/^'IBM Plex Sans'/);
+    expect(mono, 'the mono stack no longer leads with Plex').toMatch(/^'IBM Plex Mono'/);
+    // The fallbacks STAY. A woff2 that fails to load should leave the HUD readable; it
+    // simply stops being metric-identical, which is a degradation and not a break.
+    expect(sans).toContain('system-ui');
+    expect(mono).toContain('monospace');
+    // And nothing still asks for a bare platform stack: six declarations used to.
+    expect(text, 'a bare ui-monospace declaration is back')
+      .not.toMatch(/font-family:\s*ui-monospace/);
+  });
+
+  it('declares a face for every weight it asks for, so nothing is synthesised', () => {
+    // Plex Sans's axis ends at 700 and Plex Mono ships no variable build. A weight outside
+    // what is declared is synthesised by the engine, per engine -- which is the variance
+    // this change removes, reintroduced by a single number.
+    const text = stripComments(css);
+    const faces = [...text.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
+    expect(faces.length, 'the @font-face block is gone').toBeGreaterThanOrEqual(3);
+    const sansFace = faces.find((f) => f.includes("'IBM Plex Sans'")) ?? '';
+    expect(sansFace, 'the sans face is no longer the variable range').toMatch(/font-weight:\s*100 700/);
+    const monoWeights = faces.filter((f) => f.includes("'IBM Plex Mono'"))
+      .map((f) => /font-weight:\s*(\d+)/.exec(f)?.[1] ?? '').sort();
+    expect(monoWeights, 'the declared mono weights moved').toEqual(['400', '600']);
+    // Every weight the HUD asks for must be inside 100-700, or the engine invents it.
+    for (const w of [...text.matchAll(/font-weight:\s*(\d{3})\b/g)].map((m) => Number(m[1]))) {
+      expect(w, `font-weight ${w} is outside Plex's axis`).toBeLessThanOrEqual(700);
+    }
+    // And the two weight tokens still express a DIFFERENCE. Clamping both to 700 would
+    // have satisfied the loop above while making `strong` mean nothing.
+    const normal = Number(/--hud-weight-normal:\s*(\d+)/.exec(text)?.[1]);
+    const strong = Number(/--hud-weight-strong:\s*(\d+)/.exec(text)?.[1]);
+    expect(strong, 'strong is no longer stronger than normal').toBeGreaterThan(normal);
+  });
+
   it('draws no cue state with `background`, which forced colours drops', () => {
     // The #230 mockups measured this: with a background fill, a filled pip and a hollow one were
     // identical under forced colours. Every rule whose selector names a stock-cue class.
