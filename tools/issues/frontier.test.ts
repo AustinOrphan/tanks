@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   frontierOf,
+  renderFrontier,
   longestDependencyChain,
   readinessOf,
   standingBlockers,
@@ -238,5 +239,64 @@ describe('frontier: standingBlockers', () => {
     const { open, unknown } = standingBlockers(subject, index([subject]));
     expect(open).toEqual([20, 30]);
     expect(unknown).toHaveLength(1);
+  });
+});
+
+describe('frontier: the rendered report', () => {
+  const graph = [
+    issue(1, { labels: ['priority:now', 'size:m'], title: 'a ready one' }),
+    issue(2, { blockedBy: [{ number: 1, state: 'open' }], title: 'a blocked one' }),
+    issue(3, { blockedByLoaded: false, declaredBlockedBy: 2, title: 'an unknown one' }),
+  ];
+
+  it('carries the denominator on the headline and the priority/size on each row', () => {
+    const text = renderFrontier(snap(graph));
+    expect(text).toContain('**1 ready / 1 blocked / 1 unknown**, of 3 open issues in scope');
+    expect(text).toContain('- #1 [now/m] a ready one');
+    expect(text).toContain('#2 blocked by #1');
+    expect(text).toContain('#3 2 blocker(s) this snapshot did not read');
+  });
+
+  it('says in the output that ready does not mean startable', () => {
+    // LOAD-BEARING, not decoration. Measured on this repository, the native graph called 24
+    // of 28 issues ready while about 8 were waiting on a maintainer ruling -- a decision
+    // carries no blocked-by edge, so no relationship data can see it. A reader who takes
+    // this list as a work queue picks one up and stalls.
+    const text = renderFrontier(snap(graph));
+    expect(text).toContain('READY MEANS "NO BLOCKER IN THE GRAPH"');
+    expect(text).toContain('decision carries no blocked-by edge');
+  });
+
+  it('separates "makes ready" from "reaches" wherever it prints both', () => {
+    // The other load-bearing sentence: "closing this unblocks 12" is exactly the claim that
+    // gets repeated from a number printed without the qualifier.
+    const chain = [
+      issue(1),
+      issue(2, { blockedBy: [{ number: 1, state: 'open' }] }),
+      issue(3, { blockedBy: [{ number: 2, state: 'open' }] }),
+    ];
+    const text = renderFrontier(snap(chain));
+    expect(text).toContain('LAST standing blocker');
+    expect(text).toContain('- #1: makes 1 ready (#2), reaches 2');
+  });
+
+  it('refuses the chain on a cyclic snapshot and says why, in the report itself', () => {
+    const cyclic = [
+      issue(1, { blockedBy: [{ number: 2, state: 'open' }] }),
+      issue(2, { blockedBy: [{ number: 1, state: 'open' }] }),
+    ];
+    const text = renderFrontier(snap(cyclic, [[1, 2]]));
+    expect(text).toContain('Not computed: the snapshot reports 1 cycle(s)');
+    expect(text).not.toMatch(/^Depth \d/m);
+
+    // The control: the same two issues without the return edge report a depth.
+    const acyclic = [issue(1), issue(2, { blockedBy: [{ number: 1, state: 'open' }] })];
+    expect(renderFrontier(snap(acyclic))).toContain('Depth 2: #1 -> #2');
+  });
+
+  it('names the scope it filtered to, so a short list cannot read as the whole graph', () => {
+    const text = renderFrontier(snap(graph), { milestone: 'PP1', excludeLabels: ['human-required'] });
+    expect(text).toContain('milestone PP1');
+    expect(text).toContain('without human-required');
   });
 });

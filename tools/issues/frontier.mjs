@@ -248,3 +248,109 @@ export function frontierOf(snapshot, filter = {}) {
     considered: ready.length + blocked.length + unknown.length,
   };
 }
+
+/**
+ * The frontier as a maintainer reads it.
+ *
+ * Kept here rather than in `run.mjs` for the reason the rest of this module exists: it is
+ * pure, so it is testable without a token, and the CLI stays a thin caller. Every count
+ * carries the population it came from -- "7 ready" is unreadable without knowing whether
+ * that is of 9 or of 90.
+ *
+ * TWO SENTENCES IN THE OUTPUT ARE LOAD-BEARING, not decoration:
+ *
+ * - "Ready means no blocker in the graph, not startable." Measured on this repository, the
+ *   native graph called 24 of 28 issues ready while roughly 8 of those were waiting on a
+ *   maintainer ruling. A decision carries no blocked-by edge, so no amount of relationship
+ *   data can see it, and a reader who takes this list as a work queue will pick one up and
+ *   stall.
+ * - "`ready` counts only issues this was the LAST blocker for." Closing an issue does not
+ *   release everything downstream of it, and "closing this unblocks 12" is exactly the claim
+ *   that gets repeated from a number printed without that qualifier.
+ *
+ * @param {Snapshot} snapshot
+ * @param {{ milestone?: string | null, labels?: readonly string[], excludeLabels?: readonly string[] }} [filter]
+ * @returns {string}
+ */
+export function renderFrontier(snapshot, filter = {}) {
+  const f = frontierOf(snapshot, filter);
+  /** @type {string[]} */
+  const lines = [];
+  const scope = [
+    filter.milestone ? `milestone ${filter.milestone}` : null,
+    (filter.labels ?? []).length ? `with ${(filter.labels ?? []).join('+')}` : null,
+    (filter.excludeLabels ?? []).length ? `without ${(filter.excludeLabels ?? []).join('/')}` : null,
+  ].filter(Boolean).join(', ');
+
+  lines.push(`# Executable frontier${scope ? ` (${scope})` : ''}`);
+  lines.push('');
+  lines.push(`Snapshot of \`${snapshot?.source?.repo ?? 'unknown'}\`, generated ${snapshot?.generatedAt ?? 'unknown'}.`);
+  lines.push('');
+  lines.push(`**${f.ready.length} ready / ${f.blocked.length} blocked / ${f.unknown.length} unknown**, of ${f.considered} open issues in scope.`);
+
+  /** @param {{ labels: readonly string[] }} row @param {string} prefix */
+  const tag = (row, prefix) =>
+    row.labels.find((label) => label.startsWith(prefix))?.slice(prefix.length) ?? '-';
+
+  if (f.ready.length > 0) {
+    lines.push('');
+    lines.push('## Ready -- no standing blocker');
+    for (const row of f.ready) {
+      lines.push(`- #${row.number} [${tag(row, 'priority:')}/${tag(row, 'size:')}] ${row.title}`);
+    }
+    lines.push('');
+    lines.push('READY MEANS "NO BLOCKER IN THE GRAPH", not "startable". An issue waiting on a');
+    lines.push('decision carries no blocked-by edge, so it appears here.');
+  }
+
+  if (f.unknown.length > 0) {
+    lines.push('');
+    lines.push('## Unknown -- GitHub reports blockers this snapshot did not read');
+    for (const row of f.unknown) lines.push(`- #${row.number} ${row.reason} -- ${row.title}`);
+  }
+
+  if (f.blocked.length > 0) {
+    lines.push('');
+    lines.push('## Blocked');
+    for (const row of f.blocked) lines.push(`- #${row.number} ${row.reason} -- ${row.title}`);
+  }
+
+  const chain = longestDependencyChain(snapshot);
+  const cycles = snapshot?.cycles ?? [];
+  lines.push('');
+  lines.push('## Longest dependency chain');
+  lines.push('');
+  if (chain.length === 0) {
+    lines.push(cycles.length > 0
+      ? `Not computed: the snapshot reports ${cycles.length} cycle(s), and a longest path is undefined on a cyclic graph.`
+      : 'No blocked-by edges in scope.');
+  } else {
+    lines.push(`Depth ${chain.length}: ${chain.map((n) => `#${n}`).join(' -> ')}`);
+    lines.push('');
+    lines.push('NOT a critical path. With no duration estimates this counts sequential');
+    lines.push('prerequisites and says nothing about time.');
+  }
+
+  const unlocks = (snapshot?.issues ?? [])
+    .filter((issue) => issue.state !== 'closed')
+    .map((issue) => ({ number: issue.number, ...unlockedByClosing(snapshot, issue.number) }))
+    .filter((row) => row.downstream.length > 0)
+    .sort((a, b) => b.immediate.length - a.immediate.length
+      || b.downstream.length - a.downstream.length
+      || a.number - b.number);
+  if (unlocks.length > 0) {
+    lines.push('');
+    lines.push('## What closing an issue would unlock');
+    lines.push('');
+    lines.push('`ready` counts only issues this is the LAST standing blocker for; `reaches` is');
+    lines.push('everything downstream at any depth. They are different claims.');
+    lines.push('');
+    for (const row of unlocks) {
+      const names = row.immediate.length ? row.immediate.map((n) => `#${n}`).join(', ') : '-';
+      lines.push(`- #${row.number}: makes ${row.immediate.length} ready (${names}), reaches ${row.downstream.length}`);
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
