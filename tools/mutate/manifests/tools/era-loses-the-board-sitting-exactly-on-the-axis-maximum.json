@@ -1,0 +1,14 @@
+{
+  "id": "era-loses-the-board-sitting-exactly-on-the-axis-maximum",
+  "file": "tools/mapgen/expressive-range.mjs",
+  "find": "  return Math.min(bins - 1, Math.floor(scaled));",
+  "replace": "  return Math.floor(scaled);",
+  "expect": "killed",
+  "why": "Gives a value exactly equal to the axis maximum a bin index one past the end of the grid. `max` is precisely the value a range derived from measurements tends to contain -- `SHIPPED_RANGES` is built from measured extremes and then widened -- so the boards lost would be the extreme ones, the most interesting in the sample, and the loss would be silent.",
+  "tests": [
+    "tools/mapgen/expressive-range.test.ts"
+  ],
+  "killedBy": [
+    "expressive range: the sample never sets its own ruler puts a value exactly on the top edge in the last bin rather than off the grid"
+  ]
+}

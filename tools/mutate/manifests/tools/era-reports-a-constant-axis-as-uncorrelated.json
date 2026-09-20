@@ -1,0 +1,14 @@
+{
+  "id": "era-reports-a-constant-axis-as-uncorrelated",
+  "file": "tools/mapgen/expressive-range.mjs",
+  "find": "  if (dx === 0 || dy === 0) return null;",
+  "replace": "  if (dx === 0 || dy === 0) return 0;",
+  "expect": "killed",
+  "why": "Turns 'one axis never moved, so the question is undefined' into 'measured, and the axes are independent' -- the opposite claim, and the more flattering one. The correlation is the figure this module tells a reader to consult BEFORE coverage, because on the shipped boards every candidate axis pair runs |r| 0.78-0.95 and a grid over two of them is close to one-dimensional. A fake 0 there would present a degenerate sample as the ideal case.",
+  "tests": [
+    "tools/mapgen/expressive-range.test.ts"
+  ],
+  "killedBy": [
+    "expressive range: coverage is not reported without its axes correlation returns null rather than zero when an axis never moved"
+  ]
+}

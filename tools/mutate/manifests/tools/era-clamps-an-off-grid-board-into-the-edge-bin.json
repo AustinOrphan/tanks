@@ -1,0 +1,14 @@
+{
+  "id": "era-clamps-an-off-grid-board-into-the-edge-bin",
+  "file": "tools/mapgen/expressive-range.mjs",
+  "find": "  if (!Number.isFinite(value) || value < range.min || value > range.max) return -1;",
+  "replace": "  if (!Number.isFinite(value)) return -1;",
+  "expect": "killed",
+  "why": "Drops the range check so a board above the axis maximum is clamped into the top bin instead of counted as off-grid. This is not hypothetical: measured over 12 seeds, the `topology` ruleset puts EVERY board off-grid on wallFraction (0.516-0.560 against a shipped envelope of 0.085-0.366). Under the mutation it would land all of them in the edge bins and report a non-zero coverage for a ruleset that never enters the shipped space at all -- a generator that is out of family would read as one with reach.",
+  "tests": [
+    "tools/mapgen/expressive-range.test.ts"
+  ],
+  "killedBy": [
+    "expressive range: the sample never sets its own ruler counts an out-of-range board instead of clamping it into an edge bin"
+  ]
+}
