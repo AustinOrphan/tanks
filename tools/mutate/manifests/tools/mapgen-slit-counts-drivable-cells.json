@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-slit-counts-drivable-cells",
+  "file": "tools/mapgen/measure.ts",
+  "find": "      if (!reachable) slitCells++;",
+  "replace": "      if (reachable) slitCells++;",
+  "expect": "killed",
+  "why": "Inverts the slit test, counting open-floor cells a tank CAN enter instead of the ones it cannot. A slit is by definition a gap a shell crosses and no tank enters, so the inversion turns a measure of shell-only geometry into a rough restatement of legal area -- and it reads high everywhere rather than zero, which is the direction that looks like data. The control pair is two boards differing only in a hole's width (one cell against three), where the true answer moves from non-zero to exactly zero.",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: the gap taxonomy (issue #822) calls a one-cell hole a slit and a three-cell door not, changing nothing else"
+  ]
+}

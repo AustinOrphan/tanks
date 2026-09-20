@@ -41,7 +41,8 @@ if (json) {
   const f = (v, d = 2) => (typeof v === 'number' ? v.toFixed(d) : String(v));
   const head = [
     'board'.padEnd(12), 'N', 'ok', 'wall', 'dstr', 'cov', 'spc', 'legal', 'corr', 'open',
-    'dead', 'prs', 'unr', 'mine', 'pMin', 'pMax', 'sprd', 'neck', 'rout', '1way', 'pts', 'sight',
+    'dead', 'lane2', 'lane3', 'lane4', 'slit',
+    'prs', 'unr', 'mine', 'pMin', 'pMax', 'sprd', 'neck', 'rout', '1way', 'pts', 'sight',
     'bank', 'bOnly', 'rot',
   ];
   console.log(head.join('  '));
@@ -54,6 +55,7 @@ if (json) {
       String(r.coverPieces).padStart(3), f(r.coverSpacing, 1).padStart(3),
       f(r.legalAreaFraction), f(r.corridorAreaFraction), f(r.openGroundFraction),
       f(r.deadEndAreaFraction, 4),
+      f(r.minCorridorFraction), f(r.wideCorridorFraction), f(r.roomFraction), f(r.slitCellFraction, 4),
       String(r.spawnPairs).padStart(3), String(r.unreachablePairs).padStart(3),
       String(r.mineGatedPairs).padStart(4),
       f(r.pathMin, 1).padStart(4), f(r.pathMax, 1).padStart(4), f(r.pathSpread),
@@ -73,6 +75,10 @@ if (json) {
   console.log('pMin/pMax = shortest/longest spawn-pair path (solid-only space); sprd =');
   console.log('(max-min)/mean; neck = narrowest passage every pair must pass, world units');
   console.log('(1.000 = a tank exactly, 1.333 = the minimum corridor, 2.000 = a 3-cell lane);');
+  console.log('lane2/3/4 = NESTED fractions of legal area where a body of 2, 3 or 4 cells also');
+  console.log('fits -- the gap taxonomy rungs (issue #822); lane3 is its 60% budget. slit =');
+  console.log('fraction of OPEN-FLOOR CELLS with no tank-legal point at all, a gap a shell');
+  console.log('crosses and no tank enters -- wanted non-zero, not minimised;');
   console.log('rout = mean route-disjoint ways between a pair, greedy lower bound capped at 4;');
   console.log('1way = pairs with a single route; pts = sample points behind the three shell');
   console.log('fractions that follow; sight = mean fraction of them in direct view; bank = of');
