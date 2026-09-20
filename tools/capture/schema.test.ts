@@ -85,6 +85,8 @@ describe('capture recipe schema', () => {
       'screen.ending.campaign-complete',
       'screen.ending.practice-cleared',
       'screen.ending.practice-failed',
+      'screen.ending.versus.ffa.played',
+      'screen.ending.versus.teams.played',
       // Issue #842: the interactive states, which `tools/uikit/primitive-states.mjs`
       // produced one-shot and without a committed baseline.
       'screen.settings.focused',
