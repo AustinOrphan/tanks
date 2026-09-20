@@ -420,6 +420,33 @@ export interface BoardMeasures {
    */
   readonly bottleneckWidth: number;
 
+  // ---- bot jam risk (TANK space, issue #822) ----
+  /**
+   * How many corridors are narrow, long, and the ONLY way between two spawns at once.
+   *
+   * All three conditions together, because any two of them are fine: a narrow pinch one cell
+   * deep is a doorway; a long narrow corridor with a parallel route is a lane you may choose;
+   * a wide single route is a hall. Narrow AND long AND unavoidable is the shape this game's
+   * bots cannot handle, because they steer reactively with no pathfinding -- a bot that
+   * commits to one and meets another tank has no plan for backing out. The arena-geometry
+   * spec already names minimum-width corridors as its biggest playtest risk for this reason.
+   *
+   * NARROW is "a tank fits, a 3-cell body does not", the same rung the gap taxonomy uses.
+   * LONG is three cells of travel or more. UNAVOIDABLE means blocking the whole run
+   * disconnects a spawn pair that was joined before it was blocked.
+   *
+   * Measured over SOLID-ONLY space, matching `bottleneckWidth`: a destructible can be mined
+   * through, so it is not permanent topology.
+   *
+   * REPORTED, NOT GATED, like everything else in this file -- #822 is explicit that a quality
+   * measure which gates stops describing the board. A generated board scoring above zero here
+   * is worth looking at before it is offered, not rejecting unseen.
+   */
+  readonly jamCorridors: number;
+  /** The longest such corridor's extent in world units, 0 when there are none. A count alone
+   *  cannot tell one nasty tunnel from three short pinches. */
+  readonly longestJamCorridor: number;
+
   // ---- gap taxonomy (TANK space, issue #822) ----
   /**
    * The three below are NESTED fractions of the same denominator, `legalAreaFraction`'s own
@@ -837,6 +864,150 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     }
   }
 
+  // ---- bot jam candidates (issue #822, measure 4) ----
+  // A corridor that is (a) too narrow for two tanks to pass, (b) the ONLY way between two
+  // spawns, and (c) long enough to commit to before you can see the far end.
+  //
+  // This one matters more here than in the genre it came from, and the arena-geometry spec
+  // already says why: this game's bots steer REACTIVELY, with no pathfinding. A bot that
+  // enters a one-body corridor and meets another tank has no plan for backing out. The other
+  // mobility measures cannot see it -- `bottleneckWidth` reports the narrowest passage but
+  // not how LONG it is, and a one-cell-deep pinch and a twelve-cell tunnel are the same
+  // number to it.
+  //
+  // Measured over SOLID-ONLY space, matching `bottleneckWidth` and for the same reason: a
+  // destructible can be mined through, so it is not permanent topology.
+  const wideRadius = (3 * arena.cellSize) / 2 - solidLat.step;
+  const narrowLat = tankLattice(arena, solidWalls, wideRadius);
+  const solidIdx = idxOf(solidLat.nx, solidLat.ny);
+
+  // Narrow == a tank fits and a 3-cell body does not -- BUT NOT WHERE THE BOARD'S OWN FRAME
+  // IS THE REASON. Without that second clause this measure reads the board's rim instead of
+  // its corridors, and the fixtures said so plainly: a 30x15 board with one tunnel reported a
+  // 19.00-unit "corridor" (the board is 20 wide) at every tunnel length from 2 to 12 cells,
+  // because the narrow band hugging the boundary wall is one connected ring around the whole
+  // board and swamps everything inside it. The same ring also made the two-route control
+  // report a jam, since blocking a ring that passes every spawn disconnects them all.
+  //
+  // `tankLattice` excludes any point within `radius` of the frame, so the wide lattice insets
+  // further than the tank lattice does and the difference between them is a band along every
+  // edge. Dropping points within `wideRadius` of the frame removes exactly that band.
+  //
+  // WHAT THIS GIVES UP, stated rather than discovered later: a genuine one-body corridor
+  // running along the outer wall is not counted. On the shipped boards `loadArena`'s boundary
+  // ring makes the outermost cells solid anyway, so such a corridor would be one cell further
+  // in and still counted; on a generated board with a flush outer edge it would be missed.
+  // `width` and `height` are the board's own, already computed at the top of this function.
+  //
+  // ENCLOSED ON BOTH SIDES, not merely short of clearance. A point beside a single wall face
+  // also fails the wide-body test, and the fixtures showed what that costs: with clearance
+  // alone, the narrow bands hugging every wall face joined separate gaps into one run, so a
+  // board with TWO routes through the same wall still reported its tunnel as unavoidable --
+  // blocking the merged run blocked both gaps at once.
+  //
+  // A corridor has wall on BOTH sides. A point counts only when some opposite pair of
+  // directions is blocked within the wide radius: true in a tunnel, false against a wall
+  // face, where one side is open room.
+  const span = Math.max(1, Math.round(wideRadius / solidLat.step));
+  const OPPOSED: ReadonlyArray<readonly [number, number]> = [[1, 0], [0, 1], [1, 1], [1, -1]];
+  const blockedAt = (i: number, j: number) =>
+    i < 0 || j < 0 || i >= solidLat.nx || j >= solidLat.ny || solidLat.legal[solidIdx(i, j)] !== 1;
+  const narrow = new Uint8Array(solidLat.legal.length);
+  for (let k = 0; k < narrow.length; k++) {
+    if (solidLat.legal[k] !== 1 || narrowLat.legal[k] === 1) continue;
+    const i = (k / solidLat.ny) | 0;
+    const j = k - i * solidLat.ny;
+    const x = (i + 0.5) * solidLat.step;
+    const y = (j + 0.5) * solidLat.step;
+    // The board's own frame is not a corridor wall; without this the rim is one run around
+    // the whole board, which swamped everything inside it.
+    if (x < wideRadius || y < wideRadius || x > width - wideRadius || y > height - wideRadius) continue;
+    for (const [di, dj] of OPPOSED) {
+      if (blockedAt(i + di * span, j + dj * span) && blockedAt(i - di * span, j - dj * span)) {
+        narrow[k] = 1;
+        break;
+      }
+    }
+  }
+
+  // Connected runs of narrow space, 4-connected. Each run is one candidate corridor.
+  const runOf = new Int32Array(narrow.length).fill(-1);
+  const runs: { cells: number[]; minI: number; maxI: number; minJ: number; maxJ: number }[] = [];
+  for (let start = 0; start < narrow.length; start++) {
+    if (narrow[start] !== 1 || runOf[start] !== -1) continue;
+    const id = runs.length;
+    const cells: number[] = [];
+    let minI = Infinity; let maxI = -Infinity; let minJ = Infinity; let maxJ = -Infinity;
+    const stack = [start];
+    runOf[start] = id;
+    while (stack.length > 0) {
+      const k = stack.pop() as number;
+      cells.push(k);
+      const i = (k / solidLat.ny) | 0;
+      const j = k - i * solidLat.ny;
+      if (i < minI) minI = i;
+      if (i > maxI) maxI = i;
+      if (j < minJ) minJ = j;
+      if (j > maxJ) maxJ = j;
+      const step = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [di, dj] of step) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= solidLat.nx || nj >= solidLat.ny) continue;
+        const nk = solidIdx(ni, nj);
+        if (narrow[nk] !== 1 || runOf[nk] !== -1) continue;
+        runOf[nk] = id;
+        stack.push(nk);
+      }
+    }
+    runs.push({ cells, minI, maxI, minJ, maxJ });
+  }
+
+  // A run's LENGTH is its longer extent, which is what a tank drives along. Using the bounding
+  // box rather than a true geodesic through the run is deliberate: it over-estimates a bent
+  // corridor and never under-estimates a straight one, so a run this measure calls short is
+  // genuinely short.
+  const runLength = (r: { minI: number; maxI: number; minJ: number; maxJ: number }) =>
+    Math.max((r.maxI - r.minI + 1), (r.maxJ - r.minJ + 1)) * solidLat.step;
+
+  // "Longer than a few cells": three cells of travel, the same rung the width test uses.
+  const JAM_LENGTH = 3 * arena.cellSize;
+
+  // Which spawn pairs are joined at all in solid-only space, before anything is blocked. A
+  // pair already separated cannot be separated again, and counting it would inflate the
+  // measure on exactly the broken boards the acceptance tier already rejects.
+  const jamPairs: [number, number][] = [];
+  for (let a = 0; a < spawnNodes.length; a++) {
+    if (spawnNodes[a] < 0) continue;
+    const d = geodesic(solidLat, spawnNodes[a]);
+    for (let b = a + 1; b < spawnNodes.length; b++) {
+      if (spawnNodes[b] >= 0 && d[spawnNodes[b]] >= 0) jamPairs.push([a, b]);
+    }
+  }
+
+  let jamCorridors = 0;
+  let longestJam = 0;
+  for (const run of runs) {
+    const length = runLength(run);
+    if (length < JAM_LENGTH) continue;
+    // Articulation: block the run and ask whether any pair that WAS joined now is not.
+    const blocked = new Uint8Array(solidLat.legal.length);
+    for (const k of run.cells) blocked[k] = 1;
+    let cuts = false;
+    const cache = new Map<number, Float64Array>();
+    for (const [a, b] of jamPairs) {
+      let d = cache.get(a);
+      if (d === undefined) { d = geodesic(solidLat, spawnNodes[a], blocked); cache.set(a, d); }
+      // The spawn itself sitting inside the blocked run is not a cut; it is a spawn in a
+      // corridor, which `versus-board.ts`'s egress gate already judges.
+      if (blocked[spawnNodes[a]] === 1 || blocked[spawnNodes[b]] === 1) continue;
+      if (d[spawnNodes[b]] < 0) { cuts = true; break; }
+    }
+    if (!cuts) continue;
+    jamCorridors++;
+    if (length > longestJam) longestJam = length;
+  }
+
   // ---- sightlines and carom ----
   // A fixed stratified sample: legal points nearest each node of a 2-world-unit grid over
   // the board. Deterministic, evenly spread, and about 90-130 points on shipped sizes --
@@ -948,6 +1119,8 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     pathSpread: pathMean > 0 ? (Math.max(...pairPaths) - Math.min(...pairPaths)) / pathMean : 0,
     detourRatio: pairPaths.length ? Math.min(...pairPaths) / Math.sqrt(width * width + height * height) : 0,
     bottleneckWidth: bottleneck,
+    jamCorridors,
+    longestJamCorridor: longestJam,
     minCorridorFraction: lat.legalCount ? minCorridorCount / lat.legalCount : 0,
     wideCorridorFraction: lat.legalCount ? wideCorridorCount / lat.legalCount : 0,
     roomFraction: lat.legalCount ? roomCount / lat.legalCount : 0,

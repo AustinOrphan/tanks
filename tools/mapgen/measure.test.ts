@@ -540,3 +540,123 @@ describe('mapgen quality measures: the gap taxonomy (issue #822)', () => {
     expect(Math.max(...versus.map((r) => r.m.slitCellFraction))).toBeGreaterThan(0.01);
   });
 });
+
+describe('mapgen quality measures: bot jam corridors (issue #822)', () => {
+  /**
+   * A jam corridor is narrow AND long AND the only way through, all three at once. Any two of
+   * them are fine, so every control below holds two conditions still and varies the third.
+   *
+   * The measure was wrong twice before these fixtures were satisfied, and both failures are
+   * worth keeping in mind when changing it:
+   *   1. clearance alone made the band along the BOARD FRAME one run around the whole board,
+   *      which reported a 19.00-unit corridor on a board 20 units wide, at every tunnel
+   *      length;
+   *   2. clearance alone also made the bands along interior WALL FACES join separate gaps
+   *      into one run, so a board with two routes still reported its tunnel as unavoidable.
+   * The fix for both is that a corridor is enclosed on BOTH sides, not merely short of
+   * clearance.
+   */
+
+  /** Two rooms in a 30x15 board, joined by ONE tunnel `wide` cells across and `len` long. */
+  const tunnel = (wide: number, len: number): Arena => {
+    const cols = 30;
+    const rows = 15;
+    const mid = 7;
+    const grid: string[] = [];
+    for (let r = 0; r < rows; r++) {
+      let row = '';
+      for (let c = 0; c < cols; c++) {
+        const inWall = c >= 12 && c < 12 + len;
+        const inGap = r >= mid && r < mid + wide;
+        row += inWall && !inGap ? '#' : '.';
+      }
+      grid.push(row);
+    }
+    grid[3] = `${grid[3].slice(0, 3)}P${grid[3].slice(4)}`;
+    grid[rows - 4] = `${grid[rows - 4].slice(0, cols - 4)}B${grid[rows - 4].slice(cols - 3)}`;
+    return board(grid);
+  };
+
+  /** The same board, with a second gap opened through the same wall. */
+  const twoRoutes = (len: number): Arena => {
+    const grid = tunnel(2, len).grid.map((row) => [...row]);
+    for (let c = 12; c < 12 + len; c++) { grid[2][c] = '.'; grid[3][c] = '.'; }
+    return board(grid.map((row) => row.join('')));
+  };
+
+  it('counts a one-body tunnel and ignores a two-body one, at identical length', () => {
+    // Width is the whole distinction here: same board, same wall, same tunnel length, and the
+    // only change is whether two tanks can pass. 2 cells is 1.333 units, a tank plus 0.333.
+    for (const len of [2, 6, 12]) {
+      expect(measureBoard(tunnel(2, len), 2, `narrow-${len}`).jamCorridors, `2-cell @ ${len}`)
+        .toBeGreaterThan(0);
+      expect(measureBoard(tunnel(3, len), 2, `wide-${len}`).jamCorridors, `3-cell @ ${len}`).toBe(0);
+      expect(measureBoard(tunnel(4, len), 2, `wider-${len}`).jamCorridors, `4-cell @ ${len}`).toBe(0);
+    }
+  });
+
+  it('stops counting the same tunnel once a second route exists', () => {
+    // THE CONTROL THAT DROVE THE DESIGN. The corridor is exactly as narrow and as long as
+    // before; it is simply no longer the only way through, so it is no longer a trap. A bot
+    // with no pathfinding can still blunder into it, but it cannot deadlock the match.
+    for (const len of [6, 12]) {
+      expect(measureBoard(tunnel(2, len), 2, `one-${len}`).jamCorridors, `one route @ ${len}`)
+        .toBeGreaterThan(0);
+      expect(measureBoard(twoRoutes(len), 2, `two-${len}`).jamCorridors, `two routes @ ${len}`).toBe(0);
+    }
+    // ...and `routeCount`, which is an independent measure, agrees about the second route.
+    expect(measureBoard(twoRoutes(12), 2, 'two').routeCount).toBeGreaterThan(1);
+  });
+
+  it('reports a length that grows with the tunnel, rather than with the board', () => {
+    // The first version reported 19.00 on a 20-unit board at every length, because it was
+    // measuring the board's rim. These three have to separate.
+    const short = measureBoard(tunnel(2, 2), 2, 'short').longestJamCorridor;
+    const mid = measureBoard(tunnel(2, 6), 2, 'mid').longestJamCorridor;
+    const long = measureBoard(tunnel(2, 12), 2, 'long').longestJamCorridor;
+    expect(short).toBeGreaterThan(0);
+    expect(mid).toBeGreaterThan(short);
+    expect(long).toBeGreaterThan(mid);
+    // A 12-cell tunnel is 8 world units; the bounding-box measure over-estimates a little and
+    // must not run away with it.
+    expect(long).toBeLessThan(12);
+  });
+
+  it('finds nothing on an open board, where the frame is the only narrow thing', () => {
+    // The frame band is what the first version mistook for a corridor. A board with no walls
+    // at all has no corridor by construction.
+    for (const [cols, rows] of [[22, 18], [33, 27]] as const) {
+      const m = measureBoard(openBoard(cols, rows), 2, `empty-${cols}x${rows}`);
+      expect(m.jamCorridors, `${cols}x${rows}`).toBe(0);
+      expect(m.longestJamCorridor, `${cols}x${rows}`).toBe(0);
+    }
+  });
+
+  it('flags exactly one shipped board, and three other measures agree about which', () => {
+    // CALIBRATION, not a gate. Measured at N=2 over all 8 shipped boards: seven report zero,
+    // and vs-tri-01 reports 3 corridors with the longest at 7.58 units.
+    //
+    // That is not this measure on its own: vs-tri-01 is also the only shipped board whose
+    // `bottleneckWidth` is the 1.333 minimum and whose `routeCount` is 1.00, and it is the
+    // smallest board shipped at 27x17. Four independent figures pointing at one board is
+    // corroboration; one figure pointing at one board would be a coincidence.
+    const rows = ARENA_DEFS.map((def) => ({ id: def.id, m: measureBoard(def, 2, def.id) }));
+    const flagged = rows.filter((r) => r.m.jamCorridors > 0);
+    expect(flagged.map((r) => r.id)).toEqual(['vs-tri-01']);
+    expect(rows).toHaveLength(8);
+
+    const tri = rows.find((r) => r.id === 'vs-tri-01');
+    expect(tri?.m.jamCorridors).toBeGreaterThan(0);
+    expect(tri?.m.longestJamCorridor).toBeGreaterThan(0);
+    // The corroborating pair, asserted so a future board that trips this measure alone is
+    // visibly different from vs-tri-01 rather than quietly lumped with it.
+    expect(tri?.m.bottleneckWidth).toBeCloseTo(2 * (2 / 3), 5);
+    expect(tri?.m.routeCount).toBeCloseTo(1, 5);
+
+    // And every board reporting zero here has more than one route, which is the relationship
+    // the measure claims.
+    rows.filter((r) => r.m.jamCorridors === 0).forEach((r) => {
+      expect(r.m.routeCount, `${r.id} has an alternative route`).toBeGreaterThan(1);
+    });
+  });
+});
