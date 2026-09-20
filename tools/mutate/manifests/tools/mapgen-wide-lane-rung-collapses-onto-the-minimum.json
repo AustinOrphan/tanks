@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-wide-lane-rung-collapses-onto-the-minimum",
+  "file": "tools/mapgen/measure.ts",
+  "find": "  const wideCorridorCount = gapRung(3);",
+  "replace": "  const wideCorridorCount = gapRung(2);",
+  "expect": "killed",
+  "why": "Measures the 'comfortable corridor' rung with the MINIMUM corridor's body, collapsing two of the gap taxonomy's three rungs onto each other. Issue #822's budget is stated against the 3-cell rung specifically, so a silent collapse would report 0.94 where the board scores 0.72 and every shipped board would clear a 60% bar it does not actually meet. Worth its own entry because the first draft of the nesting assertion used `toBeLessThanOrEqual`, under which this mutation SURVIVED -- equal satisfies it. The test now asserts strict ordering, which every shipped board separates by a wide margin (arena-01: 0.945 / 0.718 / 0.522).",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: the gap taxonomy (issue #822) keeps the three rungs nested on every shipped board"
+  ]
+}
