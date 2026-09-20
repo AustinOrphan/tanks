@@ -3024,15 +3024,17 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     // Structural here, and verified in a real browser on the issue: this test cannot see a
     // network request.
     const text = stripComments(src);
+    // Rules only, with the @font-face declarations removed: what remains that NAMES one of
+    // these families is a rule asking a browser to fetch it.
+    const rules = [...text.replace(/@font-face\s*\{[^}]*\}/g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)];
+    expect(rules.length, 'the population: stylesheet rules outside @font-face')
+      .toBeGreaterThan(100);
     for (const family of ["'Atkinson Hyperlegible'", "'Inter'"]) {
-      const mentions = [...text.matchAll(new RegExp(family.replace(/'/g, "'"), 'g'))];
-      expect(mentions.length, `${family} is named more than its face and its arm`)
-        .toBeLessThanOrEqual(3);
-      // Every rule naming the family outside a @font-face must be an arm class.
-      const outside = text.replace(/@font-face\s*\{[^}]*\}/g, '');
-      for (const [, selector] of outside.matchAll(/([^{}]*)\{[^}]*\}/g)) {
-        if (!selector.includes(family)) continue;
-        expect(selector, `${family} is asked for outside an arm class`).toMatch(/hud-font--/);
+      const asking = rules.filter(([, , body]) => body.includes(family));
+      expect(asking.length, `${family} is asked for by no rule, so its arm cannot work`).toBe(1);
+      for (const [, selector] of asking) {
+        expect(selector.trim(), `${family} is asked for outside an arm class`)
+          .toMatch(/\.hud\.hud-font--/);
       }
     }
   });
