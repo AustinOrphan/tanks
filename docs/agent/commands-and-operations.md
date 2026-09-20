@@ -611,3 +611,34 @@ the configuration landed. They confirmed the four properties this file claims ab
   No update has touched the `engines` floor, which still reads what `af1cb40` set.
 - **Nothing merged itself.** Each of the eight merged pull requests ran the same eight
   required checks as any other and passed them, and a person merged each one.
+
+### A merged update does not reach a working copy (issue #817)
+
+Merging an update moves `package.json` and `package-lock.json`. It touches **no** checkout's
+`node_modules`. Until someone reinstalls, every local gate runs the old versions while CI runs
+the declared ones, and nothing says so.
+
+On a machine where several worktrees share one install, that gap has stayed open for days at a
+time and been rediscovered independently more than once -- with the gate tools themselves
+drifting a major behind, so a local pass was no more trustworthy than a local failure.
+
+**A green gate somewhere does not clear it.** Worktrees are not uniform: some symlink to a
+shared install, some carry their own, some have none. A clean run in one says nothing about
+the others.
+
+**The failure that is not a red test.** A stale install changes what a version-sensitive
+MEASUREMENT reports without failing anything -- an A/B between two library versions can
+silently run the same version twice, or the wrong one. Two checks, both cheap:
+
+```sh
+node -p "require('./node_modules/three/package.json').version"   # what this checkout resolves
+```
+
+and, for anything that runs in a browser through vite, read the version back from **inside the
+page** (`THREE.REVISION`, or the package's own export). `node_modules/.vite` caches a
+pre-bundle per dependency version, so a stale cache can serve a different version again from
+the one on disk; `npx vite optimize --force` is what clears it.
+
+**The fix is `npm ci` in the checkout that owns the install**, run deliberately. Reinstalling
+underneath a running gate breaks it, so on a shared machine it belongs at a quiet boundary
+rather than to whoever hits the symptom first.
