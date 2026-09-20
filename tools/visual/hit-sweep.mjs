@@ -13,6 +13,7 @@
  * by the gate itself.
  */
 import { findScreenState, SCREEN_STATES } from '../screens/states.mjs';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { runStep, applyEntryMode } from '../screens/steps.mjs';
 
 /**
@@ -185,6 +186,10 @@ export async function measureHitTargets(browser, base, state, viewport, timeout 
     reducedMotion: 'reduce',
     colorScheme: 'dark',
   });
+  // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+  // THIS driver navigates for itself, separately from `verify.mjs`'s own two page paths,
+  // which is the shape of bug issues #781 and #844 both hit here.
+  await context.addInitScript(audioContextOverrideSource());
   const errors = [];
   try {
     const page = await context.newPage();
