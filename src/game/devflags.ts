@@ -18,6 +18,7 @@ import {
   isArrivalLanguage,
   type ArrivalLanguage,
 } from '../presentation/arrival-language';
+import { HUD_FONTS, isHudFont, type HudFont } from '../presentation/hud-font';
 import { STOCK_CUES, isStockCue, type StockCue } from '../presentation/stock-cue';
 import {
   ENEMY_ROLE_CUES, isEnemyRoleCue, type EnemyRoleCue,
@@ -448,6 +449,13 @@ export interface DevFlags {
    */
   stockCue: StockCue | null;
   /**
+   * Which alternate TYPEFACE to draw the HUD in (issue #865). `null` is the shipped Plex.
+   * `atkinson` and `inter` are the two faces #864 kept rather than discarded, each vendored
+   * beside Plex and fetched only when selected. A temporary open-question flag.
+   * See presentation/hud-font.ts.
+   */
+  hudFont: HudFont | null;
+  /**
    * Where Versus Setup puts Start and Back (issue #668); null = the pinned bar carrying
    * both. See presentation/versus-actions.ts.
    */
@@ -567,6 +575,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   shellTrail: null,
   arrival: null,
   stockCue: null,
+  hudFont: null,
   versusActions: null,
   aiPerception: null,
 };
@@ -772,6 +781,13 @@ function asStockCue(params: URLSearchParams): StockCue | null {
   return isStockCue(raw) ? raw : null;
 }
 
+/** One of the named HUD typeface arms, or null when absent or unrecognised. */
+function asHudFont(params: URLSearchParams): HudFont | null {
+  const raw = params.get('hudFont');
+  if (raw === null) return null;
+  return isHudFont(raw) ? raw : null;
+}
+
 /** One of the named identity-marker candidates, or null when absent or unrecognised. */
 function asIdentityMarker(params: URLSearchParams): IdentityMarkerStyle | null {
   const raw = params.get('identityMarker');
@@ -941,6 +957,7 @@ export function parseDevFlags(search: string): DevFlags {
     shellTrail: asShellTrail(params),
     arrival: asArrival(params),
     stockCue: asStockCue(params),
+    hudFont: asHudFont(params),
     versusActions: asVersusActions(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
@@ -1412,6 +1429,18 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       + 'teams falls back to \'pips\'), \'strike\' lifts the old number away struck through, '
       + 'and \'badge\' drops a "−1" under the entry. The shipped strip only '
       + 'changes the digit. Temporary: deleted once an arm is chosen.',
+  },
+  hudFont: {
+    kind: 'valued',
+    values: [...HUD_FONTS],
+    description:
+      'Draws the HUD in one of the two typefaces issue #864 kept rather than discarded '
+      + '(issue #865): \'atkinson\' is Atkinson Hyperlegible, drawn to make characters hard to '
+      + 'CONFUSE rather than merely legible, and \'inter\' is the closest of the three to the '
+      + 'pre-#864 look. The shipped face is IBM Plex, which is what the flag\'s absence draws. '
+      + 'Only the selected face is downloaded, and only the sans changes -- neither alternate '
+      + 'ships a monospace companion, so readouts stay Plex Mono under every arm. Temporary: '
+      + 'deleted once a face is chosen.',
   },
   shellTrail: {
     kind: 'valued',

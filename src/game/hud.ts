@@ -275,6 +275,7 @@ import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
 import { equalizeMenuRows } from './menu-row-width';
+import { hudFontClass, type HudFont } from '../presentation/hud-font';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
@@ -1629,6 +1630,16 @@ export interface HudOptions {
    */
   readonly menuTransition?: MenuTransition | null;
   /**
+   * Which alternate typeface to draw the HUD in (issue #865's `?dev=1&hudFont=` flag).
+   * Absent and `null` are the same thing: the shipped IBM Plex, with no class added.
+   *
+   * A CONSTRUCTION argument for the same reason `menuTransition` is one -- a developer flag
+   * read once from the query string, where a setter would add a member to the `Hud` interface,
+   * its three ownership `Pick`s and every fake in `loop.test.ts` to model a value that cannot
+   * change within a page load.
+   */
+  readonly hudFont?: HudFont | null;
+  /**
    * Which gameplay-topbar arm to render (issue #552's `?dev=1&topbar=` flag). Absent,
    * `null` and `SHIPPED_TOPBAR_TREATMENT` are the same thing: the shipped bar, with no
    * override applied to it anywhere. `'full'` is now an ARM -- the pre-ruling bar, which
@@ -1778,6 +1789,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   const treatmentClass = menuTransitionClass(opts.menuTransition ?? null);
   if (treatmentClass !== null) el.classList.add(treatmentClass);
+  /**
+   * Issue #865's typeface arm, by the same mechanism and for the same reason: a class on the
+   * HUD root, so `--hud-font` moves inside `.hud` and nowhere else. Absent and unrecognised
+   * both yield `null` and add nothing, so the shipped face is literally the shipped path.
+   */
+  const fontClass = hudFontClass(opts.hudFont ?? null);
+  if (fontClass !== null) el.classList.add(fontClass);
   /**
    * What issue #552's topbar arm changes about the shipped bar -- nothing, on the shipped
    * path (see `topbar-treatment.ts`). Read once here, like the transition above, because

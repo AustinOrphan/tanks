@@ -51,6 +51,43 @@
   font-display: block;
 }
 
+/* The two faces issue #864 kept rather than discarded, behind `?dev=1&hudFont=` (issue #865).
+ *
+ * DECLARING A FACE DOES NOT FETCH IT. A `@font-face` is a promise the browser keeps lazily: the
+ * file is requested only when some rule that matches an element asks for that family, and the
+ * only rules naming these two are the `.hud-font--*` classes below, which nothing wears unless
+ * the flag put them there. So a shipped page downloads neither, and that is verified in a real
+ * browser rather than argued from the spec -- see issue #865.
+ *
+ * `font-display: block` for the same reason the shipped faces use it: the alternative paints
+ * the HUD in a fallback and then again in the arm, which is a layout shift on the one surface
+ * these files exist to pin.
+ */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('./fonts/atkinson-hyperlegible-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  /* 400 and 700 are the whole family -- there is no variable build and no other static
+   * weight. The HUD asks for 100-700, so a browser synthesises the rest under this arm.
+   * That is the arm's own coverage, recorded in `src/game/fonts/README.md`. */
+  src: url('./fonts/atkinson-hyperlegible-latin-700-normal.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/inter-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
 /* ---- Design tokens (issue #321) -------------------------------------------------
  *
  * One place for the values the HUD repeats, named for the ROLE they play rather than
@@ -208,6 +245,24 @@
    * `.hud--reduced-motion` and the media query is gone. */
   --ui-transition-duration: 150ms;
   --ui-transition-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Issue #865's typeface arms.
+ *
+ * SCOPED TO `.hud`, not `:root`, and that is the point of the class living on the HUD root:
+ * these properties are the HUD's own vocabulary, and a `:root` override would repaint anything
+ * outside it that ever inherits them. The flag asks "how does the HUD read in this face", not
+ * "what does the page look like".
+ *
+ * ONLY `--hud-font` MOVES. Neither alternate ships a monospace companion, so `--hud-font-mono`
+ * stays Plex Mono under both arms -- which also leaves every mono readout (timers, stock
+ * counts, the diagnostics pane) as a fixed reference when two captures are compared.
+ */
+.hud.hud-font--atkinson {
+  --hud-font: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.hud.hud-font--inter {
+  --hud-font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 /* ---- Primitives (issue #321) -----------------------------------------------------

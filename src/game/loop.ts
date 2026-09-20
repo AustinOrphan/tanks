@@ -1283,6 +1283,10 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // are: the seam stays `(root) => Hud`, so no injected HUD in a test grows a
         // developer flag it has no opinion about.
         menuTransition: devFlags.menuTransition,
+        // Issue #865's typeface arm, bound for the same reason as the one above: a
+        // developer flag no injected HUD in a test has an opinion about. `null` is the
+        // shipped face, so every one of them keeps rendering Plex.
+        hudFont: devFlags.hudFont,
         // Issue #552's topbar arm, bound here for the same reason: a developer flag no
         // injected HUD in a test has an opinion about. `null` is the shipped bar, so
         // every one of them keeps rendering it.

@@ -55,7 +55,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (28)
+## Valued flags (29)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ Notes:
 | `enemyRole` | `enemyRole` | `girth`, `flare`, `dome`, `hull`, `deck`, `riser`, `crown`, `both` | `null` | Draws what an enemy DOES without using colour (issues #357, #773, #831). The shipped board gives every kind one silhouette and separates them by hue alone. Seven single levers carry the same three states so they can be compared: 'girth', 'flare', 'dome' and 'hull' carry weapon class, 'deck', 'riser' and 'crown' carry mine load. 'both' is the approved arm -- the muzzle flare and the raised deck block together. Every value but one is a multiple of a shipped measurement; 'hull' sets the plan outline's corner radius and nose taper directly, because both are clamped and the shipped nose already sits at its ceiling. With the flag absent no tank moves a vertex. |
 | `fillRimLights` | `fillRimLights` | `on`, `off` | `null` | Overrides whether the scene builds its fill and rim lights (`off` never adds them), leaving every other render setting at the preset. |
 | `gallery` | `gallery` | comma-separated parts, each `key:value` or a bare `reach`/`timer`, e.g. `scene:destroyed,view:low,age:24` | `null` | Opens the Developer Tools gallery workbench on this selection when the page loads. The workbench's Copy Link writes it. |
+| `hudFont` | `hudFont` | `atkinson`, `inter` | `null` | Draws the HUD in one of the two typefaces issue #864 kept rather than discarded (issue #865): 'atkinson' is Atkinson Hyperlegible, drawn to make characters hard to CONFUSE rather than merely legible, and 'inter' is the closest of the three to the pre-#864 look. The shipped face is IBM Plex, which is what the flag's absence draws. Only the selected face is downloaded, and only the sans changes -- neither alternate ships a monospace companion, so readouts stay Plex Mono under every arm. Temporary: deleted once a face is chosen. |
 | `identityMarker` | `identityMarker` | `arcs`, `shape`, `roof` | `null` | Adds a second, non-colour channel to player identity (issue #630). On the ground ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own outline. On the turret crown instead: 'roof' leaves the ring exactly as shipped and counts the slot in blades, trading the ring's area for a surface nothing can occlude. In an FFA match the same mark is drawn beside that player in the HUD stock strip (issue #778), so the ground and the readout can be judged as a pair; teams entries are unchanged, since they already carry the A/B/C letter. The shipped default carries identity in hue alone. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `menuTransition` | `menuTransition` | `fade`, `fade-long`, `rise`, `settle` | `null` | Runs a named menu transition between application surfaces (issue #542); `rise` is the shipped 150ms crossfade plus a 16px upward lift, and `fade` is the opacity-only transition that shipped before it. |
