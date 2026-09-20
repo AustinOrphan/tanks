@@ -12,11 +12,24 @@ import type { WallKind } from './types';
 import { VERSUS_CATALOG } from './config/versus-catalog';
 
 // ---------------------------------------------------------------------------
-// SHIPPED-ARENA SWEEP. Denominator for every claim in this block: 7 shipped arenas x
-// 3 versus player counts (2, 3, 4) = 21 (arena, N) verdicts, 10 spawn pairs per arena
-// (C(2,2) + C(3,2) + C(4,2) = 1 + 3 + 6), 50 pairs total. Pinned as its own assertion
-// so a 6th arena moves this test rather than silently shrinking the sweep --
-// versus-spawns.test.ts's own `ARENAS.length` pin is the precedent.
+// SHIPPED-ARENA SWEEP. Three populations, not one, and issue #869 was filed because this
+// header used to give a single figure that was none of them. Every claim below belongs to
+// exactly one of these:
+//
+//   8 shipped arenas x 3 versus player counts (2, 3, 4)  = 24 (arena, N) verdicts EXIST
+//   minus vs-duel-01's three, which the loop excludes    = 21 verdicts are CHECKED
+//   10 spawn pairs per arena across the three counts
+//     (C(2,2) + C(3,2) + C(4,2) = 1 + 3 + 6)             = 70 pairs across those 21
+//                                                          (80 across all 24)
+//   plus vs-duel-01 @ N=2, asserted on its own below     = 71 pairs asserted in this block
+//
+// Re-derived against the tree rather than carried forward: `versusBoardCatalog()` produces
+// 24 rows, the loop's own `expect(checked).toBe(21)` pins the second figure, and the pair
+// totals are the sum of `totalPairs` over each set.
+//
+// `ARENA_DEFS.length` is pinned as its own assertion immediately below, so a 9th arena moves
+// this test rather than silently shrinking the sweep -- versus-spawns.test.ts's own
+// `ARENAS.length` pin is the precedent.
 // ---------------------------------------------------------------------------
 
 describe('evaluateVersusBoard: the shipped-arena sweep', () => {
@@ -31,7 +44,10 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     // Re-derived live, not snapshotted: this recomputes open-floor counts and
     // reruns the real loadArena placement/LOS checks on every shipped grid.
     //
-    // 18 of 24, not 24 of 24, and the shrinkage is in two deliberate steps.
+    // 21 of 24, not 24 of 24, and the exclusion has moved twice -- 15 -> 18 -> 21 as boards
+    // were fixed and rejoined. (This line read "18 of 24" until issue #869; the narrative
+    // below already described the move to 21, and the `it()` title says 21, so the opening
+    // figure was the only thing left behind.)
     //
     // vs-quad-01 remains in ARENA_DEFS -- its grid is what #425 will edit -- but is
     // WITHDRAWN from the catalog and fails the tank-egress gate at all three counts. That
@@ -76,13 +92,20 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
   });
 
   // NONE OF THE THREE CRITERIA CURRENTLY DISCRIMINATES ON SHIPPED DATA -- stated
-  // plainly rather than left to be inferred from the all-true sweep above. Five of the
-  // six shipped arenas are 33x27 or 45x33, authored for a single campaign player plus
+  // plainly rather than left to be inferred from the all-true sweep above. SIX of the
+  // EIGHT shipped arenas are 33x27 or 45x33 (arena-01 through arena-03 and vs-quad-01 at
+  // 33x27, arena-04 and arena-05 at 45x33), authored for a single campaign player plus
   // arranged enemies, not for tightness at 2-4 versus starts; none of them was ever
-  // close to failing any of these bounds. Issue #271's vs-duel-01 is the first board
-  // authored FOR versus and the first to move this margin -- at 27x21 it is the
-  // smallest shipped, and it more than halves the headroom (10x MIN down to 6x) while
-  // still not coming close to failing. The criterion remains non-discriminating on
+  // close to failing any of these bounds.
+  //
+  // The two boards authored FOR versus are the smaller ones and are what has moved this
+  // margin, in two steps. Issue #271's vs-duel-01 came first at 27x21 and took the headroom
+  // from 10x MIN down to 6x. Issue #424's vs-tri-01 is smaller still at 27x17 and holds it
+  // now: its N=4 ratio of 72.25 is **4.01x** the bound, which is 0.25 cells of open floor
+  // above the 4x assertion below. (This paragraph said "five of the six" and called
+  // vs-duel-01 the smallest shipped until issue #869; both were true when written.)
+  //
+  // The criterion remains non-discriminating on
   // shipped data; it is just no longer non-discriminating by an order of magnitude. The three synthetic-fixture describe blocks
   // below prove each criterion CAN fail (and, for concealment and room, that it is
   // wired into `suitable` -- see the mutation table in
