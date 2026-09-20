@@ -1,0 +1,77 @@
+name: Issue graph snapshot
+
+# Export the native issue graph as a versioned JSON artifact (issue #437).
+#
+# THIS IS THE TOKENLESS HALF'S PRODUCER. #437's whole point is that a maintainer never
+# pastes a personal access token into a browser: a read-only job uses the workflow's own
+# scoped token, and whatever consumes the result reads only the exported file. Nothing here
+# is reachable from the game, and nothing here writes to the repository.
+#
+# IT UPLOADS AN ARTIFACT AND DOES NOT COMMIT. #437 asks for "an automatic refresh cadence
+# ... that does not create noisy commits", and a daily commit of a file whose `generatedAt`
+# always differs is exactly that noise. Where the snapshot is finally PUBLISHED is a separate
+# decision -- it touches the Pages topology, which serves the game below /tanks/ -- so this
+# leaf deliberately stops at "generated, downloadable, and visible in the run summary".
+
+on:
+  schedule:
+    # Daily. 05:41 UTC keeps it clear of the other recurring jobs in this repository
+    # (issue-metadata 13:17, mutation-floor 07:23, engines 05:17 Mondays), so a slow run
+    # never queues behind one of them on the same minute.
+    - cron: '41 5 * * *'
+  # The documented manual refresh path #437 asks for: one click, no local checkout, no token.
+  workflow_dispatch:
+
+# Deny everything by default, then grant exactly what the export reads. #437's security
+# section asks for repository metadata and Issues READ access and nothing else; there is no
+# write scope anywhere in this file.
+permissions: {}
+
+jobs:
+  snapshot:
+    name: export the issue graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # One export at a time, and a superseded run loses nothing: every run reads current
+    # state from the API rather than accumulating anything, so cancelling an in-flight one
+    # in favour of a newer one is always correct. This is the opposite of the queue
+    # reconciliation's `cancel-in-progress: false`, which must not drop a pending run.
+    concurrency:
+      group: issue-graph-snapshot-${{ github.repository }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      # NO DEPENDENCY INSTALL, deliberately, and the same choice `issue-metadata.yml`
+      # makes. Checked rather than assumed: every import in the chain
+      # (run.mjs -> snapshot.mjs -> metadata.mjs -> queue.mjs) resolves either to a `node:`
+      # builtin or to a sibling `.mjs` in tools/issues, so nothing reaches node_modules.
+      # An `npm ci` here would add minutes to a job that needs none of it.
+      #
+      # `--out` is explicit rather than left to the default, because the upload step below
+      # names the same path and the two must not drift. The run's commit is stamped into
+      # the file from GITHUB_SHA, which `run.mjs` already reads.
+      - name: Export the issue graph snapshot
+        run: npm run issues:snapshot -- --out issue-graph.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # The counts land in the run summary through GITHUB_STEP_SUMMARY, so the three
+      # "unknown" figures are visible without downloading anything -- which is the point of
+      # reporting them at all. An unauthenticated run cannot read enough relationships to be
+      # trustworthy at this repository's size, so if those numbers are ever non-zero here,
+      # the token is the first thing to check.
+      - name: Upload the snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-graph
+          path: issue-graph.json
+          if-no-files-found: error
+          retention-days: 30
