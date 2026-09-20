@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import {
   subsetStates, baselineFileName, readBaseline, serialiseBaseline,
-  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal, pageErrorRefusalReason } from './baseline.mjs';
+  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal, pageErrorRefusalReason, boxWithinTolerance, BOX_TOLERANCE_PX } from './baseline.mjs';
 import { judgeState, checkExitCode, formatVerdict, recipeFor } from './check.mjs';
 import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
@@ -66,8 +66,10 @@ describe('the screen baseline: what a diff says (issue #846)', () => {
   });
 
   it('names the field that moved, not the whole entry', () => {
-    const changes = diffMeasurements([m()], [m({ box: { x: 0, y: 0, w: 12, h: 4 } })]);
-    expect(changes).toEqual([{ selector: '.a', field: 'box.w', expected: 10, actual: 12 }]);
+    // Past the box tolerance on purpose: 10 -> 12 used to be the case here, and it is now
+    // deliberately NOT a change. See the tolerance block below for why, and for the boundary.
+    const changes = diffMeasurements([m()], [m({ box: { x: 0, y: 0, w: 20, h: 4 } })]);
+    expect(changes).toEqual([{ selector: '.a', field: 'box.w', expected: 10, actual: 20 }]);
   });
 
   it('reports a watched style property, which is what makes pixels unnecessary', () => {
@@ -315,5 +317,55 @@ describe('the screen gate: the declaration reaches the verdict, not just the hel
     for (const call of calls) {
       expect(call, `a judgeState call site does not pass the state: ${call}`).toMatch(/\bstate,|\bstate:/);
     }
+  });
+});
+
+describe('the screen baseline: how far a box may move between platforms (issue #861)', () => {
+  const m = (over: Record<string, unknown> = {}) => ({
+    selector: '.a', present: true, visible: true, box: { x: 0, y: 0, w: 100, h: 40 },
+    text: 'a', style: { color: 'rgb(1, 2, 3)' }, ...over,
+  });
+  const boxOf = (over: Record<string, number>) => [m({ box: { x: 0, y: 0, w: 100, h: 40, ...over } })];
+
+  it('ignores the 1px and 2px residue two cross-platform runs actually produced', () => {
+    expect(diffMeasurements([m()], boxOf({ w: 101 })), '1px was reported').toEqual([]);
+    expect(diffMeasurements([m()], boxOf({ w: 102 })), '2px was reported').toEqual([]);
+    expect(diffMeasurements([m()], boxOf({ w: 98 })), '2px under was reported').toEqual([]);
+  });
+
+  it('reports the very next pixel, so the tolerance is a band and not a shrug', () => {
+    expect(diffMeasurements([m()], boxOf({ w: 103 })))
+      .toEqual([{ selector: '.a', field: 'box.w', expected: 100, actual: 103 }]);
+    expect(diffMeasurements([m()], boxOf({ h: 37 })))
+      .toEqual([{ selector: '.a', field: 'box.h', expected: 40, actual: 37 }]);
+  });
+
+  it('applies to every axis independently, not to the box as a whole', () => {
+    // Four small shifts are four tolerated values, not one budget spent on the first axis.
+    expect(diffMeasurements([m()], boxOf({ x: 2, y: 2, w: 102, h: 42 }))).toEqual([]);
+    // And one axis going out does not suppress the others' exactness.
+    const out = diffMeasurements([m()], boxOf({ x: 2, w: 110 }));
+    expect(out.map((c) => c.field)).toEqual(['box.w']);
+  });
+
+  it('leaves everything that is NOT a rasteriser artefact exact', () => {
+    // The tolerance exists for glyph advances landing either side of a rounding boundary.
+    // None of these is that, so none of them gets a band -- a control that disappeared or a
+    // label that changed wording is a real difference at any magnitude.
+    expect(diffMeasurements([m()], [m({ visible: false })]).map((c) => c.field)).toEqual(['visible']);
+    expect(diffMeasurements([m()], [m({ present: false })]).map((c) => c.field)).toEqual(['present']);
+    expect(diffMeasurements([m()], [m({ text: 'b' })]).map((c) => c.field)).toEqual(['text']);
+    expect(diffMeasurements([m()], [m({ style: { color: 'rgb(9, 9, 9)' } })]).map((c) => c.field))
+      .toEqual(['style.color']);
+  });
+
+  it('compares non-numeric box values exactly, rather than calling them near enough', () => {
+    // A missing or malformed box must not slip through arithmetic that would make NaN or
+    // undefined look close to something.
+    expect(boxWithinTolerance(undefined, 100)).toBe(false);
+    expect(boxWithinTolerance(100, undefined)).toBe(false);
+    expect(boxWithinTolerance(NaN, NaN)).toBe(false);
+    expect(boxWithinTolerance(undefined, undefined)).toBe(true);
+    expect(BOX_TOLERANCE_PX).toBe(2);
   });
 });

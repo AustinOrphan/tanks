@@ -286,6 +286,15 @@ The declaration runs both ways, which is what keeps it a contract rather than a 
 | a different error | **fails** — a declaration is not an amnesty for an unrelated regression |
 | the declared error *plus* a stray one | **fails** — the match is per-error |
 
+**Box geometry is compared to within 2px; everything else is exact.** Text-sized boxes are not
+exactly reproducible across operating systems and bundling the typeface did not make them so —
+it fixed which face is used, not which rasteriser draws it. `--font-render-hinting=none` takes
+out the largest part of the remainder (it cut this gate's cross-platform disagreement from 161
+values to 33, and removed every difference above 2px); what is left is the last fraction of a
+pixel landing on either side of a rounding boundary. `present`, `visible`, `text` and the
+watched style properties have no tolerance at all, because none of them is a rasteriser
+artefact.
+
 Because the baseline is JSON, the pull-request diff *is* the review:
 
 ```diff

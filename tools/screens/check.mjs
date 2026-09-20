@@ -55,6 +55,9 @@ export function judgeState({ stateId, state, recipe, baseline, report }) {
   return {
     stateId,
     status: changes.length === 0 ? 'match' : 'differs',
+    // Missing evidence does not change the verdict, but it is never silent: a state that
+    // passed without producing a screenshot has no picture for the next person to read.
+    screenshotError: report.screenshotError ?? null,
     pageErrors,
     changes,
     recipeId: recipe?.id ?? stateId,
@@ -94,7 +97,8 @@ export async function writeFailureArtifacts(dir, { verdict, baseline, report, pn
 
 /** One verdict as the text a reader sees, in the terminal and in `diff.txt`. */
 export function formatVerdict(verdict) {
-  if (verdict.status === 'match') return `PASS ${verdict.recipeId ?? verdict.stateId}`;
+  const note = verdict.screenshotError ? `\n  no screenshot: ${verdict.screenshotError}` : '';
+  if (verdict.status === 'match') return `PASS ${verdict.recipeId ?? verdict.stateId}${note}`;
   if (verdict.status === 'page-error') {
     // A state that DECLARED its error gets the declaration's own wording, because the two
     // ways it breaks need different fixes: an unexpected error is a regression in the page,
@@ -110,7 +114,7 @@ export function formatVerdict(verdict) {
     // The colon introduces the list below it, so it is only earned when there IS a list. The
     // `missing` refusal has none by definition -- the complaint is that nothing was raised.
     const lines = verdict.pageErrors.map((e) => `    ${e}`);
-    return [`FAIL ${verdict.stateId}`, `  ${reason}${lines.length > 0 ? ':' : ''}`, ...lines].join('\n');
+    return [`FAIL ${verdict.stateId}`, `  ${reason}${lines.length > 0 ? ':' : ''}`, ...lines].join('\n') + note;
   }
   if (verdict.status === 'capture-failed') {
     return [`FAIL ${verdict.stateId}`, `  the capture itself failed: ${verdict.pageErrors[0]}`].join('\n');

@@ -198,7 +198,22 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     }
 
     const measurements = await measure(page, state.measure);
-    const png = await page.screenshot();
+    // The screenshot is EVIDENCE, not the verdict, so it is not allowed to decide one.
+    // `Page.captureScreenshot` fails on the CI runner for the two states that deliberately
+    // refuse WebGL, and because this threw, the measurements already taken above were thrown
+    // away with it -- the gate reported "the capture itself failed" and wrote an evidence
+    // file containing an empty measurement list, which is the least informative thing it
+    // could have said about a page it had in fact just measured.
+    //
+    // Recorded rather than swallowed: `screenshotError` travels in the report, the check
+    // command prints it, and the state is still judged on its measurements.
+    let png = null;
+    let screenshotError = null;
+    try {
+      png = await page.screenshot();
+    } catch (e) {
+      screenshotError = String(e).split('\n')[0];
+    }
     const report = {
       capture: { viewport: { width, height, devicePixelRatio: dpr } },
       producer: {
@@ -207,6 +222,7 @@ export async function captureState(browser, base, state, { width, height, dpr, t
         webgl: state.webgl,
         javascript: state.javascript,
         boot: state.boot,
+        screenshotError,
         // Carried so the adapter can tell an uncaught error that IS the subject from one
         // that merely happened (issue #781).
         entry: state.entry,

@@ -123,6 +123,35 @@ export function formatPageErrorRefusal(verdict, stateId) {
   return `${stateId}: ${pageErrorRefusalReason(verdict)}`;
 }
 
+/**
+ * How far a box may move between platforms before it counts as a change.
+ *
+ * Text-sized boxes are not exactly reproducible across operating systems, and bundling the
+ * typeface (#864) does not make them so. It fixed WHICH face is used; the RASTERISER is still
+ * the host's. `--font-render-hinting=none` (see `launchBrowser`) takes out the largest part of
+ * what is left -- it cut this gate's cross-platform disagreement from 161 values to 33, and
+ * every difference above 2px with it. What remains is the last fraction of a pixel landing on
+ * either side of a rounding boundary, mostly through `line-height: normal`, which resolves
+ * from font metrics the host reports and is not even a constant ratio across sizes.
+ *
+ * TWO pixels, and the number is argued rather than picked: the residue measured exactly 1px
+ * (70 values) and 2px (36) across two full cross-platform runs, and nothing between 3px and
+ * 54px survived the hinting flag. A real layout regression in this codebase is a control that
+ * moved, a panel that reflowed or a line that wrapped -- tens of pixels, not two.
+ *
+ * It applies to BOX GEOMETRY ONLY. `present`, `visible`, `text` and every watched style
+ * property stay exact, because none of them is a rasteriser artefact: a control that vanished,
+ * a label that changed wording or a colour that moved is a real difference at any magnitude.
+ */
+export const BOX_TOLERANCE_PX = 2;
+
+/** Whether two box values agree to within the tolerance; exact for anything non-numeric. */
+export function boxWithinTolerance(expected, actual, tolerance = BOX_TOLERANCE_PX) {
+  if (typeof expected !== 'number' || typeof actual !== 'number') return expected === actual;
+  if (!Number.isFinite(expected) || !Number.isFinite(actual)) return expected === actual;
+  return Math.abs(expected - actual) <= tolerance;
+}
+
 export function diffMeasurements(expected, actual) {
   const changes = [];
   const byName = (list) => new Map(list.map((m) => [m.selector, m]));
@@ -143,7 +172,9 @@ export function diffMeasurements(expected, actual) {
     for (const axis of ['x', 'y', 'w', 'h']) {
       const ev = e.box?.[axis];
       const av = a.box?.[axis];
-      if (ev !== av) changes.push({ selector, field: `box.${axis}`, expected: ev, actual: av });
+      if (!boxWithinTolerance(ev, av)) {
+        changes.push({ selector, field: `box.${axis}`, expected: ev, actual: av });
+      }
     }
     const styles = new Set([...Object.keys(e.style ?? {}), ...Object.keys(a.style ?? {})]);
     for (const prop of [...styles].sort()) {
