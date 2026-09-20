@@ -20,6 +20,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from '../visual/static-server.mjs';
 
@@ -49,6 +50,8 @@ export function runOrder(arms, runs) {
 
 async function oneRun(browser, base, arm, timeoutMs) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+  await context.addInitScript(audioContextOverrideSource());
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));

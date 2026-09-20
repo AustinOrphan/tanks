@@ -29,6 +29,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from '../visual/static-server.mjs';
 
@@ -96,6 +97,8 @@ async function main() {
     args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+  await page.addInitScript(audioContextOverrideSource());
   const report = [];
   try {
     await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });

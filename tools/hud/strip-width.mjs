@@ -35,6 +35,9 @@ const layoutFor = (slots, total) => {
 };
 
 const browser = await chromium.launch();
+// NO AudioContext override here, deliberately (issue #877): this page is built with
+// `setContent` from raw CSS and markup and never navigates to the app, so there is no
+// boot path to remove a constructor from.
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 
 async function measure(players, total) {

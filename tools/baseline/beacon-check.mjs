@@ -71,6 +71,11 @@ async function main() {
     const chromium = await loadChromium();
     const browser = await chromium.launch();
     try {
+      // NO AudioContext override here, deliberately (issue #877), which listed this row
+      // as unverified. Settled by reading the target: BEACON_URL is the `run.mjs` page
+      // above -- `tools/baseline/page.html` with a `?beacon=` query -- and that page's
+      // module script imports `trace.ts` and `angles.ts`, which reach `src/sim` only.
+      // Never the app, so never its audio contexts.
       const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'load' });
       // Wait for the page's own beacon script to report success, so the browser is not

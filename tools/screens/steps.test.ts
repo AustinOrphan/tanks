@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { advancePlay, audioContextOverrideSource, PLAY_START, webglOverrideSource } from './steps.mjs';
+import { advancePlay, PLAY_START, webglOverrideSource } from './steps.mjs';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 
 /**
  * Issue #700. `webglOverrideSource` returns page-side source for a browser, so a unit test

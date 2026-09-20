@@ -182,6 +182,10 @@ async function runPlaywrightMode(opts) {
       let browser;
       try {
         browser = await playwright[name].launch();
+        // NO AudioContext override here, deliberately (issue #877): the target is
+        // `tools/baseline/page.html`, whose module script imports `trace.ts` and
+        // `angles.ts` only, and those reach `src/sim` alone. The app's boot path, and so
+        // the two audio contexts it builds, is never loaded.
         const page = await browser.newPage();
         const pageErrors = [];
         page.on('pageerror', (e) => pageErrors.push(String(e)));

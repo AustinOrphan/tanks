@@ -21,6 +21,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -93,6 +94,27 @@ try {
   const chromium = await loadChromium();
   browser = await chromium.launch();
   const page = await browser.newPage();
+  // Issue #877: every tool that boots the app removes the AudioContext constructor first.
+  // This is the one tool where a wrong call would produce silently wrong OUTPUT rather than
+  // an obvious failure, so it was measured rather than argued from `OfflineAudioContext`
+  // being a constructor the override leaves alone. Two kinds of target, because they answer
+  // differently:
+  //
+  //   --sfx explosion   0 of  61,739 samples differ across the override
+  //   --sfx all         0 of 480,690 samples differ across the override
+  //
+  // Both are bit-reproducible in the first place -- `--sfx explosion` rendered twice with no
+  // override hashes the same, and `--sfx all` hashes the same across three runs -- so a zero
+  // there means what it looks like.
+  //
+  // `--track` is NOT bit-reproducible, so its comparison has to be a contrast rather than a
+  // hash. Over `--track arena --seconds 6`, three pairs ACROSS the override differ in 1, 2
+  // and 3 of 264,600 samples; three pairs WITHIN the override arm differ in 3, 3 and 4. Max
+  // |delta| is 1 LSB in every pair, `--seed 7` does not remove it (2 of 264,600 between two
+  // seeded runs), and the peak is 0.218 in all six track renders. The override's effect is
+  // therefore not distinguishable from the renderer's own run-to-run jitter, which is
+  // present without it.
+  await page.addInitScript(audioContextOverrideSource());
   page.on('pageerror', (e) => console.error('page error:', String(e)));
   await page.goto(base, { waitUntil: 'domcontentloaded' });
 

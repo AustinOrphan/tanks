@@ -47,6 +47,9 @@ try {
   browser = await chromium.launch({
     args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'],
   });
+  // NO AudioContext override here, deliberately (issue #877): `idle-cost.html` loads
+  // `idle-cost.ts`, whose only import is `src/render/preview`, so the app's boot path and
+  // its two audio contexts are never reached. See `tools/gl/run.mjs` for the longer note.
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', String(e)));
