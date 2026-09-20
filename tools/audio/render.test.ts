@@ -12,6 +12,13 @@ import { describe, expect, it } from 'vitest';
 // `process.exit(2)` paths and a 360-line `try`/`finally` -- ran at the top level, so importing
 // it HERE would have spawned vite, launched Chromium and rendered a .wav into `audio-out/`.
 // That it now returns in single-digit milliseconds is the guard working.
+//
+// What the guard is NOT for, measured rather than assumed: it does not prevent a hang. With
+// the guard removed, this suite still fails in about a second -- `main()` is async and nothing
+// awaits it at module scope, so the import returns immediately and the assertion below is what
+// catches the missing guard. The renderer is simply killed part-way when vitest exits. The
+// value is that the tool does not RUN at all: no vite, no Chromium, no `audio-out/` write
+// racing whatever else is on the machine.
 import './render.mjs';
 
 describe('render.mjs: the seams no vitest run can execute', () => {
