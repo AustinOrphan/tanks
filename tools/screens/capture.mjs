@@ -11,7 +11,7 @@
  */
 import { loadChromium } from '../shared/playwright.mjs';
 import { serveStatic } from '../visual/static-server.mjs';
-import { runStep, webglOverrideSource, applyEntryMode } from './steps.mjs';
+import { runStep, webglOverrideSource, audioContextOverrideSource, applyEntryMode } from './steps.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 
 const MIME = {
@@ -120,6 +120,9 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     // decided by how the very first request is answered. Shared with the layout sweep's own
     // driver, which navigates separately -- see `applyEntryMode`.
     await applyEntryMode(page, state.entry);
+    // Before any navigation and before the WebGL override, because what it removes is read
+    // during startup by both Howler and `engine.ts`. See `audioContextOverrideSource`.
+    await page.addInitScript(audioContextOverrideSource());
     if (state.webgl !== 'ok') await page.addInitScript(webglOverrideSource(state.webgl));
     if (Object.keys(state.storage).length > 0) {
       // localStorage needs an origin, so the first visit exists only to get one. The
