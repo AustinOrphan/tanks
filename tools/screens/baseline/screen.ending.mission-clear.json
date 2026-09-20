@@ -28,7 +28,7 @@
       "visible": true,
       "box": {
         "x": 417,
-        "y": 256,
+        "y": 255,
         "w": 445,
         "h": 72
       },
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 562,
-        "y": 370,
-        "w": 156,
-        "h": 47
+        "x": 563,
+        "y": 369,
+        "w": 154,
+        "h": 49
       },
       "text": "Next Level",
       "style": {
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 557,
-        "y": 433,
-        "w": 166,
+        "x": 556,
+        "y": 434,
+        "w": 168,
         "h": 44
       },
       "text": "Practice This Level",

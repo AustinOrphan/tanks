@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 632,
+        "x": 630,
         "y": 221,
-        "w": 92,
+        "w": 96,
         "h": 44
       },
       "text": "Controllers",

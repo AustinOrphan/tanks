@@ -269,6 +269,23 @@ no `expected.png` to compare it against — pixels are not the channel.
 `measurementsSha256` hashes the measurements alone, so a screen that started throwing would
 keep its hash and pass; an uncaught error is a defect regardless of what the layout did.
 
+**Unless the state declares it.** A state whose subject IS a failed page says so with a
+`pageError` field naming a substring the error must contain, and then both commands treat that
+error as the design and go on to compare measurements normally. `screen.startup.entry-unparseable`
+declares `'SyntaxError'`: its entry bundle is served deliberately unbalanced so it fails at
+parse time, which is the only way to reach the "could not start" card. Without the field that
+state could never be accepted and could never pass — a gate quietly not covering one of its
+own states.
+
+The declaration runs both ways, which is what keeps it a contract rather than a suppression:
+
+| what the capture raised | verdict |
+| --- | --- |
+| the declared error | the design; measurements are diffed as usual |
+| nothing at all | **fails** — the card it exists to photograph is no longer being reached |
+| a different error | **fails** — a declaration is not an amnesty for an unrelated regression |
+| the declared error *plus* a stray one | **fails** — the match is per-error |
+
 Because the baseline is JSON, the pull-request diff *is* the review:
 
 ```diff

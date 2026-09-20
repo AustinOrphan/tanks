@@ -28,8 +28,8 @@
       "visible": true,
       "box": {
         "x": 583,
-        "y": 571,
-        "w": 114,
+        "y": 572,
+        "w": 115,
         "h": 44
       },
       "text": "Main Menu",
@@ -48,8 +48,8 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 577,
-        "y": 369,
+        "x": 578,
+        "y": 370,
         "w": 125,
         "h": 44
       },
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 593,
-        "y": 443,
-        "w": 95,
+        "x": 592,
+        "y": 444,
+        "w": 97,
         "h": 44
       },
       "text": "Settings",

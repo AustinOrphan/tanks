@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 548,
+        "x": 547,
         "y": 660,
-        "w": 184,
+        "w": 186,
         "h": 44
       },
       "text": "Restart with Same Seed",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 553,
+        "x": 552,
         "y": 772,
-        "w": 174,
+        "w": 177,
         "h": 44
       },
       "text": "Restart Current Round",

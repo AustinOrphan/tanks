@@ -1,0 +1,14 @@
+{
+  "id": "ui-btn-stops-inheriting-the-bundled-face",
+  "file": "src/game/hud.css",
+  "find": "  font-family: inherit;\n  min-height: var(--hud-control-min);",
+  "replace": "  min-height: var(--hud-control-min);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) makes the control primitive INHERIT the family, which a <button> otherwise refuses"
+  ],
+  "why": "Returns every control in the game to the platform's Arial. A <button>'s UA `font` shorthand sets family, size and weight together and beats the family inherited from `.hud`, so without this declaration 269 of the 271 elements carrying `.ui-btn` compute `font-family: Arial` -- measured on the built page after #864 bundled the typeface. Nothing looks broken, which is why it survived #864: the buttons still render, just in a face the host chooses, so their text metrics keep the platform dependency the bundling existed to remove and the screen gate keeps comparing host-resolved boxes."
+}

@@ -50,7 +50,7 @@
       "box": {
         "x": 604,
         "y": 424,
-        "w": 72,
+        "w": 73,
         "h": 44
       },
       "text": "Retry",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 579,
+        "x": 578,
         "y": 480,
-        "w": 122,
+        "w": 123,
         "h": 44
       },
       "text": "Back to menu",

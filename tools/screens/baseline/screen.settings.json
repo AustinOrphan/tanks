@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 528,
+        "x": 527,
         "y": 489,
-        "w": 95,
+        "w": 96,
         "h": 44
       },
       "text": "Reset stats",
@@ -71,7 +71,7 @@
       "box": {
         "x": 633,
         "y": 489,
-        "w": 118,
+        "w": 119,
         "h": 44
       },
       "text": "Reset progress",

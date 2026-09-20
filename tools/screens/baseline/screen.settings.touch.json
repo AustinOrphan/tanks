@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 304,
+        "x": 296,
         "y": 221,
-        "w": 87,
+        "w": 90,
         "h": 44
       },
       "text": "Aim: Stick",
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 401,
+        "x": 396,
         "y": 221,
-        "w": 117,
+        "w": 120,
         "h": 44
       },
       "text": "Fire: Tap to fire",

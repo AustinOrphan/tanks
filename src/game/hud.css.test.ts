@@ -2974,6 +2974,21 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
       .not.toMatch(/font-family:\s*ui-monospace/);
   });
 
+  it('makes the control primitive INHERIT the family, which a <button> otherwise refuses', () => {
+    // The gap the bundling left. A <button>'s UA stylesheet sets `font` as a shorthand --
+    // family, size and weight in one declaration -- and that beats the family every other
+    // element inherits from `.hud`. MEASURED on the built page after #864 landed: 269 of the
+    // 271 elements carrying `.ui-btn` computed `font-family: Arial`, the two exceptions being
+    // the `<a class="ui-btn">` links, which are not buttons. So every control in the game was
+    // still resolving its face per platform, which is exactly what bundling removed elsewhere.
+    expect(ruleBody('.ui-btn'), 'the control primitive no longer inherits its family')
+      .toMatch(/font-family:\s*inherit/);
+    // FAMILY only. `font: inherit` would drag size and weight along and flatten the control
+    // scale -- a primary slab is 20px where a tertiary is 15px.
+    expect(ruleBody('.ui-btn'), 'the primitive inherits the whole font shorthand')
+      .not.toMatch(/font:\s*inherit/);
+  });
+
   it('declares a face for every weight it asks for, so nothing is synthesised', () => {
     // Plex Sans's axis ends at 700 and Plex Mono ships no variable build. A weight outside
     // what is declared is synthesised by the engine, per engine -- which is the variance

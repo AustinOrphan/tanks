@@ -254,9 +254,10 @@ export const SCREEN_STATES = Object.freeze([
   }),
   // The two ways the entry bundle can fail a player (issue #781). Kept beside the holding
   // card on purpose: all three photograph the page BEFORE the application exists, and the
-  // difference between them is only what happened to one request. `#boot-loading` is measured
-  // by all three, because these two are the states where it is RETIRED rather than absent --
-  // the card's own guard reads it, then `app.innerHTML = ''` takes it out.
+  // difference between them is only what happened to one request. These two do NOT measure
+  // `#boot-loading` -- the card's own guard reads it and then `app.innerHTML = ''` takes it
+  // out, so by the time the failure card is up the holding card is gone rather than hidden.
+  // Each state repeats that below, and `states.test.ts` asserts it.
   state({
     id: 'screen.startup.entry-refused',
     title: 'Entry bundle refused',
@@ -1021,7 +1022,12 @@ export const SCREEN_STATES = Object.freeze([
     description: 'The browser answered, and the answer was no. Hardware-acceleration advice.',
     webgl: 'unsupported',
     steps: [{ waitVisible: '[role="alert"]' }],
-    measure: ['[role="alert"]'],
+    // The container AND its text. `[role="alert"]` alone is a full-viewport flex box whose
+    // geometry cannot move whatever the type does, so measuring only it made these two states
+    // blind to the thing #864 changed here -- and that blindness is why the inline card in
+    // index.html stayed on `system-ui` unnoticed. The h1 and p are text-sized, so they move
+    // when the face does.
+    measure: ['[role="alert"]', '[role="alert"] h1', '[role="alert"] p'],
   }),
   state({
     id: 'screen.startup.probe-blocked',
@@ -1029,7 +1035,12 @@ export const SCREEN_STATES = Object.freeze([
     description: 'getContext threw. Different cause, different advice: extensions and privacy modes.',
     webgl: 'probe-blocked',
     steps: [{ waitVisible: '[role="alert"]' }],
-    measure: ['[role="alert"]'],
+    // The container AND its text. `[role="alert"]` alone is a full-viewport flex box whose
+    // geometry cannot move whatever the type does, so measuring only it made these two states
+    // blind to the thing #864 changed here -- and that blindness is why the inline card in
+    // index.html stayed on `system-ui` unnoticed. The h1 and p are text-sized, so they move
+    // when the face does.
+    measure: ['[role="alert"]', '[role="alert"] h1', '[role="alert"] p'],
   }),
   state({
     id: 'screen.startup.match-failed',

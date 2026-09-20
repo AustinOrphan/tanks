@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 538,
+        "x": 537,
         "y": 328,
-        "w": 204,
+        "w": 206,
         "h": 32
       },
       "text": "Tanks! could not start.",
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 403,
+        "x": 406,
         "y": 376,
-        "w": 474,
+        "w": 468,
         "h": 26
       },
       "text": "Something went wrong before the game was ready. Try reloading.",
@@ -71,7 +71,7 @@
       "box": {
         "x": 592,
         "y": 425,
-        "w": 96,
+        "w": 97,
         "h": 47
       },
       "text": "Reload",

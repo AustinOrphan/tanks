@@ -197,7 +197,13 @@
           page.style.cssText =
             'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
             'gap:1rem;height:100%;padding:2rem;box-sizing:border-box;color:#d8dde6;' +
-            'font:16px/1.6 system-ui,sans-serif;text-align:center';
+            // 'IBM Plex Sans' first, matching `boot.ts`'s PAGE_CSS. This card is drawn by
+            // the INLINE guard, which is the whole reason it was missed when #864 bundled the
+            // typeface: these two states route the entry bundle to a 404 or to unparseable
+            // source, so `boot.ts` never runs and its font change never reaches them. Left on
+            // `system-ui` they are the only states in the checked subset whose text metrics
+            // still depend on the host, which is the defect #864 existed to remove.
+            "font:16px/1.6 'IBM Plex Sans',system-ui,sans-serif;text-align:center";
           page.setAttribute('role', 'alert');
           page.setAttribute('aria-live', 'assertive');
           var h = document.createElement('h1');

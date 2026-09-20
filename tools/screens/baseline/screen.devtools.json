@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 563,
+        "x": 561,
         "y": 268,
-        "w": 153,
+        "w": 158,
         "h": 44
       },
       "text": "Controller Self-Test",
@@ -92,7 +92,7 @@
       "box": {
         "x": 569,
         "y": 436,
-        "w": 142,
+        "w": 143,
         "h": 44
       },
       "text": "Pin Current Seed",

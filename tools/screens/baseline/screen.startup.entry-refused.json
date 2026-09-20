@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 540,
+        "x": 539,
         "y": 328,
-        "w": 200,
+        "w": 202,
         "h": 32
       },
       "text": "Tanks! could not load.",
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 395,
+        "x": 400,
         "y": 376,
-        "w": 490,
+        "w": 481,
         "h": 26
       },
       "text": "Part of the game couldn't load. Check your connection, then reload.",
@@ -71,7 +71,7 @@
       "box": {
         "x": 592,
         "y": 425,
-        "w": 96,
+        "w": 97,
         "h": 47
       },
       "text": "Reload",

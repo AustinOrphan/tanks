@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 559,
+        "x": 558,
         "y": 193,
-        "w": 161,
+        "w": 164,
         "h": 44
       },
       "text": "Sticks: Recommended",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 558,
+        "x": 557,
         "y": 247,
-        "w": 164,
+        "w": 166,
         "h": 252
       },
       "text": "Fire: RT / R2Mine: LT / L2Confirm: A / CrossBack: B / CirclePause: Menu / Options",
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 554,
+        "x": 553,
         "y": 509,
-        "w": 172,
+        "w": 173,
         "h": 44
       },
       "text": "Reset to Recommended",

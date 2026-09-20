@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
   subsetStates, baselineFileName, readBaseline, serialiseBaseline,
-  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal } from './baseline.mjs';
+  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal, pageErrorRefusalReason } from './baseline.mjs';
 import { judgeState, checkExitCode, formatVerdict, recipeFor } from './check.mjs';
 import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
@@ -234,12 +235,85 @@ describe('the screen gate: a state whose subject IS a page error (issue #861)', 
   });
 
   it('words the three refusals differently, because they need different fixes', () => {
-    const missing = formatPageErrorRefusal(judgePageErrors(declared, []), declared.id);
-    const mismatch = formatPageErrorRefusal(judgePageErrors(declared, ['TypeError: nope']), declared.id);
-    const unexpected = formatPageErrorRefusal(judgePageErrors(plain, ['TypeError: nope']), plain.id);
+    const missing = pageErrorRefusalReason(judgePageErrors(declared, []));
+    const mismatch = pageErrorRefusalReason(judgePageErrors(declared, ['TypeError: nope']));
+    const unexpected = pageErrorRefusalReason(judgePageErrors(plain, ['TypeError: nope']));
     expect(missing).toMatch(/raised none/);
     expect(mismatch).toMatch(/does not match the declared/);
     expect(unexpected).toMatch(/no design to approve/);
     expect(new Set([missing, mismatch, unexpected]).size, 'two refusals read the same').toBe(3);
+  });
+});
+
+describe('the screen gate: the declaration reaches the verdict, not just the helper (issue #861)', () => {
+  // The helper above is a pure function tested in isolation, which cannot prove COMPOSITION:
+  // `judgeState` has to be handed the state, and its call site has to hand it over. Both were
+  // unasserted when this block was written -- reverting judgeState's whole declared path left
+  // every test green, which is the definition of a dead branch.
+  const m = () => ({ selector: '.a', present: true, visible: true, box: { x: 0, y: 0, w: 10, h: 10 }, text: 'a', style: {} });
+  const declared = { id: 'screen.startup.entry-unparseable', pageError: 'SyntaxError' };
+
+  it('lets a DECLARED error through to the ordinary measurement comparison', () => {
+    // The point of declaring: the failure card still gets its layout diffed. A state waved
+    // past on the strength of having thrown would photograph nothing.
+    const v = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: ["SyntaxError: Unexpected token ';'"] },
+    });
+    expect(v.status, 'a declared error was still treated as a failure').toBe('match');
+    expect(checkExitCode([v])).toBe(0);
+  });
+
+  it('still DIFFS a declaring state, so its card cannot drift behind the declaration', () => {
+    const moved = { ...m(), box: { x: 0, y: 0, w: 99, h: 10 } };
+    const v = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [moved], pageErrors: ["SyntaxError: Unexpected token ';'"] },
+    });
+    expect(v.status).toBe('differs');
+    expect(v.changes.length).toBeGreaterThan(0);
+  });
+
+  it('fails a declaring state whose error stopped appearing, and says so without a dangling colon', () => {
+    const v = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: [] },
+    });
+    expect(v.status).toBe('page-error');
+    const text = formatVerdict(v);
+    expect(text).toContain('expected a page error containing');
+    expect(text).toContain('raised none');
+    expect(text.split('\n').length, 'an empty error list still printed list lines').toBe(2);
+    expect(text.endsWith(':'), 'the colon introduces a list that is not there').toBe(false);
+    // The state id belongs on the FAIL line, once.
+    expect(text.split(declared.id).length - 1, 'the state id is repeated').toBe(1);
+    expect(checkExitCode([v])).toBe(1);
+  });
+
+  it('fails a declaring state on a stray error, wording it differently from an undeclared one', () => {
+    const strayV = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: ['TypeError: boom'] },
+    });
+    const plainV = judgeState({
+      stateId: 'screen.a', recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: ['TypeError: boom'] },
+    });
+    expect(strayV.status).toBe('page-error');
+    expect(formatVerdict(strayV)).toContain('does not match the declared');
+    expect(formatVerdict(plainV)).toContain('not trustworthy');
+    expect(formatVerdict(strayV)).not.toBe(formatVerdict(plainV));
+  });
+
+  it('is actually handed the state by check.mjs, which no unit test can prove', () => {
+    // STRUCTURAL, and it says so. `judgeState` reads `state?.pageError`, so a call site that
+    // forgets the argument does not throw -- it silently takes the undeclared branch and the
+    // declaration stops working, with every test in this file still green.
+    const src = readFileSync(new URL('./check.mjs', import.meta.url), 'utf8');
+    const calls = src.match(/judgeState\(\{[^}]*\}/g) ?? [];
+    expect(calls.length, 'no judgeState call site found in check.mjs').toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call, `a judgeState call site does not pass the state: ${call}`).toMatch(/\bstate,|\bstate:/);
+    }
   });
 });

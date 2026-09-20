@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { SCREEN_STATES } from './states.mjs';
 import { captureState, launchBrowser, serve } from './capture.mjs';
-import { BASELINE_DIR, subsetStates, readBaseline, diffMeasurements, formatFailure, judgePageErrors, formatPageErrorRefusal } from './baseline.mjs';
+import { BASELINE_DIR, subsetStates, readBaseline, diffMeasurements, formatFailure, judgePageErrors, pageErrorRefusalReason } from './baseline.mjs';
 import { CAPTURE_RECIPES } from '../capture/registry.mjs';
 import { inspectSourceState } from '../capture/provenance.mjs';
 
@@ -99,11 +99,18 @@ export function formatVerdict(verdict) {
     // A state that DECLARED its error gets the declaration's own wording, because the two
     // ways it breaks need different fixes: an unexpected error is a regression in the page,
     // a missing one means the state stopped reaching the failure it was written to show.
-    const reason = verdict.errorVerdict
-      ? `  ${formatPageErrorRefusal(verdict.errorVerdict, verdict.stateId)}:`
-      : '  the page raised an error, so the screen is not trustworthy:';
-    return [`FAIL ${verdict.stateId}`, reason,
-      ...verdict.pageErrors.map((e) => `    ${e}`)].join('\n');
+    // Only a DECLARATION failure gets the declaration's wording. An ordinary unexpected error
+    // keeps this command's own sentence: `accept` refuses because there is no design to
+    // approve, `check` fails because the screen cannot be trusted, and the 44 states that
+    // declare nothing should not start reading like the other command.
+    const declarationFailed = verdict.errorVerdict && verdict.errorVerdict.reason !== 'unexpected';
+    const reason = declarationFailed
+      ? pageErrorRefusalReason(verdict.errorVerdict)
+      : 'the page raised an error, so the screen is not trustworthy';
+    // The colon introduces the list below it, so it is only earned when there IS a list. The
+    // `missing` refusal has none by definition -- the complaint is that nothing was raised.
+    const lines = verdict.pageErrors.map((e) => `    ${e}`);
+    return [`FAIL ${verdict.stateId}`, `  ${reason}${lines.length > 0 ? ':' : ''}`, ...lines].join('\n');
   }
   if (verdict.status === 'capture-failed') {
     return [`FAIL ${verdict.stateId}`, `  the capture itself failed: ${verdict.pageErrors[0]}`].join('\n');

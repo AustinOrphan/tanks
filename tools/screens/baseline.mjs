@@ -101,15 +101,26 @@ export function judgePageErrors(state, pageErrors) {
   return { ok: true, errors, expected };
 }
 
-/** The one-line reason a `judgePageErrors` refusal gives, so both commands word it the same. */
-export function formatPageErrorRefusal(verdict, stateId) {
+/**
+ * Why a `judgePageErrors` refusal refused, without naming the state.
+ *
+ * Separate from the state id because the two callers frame it differently: `accept` prints a
+ * single `REFUSED <id>: <reason>` line, while `check` has already printed `FAIL <id>` above
+ * and would otherwise say the id twice.
+ */
+export function pageErrorRefusalReason(verdict) {
   if (verdict.reason === 'missing') {
-    return `${stateId}: expected a page error containing '${verdict.expected}', and the page raised none`;
+    return `expected a page error containing '${verdict.expected}', and the page raised none`;
   }
   if (verdict.reason === 'mismatch') {
-    return `${stateId}: page error does not match the declared '${verdict.expected}'`;
+    return `page error does not match the declared '${verdict.expected}'`;
   }
-  return `${stateId}: the page raised an error, so there is no design to approve`;
+  return 'the page raised an error, so there is no design to approve';
+}
+
+/** The reason as one line naming the state, which is the form `accept` prints. */
+export function formatPageErrorRefusal(verdict, stateId) {
+  return `${stateId}: ${pageErrorRefusalReason(verdict)}`;
 }
 
 export function diffMeasurements(expected, actual) {
