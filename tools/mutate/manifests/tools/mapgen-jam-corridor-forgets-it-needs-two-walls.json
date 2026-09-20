@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-jam-corridor-forgets-it-needs-two-walls",
+  "file": "tools/mapgen/measure.ts",
+  "find": "      if (blockedAt(i + di * span, j + dj * span) && blockedAt(i - di * span, j - dj * span)) {",
+  "replace": "      if (blockedAt(i + di * span, j + dj * span) || blockedAt(i - di * span, j - dj * span)) {",
+  "expect": "killed",
+  "why": "Counts a point beside a SINGLE wall face as corridor-narrow, which is the bug this measure actually shipped with twice before its fixtures were satisfied. With `||`, the narrow bands hugging every interior wall face join separate gaps into one connected run, so blocking that run blocks every route at once and a board with two ways through the same wall still reports its tunnel as unavoidable. A corridor has wall on BOTH sides; a wall face has open room on one of them. The two-route control is the assertion that separates them.",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: bot jam corridors (issue #822) stops counting the same tunnel once a second route exists"
+  ]
+}
