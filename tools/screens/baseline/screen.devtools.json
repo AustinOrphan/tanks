@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 522,
+        "x": 520,
         "y": 35,
-        "w": 237,
-        "h": 38
+        "w": 239,
+        "h": 42
       },
       "text": "Developer Tools",
       "style": {
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 559,
-        "y": 256,
-        "w": 163,
+        "x": 563,
+        "y": 268,
+        "w": 153,
         "h": 44
       },
       "text": "Controller Self-Test",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 564,
-        "y": 368,
-        "w": 153,
+        "x": 568,
+        "y": 380,
+        "w": 144,
         "h": 44
       },
       "text": "Copy Diagnostics",
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 566,
-        "y": 424,
-        "w": 148,
+        "x": 569,
+        "y": 436,
+        "w": 142,
         "h": 44
       },
       "text": "Pin Current Seed",
@@ -111,9 +111,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 604,
-        "y": 860,
-        "w": 72,
+        "x": 605,
+        "y": 876,
+        "w": 70,
         "h": 44
       },
       "text": "Back",

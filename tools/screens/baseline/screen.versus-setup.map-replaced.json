@@ -28,7 +28,7 @@
       "visible": true,
       "box": {
         "x": 272,
-        "y": 277,
+        "y": 287,
         "w": 736,
         "h": 371
       },
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 458,
-        "y": 670,
-        "w": 365,
-        "h": 16
+        "x": 462,
+        "y": 680,
+        "w": 356,
+        "h": 18
       },
       "text": "Pinwheel is not available with 3 players. Random selected.",
       "style": {

@@ -28,9 +28,9 @@
       "visible": true,
       "box": {
         "x": 296,
-        "y": 378,
+        "y": 395,
         "w": 688,
-        "h": 1660
+        "h": 1640
       },
       "text": "Privacy PolicyThe full text of PRIVACY.md in this repository.Last updated: 2026-09-17This policy covers the Tanks! browser game (the \"game\" or \"app\"), published at austinorphan.com/tanks/.SummaryThe g",
       "style": {
@@ -49,7 +49,7 @@
       "visible": true,
       "box": {
         "x": 306,
-        "y": 753,
+        "y": 770,
         "w": 668,
         "h": 333
       },

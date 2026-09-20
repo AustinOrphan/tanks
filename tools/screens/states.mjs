@@ -289,6 +289,13 @@ export const SCREEN_STATES = Object.freeze([
       + 'only thing that tells a player which happened.',
     entry: 'unparseable',
     menu: 'present',
+    // The subject of this state IS a page error: the entry bundle is served deliberately
+    // unbalanced (`tools/screens/steps.mjs`) so it fails at PARSE time, which is the only way
+    // to reach the "could not start" card rather than the "could not load" one. Declared, so
+    // `check` and `accept` treat it as the design instead of refusing to look -- and so a
+    // capture that stops raising it fails too, because then the card is no longer being
+    // demonstrated. Substring only: engines word the rest of a SyntaxError differently.
+    pageError: 'SyntaxError',
     steps: [{ waitVisible: '#boot-entry-failure-card' }],
     // NOT `#boot-loading`. The card's own code runs `app.innerHTML = ''` before drawing, so
     // the holding card is REMOVED rather than hidden -- and the adapter fails any measured

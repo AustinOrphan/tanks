@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 581,
-        "y": 567,
-        "w": 118,
+        "x": 583,
+        "y": 571,
+        "w": 114,
         "h": 44
       },
       "text": "Main Menu",
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 575,
-        "y": 365,
-        "w": 130,
+        "x": 577,
+        "y": 369,
+        "w": 125,
         "h": 44
       },
       "text": "Change Setup",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 590,
-        "y": 439,
-        "w": 100,
+        "x": 593,
+        "y": 443,
+        "w": 95,
         "h": 44
       },
       "text": "Settings",

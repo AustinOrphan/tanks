@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 428,
+        "x": 438,
         "y": 400,
-        "w": 423,
-        "h": 36
+        "w": 403,
+        "h": 40
       },
       "text": "Mission 3 -- 2 lives left. Starting a new campaign replaces it. This cannot be undone.",
       "style": {
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 490,
-        "y": 448,
-        "w": 301,
+        "x": 497,
+        "y": 452,
+        "w": 287,
         "h": 44
       },
       "text": "Keep playing\n        Start new campaign",

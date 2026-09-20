@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 531,
-        "y": 180,
-        "w": 219,
-        "h": 66
+        "x": 534,
+        "y": 176,
+        "w": 211,
+        "h": 72
       },
       "text": "TANKS!",
       "style": {
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 557,
-        "y": 260,
-        "w": 166,
-        "h": 18
+        "x": 559,
+        "y": 262,
+        "w": 162,
+        "h": 20
       },
       "text": "Mission 3 -- 2 lives left",
       "style": {
@@ -70,7 +70,7 @@
       "visible": true,
       "box": {
         "x": 518,
-        "y": 294,
+        "y": 298,
         "w": 245,
         "h": 47
       },
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 547,
-        "y": 355,
-        "w": 186,
+        "x": 551,
+        "y": 359,
+        "w": 178,
         "h": 44
       },
       "text": "Start New Campaign",

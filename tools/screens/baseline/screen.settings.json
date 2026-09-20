@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 577,
+        "x": 578,
         "y": 35,
-        "w": 126,
-        "h": 38
+        "w": 124,
+        "h": 42
       },
       "text": "Settings",
       "style": {
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 523,
-        "y": 477,
-        "w": 99,
+        "x": 528,
+        "y": 489,
+        "w": 95,
         "h": 44
       },
       "text": "Reset stats",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 632,
-        "y": 477,
-        "w": 125,
+        "x": 633,
+        "y": 489,
+        "w": 118,
         "h": 44
       },
       "text": "Reset progress",

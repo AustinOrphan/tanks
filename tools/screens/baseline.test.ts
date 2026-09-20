@@ -5,8 +5,7 @@ import { join } from 'node:path';
 
 import {
   subsetStates, baselineFileName, readBaseline, serialiseBaseline,
-  diffMeasurements, formatFailure, brief,
-} from './baseline.mjs';
+  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal } from './baseline.mjs';
 import { judgeState, checkExitCode, formatVerdict, recipeFor } from './check.mjs';
 import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
@@ -192,5 +191,55 @@ describe('the screen gate: accepting is a deliberate act (issue #326)', () => {
     expect(() => statesToAccept({ only: 'screen.ending.mission-clear.played', all: false }))
       .toThrow(/not in the checked subset/);
     expect(() => statesToAccept({ only: 'screen.not-a-state', all: false })).toThrow(/not in the checked subset/);
+  });
+});
+
+describe('the screen gate: a state whose subject IS a page error (issue #861)', () => {
+  const plain = { id: 'screen.main-menu' };
+  const declared = { id: 'screen.startup.entry-unparseable', pageError: 'SyntaxError' };
+
+  it('still refuses an undeclared error, which is every other state', () => {
+    expect(judgePageErrors(plain, []).ok).toBe(true);
+    const v = judgePageErrors(plain, ['TypeError: x is not a function']);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('unexpected');
+  });
+
+  it('accepts the declared error as the design rather than refusing to look', () => {
+    const v = judgePageErrors(declared, ["SyntaxError: Unexpected token ';'"]);
+    expect(v.ok, 'the state that exists to photograph a parse failure was refused').toBe(true);
+  });
+
+  it('fails when the declared error does NOT appear, because the card is no longer reached', () => {
+    // The direction that is easy to leave out. Every measured selector can still match while
+    // the state has quietly stopped demonstrating the failure it was written for.
+    const v = judgePageErrors(declared, []);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('missing');
+  });
+
+  it('fails on a DIFFERENT error, so the declaration cannot launder an unrelated regression', () => {
+    const v = judgePageErrors(declared, ['TypeError: boot is not a function']);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('mismatch');
+    expect(v.errors, 'the refusal should name the stray error, not the expected one')
+      .toEqual(['TypeError: boot is not a function']);
+  });
+
+  it('fails when a stray error rides ALONGSIDE the declared one', () => {
+    // A declaration is per-error, not a blanket amnesty for the capture.
+    const v = judgePageErrors(declared, ["SyntaxError: Unexpected token ';'", 'TypeError: later boom']);
+    expect(v.ok).toBe(false);
+    expect(v.errors).toEqual(['TypeError: later boom']);
+  });
+
+  it('words the three refusals differently, because they need different fixes', () => {
+    const missing = formatPageErrorRefusal(judgePageErrors(declared, []), declared.id);
+    const mismatch = formatPageErrorRefusal(judgePageErrors(declared, ['TypeError: nope']), declared.id);
+    const unexpected = formatPageErrorRefusal(judgePageErrors(plain, ['TypeError: nope']), plain.id);
+    expect(missing).toMatch(/raised none/);
+    expect(mismatch).toMatch(/does not match the declared/);
+    expect(unexpected).toMatch(/no design to approve/);
+    expect(new Set([missing, mismatch, unexpected]).size, 'two refusals read the same').toBe(3);
   });
 });

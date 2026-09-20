@@ -1,0 +1,89 @@
+{
+  "state": "screen.startup.entry-unparseable",
+  "measurements": [
+    {
+      "selector": "#boot-entry-failure-card",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Tanks! could not start.Something went wrong before the game was ready. Try reloading.Reload",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#boot-entry-failure-card h1",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 538,
+        "y": 328,
+        "w": 204,
+        "h": 32
+      },
+      "text": "Tanks! could not start.",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(240, 243, 248)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "20px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#boot-entry-failure-card p",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 403,
+        "y": 376,
+        "w": 474,
+        "h": 26
+      },
+      "text": "Something went wrong before the game was ready. Try reloading.",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#boot-entry-failure-card button",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 592,
+        "y": 425,
+        "w": 96,
+        "h": 47
+      },
+      "text": "Reload",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(240, 243, 248)",
+        "background-color": "rgb(42, 47, 56)",
+        "font-size": "16px",
+        "margin-top": "8px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}

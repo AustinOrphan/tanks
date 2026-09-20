@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 578,
-        "y": 538,
-        "w": 123,
+        "x": 582,
+        "y": 542,
+        "w": 116,
         "h": 44
       },
       "text": "Quit to Title",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 590,
-        "y": 410,
-        "w": 100,
+        "x": 593,
+        "y": 414,
+        "w": 95,
         "h": 44
       },
       "text": "Settings",

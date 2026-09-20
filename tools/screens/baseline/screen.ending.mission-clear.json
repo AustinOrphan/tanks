@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 412,
-        "y": 260,
-        "w": 457,
-        "h": 66
+        "x": 417,
+        "y": 256,
+        "w": 445,
+        "h": 72
       },
       "text": "Level 3 cleared!",
       "style": {
@@ -49,7 +49,7 @@
       "visible": true,
       "box": {
         "x": 562,
-        "y": 366,
+        "y": 370,
         "w": 156,
         "h": 47
       },
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 552,
-        "y": 429,
-        "w": 176,
+        "x": 557,
+        "y": 433,
+        "w": 166,
         "h": 44
       },
       "text": "Practice This Level",

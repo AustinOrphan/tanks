@@ -71,6 +71,47 @@ export function serialiseBaseline(stateId, measurements) {
  * report that selector by name rather than reporting every later entry as changed, which is
  * what a positional walk does and what makes a diff unreadable exactly when it matters.
  */
+/**
+ * Whether a capture's page errors are the ones its state exists to demonstrate.
+ *
+ * Both consumers refused ANY page error, on the reasonable ground that a page which threw has
+ * no design to approve and nothing worth diffing. That is right for every state but the ones
+ * whose whole subject is a page that failed: `screen.startup.entry-unparseable` serves an
+ * entry bundle that cannot be parsed, so a `SyntaxError` is not noise on the way to the
+ * picture, it IS the picture. Without a way to say so that state could never be accepted and
+ * could never pass, which is a gate quietly not covering one of its own states.
+ *
+ * A state declares the error by substring rather than in full, because the text around it is
+ * not ours to pin -- engines word these differently and a bundler can move what precedes the
+ * offending token.
+ *
+ * The declaration is bidirectional on purpose. An expected error that does NOT appear fails
+ * too: the state exists to prove the failure card is reached, so a capture that boots cleanly
+ * has stopped demonstrating the thing, even though every measured selector may still match.
+ */
+export function judgePageErrors(state, pageErrors) {
+  const errors = pageErrors ?? [];
+  const expected = state?.pageError ?? null;
+  if (expected === null) {
+    return errors.length === 0 ? { ok: true, errors } : { ok: false, reason: 'unexpected', errors };
+  }
+  if (errors.length === 0) return { ok: false, reason: 'missing', errors, expected };
+  const stray = errors.filter((e) => !String(e).includes(expected));
+  if (stray.length > 0) return { ok: false, reason: 'mismatch', errors: stray, expected };
+  return { ok: true, errors, expected };
+}
+
+/** The one-line reason a `judgePageErrors` refusal gives, so both commands word it the same. */
+export function formatPageErrorRefusal(verdict, stateId) {
+  if (verdict.reason === 'missing') {
+    return `${stateId}: expected a page error containing '${verdict.expected}', and the page raised none`;
+  }
+  if (verdict.reason === 'mismatch') {
+    return `${stateId}: page error does not match the declared '${verdict.expected}'`;
+  }
+  return `${stateId}: the page raised an error, so there is no design to approve`;
+}
+
 export function diffMeasurements(expected, actual) {
   const changes = [];
   const byName = (list) => new Map(list.map((m) => [m.selector, m]));

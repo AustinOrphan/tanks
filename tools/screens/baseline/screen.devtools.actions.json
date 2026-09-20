@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 544,
-        "y": 648,
-        "w": 191,
+        "x": 548,
+        "y": 660,
+        "w": 184,
         "h": 44
       },
       "text": "Restart with Same Seed",
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 583,
-        "y": 704,
-        "w": 113,
+        "x": 585,
+        "y": 716,
+        "w": 110,
         "h": 44
       },
       "text": "Reroll Seed",
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 548,
-        "y": 760,
-        "w": 184,
+        "x": 553,
+        "y": 772,
+        "w": 174,
         "h": 44
       },
       "text": "Restart Current Round",
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 604,
-        "y": 1028,
-        "w": 72,
+        "x": 605,
+        "y": 1044,
+        "w": 70,
         "h": 44
       },
       "text": "Back",
