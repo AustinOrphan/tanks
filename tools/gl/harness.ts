@@ -2899,8 +2899,22 @@ function firefightWorld(n: number): ReturnType<typeof createWorld> {
  * more would be a board the game cannot deal.
  */
 const COST_TANKS = 8;
-const COST_W = 800;
-const COST_H = 500;
+// 400x250, quartered from 800x500 by issue #883, and the aspect is preserved at 1.6 because
+// `createScene`'s fit derives the camera frustum from `w / h` alone.
+//
+// MEASURED, both halves of the trade. Cost: this check is the most expensive in the harness,
+// and it falls from 43.09/43.23 s to 26.42 s -- 16.8 s off a 274 s run. Not the 4x a purely
+// fill-bound model predicts, because much of it is per-render submit cost, which is the same
+// thing the timing table below records from the other direction.
+//
+// Power: nothing here reads an absolute byte count. The assertions are draw-call counts (16
+// and 96, size-free) and `bytesDiffering(...) === 0` comparisons, which only need a difference
+// to exist. The one recorded number that DID scale is in
+// `renderer-builds-the-smoke-system-low-dropped`, and it was re-derived rather than divided:
+// the disclosed mutation moves 1,515 of 400,000 bytes here against 5,907 of 1,600,000 before,
+// which is 0.379% of the frame against 0.369% -- the same signal, a smaller frame.
+const COST_W = 400;
+const COST_H = 250;
 /**
  * Frames between the volley and the measurement, at 1/60 each. 22 is 0.367s, which does
  * two things: it is past everything else a `fire` event draws (particles.ts's muzzle burst
