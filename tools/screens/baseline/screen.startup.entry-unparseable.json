@@ -1,8 +1,8 @@
 {
-  "state": "screen.startup.probe-blocked",
+  "state": "screen.startup.entry-unparseable",
   "measurements": [
     {
-      "selector": "[role=\"alert\"]",
+      "selector": "#boot-entry-failure-card",
       "present": true,
       "visible": true,
       "box": {
@@ -11,7 +11,7 @@
         "w": 1280,
         "h": 800
       },
-      "text": "This browser cannot run Tanks!Something stopped the game from checking whether this browser can draw it — often an extension, or a privacy mode that blocks graphics access. Try disabling extensions fo",
+      "text": "Tanks! could not start.Something went wrong before the game was ready. Try reloading.Reload",
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -23,16 +23,16 @@
       }
     },
     {
-      "selector": "[role=\"alert\"] h1",
+      "selector": "#boot-entry-failure-card h1",
       "present": true,
       "visible": true,
       "box": {
-        "x": 495,
-        "y": 302,
-        "w": 289,
+        "x": 537,
+        "y": 328,
+        "w": 206,
         "h": 32
       },
-      "text": "This browser cannot run Tanks!",
+      "text": "Tanks! could not start.",
       "style": {
         "display": "block",
         "opacity": "1",
@@ -44,16 +44,16 @@
       }
     },
     {
-      "selector": "[role=\"alert\"] p",
+      "selector": "#boot-entry-failure-card p",
       "present": true,
       "visible": true,
       "box": {
-        "x": 368,
-        "y": 350,
-        "w": 544,
-        "h": 77
+        "x": 406,
+        "y": 376,
+        "w": 468,
+        "h": 26
       },
-      "text": "Something stopped the game from checking whether this browser can draw it — often an extension, or a privacy mode that blocks graphics access. Try disabling extensions for this page, or use a differen",
+      "text": "Something went wrong before the game was ready. Try reloading.",
       "style": {
         "display": "block",
         "opacity": "1",
@@ -61,6 +61,27 @@
         "background-color": "rgba(0, 0, 0, 0)",
         "font-size": "16px",
         "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#boot-entry-failure-card button",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 592,
+        "y": 425,
+        "w": 97,
+        "h": 47
+      },
+      "text": "Reload",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(240, 243, 248)",
+        "background-color": "rgb(42, 47, 56)",
+        "font-size": "16px",
+        "margin-top": "8px",
         "margin-bottom": "0px"
       }
     }

@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 336,
-        "y": 277,
-        "w": 608,
-        "h": 66
+        "x": 347,
+        "y": 271,
+        "w": 585,
+        "h": 72
       },
       "text": "Campaign Complete!",
       "style": {
@@ -49,9 +49,9 @@
       "visible": true,
       "box": {
         "x": 515,
-        "y": 409,
+        "y": 413,
         "w": 250,
-        "h": 47
+        "h": 49
       },
       "text": "Start New Campaign",
       "style": {

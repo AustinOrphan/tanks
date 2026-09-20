@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 516,
-        "y": 215,
-        "w": 104,
+        "x": 520,
+        "y": 221,
+        "w": 100,
         "h": 44
       },
       "text": "Rumble: On",
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 358,
-        "y": 280,
-        "w": 565,
-        "h": 16
+        "x": 368,
+        "y": 286,
+        "w": 544,
+        "h": 18
       },
       "text": "No connected controller reports a rumble motor. Connect one that does and this turns on.",
       "style": {

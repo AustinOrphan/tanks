@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-tolerates-a-vanished-control",
+  "file": "tools/screens/baseline.mjs",
+  "find": "  if (typeof expected !== 'number' || typeof actual !== 'number') return expected === actual;",
+  "replace": "  if (typeof expected !== 'number' || typeof actual !== 'number') return true;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: how far a box may move between platforms (issue #861) compares non-numeric box values exactly, rather than calling them near enough"
+  ],
+  "why": "Makes a missing box compare equal to a present one. The tolerance is arithmetic on two numbers; the moment either side is `undefined` -- a selector that stopped being measured, a malformed entry -- there is nothing to take a difference of, and returning true reports agreement between a box and no box at all. That is the opposite of what the tolerance was widened for: it exists to absorb a glyph advance landing either side of a rounding boundary, not to excuse a control that disappeared."
+}

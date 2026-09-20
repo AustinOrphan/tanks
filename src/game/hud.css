@@ -251,6 +251,18 @@
    * <button> already centres its content in a box taller than its text, and turning every
    * control into a flex container would split a toggle's label and value into separate
    * flex items and trim the space between them. */
+  /* A <button>'s UA `font` shorthand sets family, size and weight in one declaration, which
+   * beats the inheritance every other element gets from `.hud`. Without this line 269 of the
+   * 271 controls carrying this primitive render in Arial while the rest of the HUD is on the
+   * bundled face -- the two exceptions being the `<a class="ui-btn">` links in About & Legal,
+   * which are not buttons and so inherit normally. Measured, not assumed: #864 bundled the
+   * typeface and every control kept Arial, and the 44 button boxes that moved in the baseline
+   * regeneration moved because `--hud-weight-normal` went 700 -> 500 and Arial has no weight
+   * between, not because the face changed.
+   *
+   * FAMILY only. `font: inherit` would take size and weight too, and those are set per control
+   * (a primary slab at 20px, a tertiary at 15px) -- inheriting them would flatten the scale. */
+  font-family: inherit;
   min-height: var(--hud-control-min);
   min-width: var(--hud-control-min);
   /* So the floor is the OUTER size on every element carrying the primitive. A <button> is

@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-declared-page-error-may-go-missing",
+  "file": "tools/screens/baseline.mjs",
+  "find": "  if (errors.length === 0) return { ok: false, reason: 'missing', errors, expected };",
+  "replace": "  if (errors.length === 0) return { ok: true, errors, expected };",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen gate: a state whose subject IS a page error (issue #861) fails when the declared error does NOT appear, because the card is no longer reached"
+  ],
+  "why": "Drops the direction of the contract that is easy to leave out. A state that declares a page error exists to prove a FAILURE card is reached; if the page stops raising the error, the card is no longer being demonstrated, yet every measured selector can still match and the state passes. This is the asymmetry that makes the declaration a contract rather than a suppression: the error must appear, and it must be the declared one."
+}

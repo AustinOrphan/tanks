@@ -71,6 +71,87 @@ export function serialiseBaseline(stateId, measurements) {
  * report that selector by name rather than reporting every later entry as changed, which is
  * what a positional walk does and what makes a diff unreadable exactly when it matters.
  */
+/**
+ * Whether a capture's page errors are the ones its state exists to demonstrate.
+ *
+ * Both consumers refused ANY page error, on the reasonable ground that a page which threw has
+ * no design to approve and nothing worth diffing. That is right for every state but the ones
+ * whose whole subject is a page that failed: `screen.startup.entry-unparseable` serves an
+ * entry bundle that cannot be parsed, so a `SyntaxError` is not noise on the way to the
+ * picture, it IS the picture. Without a way to say so that state could never be accepted and
+ * could never pass, which is a gate quietly not covering one of its own states.
+ *
+ * A state declares the error by substring rather than in full, because the text around it is
+ * not ours to pin -- engines word these differently and a bundler can move what precedes the
+ * offending token.
+ *
+ * The declaration is bidirectional on purpose. An expected error that does NOT appear fails
+ * too: the state exists to prove the failure card is reached, so a capture that boots cleanly
+ * has stopped demonstrating the thing, even though every measured selector may still match.
+ */
+export function judgePageErrors(state, pageErrors) {
+  const errors = pageErrors ?? [];
+  const expected = state?.pageError ?? null;
+  if (expected === null) {
+    return errors.length === 0 ? { ok: true, errors } : { ok: false, reason: 'unexpected', errors };
+  }
+  if (errors.length === 0) return { ok: false, reason: 'missing', errors, expected };
+  const stray = errors.filter((e) => !String(e).includes(expected));
+  if (stray.length > 0) return { ok: false, reason: 'mismatch', errors: stray, expected };
+  return { ok: true, errors, expected };
+}
+
+/**
+ * Why a `judgePageErrors` refusal refused, without naming the state.
+ *
+ * Separate from the state id because the two callers frame it differently: `accept` prints a
+ * single `REFUSED <id>: <reason>` line, while `check` has already printed `FAIL <id>` above
+ * and would otherwise say the id twice.
+ */
+export function pageErrorRefusalReason(verdict) {
+  if (verdict.reason === 'missing') {
+    return `expected a page error containing '${verdict.expected}', and the page raised none`;
+  }
+  if (verdict.reason === 'mismatch') {
+    return `page error does not match the declared '${verdict.expected}'`;
+  }
+  return 'the page raised an error, so there is no design to approve';
+}
+
+/** The reason as one line naming the state, which is the form `accept` prints. */
+export function formatPageErrorRefusal(verdict, stateId) {
+  return `${stateId}: ${pageErrorRefusalReason(verdict)}`;
+}
+
+/**
+ * How far a box may move between platforms before it counts as a change.
+ *
+ * Text-sized boxes are not exactly reproducible across operating systems, and bundling the
+ * typeface (#864) does not make them so. It fixed WHICH face is used; the RASTERISER is still
+ * the host's. `--font-render-hinting=none` (see `launchBrowser`) takes out the largest part of
+ * what is left -- it cut this gate's cross-platform disagreement from 161 values to 33, and
+ * every difference above 2px with it. What remains is the last fraction of a pixel landing on
+ * either side of a rounding boundary, mostly through `line-height: normal`, which resolves
+ * from font metrics the host reports and is not even a constant ratio across sizes.
+ *
+ * TWO pixels, and the number is argued rather than picked: the residue measured exactly 1px
+ * (70 values) and 2px (36) across two full cross-platform runs, and nothing between 3px and
+ * 54px survived the hinting flag. A real layout regression in this codebase is a control that
+ * moved, a panel that reflowed or a line that wrapped -- tens of pixels, not two.
+ *
+ * It applies to BOX GEOMETRY ONLY. `present`, `visible`, `text` and every watched style
+ * property stay exact, because none of them is a rasteriser artefact: a control that vanished,
+ * a label that changed wording or a colour that moved is a real difference at any magnitude.
+ */
+export const BOX_TOLERANCE_PX = 2;
+
+/** Whether two box values agree to within the tolerance; exact for anything non-numeric. */
+export function boxWithinTolerance(expected, actual, tolerance = BOX_TOLERANCE_PX) {
+  if (typeof expected !== 'number' || typeof actual !== 'number') return expected === actual;
+  if (!Number.isFinite(expected) || !Number.isFinite(actual)) return expected === actual;
+  return Math.abs(expected - actual) <= tolerance;
+}
+
 export function diffMeasurements(expected, actual) {
   const changes = [];
   const byName = (list) => new Map(list.map((m) => [m.selector, m]));
@@ -91,7 +172,9 @@ export function diffMeasurements(expected, actual) {
     for (const axis of ['x', 'y', 'w', 'h']) {
       const ev = e.box?.[axis];
       const av = a.box?.[axis];
-      if (ev !== av) changes.push({ selector, field: `box.${axis}`, expected: ev, actual: av });
+      if (!boxWithinTolerance(ev, av)) {
+        changes.push({ selector, field: `box.${axis}`, expected: ev, actual: av });
+      }
     }
     const styles = new Set([...Object.keys(e.style ?? {}), ...Object.keys(a.style ?? {})]);
     for (const prop of [...styles].sort()) {

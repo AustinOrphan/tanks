@@ -15,8 +15,9 @@ the resolution order this script shares.
 ## What it is, and what it is not
 
 A **one-shot evidence producer** for issue #321's closeout, not a gate. Nothing in CI runs
-it, it writes no committed baseline, and it is not the durable `screen.*` recipe work —
-that, its baselines and the broader screen-state matrix are issue #326's.
+it and it writes no committed baseline. The durable `screen.*` recipe work is issue #326's,
+and as of issues #846 and #847 the baselines exist and the gate runs in required CI — see
+[`tools/screens/README.md`](../screens/README.md), "The required gate, decided".
 
 **Partly subsumed as of issue #842, and kept for the rest.** Three of the interactive states
 this produced are now committed `screen.*` recipes with baselines, built on two new step kinds

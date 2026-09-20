@@ -21,6 +21,48 @@
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
+    },
+    {
+      "selector": "[role=\"alert\"] h1",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 495,
+        "y": 315,
+        "w": 289,
+        "h": 32
+      },
+      "text": "This browser cannot run Tanks!",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(240, 243, 248)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "20px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "[role=\"alert\"] p",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 368,
+        "y": 363,
+        "w": 544,
+        "h": 51
+      },
+      "text": "The game needs WebGL 2, and this browser is not providing it. Try a different browser, or turn on hardware acceleration in this one’s settings.",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
     }
   ]
 }

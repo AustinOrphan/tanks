@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 557,
-        "y": 236,
-        "w": 166,
-        "h": 38
+        "x": 556,
+        "y": 229,
+        "w": 167,
+        "h": 42
       },
       "text": "Controllers",
       "style": {
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 537,
-        "y": 305,
-        "w": 206,
-        "h": 168
+        "x": 539,
+        "y": 302,
+        "w": 202,
+        "h": 172
       },
       "text": "Player 1Keyboard / Mouse / TouchKeyboardNone",
       "style": {
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 604,
-        "y": 541,
-        "w": 72,
+        "x": 605,
+        "y": 548,
+        "w": 70,
         "h": 44
       },
       "text": "Back",

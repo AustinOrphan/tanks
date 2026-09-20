@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 378,
-        "y": 219,
-        "w": 524,
-        "h": 791
+        "x": 390,
+        "y": 233,
+        "w": 499,
+        "h": 883
       },
       "text": "Index 0 — Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)mapping: standard · axes: 4 · buttons: 17supported (standard mapping)Axis 00.62Axis 1-0.41Axis 20.00Axis 30.00Button 00.",
       "style": {
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 378,
-        "y": 219,
-        "w": 524,
-        "h": 419
+        "x": 390,
+        "y": 233,
+        "w": 499,
+        "h": 469
       },
       "text": "Index 0 — Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)mapping: standard · axes: 4 · buttons: 17supported (standard mapping)Axis 00.62Axis 1-0.41Axis 20.00Axis 30.00Button 00.",
       "style": {
@@ -69,10 +69,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 388,
-        "y": 313,
-        "w": 504,
-        "h": 15
+        "x": 400,
+        "y": 335,
+        "w": 479,
+        "h": 17
       },
       "text": "Axis 00.62",
       "style": {
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 580,
-        "y": 1038,
-        "w": 120,
+        "x": 582,
+        "y": 1144,
+        "w": 115,
         "h": 44
       },
       "text": "Copy Report",

@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-declared-page-error-admits-any-error",
+  "file": "tools/screens/baseline.mjs",
+  "find": "  const stray = errors.filter((e) => !String(e).includes(expected));",
+  "replace": "  const stray = [];",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen gate: a state whose subject IS a page error (issue #861) fails on a DIFFERENT error, so the declaration cannot launder an unrelated regression"
+  ],
+  "why": "Turns a state's page-error declaration into a blanket amnesty. `screen.startup.entry-unparseable` declares the SyntaxError it exists to photograph; with the match dropped, any other error on that page -- a real regression in the boot path, or a second error riding alongside the expected one -- is accepted as the design and written into the baseline. The state would keep passing while no longer demonstrating what it was written for, which is the specific way a gate stops being one."
+}

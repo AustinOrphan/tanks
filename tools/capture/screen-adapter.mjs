@@ -51,7 +51,7 @@ function assertScreenProfile(recipe) {
     }
   }
   if (recipe.schedule.kind !== 'still') {
-    throw new Error('screen captures are stills; a moving application surface is issue #326');
+    throw new Error('screen captures are stills; a moving application surface is the flow producer (issue #815)');
   }
   // `reducedMotion` is not a knob here and saying so is the honest form. The runner always
   // emulates reduced motion, because a crossfade caught mid-flight is the difference

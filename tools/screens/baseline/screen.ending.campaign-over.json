@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 482,
-        "y": 277,
-        "w": 316,
-        "h": 66
+        "x": 486,
+        "y": 271,
+        "w": 309,
+        "h": 72
       },
       "text": "Game Over",
       "style": {
@@ -49,9 +49,9 @@
       "visible": true,
       "box": {
         "x": 515,
-        "y": 409,
+        "y": 413,
         "w": 250,
-        "h": 47
+        "h": 49
       },
       "text": "Start New Campaign",
       "style": {

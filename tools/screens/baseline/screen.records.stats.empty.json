@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 470,
-        "y": 327,
-        "w": 340,
-        "h": 288
+        "x": 471,
+        "y": 318,
+        "w": 338,
+        "h": 312
       },
       "text": "Statistics, lifetime and this level attemptLifetimeLevel attemptShell kills00Mine kills00Deaths00Self kills00AI friendly fire00Shots fired00Accuracy----Mines laid00Mine accuracy----Walls destroyed00Ri",
       "style": {
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 566,
-        "y": 283,
-        "w": 148,
-        "h": 16
+        "x": 569,
+        "y": 272,
+        "w": 143,
+        "h": 18
       },
       "text": "No matches played yet.",
       "style": {
