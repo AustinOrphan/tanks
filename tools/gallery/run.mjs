@@ -42,6 +42,8 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parseArgs, safeLabel, gridShape, galleryQuery, GALLERY_ARMS } from './args.mjs';
 import { enterGameplay, GAME_CANVAS } from './enter-gameplay.mjs';
 import { audioContextOverrideSource } from '../shared/audio-context.mjs';
@@ -437,6 +439,14 @@ async function run(browser) {
   console.log(`wrote ${shots.reduce((a, s) => a + s.n, 0)} frame(s) to ${outDir}`);
 }
 
-main()
-  .catch((e) => { console.error(e.message ?? e); process.exitCode = 1; })
-  .finally(() => vite?.kill());
+// Run only when this file IS the process entry point (issue #881), the same guard
+// `tools/screens/record.mjs` has carried since issue #815. Without it, importing this module
+// -- which is the only way `tools/mutate` can reach the file through Vitest's dependency
+// graph -- would launch a browser and start the sweep.
+const isEntryPoint = process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+
+if (isEntryPoint) {
+  main()
+    .catch((e) => { console.error(e.message ?? e); process.exitCode = 1; })
+    .finally(() => vite?.kill());
+}

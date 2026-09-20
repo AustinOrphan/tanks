@@ -13,6 +13,8 @@ dist
 # generated renders -- visual gate output and gallery stills
 visual-out/
 gallery-out/
+uikit-out/
+fc-out/
 screens-check-out/
 /artifacts/capture/
 /artifacts/compare/
