@@ -8,7 +8,7 @@ import { HIT_EXTRA_STATES, hitSweepExclusion, hitSweepStates } from './hit-sweep
 /**
  * Issue #710: the `visual` gate sweeps menu hit targets, and WHICH surfaces it sweeps is
  * decided here rather than in `verify.mjs`, which runs on import. The population below is
- * the screen-state catalogue as it stands: 41 states, 16 excluded, 25 swept, plus 1 extra.
+ * the screen-state catalogue as it stands: 49 states, 18 excluded, 31 swept, plus 1 extra.
  */
 
 /** Every excluded catalogue state, by the rule that removes it. */
@@ -28,9 +28,14 @@ const EXCLUDED = {
   ],
   'the no-script page: the collector runs as page script': ['screen.no-script'],
   'the match failure overlay, owned by its own capture': ['screen.startup.match-failed'],
-  'a played ending, whose panel its pushed-outcome state already sweeps': [
+  // Issue #776 added the versus pair. They are excluded by the same rule and NOT for the
+  // same second reason: the campaign endings each have a pushed-outcome twin this sweep does
+  // see, and the versus results panel has none, because `loop.ts` has no `vs-match-end` arm.
+  'a played ending: too many seconds of software-GL play for a required check': [
     'screen.ending.mission-clear.played',
     'screen.ending.campaign-over.played',
+    'screen.ending.versus.ffa.played',
+    'screen.ending.versus.teams.played',
   ],
   // Issue #841's three menu-less states. MEASURED, not assumed: `screen.practice` was swept
   // on the first attempt and reported "no controls measured" in all four viewports, because
@@ -45,7 +50,7 @@ const EXCLUDED = {
 describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
   it('excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule', () => {
     // Negative controls, one per rule: deleting any of the five clauses in hitSweepExclusion
-    // lets that rule's states through -- 7, 2, 1, 1 and 2 -- and this map no longer matches.
+    // lets that rule's states through -- 7, 2, 1, 1 and 4 -- and this map no longer matches.
     const actual: Record<string, string[]> = {};
     for (const state of SCREEN_STATES) {
       const reason = hitSweepExclusion(state);

@@ -1,13 +1,13 @@
 {
   "id": "hit-sweep-drives-played-endings",
   "file": "tools/visual/hit-sweep.mjs",
-  "find": "  if (state.steps.some((step) => 'playUntil' in step)) return 'a played ending, whose panel its pushed-outcome state already sweeps';\n",
-  "replace": "  if (false) return 'a played ending, whose panel its pushed-outcome state already sweeps';\n",
+  "find": "  if (state.steps.some((step) => 'playUntil' in step)) return 'a played ending: too many seconds of software-GL play for a required check';\n",
+  "replace": "  if (false) return 'a played ending: too many seconds of software-GL play for a required check';\n",
   "expect": "killed",
   "tests": [
     "tools/visual/hit-sweep.test.ts"
   ],
-  "why": "Issue #617. The required `visual` check's hit-target sweep drives the two played ending states, each tens of seconds of software-GL play before its panel shows, to press controls the pushed-outcome state of the same ending already puts in front of the sweep.",
+  "why": "Issue #617, widened by #776. The required `visual` check's hit-target sweep drives all FOUR played ending states, each tens of seconds of software-GL play before its panel shows, in every one of its four viewports. The two campaign endings reach a panel the pushed-outcome state of the same ending already puts in front of the sweep; the two versus endings reach one nothing else does, and their own screen state measures its three controls instead. The cost is the reason for the rule either way: the versus pair alone takes 110 s and 138 s to play.",
   "killedBy": [
     "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule",
     "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the extra surface"

@@ -72,10 +72,15 @@ export function hitSweepExclusion(state) {
   if (state.javascript === 'off') return 'the no-script page: the collector runs as page script';
   if (state.steps.some((step) => 'breakWebgl' in step)) return 'the match failure overlay, owned by its own capture';
   // Issue #617. A played ending is tens of seconds of software-GL play before its panel
-  // shows, inside a required check. The panel it reaches is the one the pushed-outcome state
-  // of the same ending already puts in front of this sweep, so sweeping it again buys no
-  // new control to press.
-  if (state.steps.some((step) => 'playUntil' in step)) return 'a played ending, whose panel its pushed-outcome state already sweeps';
+  // shows, inside a required check.
+  //
+  // The reason used to say the pushed-outcome state of the same ending already sweeps that
+  // panel, which was true of the campaign pair and is NOT true of issue #776's versus pair:
+  // `loop.ts` has no pushed `vs-match-end` arm, so nothing else puts the versus results panel
+  // in front of this sweep. The cost is the rule either way -- four played endings at tens of
+  // seconds each, times four viewports, inside a required check -- and the versus panel's
+  // three controls are measured by its own screen state instead.
+  if (state.steps.some((step) => 'playUntil' in step)) return 'a played ending: too many seconds of software-GL play for a required check';
   // Issue #841. A state that declares no menu has nothing for this sweep to press, and the
   // sweep reports "no controls measured" as a failure -- correctly, since for every other
   // state that means the surface never opened. Keyed on the declaration rather than on ids

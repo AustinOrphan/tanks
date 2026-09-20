@@ -82,6 +82,8 @@ on:
           - screen.ending.mission-clear.played
           - screen.ending.practice-cleared
           - screen.ending.practice-failed
+          - screen.ending.versus.ffa.played
+          - screen.ending.versus.teams.played
           - screen.launch
           - screen.levels
           - screen.main-menu

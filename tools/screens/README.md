@@ -193,17 +193,24 @@ screen, and rendered through SwiftShader.
 
 ### What is in it
 
-**Every state except the two played endings.** Each state is a distinct surface, so the
+**Every state except the played endings.** Each state is a distinct surface, so the
 "name the distinct risk it protects" rule maps one-to-one.
 
 A RULE, not a list, and deliberately: this paragraph first said "thirty-nine of forty-one" and
 the catalogue outgrew that within a day. `subsetStates` in `baseline.mjs` derives the set, so a
 state added tomorrow is covered without anyone remembering to edit a number.
 
-`screen.ending.mission-clear.played` and `screen.ending.campaign-over.played` are out.
-Measured: **22.9 s each**, against 5.9 s for the pushed-outcome twin that asserts the same
-panel, and 1.4 s for an ordinary state. That is the argument `hit-sweep.mjs` already uses to
-exclude them from the menu sweep.
+The four played endings are out. `screen.ending.mission-clear.played` and
+`screen.ending.campaign-over.played` were measured at **22.9 s each**, against 5.9 s for the
+pushed-outcome twin that asserts the same panel and 1.4 s for an ordinary state. Issue #776's
+`screen.ending.versus.ffa.played` and `screen.ending.versus.teams.played` are dearer still --
+**110 s and 138 s**, measured on the 4 GB box with no GPU -- because a versus match at one
+stock runs 1,844-2,255 simulated ticks before a winner exists.
+
+The versus pair differs from the campaign pair in one way worth knowing: it has **no
+pushed-outcome twin to fall back on**. `loop.ts` deliberately leaves `vs-match-end` out of the
+`outcome` arms, so playing the match is the only way to reach that panel at all, and the
+subset's argument for excluding them is cost alone.
 
 ### What it may cost
 
@@ -307,6 +314,8 @@ decision. Stated here rather than left as a silently missing row.
 | `screen.ending.practice-failed` | `?dev=1&outcome=practice-failed` | the panel |
 | `screen.ending.mission-clear.played` | playing level 3 with autoplay until it is won | the path, and the panel it arrives at |
 | `screen.ending.campaign-over.played` | playing level 3 with autoplay until the run is out of lives | the path, and the panel it arrives at |
+| `screen.ending.versus.ffa.played` | playing a two-player FFA at one stock with autoplay until a winner | the versus results panel, which has no pushed twin |
+| `screen.ending.versus.teams.played` | the same at three players in Teams | the same panel under a team title |
 
 **The played pair (issue #617).** Each starts from Continue on the same mid-campaign save and
 runs `{ playUntil }` until `.hud-action` shows, then checks `.hud-title` says which ending it

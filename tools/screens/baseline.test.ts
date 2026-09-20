@@ -22,14 +22,28 @@ const recipe = {
 
 describe('the screen baseline: which states it covers (issues #840, #846)', () => {
   it('covers every state except the played endings, as a RULE rather than a list', () => {
-    // #840's decision is "every state except the two played endings", and the prose beside it
+    // #840's decision is "every state except the played endings", and the prose beside it
     // quoted a count the catalogue outgrew within a day. A rule survives a new state; a
     // hard-coded list silently stops covering one.
+    //
+    // The played endings are NAMED rather than derived, and `- PLAYED.length` rather than a
+    // literal. Deriving them with the same `.played` suffix `subsetStates` keys on would make
+    // this pass for any predicate at all, including one that excluded the whole catalogue;
+    // the literal 2 it replaces was the hard-coded count this test's own comment warns about,
+    // and issue #776's versus pair is what found it.
+    const PLAYED = [
+      'screen.ending.mission-clear.played',
+      'screen.ending.campaign-over.played',
+      'screen.ending.versus.ffa.played',
+      'screen.ending.versus.teams.played',
+    ];
     const ids = subsetStates(SCREEN_STATES).map((s) => s.id);
-    expect(ids).not.toContain('screen.ending.mission-clear.played');
-    expect(ids).not.toContain('screen.ending.campaign-over.played');
-    expect(ids.length, 'the subset is the catalogue minus exactly the played pair')
-      .toBe(SCREEN_STATES.length - 2);
+    for (const id of PLAYED) {
+      expect(SCREEN_STATES.map((s) => s.id), `${id} is not in the catalogue`).toContain(id);
+      expect(ids, `${id} reached the subset`).not.toContain(id);
+    }
+    expect(ids.length, 'the subset is the catalogue minus exactly the played endings')
+      .toBe(SCREEN_STATES.length - PLAYED.length);
     // Negative control: a state added tomorrow is covered without anyone editing this file.
     const grown = [...SCREEN_STATES, { ...SCREEN_STATES[0], id: 'screen.a-future-screen' }];
     expect(subsetStates(grown).map((s) => s.id)).toContain('screen.a-future-screen');
