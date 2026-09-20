@@ -41,7 +41,7 @@ if (json) {
   const f = (v, d = 2) => (typeof v === 'number' ? v.toFixed(d) : String(v));
   const head = [
     'board'.padEnd(12), 'N', 'ok', 'wall', 'dstr', 'cov', 'spc', 'legal', 'corr', 'open',
-    'prs', 'unr', 'mine', 'pMin', 'pMax', 'sprd', 'neck', 'rout', '1way', 'pts', 'sight',
+    'dead', 'prs', 'unr', 'mine', 'pMin', 'pMax', 'sprd', 'neck', 'rout', '1way', 'pts', 'sight',
     'bank', 'bOnly', 'rot',
   ];
   console.log(head.join('  '));
@@ -53,6 +53,7 @@ if (json) {
       f(r.wallFraction), f(r.destructibleFraction),
       String(r.coverPieces).padStart(3), f(r.coverSpacing, 1).padStart(3),
       f(r.legalAreaFraction), f(r.corridorAreaFraction), f(r.openGroundFraction),
+      f(r.deadEndAreaFraction, 4),
       String(r.spawnPairs).padStart(3), String(r.unreachablePairs).padStart(3),
       String(r.mineGatedPairs).padStart(4),
       f(r.pathMin, 1).padStart(4), f(r.pathMax, 1).padStart(4), f(r.pathSpread),
@@ -65,7 +66,9 @@ if (json) {
   console.log('wall/dstr = fraction of cells walled / destructible; cov = merged wall rects;');
   console.log('spc = mean nearest-neighbour cover spacing (world units); legal = fraction of');
   console.log('board where a tank centre fits; corr/open = fraction of that with <=2 / >=6 of 8');
-  console.log('directions clear for 1.5 tank diameters; prs = spawn pairs measured, unr =');
+  console.log('directions clear for 1.5 tank diameters; dead = the same probe at <=1, a pocket');
+  console.log('you can leave only one way (issue #822) -- an empty rectangle reads 0.0000, so');
+  console.log('this one carries no rim; prs = spawn pairs measured, unr =');
   console.log('unreachable even with destructibles gone, mine = routable only by mining through;');
   console.log('pMin/pMax = shortest/longest spawn-pair path (solid-only space); sprd =');
   console.log('(max-min)/mean; neck = narrowest passage every pair must pass, world units');

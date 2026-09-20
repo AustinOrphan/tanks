@@ -306,6 +306,66 @@ export interface BoardMeasures {
    */
   readonly openGroundFraction: number;
 
+  /**
+   * Fraction of PROBED tank-legal area with 1 or 0 of 8 directions clear for 1.5 tank
+   * diameters -- a pocket you can leave only one way, or not at all (issue #822).
+   *
+   * This exists because `corridorAreaFraction` above cannot answer the question its own
+   * comment raises. "<= 2 clear" collapses a straight lane with two exits and a dead-end
+   * pocket with one into a single number, and the genre rule the design survey took this
+   * from is specifically about the pockets: a board of lanes is a style, a board of
+   * pockets is a bot trap. Same probe, same rays, one bucket narrower.
+   *
+   * DENOMINATOR is `probedPoints`, not the full lattice: the probe subsamples every 4th
+   * lattice point per axis (see the loop). Read it beside `legalAreaFraction`, never as a
+   * share of the board.
+   *
+   * NOT EDGE-SENSITIVE, which was worth checking rather than assuming -- `openGroundFraction`
+   * is, and the first draft of this comment claimed this one would be too. Measured on empty
+   * rectangles with no walls at all, where the true count is zero by construction:
+   *
+   *   empty 22x18   0.0000      empty 33x27   0.0000      empty 45x33   0.0000
+   *
+   * The rim is real but lands one bucket higher: `degreeProfile[3]` reads 0.060 / 0.025 /
+   * 0.015 on those same three boards, shrinking with board size exactly as a rim should. A
+   * board corner keeps three clear directions, so it never reaches "<= 1".
+   *
+   * WHAT IT DISCRIMINATES, and the reason it is not just `corridorAreaFraction` with a
+   * different threshold. Two 22x18 boards with the SAME 18 wall cells, arranged as a blind
+   * alley and as two free-standing bars that enclose nothing:
+   *
+   *                      deadEnd   corridor
+   *   pocket (one way out)  0.0052     0.028
+   *   bars (no enclosure)   0.0027     0.067
+   *
+   * The new measure roughly doubles for the enclosing arrangement. `corridorAreaFraction`
+   * moves the OTHER WAY and rates the harmless one as more corridor-like, which is the blunt
+   * proxy this replaces, shown rather than asserted. `measure.test.ts` pins this pair.
+   *
+   * IT COUNTS POCKETS, NOT THEIR DEPTH. Deepening that alley from 2 to 10 cells moves the
+   * figure 0.0048 -> 0.0056, and the absolute count of "<= 1" points stays at about 6: the
+   * points along an alley have two clear directions, in and out, so only its END scores.
+   * A rule that wants to bound alley LENGTH needs a different instrument -- see issue #822's
+   * fourth measure, the articulation-point filter, which is not implemented here.
+   */
+  readonly deadEndAreaFraction: number;
+  /** How many lattice points the 8-ray probe actually visited -- the denominator behind
+   *  `corridorAreaFraction`, `openGroundFraction`, `deadEndAreaFraction` and
+   *  `degreeProfile`. Reported rather than left implicit: all four are fractions of the
+   *  SUBSAMPLE, and the subsample is every 4th lattice point per axis. */
+  readonly probedPoints: number;
+  /**
+   * The navigability degree profile (issue #822): `degreeProfile[d]` is the fraction of
+   * probed points with exactly `d` of 8 directions clear, `d` in 0..8. Sums to 1.
+   *
+   * The three fractions above are all thresholds on this one histogram --
+   * `deadEndAreaFraction` is `[0] + [1]`, `corridorAreaFraction` is `[0..2]`,
+   * `openGroundFraction` is `[6..8]` -- so the profile is what makes the 5-6 cell blind
+   * band `openGroundFraction` documents visible rather than inferred, and what lets a
+   * future ruleset be compared on shape rather than on three summary numbers.
+   */
+  readonly degreeProfile: readonly number[];
+
   // ---- fairness and flow (TANK space, per spawn pair) ----
   /** How many spawn pairs were measurable at all. Every figure below is over THIS
    *  denominator, not `C(playerCount, 2)`: a pair with no solid-only route contributes
@@ -549,6 +609,9 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
   let probed = 0;
   let corridorLike = 0;
   let openGround = 0;
+  let deadEndLike = 0;
+  /** Counts of probed points by how many of the 8 directions were clear: index 0..8. */
+  const degreeCounts = new Array<number>(DIRS.length + 1).fill(0);
   for (let i = 0; i < lat.nx; i += 4) {
     for (let j = 0; j < lat.ny; j += 4) {
       if (lat.legal[idx(i, j)] !== 1) continue;
@@ -566,6 +629,13 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
       }
       if (open <= 2) corridorLike++;
       if (open >= 6) openGround++;
+      // Issue #822's dead-end budget, from the SAME probe rather than a second instrument:
+      // the genre rule asks for a navigability degree profile, and `open` already IS that
+      // degree. Splitting the profile out costs one array and makes the blunt-proxy
+      // complaint checkable -- `corridorAreaFraction` collapses "<= 2" into one bucket, so
+      // a lane with two exits and a pocket with one are the same number to it.
+      degreeCounts[open]++;
+      if (open <= 1) deadEndLike++;
     }
   }
 
@@ -773,6 +843,9 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     legalAreaFraction: lat.legalCount / (lat.nx * lat.ny),
     corridorAreaFraction: probed ? corridorLike / probed : 0,
     openGroundFraction: probed ? openGround / probed : 0,
+    deadEndAreaFraction: probed ? deadEndLike / probed : 0,
+    probedPoints: probed,
+    degreeProfile: probed ? degreeCounts.map((n) => n / probed) : degreeCounts.slice(),
     spawnPairs: pairPaths.length,
     unreachablePairs,
     mineGatedPairs,
