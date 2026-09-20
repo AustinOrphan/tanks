@@ -9,8 +9,12 @@ import { describe, expect, it } from 'vitest';
 // outright. This import is what puts `run.mjs` in that graph.
 //
 // And behaviourally: before #881 this module called `main()` at the top level, so importing it
-// HERE would launch a browser and spawn vite and render a gallery. That it does not is the guard
-// working; if the guard regressed, this suite would hang rather than fail cleanly.
+// HERE would RUN it -- spawn vite and render a gallery. That it does not is the guard working.//
+// MEASURED here, because this tool's `main()` is the cheapest to recover from: with the guard
+// removed, the import really does run it, and this suite then reports a clean FAILURE rather
+// than a hang -- the gallery finishes in about a second and a half, so the source assertion
+// below is what catches it. A longer tool holds the unit suite for as long as it runs instead.
+// The first draft of this comment claimed a hang for all five; one control disproved it.
 import './run.mjs';
 
 describe('run.mjs: the seams no vitest run can execute', () => {

@@ -9,8 +9,7 @@ import { describe, expect, it } from 'vitest';
 // outright. This import is what puts `primitive-states.mjs` in that graph.
 //
 // And behaviourally: before #881 this module called `main()` at the top level, so importing it
-// HERE would launch a browser and serve a build and sweep every UI-kit primitive. That it does not is the guard
-// working; if the guard regressed, this suite would hang rather than fail cleanly.
+// HERE would RUN it -- serve a build and sweep every UI-kit primitive. That it does not is the guard working.
 import './primitive-states.mjs';
 
 describe('primitive-states.mjs: the seams no vitest run can execute', () => {

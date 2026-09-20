@@ -9,8 +9,7 @@ import { describe, expect, it } from 'vitest';
 // outright. This import is what puts `roundtrip.mjs` in that graph.
 //
 // And behaviourally: before #881 this module called `main()` at the top level, so importing it
-// HERE would launch a browser and run the whole context-leak sweep against a build that may not exist. That it does not is the guard
-// working; if the guard regressed, this suite would hang rather than fail cleanly.
+// HERE would RUN it -- run the whole context-leak sweep against a build that may not exist. That it does not is the guard working.
 import './roundtrip.mjs';
 
 describe('roundtrip.mjs: the seams no vitest run can execute', () => {

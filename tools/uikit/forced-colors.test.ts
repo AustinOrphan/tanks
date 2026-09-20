@@ -9,8 +9,7 @@ import { describe, expect, it } from 'vitest';
 // outright. This import is what puts `forced-colors.mjs` in that graph.
 //
 // And behaviourally: before #881 this module called `main()` at the top level, so importing it
-// HERE would launch a browser and run every forced-colours pass. That it does not is the guard
-// working; if the guard regressed, this suite would hang rather than fail cleanly.
+// HERE would RUN it -- run every forced-colours pass. That it does not is the guard working.
 import './forced-colors.mjs';
 
 describe('forced-colors.mjs: the seams no vitest run can execute', () => {
