@@ -19,6 +19,7 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
 import { clearanceFailures, insetLabel } from './clearance.mjs';
 import { hitTargetFailures } from './hit-targets.mjs';
@@ -820,7 +821,15 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Run only when this file IS the process entry point (issue #881), the same guard
+// `tools/screens/record.mjs` has carried since issue #815. Without it, importing this module
+// -- which is the only way `tools/mutate` can reach the file through Vitest's dependency
+// graph -- would launch a browser and start the sweep.
+const isEntryPoint = process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+
+if (isEntryPoint) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
