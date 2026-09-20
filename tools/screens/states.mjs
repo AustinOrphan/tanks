@@ -163,6 +163,45 @@ const MID_CAMPAIGN_DEV = Object.freeze(
   Object.fromEntries(Object.entries(MID_CAMPAIGN).map(([key, value]) => [`tanks.dev.${key}`, value])),
 );
 
+/**
+ * A retained versus setup, as the pane itself persists it (issue #776).
+ *
+ * READ OFF THE PAGE, not reconstructed from `versus-setup-store.ts`'s types: the pane was
+ * driven to each configuration in a browser and `tanks.versus.v1` copied out. A hand-written
+ * shape that the store quietly migrates or rejects would fall back to the DEFAULT setup --
+ * Random map, stock 3 -- and the capture would play a different match every run while still
+ * reaching an ending, which is exactly the failure a pinned seed is supposed to remove.
+ *
+ * `stock: 1` is what makes the match short enough to photograph: one life each, so the first
+ * elimination ends it. `arenaId` is pinned for the same reason the seed is -- Random is the
+ * pane's default and would choose a different board per run.
+ *
+ * Slot roles are the pane's own defaults at each player count: slot 0 human, every other slot
+ * a bot. Slot 0 is the one `autoplay` substitutes (loop.ts's `autoplayRnd`), so the human slot
+ * is the one that plays itself and the bots fight it.
+ */
+const versusSetup = (mode, players, slots) => JSON.stringify({
+  mode,
+  players,
+  stock: 1,
+  friendlyFire: false,
+  arenaId: 'arena-01',
+  slots,
+});
+
+const VERSUS_FFA_DEV = Object.freeze({
+  ...MID_CAMPAIGN_DEV,
+  'tanks.dev.tanks.versus.v1': versusSetup('ffa', 2, [{ role: 'human' }, { role: 'bot' }]),
+});
+
+const VERSUS_TEAMS_DEV = Object.freeze({
+  ...MID_CAMPAIGN_DEV,
+  // Teams is not offered at two players (issue #281), so the Teams ending needs three. The
+  // pane assigns 0 -> team 1, 1 -> team 2, 2 -> team 1, which is the 2v1 the board supports.
+  'tanks.dev.tanks.versus.v1': versusSetup('teams', 3, [{ role: 'human' }, { role: 'bot' }, { role: 'bot' }]),
+});
+
+
 /** Dismiss the Launch splash. Every state that wants a rendered UI starts with this. */
 const PAST_SPLASH = Object.freeze([
   Object.freeze({ press: 'Space' }),
@@ -999,6 +1038,67 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-action' },
     ],
     measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-choose-level', '.hud-practice-level'],
+  }),
+
+  // ---- The versus results panel, reached by PLAYING (issue #776) ---------------------
+  //
+  // A finished versus match has ONE exit and no state reached it: `loop.ts` deliberately
+  // leaves `vs-match-end` out of the pushed `outcome` arms, because issue #279 owned this
+  // screen. #279 closed without it, so these two are the only evidence the panel exists --
+  // and unlike every campaign ending above, there is no pushed twin to fall back on. That is
+  // why both are played and neither has a cheaper stand-in.
+  //
+  // WHO PLAYS. `autoplay` substitutes SLOT 0 and only slot 0 (`loop.ts`, `autoplayRnd`), and
+  // every other slot's own source still samples through on the same tick. A pane-launched
+  // versus session goes through that same input path, which issue #776's first acceptance
+  // criterion asked to be resolved either way: MEASURED, by launching one and watching it
+  // finish -- 4 runs, every one reaching a winner with zero page errors. So slot 0 is driven
+  // by autoplay and the bots in the other slots fight it, with no human input at all.
+  //
+  // The setup arrives through STORAGE rather than through clicks on the pane. Both are
+  // reachable, and the `screen.versus-setup.*` states already photograph the clicking; what
+  // these need is the launch, and a seven-click path to it is seven more things that can
+  // change under them.
+  //
+  // `expect` on the title is what makes these say anything. Both panels show `.hud-action`,
+  // so without it a Teams match that ended some other way would be photographed under the
+  // FFA id and pass -- the same trap issue #617 recorded for the campaign pair.
+  state({
+    id: 'screen.ending.versus.ffa.played',
+    title: 'Versus results, FFA',
+    description:
+      'A two-player FFA decided at one stock, played by autoplay against a bot: Rematch, ' +
+      'Change Setup and Main Menu, the three exits a finished versus match has.',
+    storage: VERSUS_FFA_DEV,
+    query: '?dev=1&replay=1&autoplay=1&seed=7',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { click: '.hud-versus-start' },
+      // Budget: twice the 1844-1849 simulated ticks this match took over 4 measured runs
+      // (2 driven through the pane, 2 through the retained setup these states use).
+      { playUntil: { visible: '.hud-action', maxTicks: 3700, expect: { selector: '.hud-title', text: 'Player 1 wins' } } },
+    ],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-change-setup', '.hud-quit'],
+  }),
+  state({
+    id: 'screen.ending.versus.teams.played',
+    title: 'Versus results, Teams',
+    description:
+      'The 2v1 Teams ending: the same three exits, under a title that names a TEAM rather ' +
+      'than a player, which is the difference this state exists beside the FFA one for.',
+    storage: VERSUS_TEAMS_DEV,
+    query: '?dev=1&replay=1&autoplay=1&seed=7',
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { click: '.hud-versus-start' },
+      // Budget: twice the 2244-2255 simulated ticks this match took over 4 measured runs.
+      { playUntil: { visible: '.hud-action', maxTicks: 4600, expect: { selector: '.hud-title', text: 'Team 1 wins' } } },
+    ],
+    measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-change-setup', '.hud-quit'],
   }),
 
   // ---- The branded failure states (issue #325) --------------------------------------
