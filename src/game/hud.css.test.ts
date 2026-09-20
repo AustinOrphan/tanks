@@ -2974,7 +2974,7 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
       .not.toMatch(/font-family:\s*ui-monospace/);
   });
 
-  it('declares a face for every weight it asks for, so nothing is synthesised', () => {
+  it('declares a face for every weight the SHIPPED stacks ask for, so nothing is synthesised', () => {
     // Plex Sans's axis ends at 700 and Plex Mono ships no variable build. A weight outside
     // what is declared is synthesised by the engine, per engine -- which is the variance
     // this change removes, reintroduced by a single number.
@@ -2995,6 +2995,46 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     const normal = Number(/--hud-weight-normal:\s*(\d+)/.exec(text)?.[1]);
     const strong = Number(/--hud-weight-strong:\s*(\d+)/.exec(text)?.[1]);
     expect(strong, 'strong is no longer stronger than normal').toBeGreaterThan(normal);
+  });
+
+  it('leaves the shipped tokens alone, and scopes every typeface arm to .hud (issue #865)', () => {
+    // The criterion this pins: with the flag absent, the computed stacks are what `main` had.
+    // An arm that reached `:root` would repaint anything outside the HUD that inherits these,
+    // and would still be inherited after `dispose()` -- which is the reason `menuTransition`
+    // puts its treatment on the HUD root too.
+    const text = stripComments(src);
+    const arms = [...text.matchAll(/(\.hud\.hud-font--[a-z]+)\s*\{([^}]*)\}/g)];
+    expect(arms.length, 'the population: typeface arm rules').toBe(2);
+    for (const [, selector, body] of arms) {
+      expect(selector, 'an arm is not scoped to the HUD root').toMatch(/^\.hud\.hud-font--/);
+      // Only the sans moves. Neither alternate ships a monospace companion, so every mono
+      // readout stays Plex and is a fixed reference when two arm captures are compared.
+      expect(body, `${selector} moves the mono token`).not.toMatch(/--hud-font-mono/);
+      expect(body, `${selector} does not set the sans token`).toMatch(/--hud-font:/);
+    }
+    // And no arm declares itself at `:root`, where it would leak past the HUD.
+    expect(text, 'a typeface arm reaches :root').not.toMatch(/:root[^{]*\{[^}]*hud-font--/);
+  });
+
+  it('fetches an alternate face only when its arm asks for it (issue #865)', () => {
+    // A `@font-face` is declared, not downloaded: the file is requested when a MATCHED rule
+    // asks for the family. So the guarantee is structural -- the only rules naming these two
+    // families are the arm classes, which nothing wears unless the flag put them there.
+    //
+    // Structural here, and verified in a real browser on the issue: this test cannot see a
+    // network request.
+    const text = stripComments(src);
+    for (const family of ["'Atkinson Hyperlegible'", "'Inter'"]) {
+      const mentions = [...text.matchAll(new RegExp(family.replace(/'/g, "'"), 'g'))];
+      expect(mentions.length, `${family} is named more than its face and its arm`)
+        .toBeLessThanOrEqual(3);
+      // Every rule naming the family outside a @font-face must be an arm class.
+      const outside = text.replace(/@font-face\s*\{[^}]*\}/g, '');
+      for (const [, selector] of outside.matchAll(/([^{}]*)\{[^}]*\}/g)) {
+        if (!selector.includes(family)) continue;
+        expect(selector, `${family} is asked for outside an arm class`).toMatch(/hud-font--/);
+      }
+    }
   });
 
   it('draws no cue state with `background`, which forced colours drops', () => {
