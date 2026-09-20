@@ -1,0 +1,14 @@
+{
+  "id": "primitive-states-keeps-the-audio-context-constructor",
+  "file": "tools/uikit/primitive-states.mjs",
+  "find": "  await page.addInitScript(audioContextOverrideSource());\n  const report = [];",
+  "replace": "  const report = [];",
+  "expect": "killed",
+  "tests": [
+    "tools/shared/audio-context.test.ts"
+  ],
+  "killedBy": [
+    "the AudioContext override reaches every tool that boots the app uikit/primitive-states.mjs installs the override before every navigation"
+  ],
+  "why": "Leaves the two real `AudioContext`s the app builds at boot -- Howler's, when `createAudioEngine` first touches `Howler.volume()`, and `engine.ts`'s `ensureCtx`. On a host whose audio service never connects each constructor returns only after an internal 20-second timeout, so the page blocks for ~40 s before `load` fires and the UI-kit primitive sweep never reaches its first `.hud-panel`."
+}

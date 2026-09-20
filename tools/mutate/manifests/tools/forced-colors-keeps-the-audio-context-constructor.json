@@ -1,0 +1,14 @@
+{
+  "id": "forced-colors-keeps-the-audio-context-constructor",
+  "file": "tools/uikit/forced-colors.mjs",
+  "find": "    await page.addInitScript(audioContextOverrideSource());\n    await page.emulateMedia({ colorScheme, forcedColors });",
+  "replace": "    await page.emulateMedia({ colorScheme, forcedColors });",
+  "expect": "killed",
+  "tests": [
+    "tools/shared/audio-context.test.ts"
+  ],
+  "killedBy": [
+    "the AudioContext override reaches every tool that boots the app uikit/forced-colors.mjs installs the override before every navigation"
+  ],
+  "why": "Leaves the two real `AudioContext`s the app builds at boot -- Howler's, when `createAudioEngine` first touches `Howler.volume()`, and `engine.ts`'s `ensureCtx`. On a host whose audio service never connects each constructor returns only after an internal 20-second timeout, so the page blocks for ~40 s before `load` fires and every forced-colors pass builds its own page, so the stall is paid once per (scheme, forced) combination rather than once per run."
+}

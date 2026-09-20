@@ -1,14 +1,14 @@
 {
-  "id": "capture-removes-only-the-unprefixed-audio-context",
-  "file": "tools/screens/steps.mjs",
+  "id": "shared-removes-only-the-unprefixed-audio-context",
+  "file": "tools/shared/audio-context.mjs",
   "find": "    delete window.AudioContext;\n    delete window.webkitAudioContext;",
   "replace": "    delete window.AudioContext;",
   "expect": "killed",
   "tests": [
-    "tools/screens/steps.test.ts"
+    "tools/shared/audio-context.test.ts"
   ],
   "killedBy": [
-    "steps.mjs: removing the AudioContext constructor before boot removes both spellings the audio stack looks for"
+    "audio-context.mjs: removing the AudioContext constructor before boot removes both spellings the audio stack looks for"
   ],
   "why": "Removes one spelling and leaves the other. Howler reads `AudioContext` and falls back to `webkitAudioContext`, so a half-removal still hands it a constructor to block in and the capture keeps the full stall this override exists to avoid -- while the page looks correct, because the app's own `ensureCtx` reads the same pair and would take the null path either way."
 }
