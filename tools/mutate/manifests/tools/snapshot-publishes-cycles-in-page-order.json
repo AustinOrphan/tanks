@@ -1,0 +1,15 @@
+{
+  "id": "snapshot-publishes-cycles-in-page-order",
+  "file": "tools/issues/snapshot.mjs",
+  "find": "      const rotation = cycle.indexOf(Math.min(...cycle));\n      return [...cycle.slice(rotation), ...cycle.slice(0, rotation)];",
+  "replace": "      return [...cycle];",
+  "expect": "killed",
+  "why": "Publishes `findDependencyCycles`' output unrotated. That function walks `graph.keys()`, which is the order the issues arrived in, so the same two-issue cycle comes back as [1, 2] or [2, 1] purely by which page GitHub returned first. The audit only formats the members, so it never had to care; a committed snapshot would flip between the two forms and put a spurious diff in every export. Rotating to the lowest member is what makes the file's determinism promise hold for this field.",
+  "tests": [
+    "tools/issues/snapshot.test.ts"
+  ],
+  "killedBy": [
+    "buildSnapshot reports a blocked-by cycle the same way whichever issue GitHub returned first",
+    "normaliseCycles rotates every cycle to its lowest member and orders the list"
+  ]
+}

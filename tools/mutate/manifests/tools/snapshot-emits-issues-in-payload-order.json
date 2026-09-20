@@ -1,0 +1,14 @@
+{
+  "id": "snapshot-emits-issues-in-payload-order",
+  "file": "tools/issues/snapshot.mjs",
+  "find": "    .filter((issue) => issue.number > 0)\n    .sort((a, b) => a.number - b.number);",
+  "replace": "    .filter((issue) => issue.number > 0)\n    .sort(() => 0);",
+  "expect": "killed",
+  "why": "Leaves the issue list in the order GitHub's pages happened to arrive in. Every other field is identical between two exports of an unchanged graph, so this alone would make a scheduled job rewrite the file whenever pagination shifted, and a reader could no longer tell a real change from a reordering. `Array.prototype.sort` is stable, so the no-op comparator preserves input order rather than scrambling it: the mutation is the absence of the sort, not a different sort.",
+  "tests": [
+    "tools/issues/snapshot.test.ts"
+  ],
+  "killedBy": [
+    "buildSnapshot serialises identically whatever order the input arrives in"
+  ]
+}
