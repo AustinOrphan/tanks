@@ -1,0 +1,14 @@
+{
+  "id": "capture-keeps-the-audio-context-constructor",
+  "file": "tools/screens/capture.mjs",
+  "find": "    await page.addInitScript(audioContextOverrideSource());\n    if (state.webgl !== 'ok')",
+  "replace": "    if (state.webgl !== 'ok')",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/capture.test.ts"
+  ],
+  "killedBy": [
+    "capture.mjs: the seams no vitest run can execute (issue #841) removes the AudioContext constructor for every state, not just the ones that ask"
+  ],
+  "why": "Leaves the AudioContext constructor in place for every capture. On a host whose audio service never connects the constructor returns only after an internal 20-second timeout, and the app builds two during startup -- Howler's and `engine.ts`'s -- so the page blocks for ~40 s and every capture of a script-running state dies on Playwright's 30 s navigation default. That is issue #860's 'wedged browser': it looked like a broken local Chromium because the script-disabled states were the only ones that still came back."
+}

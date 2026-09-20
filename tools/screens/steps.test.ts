@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { advancePlay, PLAY_START, webglOverrideSource } from './steps.mjs';
+import { advancePlay, audioContextOverrideSource, PLAY_START, webglOverrideSource } from './steps.mjs';
 
 /**
  * Issue #700. `webglOverrideSource` returns page-side source for a browser, so a unit test
@@ -35,6 +35,38 @@ function run(mode: string) {
     realGetContext, realCreateFramebuffer, realFramebufferTexture2D,
   };
 }
+
+/**
+ * Issue #860. Page-side source again, so the same stand-in treatment as the WebGL overrides:
+ * run it against a fake `window` and assert what it leaves behind. Both spellings matter --
+ * Howler reads `AudioContext` and falls back to `webkitAudioContext`, so removing one and
+ * leaving the other still hands it a constructor to block in.
+ */
+describe('steps.mjs: removing the AudioContext constructor before boot', () => {
+  function apply(win: Record<string, unknown>) {
+    new Function('window', audioContextOverrideSource())(win);
+    return win;
+  }
+
+  it('removes both spellings the audio stack looks for', () => {
+    const win = apply({ AudioContext: function real() {}, webkitAudioContext: function alsoReal() {} });
+    expect('AudioContext' in win, 'the prefixed-free constructor survived').toBe(false);
+    expect('webkitAudioContext' in win, 'the webkit constructor survived').toBe(false);
+  });
+
+  it('leaves `in` reporting absent, not merely undefined', () => {
+    // `engine.ts` reaches the null path through `window.AudioContext || window.webkitAudioContext`
+    // being falsy, but Howler's own probe is a `typeof AudioContext !== 'undefined'` guard on the
+    // GLOBAL. Assigning undefined would satisfy the first and, in a real page, still leave a
+    // declared global for the second. Deleting is what makes both agree.
+    const win = apply({ AudioContext: function real() {} });
+    expect(Object.keys(win)).toEqual([]);
+  });
+
+  it('is inert on a host that never had one', () => {
+    expect(() => apply({})).not.toThrow();
+  });
+});
 
 /**
  * Issue #617. `advancePlay` decides a `{ playUntil }` step one poll at a time, so every way a
