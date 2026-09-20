@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
+  DEFAULT_SNAPSHOT_PATH,
   applyIssueEvent,
   applyQueuePlan,
   attachLinkedPullRequests,
@@ -11,6 +15,7 @@ import {
   main,
   parseRepositoryRemote,
   resolveRepository,
+  writeSnapshotFile,
 } from './run.mjs';
 
 describe('repository resolution', () => {
@@ -774,5 +779,133 @@ describe('audit command with pull-request linkage', () => {
       .resolves.toBe(0);
     expect(reports.join('\n')).toContain('Linked pull requests: not inspected (no token)');
     expect(github.writes).toEqual([]);
+  });
+});
+
+describe('issue-graph snapshot export', () => {
+  // Two issues: #40 is blocked and therefore inspected, #41 is not inspected at all because
+  // GitHub's own summary says it has nothing to read. #41 is the control -- it must not be
+  // counted as a hole in the data merely because no request was made for it.
+  const snapshotFetch = async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.includes('/dependencies/blocked_by?')) {
+      return new Response(JSON.stringify([{ number: 41, state: 'open' }]), { status: 200 });
+    }
+    if (url.includes('/sub_issues?')) return new Response('[]', { status: 200 });
+    if (url.includes('page=1')) {
+      return new Response(JSON.stringify([
+        {
+          number: 40,
+          state: 'open',
+          title: 'Blocked work',
+          html_url: 'https://github.com/AustinOrphan/tanks/issues/40',
+          labels: ['size:s'],
+          issue_dependencies_summary: { blocked_by: 1, total_blocked_by: 1 },
+          sub_issues_summary: { total: 0, completed: 0 },
+        },
+        {
+          number: 41,
+          state: 'open',
+          title: 'The blocker',
+          html_url: 'https://github.com/AustinOrphan/tanks/issues/41',
+          labels: ['size:m'],
+          issue_dependencies_summary: { blocked_by: 0, total_blocked_by: 0 },
+          sub_issues_summary: { total: 0, completed: 0 },
+        },
+      ]), { status: 200 });
+    }
+    return new Response('[]', { status: 200 });
+  };
+
+  const runSnapshot = (argv: string[], env: Record<string, string> = {}) => {
+    const written: { path: string; body: string }[] = [];
+    const reports: string[] = [];
+    return main({
+      argv,
+      env,
+      fetchImpl: snapshotFetch,
+      log: (report) => reports.push(report),
+      writeFile: (path: string, body: string) => written.push({ path, body }),
+      now: () => '2026-09-19T23:59:00.000Z',
+    }).then((code) => ({ code, written, reports }));
+  };
+
+  it('writes a parseable snapshot whose counts name their denominator', async () => {
+    const { code, written, reports } = await runSnapshot(
+      ['snapshot', '--repo', 'AustinOrphan/tanks', '--out', 'out/graph.json', '--ref', 'deadbee'],
+    );
+
+    expect(code).toBe(0);
+    expect(written).toHaveLength(1);
+    expect(written[0].path).toBe('out/graph.json');
+    const snapshot = JSON.parse(written[0].body);
+    expect(snapshot.source).toEqual({ repo: 'AustinOrphan/tanks', ref: 'deadbee' });
+    expect(snapshot.generatedAt).toBe('2026-09-19T23:59:00.000Z');
+    expect(snapshot.issues.map((issue: { number: number }) => issue.number)).toEqual([40, 41]);
+    expect(snapshot.counts.issues).toBe(2);
+    expect(snapshot.counts.dependencyEdges).toBe(1);
+    // The control: #41 was never asked about, and that is not a hole.
+    expect(snapshot.counts.blockedByUnknown).toBe(0);
+
+    const report = reports.join('\n');
+    expect(report).toContain('**2 issues**, 2 open');
+    expect(report).toContain('0 of 2 blocked by something the run did not read');
+    // A trailing newline is what keeps a committed snapshot diffing as lines.
+    expect(written[0].body.endsWith('}\n')).toBe(true);
+  });
+
+  it('defaults the path and takes the ref from the workflow environment', async () => {
+    const { written } = await runSnapshot(
+      ['snapshot', '--repo', 'AustinOrphan/tanks'],
+      { GITHUB_SHA: 'c0ffee1' },
+    );
+    expect(written[0].path).toBe(DEFAULT_SNAPSHOT_PATH);
+    expect(JSON.parse(written[0].body).source.ref).toBe('c0ffee1');
+  });
+
+  it('does not refuse a missing token the way reconcile and event do', async () => {
+    // Narrowly what it says. This proves the mode has no token PRECONDITION -- it does not
+    // prove an anonymous run succeeds against a real repository, and measured against this
+    // one it does not: 73 open issues exhaust the 60-per-hour unauthenticated budget partway
+    // through enrichment and the run fails with a 403.
+    await expect(runSnapshot(['snapshot', '--repo', 'AustinOrphan/tanks']))
+      .resolves.toMatchObject({ code: 0 });
+  });
+
+  it('names snapshot in the usage it refuses an unknown mode with', async () => {
+    await expect(main({ argv: ['snapshotx'], env: {}, fetchImpl: snapshotFetch, log: () => {} }))
+      .rejects.toThrow(/audit\|event\|reconcile\|snapshot/);
+  });
+
+  it('fails loudly when the write did not take', () => {
+    // The real filesystem first, so the guard is shown passing on a genuine write -- and
+    // that it creates the directory -- rather than only on a rigged one.
+    const dir = mkdtempSync(join(tmpdir(), 'tanks-snapshot-'));
+    try {
+      const path = join(dir, 'nested', 'graph.json');
+      expect(() => writeSnapshotFile(path, '{"ok":true}\n')).not.toThrow();
+      expect(readFileSync(path, 'utf8')).toBe('{"ok":true}\n');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+
+    // Then the branch a working filesystem cannot reach: a write that silently does nothing.
+    // Without the read-back that returns cleanly, and the consumer reads a stale snapshot
+    // from a green run -- the whole reason the read-back is there.
+    let writes = 0;
+    expect(() => writeSnapshotFile('out/graph.json', '{"fresh":true}\n', {
+      mkdir: () => undefined,
+      write: () => { writes += 1; },
+      read: () => '{"stale":true}\n',
+    })).toThrow(/did not take: wrote 15 byte\(s\), read back 15/);
+    expect(writes).toBe(1);
+
+    // The control for that throw: the same injected pair, agreeing, must NOT throw. Without
+    // it the assertion above would still pass if the guard threw unconditionally.
+    expect(() => writeSnapshotFile('out/graph.json', '{"fresh":true}\n', {
+      mkdir: () => undefined,
+      write: () => undefined,
+      read: () => '{"fresh":true}\n',
+    })).not.toThrow();
   });
 });
