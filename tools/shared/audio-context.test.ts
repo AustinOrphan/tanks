@@ -126,6 +126,7 @@ const EXCLUDED = [
   'baseline/beacon-check.mjs',
   'baseline/run.mjs',
   'gl/idle-cost.mjs',
+  'gl/phase-cost.mjs',
   'gl/run.mjs',
   'hud/strip-width.mjs',
 ];

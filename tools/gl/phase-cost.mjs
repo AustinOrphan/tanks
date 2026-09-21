@@ -68,6 +68,12 @@ try {
   browser = await chromium.launch({
     args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'],
   });
+  // NO AudioContext override here, deliberately (issue #877). This page is
+  // `tools/gl/phase-cost.html`, which loads one module whose imports are `three`,
+  // `src/render/scene`, `src/render/renderer` and two `src/sim` modules. Nothing under
+  // `src/render` or `src/sim` imports `src/audio` at all -- `src/sim/purity.test.ts` is what
+  // keeps that true -- so neither of the two constructions that made the app wedge is
+  // reachable, and there is no context here for an override to remove.
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(String(e)));
