@@ -3059,7 +3059,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* `justify-content` comes from the shared `safe center` scroller rule (issue #633). */
   gap: var(--hud-space-3);
   background: var(--hud-scrim-pane);
   color: var(--hud-text);
@@ -3115,10 +3115,34 @@
  * A browser that does not parse `safe` drops this declaration and keeps the base rule's
  * `center`, which is exactly the clipping these panes had before -- no worse than that.
  */
+/*
+ * TWO PANES JOINED THIS RULE LATER (issue #633), and they are the last two full-screen panes
+ * that were still `justify-content: center` with no scroller of their own.
+ *
+ * `.hud-controllers` is a present-tense clip, not a precaution. Measured through
+ * tools/screens on the built page at 422x195 -- an 844x390 handset in landscape at 200%
+ * browser zoom, which halves the CSS viewport, and which is this pane's own criterion in
+ * issue #327 -- `screen.controllers.pads` put `#hud-controllers-title` at y = -14 with two
+ * pads connected. Above the scroll origin, with no scrollbar reaching it. Its inner
+ * `.hud-controller-rows` already scrolls, so the LIST was reachable and the heading was not,
+ * which is the shape that made this easy to miss.
+ *
+ * `.hud-levelselect` is the precaution, and is labelled as one rather than claimed as a fix:
+ * at 195x422, 422x195 and 320x568 every measured box is positive, because the mid-campaign
+ * fixture has cleared two levels and `.hud-levels` is 98px wide. It is a non-wrapping flex
+ * row of 44px buttons in a pane that could not scroll, so it overflows once a campaign is
+ * further along than any fixture here goes. Same treatment as `.hud-devtools` got under #642.
+ *
+ * Both panes' own rules below no longer set `justify-content`: `.hud-controllers` is
+ * declared AFTER this rule and would otherwise win it back, which is the kind of ordering
+ * accident this file has been bitten by before.
+ */
 .hud-panel,
 .hud-stats,
 .hud-customize,
-.hud-achievements {
+.hud-achievements,
+.hud-levelselect,
+.hud-controllers {
   justify-content: safe center;
   overflow-y: auto;
 }
@@ -3989,7 +4013,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* `justify-content` comes from the shared `safe center` scroller rule (issue #633), which
+     is declared EARLIER in this file -- so setting it here would win it back and re-clip
+     the heading this pane was measured losing. */
   gap: var(--hud-space-3);
   background: var(--hud-scrim-pane);
   color: var(--hud-text);

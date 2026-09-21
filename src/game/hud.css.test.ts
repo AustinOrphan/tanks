@@ -873,25 +873,32 @@ describe('hud.css is syntactically whole', () => {
     // comment this replaces named six scrollers, and there are eight -- `.hud-devcfg` and
     // `.hud-controller-rows` arrived after it was written, and `> 3` could not notice.
     //
-    // EIGHT was every `overflow-y: auto` rule in hud.css until issue #686 added a ninth that
-    // covers four panes at once, counted with `grep -nE 'overflow(-y)?: *auto' src/game/hud.css`:
-    // .hud-settings, .hud-about, .hud-devtools, .hud-devcfg, .hud-selftest,
-    // .hud-achievement-list, .hud-controller-rows, .hud-versus-setup, and the shared
-    // `.hud-panel, .hud-stats, .hud-customize, .hud-achievements` rule -- twelve panes in
-    // nine rules. That equality is what lets this guard claim no scrolling PANE centres its
-    // axis rather than only the ones the fixture happens to build -- and if another rule is
-    // added to a surface `mountEveryButton` does not mount, the two populations part and this
-    // comment is the thing that has gone stale.
+    // ELEVEN is every `overflow-y: auto` DECLARATION in hud.css, counted with the anchored
+    // `grep -nE '^\s+overflow(-y)?: *auto;' src/game/hud.css` -- anchored because the
+    // unanchored pattern this comment used to name also matches the five prose lines that
+    // discuss the property, and counted 16. Ten of the eleven are one pane each:
+    // .hud-settings, .hud-about, .hud-devtools, .hud-devcfg, .hud-selftest, .hud-layout,
+    // .hud-gallery, .hud-achievement-list, .hud-controller-rows, .hud-versus-setup. The
+    // eleventh is the shared rule, which covered four panes when #686 wrote it and covers
+    // SIX since #633 moved `.hud-levelselect` and `.hud-controllers` onto it. Sixteen panes
+    // in eleven rules, and sixteen names below.
+    //
+    // That equality is what lets this guard claim no scrolling PANE centres its axis rather
+    // than only the ones the fixture happens to build -- and if another rule is added to a
+    // surface `mountEveryButton` does not mount, the two populations part and this comment is
+    // the thing that has gone stale.
     expect([...new Set(scrollers.map((el) => el.className.split(' ')[0]))].sort()).toEqual([
       'hud-about',
       'hud-achievement-list',
       'hud-achievements',
       'hud-controller-rows',
+      'hud-controllers',
       'hud-customize',
       'hud-devcfg',
       'hud-devtools',
       'hud-gallery',
       'hud-layout',
+      'hud-levelselect',
       'hud-panel',
       'hud-selftest',
       'hud-settings',
@@ -915,13 +922,31 @@ describe('hud.css is syntactically whole', () => {
     //  - `.hud-devtools` (issue #642), at 568x280: the heading at y = -19, now y = +35.
     //    Latent rather than reachable -- that pane's content is 318px tall, so no handset
     //    clips it today, and it was fixed before the developer shell grows into it.
+    //  - `.hud-controllers` (issue #633), at 422x195 -- an 844x390 handset in landscape at
+    //    200% browser zoom, which is #327's own criterion for this pane. Measured over
+    //    `screen.controllers.pads`, so two pads are connected: `#hud-controllers-title` at
+    //    y = -14, now y = +8. Reachable today, and the one pane here that was. Its inner
+    //    `.hud-controller-rows` already scrolled, which is why the LIST was reachable while
+    //    the heading above it was not.
+    //  - `.hud-levelselect` (issue #633): latent, like `.hud-devtools`. Every measured box is
+    //    positive at 195x422, 422x195 and 320x568, because the mid-campaign fixture has
+    //    cleared two levels and `.hud-levels` comes to 98px wide. It is a NON-WRAPPING flex
+    //    row of 44px buttons, so it overflows once a campaign runs further than any fixture
+    //    here goes; the wrapping half of that is left to this issue's own children.
     //
     // What still fails here, now that there is no residual to pin: any of the eight
     // scrollers above re-centring, and any ninth arriving centred. The `for` loop is the
     // first of those spelled out per pane, so a failure names which one regressed rather
     // than printing a one-element diff.
     expect(centred.sort()).toEqual([]);
-    for (const fixed of ['hud-about', 'hud-versus-setup', 'hud-settings', 'hud-devtools']) {
+    for (const fixed of [
+      'hud-about',
+      'hud-versus-setup',
+      'hud-settings',
+      'hud-devtools',
+      'hud-controllers',
+      'hud-levelselect',
+    ]) {
       expect(centred, `${fixed} centres its main axis and clips its own overflow`).not.toContain(
         fixed,
       );

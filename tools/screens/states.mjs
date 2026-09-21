@@ -392,7 +392,10 @@ export const SCREEN_STATES = Object.freeze([
     description: 'The level grid, which draws only the levels the player has cleared.',
     storage: MID_CAMPAIGN,
     steps: [...PAST_SPLASH, { click: '.hud-levelselect-open' }, { waitVisible: '.hud-levelselect' }],
-    measure: ['.hud-levelselect', '.hud-levels', '.hud-levels-note'],
+    // The heading is measured because it is the box that goes ABOVE the scroll origin when
+    // this pane overflows (issue #633): the pane and the grid can both read positive while
+    // the title the pane is labelled by is off the top and unreachable.
+    measure: ['.hud-levelselect', '#hud-levelselect-title', '.hud-levels', '.hud-levels-note'],
   }),
   state({
     id: 'screen.practice',
