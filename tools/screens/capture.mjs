@@ -101,7 +101,7 @@ async function measure(/** @type {any} */ page, /** @type {readonly string[]} */
  * @param {any} state a catalogue state
  * @param {{ width: number, height: number, dpr: number, timeout: number, hideGame?: boolean }} viewport
  */
-export async function captureState(browser, base, state, { width, height, dpr, timeout, hideGame = false }) {
+async function captureStateOnce(browser, base, state, { width, height, dpr, timeout, hideGame = false }) {
   const pageErrors = [];
   // A touchscreen is a CAPABILITY, not a viewport (issue #844). `control-relevance.ts`
   // decides which control settings are worth showing from `PlatformCapabilities.touch`, so a
@@ -208,12 +208,30 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     //
     // Recorded rather than swallowed: `screenshotError` travels in the report, the check
     // command prints it, and the state is still judged on its measurements.
+    // RETRIED ONCE, because the failure is transient (issue #888). `Page.captureScreenshot`
+    // refuses on the CI runner for the two states that photograph a page whose WebGL context
+    // was REFUSED -- but only when a state that ran a live match preceded them through the
+    // same browser. Measured on Linux: the ten poisoning predecessors are exactly the states
+    // that click into a match (`.hud-continue`, `.hud-versus-start`, `.hud-new-game`), the
+    // same capture in a fresh browser always succeeds, and a second attempt succeeds too.
+    //
+    // Not a leaked context on our side: this function already closes its own in a `finally`,
+    // and relaunching the browser mid-run does not help while a poisoner still precedes the
+    // target. What it looks like is a browser-level transient after a GL-bearing page is
+    // discarded, which clears on its own within a frame or two.
+    //
+    // Still RECORDED when both attempts fail, and still not fatal: the screenshot is evidence,
+    // not the verdict, and a state is judged on its measurements either way.
     let png = null;
     let screenshotError = null;
-    try {
-      png = await page.screenshot();
-    } catch (e) {
-      screenshotError = String(e).split('\n')[0];
+    for (let attempt = 0; attempt < 2 && png === null; attempt += 1) {
+      if (attempt > 0) await page.waitForTimeout(250);
+      try {
+        png = await page.screenshot();
+        screenshotError = null;
+      } catch (e) {
+        screenshotError = String(e).split('\n')[0];
+      }
     }
     const report = {
       capture: { viewport: { width, height, devicePixelRatio: dpr } },
@@ -237,3 +255,25 @@ export async function captureState(browser, base, state, { width, height, dpr, t
     await context.close();
   }
 }
+
+/**
+ * One capture, with the whole attempt repeated if the screenshot was refused.
+ *
+ * TWO levels of retry, because they rescue different states (issue #888, measured on Linux
+ * across the real 45-state sequence). `captureStateOnce` retries the screenshot CALL after a
+ * frame or two, which is enough for `screen.startup.probe-blocked`. It is not enough for
+ * `screen.startup.unsupported-render`, which only comes back on a fresh page -- so the whole
+ * capture is repeated once, which is measured to succeed.
+ *
+ * Costs nothing on the 43 states that never fail: the second attempt runs only when the first
+ * produced no screenshot at all. When both attempts fail the state still returns its
+ * measurements and its `screenshotError`, because the screenshot is evidence and not the
+ * verdict -- a state is judged on what it measured either way.
+ */
+export async function captureState(browser, base, state, viewport) {
+  const first = await captureStateOnce(browser, base, state, viewport);
+  if (first.png !== null) return first;
+  const second = await captureStateOnce(browser, base, state, viewport);
+  return second.png !== null ? second : first;
+}
+

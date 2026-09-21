@@ -1,0 +1,14 @@
+{
+  "id": "capture-stops-repeating-a-refused-screenshot",
+  "file": "tools/screens/capture.mjs",
+  "find": "  const second = await captureStateOnce(browser, base, state, viewport);\n  return second.png !== null ? second : first;",
+  "replace": "  return first;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/capture.test.ts"
+  ],
+  "killedBy": [
+    "capture.mjs: the seams no vitest run can execute (issue #841) retries a refused screenshot at BOTH levels, because they rescue different states"
+  ],
+  "why": "Leaves `screen.startup.unsupported-render` with no evidence on the CI runner. That state photographs a page whose WebGL context was refused, and `Page.captureScreenshot` is refused for it whenever a state that ran a live match preceded it through the same browser -- ten of the other forty-four do. Retrying the screenshot CALL is not enough for this one: measured on Linux across the real sequence, the in-page retry rescues `probe-blocked` and leaves this state still failing, and only repeating the capture on a fresh page brings it back. The failure is silent in the worst way, because the state still PASSES on its measurements; all that is lost is the picture a reader needs when it one day fails for a real reason."
+}
