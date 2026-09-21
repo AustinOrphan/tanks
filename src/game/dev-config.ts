@@ -85,6 +85,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   // typeface is chrome the player looks at, and swapping it changes no rule of the match.
   hudFont: 'Rendering',
   enemyDeathPulse: 'Rendering',
+  wreck: 'Rendering',
   backdrop: 'Rendering',
   menuTransition: 'Rendering',
   // With the two above rather than under Gameplay: all three name a TREATMENT of chrome

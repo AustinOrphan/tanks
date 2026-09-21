@@ -55,6 +55,7 @@ import {
   type SlotSource,
 } from '../input/assignment';
 import { createRenderer, type Renderer3D } from '../render/renderer';
+import type { WreckEffect } from '../render/wreck';
 import {
   createTankPreview,
   PREVIEW_RENDER_SETTINGS,
@@ -198,6 +199,7 @@ export interface GameDeps {
       playerAccent?: string | null;
       quality?: RenderQuality;
       enemyDeathPulse?: boolean;
+      wreck?: WreckEffect | null;
     },
   ) => Renderer3D;
   /**
@@ -2017,6 +2019,8 @@ export function startGameWith(
     // `?dev=1&enemyDeathPulse=1` (issue #200): player deaths always ring; this only
     // gates non-player ones. See death-pulse.ts's own doc comment.
     enemyDeathPulse: deps.devFlags.enemyDeathPulse,
+    // Issue #232's wreck arms. Absent leaves the shipped board, which keeps nothing.
+    wreck: deps.devFlags.wreck,
   });
   // The player's controller layouts (issue #754), for every gamepad reader this session
   // builds. Kept current by `applySettings` below rather than re-read per poll, since
