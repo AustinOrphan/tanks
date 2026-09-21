@@ -1,24 +1,26 @@
 /**
- * Issue #888: why `Page.captureScreenshot` fails on the two WebGL-refused states.
+ * Issue #888, run 3. TEMPORARY; deleted before the issue closes.
  *
- * TEMPORARY. Deleted before that issue closes.
+ * Run 1: both targets capture fine in ISOLATION, under six browser configurations. The
+ * GPU-process hypothesis is refuted.
+ * Run 2: driven as the gate drives them -- 45 states through ONE browser -- both fail, at
+ * positions 42 and 43, and nothing else in the run does. So it accumulates.
  *
- * Run 1 refuted the obvious hypothesis: driving those two states through a hand-written
- * capture, on Linux, with six different browser configurations, every screenshot succeeded.
- * So the fault is not the state in isolation -- it is something the REAL run does. The
- * difference under test here is SEQUENCE: the gate captures 45 states through one browser,
- * and these two sit at 43 and 44.
+ * This run asks the question that picks the fix: COUNT or IDENTITY? If 41 repetitions of one
+ * cheap state are enough to break the target, the browser is leaking something per capture and
+ * the fix is a lifecycle one. If only the real 41 predecessors do it, something specific in
+ * them is responsible and the fix is to find it.
  */
 import { serve, launchBrowser, captureState } from './capture.mjs';
 import { subsetStates } from './baseline.mjs';
 import { SCREEN_STATES } from './states.mjs';
 import { recipeFor } from './check.mjs';
 
-const TARGETS = ['screen.startup.unsupported-render', 'screen.startup.probe-blocked'];
-const VIEWPORT = { width: 1280, height: 800, dpr: 2 };
+const TARGET = 'screen.startup.unsupported-render';
+const FILLER = 'screen.main-menu';
 
 async function capture(browser, base, state) {
-  const v = recipeFor(state.id)?.viewport ?? { width: VIEWPORT.width, height: VIEWPORT.height, devicePixelRatio: VIEWPORT.dpr };
+  const v = recipeFor(state.id)?.viewport ?? { width: 1280, height: 800, devicePixelRatio: 2 };
   const { report, png } = await captureState(browser, base, state, {
     width: v.width, height: v.height, dpr: v.devicePixelRatio, timeout: 20000,
   });
@@ -26,32 +28,32 @@ async function capture(browser, base, state) {
 }
 
 const states = subsetStates(SCREEN_STATES);
+const target = states.find((s) => s.id === TARGET);
+const filler = states.find((s) => s.id === FILLER);
+const realPrefix = states.filter((s) => s.id !== TARGET);
+
 const server = await serve('dist');
 const base = `http://127.0.0.1:${server.address().port}/`;
 
-console.log(`\n=== ISOLATED: the two targets alone, fresh browser each ===`);
-for (const id of TARGETS) {
-  const state = states.find((s) => s.id === id);
+/** @param {string} label @param {Array<object>} prefix */
+async function arm(label, prefix) {
   const browser = await launchBrowser();
-  const r = await capture(browser, base, state).catch((e) => ({ shot: false, bytes: 0, err: `threw ${String(e).slice(0, 60)}` }));
+  let failedInPrefix = 0;
+  for (const s of prefix) {
+    try { const r = await capture(browser, base, s); if (!r.shot) failedInPrefix += 1; }
+    catch { failedInPrefix += 1; }
+  }
+  let r;
+  try { r = await capture(browser, base, target); }
+  catch (e) { r = { shot: false, bytes: 0, err: `threw ${String(e).split('\n')[0].slice(0, 60)}` }; }
   await browser.close();
-  console.log(`ISOLATED ${id}: screenshot=${r.shot} bytes=${r.bytes}${r.err ? ` err=${r.err}` : ''}`);
+  console.log(`${label.padEnd(34)} prefix=${String(prefix.length).padStart(2)} prefixFailures=${failedInPrefix} -> target screenshot=${r.shot} bytes=${r.bytes}`);
 }
 
-console.log(`\n=== SEQUENCE: all ${states.length} states through ONE browser, as the gate does ===`);
-{
-  const browser = await launchBrowser();
-  let i = 0;
-  for (const state of states) {
-    i += 1;
-    let r;
-    try { r = await capture(browser, base, state); }
-    catch (e) { r = { shot: false, bytes: 0, err: `threw ${String(e).split('\n')[0].slice(0, 70)}` }; }
-    const flag = r.shot ? '   ' : '>>>';
-    if (!r.shot || TARGETS.includes(state.id)) {
-      console.log(`${flag} [${String(i).padStart(2)}/${states.length}] ${state.id}: screenshot=${r.shot} bytes=${r.bytes}${r.err ? ` err=${r.err}` : ''}`);
-    }
-  }
-  await browser.close();
-}
+console.log('\n=== COUNT or IDENTITY? ===');
+await arm('41x the same cheap state', Array.from({ length: 41 }, () => filler));
+await arm('the real 41 predecessors', realPrefix.slice(0, 41));
+await arm('the real first 20', realPrefix.slice(0, 20));
+await arm('the real first 10', realPrefix.slice(0, 10));
+await arm('no prefix at all', []);
 server.close();
