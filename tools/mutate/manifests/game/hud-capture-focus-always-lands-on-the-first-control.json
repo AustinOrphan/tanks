@@ -1,12 +1,12 @@
 {
   "id": "hud-capture-focus-always-lands-on-the-first-control",
-  "file": "src/game/hud.ts",
-  "find": "      (same ?? sameRow ?? controls[0])?.focus();",
-  "replace": "      controls[0]?.focus();",
+  "file": "src/game/focusable.ts",
+  "find": "    (same ?? sameRow ?? controls[0])?.focus();",
+  "replace": "    controls[0]?.focus();",
   "tests": [
     "src/game/hud.navigation.test.ts"
   ],
-  "why": "A re-render must put focus back on the SAME candidate on the SAME row; landing on the pane's first control loses the player's place on every hotplug.",
+  "why": "A re-render must put focus back on the SAME candidate on the SAME row; landing on the pane's first control loses the player's place on every hotplug. Re-pointed when `captureFocus` moved to `focusable.ts` (issue #556): the body is unchanged, but leaving `createHud`'s closure took two spaces of indent off every line, so the anchor moved with it.",
   "expect": "killed",
   "killedBy": [
     "hud: the semantic action dispatcher (issue #494) focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not",
