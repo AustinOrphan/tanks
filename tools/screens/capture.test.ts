@@ -37,6 +37,29 @@ describe('capture.mjs: the seams no vitest run can execute (issue #841)', () => 
     expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
   });
 
+  it('retries a refused screenshot at BOTH levels, because they rescue different states', () => {
+    // STRUCTURAL, like its neighbours, and for the same reason: what it protects happens only
+    // in a real browser. Issue #888 -- `Page.captureScreenshot` is refused on the CI runner for
+    // the two states that photograph a page whose WebGL context was REFUSED, but only when a
+    // state that ran a live match preceded them through the same browser.
+    //
+    // The two levels are NOT redundant, and that is the whole point of asserting both. Measured
+    // across the real 45-state sequence on Linux: retrying the screenshot CALL rescues
+    // `screen.startup.probe-blocked` and leaves `screen.startup.unsupported-render` still
+    // failing; repeating the whole capture on a fresh page rescues that one too. Together, 0
+    // failures in 45 states. Delete either and one state goes back to having no evidence.
+    const src = readFileSync(new URL('./capture.mjs', import.meta.url), 'utf8');
+    expect(src, 'the screenshot call is no longer retried')
+      .toMatch(/for \(let attempt = 0; attempt < 2 && png === null; attempt \+= 1\)/);
+    expect(src, 'the whole capture is no longer repeated when the screenshot was refused')
+      .toMatch(/const second = await captureStateOnce\(/);
+    // And the repeat is CONDITIONAL on having no screenshot, not unconditional -- doubling
+    // every capture would double a required check's runtime for the 43 states that never fail.
+    const wrapper = /export async function captureState\([\s\S]*?\n}/.exec(src)?.[0] ?? '';
+    expect(wrapper, 'the second attempt is not gated on the first having failed')
+      .toMatch(/if \(first\.png !== null\) return first;/);
+  });
+
   it('asks Chromium not to hint, which is what makes a baseline portable between platforms', () => {
     // STRUCTURAL, for a flag whose effect only exists on another operating system. Linux hints
     // glyph advances through FreeType and macOS does not, so the same bundled face measures
