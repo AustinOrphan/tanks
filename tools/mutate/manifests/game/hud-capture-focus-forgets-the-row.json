@@ -1,12 +1,12 @@
 {
   "id": "hud-capture-focus-forgets-the-row",
-  "file": "src/game/hud.ts",
-  "find": "      (same ?? sameRow ?? controls[0])?.focus();",
-  "replace": "      (same ?? controls[0])?.focus();",
+  "file": "src/game/focusable.ts",
+  "find": "    (same ?? sameRow ?? controls[0])?.focus();",
+  "replace": "    (same ?? controls[0])?.focus();",
   "tests": [
     "src/game/hud.navigation.test.ts"
   ],
-  "why": "When the focused candidate vanishes (its pad unplugged), focus must stay on that row rather than jump to the first row's first control.",
+  "why": "When the focused candidate vanishes (its pad unplugged), focus must stay on that row rather than jump to the first row's first control. Re-pointed when `captureFocus` moved to `focusable.ts` (issue #556): the body is unchanged, but leaving `createHud`'s closure took two spaces of indent off every line, so the anchor moved with it.",
   "expect": "killed",
   "killedBy": [
     "hud: the semantic action dispatcher (issue #494) focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not"
