@@ -161,14 +161,45 @@ try {
   // in BOTH arms grew least (1.48x) -- so the biggest number in the profile is not the
   // regression, and optimising it would be optimising the wrong thing.
   //
-  // WHAT THE MECHANISM IS NOT. #867's own comments measured the primitives directly and ruled
-  // out renderer construction (`new WebGLRenderer` + dispose, 0.96-1.09x), `createScene` at
-  // both shipped presets (0.99x / 1.12x), scene-graph construction in node (1.02x over 300
-  // rounds), steady-state rasterization (1.02-1.08x) and readback (1.17-1.33x) -- every
-  // primitive between 0.96x and 1.36x while the harness sits at 2.3-4.1x. The same work is
-  // charged more, and SwiftShader charges it at the first call that blocks, which here is
-  // `readPixels`. Do not read a per-check number as the cost of what that check's body
-  // textually contains: the queue it drains was filled earlier.
+  // More precisely: every check that PAYS is one that builds a scene. Splitting the 94 by
+  // whether the body reaches a `createScene`/`createRenderer`/preview/gallery constructor,
+  // following harness-local helpers, puts 80 in the building bucket and 100% of the added
+  // 361 s with them; the four that build no GL state at all cost under 15 ms each in both
+  // arms, and ten loop-generated names the split could not resolve cost 0.1 s between them.
+  //
+  // WHAT THE MECHANISM IS. One named call: `createEnvironmentMap` in `src/render/scene.ts`,
+  // a 1x64 gradient run through `THREE.PMREMGenerator.fromScene`. Measured by
+  // `tools/gl/phase-cost.mjs`, which ends EVERY phase with a blocking 1x1 `readPixels` so a
+  // phase is charged its own queued work and not its neighbour's. Medians of 6 rounds per
+  // arm, one box, one session, `three` served to the page by alias so no install moved:
+  //
+  //                                        0.169.0        0.186.0      ratio
+  //   createEnvironmentMap alone             279 ms       3,176 ms     11.38x
+  //   createScene, construction              295 ms       3,137 ms     10.63x
+  //   createRenderer, construction           298 ms       3,143 ms     10.54x
+  //   new WebGLRenderer, bare                  8 ms           9 ms      1.09x
+  //   renderer.compile                         3 ms           3 ms      1.11x
+  //   first render of a fresh scene          380 ms         378 ms      1.00x
+  //   steady-state render                    213 ms         215 ms      1.01x
+  //   dispose                                  7 ms           6 ms      0.93x
+  //
+  // CONSTRUCTION IS THE WHOLE REGRESSION AND DRAWING IS FLAT -- and inside construction the
+  // environment map accounts for all of it: it gains 2,897 ms against the 2,842 ms
+  // `createScene` gains, a difference inside the round-to-round spread of either. A harness
+  // run builds 100 environment maps, counted at runtime by wrapping
+  // `PMREMGenerator` in a pass-through `three` on a run that passed 94 of 94, because every
+  // `createScene` builds one and so does every tank preview (`src/render/preview.ts`).
+  // 100 x 2.90 s is ~290 s against the 361 s the per-check profile above records as added,
+  // so roughly four fifths of it -- on two runs a day apart, whose absolute seconds drift.
+  //
+  // WHY THE FIRST ANSWERS READ FLAT. #867's own comments ruled out a bare `new
+  // WebGLRenderer` (0.96-1.09x), scene-graph construction in node (1.02x over 300 rounds),
+  // steady-state rasterization (1.02-1.08x) and readback (1.17-1.33x), and the table above
+  // agrees with every one of them. They ALSO recorded `createScene` itself at 0.99x / 1.12x,
+  // and THAT one was an artefact of the probe: nothing in it blocked, so the ~3 s
+  // `createScene` queues was billed to whatever rendered next. Do not read a per-check
+  // number -- or a per-call one -- as the cost of what its body textually contains unless
+  // something in that body blocks. SwiftShader charges at the first call that does.
   //
   // The absolute seconds here are larger than the two-sample-per-arm run recorded on the issue
   // on 2026-09-20 (103.9 s -> 273.5 s, 2.63x). Same instrument, same box, different day and
@@ -178,9 +209,15 @@ try {
   // to results, so ~266s; 600s is ~2.3x that, which is the margin a hang ceiling wants and
   // matches the guard below. The number was right; only the reason for it was not.
   //
-  // This is a DEVELOPMENT SERVER cost, not a shipped one: the production build tree-shakes
-  // the same import down to a 1.17 MB bundle, and `npm run visual` (which runs against
-  // `dist`) was unaffected.
+  // The LOAD phase is a DEVELOPMENT SERVER cost, not a shipped one: the production build
+  // tree-shakes the same import down to a 1.17 MB bundle, and `npm run visual` (which runs
+  // against `dist`) was unaffected.
+  //
+  // THE ENVIRONMENT MAP IS NOT that kind of cost. It is GL work, so any build pays it on a
+  // software rasteriser -- measured here at ~3.1 s per map against ~0.28 s on 0.169, and not
+  // measured at all on a GPU. It stays invisible to `visual` because `createEnvironmentMap`
+  // has exactly two call sites, one per scene and one per tank preview, and a running game
+  // does not build scenes in a loop the way this harness does.
   await page.goto(`${BASE}tools/gl/harness.html`, { waitUntil: 'load', timeout: 600000 });
   // A LIVENESS guard, not an assertion: nothing about the checks depends on this number,
   // and a harness that hangs is caught just as well at 600s as at 30s. It has now been
