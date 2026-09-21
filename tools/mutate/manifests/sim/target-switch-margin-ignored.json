@@ -1,13 +1,13 @@
 {
   "id": "target-switch-margin-ignored",
   "file": "src/sim/ai/target-selection.ts",
-  "find": "      AI_TARGET_SWITCH_MARGIN",
-  "replace": "      -1",
+  "find": "    policy.cost(held) - policy.cost(challenger) > AI_TARGET_SWITCH_MARGIN",
+  "replace": "    policy.cost(held) - policy.cost(challenger) > -1",
   "expect": "killed",
   "tests": [
     "src/sim/ai/target-selection.test.ts"
   ],
-  "why": "Rule 6: at the end of a commitment span an AI keeps its opponent unless another is MATERIALLY better. A negative margin makes any improvement sufficient, so the AI flips target at every span boundary -- the per-tick-thrashing failure mode one span removed. Worth an entry because the first version of the matching test could not detect it: its challenger was further from preferred range than the held target, so no margin was ever crossed.",
+  "why": "Rule 6: at the end of a commitment span an AI keeps its opponent unless another is MATERIALLY better. A negative margin makes any improvement sufficient, so the AI flips target at every span boundary -- the per-tick-thrashing failure mode one span removed. Worth an entry because the first version of the matching test could not detect it: its challenger was further from preferred range than the held target, so no margin was ever crossed. -- FIND-STRING REPOINTED (issue #891): Same comparison, now expressed through the injected cost function (#891). The bare constant name is no longer unique enough to anchor on, so the whole line is pinned.",
   "killedBy": [
     "committed opponent selection does not switch at expiry for a trivially better candidate, but does for a material one"
   ]

@@ -1,8 +1,8 @@
 {
   "id": "bot-movement-and-fire-split-again",
   "file": "src/sim/ai/player-profile.ts",
-  "find": "    engaged: nearestVisible ?? nearest,",
-  "replace": "    engaged: nearest,",
+  "find": "    return { engaged: nearestVisible ?? nearest, engagedInSight: nearestVisible !== null, centroid };",
+  "replace": "    return { engaged: nearest, engagedInSight: nearestVisible !== null, centroid };",
   "expect": "killed",
   "tests": [
     "src/sim/ai/player-profile.test.ts"
@@ -10,5 +10,5 @@
   "killedBy": [
     "issue #893: one opponent drives movement AND fire, not two MOVES toward that same opponent, which is the half that used to disagree"
   ],
-  "why": "Restores the exact defect issue #893 fixed. With `engaged` back on nearest-by-distance, movement and the mine gate reason about the closest opponent while aim and fire still require line of sight, so whenever the nearest tank stands behind a wall the bot drives at one opponent and shoots at another on the same tick. It is silent: the bot still moves, still fires, still kills things, and no existing assertion separates the two derivations. Measured across disjoint seed sets, the split costs ~8-16% more tank deaths, reproducing in direction on both."
+  "why": "Restores the exact defect issue #893 fixed. With `engaged` back on nearest-by-distance, movement and the mine gate reason about the closest opponent while aim and fire still require line of sight, so whenever the nearest tank stands behind a wall the bot drives at one opponent and shoots at another on the same tick. It is silent: the bot still moves, still fires, still kills things, and no existing assertion separates the two derivations. Measured across disjoint seed sets, the split costs ~8-16% more tank deaths, reproducing in direction on both. -- FIND-STRING REPOINTED (issue #891): This return is now the NOT-a-bot branch (#891): a human, or any player tank in a world built without `WorldForInit.bots`, which is what this entry's tests build. The mutation still re-splits movement from fire exactly as before."
 }

@@ -1,13 +1,13 @@
 {
   "id": "ai-target-never-reacquires-after-a-loss",
   "file": "src/sim/ai/target-selection.ts",
-  "find": "    const fresh = selectPerceived(world, tank, cfg);",
-  "replace": "    const fresh = tank.aiRetargetReason === 'target-lost' ? undefined : selectPerceived(world, tank, cfg);",
+  "find": "    const fresh = policy.select();",
+  "replace": "    const fresh = tank.aiRetargetReason === 'target-lost' ? undefined : policy.select();",
   "expect": "killed",
   "tests": [
     "src/sim/ai/target-selection.test.ts"
   ],
-  "why": "Refuses to re-select once a target has been lost, which leaves an AI permanently blind to an opponent that RESPAWNS. `stepRespawns` revives a tank in place -- same id, `alive` back to true -- so nothing about the world tells the AI a new opponent has appeared; it has to re-read `isTargetable` every tick, and this mutation is what 'remembering the loss' looks like as a plausible optimisation. Every other case in the file still passes: death dropping the commitment is unaffected, and no other fixture brings a dead tank back.",
+  "why": "Refuses to re-select once a target has been lost, which leaves an AI permanently blind to an opponent that RESPAWNS. `stepRespawns` revives a tank in place -- same id, `alive` back to true -- so nothing about the world tells the AI a new opponent has appeared; it has to re-read `isTargetable` every tick, and this mutation is what 'remembering the loss' looks like as a plausible optimisation. Every other case in the file still passes: death dropping the commitment is unaffected, and no other fixture brings a dead tank back. -- FIND-STRING REPOINTED (issue #891): The selector moved behind `CommitmentPolicy` when #891 extracted the shared policy; the mutation is unchanged in meaning -- refuse to reacquire after a loss.",
   "killedBy": [
     "committed opponent selection reacquires a target that dies and RESPAWNS, rather than staying blind to it"
   ]
