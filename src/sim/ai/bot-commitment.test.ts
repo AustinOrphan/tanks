@@ -15,8 +15,9 @@ import { isOpponent } from './targeting';
 import { stepAi } from './index';
 import { createPlayerAiState, decidePlayerInput, mulberry32 } from './player-profile';
 import { TICK_HZ } from '../constants';
-import type { Tank, Vec2 } from '../types';
-import type { World } from '../world';
+import type { InputState, Tank, Vec2 } from '../types';
+import { stepInputs, type World } from '../world';
+import { createWorldFor, ARENAS } from '../arena';
 
 function tank(id: number, pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -273,6 +274,59 @@ describe('determinism (issue #891)', () => {
     const committed = w.tanks.filter((t) => t.aiTargetId !== undefined);
     expect(committed.length).toBe(3);
     for (const t of w.tanks) expect(t.aiTargetId, `tank ${t.id}`).not.toBe(t.id);
+  });
+});
+
+describe('through the public boundary, not the seam (issue #891)', () => {
+  // Every other test in this file calls `stepAi` or `commitBotTarget` on a world it mutates
+  // in place. That cannot see the one thing a real tick does differently: `step` does not
+  // mutate its input, so each tick runs on a CLONE. `cloneTank` spreads, so a scalar field
+  // rides along -- but "I read the spread" is not "I ran it", and if the clone dropped
+  // `botDifficulty` or `aiTargetId` the commitment would reset every tick while all 17
+  // assertions above stayed green. .claude/rules/testing.md names this exact gap: a unit
+  // test that calls a stage directly cannot prove composition.
+  const idle: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false };
+
+  it('carries the commitment across real steps, clone and all', () => {
+    const start = createWorldFor(ARENAS[3], 20260921, {
+      playerCount: 4,
+      rules: { mode: 'ffa' },
+      bots: ['normal', 'normal', 'normal', 'normal'],
+    });
+    const bots = start.tanks.filter((t) => t.botDifficulty !== undefined);
+    expect(bots.length, 'loadArena stamped every slot').toBe(4);
+
+    let w = start;
+    const spans: (number | undefined)[] = [];
+    const ids: (number | undefined)[] = [];
+    for (let i = 0; i < 6; i++) {
+      w = stepInputs(w, [idle, idle, idle, idle]).world;
+      const p1 = w.tanks.find((t) => t.controlledBy === 0)!;
+      spans.push(p1.aiTargetTicks);
+      ids.push(p1.aiTargetId);
+      expect(p1.botDifficulty, `tick ${i}: the clone kept the marker`).toBe('normal');
+    }
+
+    // The span counts DOWN across ticks. If the clone dropped `aiTargetId`, every tick would
+    // re-acquire and this would be a flat run of the full span instead.
+    expect(ids.every((id) => id !== undefined && id === ids[0]), 'one opponent, held').toBe(true);
+    expect(spans[0]).toBe(SPAN);
+    expect(spans[5]).toBe(SPAN - 5);
+    expect(new Set(spans).size, 'six distinct countdown values').toBe(6);
+  });
+
+  it('leaves a world built without `bots` exactly as it was before #891', () => {
+    // The same arena and seed with the stamp omitted: no tank carries a difficulty, so
+    // nothing commits and `stepAi` behaves as it did. This is what every pre-existing
+    // fixture in the tree is, and why none of them moved.
+    let w = createWorldFor(ARENAS[3], 20260921, { playerCount: 4, rules: { mode: 'ffa' } });
+    for (let i = 0; i < 6; i++) w = stepInputs(w, [idle, idle, idle, idle]).world;
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players.length).toBe(4);
+    for (const t of players) {
+      expect(t.botDifficulty, `tank ${t.id}`).toBeUndefined();
+      expect(t.aiTargetId, `tank ${t.id}`).toBeUndefined();
+    }
   });
 });
 

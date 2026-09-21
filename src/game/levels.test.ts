@@ -44,6 +44,29 @@ describe('createLevelSystem: the shipped sequence', () => {
   it('carries lives into the built world, for cross-level persistence', () => {
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
     expect(sys.world(CAMPAIGN_LEVELS[0], 42, undefined, 1).lives).toBe(1);
+  });
+
+  it('stamps bot slots on the DEV-FLAG path, which has no setup pane (issue #891)', () => {
+    // THE GAP THIS TEST WAS WRITTEN AGAINST, measured before it was closed: with only the
+    // versus branch wired, a `?dev=1&mode=ffa&players=4&bots=4` session built four tanks
+    // carrying no `botDifficulty` at all -- `initialVersusConfig` is null on that path, so
+    // `createVersusLevelSystem` is never constructed and the stamp was unreachable. The
+    // visible symptom was a versus recording with `--flag aiContact` drawing an empty
+    // overlay even after the overlay itself had learned about bots.
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'ffa', players: 4, bots: 4 }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, 3, 4);
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players.length).toBe(4);
+    expect(players.every((t) => t.botDifficulty === 'normal'), 'bots=4 of players=4').toBe(true);
+  });
+
+  it('leaves a CAMPAIGN world unstamped however `bots` is set (issue #891)', () => {
+    // The control for the test above, and the reason `loadArena` gates the stamp on mode:
+    // a campaign board's computer opponents are enemy-kind tanks, which have committed
+    // targets since #359. Stamping its player would put an AI contact ring under the person.
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, bots: 1 }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, 3, 1);
+    for (const t of w.tanks) expect(t.botDifficulty, `tank ${t.id} (${t.kind})`).toBeUndefined();
     expect(sys.world(CAMPAIGN_LEVELS[0], 42).lives).toBe(LIVES); // absent means a fresh run
   });
 

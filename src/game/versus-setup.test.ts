@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, botDifficultiesOf, resizeSlots,
+  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, botDifficultiesOf,
+  botSlotDifficulties, resizeSlots,
   representedTeams,
   type VersusSetup, type VersusSlotSetup,
 } from './versus-setup';
+import { seedAssignment } from './loop';
 
 const BASE: VersusSetup = {
   mode: 'ffa', players: 2, stock: 3, friendlyFire: false, arenaId: 'arena-01',
@@ -263,6 +265,45 @@ describe('botDifficultiesOf: what the simulation stamps on the tanks (issue #891
       { role: 'bot' },
       { role: 'human' },
     ])).toEqual(['hard', 'normal', undefined]);
+  });
+
+  it('marks exactly the slots seedAssignment marks as bots, on BOTH entry paths', () => {
+    // The cross-pin. `seedAssignment` decides which slots the INPUT layer drives as bots;
+    // `botSlotDifficulties` decides which tanks the SIMULATION treats as bots. If those two
+    // disagree, the contact overlay rings one tank while another is being driven, and no
+    // single-sided test would notice. seedAssignment's own header records that a mutation
+    // making the VS path ignore its slots once SURVIVED the whole suite, which is why the
+    // agreement is asserted rather than assumed.
+    const pads: never[] = [];
+    let checked = 0;
+
+    // Path 1: a setup pane session, roles authoritative.
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'bot', difficulty: 'hard' }, { role: 'bot' }];
+    const fromAssignment = new Set(
+      seedAssignment(slots, 3, 0, pads).flatMap((s, i) => (s.kind === 'bot' ? [i] : [])),
+    );
+    const fromStamp = new Set(
+      botSlotDifficulties(slots, 3, 0).flatMap((d, i) => (d === undefined ? [] : [i])),
+    );
+    expect([...fromStamp].sort(), 'pane path').toEqual([...fromAssignment].sort());
+    checked++;
+
+    // Path 2: a dev-flag session with no pane, derived last-K rule. Swept over every
+    // (playerCount, botCount) pair the flags can produce, rather than one example.
+    for (let players = 1; players <= 4; players++) {
+      for (let bots = 0; bots <= players; bots++) {
+        const a = new Set(
+          seedAssignment(undefined, players, bots, pads).flatMap((s, i) => (s.kind === 'bot' ? [i] : [])),
+        );
+        const b = new Set(
+          botSlotDifficulties(undefined, players, bots).flatMap((d, i) => (d === undefined ? [] : [i])),
+        );
+        expect([...b].sort(), `players=${players} bots=${bots}`).toEqual([...a].sort());
+        checked++;
+      }
+    }
+    // Population: 1 pane case + the 14 (players, bots) pairs for players 1..4.
+    expect(checked).toBe(15);
   });
 
   it('ignores a difficulty left behind on a slot that is no longer a bot', () => {
