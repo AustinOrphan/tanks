@@ -318,39 +318,22 @@ Because the baseline is JSON, the pull-request diff *is* the review:
 That is what pins #326's "a successful test run is not automatic approval of a changed
 design": the run cannot approve anything, because the run cannot write.
 
-### Two members capture without a picture
+### `screen.startup.match-failed` no longer needs its note
 
-`screen.startup.unsupported-render` and `screen.startup.probe-blocked` PASS the gate on their
-measurements and produce **no `capture.png`**: `Page.captureScreenshot` answers
-`Unable to capture screenshot`. Issue #888 owns this; what is settled so far is recorded here
-so the next reader does not repeat it.
+This section used to say that member "does not capture yet" -- that it timed out waiting for
+`.hud-alert` after `breakWebgl: 'match-build-fails'`, verified at `b0035077`, and that the
+required check was waiting for it to pass. **It passes.** Two `screens:check` runs on an
+ordinary Linux developer box report `PASS screen.startup.match-failed`, and it is in the
+checked subset: only the four `.played` states are excluded.
 
-**It is not a CI-runner property.** The issue's working hypothesis was that a failed
-SwiftShader context init leaves the GPU process unable to serve the capture, and that macOS
-escapes it because ANGLE is Metal-backed there. Reproduced on an ordinary Linux developer box
-with the same `--use-gl=swiftshader` flags and no `/dev/dri` either: two `screens:check` runs,
-the same two states each time, 387 s and 394 s.
+Issue #851 is why. It moved that override from `createFramebuffer` to `framebufferTexture2D`,
+because three 0.186 had started allocating a framebuffer inside `new THREE.WebGLRenderer(...)`
+-- so the old override began throwing one statement too early and the capture landed on the
+fatal page instead of the overlay. The note predates that fix.
 
-**It needs company.** Run alone through `run.mjs`, both states photograph normally -- 58,135 B
-and 71,471 B on disk, no `screenshotError`. They also capture when run in a shared browser in
-small groups. Only the full 45-state gate reproduces it.
-
-**Retrying is not the fix.** One retry 250 ms after the failure was measured through the gate
-and changed nothing: 45 states checked, the same 2 without a picture. Reverted rather than
-kept, because a retry that never succeeds is dead code wearing a hopeful name.
-
-**What actually separates these two from every other state.** They are the only members whose
-`webgl` mode is not `ok`, and the override reaches the page through `addInitScript`, before
-any page script runs -- so no WebGL2 context is ever created. `match-failed` is the useful
-contrast: it creates a real context and breaks a *later* call through a `breakWebgl` STEP, and
-it photographs fine. So the dividing line is not "GL initialisation failed" but "the page
-never got a WebGL2 context at all".
-
-`screen.startup.match-failed` was listed here as timing out waiting for `.hud-alert`, verified
-at `b0035077`. **It passes now**, in both runs above. Issue #851 moved that override from
-`createFramebuffer` to `framebufferTexture2D` because three 0.186 had started allocating a
-framebuffer inside `new THREE.WebGLRenderer(...)`, which sent the capture to the fatal page
-instead of the overlay; the old note predates that fix.
+The two states that genuinely capture without a picture are
+`screen.startup.unsupported-render` and `screen.startup.probe-blocked`, and they are issue
+#888's, not this note's.
 
 ## Known gap
 
