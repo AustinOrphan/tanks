@@ -7,9 +7,9 @@
   "tests": [
     "src/sim/generated-scenarios.test.ts"
   ],
-  "why": "Issue #760's authoritative population bound: an off-by-one lets an owner hold one shell past its cap. The shell-cap invariant counts every owner's live shells after every tick against the same cap expression, so a corpus tank that fires into its cap reports it.",
+  "why": "Issue #760's authoritative population bound: an off-by-one lets an owner hold one shell past its cap. The shell-cap invariant counts every owner's live shells after every tick against the same cap expression, so a corpus tank that fires into its cap reports it. SEED COVERAGE MOVES: which corpus seeds catch this depends on how the generated matches unfold, so a bot-behaviour change reshuffles them -- issue #893 moved this entry's set without weakening it. A killedBy mismatch here means re-point the named seeds at ones that still fail, not that the coverage was lost.",
   "killedBy": [
     "generated scenarios: the required corpus seed 1 holds every structural invariant on every tick",
-    "generated scenarios: the required corpus seed 3 holds every structural invariant on every tick"
+    "generated scenarios: the required corpus seed 5 holds every structural invariant on every tick"
   ]
 }

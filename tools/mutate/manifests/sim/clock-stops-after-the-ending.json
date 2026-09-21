@@ -7,9 +7,9 @@
   "tests": [
     "src/sim/generated-scenarios.test.ts"
   ],
-  "why": "Issue #760's phase transitions: stepInputs advances the clock on every call, including after a win or loss, and this stops it at the ending. It proves the runs really are checked past their ending: runScenario continues TERMINAL_WATCH_TICKS after the status leaves 'playing', and the tick-advances invariant reports the first post-ending step whose tick did not move. Only corpus seeds whose scenario ends within the tick budget can report it.",
+  "why": "Issue #760's phase transitions: stepInputs advances the clock on every call, including after a win or loss, and this stops it at the ending. It proves the runs really are checked past their ending: runScenario continues TERMINAL_WATCH_TICKS after the status leaves 'playing', and the tick-advances invariant reports the first post-ending step whose tick did not move. Only corpus seeds whose scenario ends within the tick budget can report it. SEED COVERAGE MOVES: which corpus seeds catch this depends on how the generated matches unfold, so a bot-behaviour change reshuffles them -- issue #893 moved this entry's set without weakening it. A killedBy mismatch here means re-point the named seeds at ones that still fail, not that the coverage was lost.",
   "killedBy": [
-    "generated scenarios: the required corpus seed 1 holds every structural invariant on every tick",
-    "generated scenarios: the required corpus seed 2 holds every structural invariant on every tick"
+    "generated scenarios: the required corpus seed 2 holds every structural invariant on every tick",
+    "generated scenarios: the required corpus seed 3 holds every structural invariant on every tick"
   ]
 }

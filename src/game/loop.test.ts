@@ -8368,7 +8368,17 @@ describe('startGameWith: the dev console surface', () => {
       snapshots: Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>>;
       report: ReturnType<NonNullable<DevConsole['bench']>> | null;
     } {
-      const devFlags = { seed: 42, players: 3, bots: 3, ...(bench ? { bench: 'versus-bots' as const } : {}) };
+      // SEED 43, and the number is load-bearing in a way worth writing down. The guards below
+      // require the round to still be SIMULATING across the whole 150-frame window: once a
+      // versus round resolves, the driver stops stepping and `simulatedTicks` is 0 even though
+      // frames are still recorded and the phase still reads `measuring`.
+      //
+      // Whether a given seed's round outlasts the window depends on how the match unfolds, so
+      // any change to bot behaviour reshuffles which seeds qualify. Issue #893 moved seed 42
+      // from qualifying to not. This is not new fragility: seed 99 fails on both sides of that
+      // change. If it breaks again, pick another seed that keeps the round live and leave the
+      // assertions alone -- they are what makes the comparison above mean anything.
+      const devFlags = { seed: 43, players: 3, bots: 3, ...(bench ? { bench: 'versus-bots' as const } : {}) };
       const h = boot(makeDeps({ devFlags, wallMs: 111 }));
       h.setState('playing');
       const snapshots: Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> = [];
@@ -8402,7 +8412,7 @@ describe('startGameWith: the dev console surface', () => {
 
     it('reports the session it measured, the rAF intervals the frames were fired at, and the preset cap', () => {
       const { report } = runSession(true);
-      expect(report!.session).toMatchObject({ seed: 42, humanPlayers: 0, bots: 3 });
+      expect(report!.session).toMatchObject({ seed: 43, humanPlayers: 0, bots: 3 });
       // Frames are fired 23, 41 and 88 ms apart in turn, about as many of each, so the median
       // interval is the 41 ms step and the longest is the 88 ms one.
       expect([report!.frames.p50, report!.frames.max]).toEqual([41, 88]);
