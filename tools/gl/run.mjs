@@ -186,11 +186,16 @@ try {
   // CONSTRUCTION IS THE WHOLE REGRESSION AND DRAWING IS FLAT -- and inside construction the
   // environment map accounts for all of it: it gains 2,897 ms against the 2,842 ms
   // `createScene` gains, a difference inside the round-to-round spread of either. A harness
-  // run builds 100 environment maps, counted at runtime by wrapping
-  // `PMREMGenerator` in a pass-through `three` on a run that passed 94 of 94, because every
+  // run builds 100 environment maps, counted at runtime by wrapping `PMREMGenerator` in a
+  // pass-through `three` on a run that passed 94 of 94 with no page errors, because every
   // `createScene` builds one and so does every tank preview (`src/render/preview.ts`).
-  // 100 x 2.90 s is ~290 s against the 361 s the per-check profile above records as added,
-  // so roughly four fifths of it -- on two runs a day apart, whose absolute seconds drift.
+  //
+  // Two independent framings of how much of the phase that is, and they agree. ACROSS the
+  // two profile runs: 100 x the 2.90 s each map GAINS is ~290 s against the 361 s added
+  // above. WITHIN the single counted run: 100 x the 3.18 s each map COSTS on 0.186 is
+  // ~318 s against the 398.3 s that run spent inside check bodies. Roughly four fifths
+  // either way -- which is the useful form, because this box's absolute seconds drift
+  // between runs and only the share survives that.
   //
   // WHY THE FIRST ANSWERS READ FLAT. #867's own comments ruled out a bare `new
   // WebGLRenderer` (0.96-1.09x), scene-graph construction in node (1.02x over 300 rounds),
