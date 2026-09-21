@@ -1989,8 +1989,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          lives, and Settings -> Controls is the durable way in). Unlike its four siblings
          above/below, this one is NOT title-only, so its Back button cannot hardcode
          setState('main-menu') --
-         see handleControllersBack, which routes to shownState instead. The heading
-         text itself branches on shownState too, in showControllers. -->
+         its Back is handleControllersBack, which calls back() and nothing else. The
+         heading text DOES still branch on shownState, in showControllers, and that is
+         this panel's only route-state read. (The earlier wording here said
+         handleControllersBack routed on shownState too. It has not since the layer stack
+         took over, and the claim made this panel's coupling look twice the size it is --
+         issue #556.) -->
     <div class="hud-controllers hud-controllers--hidden" role="region" tabindex="-1" aria-labelledby="hud-controllers-title">
       <h1 class="hud-controllers-title" id="hud-controllers-title"></h1>
       <!-- REPLACE, never append -- rebuilt on open and on every detection refresh, same
