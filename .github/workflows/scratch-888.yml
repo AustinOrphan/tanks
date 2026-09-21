@@ -4,7 +4,9 @@
 # a macOS checkout. This runs the diagnostic ONCE against every candidate fix at the same
 # time, rather than spending a CI round trip per idea.
 name: scratch 888
-on: workflow_dispatch
+on:
+  push:
+    branches: ['fix/webgl-refused-screenshot']
 
 permissions:
   contents: read
