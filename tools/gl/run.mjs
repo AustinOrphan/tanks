@@ -142,41 +142,37 @@ try {
   // A SECOND regression the original note missed: the GL phase AFTER `load` also more than
   // doubled, 93.5-97.9s to 218.0-220.5s, which no bundle size explains.
   //
-  // WHAT THAT PHASE IS, attributed per check (issue #867). Every check is now timed around its
-  // own body and the totals are directly comparable, because both arms were measured in one
-  // session on this box with one instrument, three swapped by `npm i --no-save` with the
-  // installed version read back, and `vite optimize --force` before each:
+  // WHERE THAT PHASE GOES, per check (issue #867, and see that issue's own comments, which hold
+  // the deeper probes). Every check is now timed around its own body and the table is written
+  // by `GL_PROFILE_OUT=<path> npm run test:gl`, labelled with the INSTALLED three read from
+  // node_modules -- `npm i --no-save three@x` moves the install and leaves package.json's
+  // `^0.186.0` alone, so a manifest label would label both arms identically.
+  //
+  // IT IS EVERY CHECK, not one. One sample per arm on this box, both in one session, three
+  // swapped and read back, `vite optimize --force` before each, 94 checks passing in both:
   //
   //                                        0.169.0        0.186.0      ratio
   //   summed time inside check bodies      116.3 s        477.4 s       4.11x
-  //   checks that got slower                                            87 of 94
-  //   checks that got faster                                             7 of 94
+  //   checks slower / faster                                          87 / 7 of 94
   //   median per-check ratio (the 74
   //     checks >=200 ms in the old arm)                                  7.30x
   //
-  // IT IS NOT ONE CHECK, and it is not readback. The ten biggest absolute growers are only 36%
-  // of the added 361 s, and the checks that grew MOST are the ones that read no pixels at all:
+  // The ten biggest absolute growers are 36% of the added 361 s, and the most expensive check
+  // in BOTH arms grew least (1.48x) -- so the biggest number in the profile is not the
+  // regression, and optimising it would be optimising the wrong thing.
   //
-  //                                     0.169.0    0.186.0   aggregate   median per-check
-  //   bodies with no readback            77.4 s    337.1 s      4.36x         10.73x
-  //   bodies with >=1 readback           38.4 s    139.7 s      3.64x          3.90x
+  // WHAT THE MECHANISM IS NOT. #867's own comments measured the primitives directly and ruled
+  // out renderer construction (`new WebGLRenderer` + dispose, 0.96-1.09x), `createScene` at
+  // both shipped presets (0.99x / 1.12x), scene-graph construction in node (1.02x over 300
+  // rounds), steady-state rasterization (1.02-1.08x) and readback (1.17-1.33x) -- every
+  // primitive between 0.96x and 1.36x while the harness sits at 2.3-4.1x. The same work is
+  // charged more, and SwiftShader charges it at the first call that blocks, which here is
+  // `readPixels`. Do not read a per-check number as the cost of what that check's body
+  // textually contains: the queue it drains was filled earlier.
   //
-  // The cleanest single case is `screenToGround subtracts the canvas page offset`: it builds
-  // TWO renderers, draws nothing, reads nothing, and asserts arithmetic. 0.75 s -> 8.33 s, so
-  // one `createRenderer` plus `dispose` went from ~0.38 s to ~4.2 s. That is construction --
-  // scene, lights, shadow map, materials and the shader compiles under SwiftShader -- and it
-  // is why the phase grew broadly: nearly every check builds at least one scene. Issue #800's
-  // "constructing a WebGLRenderer, 11 -> 37 ms" is not a counter-example; it timed a bare
-  // `new THREE.WebGLRenderer()`, which is a small part of `createRenderer`.
-  //
-  // SO THERE IS A FIX SHAPE, not taken here: the harness builds and disposes a scene per
-  // check, and sharing one across checks would cut most of this. It trades away per-check
-  // isolation, which is what makes a failure point at one line today, so it needs its own
-  // decision rather than being smuggled into a measurement.
-  //
-  // Two arms, one sample each, one box, one browser. The ratio is the stable contrast; the
-  // absolute seconds are this machine's. Re-derive with `GL_PROFILE_OUT=<path> npm run test:gl`
-  // in each arm, which writes the per-check table as JSON labelled with the INSTALLED three.
+  // The absolute seconds here are larger than the two-sample-per-arm run recorded on the issue
+  // on 2026-09-20 (103.9 s -> 273.5 s, 2.63x). Same instrument, same box, different day and
+  // different load. Treat the ratio as the contrast and nothing here as a per-machine cost.
   //
   // WHY 600s SURVIVES THAT CORRECTION. A whole run on 0.186 is about 48s to `load` plus 218s
   // to results, so ~266s; 600s is ~2.3x that, which is the margin a hang ceiling wants and
