@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 557,
-        "y": 161,
-        "w": 166,
-        "h": 38
+        "x": 556,
+        "y": 152,
+        "w": 167,
+        "h": 42
       },
       "text": "Controllers",
       "style": {
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 324,
-        "y": 230,
-        "w": 633,
-        "h": 276
+        "x": 336,
+        "y": 225,
+        "w": 607,
+        "h": 280
       },
       "text": "Player 1Keyboard / Mouse / TouchKeyboardNoneXbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd) (index 0)HuiJia  USB GamePad (index 1) — not supported",
       "style": {
@@ -69,10 +69,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 486,
-        "y": 574,
-        "w": 308,
-        "h": 32
+        "x": 493,
+        "y": 579,
+        "w": 294,
+        "h": 36
       },
       "text": "HuiJia  USB GamePad (index 1) isn't supported: Tanks can't read its buttons in this browser.",
       "style": {
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 604,
-        "y": 616,
-        "w": 72,
+        "x": 605,
+        "y": 625,
+        "w": 70,
         "h": 44
       },
       "text": "Back",

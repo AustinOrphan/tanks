@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { SCREEN_STATES } from './states.mjs';
 import { captureState, launchBrowser, serve } from './capture.mjs';
-import { BASELINE_DIR, subsetStates, readBaseline, diffMeasurements, formatFailure } from './baseline.mjs';
+import { BASELINE_DIR, subsetStates, readBaseline, diffMeasurements, formatFailure, judgePageErrors, pageErrorRefusalReason } from './baseline.mjs';
 import { CAPTURE_RECIPES } from '../capture/registry.mjs';
 import { inspectSourceState } from '../capture/provenance.mjs';
 
@@ -39,10 +39,14 @@ export function recipeFor(stateId, recipes = CAPTURE_RECIPES) {
  * Pure, so every outcome is unit-testable without a browser: a missing baseline, a clean
  * match, a field that moved, and a page error each have a case of their own.
  */
-export function judgeState({ stateId, recipe, baseline, report }) {
+export function judgeState({ stateId, state, recipe, baseline, report }) {
   const pageErrors = report.pageErrors ?? [];
-  if (pageErrors.length > 0) {
-    return { stateId, status: 'page-error', pageErrors, changes: [] };
+  // A state may DECLARE the error it exists to demonstrate; see `judgePageErrors`. Expected
+  // errors fall through to the ordinary comparison, so the failure card's layout is still
+  // diffed rather than the state being waved past on the strength of having thrown.
+  const errorVerdict = judgePageErrors(state, pageErrors);
+  if (!errorVerdict.ok) {
+    return { stateId, status: 'page-error', pageErrors, errorVerdict, changes: [] };
   }
   if (baseline === null) {
     return { stateId, status: 'no-baseline', pageErrors, changes: [] };
@@ -51,6 +55,9 @@ export function judgeState({ stateId, recipe, baseline, report }) {
   return {
     stateId,
     status: changes.length === 0 ? 'match' : 'differs',
+    // Missing evidence does not change the verdict, but it is never silent: a state that
+    // passed without producing a screenshot has no picture for the next person to read.
+    screenshotError: report.screenshotError ?? null,
     pageErrors,
     changes,
     recipeId: recipe?.id ?? stateId,
@@ -90,10 +97,24 @@ export async function writeFailureArtifacts(dir, { verdict, baseline, report, pn
 
 /** One verdict as the text a reader sees, in the terminal and in `diff.txt`. */
 export function formatVerdict(verdict) {
-  if (verdict.status === 'match') return `PASS ${verdict.recipeId ?? verdict.stateId}`;
+  const note = verdict.screenshotError ? `\n  no screenshot: ${verdict.screenshotError}` : '';
+  if (verdict.status === 'match') return `PASS ${verdict.recipeId ?? verdict.stateId}${note}`;
   if (verdict.status === 'page-error') {
-    return [`FAIL ${verdict.stateId}`, '  the page raised an error, so the screen is not trustworthy:',
-      ...verdict.pageErrors.map((e) => `    ${e}`)].join('\n');
+    // A state that DECLARED its error gets the declaration's own wording, because the two
+    // ways it breaks need different fixes: an unexpected error is a regression in the page,
+    // a missing one means the state stopped reaching the failure it was written to show.
+    // Only a DECLARATION failure gets the declaration's wording. An ordinary unexpected error
+    // keeps this command's own sentence: `accept` refuses because there is no design to
+    // approve, `check` fails because the screen cannot be trusted, and the 44 states that
+    // declare nothing should not start reading like the other command.
+    const declarationFailed = verdict.errorVerdict && verdict.errorVerdict.reason !== 'unexpected';
+    const reason = declarationFailed
+      ? pageErrorRefusalReason(verdict.errorVerdict)
+      : 'the page raised an error, so the screen is not trustworthy';
+    // The colon introduces the list below it, so it is only earned when there IS a list. The
+    // `missing` refusal has none by definition -- the complaint is that nothing was raised.
+    const lines = verdict.pageErrors.map((e) => `    ${e}`);
+    return [`FAIL ${verdict.stateId}`, `  ${reason}${lines.length > 0 ? ':' : ''}`, ...lines].join('\n') + note;
   }
   if (verdict.status === 'capture-failed') {
     return [`FAIL ${verdict.stateId}`, `  the capture itself failed: ${verdict.pageErrors[0]}`].join('\n');
@@ -162,7 +183,7 @@ async function main() {
         });
         continue;
       }
-      const verdict = judgeState({ stateId: state.id, recipe, baseline: readBaseline(baselineDir, state.id), report });
+      const verdict = judgeState({ stateId: state.id, state, recipe, baseline: readBaseline(baselineDir, state.id), report });
       verdicts.push(verdict);
       console.log(formatVerdict(verdict));
       if (verdict.status !== 'match') {

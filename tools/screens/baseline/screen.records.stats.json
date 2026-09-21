@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 470,
-        "y": 298,
-        "w": 340,
-        "h": 288
+        "x": 471,
+        "y": 288,
+        "w": 338,
+        "h": 312
       },
       "text": "Statistics, lifetime and this level attemptLifetimeLevel attemptShell kills630Mine kills110Deaths90Self kills10AI friendly fire20Shots fired2140Accuracy29%--Mines laid380Mine accuracy29%--Walls destro",
       "style": {

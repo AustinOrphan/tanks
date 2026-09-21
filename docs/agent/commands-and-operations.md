@@ -491,7 +491,7 @@ went red before assuming the deploy is broken.
 
 **`workflow_dispatch` is the ungated path, and it stays that way** — it exists to
 re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
-`ci.yml`'s 13 checking steps** (`verify`: 7, `mutation`: 2, `visual`: 4), **not the
+`ci.yml`'s 14 checking steps** (`verify`: 7, `mutation`: 2, `visual`: 5), **not the
 `visual` job and not any mutation step**, so a manual deploy can still publish a render
 regression that only `tools/gl/` and `tools/visual/` catch, and a stale
 `tools/mutate/manifests/`. Those five steps are duplicated work on the automatic path;

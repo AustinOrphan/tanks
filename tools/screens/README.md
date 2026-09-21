@@ -115,8 +115,13 @@ refuses to.
 A test reads the viewport queries `hud.css` declares, and fails when two layouts meet the same
 queries without one naming the other in `sameQueriesAs` and saying what still tells them apart.
 
-**What it is not.** It is not #326's regression suite, and it commits no baselines. It is not a
+**What it is not.** It is not the required gate, it commits no baselines, and it is not a
 required check. A full sweep is several hundred captures on software GL.
+
+The gate is `npm run screens:check` (issue #846), which runs one bounded subset at one viewport
+against committed baselines inside the required `visual` job (issue #847). This sweep is the
+broad on-demand matrix beside it, and the two answer different questions: the gate asks whether
+a screen changed, the sweep asks what a screen looks like everywhere.
 
 ## Failure screens are produced by failing, never by injecting markup
 
@@ -270,6 +275,32 @@ no `expected.png` to compare it against — pixels are not the channel.
 **A page error fails a state on its own**, whatever its measurements did. The sweep's
 `measurementsSha256` hashes the measurements alone, so a screen that started throwing would
 keep its hash and pass; an uncaught error is a defect regardless of what the layout did.
+
+**Unless the state declares it.** A state whose subject IS a failed page says so with a
+`pageError` field naming a substring the error must contain, and then both commands treat that
+error as the design and go on to compare measurements normally. `screen.startup.entry-unparseable`
+declares `'SyntaxError'`: its entry bundle is served deliberately unbalanced so it fails at
+parse time, which is the only way to reach the "could not start" card. Without the field that
+state could never be accepted and could never pass — a gate quietly not covering one of its
+own states.
+
+The declaration runs both ways, which is what keeps it a contract rather than a suppression:
+
+| what the capture raised | verdict |
+| --- | --- |
+| the declared error | the design; measurements are diffed as usual |
+| nothing at all | **fails** — the card it exists to photograph is no longer being reached |
+| a different error | **fails** — a declaration is not an amnesty for an unrelated regression |
+| the declared error *plus* a stray one | **fails** — the match is per-error |
+
+**Box geometry is compared to within 2px; everything else is exact.** Text-sized boxes are not
+exactly reproducible across operating systems and bundling the typeface did not make them so —
+it fixed which face is used, not which rasteriser draws it. `--font-render-hinting=none` takes
+out the largest part of the remainder (it cut this gate's cross-platform disagreement from 161
+values to 33, and removed every difference above 2px); what is left is the last fraction of a
+pixel landing on either side of a rounding boundary. `present`, `visible`, `text` and the
+watched style properties have no tolerance at all, because none of them is a rasteriser
+artefact.
 
 Because the baseline is JSON, the pull-request diff *is* the review:
 

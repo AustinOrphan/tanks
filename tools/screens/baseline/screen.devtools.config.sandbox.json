@@ -9,7 +9,7 @@
         "x": 160,
         "y": 0,
         "w": 960,
-        "h": 154
+        "h": 158
       },
       "text": "tanks — unsetSets the sandbox enemy roster.−brown ×0+−grey ×0+−teal ×0+−olive ×0+−green ×0+−yellow ×0+Unset",
       "style": {
@@ -28,8 +28,8 @@
       "visible": true,
       "box": {
         "x": 168,
-        "y": 50,
-        "w": 177,
+        "y": 54,
+        "w": 173,
         "h": 44
       },
       "text": "−brown ×0+",

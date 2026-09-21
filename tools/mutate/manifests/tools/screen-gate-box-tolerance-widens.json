@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-box-tolerance-widens",
+  "file": "tools/screens/baseline.mjs",
+  "find": "export const BOX_TOLERANCE_PX = 2;",
+  "replace": "export const BOX_TOLERANCE_PX = 3;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: how far a box may move between platforms (issue #861) reports the very next pixel, so the tolerance is a band and not a shrug"
+  ],
+  "why": "Loosens the band that decides what this gate can still see. Two pixels is the measured residue of cross-platform rasterisation -- 70 values at 1px and 36 at 2px across two full runs, nothing between 3px and 54px once hinting was disabled -- so 3px starts absorbing differences that are not artefacts. A tolerance nobody can fail is the quiet way a regression gate stops being one, and the number drifts upward one pixel at a time unless the boundary itself is asserted."
+}

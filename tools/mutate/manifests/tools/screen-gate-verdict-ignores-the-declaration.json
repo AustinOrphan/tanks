@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-verdict-ignores-the-declaration",
+  "file": "tools/screens/check.mjs",
+  "find": "  const errorVerdict = judgePageErrors(state, pageErrors);\n  if (!errorVerdict.ok) {",
+  "replace": "  const errorVerdict = judgePageErrors(undefined, pageErrors);\n  if (!errorVerdict.ok) {",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen gate: the declaration reaches the verdict, not just the helper (issue #861) lets a DECLARED error through to the ordinary measurement comparison"
+  ],
+  "why": "Severs the declaration from the verdict while leaving the helper it calls fully tested. `judgePageErrors` reads `state?.pageError`, so a caller that loses the state does not throw -- it silently takes the undeclared branch, and `screen.startup.entry-unparseable` goes back to being a state the gate can neither accept nor pass. This is the composition a unit test on the pure function cannot reach: when the entry was written, reverting judgeState's whole declared path left all 26 tests in the file green."
+}

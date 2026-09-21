@@ -8,8 +8,8 @@
       "box": {
         "x": 18,
         "y": 12,
-        "w": 114,
-        "h": 25
+        "w": 112,
+        "h": 27
       },
       "text": "Practice",
       "style": {
@@ -30,7 +30,7 @@
         "x": 0,
         "y": 0,
         "w": 1280,
-        "h": 49
+        "h": 51
       },
       "text": "Practice\n      \n      Lives: 3\n      \n      Enemies: 3\n      Level: 1",
       "style": {
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 206,
+        "x": 202,
         "y": 14,
-        "w": 12,
-        "h": 21
+        "w": 11,
+        "h": 23
       },
       "text": "3",
       "style": {

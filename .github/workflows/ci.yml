@@ -265,6 +265,25 @@ jobs:
       - name: Session lifecycle round trip
         run: npm run roundtrip
 
+      # Issue #847. The bounded screen subset, inside this job rather than as a fourth
+      # required check -- #840's decision, and its reasoning is in tools/screens/README.md:
+      # a separate job would repeat the npm ci, Playwright, cached chromium and build above,
+      # about two minutes, for a subset that costs about the same.
+      #
+      # NO ACCEPT FLAG, and there cannot be one: `screens:check` has no path that writes a
+      # baseline. `screens:accept` is a separate command precisely so that CI invoking the
+      # checking one cannot approve a changed design, which is #326's requirement. The
+      # workflow's `permissions: contents: read` means this job could not commit one anyway.
+      - name: Screen gate (measurements against the committed baseline)
+        run: npm run screens:check -- --dist dist --out screens-check-out
+
+      # Relative-base Pages mode (#326: "relative-base Pages mode works"). `vite.config.ts`
+      # sets `base: './'` and pages.yml deliberately ignores its own base inputs because of
+      # it; this is the check that the built output actually has no absolute paths, so a
+      # capture taken here describes the bundle Pages serves from a sub-path.
+      - name: Built-output portability
+        run: npm run portability
+
       # The numbers alone do not tell you WHAT went wrong; the screenshots do.
       - name: Upload screenshots
         if: always()
@@ -273,3 +292,15 @@ jobs:
           name: visual-output
           path: visual-out/
           retention-days: 14
+
+      # The screen gate's own evidence, uploaded the same way and for the same reason: the
+      # run that fails is the one whose expected/actual/diff a person needs, and `always()`
+      # is what makes it survive the failure that produced it.
+      - name: Upload screen-gate evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screens-check-output
+          path: screens-check-out/
+          retention-days: 14
+          if-no-files-found: ignore

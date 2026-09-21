@@ -1,8 +1,8 @@
 {
-  "state": "screen.devtools.diagnostics",
+  "state": "screen.settings.touch",
   "measurements": [
     {
-      "selector": ".hud-devtools",
+      "selector": ".hud-settings",
       "present": true,
       "visible": true,
       "box": {
@@ -11,7 +11,7 @@
         "w": 1280,
         "h": 800
       },
-      "text": "Developer Tools\n      Developer mode is on for this page.\n      It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from ",
+      "text": "Settings\n      \n        Audio\n        \n          Mute (M)\n          \n          \n        \n      \n      \n        Controls\n        \n          \n          Aim: Stick\n          \n          Fire: Tap to fire\n",
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -23,37 +23,37 @@
       }
     },
     {
-      "selector": ".hud-diag-out",
+      "selector": ".hud-scheme-toggle",
       "present": true,
       "visible": true,
       "box": {
-        "x": 444,
-        "y": 656,
-        "w": 392,
-        "h": 18
+        "x": 296,
+        "y": 221,
+        "w": 90,
+        "h": 44
       },
-      "text": "",
+      "text": "Aim: Stick",
       "style": {
         "display": "block",
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
-        "background-color": "rgba(20, 24, 30, 0.55)",
-        "font-size": "12px",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13.3333px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
     },
     {
-      "selector": ".hud-diag-copy",
+      "selector": ".hud-firemode-toggle",
       "present": true,
       "visible": true,
       "box": {
-        "x": 568,
-        "y": 216,
-        "w": 144,
+        "x": 396,
+        "y": 221,
+        "w": 120,
         "h": 44
       },
-      "text": "Copy Diagnostics",
+      "text": "Fire: Tap to fire",
       "style": {
         "display": "block",
         "opacity": "1",

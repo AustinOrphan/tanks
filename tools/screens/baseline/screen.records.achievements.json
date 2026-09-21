@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 449,
-        "y": 239,
-        "w": 382,
+        "x": 453,
+        "y": 242,
+        "w": 373,
         "h": 472
       },
       "text": "Locked. First BloodDestroy a tank with a shell.Locked. MarksmanDestroy 25 tanks with shells.Locked. GunslingerDestroy 100 tanks with shells.Locked. SapperDestroy 10 tanks with mines.Locked. Demolition",
@@ -49,9 +49,9 @@
       "visible": true,
       "box": {
         "x": 588,
-        "y": 195,
+        "y": 196,
         "w": 105,
-        "h": 18
+        "h": 20
       },
       "text": "0 of 14 earned",
       "style": {

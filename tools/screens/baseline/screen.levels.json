@@ -28,7 +28,7 @@
       "visible": true,
       "box": {
         "x": 591,
-        "y": 368,
+        "y": 369,
         "w": 98,
         "h": 44
       },
@@ -48,10 +48,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 556,
-        "y": 439,
-        "w": 168,
-        "h": 16
+        "x": 559,
+        "y": 440,
+        "w": 162,
+        "h": 18
       },
       "text": "Clear a level to add it here.",
       "style": {

@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { SCREEN_STATES } from './states.mjs';
 import { captureState, launchBrowser, serve } from './capture.mjs';
-import { BASELINE_DIR, subsetStates, baselineFileName, serialiseBaseline } from './baseline.mjs';
+import { BASELINE_DIR, subsetStates, baselineFileName, serialiseBaseline, judgePageErrors, formatPageErrorRefusal } from './baseline.mjs';
 import { recipeFor } from './check.mjs';
 
 /**
@@ -64,9 +64,12 @@ async function main() {
         width: v.width, height: v.height, dpr: v.devicePixelRatio, timeout: 20000,
       });
       const errors = report.producer.pageErrors ?? [];
-      if (errors.length > 0) {
-        console.log(`REFUSED ${state.id}: the page raised an error, so there is no design to approve`);
-        for (const e of errors) console.log(`  ${e}`);
+      // A state may declare the error it exists to demonstrate, and then the error is the
+      // subject rather than a reason to refuse. See `judgePageErrors`.
+      const errorVerdict = judgePageErrors(state, errors);
+      if (!errorVerdict.ok) {
+        console.log(`REFUSED ${formatPageErrorRefusal(errorVerdict, state.id)}`);
+        for (const e of errorVerdict.errors) console.log(`  ${e}`);
         process.exitCode = 1;
         continue;
       }

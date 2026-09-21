@@ -28,7 +28,7 @@
       "visible": true,
       "box": {
         "x": 160,
-        "y": 155,
+        "y": 163,
         "w": 960,
         "h": 44
       },
@@ -49,9 +49,9 @@
       "visible": true,
       "box": {
         "x": 160,
-        "y": 219,
+        "y": 227,
         "w": 960,
-        "h": 974
+        "h": 1020
       },
       "text": "Gameplaylevel — unsetJumps straight to a level, or to the sandbox rig, instead of resuming the active run.−+UnsetsandboxinvincibleMakes the player unkillable: shells detonate harmlessly, blasts wash o",
       "style": {
@@ -70,9 +70,9 @@
       "visible": true,
       "box": {
         "x": 160,
-        "y": 6940,
-        "w": 514,
-        "h": 32
+        "y": 7310,
+        "w": 490,
+        "h": 36
       },
       "text": "Saved data namespace after reload: developer. A developer page keeps its own saves and cannot see a production one.",
       "style": {
@@ -91,9 +91,9 @@
       "visible": true,
       "box": {
         "x": 160,
-        "y": 6972,
+        "y": 7346,
         "w": 960,
-        "h": 14
+        "h": 15
       },
       "text": "?dev=1",
       "style": {

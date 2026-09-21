@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
   subsetStates, baselineFileName, readBaseline, serialiseBaseline,
-  diffMeasurements, formatFailure, brief,
-} from './baseline.mjs';
+  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal, pageErrorRefusalReason, boxWithinTolerance, BOX_TOLERANCE_PX } from './baseline.mjs';
 import { judgeState, checkExitCode, formatVerdict, recipeFor } from './check.mjs';
 import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
@@ -80,8 +80,10 @@ describe('the screen baseline: what a diff says (issue #846)', () => {
   });
 
   it('names the field that moved, not the whole entry', () => {
-    const changes = diffMeasurements([m()], [m({ box: { x: 0, y: 0, w: 12, h: 4 } })]);
-    expect(changes).toEqual([{ selector: '.a', field: 'box.w', expected: 10, actual: 12 }]);
+    // Past the box tolerance on purpose: 10 -> 12 used to be the case here, and it is now
+    // deliberately NOT a change. See the tolerance block below for why, and for the boundary.
+    const changes = diffMeasurements([m()], [m({ box: { x: 0, y: 0, w: 20, h: 4 } })]);
+    expect(changes).toEqual([{ selector: '.a', field: 'box.w', expected: 10, actual: 20 }]);
   });
 
   it('reports a watched style property, which is what makes pixels unnecessary', () => {
@@ -206,5 +208,178 @@ describe('the screen gate: accepting is a deliberate act (issue #326)', () => {
     expect(() => statesToAccept({ only: 'screen.ending.mission-clear.played', all: false }))
       .toThrow(/not in the checked subset/);
     expect(() => statesToAccept({ only: 'screen.not-a-state', all: false })).toThrow(/not in the checked subset/);
+  });
+});
+
+describe('the screen gate: a state whose subject IS a page error (issue #861)', () => {
+  const plain = { id: 'screen.main-menu' };
+  const declared = { id: 'screen.startup.entry-unparseable', pageError: 'SyntaxError' };
+
+  it('still refuses an undeclared error, which is every other state', () => {
+    expect(judgePageErrors(plain, []).ok).toBe(true);
+    const v = judgePageErrors(plain, ['TypeError: x is not a function']);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('unexpected');
+  });
+
+  it('accepts the declared error as the design rather than refusing to look', () => {
+    const v = judgePageErrors(declared, ["SyntaxError: Unexpected token ';'"]);
+    expect(v.ok, 'the state that exists to photograph a parse failure was refused').toBe(true);
+  });
+
+  it('fails when the declared error does NOT appear, because the card is no longer reached', () => {
+    // The direction that is easy to leave out. Every measured selector can still match while
+    // the state has quietly stopped demonstrating the failure it was written for.
+    const v = judgePageErrors(declared, []);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('missing');
+  });
+
+  it('fails on a DIFFERENT error, so the declaration cannot launder an unrelated regression', () => {
+    const v = judgePageErrors(declared, ['TypeError: boot is not a function']);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('mismatch');
+    expect(v.errors, 'the refusal should name the stray error, not the expected one')
+      .toEqual(['TypeError: boot is not a function']);
+  });
+
+  it('fails when a stray error rides ALONGSIDE the declared one', () => {
+    // A declaration is per-error, not a blanket amnesty for the capture.
+    const v = judgePageErrors(declared, ["SyntaxError: Unexpected token ';'", 'TypeError: later boom']);
+    expect(v.ok).toBe(false);
+    expect(v.errors).toEqual(['TypeError: later boom']);
+  });
+
+  it('words the three refusals differently, because they need different fixes', () => {
+    const missing = pageErrorRefusalReason(judgePageErrors(declared, []));
+    const mismatch = pageErrorRefusalReason(judgePageErrors(declared, ['TypeError: nope']));
+    const unexpected = pageErrorRefusalReason(judgePageErrors(plain, ['TypeError: nope']));
+    expect(missing).toMatch(/raised none/);
+    expect(mismatch).toMatch(/does not match the declared/);
+    expect(unexpected).toMatch(/no design to approve/);
+    expect(new Set([missing, mismatch, unexpected]).size, 'two refusals read the same').toBe(3);
+  });
+});
+
+describe('the screen gate: the declaration reaches the verdict, not just the helper (issue #861)', () => {
+  // The helper above is a pure function tested in isolation, which cannot prove COMPOSITION:
+  // `judgeState` has to be handed the state, and its call site has to hand it over. Both were
+  // unasserted when this block was written -- reverting judgeState's whole declared path left
+  // every test green, which is the definition of a dead branch.
+  const m = () => ({ selector: '.a', present: true, visible: true, box: { x: 0, y: 0, w: 10, h: 10 }, text: 'a', style: {} });
+  const declared = { id: 'screen.startup.entry-unparseable', pageError: 'SyntaxError' };
+
+  it('lets a DECLARED error through to the ordinary measurement comparison', () => {
+    // The point of declaring: the failure card still gets its layout diffed. A state waved
+    // past on the strength of having thrown would photograph nothing.
+    const v = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: ["SyntaxError: Unexpected token ';'"] },
+    });
+    expect(v.status, 'a declared error was still treated as a failure').toBe('match');
+    expect(checkExitCode([v])).toBe(0);
+  });
+
+  it('still DIFFS a declaring state, so its card cannot drift behind the declaration', () => {
+    const moved = { ...m(), box: { x: 0, y: 0, w: 99, h: 10 } };
+    const v = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [moved], pageErrors: ["SyntaxError: Unexpected token ';'"] },
+    });
+    expect(v.status).toBe('differs');
+    expect(v.changes.length).toBeGreaterThan(0);
+  });
+
+  it('fails a declaring state whose error stopped appearing, and says so without a dangling colon', () => {
+    const v = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: [] },
+    });
+    expect(v.status).toBe('page-error');
+    const text = formatVerdict(v);
+    expect(text).toContain('expected a page error containing');
+    expect(text).toContain('raised none');
+    expect(text.split('\n').length, 'an empty error list still printed list lines').toBe(2);
+    expect(text.endsWith(':'), 'the colon introduces a list that is not there').toBe(false);
+    // The state id belongs on the FAIL line, once.
+    expect(text.split(declared.id).length - 1, 'the state id is repeated').toBe(1);
+    expect(checkExitCode([v])).toBe(1);
+  });
+
+  it('fails a declaring state on a stray error, wording it differently from an undeclared one', () => {
+    const strayV = judgeState({
+      stateId: declared.id, state: declared, recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: ['TypeError: boom'] },
+    });
+    const plainV = judgeState({
+      stateId: 'screen.a', recipe: null, baseline: { measurements: [m()] },
+      report: { measurements: [m()], pageErrors: ['TypeError: boom'] },
+    });
+    expect(strayV.status).toBe('page-error');
+    expect(formatVerdict(strayV)).toContain('does not match the declared');
+    expect(formatVerdict(plainV)).toContain('not trustworthy');
+    expect(formatVerdict(strayV)).not.toBe(formatVerdict(plainV));
+  });
+
+  it('is actually handed the state by check.mjs, which no unit test can prove', () => {
+    // STRUCTURAL, and it says so. `judgeState` reads `state?.pageError`, so a call site that
+    // forgets the argument does not throw -- it silently takes the undeclared branch and the
+    // declaration stops working, with every test in this file still green.
+    const src = readFileSync(new URL('./check.mjs', import.meta.url), 'utf8');
+    const calls = src.match(/judgeState\(\{[^}]*\}/g) ?? [];
+    expect(calls.length, 'no judgeState call site found in check.mjs').toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call, `a judgeState call site does not pass the state: ${call}`).toMatch(/\bstate,|\bstate:/);
+    }
+  });
+});
+
+describe('the screen baseline: how far a box may move between platforms (issue #861)', () => {
+  const m = (over: Record<string, unknown> = {}) => ({
+    selector: '.a', present: true, visible: true, box: { x: 0, y: 0, w: 100, h: 40 },
+    text: 'a', style: { color: 'rgb(1, 2, 3)' }, ...over,
+  });
+  const boxOf = (over: Record<string, number>) => [m({ box: { x: 0, y: 0, w: 100, h: 40, ...over } })];
+
+  it('ignores the 1px and 2px residue two cross-platform runs actually produced', () => {
+    expect(diffMeasurements([m()], boxOf({ w: 101 })), '1px was reported').toEqual([]);
+    expect(diffMeasurements([m()], boxOf({ w: 102 })), '2px was reported').toEqual([]);
+    expect(diffMeasurements([m()], boxOf({ w: 98 })), '2px under was reported').toEqual([]);
+  });
+
+  it('reports the very next pixel, so the tolerance is a band and not a shrug', () => {
+    expect(diffMeasurements([m()], boxOf({ w: 103 })))
+      .toEqual([{ selector: '.a', field: 'box.w', expected: 100, actual: 103 }]);
+    expect(diffMeasurements([m()], boxOf({ h: 37 })))
+      .toEqual([{ selector: '.a', field: 'box.h', expected: 40, actual: 37 }]);
+  });
+
+  it('applies to every axis independently, not to the box as a whole', () => {
+    // Four small shifts are four tolerated values, not one budget spent on the first axis.
+    expect(diffMeasurements([m()], boxOf({ x: 2, y: 2, w: 102, h: 42 }))).toEqual([]);
+    // And one axis going out does not suppress the others' exactness.
+    const out = diffMeasurements([m()], boxOf({ x: 2, w: 110 }));
+    expect(out.map((c) => c.field)).toEqual(['box.w']);
+  });
+
+  it('leaves everything that is NOT a rasteriser artefact exact', () => {
+    // The tolerance exists for glyph advances landing either side of a rounding boundary.
+    // None of these is that, so none of them gets a band -- a control that disappeared or a
+    // label that changed wording is a real difference at any magnitude.
+    expect(diffMeasurements([m()], [m({ visible: false })]).map((c) => c.field)).toEqual(['visible']);
+    expect(diffMeasurements([m()], [m({ present: false })]).map((c) => c.field)).toEqual(['present']);
+    expect(diffMeasurements([m()], [m({ text: 'b' })]).map((c) => c.field)).toEqual(['text']);
+    expect(diffMeasurements([m()], [m({ style: { color: 'rgb(9, 9, 9)' } })]).map((c) => c.field))
+      .toEqual(['style.color']);
+  });
+
+  it('compares non-numeric box values exactly, rather than calling them near enough', () => {
+    // A missing or malformed box must not slip through arithmetic that would make NaN or
+    // undefined look close to something.
+    expect(boxWithinTolerance(undefined, 100)).toBe(false);
+    expect(boxWithinTolerance(100, undefined)).toBe(false);
+    expect(boxWithinTolerance(NaN, NaN)).toBe(false);
+    expect(boxWithinTolerance(undefined, undefined)).toBe(true);
+    expect(BOX_TOLERANCE_PX).toBe(2);
   });
 });

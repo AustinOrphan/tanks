@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 517,
-        "y": 107,
-        "w": 245,
-        "h": 18
+        "x": 519,
+        "y": 111,
+        "w": 243,
+        "h": 20
       },
       "text": "Tanks! is a browser arena shooter.",
       "style": {
@@ -49,9 +49,9 @@
       "visible": true,
       "box": {
         "x": 296,
-        "y": 203,
+        "y": 215,
         "w": 688,
-        "h": 44
+        "h": 46
       },
       "text": "Project websiteOpens a new tabTanks! GitHub repositoryOpens a new tab",
       "style": {
@@ -70,7 +70,7 @@
       "visible": true,
       "box": {
         "x": 296,
-        "y": 328,
+        "y": 345,
         "w": 688,
         "h": 44
       },
