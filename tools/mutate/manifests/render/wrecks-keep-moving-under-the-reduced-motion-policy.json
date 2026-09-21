@@ -9,6 +9,7 @@
   ],
   "why": "Issue #289's rule as death-pulse.ts applies it: keep the cue, drop the movement. Ignoring the setting sinks and rolls hulls for a player who asked for less movement, and does it silently -- the wreck still appears, still carries its owner's colour, and still leaves on the same clock.",
   "killedBy": [
-    "every arm leaves, and they differ on the way reduced motion holds the movement arms still and keeps the fade"
+    "every arm leaves, and they differ on the way reduced motion holds the movement arms still and keeps the fade",
+    "every arm leaves, and they differ on the way takes the policy MID-FLIGHT, not only at the next death"
   ]
 }
