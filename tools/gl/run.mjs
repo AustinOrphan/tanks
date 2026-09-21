@@ -7,6 +7,7 @@
  * locally via `npm run test:gl`.
  */
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { loadChromium } from '../shared/playwright.mjs';
@@ -15,6 +16,15 @@ const PORT = Number(process.env.GL_TEST_PORT ?? 5177);
 const BASE = `http://localhost:${PORT}/`;
 /** Something only THIS harness serves, used to prove we are testing our own build. */
 const MARKER = '__glResults';
+/**
+ * The three version these timings belong to, read from the INSTALLED package (issue #867).
+ * `npm i --no-save three@0.169.0` moves the install and leaves package.json's `^0.186.0`
+ * alone, so a profile labelled from the manifest would label both arms identically -- the
+ * dead-knob failure that makes an A/B look like one sample twice.
+ */
+const threeVersion = JSON.parse(
+  readFileSync(new URL('../../node_modules/three/package.json', import.meta.url), 'utf8'),
+).version;
 
 async function respondsOn(url, ms = 1000) {
   try {
@@ -132,6 +142,42 @@ try {
   // A SECOND regression the original note missed: the GL phase AFTER `load` also more than
   // doubled, 93.5-97.9s to 218.0-220.5s, which no bundle size explains.
   //
+  // WHAT THAT PHASE IS, attributed per check (issue #867). Every check is now timed around its
+  // own body and the totals are directly comparable, because both arms were measured in one
+  // session on this box with one instrument, three swapped by `npm i --no-save` with the
+  // installed version read back, and `vite optimize --force` before each:
+  //
+  //                                        0.169.0        0.186.0      ratio
+  //   summed time inside check bodies      116.3 s        477.4 s       4.11x
+  //   checks that got slower                                            87 of 94
+  //   checks that got faster                                             7 of 94
+  //   median per-check ratio (the 74
+  //     checks >=200 ms in the old arm)                                  7.30x
+  //
+  // IT IS NOT ONE CHECK, and it is not readback. The ten biggest absolute growers are only 36%
+  // of the added 361 s, and the checks that grew MOST are the ones that read no pixels at all:
+  //
+  //                                     0.169.0    0.186.0   aggregate   median per-check
+  //   bodies with no readback            77.4 s    337.1 s      4.36x         10.73x
+  //   bodies with >=1 readback           38.4 s    139.7 s      3.64x          3.90x
+  //
+  // The cleanest single case is `screenToGround subtracts the canvas page offset`: it builds
+  // TWO renderers, draws nothing, reads nothing, and asserts arithmetic. 0.75 s -> 8.33 s, so
+  // one `createRenderer` plus `dispose` went from ~0.38 s to ~4.2 s. That is construction --
+  // scene, lights, shadow map, materials and the shader compiles under SwiftShader -- and it
+  // is why the phase grew broadly: nearly every check builds at least one scene. Issue #800's
+  // "constructing a WebGLRenderer, 11 -> 37 ms" is not a counter-example; it timed a bare
+  // `new THREE.WebGLRenderer()`, which is a small part of `createRenderer`.
+  //
+  // SO THERE IS A FIX SHAPE, not taken here: the harness builds and disposes a scene per
+  // check, and sharing one across checks would cut most of this. It trades away per-check
+  // isolation, which is what makes a failure point at one line today, so it needs its own
+  // decision rather than being smuggled into a measurement.
+  //
+  // Two arms, one sample each, one box, one browser. The ratio is the stable contrast; the
+  // absolute seconds are this machine's. Re-derive with `GL_PROFILE_OUT=<path> npm run test:gl`
+  // in each arm, which writes the per-check table as JSON labelled with the INSTALLED three.
+  //
   // WHY 600s SURVIVES THAT CORRECTION. A whole run on 0.186 is about 48s to `load` plus 218s
   // to results, so ~266s; 600s is ~2.3x that, which is the margin a hang ceiling wants and
   // matches the guard below. The number was right; only the reason for it was not.
@@ -195,6 +241,18 @@ try {
     console.log(`\n  ${timed.length} timed check(s), ${(total / 1000).toFixed(1)}s inside check bodies`);
     for (const r of slowest) {
       console.log(`    ${(r.ms / 1000).toFixed(2).padStart(7)}s  ${((r.ms / total) * 100).toFixed(1).padStart(5)}%  ${r.name}`);
+    }
+    // The top ten answer "is it one check or all of them"; comparing two ARMS needs all 94,
+    // because a check outside one arm's top ten can be the one that grew most. Opt-in by
+    // path so an ordinary run writes nothing.
+    if (process.env.GL_PROFILE_OUT) {
+      const { writeFileSync } = await import('node:fs');
+      writeFileSync(process.env.GL_PROFILE_OUT, JSON.stringify({
+        three: threeVersion,
+        totalMs: total,
+        checks: timed.map((r) => ({ name: r.name, ms: r.ms, pass: r.pass })),
+      }, null, 2));
+      console.log(`    profile written to ${process.env.GL_PROFILE_OUT}`);
     }
   }
   console.log(
