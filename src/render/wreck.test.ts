@@ -202,7 +202,7 @@ describe('every arm leaves, and they differ on the way', () => {
   });
 });
 
-describe('housekeeping', () => {
+describe("the wreck carries the dead tank's identity", () => {
   it("wears the HULL's colour darkened, not the owner ring's", () => {
     // The ring colour resolves an enemy's undefined `controlledBy` to slot 0, so a wreck that
     // took it would paint every destroyed enemy in player one's swatch. Asserted per kind, so
@@ -216,7 +216,9 @@ describe('housekeeping', () => {
     expect(second, 'the enemy wreck is not the enemy hull darkened').toBe(darkened(ENEMY_PAINT));
     expect(first, 'both kinds got the same colour').not.toBe(second);
   });
+});
 
+describe('housekeeping', () => {
 
   it('dispose clears the scene of every wreck, active or pooled', () => {
     const scene = new THREE.Scene();
