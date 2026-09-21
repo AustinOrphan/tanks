@@ -70,8 +70,8 @@
       "visible": true,
       "box": {
         "x": 160,
-        "y": 7310,
-        "w": 490,
+        "y": 7514,
+        "w": 489,
         "h": 36
       },
       "text": "Saved data namespace after reload: developer. A developer page keeps its own saves and cannot see a production one.",
@@ -91,7 +91,7 @@
       "visible": true,
       "box": {
         "x": 160,
-        "y": 7346,
+        "y": 7550,
         "w": 960,
         "h": 15
       },

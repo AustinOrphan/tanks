@@ -1,0 +1,14 @@
+{
+  "id": "hud-font-flag-accepts-any-value",
+  "file": "src/game/devflags.ts",
+  "find": "  return isHudFont(raw) ? raw : null;",
+  "replace": "  return raw as HudFont;",
+  "expect": "killed",
+  "tests": [
+    "src/game/devflags.test.ts"
+  ],
+  "killedBy": [
+    "parseDevFlags: hudFont (issue #865 -- the two faces #864 kept) rejects anything else to null rather than guessing -- population: the 7 forms below"
+  ],
+  "why": "A misspelled face would be handed to the HUD as though it named an arm. `hud-font.ts` has a class for each of the two arms and none for anything else, so the class the flag adds would match no rule: the HUD would stay on Plex while the query string, the developer pane and any capture filename all claimed an arm was running. That is worse than refusing the value, because a comparison would be recorded against a face that was never drawn. `plex` and `ibm-plex-sans` are in the rejected population for the same reason -- naming the DEFAULT is not a way to select an arm."
+}
