@@ -1,4 +1,5 @@
 import type { ResolvedTankConfig } from '../config/types';
+import type { BotDifficulty } from '../types';
 
 /**
  * Per-bot competence presets for versus (issue #267).
@@ -40,7 +41,7 @@ import type { ResolvedTankConfig } from '../config/types';
  * here. What is NOT provisional is the structure: `normal` is exactly identity, the ordering
  * is monotone on every axis, and `hard` cannot reach perfection -- see the bounds below.
  */
-export type BotDifficulty = 'easy' | 'normal' | 'hard';
+export type { BotDifficulty };
 
 /** Offer order, which is also difficulty order. */
 export const BOT_DIFFICULTIES: readonly BotDifficulty[] = ['easy', 'normal', 'hard'];
@@ -57,6 +58,29 @@ export const DEFAULT_BOT_DIFFICULTY: BotDifficulty = 'normal';
 export function isBotDifficulty(value: unknown): value is BotDifficulty {
   return typeof value === 'string' && (BOT_DIFFICULTIES as readonly string[]).includes(value);
 }
+
+/**
+ * How long a versus bot holds its committed opponent, in seconds, per difficulty (issue #891).
+ *
+ * WHY IT LIVES HERE AND NOT IN `ai-profiles.json`. A versus bot fills a PLAYER slot, and
+ * `roster.ts` records that the player "carries an (inert) aiProfile only because the schema
+ * requires" one -- so `configFor('player').ai.targetCommitmentTime` is a number nobody chose.
+ * Reading a bot's commitment span through it would be a value with no owner. This table is the
+ * owner: it is bot configuration, in the file that already owns bot competence, which is where
+ * #267 would tune it.
+ *
+ * WHY ALL THREE ARE 1.5. That is exactly `targetCommitmentTime` in all 8 entries of
+ * `ai-profiles.json`, so a versus bot commits for the same span the campaign AI already does
+ * and this issue changes no timing anywhere. Differentiating the columns is a balance
+ * decision, and #891's boundaries exclude difficulty rebalancing -- the table is keyed by
+ * difficulty so that decision has somewhere to land, not because it has been made. Equal
+ * numbers here are a claim that can be checked by reading them, which is the point.
+ */
+export const BOT_TARGET_COMMITMENT_SECONDS: Record<BotDifficulty, number> = {
+  easy: 1.5,
+  normal: 1.5,
+  hard: 1.5,
+};
 
 /** The modifier applied to each competence axis, per preset. */
 interface CompetenceScale {

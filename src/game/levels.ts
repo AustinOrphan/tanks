@@ -12,6 +12,7 @@ import { createSandboxWorld } from '../sim/sandbox';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import type { RunStore } from './run';
 import type { VersusConfig } from './versus-config';
+import { botSlotDifficulties } from './versus-setup';
 
 /**
  * The one object that knows how many levels exist, where a session starts, and how to
@@ -165,6 +166,13 @@ export function createLevelSystem(
         lives,
         playerCount,
         pp1Roles: flags.pp1Roles,
+        // The DEV-FLAG path's bot slots (issue #891). `loadArena` stamps these only in
+        // 'ffa'/'teams', so a campaign session -- where every computer opponent is an
+        // enemy-kind tank that has committed targets since #359 -- is untouched. Without
+        // this line a `?dev=1&mode=ffa&players=4&bots=4` session builds tanks the
+        // simulation cannot tell from humans, which is why a versus recording with
+        // `--flag aiContact` drew nothing even after the overlay learned about bots.
+        bots: botSlotDifficulties(undefined, playerCount ?? 1, flags.bots ?? 0),
         rules: {
           unarmedTrigger,
           corpseBlocksShells: flags.corpseBlock,
@@ -273,6 +281,11 @@ export function createVersusLevelSystem(
           // falls back to `teamOf(slot)` for -- so a config saved before teams could be
           // chosen builds exactly the board it always did.
           teams: config.slots.map((slot) => slot.team),
+          // Which slots a computer drives, and how well (issue #891). Derived from the same
+          // per-slot `role` `botSlotsOf` reads, so the simulation's view of which tanks are
+          // bots cannot disagree with the setup pane's -- and `Tank.botDifficulty` is what
+          // lets `stepAi` commit an opponent for a player-kind tank at all.
+          bots: botSlotDifficulties(config.slots, config.players, 0),
           rules: {
             unarmedTrigger,
             corpseBlocksShells: flags.corpseBlock,

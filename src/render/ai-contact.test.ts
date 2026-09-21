@@ -156,6 +156,34 @@ describe('createAiContact scene wiring', () => {
     expect(groups(scene)).toHaveLength(2);
   });
 
+  it('marks a BOT filling a player slot, and still not the human beside it (issue #891)', () => {
+    // Until #891 this line read `tank.kind === 'player'`, so a versus board -- where every
+    // tank is player-kind -- drew an empty overlay, and #359's last acceptance criterion
+    // asked for VS-bot evidence that could not be recorded. The human in the same world is
+    // the control: a predicate loosened to "any player tank" makes this 3 rather than 2, and
+    // rings the tank the person is steering.
+    const scene = new THREE.Scene();
+    const overlay = createAiContact(scene);
+    overlay.sync(world([
+      tank(1, 'player', 0, 0, { botDifficulty: 'normal' }),
+      tank(2, 'player', 1, 1, { botDifficulty: 'hard' }),
+      tank(3, 'player', 2, 2),
+      tank(4, 'player', 3, 3, { botDifficulty: 'easy', alive: false }),
+    ]));
+    expect(groups(scene)).toHaveLength(2);
+  });
+
+  it('labels a bot\'s committed opponent the way it labels an enemy\'s (issue #891)', () => {
+    // contactStateOf/contactLabel read only `aiTargetId`/`aiTargetTicks`, never the kind, so
+    // this asserts the overlay reports a bot's commitment rather than merely drawing a ring
+    // for it. `m0` because a versus bot carries no last-seen memory: `updateTargetMemory`
+    // runs on the enemy path only, which is worth knowing before reading a recording.
+    const bot = tank(1, 'player', 0, 0, { botDifficulty: 'normal', aiTargetId: 2, aiTargetTicks: 44 });
+    const w = world([bot, tank(2, 'player', 0, 3)]);
+    expect(contactStateOf(w, bot)).toEqual({ state: 'visible', at: { x: 0, y: 3 } });
+    expect(contactLabel(bot, 'visible')).toContain('#2 c44');
+  });
+
   it('puts the far end of the connector exactly on the contact point', () => {
     // The assertion that catches an axis or sign error. Sim (x, y) becomes three (x, _, y)
     // and a group rotated about +Y by -theta sends local +X to (cos, 0, sin) -- easy to get

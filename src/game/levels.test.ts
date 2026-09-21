@@ -44,6 +44,29 @@ describe('createLevelSystem: the shipped sequence', () => {
   it('carries lives into the built world, for cross-level persistence', () => {
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
     expect(sys.world(CAMPAIGN_LEVELS[0], 42, undefined, 1).lives).toBe(1);
+  });
+
+  it('stamps bot slots on the DEV-FLAG path, which has no setup pane (issue #891)', () => {
+    // THE GAP THIS TEST WAS WRITTEN AGAINST, measured before it was closed: with only the
+    // versus branch wired, a `?dev=1&mode=ffa&players=4&bots=4` session built four tanks
+    // carrying no `botDifficulty` at all -- `initialVersusConfig` is null on that path, so
+    // `createVersusLevelSystem` is never constructed and the stamp was unreachable. The
+    // visible symptom was a versus recording with `--flag aiContact` drawing an empty
+    // overlay even after the overlay itself had learned about bots.
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'ffa', players: 4, bots: 4 }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, 3, 4);
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players.length).toBe(4);
+    expect(players.every((t) => t.botDifficulty === 'normal'), 'bots=4 of players=4').toBe(true);
+  });
+
+  it('leaves a CAMPAIGN world unstamped however `bots` is set (issue #891)', () => {
+    // The control for the test above, and the reason `loadArena` gates the stamp on mode:
+    // a campaign board's computer opponents are enemy-kind tanks, which have committed
+    // targets since #359. Stamping its player would put an AI contact ring under the person.
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, bots: 1 }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, 3, 1);
+    for (const t of w.tanks) expect(t.botDifficulty, `tank ${t.id} (${t.kind})`).toBeUndefined();
     expect(sys.world(CAMPAIGN_LEVELS[0], 42).lives).toBe(LIVES); // absent means a fresh run
   });
 
@@ -449,11 +472,37 @@ describe('createVersusLevelSystem', () => {
     const sys = createVersusLevelSystem(teams3, noRun());
     const w = sys.world(sys.start, 42, undefined, 3);
     // Deep-equal against the sim's own constructor with identical arguments: fails if
-    // ANY of mode/players/stock/friendlyFire/arena is dropped on the floor between
+    // ANY of mode/players/stock/friendlyFire/arena/bots is dropped on the floor between
     // this method and createWorldFor.
     expect(w).toEqual(
-      createWorldFor(arenaById('arena-02'), 42, { lives: 3, playerCount: 3, stock: 2, rules: { mode: 'teams', friendlyFire: true } }),
+      createWorldFor(arenaById('arena-02'), 42, {
+        lives: 3,
+        playerCount: 3,
+        stock: 2,
+        // Spelled out rather than re-derived with `botDifficultiesOf`, which is the function
+        // on the other side of this equality: deriving both sides the same way would make
+        // this assertion agree with itself. `defaultSlots(3)` is one human and two bots, and
+        // a bot slot nobody has chosen a preset for resolves to `normal` (issue #891).
+        bots: [undefined, 'normal', 'normal'],
+        rules: { mode: 'teams', friendlyFire: true },
+      }),
     );
+  });
+
+  it('bot difficulty reaches every bot slot\'s tank -- fails if `bots` is dropped before createWorldFor', () => {
+    // The sibling of the `stock` and `friendlyFire` tests below, and the reason #891's
+    // commitment runs at all: `stepAi` can only commit an opponent for a player-kind tank
+    // that carries a difficulty, so a drop here is the whole feature going quietly inert.
+    const sys = createVersusLevelSystem({ ...ffa3, slots: defaultSlots(3) }, noRun());
+    const w = sys.world(sys.start, 42, undefined, 3);
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players.length).toBe(3);
+    // defaultSlots puts the human in slot 0 and bots in the rest, and `controlledBy` is the
+    // slot -- so this asserts WHICH tanks are bots, not merely how many.
+    const bySlot = new Map(players.map((t) => [t.controlledBy, t.botDifficulty]));
+    expect(bySlot.get(0), 'slot 0 is the human on this device').toBeUndefined();
+    expect(bySlot.get(1)).toBe('normal');
+    expect(bySlot.get(2)).toBe('normal');
   });
 
   it('stock reaches every player tank\'s stockRemaining -- fails if `stock` is dropped before createWorldFor', () => {

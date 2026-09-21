@@ -505,7 +505,7 @@ export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfi
 /**
  * Can `other` be targeted by the AI tank `subject`?
  *
- * The MIRROR of player-profile.ts's `isOpponent`, which answers the same question for a bot
+ * The MIRROR of `isOpponent` directly below, which answers the same question for a bot
  * driving a PLAYER slot -- there, in campaign-coop, the opponents are the enemies. Here the
  * subject IS an enemy, so its opponents are the player-kind tanks. Kept separate rather than
  * generalised: one predicate that tried to serve both directions would have to branch on the
@@ -516,6 +516,35 @@ export function isTargetable(world: World, subject: Tank, other: Tank): boolean 
   // Teams matter only once both tanks carry one; campaign-coop enemies carry none.
   if (world.rules.mode === 'teams' && other.team !== undefined && other.team === subject.team) return false;
   return true;
+}
+
+/**
+ * Can `other` be fought by a tank filling a PLAYER slot -- a human or a bot?
+ *
+ * MOVED HERE FROM `player-profile.ts` (issue #891) and otherwise unchanged. It was private
+ * there, which was fine while `decidePlayerInput` was its only reader. #891 adds a second
+ * reader: the commitment written by `stepAi` for a bot slot has to agree with the threat pass
+ * the bot's own decision runs, and "exactly one opponent notion governs a bot's movement and
+ * firing" is the criterion at stake. Two mode-aware predicates in two files would satisfy it
+ * only by inspection, and would diverge -- which is the defect #894 had just finished fixing
+ * one layer down. One exported function makes it true by construction, and puts it beside
+ * `isTargetable`, where a reader comparing the two directions finds both.
+ *
+ * Named `subject`, not `self`: purity.test.ts's guard flags any bare `self.`/`self[` as the
+ * DOM/worker global by regex, not by scope, so a LOCAL `self` parameter that is ever dotted
+ * (`self.pos`) is a real false positive there, not a hypothetical one.
+ */
+export function isOpponent(world: World, subject: Tank, other: Tank): boolean {
+  if (!other.alive) return false;
+  switch (world.rules.mode) {
+    case 'ffa':
+      return other.kind === 'player' && other.id !== subject.id;
+    case 'teams':
+      return other.kind === 'player' && other.team !== subject.team;
+    case 'campaign-coop':
+    default:
+      return other.kind !== 'player';
+  }
 }
 
 /**

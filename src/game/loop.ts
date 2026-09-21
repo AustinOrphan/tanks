@@ -11,7 +11,7 @@ import {
 import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, createVersusLevelSystem, type LevelSystem } from './levels';
 import { resolveVersusConfig, type VersusConfig } from './versus-config';
-import { botSlotsOf, resolveSources, type VersusSlotSetup } from './versus-setup';
+import { botSlotsOf, botSlotsFor, resolveSources, type VersusSlotSetup } from './versus-setup';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
 import type { CustomizationStore } from './customization';
@@ -713,11 +713,11 @@ export function seedAssignment(
   return deriveInitialAssignment(playerCount, botSlotsFor(playerCount, botCount), unreadable);
 }
 
-export function botSlotsFor(playerCount: number, botCount: number): Set<number> {
-  const slots = new Set<number>();
-  for (let i = playerCount - botCount; i < playerCount; i++) slots.add(i);
-  return slots;
-}
+// MOVED to versus-setup.ts (issue #891) and re-exported here, so every existing importer --
+// including loop.test.ts -- is untouched. `levels.ts` now needs the same rule to stamp
+// `Tank.botDifficulty` on a dev-flag session's tanks, and it cannot import this module:
+// loop.ts imports levels.ts, so the arrow only points one way.
+export { botSlotsFor };
 
 // createIdleInputSource() was RETIRED at n-player arc PR3 (`pad[i] -> slot[i]`), when
 // every co-player slot got its own dedicated `createGamepadInputSource(padIndex)` whose

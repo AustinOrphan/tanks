@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Tank, Vec2 } from '../sim/types';
 import { lineOfSight } from '../sim/ai/targeting';
+import { isBotDriven } from '../sim/ai/bot-commitment';
 import { TANK_RADIUS } from '../sim/constants';
 
 /**
@@ -232,9 +233,14 @@ export function createAiContact(scene: THREE.Scene): AiContact {
   function sync(world: World): void {
     const seen = new Set<number>();
     for (const tank of world.tanks) {
-      // Players are not driven by stepAi, so they have no committed target to show; a ring
-      // round the tank you are steering would be noise, not information.
-      if (tank.kind === 'player' || !tank.alive) continue;
+      // HUMANS have no committed target to show, and a ring round the tank you are steering
+      // would be noise rather than information. A bot filling a versus player slot is a
+      // different case: since #891 it commits through the same `applyCommitment` the campaign
+      // AI does, and `isBotDriven` is the one predicate that separates the two. Before that,
+      // this line read `tank.kind === 'player'`, which made a versus recording with
+      // `--flag aiContact` draw an empty overlay -- the non-evidence #359's last criterion
+      // kept tripping over.
+      if (!tank.alive || (tank.kind === 'player' && !isBotDriven(tank))) continue;
       seen.add(tank.id);
       let view = views.get(tank.id);
       if (!view) {

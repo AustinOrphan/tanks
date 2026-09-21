@@ -1,4 +1,6 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry } from './types';
+import type {
+  Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry, BotDifficulty,
+} from './types';
 import { createWorld, type World } from './world';
 import type { WorldRulesInit } from './rules';
 import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
@@ -232,6 +234,15 @@ export function loadArena(
   // way to invent an unapproved roster, which is exactly what the issue's "not permission to
   // retune every tank" note forbids.
   pp1Roles: boolean = false,
+  // Trailing and optional, the same precedent as `teams` directly above, and indexed BY SLOT
+  // in exactly the same sparse way (issue #891): `undefined` at a slot is a human, a value is
+  // a computer opponent at that difficulty. Absent -- which is every existing call site --
+  // stamps nothing, so no tank gains a `botDifficulty`, `stepAi` skips every player-kind tank
+  // exactly as before, and `BASELINE_HASH` is untouched by this parameter existing.
+  //
+  // Only stamped in 'ffa'/'teams'. A campaign-coop board has no bot-filled player slots: its
+  // computer opponents are enemy-kind tanks, which have run committed targeting since #359.
+  bots?: readonly (BotDifficulty | undefined)[],
 ): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[]; arenaGeometry: ArenaGeometry } {
   const { cols, rows, cellSize, legend } = arena;
 
@@ -314,6 +325,14 @@ export function loadArena(
       // doc comment. P1 is stamped here; PASS 1b's ffa/teams branch stamps every
       // co-player the same way.
       if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) tank.stockRemaining = stock;
+      // Bot-drivenness is a PLAYER-only, versus-only concept -- see Tank.botDifficulty's own
+      // doc comment. P1 is slot 0 and is stamped HERE rather than in PASS 1b for the same
+      // reason team is: that branch reaches P1 only to move its spawn position and never
+      // rebuilds its tank, so a stamp placed only there would silently skip slot 0.
+      if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) {
+        const bot = bots?.[0];
+        if (bot !== undefined) tank.botDifficulty = bot;
+      }
       tanks.push(tank);
       if (kind === 'player' && p1Row < 0) { p1Row = r; p1Col = c; p1SpawnIndex = spawns.length - 1; }
     }
@@ -363,6 +382,8 @@ export function loadArena(
         const tank = makeTank(id++, 'player', pos, 0, i);
         if (mode === 'teams') tank.team = teams?.[i] ?? teamOf(i);
         tank.stockRemaining = stock;
+        const bot = bots?.[i];
+        if (bot !== undefined) tank.botDifficulty = bot;
         tanks.push(tank);
       }
     } else {
@@ -487,6 +508,12 @@ export interface WorldForInit {
   teams?: readonly (number | undefined)[];
   /** Stamp the approved PP1 per-role ordnance caps. Absent leaves the roster's own in force. */
   pp1Roles?: boolean;
+  /**
+   * Per-slot bot difficulty (issue #891). A slot carrying a value is filled by a computer
+   * opponent at that difficulty; `undefined` is a human. Sparse and indexed by slot, exactly
+   * like `teams`. Ignored outside 'ffa'/'teams'.
+   */
+  bots?: readonly (BotDifficulty | undefined)[];
   /** Everything `World.rules` carries. See `WorldRulesInit` in rules.ts. */
   rules?: WorldRulesInit;
 }
@@ -496,7 +523,7 @@ export interface WorldForInit {
  * `init.lives` is how a cleared level's remaining lives carry into the next one.
  */
 export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit = {}): World {
-  const { lives = LIVES, playerCount = 1, stock, teams, pp1Roles, rules = {} } = init;
+  const { lives = LIVES, playerCount = 1, stock, teams, pp1Roles, bots, rules = {} } = init;
   // `arenaGeometry` is a `WorldRulesInit` key and also the one rule `loadArena` DERIVES, so
   // it is taken off `rules` here rather than left to the spread below. A caller passing
   // `rules: { ...world.rules }` -- which is the documented way to derive a variant, and
@@ -518,7 +545,7 @@ export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit =
   // the one key that is not purely a rule, which is why it is read out here rather than
   // left to the spread.
   return createWorld({
-    ...loadArena(arena, playerCount, rules.mode, seed, stock, teams, pp1Roles),
+    ...loadArena(arena, playerCount, rules.mode, seed, stock, teams, pp1Roles, bots),
     ...worldRules,
     lives,
     seed,

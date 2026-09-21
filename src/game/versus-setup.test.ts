@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, resizeSlots,
+  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, botDifficultiesOf,
+  botSlotDifficulties, resizeSlots,
   representedTeams,
   type VersusSetup, type VersusSlotSetup,
 } from './versus-setup';
+import { seedAssignment } from './loop';
 
 const BASE: VersusSetup = {
   mode: 'ffa', players: 2, stock: 3, friendlyFire: false, arenaId: 'arena-01',
@@ -241,6 +243,75 @@ describe('botSlotsOf: the derived count', () => {
 
   it('is empty for an all-human setup', () => {
     expect(botSlotsOf([{ role: 'human' }, { role: 'human' }]).size).toBe(0);
+  });
+});
+
+describe('botDifficultiesOf: what the simulation stamps on the tanks (issue #891)', () => {
+  it('agrees with botSlotsOf about which slots are bots', () => {
+    // The two derivations must not diverge, so the test compares them rather than restating
+    // one of them: a change that made either read something other than `role` fails here.
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'bot' }, { role: 'none' }, { role: 'bot' }];
+    const difficulties = botDifficultiesOf(slots);
+    const fromDifficulties = new Set(difficulties.flatMap((d, i) => (d === undefined ? [] : [i])));
+    expect([...fromDifficulties].sort()).toEqual([...botSlotsOf(slots)].sort());
+    expect(difficulties.length, 'one entry per slot, so indexes are slot numbers').toBe(4);
+  });
+
+  it('carries each bot\'s chosen preset, and defaults an unchosen one to normal', () => {
+    // `undefined` in this array means HUMAN, so a bot slot must never contribute one --
+    // that would build a tank the simulation treats as a person: no commitment, no overlay.
+    expect(botDifficultiesOf([
+      { role: 'bot', difficulty: 'hard' },
+      { role: 'bot' },
+      { role: 'human' },
+    ])).toEqual(['hard', 'normal', undefined]);
+  });
+
+  it('marks exactly the slots seedAssignment marks as bots, on BOTH entry paths', () => {
+    // The cross-pin. `seedAssignment` decides which slots the INPUT layer drives as bots;
+    // `botSlotDifficulties` decides which tanks the SIMULATION treats as bots. If those two
+    // disagree, the contact overlay rings one tank while another is being driven, and no
+    // single-sided test would notice. seedAssignment's own header records that a mutation
+    // making the VS path ignore its slots once SURVIVED the whole suite, which is why the
+    // agreement is asserted rather than assumed.
+    const pads: never[] = [];
+    let checked = 0;
+
+    // Path 1: a setup pane session, roles authoritative.
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'bot', difficulty: 'hard' }, { role: 'bot' }];
+    const fromAssignment = new Set(
+      seedAssignment(slots, 3, 0, pads).flatMap((s, i) => (s.kind === 'bot' ? [i] : [])),
+    );
+    const fromStamp = new Set(
+      botSlotDifficulties(slots, 3, 0).flatMap((d, i) => (d === undefined ? [] : [i])),
+    );
+    expect([...fromStamp].sort(), 'pane path').toEqual([...fromAssignment].sort());
+    checked++;
+
+    // Path 2: a dev-flag session with no pane, derived last-K rule. Swept over every
+    // (playerCount, botCount) pair the flags can produce, rather than one example.
+    for (let players = 1; players <= 4; players++) {
+      for (let bots = 0; bots <= players; bots++) {
+        const a = new Set(
+          seedAssignment(undefined, players, bots, pads).flatMap((s, i) => (s.kind === 'bot' ? [i] : [])),
+        );
+        const b = new Set(
+          botSlotDifficulties(undefined, players, bots).flatMap((d, i) => (d === undefined ? [] : [i])),
+        );
+        expect([...b].sort(), `players=${players} bots=${bots}`).toEqual([...a].sort());
+        checked++;
+      }
+    }
+    // Population: 1 pane case + the 14 (players, bots) pairs for players 1..4.
+    expect(checked).toBe(15);
+  });
+
+  it('ignores a difficulty left behind on a slot that is no longer a bot', () => {
+    // The setup pane keeps `difficulty` when a slot is switched back to human (it is
+    // documented as meaningful only for `role: 'bot'`). Reading the stale value would stamp
+    // a human's tank and put an AI contact ring under the player.
+    expect(botDifficultiesOf([{ role: 'human', difficulty: 'hard' }, { role: 'none', difficulty: 'easy' }]))
+      .toEqual([undefined, undefined]);
   });
 });
 

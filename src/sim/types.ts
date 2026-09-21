@@ -63,6 +63,18 @@ export type AiState = 'idle' | 'aim' | 'fire' | 'reposition';
 export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
 
 /**
+ * How competent a computer opponent filling a versus player slot is.
+ *
+ * DEFINED HERE rather than in `ai/bot-difficulty.ts`, which owns everything else about it
+ * (the offer order, the default, the guard, the competence table) and re-exports this name so
+ * no import site moved. `Tank.botDifficulty` needs the type, and `ai/bot-difficulty.ts`
+ * reaches `config/types.ts`, which imports this file -- so owning the type there and importing
+ * it here would close a types -> ai -> config -> types cycle. TypeScript accepts a cycle of
+ * type imports silently, which is exactly why `dependency-direction.test.ts` exists.
+ */
+export type BotDifficulty = 'easy' | 'normal' | 'hard';
+
+/**
  * The grid a world's walls were built from -- `cols`/`rows`/`cellSize`/`grid`/`legend`,
  * exactly the shape `arena.ts`'s own `Arena` interface carries (structurally identical,
  * deliberately not imported from there: `arena.ts` already imports `world.ts`, so the
@@ -188,6 +200,26 @@ export interface Tank {
    */
   aiRetargetReason?: 'acquired' | 'target-lost' | 'switched-on-expiry';
   aiRetargetAgeTicks?: number;
+  /**
+   * Set on a `kind: 'player'` tank whose slot is filled by a computer opponent, and absent on
+   * a human's (issue #891). The value is that bot's difficulty.
+   *
+   * ONE FIELD, NOT TWO, deliberately. An `aiDriven` boolean beside a difficulty is two facts
+   * that can disagree -- a slot marked driven with no difficulty, or a difficulty on a human's
+   * tank -- and nothing in the type would catch either. Presence IS drivenness, so the pair
+   * cannot drift.
+   *
+   * WHY IT IS SIMULATION STATE AT ALL. Before #891 the sim had no idea which player slots were
+   * bots: `botSlotsOf` and the per-slot difficulty lived in `game/versus-setup.ts`, outside
+   * `src/sim/` entirely, and `stepAi` skipped every player-kind tank by construction. That is
+   * exactly why versus bots could not hold a committed opponent -- the one place entitled to
+   * write commitment state could not tell a bot from a human. Stamped by `loadArena` from
+   * `WorldForInit.bots`, the same per-slot path `teams` already takes.
+   *
+   * A plain string union, so it survives `cloneTank`'s spread, a seeded replay and any
+   * serialisation without special handling.
+   */
+  botDifficulty?: BotDifficulty;
   aiShotPlan?: 'bank' | 'direct';
   aiShotPlanTicks?: number;
   /**

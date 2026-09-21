@@ -1,0 +1,15 @@
+{
+  "id": "bot-commitment-targets-itself",
+  "file": "src/sim/ai/bot-commitment.ts",
+  "find": "    if (!isOpponent(world, tank, other)) continue;",
+  "replace": "    if (!other.alive) continue;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/bot-commitment.test.ts"
+  ],
+  "why": "In a versus world every tank is player-kind, so the campaign predicate `isTargetable` accepts the subject itself and, in teams, its own team-mates. Dropping to a bare liveness check is the shape that mistake takes. #891's criterion 'a bot never targets itself, and team mode never targets a team-mate' is what this pins.",
+  "killedBy": [
+    "who a bot may fight (issue #891) never targets itself in ffa",
+    "who a bot may fight (issue #891) never targets a team-mate in teams, and takes the further enemy over the nearer friend"
+  ]
+}
