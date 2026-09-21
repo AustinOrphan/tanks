@@ -1,0 +1,14 @@
+{
+  "id": "bot-commitment-read-ignores-commitment",
+  "file": "src/sim/ai/bot-commitment.ts",
+  "find": "  if (tank.aiTargetId !== undefined) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/bot-commitment.test.ts"
+  ],
+  "why": "The write half and the read half can rot apart, because `stepAi` writes the commitment and `decidePlayerInput` reads it a tick later. A read that ignores `aiTargetId` and falls straight through to `bestCandidate` still commits correctly, still populates the contact overlay, and still passes every assertion about the stored fields -- while the bot actually plays exactly as it did before #891, re-picking the nearest opponent every tick. Only an assertion that drives the real decision catches it.",
+  "killedBy": [
+    "one opponent notion, across the write and the read (issue #891) drives the bot decision at the committed opponent, not at the nearest one"
+  ]
+}

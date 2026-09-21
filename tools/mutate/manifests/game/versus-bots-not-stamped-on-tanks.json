@@ -1,0 +1,14 @@
+{
+  "id": "versus-bots-not-stamped-on-tanks",
+  "file": "src/game/levels.ts",
+  "find": "          bots: botDifficultiesOf(config.slots),",
+  "replace": "          bots: undefined,",
+  "expect": "killed",
+  "tests": [
+    "src/game/levels.test.ts"
+  ],
+  "why": "The one line that carries which slots a computer drives from the setup pane into the simulation. Dropping it leaves every unit test of the commitment itself passing -- those build their own worlds and stamp `botDifficulty` directly -- while every real versus session silently reverts to the pre-#891 bot: no commitment, no contact overlay, nearest-target-every-tick. A feature that works only in its own tests is the failure mode this pins.",
+  "killedBy": [
+    "createVersusLevelSystem bot difficulty reaches every bot slot's tank -- fails if `bots` is dropped before createWorldFor"
+  ]
+}

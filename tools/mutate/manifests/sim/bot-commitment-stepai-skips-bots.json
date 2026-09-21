@@ -1,0 +1,15 @@
+{
+  "id": "bot-commitment-stepai-skips-bots",
+  "file": "src/sim/ai/index.ts",
+  "find": "    if (!tank.alive || !isBotDriven(tank)) continue;\n    commitBotTarget(world, tank);",
+  "replace": "    if (!tank.alive || !isBotDriven(tank)) continue;\n    void commitBotTarget;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/bot-commitment.test.ts"
+  ],
+  "why": "This IS the pre-#891 behaviour: `stepAi` reaching a bot-driven player tank and declining to commit anything for it. The whole feature is invisible to the rest of the suite -- no other fixture in the tree stamps `Tank.botDifficulty` -- so with this pass removed the 1,326 other sim tests stay exactly as green as they are with it. Measured as a control before the entry was written: 10 of the 17 tests in the scoped file fail.",
+  "killedBy": [
+    "the commitment window (issue #891) holds its first opponent for the full span even as a nearer one closes in",
+    "determinism (issue #891) commits every bot on the board, not just the first"
+  ]
+}

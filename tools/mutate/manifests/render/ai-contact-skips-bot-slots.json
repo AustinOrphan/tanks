@@ -1,0 +1,14 @@
+{
+  "id": "ai-contact-skips-bot-slots",
+  "file": "src/render/ai-contact.ts",
+  "find": "      if (!tank.alive || (tank.kind === 'player' && !isBotDriven(tank))) continue;",
+  "replace": "      if (!tank.alive || tank.kind === 'player') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/render/ai-contact.test.ts"
+  ],
+  "why": "The exact line as it stood before #891, and the reason #359's last acceptance criterion could not be met: on a versus board every tank is player-kind, so the overlay drew nothing and a recording with `--flag aiContact` produced non-evidence. Nothing else in the tree notices -- no committed baseline renders this overlay, so the `visual` gate is silent on it.",
+  "killedBy": [
+    "createAiContact scene wiring marks a BOT filling a player slot, and still not the human beside it (issue #891)"
+  ]
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, resizeSlots,
+  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, botDifficultiesOf, resizeSlots,
   representedTeams,
   type VersusSetup, type VersusSlotSetup,
 } from './versus-setup';
@@ -241,6 +241,36 @@ describe('botSlotsOf: the derived count', () => {
 
   it('is empty for an all-human setup', () => {
     expect(botSlotsOf([{ role: 'human' }, { role: 'human' }]).size).toBe(0);
+  });
+});
+
+describe('botDifficultiesOf: what the simulation stamps on the tanks (issue #891)', () => {
+  it('agrees with botSlotsOf about which slots are bots', () => {
+    // The two derivations must not diverge, so the test compares them rather than restating
+    // one of them: a change that made either read something other than `role` fails here.
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'bot' }, { role: 'none' }, { role: 'bot' }];
+    const difficulties = botDifficultiesOf(slots);
+    const fromDifficulties = new Set(difficulties.flatMap((d, i) => (d === undefined ? [] : [i])));
+    expect([...fromDifficulties].sort()).toEqual([...botSlotsOf(slots)].sort());
+    expect(difficulties.length, 'one entry per slot, so indexes are slot numbers').toBe(4);
+  });
+
+  it('carries each bot\'s chosen preset, and defaults an unchosen one to normal', () => {
+    // `undefined` in this array means HUMAN, so a bot slot must never contribute one --
+    // that would build a tank the simulation treats as a person: no commitment, no overlay.
+    expect(botDifficultiesOf([
+      { role: 'bot', difficulty: 'hard' },
+      { role: 'bot' },
+      { role: 'human' },
+    ])).toEqual(['hard', 'normal', undefined]);
+  });
+
+  it('ignores a difficulty left behind on a slot that is no longer a bot', () => {
+    // The setup pane keeps `difficulty` when a slot is switched back to human (it is
+    // documented as meaningful only for `role: 'bot'`). Reading the stale value would stamp
+    // a human's tank and put an AI contact ring under the player.
+    expect(botDifficultiesOf([{ role: 'human', difficulty: 'hard' }, { role: 'none', difficulty: 'easy' }]))
+      .toEqual([undefined, undefined]);
   });
 });
 

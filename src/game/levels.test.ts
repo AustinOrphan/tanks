@@ -449,11 +449,37 @@ describe('createVersusLevelSystem', () => {
     const sys = createVersusLevelSystem(teams3, noRun());
     const w = sys.world(sys.start, 42, undefined, 3);
     // Deep-equal against the sim's own constructor with identical arguments: fails if
-    // ANY of mode/players/stock/friendlyFire/arena is dropped on the floor between
+    // ANY of mode/players/stock/friendlyFire/arena/bots is dropped on the floor between
     // this method and createWorldFor.
     expect(w).toEqual(
-      createWorldFor(arenaById('arena-02'), 42, { lives: 3, playerCount: 3, stock: 2, rules: { mode: 'teams', friendlyFire: true } }),
+      createWorldFor(arenaById('arena-02'), 42, {
+        lives: 3,
+        playerCount: 3,
+        stock: 2,
+        // Spelled out rather than re-derived with `botDifficultiesOf`, which is the function
+        // on the other side of this equality: deriving both sides the same way would make
+        // this assertion agree with itself. `defaultSlots(3)` is one human and two bots, and
+        // a bot slot nobody has chosen a preset for resolves to `normal` (issue #891).
+        bots: [undefined, 'normal', 'normal'],
+        rules: { mode: 'teams', friendlyFire: true },
+      }),
     );
+  });
+
+  it('bot difficulty reaches every bot slot\'s tank -- fails if `bots` is dropped before createWorldFor', () => {
+    // The sibling of the `stock` and `friendlyFire` tests below, and the reason #891's
+    // commitment runs at all: `stepAi` can only commit an opponent for a player-kind tank
+    // that carries a difficulty, so a drop here is the whole feature going quietly inert.
+    const sys = createVersusLevelSystem({ ...ffa3, slots: defaultSlots(3) }, noRun());
+    const w = sys.world(sys.start, 42, undefined, 3);
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players.length).toBe(3);
+    // defaultSlots puts the human in slot 0 and bots in the rest, and `controlledBy` is the
+    // slot -- so this asserts WHICH tanks are bots, not merely how many.
+    const bySlot = new Map(players.map((t) => [t.controlledBy, t.botDifficulty]));
+    expect(bySlot.get(0), 'slot 0 is the human on this device').toBeUndefined();
+    expect(bySlot.get(1)).toBe('normal');
+    expect(bySlot.get(2)).toBe('normal');
   });
 
   it('stock reaches every player tank\'s stockRemaining -- fails if `stock` is dropped before createWorldFor', () => {
