@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
+import type { Tank } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import { hullGeometry } from './tank-model';
-import { resolveOwnerColor } from '../presentation/identity';
 import type { WreckEffect } from '../presentation/wreck';
 
 /**
@@ -34,8 +34,15 @@ import type { WreckEffect } from '../presentation/wreck';
  */
 
 export interface WreckSystem {
-  /** One wreck per `tank-destroyed` event in this frame, at the event's own death position. */
-  spawn(events: SimEvent[], world: World): void;
+  /**
+   * One wreck per `tank-destroyed` event in this frame, at the event's own death position.
+   *
+   * `bodyColorOf` is `entities.ts`'s own hull-colour seam, passed in rather than recomputed.
+   * The first draft called `resolveOwnerColor`, which is the IDENTITY RING's colour: for an
+   * enemy -- `controlledBy` undefined -- it resolves to slot 0, so every destroyed enemy left
+   * a wreck in player one's cyan. Measured in the built page before it was believed.
+   */
+  spawn(events: SimEvent[], world: World, bodyColorOf: (tank: Tank) => number): void;
   /** Ages every wreck by `dt` and recycles the expired. */
   update(dt: number): void;
   /**
@@ -59,7 +66,7 @@ export interface WreckSystem {
 }
 
 interface Wreck {
-  mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
   life: number;
 }
 
@@ -81,12 +88,16 @@ const TILT_RADIANS = Math.PI / 2.6;
 /** Just off the felt, matching the RING_Y precedent `ai-contact.ts` sets for the same reason. */
 const WRECK_Y = 0.02;
 /**
- * How far the identity colour is dragged toward black.
+ * How far the identity colour is dragged toward black. Lit, not flat: the hull keeps the
+ * same `MeshStandardMaterial` family every tank body uses, at the same roughness family, so
+ * the scene's lights shade it and the extrusion reads as a hull.
  *
- * The wreck is drawn UNLIT (`MeshBasicMaterial`) while every live tank is lit and shaded, so
- * it reads as a flat silhouette rather than a tank at a distance. That is most of what makes
- * it "clearly inert"; the darkening is the rest, and it keeps the owner's identity legible --
- * the issue asks for the wreck to carry identity, not to discard it.
+ * THE FIRST DRAFT WAS UNLIT (`MeshBasicMaterial`), on the reasoning that a flat silhouette
+ * among lit tanks would read as "clearly inert" by itself. A capture of the built page
+ * refuted it: unlit gives every face of the extrusion one colour, so the wreck drew as a
+ * bright, perfectly flat rounded rectangle on the felt -- a pickup pad or a UI decal, not a
+ * destroyed tank, and brighter than the lit geometry around it rather than darker. The
+ * darkening is what makes it inert; the shading is what makes it a hull.
  */
 const DARKEN = 0.45;
 
@@ -114,8 +125,13 @@ export function createWreckSystem(scene: THREE.Scene, effect: WreckEffect = 'sin
     if (!w) {
       const mesh = new THREE.Mesh(
         hullGeometry(),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false }),
-      ) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+        // Rougher and flatter than a live hull (`entities.ts` builds bodies at 0.72/0.25):
+        // a wreck has no paint left to catch a highlight, and a specular glint is the one
+        // thing that would make it look maintained.
+        new THREE.MeshStandardMaterial({
+          color, roughness: 0.95, metalness: 0, transparent: true, opacity: 1, depthWrite: false,
+        }),
+      ) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
       mesh.name = 'wreck';
       scene.add(mesh);
       w = { mesh, life: LIFETIME_SECONDS };
@@ -137,12 +153,12 @@ export function createWreckSystem(scene: THREE.Scene, effect: WreckEffect = 'sin
     pool.push(w);
   }
 
-  function spawn(events: SimEvent[], world: World): void {
+  function spawn(events: SimEvent[], world: World, bodyColorOf: (tank: Tank) => number): void {
     for (const event of events) {
       if (event.type !== 'tank-destroyed') continue;
       const tank = world.tanks.find((t) => t.id === event.tankId);
       if (!tank) continue; // unreachable: tanks are never removed. Never throw in a render path.
-      const w = acquire(darken(resolveOwnerColor(world, tank), DARKEN));
+      const w = acquire(darken(bodyColorOf(tank), DARKEN));
       // The event's OWN position -- where the sim recorded the death -- and the heading the
       // tank is wearing on this frame, COPIED rather than referenced. See the file header.
       w.mesh.position.x = event.pos.x;

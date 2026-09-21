@@ -24,6 +24,18 @@ const world = (tanks: Tank[]): World => createWorld({ walls: [], tanks, spawns: 
 const destroyed = (tankId: number, x: number, y: number): SimEvent =>
   ({ type: 'tank-destroyed', tankId, kind: 'player', by: 'shell', pos: { x, y } } as unknown as SimEvent);
 
+const PLAYER_PAINT = 0x3366ff;
+const ENEMY_PAINT = 0x7a8b2c;
+/** Stands in for `entities.ts`'s `bodyColorOf`: the colour the HULL is painted, per tank. */
+const paint = (t: Tank): number => (t.kind === 'player' ? PLAYER_PAINT : ENEMY_PAINT);
+
+/** The module's own darkening, recomputed here so the expectation is not a copied literal. */
+function darkened(hex: number): number {
+  const c = new THREE.Color(hex);
+  c.multiplyScalar(1 - 0.45);
+  return c.getHex();
+}
+
 const wrecks = (scene: THREE.Scene): THREE.Mesh[] =>
   scene.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh && o.name === 'wreck');
 const visible = (scene: THREE.Scene): THREE.Mesh[] => wrecks(scene).filter((m) => m.visible);
@@ -34,7 +46,7 @@ describe('one wreck per destruction, at the death position and heading', () => {
     // before the next frame. Fixture deliberately disagrees: tank at (9,9), event at (2,3).
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene);
-    sys.spawn([destroyed(1, 2, 3)], world([tank(1, 9, 9)]));
+    sys.spawn([destroyed(1, 2, 3)], world([tank(1, 9, 9)]), paint);
     const m = visible(scene)[0];
     expect(m.position.x).toBe(2);
     expect(m.position.z).toBe(3);
@@ -46,7 +58,7 @@ describe('one wreck per destruction, at the death position and heading', () => {
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene);
     const t = tank(1, 0, 0, { bodyAngle: 1 });
-    sys.spawn([destroyed(1, 0, 0)], world([t]));
+    sys.spawn([destroyed(1, 0, 0)], world([t]), paint);
     const m = visible(scene)[0];
     expect(m.rotation.y).toBeCloseTo(-1, 10);
 
@@ -62,18 +74,18 @@ describe('one wreck per destruction, at the death position and heading', () => {
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene);
     const w = world([tank(1, 0, 0)]);
-    sys.spawn([destroyed(1, 0, 0)], w);
-    for (let i = 0; i < 10; i++) sys.spawn([], w);
+    sys.spawn([destroyed(1, 0, 0)], w, paint);
+    for (let i = 0; i < 10; i++) sys.spawn([], w, paint);
     expect(visible(scene)).toHaveLength(1);
   });
 
   it('ignores every other event type, and an event naming no tank', () => {
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene);
-    sys.spawn([{ type: 'shot-fired' } as unknown as SimEvent], world([tank(1, 0, 0)]));
+    sys.spawn([{ type: 'shot-fired' } as unknown as SimEvent], world([tank(1, 0, 0)]), paint);
     expect(visible(scene)).toHaveLength(0);
     // A tankId not in the world is unreachable in practice; it must not throw either.
-    expect(() => sys.spawn([destroyed(99, 0, 0)], world([tank(1, 0, 0)]))).not.toThrow();
+    expect(() => sys.spawn([destroyed(99, 0, 0)], world([tank(1, 0, 0)]), paint)).not.toThrow();
     expect(visible(scene)).toHaveLength(0);
   });
 });
@@ -85,7 +97,7 @@ describe('the pool is bounded and replaces deterministically', () => {
     const tanks = Array.from({ length: 12 }, (_, i) => tank(i + 1, 0, 0));
     const w = world(tanks);
     // Twelve deaths at distinct x, one frame apart, against a cap of 8.
-    for (let i = 0; i < 12; i++) sys.spawn([destroyed(i + 1, i, 0)], w);
+    for (let i = 0; i < 12; i++) sys.spawn([destroyed(i + 1, i, 0)], w, paint);
 
     const shown = visible(scene);
     expect(shown.length).toBeLessThanOrEqual(8);
@@ -99,12 +111,12 @@ describe('the pool is bounded and replaces deterministically', () => {
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene);
     const w = world([tank(1, 0, 0)]);
-    for (let i = 0; i < 6; i++) sys.spawn([destroyed(1, i, 0)], w);
+    for (let i = 0; i < 6; i++) sys.spawn([destroyed(1, i, 0)], w, paint);
     const built = wrecks(scene).length;
     // Expire them all, then spawn six more: the scene must not hold twelve.
     sys.update(99);
     expect(visible(scene)).toHaveLength(0);
-    for (let i = 0; i < 6; i++) sys.spawn([destroyed(1, i, 0)], w);
+    for (let i = 0; i < 6; i++) sys.spawn([destroyed(1, i, 0)], w, paint);
     expect(wrecks(scene).length, 'recycled, not rebuilt').toBe(built);
   });
 });
@@ -116,7 +128,7 @@ describe('every arm leaves, and they differ on the way', () => {
     for (const effect of WRECK_EFFECTS) {
       const scene = new THREE.Scene();
       const sys = createWreckSystem(scene, effect);
-      sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]));
+      sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]), paint);
       expect(visible(scene), effect).toHaveLength(1);
       sys.update(5.9);
       expect(visible(scene), `${effect} still alive just before the lifetime`).toHaveLength(1);
@@ -133,10 +145,10 @@ describe('every arm leaves, and they differ on the way', () => {
     const at = (effect: WreckEffect) => {
       const scene = new THREE.Scene();
       const sys = createWreckSystem(scene, effect);
-      sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]));
+      sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]), paint);
       sys.update(3);
       const m = visible(scene)[0];
-      return { y: m.position.y, roll: m.rotation.z, opacity: (m.material as THREE.MeshBasicMaterial).opacity };
+      return { y: m.position.y, roll: m.rotation.z, opacity: (m.material as THREE.MeshStandardMaterial).opacity };
     };
     const sink = at('sink');
     const fade = at('fade');
@@ -160,12 +172,12 @@ describe('every arm leaves, and they differ on the way', () => {
       const scene = new THREE.Scene();
       const sys = createWreckSystem(scene, effect);
       sys.setReducedMotion(true);
-      sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]));
+      sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]), paint);
       sys.update(3);
       const m = visible(scene)[0];
       expect(m.position.y, `${effect} does not sink`).toBeCloseTo(0.02, 10);
       expect(m.rotation.z, `${effect} does not roll`).toBe(0);
-      const opacity = (m.material as THREE.MeshBasicMaterial).opacity;
+      const opacity = (m.material as THREE.MeshStandardMaterial).opacity;
       expect(opacity, `${effect} still fades`).toBeGreaterThan(0);
       expect(opacity, `${effect} still fades`).toBeLessThan(1);
     }
@@ -178,7 +190,7 @@ describe('every arm leaves, and they differ on the way', () => {
     // spawn, which is invisible to a test that sets the policy first.
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene, 'sink');
-    sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]));
+    sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]), paint);
     sys.update(2);
     const m = visible(scene)[0];
     const sunkTo = m.position.y;
@@ -191,13 +203,28 @@ describe('every arm leaves, and they differ on the way', () => {
 });
 
 describe('housekeeping', () => {
+  it("wears the HULL's colour darkened, not the owner ring's", () => {
+    // The ring colour resolves an enemy's undefined `controlledBy` to slot 0, so a wreck that
+    // took it would paint every destroyed enemy in player one's swatch. Asserted per kind, so
+    // a system that ignored the seam and used one colour for everything also fails.
+    const scene = new THREE.Scene();
+    const sys = createWreckSystem(scene, 'fade');
+    const w = world([tank(1, 0, 0, { kind: 'player' }), tank(2, 1, 1, { kind: 'brown' } as Partial<Tank>)]);
+    sys.spawn([destroyed(1, 0, 0), destroyed(2, 1, 1)], w, paint);
+    const [first, second] = visible(scene).map((m) => (m.material as THREE.MeshStandardMaterial).color.getHex());
+    expect(first, 'the player wreck is not the player hull darkened').toBe(darkened(PLAYER_PAINT));
+    expect(second, 'the enemy wreck is not the enemy hull darkened').toBe(darkened(ENEMY_PAINT));
+    expect(first, 'both kinds got the same colour').not.toBe(second);
+  });
+
+
   it('dispose clears the scene of every wreck, active or pooled', () => {
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene);
     const w = world([tank(1, 0, 0)]);
-    for (let i = 0; i < 3; i++) sys.spawn([destroyed(1, i, 0)], w);
+    for (let i = 0; i < 3; i++) sys.spawn([destroyed(1, i, 0)], w, paint);
     sys.update(99); // two into the pool, one still active on the next spawn
-    sys.spawn([destroyed(1, 0, 0)], w);
+    sys.spawn([destroyed(1, 0, 0)], w, paint);
     expect(wrecks(scene).length).toBeGreaterThan(0);
     sys.dispose();
     expect(wrecks(scene)).toHaveLength(0);
@@ -210,7 +237,7 @@ describe('housekeeping', () => {
     const scene = new THREE.Scene();
     const sys = createWreckSystem(scene);
     const w = world([tank(1, 0, 0), tank(2, 0, 0)]);
-    sys.spawn([destroyed(1, 3, 4), destroyed(2, 5, 6)], w);
+    sys.spawn([destroyed(1, 3, 4), destroyed(2, 5, 6)], w, paint);
     expect(visible(scene)).toHaveLength(2);
 
     sys.clear();
@@ -218,7 +245,7 @@ describe('housekeeping', () => {
 
     // And the meshes are recycled rather than leaked: the next death reuses one of them.
     const before = wrecks(scene).length;
-    sys.spawn([destroyed(1, 1, 1)], w);
+    sys.spawn([destroyed(1, 1, 1)], w, paint);
     expect(visible(scene)).toHaveLength(1);
     expect(wrecks(scene), 'clear leaked its meshes instead of pooling them').toHaveLength(before);
   });
