@@ -11,9 +11,29 @@ import {
 } from './controller-labels';
 import type { SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
+import type { UnsupportedReason } from '../input/gamepad-profile';
 
-const pad = (padIndex: number, id: string, unsupported?: DetectedPad['unsupported']): DetectedPad =>
+const pad = (padIndex: number, id: string, unsupported?: UnsupportedReason): DetectedPad =>
   ({ padIndex, id, unsupported } as DetectedPad);
+
+// The two real `UnsupportedReason` variants, built in full rather than cast. An earlier draft
+// used `{ code: 'unreadable' } as DetectedPad['unsupported']`, which is not a code this union
+// has -- the cast compiled under one tsc invocation and the repository's own `npm run
+// typecheck` refused it. A fabricated code would also have meant the "cannot read its buttons"
+// branch was never exercised by a reason the type can actually produce.
+const TOO_FEW: UnsupportedReason = {
+  code: 'insufficient-controls',
+  profileId: 'generic',
+  axes: 1,
+  buttons: 2,
+  requiredAxes: 2,
+  requiredButtons: 8,
+};
+const UNKNOWN_MAPPING: UnsupportedReason = {
+  code: 'unknown-mapping',
+  mapping: '',
+  id: 'Odd Pad',
+};
 
 const NAMED: DetectedPad[] = [pad(0, 'Xbox Wireless Controller'), pad(1, '')];
 
@@ -74,8 +94,8 @@ describe('candidateLabel', () => {
 
 describe('unsupportedPad and unsupportedSentence', () => {
   const BAD: DetectedPad[] = [
-    pad(0, 'Tiny Pad', { code: 'insufficient-controls' } as DetectedPad['unsupported']),
-    pad(1, 'Odd Pad', { code: 'unreadable' } as DetectedPad['unsupported']),
+    pad(0, 'Tiny Pad', TOO_FEW),
+    pad(1, 'Odd Pad', UNKNOWN_MAPPING),
     pad(2, 'Fine Pad'),
   ];
 
