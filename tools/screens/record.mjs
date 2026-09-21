@@ -101,7 +101,7 @@ export function parseRecordArgs(argv) {
   for (const name of required) if (!values.has(name)) throw new Error(`--${name} is required`);
   // OPTIONAL, and a pair: a versus flow needs both, every other flow needs neither.
   // `validateFlowInputs` enforces that, so this only has to admit them.
-  const optional = ['mode', 'players'];
+  const optional = ['mode', 'players', 'bots'];
   const known = new Set([...required, ...optional]);
   for (const name of values.keys()) if (!known.has(name)) throw new Error(`unknown option --${name}`);
   const num = (name) => {
@@ -119,6 +119,9 @@ export function parseRecordArgs(argv) {
     // campaign recording claim to be a two-player versus round.
     mode: values.has('mode') ? values.get('mode') : undefined,
     players: values.has('players') ? num('players') : undefined,
+    // Absent means "leave the session's own default alone", which is not the same as zero:
+    // `bots=0` is a deliberate all-human board and a legitimate thing to record.
+    bots: values.has('bots') ? num('bots') : undefined,
   });
   const seconds = num('seconds');
   const fps = num('fps');

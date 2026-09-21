@@ -1,0 +1,14 @@
+{
+  "id": "flow-versus-bots-exceed-the-slots",
+  "file": "tools/screens/flow.mjs",
+  "find": "    if (!Number.isInteger(bots) || bots < 0 || bots > players) {",
+  "replace": "    if (!Number.isInteger(bots) || bots < 0) {",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "a versus recording says how many slots the computer drives (issue #359) refuses more bots than there are slots, rather than letting the page clamp"
+  ],
+  "why": "Defers the bound to the page, which CLAMPS rather than rejects (`devflags.ts` on `bots`). That is the right behaviour for a URL a person typed and the wrong one for a recipe: `bots=5` at `players=4` would record a four-bot session while the recipe and the report both say five, so the evidence describes the request instead of the run. A recipe is a claim about what was captured, and the clamp quietly makes that claim false."
+}

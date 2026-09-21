@@ -32,7 +32,7 @@ const inputs = (over: Record<string, unknown> = {}) => ({ level: 1, seed: 7, dri
 
 describe('the flow catalogue (issue #815)', () => {
   it('names the campaign round, and refuses a flow it does not know', () => {
-    expect(FLOW_IDS).toEqual(['campaign-round', 'versus-round']);
+    expect(FLOW_IDS).toEqual(['campaign-round', 'coop-round', 'versus-round']);
     expect(() => findFlow('campaign-menu')).toThrow(/unknown flow 'campaign-menu'/);
   });
 
@@ -101,6 +101,76 @@ describe('the flow catalogue (issue #815)', () => {
       if (param === 'dev') continue; // the gate itself, not a DevFlags field
       expect(FLAG_REGISTRY, `${param} is not a registered dev flag`).toHaveProperty(param);
     }
+  });
+});
+
+describe('co-op is its own named capture (issue #359)', () => {
+  const coop = (over: Record<string, unknown> = {}) => inputs({ players: 3, ...over });
+
+  it('is a flow, because co-op is a campaign round with company rather than a versus round', () => {
+    expect(FLOW_IDS).toContain('coop-round');
+  });
+
+  it('asks for the player slots even with no mode, which is what makes it co-op at all', () => {
+    // The bug this pins: `players` used to be emitted only alongside `mode`, so every co-op
+    // request recorded a ONE-player campaign round -- which looks exactly like a correct
+    // capture, and would have been filed as evidence of target distribution across players
+    // that were never on the board.
+    const url = buildFlowUrl(coop({ bots: 2, flags: { aiContact: true } }));
+    expect(url).toContain('players=3');
+    expect(url).toContain('bots=2');
+    expect(url).not.toContain('mode=');
+    expect(url).toBe('?dev=1&replay=1&level=4&seed=7&players=3&bots=2&autoplay=1&aiContact=1'.replace('level=4', 'level=1'));
+  });
+
+  it('still refuses a half-specified versus round', () => {
+    // `players` alone became legal; `mode` alone did not. A versus recipe that loses its
+    // player count would otherwise play the board with one tank and no stock strip.
+    expect(() => validateFlowInputs(inputs({ mode: 'ffa' }))).toThrow(/mode needs players/);
+  });
+
+  it('keys `bots` to the player slots, not to the versus mode', () => {
+    expect(() => validateFlowInputs(inputs({ bots: 2 }))).toThrow(/bots needs players/);
+    expect(() => validateFlowInputs(coop({ bots: 4 }))).toThrow(/bots must be a whole number in \[0, 3\]/);
+    expect(buildFlowUrl(coop({ bots: 3 }))).toContain('bots=3');
+  });
+});
+
+describe('a versus recording says how many slots the computer drives (issue #359)', () => {
+  const versus = (over: Record<string, unknown> = {}) =>
+    inputs({ mode: 'ffa', players: 4, ...over });
+
+  it('puts `bots` after `players`, because it is bounded by it', () => {
+    expect(buildFlowUrl(versus({ bots: 3 })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=3&autoplay=1');
+  });
+
+  it('keeps absent and zero distinct, because an all-human board is a real request', () => {
+    // Absent leaves the session's own default alone; `bots=0` asks for no computer players
+    // at all. Collapsing them would make it impossible to record the second on purpose.
+    expect(buildFlowUrl(versus())).not.toContain('bots');
+    expect(buildFlowUrl(versus({ bots: 0 }))).toContain('bots=0');
+  });
+
+  it('refuses more bots than there are slots, rather than letting the page clamp', () => {
+    // `devflags.ts` clamps `bots` against the resolved player count instead of rejecting it.
+    // That is right for a URL a person typed and wrong for a recipe: the clamp would record a
+    // different session than the one named, and the report would describe the request.
+    expect(() => validateFlowInputs(versus({ bots: 5 }))).toThrow(/bots must be a whole number in \[0, 4\]/);
+    expect(() => validateFlowInputs(versus({ bots: -1 }))).toThrow(/bots must be/);
+    expect(() => validateFlowInputs(versus({ bots: 1.5 }))).toThrow(/bots must be/);
+  });
+
+  it('refuses `bots` without a versus session to put them in', () => {
+    expect(() => validateFlowInputs(inputs({ bots: 2 }))).toThrow(/bots needs players/);
+  });
+
+  it('offers the contact overlay, which is what makes the selection visible at all', () => {
+    // A versus recording without it is tanks moving around: the committed opponent and the
+    // reason for each change are drawn only by `aiContact`.
+    expect(FLOW_FLAG_IDS).toContain('aiContact');
+    expect(buildFlowUrl(versus({ bots: 3, flags: { aiContact: true } })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=3&autoplay=1&aiContact=1');
   });
 });
 
@@ -366,10 +436,16 @@ describe('the versus flow (issue #234)', () => {
   });
 
   it('refuses half a versus round, which is the failure that would look like a success', () => {
-    // `mode` alone plays the board with one tank and no stock strip; `players` alone is
-    // campaign co-op. Either would record a capture that is not what its recipe claims.
-    expect(() => validateFlowInputs(vs({ players: undefined }))).toThrow(/given together/);
-    expect(() => validateFlowInputs(vs({ mode: undefined }))).toThrow(/given together/);
+    // `mode` alone plays the board with one tank and no stock strip -- still refused.
+    expect(() => validateFlowInputs(vs({ players: undefined }))).toThrow(/mode needs players/);
+    // `players` alone is campaign co-op, and since issue #359 that is a legal request with a
+    // flow of its own (`coop-round`) rather than a malformed versus round. What still stops a
+    // versus RECIPE losing its mode is the flow's own `start`, which waits on
+    // `.hud-versus-stocks` -- an element a campaign session never shows.
+    expect(() => validateFlowInputs(vs({ mode: undefined }))).not.toThrow();
+    expect(findFlow('versus-round').start({ level: 1 }).some(
+      (step: Record<string, unknown>) => String(step.waitVisible ?? '').includes('hud-versus-stocks'),
+    ), 'the versus flow no longer proves it is versus-shaped').toBe(true);
   });
 
   it('holds players and mode to the page own ranges, not a superset', () => {
