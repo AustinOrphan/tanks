@@ -1,0 +1,14 @@
+{
+  "id": "controller-label-drops-the-empty-id-fallback",
+  "file": "src/game/controller-labels.ts",
+  "find": "      const name = live && live.id.length > 0 ? live.id : `Controller ${source.padIndex}`;",
+  "replace": "      const name = live ? live.id : `Controller ${source.padIndex}`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/controller-labels.test.ts"
+  ],
+  "why": "A browser may report a pad it will not name, and `Gamepad.id` is then the empty string -- not undefined, so `live` is truthy and the length check is the only thing standing between the player and a label reading ' (index 1)': a leading space and a parenthesis. Unreachable by assertion until #556 moved these labels out of `createHud`, where they read `currentDetectedPads` from a closure and could only be checked by rendering the panel and reading the DOM back. Nothing in the tree renders an unnamed pad on purpose, which is why no existing case covers it.",
+  "killedBy": [
+    "slotSourceLabel falls back to `Controller N` when the browser names a pad with an empty string"
+  ]
+}
