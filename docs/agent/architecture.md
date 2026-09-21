@@ -395,6 +395,37 @@ artefact. It does **not** cover CODE: a change to `targeting.ts` diverges a repl
 fingerprint unchanged, so a mismatch proves a trace is stale while a match does not prove
 it is fresh.
 
+**THE SIMULATION DOES NOT KNOW WHICH SLOTS ARE BOT-DRIVEN, and that is a decision rather
+than a gap** (issue #891, 2026-09-21). A versus bot occupies a player slot, so `kind` is
+`'player'` and nothing in `src/sim/` distinguishes it from a human. The only bot/human fact in
+the tree is `assignment[i].kind === 'bot'` (`botSlotsFromAssignment`, `loop.ts`) and
+`VersusSlotRole` (`versus-setup.ts`); neither reaches the sim, and neither should.
+
+The shape it would have to take is the one `invincible`, `disarmed` and `controlledBy` already
+use — an optional field on `Tank`, stamped by the game layer. Those three are safe because they
+are fixed at CONSTRUCTION, which is what makes a replay an exact function of its inputs: the
+trace's `ReplayMeta` describes how to rebuild the world, the rebuild stamps the same values, and
+`stepInputs` re-applies the recorded inputs over them. **Bot-ness is not construction-time.**
+`reassignSlot` (`loop.ts`) flips a slot between human and bot MID-MATCH, incrementally, without
+rebuilding the world — and `WorldRules` is disqualified for the same reason, being resolved once
+and frozen (`rules.ts`).
+
+So if the sim READ bot-ness it would become part of the simulation function, and replay would
+have to reproduce it. The trace records inputs and nothing else: **there is no representation of
+a mid-match slot reassignment in it**, so this would need a new trace event type *and*
+`REPLAY_SCHEMA` 4 -> 5, against a format whose own note records that there is no migration
+layer — every existing trace invalidated for a field the simulation does not need.
+
+It does not need it, because the two things that look like they want it are already served.
+**The overlay**: `ai-contact.ts` skips `kind === 'player'`, and the renderer is where bot-ness
+already lives, so a committed target computed for every player-kind tank can be DRAWN
+selectively without the sim ever learning who drives which slot. **Per-bot behaviour**:
+`BotDifficulty` is the precedent and it never enters the world — `decidePlayerInput` takes it as
+a trailing parameter and applies it to a config copy (`withBotDifficulty(configFor(kind), …)`),
+so "bots behave differently" is expressed by what the game layer passes the input producer, not
+by what the world remembers. A bot is a controller, not a kind of tank; the simulation's job is
+to be indifferent to who is holding the controller.
+
 **The RENDER ANIMATION CLOCK is a second clock, and it is now named and decided.** The sim
 is fixed-step and never sees wall time; the render layer does, as the `dt` `driver.ts`
 hands `renderer.render`, which forwards it to **two** consumers — `entities.sync` (an
