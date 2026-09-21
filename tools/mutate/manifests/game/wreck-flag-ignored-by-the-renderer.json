@@ -1,0 +1,14 @@
+{
+  "id": "wreck-flag-ignored-by-the-renderer",
+  "file": "src/game/loop.ts",
+  "find": "    wreck: deps.devFlags.wreck,",
+  "replace": "    wreck: null,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Severs the wreck dev flag from the renderer, so `?dev=1&wreck=tilt` parses, validates and shows as set in the Developer panel while no wreck is ever built. Issue #232 leaves the removal effect open -- 'fade, crumble, sink, or otherwise' -- so the three arms exist to be turned on and compared in play; an arm that never reaches the renderer reads as 'the decoration does not help' rather than 'it never drew'. Invisible to render/wreck.test.ts, which constructs the system directly, and to the exact-object option tests, which only pin the default null.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default threads the wreck dev flag's chosen arm through to the renderer (issue #232)"
+  ]
+}
