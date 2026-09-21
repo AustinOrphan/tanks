@@ -1,0 +1,14 @@
+{
+  "id": "focusable-accepts-a-negative-tabindex",
+  "file": "src/game/focusable.ts",
+  "find": "    if (ti !== null && Number(ti) < 0) return false; // none today, but future-proof",
+  "replace": "    if (ti !== null && Number(ti) < -1000) return false; // none today, but future-proof",
+  "expect": "killed",
+  "tests": [
+    "src/game/focusable.test.ts"
+  ],
+  "killedBy": [
+    "focusableControls: the branch no panel can reach (issue #556) excludes a negative tabindex, and keeps the controls either side of it"
+  ],
+  "why": "Lets an element that is deliberately out of the sequential focus order into the roving order. This is the one branch of `focusable.ts` that NO `createHud` test can reach, because nothing in the HUD carries a negative `tabindex` -- the line's own comment says so. Measured before the module test was written: every other branch of this file is killed by the existing panel tests (ancestors 3 cases, disabled 2, hidden 8, the capture no-op 1, the same-row fallback 1), and this one survived the whole suite. It is also why the move out of `createHud` is worth something beyond file size: the guard could not be exercised at all while it was reachable only by building a panel that contains the attribute, and no panel does."
+}
