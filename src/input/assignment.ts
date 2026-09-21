@@ -29,6 +29,25 @@ export type SlotSource =
 export type Assignment = SlotSource[];
 
 /**
+ * Do two slot sources name the same device?
+ *
+ * ONE implementation, and it lives here because this is the file that owns the union. It was
+ * two: `sameSlotSource` in `game/loop.ts` and `sameSource` in `game/hud.ts`, byte-identical
+ * bodies, the only two occurrences in `src/`. They agreed, so nothing failed -- which is the
+ * point. `gamepad` is the one variant carrying an identity field today, so a fifth variant
+ * with its own field would have had to be remembered in two places, and the copy that was
+ * forgotten would have compared two different devices as equal and silently skipped a
+ * reassignment.
+ *
+ * `kind` first, so the narrowing below is the compiler's rather than a cast: TypeScript only
+ * knows `a.padIndex` exists once both sides are known to be `'gamepad'`.
+ */
+export function sameSlotSource(a: SlotSource, b: SlotSource): boolean {
+  if (a.kind !== b.kind) return false;
+  return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
+}
+
+/**
  * Today's rule, made explicit and readable as data instead of re-derived on every read:
  * slot 0 is `'keyboard'`, every slot i >= 1 is `{gamepad, padIndex: i}` (`pad[i] ->
  * slot[i]`, gamepad.ts) -- UNLESS the slot is bot-claimed (`botSlots`, `loop.ts`'s

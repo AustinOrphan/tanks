@@ -8639,6 +8639,36 @@ describe('startGameWith: the input recorder', () => {
     h.handle.dispose();
   });
 
+  it('stamps the pp1Roles ARM from the session flag, which no world can be asked for', () => {
+    // WRITTEN AGAINST A SURVIVING MUTATION. Replacing `deps.devFlags.pp1Roles` with a literal
+    // `false` at both `replayMetaFor` call sites left **483 of 483 loop tests passing**, which
+    // is the whole defect issue #797 describes, one layer up: the arm is a construction-time
+    // stamp, so a finished world cannot be asked which arm built it, and nothing downstream
+    // notices a trace that claims the shipped caps. Both arms are asserted so neither
+    // direction can rot into a constant.
+    const armed = boot(makeDeps({ devFlags: { replay: true, pp1Roles: true }, levelCount: 3 }));
+    armed.setState('playing');
+    armed.fireFrame(100);
+    expect(trace(armed).meta.pp1Roles).toBe(true);
+
+    // AND AFTER A LEVEL SWITCH, which is a SECOND stamping site. `recorder.begin()` re-stamps
+    // the meta for the new world, and mutating only that site left all 484 tests passing while
+    // the first-level assertion above still held -- a trace recorded across an advance would
+    // have claimed shipped caps from level 2 onward. Measured, not assumed.
+    armed.setState('outcome-win');
+    armed.hud.startRestart();
+    armed.setState('playing');
+    armed.fireFrame(200);
+    expect(trace(armed).meta.pp1Roles, 'the re-stamp after an advance').toBe(true);
+    armed.handle.dispose();
+
+    const shipped = boot(makeDeps({ devFlags: { replay: true } }));
+    shipped.setState('playing');
+    shipped.fireFrame(100);
+    expect(trace(shipped).meta.pp1Roles).toBe(false);
+    shipped.handle.dispose();
+  });
+
   it('produces a trace that replays the recorded run exactly', () => {
     // The end-to-end claim: what the shipped loop captures is enough to rebuild the
     // run. The fake level system builds a REAL arena world, so the rebuild below is
@@ -8657,11 +8687,23 @@ describe('startGameWith: the input recorder', () => {
     // behaviour (the review of this PR caught exactly that staleness here, and it
     // recurred: this call stopped at coopAttempts while the meta had since grown
     // mode/friendlyFire, and issue #492 added aiTargetPerception).
+    //
+    // THAT IS NOW THREE TIMES, counting issue #797's `pp1Roles` below. Every occurrence has
+    // the same shape: the meta grows a field, this hand-written rebuild does not, and
+    // nothing fails -- the trace still parses and the fingerprint still matches, because it
+    // covers the four sim JSON files and says nothing about how a world was constructed. The
+    // structural fix is a shared `worldFromMeta(meta)` that both this and replay.test.ts's
+    // `worldFor` call, so there is one list instead of two; it is deliberately not done here,
+    // because it is a refactor of a test seam rather than part of carrying the arm.
+    //
+    // `pp1Roles` sits OUTSIDE `rules` because it is not a rule: `createWorldFor` hands it to
+    // `loadArena`, which stamps per-role shellCap/mineCap onto the tanks at construction.
     // `stock` and `teams` are deliberately absent: both are versus-only and neither is a
     // ReplayMeta field. They used to be two `undefined`s carried in the positional list to
     // reach `aiTargetPerception` past them.
     const rebuilt = createWorldFor(arenaById(t.meta.arenaId), t.meta.seed, {
       lives: t.meta.lives,
+      pp1Roles: t.meta.pp1Roles,
       rules: {
         unarmedTrigger: t.meta.unarmedTrigger,
         corpseBlocksShells: t.meta.corpseBlocksShells,

@@ -4,6 +4,7 @@ import { cloneWorld, step, stepInputs, type World } from '../sim/world';
 import type { InputState } from '../sim/types';
 import { COUNTDOWN_TICKS } from '../sim/constants';
 import balanceJson from '../sim/config/data/balance.json';
+import { PP1_ROLE_SHELL_CAPS } from '../sim/config/pp1-roles';
 import {
   canonical,
   fingerprint,
@@ -33,6 +34,7 @@ const META: ReplayMeta = {
   mode: 'campaign-coop',
   friendlyFire: false,
   aiTargetPerception: 'full',
+  pp1Roles: false,
 };
 
 /**
@@ -80,6 +82,11 @@ function worldFor(meta: ReplayMeta, playerCount = 1): World {
   return createWorldFor(arenaById(meta.arenaId), meta.seed, {
     lives: meta.lives,
     playerCount,
+    // The ARM, threaded so a rebuild reproduces the ordnance caps the trace was recorded
+    // under (issue #797). Not a rule -- `createWorldFor` hands it to `loadArena`, which
+    // stamps per-role `shellCap`/`mineCap` onto the tanks it builds -- so it sits beside
+    // `rules` rather than inside it, exactly as it does in `levels.ts`.
+    pp1Roles: meta.pp1Roles,
     rules: {
       unarmedTrigger: meta.unarmedTrigger,
       corpseBlocksShells: meta.corpseBlocksShells,
@@ -263,10 +270,65 @@ describe('createRecordingInput', () => {
   });
 });
 
+describe('the pp1Roles arm survives a round trip (issue #797)', () => {
+  // WHAT THIS IS ABOUT. `pp1Roles` is the first ReplayMeta field that is not a `World.rules`
+  // switch. It is a construction-time stamp: `createWorldFor` hands it to `loadArena`, which
+  // writes per-role `shellCap`/`mineCap` onto the tanks. So a finished world cannot be asked
+  // which arm built it, and before this the meta did not carry it -- a trace recorded under
+  // `?dev=1&pp1Roles=1` rebuilt at shipped caps and diverged wherever a cap refused a shot.
+  // Silently: the data fingerprint covers the four sim JSON files, and the arm's values live
+  // in sim/config/pp1-roles.ts, outside it.
+
+  it('reads the arm from the recorder, because the world cannot be asked', () => {
+    // Both directions, so neither can rot into a constant.
+    const armed = createWorldFor(ARENAS[0], 7, { pp1Roles: true });
+    const shipped = createWorldFor(ARENAS[0], 7, {});
+    expect(replayMetaFor(armed, 'arena-01', true).pp1Roles).toBe(true);
+    expect(replayMetaFor(shipped, 'arena-01', false).pp1Roles).toBe(false);
+  });
+
+  it('rebuilds the ARM caps from the meta alone, not the shipped ones', () => {
+    // The end-to-end claim the issue asks for: record in the arm, rebuild from the meta, and
+    // the rebuilt tanks carry the arm's ordnance caps.
+    const live = createWorldFor(ARENAS[0], 7, { pp1Roles: true });
+    const meta = replayMetaFor(live, 'arena-01', true);
+    const rebuilt = worldFor(meta);
+
+    const capsOf = (w: World) => w.tanks
+      .filter((t) => t.shellCap !== undefined)
+      .map((t) => `${t.kind}:${t.shellCap}`)
+      .sort();
+
+    expect(capsOf(rebuilt)).toEqual(capsOf(live));
+    // Non-vacuous in the way that matters: the arm has to have stamped SOMETHING, or two
+    // empty lists would satisfy the equality above and prove nothing.
+    expect(capsOf(live).length).toBeGreaterThan(0);
+    // And it must be the ARM's caps, named rather than merely "equal to live": brown is
+    // band 1-2 and the arm sets 2, which is the value a shipped rebuild would not produce.
+    expect(capsOf(rebuilt)).toContain(`brown:${PP1_ROLE_SHELL_CAPS.brown}`);
+  });
+
+  it('THE NEGATIVE CONTROL: a meta that drops the arm rebuilds at shipped caps', () => {
+    // This is what the code did before #797 -- the arm simply absent from the meta -- written
+    // as an assertion so the regression cannot come back quietly. A rebuild from a meta whose
+    // `pp1Roles` is false must NOT carry the arm's caps, and the two arms must differ at all.
+    const live = createWorldFor(ARENAS[0], 7, { pp1Roles: true });
+    const armed = worldFor(replayMetaFor(live, 'arena-01', true));
+    const dropped = worldFor({ ...replayMetaFor(live, 'arena-01', true), pp1Roles: false });
+
+    const caps = (w: World) => w.tanks.map((t) => t.shellCap ?? null);
+    expect(caps(armed)).not.toEqual(caps(dropped));
+    // Name the divergence rather than just asserting inequality: the arm stamps a cap where
+    // the shipped build leaves the roster's own in force.
+    expect(caps(armed).some((c) => c !== null)).toBe(true);
+    expect(caps(dropped).every((c) => c === null)).toBe(true);
+  });
+});
+
 describe('replayMetaFor', () => {
-  it('reads the world, not the flags that built it', () => {
+  it('reads the world for every rule, and takes the one arm the world cannot show', () => {
     const world = createWorldFor(ARENAS[1], 4242, { lives: 2, rules: { unarmedTrigger: 'both' } });
-    expect(replayMetaFor(world, 'arena-02')).toEqual({
+    expect(replayMetaFor(world, 'arena-02', false)).toEqual({
       arenaId: 'arena-02',
       seed: 4242,
       lives: 2,
@@ -278,6 +340,7 @@ describe('replayMetaFor', () => {
       mode: 'campaign-coop',
       friendlyFire: false,
       aiTargetPerception: 'full',
+      pp1Roles: false,
     });
   });
 
@@ -286,7 +349,7 @@ describe('replayMetaFor', () => {
     // must reproduce whatever corpseBlocksShells/muzzleClearsTanks the recorded world
     // was actually built with, not today's defaults.
     const world = createWorldFor(ARENAS[0], 7, { lives: 3, rules: { unarmedTrigger: 'none', corpseBlocksShells: true, muzzleClearsTanks: false } });
-    expect(replayMetaFor(world, 'arena-01')).toEqual({
+    expect(replayMetaFor(world, 'arena-01', false)).toEqual({
       arenaId: 'arena-01',
       seed: 7,
       lives: 3,
@@ -298,6 +361,7 @@ describe('replayMetaFor', () => {
       mode: 'campaign-coop',
       friendlyFire: false,
       aiTargetPerception: 'full',
+      pp1Roles: false,
     });
   });
 
@@ -306,7 +370,7 @@ describe('replayMetaFor', () => {
     // whatever coopAttempts the recorded world was actually built with (pool mode,
     // false), not the shared-attempts default.
     const world = createWorldFor(ARENAS[0], 8, { lives: 3, playerCount: 2, rules: { unarmedTrigger: 'none', coopAttempts: false } });
-    expect(replayMetaFor(world, 'arena-01')).toEqual({
+    expect(replayMetaFor(world, 'arena-01', false)).toEqual({
       arenaId: 'arena-01',
       seed: 8,
       lives: 3,
@@ -318,12 +382,13 @@ describe('replayMetaFor', () => {
       mode: 'campaign-coop',
       friendlyFire: false,
       aiTargetPerception: 'full',
+      pp1Roles: false,
     });
   });
 
   it('reads mode and friendlyFire off the world too, when a versus mode was requested (n-player arc PR 4)', () => {
     const world = createWorldFor(ARENAS[0], 11, { lives: 3, playerCount: 4, rules: { unarmedTrigger: 'none', mode: 'teams', friendlyFire: true } });
-    expect(replayMetaFor(world, 'arena-01')).toEqual({
+    expect(replayMetaFor(world, 'arena-01', false)).toEqual({
       arenaId: 'arena-01',
       seed: 11,
       lives: 3,
@@ -335,6 +400,7 @@ describe('replayMetaFor', () => {
       mode: 'teams',
       friendlyFire: true,
       aiTargetPerception: 'full',
+      pp1Roles: false,
     });
   });
 
@@ -349,7 +415,7 @@ describe('replayMetaFor', () => {
       playerCount: 1,
       rules: { unarmedTrigger: 'none', aiTargetPerception: 'line-of-sight' },
     });
-    expect(replayMetaFor(world, 'arena-01')).toEqual({
+    expect(replayMetaFor(world, 'arena-01', false)).toEqual({
       arenaId: 'arena-01',
       seed: 13,
       lives: 3,
@@ -361,12 +427,13 @@ describe('replayMetaFor', () => {
       mode: 'campaign-coop',
       friendlyFire: false,
       aiTargetPerception: 'line-of-sight',
+      pp1Roles: false,
     });
   });
 
   it('round-trips mode and friendlyFire through createWorldFor -- enemies stay stripped on the rebuilt world too', () => {
     const recorded = createWorldFor(ARENAS[0], 12, { lives: 3, playerCount: 4, rules: { unarmedTrigger: 'none', mode: 'ffa' } });
-    const meta = replayMetaFor(recorded, 'arena-01');
+    const meta = replayMetaFor(recorded, 'arena-01', false);
     expect(meta.mode).toBe('ffa');
     const rebuilt = worldFor(meta, 4);
     expect(rebuilt.rules.mode).toBe('ffa');
@@ -380,7 +447,7 @@ describe('replayMetaFor', () => {
     // them too. worldFor() in this file is the same rebuild loop.test.ts's replay
     // round-trip performs against a live game.
     const recorded = createWorldFor(ARENAS[0], 9, { lives: 3, rules: { unarmedTrigger: 'none', corpseBlocksShells: true, muzzleClearsTanks: false } });
-    const meta = replayMetaFor(recorded, 'arena-01');
+    const meta = replayMetaFor(recorded, 'arena-01', false);
     const rebuilt = worldFor(meta);
     expect(rebuilt.rules.corpseBlocksShells).toBe(true);
     expect(rebuilt.rules.muzzleClearsTanks).toBe(false);
@@ -392,7 +459,7 @@ describe('replayMetaFor', () => {
     // recorded run did not.
     const world = createWorldFor(ARENAS[0], 5, { lives: 3, rules: { unarmedTrigger: 'none' } });
     world.tanks.find((t) => t.kind === 'player')!.invincible = true;
-    expect(replayMetaFor(world, 'arena-01').invincible).toBe(true);
+    expect(replayMetaFor(world, 'arena-01', false).invincible).toBe(true);
   });
 });
 
@@ -401,7 +468,7 @@ describe('replayTrace', () => {
     // The claim the whole feature rests on. Record a real run through the real
     // sim, then rebuild the world from meta and re-apply the recorded inputs: the
     // final worlds must be identical, structurally, not merely "still playing".
-    const meta = replayMetaFor(worldFor(META), 'arena-01');
+    const meta = replayMetaFor(worldFor(META), 'arena-01', false);
     const rec = createRecordingInput(scriptedInputs(2024), meta);
 
     let live = worldFor(meta);
@@ -428,7 +495,7 @@ describe('replayTrace', () => {
   it('diverges when a single tick is dropped -- the equality above is load-bearing', () => {
     // The negative control for the test above: if the comparison could not see a
     // one-tick difference, it would pass for a recorder that dropped ticks.
-    const meta = replayMetaFor(worldFor(META), 'arena-01');
+    const meta = replayMetaFor(worldFor(META), 'arena-01', false);
     const rec = createRecordingInput(scriptedInputs(2024), meta);
     let live = worldFor(meta);
     for (let i = 0; i < COUNTDOWN_TICKS + 120; i++) live = stepInputs(live, rec.sample()).world;
@@ -486,7 +553,7 @@ describe('replayTrace', () => {
     let i = 0;
     const rec = createRecordingInput(
       { sample: () => [script[i++]] },
-      replayMetaFor(worldFor(META), 'arena-01'),
+      replayMetaFor(worldFor(META), 'arena-01', false),
     );
     for (let t = 0; t < TICKS; t++) rec.sample();
     const replayed = replayTrace(rec.trace(), worldFor(META));
@@ -500,7 +567,7 @@ describe('replayTrace', () => {
   });
 
   it('round-trips TWO slots -- each player replays its OWN recorded input; swapping the two slots diverges', () => {
-    const meta = replayMetaFor(worldFor(META, 2), 'arena-01');
+    const meta = replayMetaFor(worldFor(META, 2), 'arena-01', false);
     const rec = createRecordingInput(scriptedInputs(4242, 2), meta);
 
     let live = worldFor(meta, 2);
@@ -543,7 +610,7 @@ describe('replayTrace', () => {
       playerCount: 1,
       rules: { unarmedTrigger: 'none', aiTargetPerception: 'line-of-sight' },
     });
-    const meta = replayMetaFor(recorded, 'arena-02');
+    const meta = replayMetaFor(recorded, 'arena-02', false);
     expect(meta.aiTargetPerception).toBe('line-of-sight');
     expect(worldFor(meta).rules.aiTargetPerception).toBe('line-of-sight');
 
@@ -592,16 +659,17 @@ describe('checkTrace', () => {
     expect(checkTrace({ ...good, schema: 9 }).reason).toContain('schema');
   });
 
-  it('rejects a schema-3 trace, which predates the recorded perception rule (issue #492)', () => {
-    // The no-migration policy, at the one version where reading an old trace anyway
-    // would be actively wrong: a schema-3 trace carries no aiTargetPerception, so
-    // anything that accepted it would have to default the rule to 'full' -- which is
-    // exactly the silent divergence the bump exists to stop. Fails if REPLAY_SCHEMA is
-    // left at 3 while the field is added, which is the whole hazard of a meta change
-    // without a version change.
+  it('rejects a schema-4 trace, which predates the recorded pp1Roles arm (issue #797)', () => {
+    // The no-migration policy, at the newest version where reading an old trace anyway
+    // would be actively wrong: a schema-4 trace carries no `pp1Roles`, so anything that
+    // accepted it would have to default the arm to false -- rebuilding an arm recording at
+    // SHIPPED ordnance caps, which is exactly the silent divergence the bump exists to stop.
+    // Fails if REPLAY_SCHEMA is left at 4 while the field is added, which is the whole hazard
+    // of a meta change without a version change. The same case guarded #492's 3 -> 4 bump
+    // before this; the version moves with the meta shape, and so does this literal.
     const good = createRecordingInput(scriptedInputs(1), META).trace();
-    expect(checkTrace({ ...good, schema: 3 }).ok).toBe(false);
-    expect(checkTrace({ ...good, schema: 3 }).reason).toContain('schema 3');
+    expect(checkTrace({ ...good, schema: 4 }).ok).toBe(false);
+    expect(checkTrace({ ...good, schema: 4 }).reason).toContain('schema 4');
     // Non-vacuous: the trace this build just produced is still accepted, so the
     // rejection above is about the version and not about the trace.
     expect(checkTrace(good).ok).toBe(true);

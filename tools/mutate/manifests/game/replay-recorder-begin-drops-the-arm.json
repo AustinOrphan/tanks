@@ -1,0 +1,14 @@
+{
+  "id": "replay-recorder-begin-drops-the-arm",
+  "file": "src/game/loop.ts",
+  "find": "recorder?.begin(replayMetaFor(world, level.arenaId, deps.devFlags.pp1Roles));",
+  "replace": "recorder?.begin(replayMetaFor(world, level.arenaId, false));",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "THE SECOND stamping site, and the one that was uncovered. There are two: `createRecordingInput` at session start and `recorder.begin` on a level advance. Measured while writing #797's coverage -- mutating this site alone left **484 of 484 loop tests passing** even with a first-level assertion on the arm in place, because a trace only reaches this path after an advance. So a run recorded across a level switch would have claimed shipped ordnance caps from level 2 onward while level 1 looked correct. Killed by extending that case through `startRestart()` and re-reading the meta.",
+  "killedBy": [
+    "startGameWith: the input recorder stamps the pp1Roles ARM from the session flag, which no world can be asked for"
+  ]
+}
