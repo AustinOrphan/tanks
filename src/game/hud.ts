@@ -264,10 +264,7 @@ export type GameplayStatus = {
 
 import type { StatCounts } from './stats';
 import type { TypedOutcome, TypedOutcomeKind } from './app-state';
-import { sameSlotSource } from '../input/assignment';
-import {
-  NOT_SUPPORTED, candidateLabel, slotSourceLabel, unsupportedPad, unsupportedSentence,
-} from './controller-labels';
+import { slotSourceLabel } from './controller-labels';
 import type { Assignment, SlotSource } from '../input/assignment';
 import { unreadablePadIndices, type DetectedPad } from '../input/gamepad';
 import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
@@ -295,6 +292,7 @@ import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntr
 import type { HullColorId, SkinId, AccentId } from '../presentation/customization';
 import { captureFocus, focusableControls, isHiddenWithin } from './focusable';
 import { createCustomizePane, CUSTOMIZE_BODY } from './customize-pane';
+import { createControllersPane, CONTROLLERS_BODY } from './controllers-pane';
 import type { Surface } from './pane-host';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import { arenaSchematic, drawArenaSchematic, type SchematicPaint } from './arena-schematic';
@@ -1995,19 +1993,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          handleControllersBack routed on shownState too. It has not since the layer stack
          took over, and the claim made this panel's coupling look twice the size it is --
          issue #556.) -->
-    <div class="hud-controllers hud-controllers--hidden" role="region" tabindex="-1" aria-labelledby="hud-controllers-title">
-      <h1 class="hud-controllers-title" id="hud-controllers-title"></h1>
-      <!-- REPLACE, never append -- rebuilt on open and on every detection refresh, same
-           convention setLevelSelect already uses for .hud-levels. -->
-      <div class="hud-controller-rows"></div>
-      <!-- Issue #597. The help line is constant: it describes the list (only pads the
-           browser reports can appear), so it is not a warning a keyboard or touch player
-           has to dismiss. The unsupported line shows only while a listed pad cannot be
-           read, and is the reason its disabled candidates point at. -->
-      <p class="ui-hint hud-controllers-help">Only controllers your browser reports appear here. Not listed? Press a button on it, or reconnect it.</p>
-      <p class="ui-hint hud-controllers-unsupported hud-controllers-unsupported--hidden" id="hud-controllers-unsupported" role="status"></p>
-      <button class="ui-btn ui-btn--slab hud-controllers-back" type="button">Back</button>
-    </div>
+    <div class="hud-controllers hud-controllers--hidden" role="region" tabindex="-1" aria-labelledby="hud-controllers-title">${CONTROLLERS_BODY}</div>
     <!-- The versus setup pane (docs/superpowers/plans/2026-08-21-versus-setup-menu.md,
          docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md §3): reached from
          the title screen's own Versus button above, following the exact panel template
@@ -2658,10 +2644,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
   const controllersOpenBtn = el.querySelector('.hud-controllers-open') as HTMLButtonElement;
   const controllersView = el.querySelector('.hud-controllers') as HTMLElement;
-  const controllersTitleEl = el.querySelector('.hud-controllers-title') as HTMLElement;
-  const controllerRowsEl = el.querySelector('.hud-controllers .hud-controller-rows') as HTMLElement;
-  const controllersUnsupportedEl = el.querySelector('.hud-controllers-unsupported') as HTMLElement;
-  const controllersBackBtn = el.querySelector('.hud-controllers-back') as HTMLButtonElement;
   const versusOpenBtn = el.querySelector('.hud-versus-open') as HTMLButtonElement;
   const campaignOpenBtn = el.querySelector('.hud-campaign-open') as HTMLButtonElement;
   const versusSetupView = el.querySelector('.hud-versus-setup') as HTMLElement;
@@ -2924,7 +2906,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // The controller assignment UI's one write path -- see onReassignSlot's own doc
   // comment. The panel that fires this lands separately; the subscription exists now so
   // loop.ts's reassignSlot has somewhere real to register.
-  const reassignSlotCbs: Array<(slot: number, source: SlotSource) => void> = [];
   let earnedIds: ReadonlySet<AchievementId> = new Set();
   const settingsOpenCbs: Array<() => void> = [];
   const settingsCloseCbs: Array<() => void> = [];
@@ -2954,8 +2935,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     versusSetupOpen = false;
     for (const cb of versusSetupCloseCbs) cb();
   }
-  const controllersOpenCbs: Array<() => void> = [];
-  const controllersCloseCbs: Array<() => void> = [];
   const selfTestOpenCbs: Array<() => void> = [];
   const selfTestCloseCbs: Array<() => void> = [];
   /**
@@ -2974,10 +2953,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /** Whether the workbench is on screen. Tracked for the self-test's reason: open and close fire once each. */
   let galleryOpen = false;
   const recordsOpenCbs: Array<() => void> = [];
-  let currentAssignment: Assignment = [];
   let currentDetectedPads: readonly DetectedPad[] = [];
-  /** Fails closed: see setBotAssignmentAllowed's doc comment on the Hud interface. */
-  let botAssignmentAllowedNow = false;
 
   /** The Records table's two columns, and nothing else -- see setStats. */
   let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
@@ -3624,6 +3600,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const ACH_SURFACE: Surface = { el: achView, hidden: 'hud-achievements--hidden' };
   const LEVELSELECT_SURFACE: Surface = { el: levelSelectView, hidden: 'hud-levelselect--hidden' };
   const CONTROLLERS_SURFACE: Surface = { el: controllersView, hidden: 'hud-controllers--hidden' };
+  const controllers = createControllersPane(
+    {
+      enterSurface,
+      closeSurface,
+      isSurfaceOpen,
+      open: (opener) => openLayer('controllers', opener),
+      back,
+    },
+    CONTROLLERS_SURFACE,
+    controllersOpenBtn,
+    {
+      // The host's list, because Versus Setup renders a device column from the same one and a
+      // `Hud` member writes it -- the spec's rule 4 ruling.
+      detectedPads: () => currentDetectedPads,
+      // The pane's one route-dependent value, supplied rather than derived: see the pane's own
+      // doc comment for why it is not a host member.
+      headingText: () => (shownState === 'paused' ? 'Controllers' : "Choose who's playing"),
+    },
+  );
   const VERSUS_SETUP_SURFACE: Surface = { el: versusSetupView, hidden: 'hud-versus-setup--hidden' };
   const SETTINGS_SURFACE: Surface = { el: settingsView, hidden: 'hud-settings--hidden' };
   const ABOUT_SURFACE: Surface = { el: aboutView, hidden: 'hud-about--hidden' };
@@ -4366,116 +4361,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * input layer stays free of copy.
    */
 
-  function renderControllerRowsInto(container: HTMLElement, assignment: Assignment): void {
-    const restoreFocus = captureFocus(container);
-    container.replaceChildren();
-    for (let slot = 0; slot < assignment.length; slot++) {
-      const source = assignment[slot];
-      const row = document.createElement('div');
-      row.className = 'hud-controller-row';
-      row.dataset.slot = String(slot);
 
-      const label = document.createElement('span');
-      label.className = 'hud-controller-row-label';
-      label.textContent = `Player ${slot + 1}`;
 
-      const current = document.createElement('span');
-      current.className = 'hud-controller-row-current';
-      current.textContent = slotSourceLabel(source, currentDetectedPads);
-      const disconnected =
-        source.kind === 'gamepad' && !currentDetectedPads.some((p) => p.padIndex === source.padIndex);
-      current.classList.toggle('hud-controller-row-current--disconnected', disconnected);
-      if (disconnected) current.textContent += ' — disconnected';
-      // An assigned pad Tanks cannot read (issue #597) is present, so it is not
-      // "disconnected", and without this it reads exactly like a pad that works.
-      if (source.kind === 'gamepad' && unsupportedPad(source.padIndex, currentDetectedPads)) {
-        current.textContent += NOT_SUPPORTED;
-      }
-
-      row.append(label, current);
-
-      // `'bot'` is offered only where a bot may legitimately drive a player tank -- see
-      // `botAssignmentAllowed`. Omitted from the list rather than rendered disabled: a
-      // greyed-out control in the campaign advertises a capability the campaign does not
-      // have, and `loop.ts` refuses the reassignment independently anyway.
-      const candidates: SlotSource[] = [
-        { kind: 'keyboard' },
-        ...(botAssignmentAllowedNow ? [{ kind: 'bot' } as SlotSource] : []),
-        { kind: 'none' },
-        ...currentDetectedPads.map((p): SlotSource => ({ kind: 'gamepad', padIndex: p.padIndex })),
-      ];
-      for (const candidate of candidates) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'ui-btn ui-selectable hud-controller-source-btn';
-        btn.textContent = candidateLabel(candidate, currentDetectedPads);
-        btn.dataset.candidate = candidate.kind === 'gamepad' ? `gamepad-${candidate.padIndex}` : candidate.kind;
-        setSelected(btn, sameSlotSource(candidate, source));
-        // A pad Tanks cannot read is SHOWN, refused, and pointed at its reason (issue #597):
-        // listing it is what separates "your browser reports it but the game cannot use it"
-        // from "nothing was detected". It gets no reassign listener, so a synthetic click
-        // cannot assign a pad the reader would sample as neutral every tick.
-        if (candidate.kind === 'gamepad' && unsupportedPad(candidate.padIndex, currentDetectedPads)) {
-          btn.textContent += NOT_SUPPORTED;
-          btn.disabled = true;
-          describeDisabledReason(btn, controllersUnsupportedEl.id);
-          row.appendChild(btn);
-          continue;
-        }
-        const forSlot = slot; // captured per-iteration, not the loop's shared binding
-        btn.addEventListener('click', () => {
-          for (const cb of reassignSlotCbs) cb(forSlot, candidate);
-        });
-        row.appendChild(btn);
-      }
-      container.appendChild(row);
-    }
-    const unreadable = currentDetectedPads.filter((p) => p.unsupported !== undefined);
-    // NOT point-free. `unsupportedSentence` takes the live pad list as its second
-    // argument since #556 moved it out of this closure, and `Array.map` passes the INDEX
-    // there -- which typechecks only because the compiler refused it here. A signature
-    // whose second parameter happened to be optional would have compiled and silently
-    // named every pad from an index-shaped list.
-    controllersUnsupportedEl.textContent = unreadable
-      .map((pad) => unsupportedSentence(pad, currentDetectedPads))
-      .join(' ');
-    controllersUnsupportedEl.classList.toggle('hud-controllers-unsupported--hidden', unreadable.length === 0);
-    restoreFocus();
-  }
-
-  function renderControllerRows(): void {
-    renderControllerRowsInto(controllerRowsEl, currentAssignment);
-  }
-
-  /**
-   * The single chokepoint for both the panel's own Back button AND setState's
-   * unconditional close -- see onControllersOpen/onControllersClose's doc comment.
-   * Guarded on the ACTUAL transition, same as Customize's `show`, so loop.ts's window
-   * listener add/remove never sees a redundant open or close.
-   */
-  function showControllers(show: boolean, instant = false): void {
-    // Read before the transition begins -- same reason as Customize's `show`.
-    const wasOpen = isSurfaceOpen(CONTROLLERS_SURFACE);
-    if (show) {
-      swapSurface(openSurface(), CONTROLLERS_SURFACE, () => {
-        // The only copy that differs between the two entry points -- see this panel's own
-        // markup comment.
-        controllersTitleEl.textContent =
-          shownState === 'paused' ? 'Controllers' : "Choose who's playing";
-        renderControllerRows();
-        controllersView.focus();
-        if (!wasOpen) for (const cb of controllersOpenCbs) cb();
-      });
-    } else {
-      closeSurface(
-        CONTROLLERS_SURFACE,
-        () => {
-          if (wasOpen) for (const cb of controllersCloseCbs) cb();
-        },
-        instant,
-      );
-    }
-  }
 
   /**
    * Roving-tabindex keyboard (and future D-pad) navigation between the HUD's panels.
@@ -4803,11 +4690,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     levelselect: { container: levelSelectView, open: () => showLevelSelect(true), close: () => showLevelSelect(false) },
     controllers: {
       container: controllersView,
-      open: () => showControllers(true),
-      close: () => showControllers(false),
+      open: () => controllers.show(true),
+      close: () => controllers.show(false),
       /** Same shape as `customize` above: the pane's subscribers own the pad listeners. */
       release: () => {
-        if (isSurfaceOpen(CONTROLLERS_SURFACE)) for (const cb of controllersCloseCbs) cb();
+        if (isSurfaceOpen(CONTROLLERS_SURFACE)) controllers.release();
       },
     },
     'versus-setup': {
@@ -6553,9 +6440,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
   levelSelectBackBtn.addEventListener('click', blurIfPointer);
 
-  const handleControllersOpen = (): void => {
-    openLayer('controllers', controllersOpenBtn);
-  };
   // The Settings -> Controls entry (issue #226), and the durable one now that the Main
   // Menu no longer carries a Controllers peer. It REPLACES the Settings pane rather than
   // covering it, like every other pane-to-pane move in this file, so Back returns to the
@@ -6565,20 +6449,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleSettingsControllersOpen = (): void => {
     openLayer('controllers', settingsControllersBtn);
   };
-  // Reachable from 'paused' as well as the Main Menu (owner ruling: "in case controllers
-  // disconnect"), which is why this panel's Back was the one that could never hard-code
-  // its destination. The layer records the surface it was opened over, so Back from a
-  // paused round returns to the paused round -- the same rule every other pane now
-  // follows rather than a special case for this one.
-  const handleControllersBack = (): void => {
-    back();
-  };
-  controllersOpenBtn.addEventListener('click', handleControllersOpen);
-  controllersOpenBtn.addEventListener('click', blurIfPointer);
   settingsControllersBtn.addEventListener('click', handleSettingsControllersOpen);
   settingsControllersBtn.addEventListener('click', blurIfPointer);
-  controllersBackBtn.addEventListener('click', handleControllersBack);
-  controllersBackBtn.addEventListener('click', blurIfPointer);
 
   // ---- Versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
   // design.md) --------------------------------------------------------------------
@@ -7469,7 +7341,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // not only the panel's own Back button. Omitted, the panel -- and its live
     // gamepadconnected/disconnected listeners -- would leak onto the live game on
     // Resume, since 'paused' -> 'playing' is one of this function's own early returns.
-    showControllers(false, true); // instant, same reason as Customize above
+    controllers.show(false, true); // instant, same reason as Customize above
     // A bare class add, not routed through showVersusSetup(false), which would animate a
     // Back. Its subscribers are released explicitly instead, for Settings' reason below: a
     // match started from the pane would otherwise keep `route-ui.ts`'s pad hotplug
@@ -8179,7 +8051,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       customize.onPickSkin(cb);
     },
     onReassignSlot(cb: (slot: number, source: SlotSource) => void): void {
-      reassignSlotCbs.push(cb);
+      controllers.onReassignSlot(cb);
     },
     // Unconditional, like setLevelSelect -- NOT gated on the panel being open (unlike
     // setAchievements/setOutcome's convention): "REPLACE, never append" means .hud-
@@ -8187,8 +8059,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // the panel has ever opened) and a mid-session hotplug both land correctly whenever
     // the panel is next shown, with no separate "refresh on open" path to keep in sync.
     setControllers(assignment: Assignment): void {
-      currentAssignment = assignment;
-      renderControllerRows();
+      controllers.setControllers(assignment);
       // NO versus-pane refresh here any more (issue #260). These rows used to mirror
       // `currentAssignment`, so a session reassignment had to repaint them; they now
       // render the RETAINED ROLES and a device derived from `currentDetectedPads`,
@@ -8197,7 +8068,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     setDetectedPads(pads: readonly DetectedPad[]): void {
       currentDetectedPads = pads;
-      renderControllerRows();
+      controllers.refresh();
       // The versus pane's derived device column AND its Start gate both read the pad
       // list (`resolveSources`), so a hotplug or an unplug while the pane is open has
       // to repaint them -- that is what turns a controller pulled mid-setup into a
@@ -8205,8 +8076,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       renderVersusSlotRows();
     },
     setBotAssignmentAllowed(allowed: boolean): void {
-      botAssignmentAllowedNow = allowed;
-      renderControllerRows();
+      controllers.setBotAssignmentAllowed(allowed);
       // Not the versus pane: this flag gates whether a bot may drive a player tank in
       // the RUNNING session (the campaign refuses it), and the setup pane is a versus
       // pane, where Bot is always a legitimate slot role -- `defaultSlots` makes it the
@@ -8222,10 +8092,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       settingsCloseCbs.push(cb);
     },
     onControllersOpen(cb: () => void): void {
-      controllersOpenCbs.push(cb);
+      controllers.onControllersOpen(cb);
     },
     onControllersClose(cb: () => void): void {
-      controllersCloseCbs.push(cb);
+      controllers.onControllersClose(cb);
     },
     setPadDiagnostics(pads: readonly PadDiagnostic[]): void {
       selfTest.update(pads);
@@ -8446,12 +8316,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       chooseLevelBtn.removeEventListener('click', blurIfPointer);
       levelSelectBackBtn.removeEventListener('click', handleLevelSelectBack);
       levelSelectBackBtn.removeEventListener('click', blurIfPointer);
-      controllersOpenBtn.removeEventListener('click', handleControllersOpen);
-      controllersOpenBtn.removeEventListener('click', blurIfPointer);
       settingsControllersBtn.removeEventListener('click', handleSettingsControllersOpen);
       settingsControllersBtn.removeEventListener('click', blurIfPointer);
-      controllersBackBtn.removeEventListener('click', handleControllersBack);
-      controllersBackBtn.removeEventListener('click', blurIfPointer);
       versusOpenBtn.removeEventListener('click', handleVersusOpen);
       versusOpenBtn.removeEventListener('click', blurIfPointer);
       versusStartBtn.removeEventListener('click', handleVersusStart);
@@ -8469,6 +8335,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       confirmCancelBtn.removeEventListener('click', handleConfirmCancel);
       confirmCancelBtn.removeEventListener('click', blurIfPointer);
       customize.dispose(); // the Customize opener's and Back button's listeners
+      controllers.dispose(); // the Controllers opener's and Back button's listeners
       recordsOpenBtn.removeEventListener('click', handleRecordsOpen);
       recordsOpenBtn.removeEventListener('click', blurIfPointer);
       for (const btn of recordsTabStatsBtns) {

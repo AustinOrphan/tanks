@@ -1,13 +1,13 @@
 {
   "id": "assigned-unsupported-pad-reads-as-working",
-  "file": "src/game/hud.ts",
-  "find": "      if (source.kind === 'gamepad' && unsupportedPad(source.padIndex, currentDetectedPads)) {\n        current.textContent += NOT_SUPPORTED;\n      }\n",
+  "file": "src/game/controllers-pane.ts",
+  "find": "      if (source.kind === 'gamepad' && unsupportedPad(source.padIndex, pads)) {\n        current.textContent += NOT_SUPPORTED;\n      }\n",
   "replace": "\n",
   "expect": "killed",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
-  "why": "Issue #597. A slot already bound to a pad Tanks cannot read shows that pad as its current source with no 'not supported' suffix, which is exactly how a working pad reads. The pad is present, so the disconnected suffix does not fire either. Killed by the assigned-unsupported-pad case. ANCHOR REPOINTED (issue #556): the controller label helpers moved from `createHud`'s closure to `src/game/controller-labels.ts`, taking the live pad list as a parameter instead of reading `currentDetectedPads` from scope. The mutation is unchanged in meaning; only where the line lives, and its indentation, moved.",
+  "why": "Issue #597. A slot already bound to a pad Tanks cannot read shows that pad as its current source with no 'not supported' suffix, which is exactly how a working pad reads. The pad is present, so the disconnected suffix does not fire either. Killed by the assigned-unsupported-pad case. ANCHOR REPOINTED (issue #556): the controller label helpers moved from `createHud`'s closure to `src/game/controller-labels.ts`, taking the live pad list as a parameter instead of reading `currentDetectedPads` from scope. The mutation is unchanged in meaning; only where the line lives, and its indentation, moved. Re-pointed when the Controllers pane moved to `controllers-pane.ts` (issue #556). The body is unchanged; `currentDetectedPads` became the local `pads`, because the list is now the host's and reaches this renderer as a value rather than a closure read.",
   "killedBy": [
     "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) a pad the browser reports but Tanks cannot read (issue #597) marks a slot whose ASSIGNED pad cannot be read, rather than showing it as working"
   ]

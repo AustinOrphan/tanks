@@ -19,6 +19,7 @@ const paneSources = import.meta.glob('./*-pane.ts', {
 /** Every extracted pane, and the host members it may call. Adding a pane adds a row. */
 const HOST_KEYS: Readonly<Record<string, readonly string[]>> = {
   './customize-pane.ts': ['back', 'closeSurface', 'enterSurface', 'isSurfaceOpen', 'open'],
+  './controllers-pane.ts': ['back', 'closeSurface', 'enterSurface', 'isSurfaceOpen', 'open'],
 };
 
 const withoutComments = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
