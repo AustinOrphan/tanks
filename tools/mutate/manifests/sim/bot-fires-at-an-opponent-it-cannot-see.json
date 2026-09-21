@@ -1,0 +1,14 @@
+{
+  "id": "bot-fires-at-an-opponent-it-cannot-see",
+  "file": "src/sim/ai/player-profile.ts",
+  "find": "  const target: Tank | null = threats.engagedInSight ? threats.engaged : null;",
+  "replace": "  const target: Tank | null = threats.engaged;",
+  "expect": "killed",
+  "tests": [
+    "src/sim/ai/player-profile.test.ts"
+  ],
+  "killedBy": [
+    "issue #893: one opponent drives movement AND fire, not two holds its turret when NOTHING is visible, rather than tracking the tank behind the wall"
+  ],
+  "why": "Drops the line-of-sight half of the firing gate. `engaged` falls back to the nearest opponent when none is visible, so without this test a bot acquires a firing solution on a tank behind a wall: `hasSolution` goes true, the reaction clock runs, and the bot shoots into the wall it is driving toward. This is the half of `engaged = nearestVisible ?? nearest` that keeps the unification a refactor rather than a lethality change -- the fallback exists to give MOVEMENT an opponent when nothing is visible, never to give firing one."
+}

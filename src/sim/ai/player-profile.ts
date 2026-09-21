@@ -214,17 +214,25 @@ function isOpponent(world: World, subject: Tank, other: Tank): boolean {
  * one O(tanks) loop, no pairwise term, so folding it into `decidePlayerInput` keeps the
  * whole function O(tanks+mines+walls) per tick, the order it already was.
  *
- * Carries only what has a real consumer today: `nearest` (the movement band and the
- * mine gate both still reason about ONE specific opponent) and `centroid` (the retreat
- * branch's whole-map answer to "which way is actually away"). Second-nearest and a bare
- * opponent count were part of an earlier draft and were cut before landing -- nothing
+ * Carries only what has a real consumer today: `engaged` with its `engagedInSight` flag (the
+ * one opponent movement, mines, aim and fire all reason about -- issue #893) and `centroid`
+ * (the retreat branch's whole-map answer to "which way is actually away"). Second-nearest and
+ * a bare opponent count were part of an earlier draft and were cut before landing -- nothing
  * in this file ever read them, and a computed value with no consumer is untestable dead
  * weight, not scaffolding for later; add them back only alongside the consumer that
  * needs them.
  */
 interface ThreatSummary {
-  /** Same tank the old nearestEnemy(world, subject) returned. */
-  nearest: Tank | null;
+  /**
+   * The one opponent this tick: nearest visible, or nearest outright when none is visible.
+   * Every consumer reads THIS. See `assessThreats` for why it is not two fields.
+   */
+  engaged: Tank | null;
+  /**
+   * Whether `engaged` is the one that can be seen, which is the only thing entitled to a
+   * firing solution. False also when there are no opponents at all.
+   */
+  engagedInSight: boolean;
   /**
    * Centroid of every opponent's position, or null when there are none. Equal to
    * `nearest.pos` when there is exactly one opponent -- every consumer that reads this
@@ -235,9 +243,31 @@ interface ThreatSummary {
   centroid: Vec2 | null;
 }
 
+/**
+ * The ONE opponent this tick, and everything the decision needs to know about it.
+ *
+ * There used to be two derivations (issue #893). This pass found the nearest opponent by
+ * distance and drove movement and the mine gate with it; a second loop further down found the
+ * nearest opponent WITH LINE OF SIGHT and drove aim, the reaction clock and fire. Different
+ * predicates, so whenever the closest opponent stood behind a wall and a farther one did not,
+ * the bot drove at one tank and shot at another on the same tick.
+ *
+ * `engaged` is `nearestVisible ?? nearest`, and that choice is what makes this a refactor
+ * rather than a balance change: **the firing path is bit-identical to what it replaced.**
+ * Where an opponent is visible, `engaged` IS the nearest visible one, so aim and fire see the
+ * same tank they always did. Where none is visible, `engagedInSight` is false, `hasSolution`
+ * is false, and the bot holds fire exactly as the old `target === null` branch did. What
+ * changes is only movement and mines, and only in the case the two used to disagree -- which
+ * is the defect.
+ *
+ * `nearest` is deliberately NOT exposed. A second opinion available to a caller is how the
+ * two derivations grew apart in the first place.
+ */
 function assessThreats(world: World, subject: Tank): ThreatSummary {
   let nearest: Tank | null = null;
   let nearestDist = Infinity;
+  let nearestVisible: Tank | null = null;
+  let nearestVisibleDist = Infinity;
   let count = 0;
   let sumX = 0;
   let sumY = 0;
@@ -251,9 +281,19 @@ function assessThreats(world: World, subject: Tank): ThreatSummary {
       nearestDist = d;
       nearest = t;
     }
+    // One loop, same line-of-sight call count as the two it replaces: the old scan tested
+    // every opponent too, just further down the function.
+    if (d < nearestVisibleDist && lineOfSight(subject.pos, t.pos, world.walls)) {
+      nearestVisibleDist = d;
+      nearestVisible = t;
+    }
   }
   return {
-    nearest,
+    engaged: nearestVisible ?? nearest,
+    engagedInSight: nearestVisible !== null,
+    // WHOLE-MAP, deliberately, and not narrowed to `engaged` with the rest. This is the
+    // retreat direction (`seekLikeMove`), and backing away from the one tank you are engaging
+    // while reversing into the two behind you is worse than the defect this change fixes.
     centroid: count > 0 ? { x: sumX / count, y: sumY / count } : null,
   };
 }
@@ -276,14 +316,15 @@ function blend(toward: Vec2, wander: Vec2): Vec2 {
  * WANDER_TICKS ticks -- one cadence for both, rather than a separate clock for each.
  *
  * Directive A, part 2: the RETREAT branch pulls away from `threats.centroid`, not
- * `threats.nearest.pos` -- retreating from only the closest opponent can walk the
+ * `threats.engaged.pos` -- retreating from only the opponent you are engaging can walk the
  * player straight at a second one, and the centroid is the whole-map-aware answer to
- * "which way is actually away from the pressure". `centroid` equals `nearest.pos`
- * exactly when there is only one opponent (see ThreatSummary's doc comment), so this is
- * behaviour-identical to the old nearest-only retreat in the single-opponent case and
- * only diverges once a second opponent is in play -- the same reduction the mine/aim
- * gates below still use `threats.nearest` for directly, since a live shot or a mine
- * drop is about ONE specific opponent, not the mass.
+ * "which way is actually away from the pressure". `centroid` equals the engaged tank's
+ * position exactly when there is only one opponent (see ThreatSummary's doc comment), so
+ * this is behaviour-identical to the old nearest-only retreat in the single-opponent case
+ * and only diverges once a second opponent is in play. The approach band and the mine gate
+ * read `threats.engaged` directly instead, since driving at, shooting at or mining ONE
+ * specific opponent is the thing issue #893 made them agree about; the mass is a retreat
+ * question only.
  */
 function seekLikeMove(world: World, player: Tank, rnd: () => number, state: PlayerAiState, threats: ThreatSummary): Vec2 {
   if (state.wanderTicksLeft <= 0) {
@@ -294,7 +335,7 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
   state.wanderTicksLeft -= 1;
   const wander = fromAngle(state.wanderHeading);
 
-  const nearest = threats.nearest;
+  const nearest = threats.engaged;
   if (!nearest) return wander;
 
   const d = vdist(player.pos, nearest.pos);
@@ -427,15 +468,12 @@ export function decidePlayerInput(
   state.intentTicks = committed.nextIntentTicks;
   const move = committed.move;
 
-  // ---- Targeting: the nearest enemy the player can actually SEE. ----
-  let target: Tank | null = null;
-  let bestDist = Infinity;
-  for (const t of world.tanks) {
-    if (!isOpponent(world, player, t)) continue;
-    if (!lineOfSight(player.pos, t.pos, world.walls)) continue;
-    const d = vdist(player.pos, t.pos);
-    if (d < bestDist) { bestDist = d; target = t; }
-  }
+  // ---- Targeting: the opponent already resolved for this tick. ----
+  // This used to be a SECOND scan with its own predicate (issue #893), which is how a bot
+  // came to drive at one tank while shooting at another. `engaged` is `nearestVisible ??
+  // nearest`, so this line picks out exactly the tank the old loop found -- the nearest
+  // visible one -- and yields null in exactly the case the old loop found nothing.
+  const target: Tank | null = threats.engagedInSight ? threats.engaged : null;
 
   // No tank in sight: hold the current turret heading rather than snapping to some
   // default or firing on a wall. An earlier version aimed at and fired on an intact
@@ -486,7 +524,7 @@ export function decidePlayerInput(
   // mine while already standing within the PERCEIVED flee radius of a live mine (own or
   // not) -- the same margin dangerAvoidMove now flees to, so a mine is never dropped
   // somewhere the player's own (possibly mistaken) read says it would have to dodge again.
-  const nearest = threats.nearest;
+  const nearest = threats.engaged;
   // `seen`, not `world`: this is a hazard read, so it goes through the same believed picture
   // the dodge above did. A mine the bot has not noticed cannot be a reason not to lay one.
   const nearLiveMine = seen.mines.some(
