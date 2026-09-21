@@ -639,6 +639,36 @@ page** (`THREE.REVISION`, or the package's own export). `node_modules/.vite` cac
 pre-bundle per dependency version, so a stale cache can serve a different version again from
 the one on disk; `npx vite optimize --force` is what clears it.
 
-**The fix is `npm ci` in the checkout that owns the install**, run deliberately. Reinstalling
-underneath a running gate breaks it, so on a shared machine it belongs at a quiet boundary
-rather than to whoever hits the symptom first.
+**The fix is not `npm ci` on its own.** `npm ci` resolves the lockfile *in the checkout it runs
+in*. If that checkout is itself behind, the command succeeds, installs the stale versions again,
+and reports nothing wrong. Check the checkout before installing:
+
+```sh
+git -C <checkout> status --porcelain                          # must be empty
+git -C <checkout> pull --ff-only
+npm --prefix <checkout> ci
+npm --prefix <checkout> install --no-save playwright@1.62.0
+```
+
+Measured on 2026-09-21, which is why this reads as it does: the shared install held `three`
+0.169.0 and `jsdom` 29.1.1, and so did its own checkout's `package.json` (`^0.169.0`, `^29.1.1`).
+The install was not stale relative to its checkout -- the checkout was behind, `package.json`
+dated 2026-09-15 and the lockfile 2026-09-13. `npm ci` alone would have reinstalled 0.169.
+
+**The last line restores what `npm ci` deletes.** `playwright` is not a declared dependency, so
+the install removes it and every browser gate in every worktree symlinked to that install fails
+until it is back. The downloaded browsers under `~/.cache/ms-playwright` survive; only the node
+package needs reinstalling.
+
+**Run it deliberately.** Reinstalling underneath a running gate breaks it, so on a shared machine
+it belongs at a quiet boundary rather than to whoever hits the symptom first.
+
+**Then expect stale branches to go red, and read those failures correctly.** A branch written
+while the install was stale can assert the old library's behaviour, so the same install that
+fixes `main` breaks it. 1 of the 21 symlinked worktrees was sampled after the install above and
+reported 3 failures over 92 tests, every one the mirror image of the original symptom --
+`expected '942.08px' to be '92vw'` where `main` asserts a px string and the computed value, and a
+generated notices file produced against the older `three`. That is a branch wanting a merge from
+`main`, not an install wanting another pass. The other 20 were not swept, and none of the 21 was
+measured before the reinstall, so the direction of that change is inferred from the assertions
+rather than observed.
