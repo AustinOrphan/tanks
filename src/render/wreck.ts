@@ -3,6 +3,7 @@ import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import { hullGeometry } from './tank-model';
 import { resolveOwnerColor } from '../presentation/identity';
+import type { WreckEffect } from '../presentation/wreck';
 
 /**
  * A detached, pooled, self-expiring wreck silhouette at a tank's death position and heading
@@ -31,23 +32,6 @@ import { resolveOwnerColor } from '../presentation/identity';
  * silently swing to its owner's new spawn heading. `Tank.aiLastSeenPos` carries the same
  * warning for the same reason.
  */
-
-/**
- * How a wreck leaves. A FEEL choice, and deliberately an arm rather than a decision: issue
- * #232 lists "fade, crumble, sink, or otherwise" without picking, and "clearly inert and
- * distinguishable from a living or respawning tank" is a look rather than a threshold.
- *
- * `crumble` -- breaking into several settling pieces -- is NOT here. It is the only one of the
- * issue's suggestions that changes the pool's shape, because one death becomes several
- * objects and the cap stops meaning what it says. Building a one-piece imitation of it and
- * calling it `crumble` would put a fake option in front of the ruling.
- */
-export const WRECK_EFFECTS = ['sink', 'fade', 'tilt'] as const;
-export type WreckEffect = (typeof WRECK_EFFECTS)[number];
-
-export function isWreckEffect(value: unknown): value is WreckEffect {
-  return typeof value === 'string' && (WRECK_EFFECTS as readonly string[]).includes(value);
-}
 
 export interface WreckSystem {
   /** One wreck per `tank-destroyed` event in this frame, at the event's own death position. */

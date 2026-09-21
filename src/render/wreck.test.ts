@@ -5,7 +5,8 @@
 // .claude/rules/rendering.md says.
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { createWreckSystem, isWreckEffect, WRECK_EFFECTS, type WreckEffect } from './wreck';
+import { createWreckSystem } from './wreck';
+import { WRECK_EFFECTS, type WreckEffect } from '../presentation/wreck';
 import { createWorld, type World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank } from '../sim/types';
@@ -169,6 +170,24 @@ describe('every arm leaves, and they differ on the way', () => {
       expect(opacity, `${effect} still fades`).toBeLessThan(1);
     }
   });
+
+  it('takes the policy MID-FLIGHT, not only at the next death', () => {
+    // death-pulse.ts's sibling contract. A player who turns the setting on wants the movement
+    // to stop NOW; a wreck that keeps sinking for its remaining seconds is the one on screen
+    // when they changed it. Settled by reading the flag per update rather than latching it at
+    // spawn, which is invisible to a test that sets the policy first.
+    const scene = new THREE.Scene();
+    const sys = createWreckSystem(scene, 'sink');
+    sys.spawn([destroyed(1, 0, 0)], world([tank(1, 0, 0)]));
+    sys.update(2);
+    const m = visible(scene)[0];
+    const sunkTo = m.position.y;
+    expect(sunkTo, 'the wreck never sank, so the toggle proves nothing').toBeLessThan(0.02);
+
+    sys.setReducedMotion(true);
+    sys.update(2);
+    expect(m.position.y, 'the wreck kept sinking after the policy changed').toBe(sunkTo);
+  });
 });
 
 describe('housekeeping', () => {
@@ -202,12 +221,5 @@ describe('housekeeping', () => {
     sys.spawn([destroyed(1, 1, 1)], w);
     expect(visible(scene)).toHaveLength(1);
     expect(wrecks(scene), 'clear leaked its meshes instead of pooling them').toHaveLength(before);
-  });
-
-  it('isWreckEffect accepts exactly the shipped arms', () => {
-    for (const e of WRECK_EFFECTS) expect(isWreckEffect(e), e).toBe(true);
-    for (const bad of ['crumble', 'CRUMBLE', '', 'sink ', null, 7, undefined]) {
-      expect(isWreckEffect(bad), String(bad)).toBe(false);
-    }
   });
 });

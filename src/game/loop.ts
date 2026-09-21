@@ -56,7 +56,7 @@ import {
   type SlotSource,
 } from '../input/assignment';
 import { createRenderer, type Renderer3D } from '../render/renderer';
-import type { WreckEffect } from '../render/wreck';
+import type { WreckEffect } from '../presentation/wreck';
 import {
   createTankPreview,
   PREVIEW_RENDER_SETTINGS,

@@ -26,7 +26,7 @@ import {
 import { FLAG_REGISTRY } from '../../src/game/devflags';
 import { ENEMY_ROLE_CUES } from '../../src/presentation/enemy-role';
 import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
-import { WRECK_EFFECTS } from '../../src/render/wreck';
+import { WRECK_EFFECTS } from '../../src/presentation/wreck';
 import { ACHIEVEMENTS } from '../../src/game/achievements';
 
 const inputs = (over: Record<string, unknown> = {}) => ({ level: 1, seed: 7, driver: 'autoplay', flags: {}, ...over });

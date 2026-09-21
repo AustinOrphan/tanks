@@ -18,7 +18,7 @@ import {
   isArrivalLanguage,
   type ArrivalLanguage,
 } from '../presentation/arrival-language';
-import { WRECK_EFFECTS, isWreckEffect, type WreckEffect } from '../render/wreck';
+import { WRECK_EFFECTS, isWreckEffect, type WreckEffect } from '../presentation/wreck';
 import { HUD_FONTS, isHudFont, type HudFont } from '../presentation/hud-font';
 import { STOCK_CUES, isStockCue, type StockCue } from '../presentation/stock-cue';
 import {
