@@ -1,0 +1,14 @@
+{
+  "id": "workflow-lint-retries-a-wrong-pin",
+  "file": "tools/workflow-lint/lint.mjs",
+  "find": "  return status === 408 || status === 429 || status >= 500;",
+  "replace": "  return true;",
+  "expect": "killed",
+  "tests": [
+    "tools/workflow-lint/lint.test.ts"
+  ],
+  "why": "The retry exists for one failure -- `verify (floor)` went red on `main` on 2026-09-21 with HTTP 504 from the shellcheck release asset, on a tree that touched no workflow -- and it must not swallow the opposite failure. Retrying every status makes a 404 from a wrong or withdrawn pin take three attempts and a backoff before failing, and buries the status that says the pin is wrong behind 'after 3 attempt(s)'. The download still succeeds and the digest check is untouched, so nothing else in the tool notices.",
+  "killedBy": [
+    "workflow lint download retry retries the statuses that are transient, and not the ones that mean a wrong pin"
+  ]
+}

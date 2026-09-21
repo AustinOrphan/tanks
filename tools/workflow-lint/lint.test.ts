@@ -6,10 +6,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
   ACTIONLINT_VERSION,
+  DOWNLOAD_ATTEMPTS,
   FIXTURES,
   PINS,
   SHELLCHECK_VERSION,
+  backoffMs,
   pinsFor,
+  retryableStatus,
   unreportedFixtures,
   verifyDigest,
   workflowFiles,
@@ -46,6 +49,32 @@ describe('workflow lint pins', () => {
     expect(() => verifyDigest(Buffer.from('actionlinT'), good, 'fixture archive')).toThrow(
       /fixture archive has SHA-256 [0-9a-f]{64}, pinned [0-9a-f]{64}; refusing to run it/,
     );
+  });
+});
+
+describe('workflow lint download retry', () => {
+  it('retries the statuses that are transient, and not the ones that mean a wrong pin', () => {
+    // 504 is the one that actually happened: `verify (floor)` went red on `main` on
+    // 2026-09-21 with HTTP 504 from the shellcheck release asset, on a tree that touched no
+    // workflow. 404 is the counter-case -- a wrong pin does not get better on the third try,
+    // and retrying it only makes the failure slower and its message less obvious.
+    for (const status of [500, 502, 503, 504, 408, 429]) {
+      expect(retryableStatus(status), `${status} is transient`).toBe(true);
+    }
+    for (const status of [400, 401, 403, 404, 410]) {
+      expect(retryableStatus(status), `${status} means the pin or the host is wrong`).toBe(false);
+    }
+  });
+
+  it('tries more than once, and waits longer each time', () => {
+    // Stated rather than assumed: with one attempt the retry does nothing, and with a flat
+    // zero backoff three attempts land inside the same bad second the first one hit.
+    expect(DOWNLOAD_ATTEMPTS).toBeGreaterThan(1);
+    const waits = Array.from({ length: DOWNLOAD_ATTEMPTS - 1 }, (_, i) => backoffMs(i + 1));
+    expect(waits.every((ms) => ms > 0), `backoffs were ${waits.join(', ')}`).toBe(true);
+    for (let i = 1; i < waits.length; i++) {
+      expect(waits[i], `backoff ${i + 1} does not exceed backoff ${i}`).toBeGreaterThan(waits[i - 1]);
+    }
   });
 });
 

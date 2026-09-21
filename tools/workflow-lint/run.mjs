@@ -16,11 +16,15 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   ACTIONLINT_VERSION,
+  DOWNLOAD_ATTEMPTS,
   FIXTURES,
   SHELLCHECK_VERSION,
+  backoffMs,
   pinsFor,
+  retryableStatus,
   unreportedFixtures,
   verifyDigest,
   workflowFiles,
@@ -41,9 +45,32 @@ async function binary(name, version, pin) {
   const exe = join(dir, pin.member);
   if (existsSync(exe)) return exe;
 
-  const response = await fetch(pin.url);
-  if (!response.ok) fail(`workflow lint: downloading ${pin.url} failed with HTTP ${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
+  // Retried, not because the network is unreliable in general but because this one is a
+  // required check: see DOWNLOAD_ATTEMPTS in lint.mjs for the failure it is here to absorb.
+  // The digest check below is unchanged, so a retry can only change whether the archive
+  // arrives, never which archive is accepted.
+  let bytes = null;
+  let lastFailure = '';
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+    if (attempt > 1) await sleep(backoffMs(attempt - 1));
+    let response;
+    try {
+      response = await fetch(pin.url);
+    } catch (error) {
+      lastFailure = `${error.message ?? error}`;
+      continue; // A thrown fetch is a transport failure, which is exactly the retryable kind.
+    }
+    if (response.ok) {
+      bytes = Buffer.from(await response.arrayBuffer());
+      break;
+    }
+    lastFailure = `HTTP ${response.status}`;
+    if (!retryableStatus(response.status)) break;
+  }
+  if (bytes === null) {
+    fail(`workflow lint: downloading ${pin.url} failed with ${lastFailure}`
+      + ` after ${DOWNLOAD_ATTEMPTS} attempt(s)`);
+  }
   verifyDigest(bytes, pin.sha256, `${name} ${version} archive`);
 
   // Extract into a sibling directory and rename into place, so an interrupted run never

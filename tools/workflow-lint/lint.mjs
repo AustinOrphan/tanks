@@ -81,6 +81,35 @@ export const PINS = {
 };
 
 /** The pins for this machine, or an error naming the platform and the supported ones. */
+/**
+ * How many times a pinned archive is fetched before the lint gives up, and how long it waits
+ * between tries.
+ *
+ * WHY THIS EXISTS. `verify (floor)` is a required check, and on 2026-09-21 it failed on `main`
+ * with `downloading .../shellcheck-v0.11.0.linux.x86_64.tar.gz failed with HTTP 504` -- a
+ * transient error from the release CDN, on a tree whose change touched no workflow. A single
+ * `fetch` with no retry turns one bad second at GitHub into a red required check and a manual
+ * re-run, and `verify (current)` fails behind it.
+ *
+ * A DIGEST, NOT A TRUST DECISION. Retrying is safe here precisely because the bytes are still
+ * checked against the SHA-256 pin afterwards: a retry can change WHETHER the archive arrives,
+ * never WHICH archive is accepted.
+ */
+export const DOWNLOAD_ATTEMPTS = 3;
+
+/**
+ * Whether an HTTP status is worth trying again. Server-side and rate-limit failures are
+ * transient; a 404 means the pin is wrong and retrying it just fails three times as slowly.
+ */
+export function retryableStatus(status) {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/** Linear backoff, so three attempts span about a second and a half rather than none. */
+export function backoffMs(attempt) {
+  return attempt * 500;
+}
+
 export function pinsFor(platform, arch) {
   const key = `${platform}-${arch}`;
   const pins = PINS[key];
