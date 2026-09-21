@@ -264,6 +264,7 @@ export type GameplayStatus = {
 
 import type { StatCounts } from './stats';
 import type { TypedOutcome, TypedOutcomeKind } from './app-state';
+import { sameSlotSource } from '../input/assignment';
 import type { Assignment, SlotSource } from '../input/assignment';
 import { unreadablePadIndices, type DetectedPad } from '../input/gamepad';
 import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
@@ -4360,10 +4361,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     }
   }
 
-  function sameSource(a: SlotSource, b: SlotSource): boolean {
-    if (a.kind !== b.kind) return false;
-    return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
-  }
 
   /**
    * REPLACE, never append -- the same "REPLACE, never append" convention `setLevelSelect`
@@ -4476,7 +4473,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         btn.className = 'ui-btn ui-selectable hud-controller-source-btn';
         btn.textContent = candidateLabel(candidate);
         btn.dataset.candidate = candidate.kind === 'gamepad' ? `gamepad-${candidate.padIndex}` : candidate.kind;
-        setSelected(btn, sameSource(candidate, source));
+        setSelected(btn, sameSlotSource(candidate, source));
         // A pad Tanks cannot read is SHOWN, refused, and pointed at its reason (issue #597):
         // listing it is what separates "your browser reports it but the game cannot use it"
         // from "nothing was detected". It gets no reassign listener, so a synthetic click

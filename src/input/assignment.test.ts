@@ -4,6 +4,7 @@ import {
   reassign,
   botAssignmentAllowed,
   createHeldInputSource,
+  sameSlotSource,
   type Assignment,
   type SlotSource,
 } from './assignment';
@@ -225,5 +226,44 @@ describe('botAssignmentAllowed: bots may not drive a player tank in the campaign
     expect(botAssignmentAllowed('ffa', true)).toBe(true);
     expect(botAssignmentAllowed('teams', false)).toBe(true);
     expect(botAssignmentAllowed('teams', true)).toBe(true);
+  });
+});
+
+describe('sameSlotSource: one implementation for a union with one identity field', () => {
+  // WHY THIS EXISTS AS A TEST AT ALL. This predicate was written twice -- `sameSlotSource` in
+  // game/loop.ts and `sameSource` in game/hud.ts, byte-identical bodies, and the only two
+  // occurrences in src/. They agreed, so nothing ever failed; the hazard was the next variant.
+  // `gamepad` is the one member of the union carrying an identity field, and a fifth variant
+  // with its own field would have had to be remembered in both copies.
+
+  it('matches by kind for every variant that carries no identity', () => {
+    // Population: the three identity-free variants of the four-member union.
+    const plain: SlotSource[] = [{ kind: 'keyboard' }, { kind: 'bot' }, { kind: 'none' }];
+    let checked = 0;
+    for (const s of plain) {
+      expect(sameSlotSource(s, { ...s })).toBe(true);
+      checked++;
+    }
+    expect(checked).toBe(3);
+    // ...and does not confuse two different identity-free kinds for each other.
+    expect(sameSlotSource({ kind: 'keyboard' }, { kind: 'bot' })).toBe(false);
+    expect(sameSlotSource({ kind: 'bot' }, { kind: 'none' })).toBe(false);
+  });
+
+  it('separates two gamepads by padIndex, which is the whole point', () => {
+    // THE discriminating case. A version comparing only `kind` passes every assertion above
+    // and fails exactly here -- and in the game it would treat a slot rebound from pad 0 to
+    // pad 1 as unchanged, so the reassignment would be skipped.
+    expect(sameSlotSource({ kind: 'gamepad', padIndex: 0 }, { kind: 'gamepad', padIndex: 0 })).toBe(true);
+    expect(sameSlotSource({ kind: 'gamepad', padIndex: 0 }, { kind: 'gamepad', padIndex: 1 })).toBe(false);
+  });
+
+  it('never reports a gamepad equal to a non-gamepad', () => {
+    const pad: SlotSource = { kind: 'gamepad', padIndex: 2 };
+    const others: SlotSource[] = [{ kind: 'keyboard' }, { kind: 'bot' }, { kind: 'none' }];
+    for (const other of others) {
+      expect(sameSlotSource(pad, other), other.kind).toBe(false);
+      expect(sameSlotSource(other, pad), other.kind).toBe(false);
+    }
   });
 });
