@@ -318,12 +318,22 @@ Because the baseline is JSON, the pull-request diff *is* the review:
 That is what pins #326's "a successful test run is not automatic approval of a changed
 design": the run cannot approve anything, because the run cannot write.
 
-### One member does not capture yet
+### `screen.startup.match-failed` no longer needs its note
 
-`screen.startup.match-failed` times out waiting for `.hud-alert` after `breakWebgl:
-'match-build-fails'`. Verified pre-existing at `b0035077`, before the 2026-09-19 merges, and
-invisible because nothing in required CI exercises it. It stays a listed member; the required
-check waits for it to pass.
+This section used to say that member "does not capture yet" -- that it timed out waiting for
+`.hud-alert` after `breakWebgl: 'match-build-fails'`, verified at `b0035077`, and that the
+required check was waiting for it to pass. **It passes.** Two `screens:check` runs on an
+ordinary Linux developer box report `PASS screen.startup.match-failed`, and it is in the
+checked subset: only the four `.played` states are excluded.
+
+Issue #851 is why. It moved that override from `createFramebuffer` to `framebufferTexture2D`,
+because three 0.186 had started allocating a framebuffer inside `new THREE.WebGLRenderer(...)`
+-- so the old override began throwing one statement too early and the capture landed on the
+fatal page instead of the overlay. The note predates that fix.
+
+The two states that genuinely capture without a picture are
+`screen.startup.unsupported-render` and `screen.startup.probe-blocked`, and they are issue
+#888's, not this note's.
 
 ## Known gap
 
