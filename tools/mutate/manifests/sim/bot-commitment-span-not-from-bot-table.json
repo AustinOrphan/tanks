@@ -9,7 +9,7 @@
   ],
   "why": "#891's third criterion is about PROVENANCE: the span must come from real per-bot configuration and not from `configFor('player')`, which roster.ts records as an inert value the schema demands. A literal span produces a bot that still commits, still holds, and still retargets for documented reasons -- every behavioural assertion passes. The tests tie the observed countdown to BOT_TARGET_COMMITMENT_SECONDS by name so the table is the thing being checked.",
   "killedBy": [
-    "the commitment window (issue #891) counts the span down one tick per step, from the configured seconds",
-    "the commitment window (issue #891) reads its span from the bot table for every difficulty, not from the inert player profile"
+    "the commitment span (issue #891) counts the span down one tick per step, from the configured seconds",
+    "the commitment span (issue #891) reads its span from the bot table for every difficulty, not from the inert player profile"
   ]
 }

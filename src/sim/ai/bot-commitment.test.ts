@@ -58,7 +58,7 @@ describe('a bot slot is what the simulation can see (issue #891)', () => {
   });
 });
 
-describe('the commitment window (issue #891)', () => {
+describe('the commitment span (issue #891)', () => {
   it('holds its first opponent for the full span even as a nearer one closes in', () => {
     // THE TEST THE FEATURE EXISTS FOR. A per-tick nearest scan -- the shipped behaviour
     // before this change -- switches the moment tank 3 becomes closer than tank 2, which
@@ -113,9 +113,9 @@ describe('the commitment window (issue #891)', () => {
     expect(BOT_DIFFICULTIES.length).toBe(3);
   });
 
-  it('drops a dead opponent at once rather than waiting out the window', () => {
+  it('drops a dead opponent at once rather than waiting out its span', () => {
     // Rule 5, and the criterion "cannot leave AI stuck on a stale opponent". The span is
-    // still running when tank 2 dies, so a window-only implementation would hold it.
+    // still running when tank 2 dies, so a span-only implementation would hold it.
     const w = world([
       tank(1, { x: 0, y: 0 }, { botDifficulty: 'normal' }),
       tank(2, { x: 4, y: 0 }),
@@ -340,7 +340,7 @@ describe('commitBotTarget directly (issue #891)', () => {
   it('reports the reason for the change it made', () => {
     const w = world([tank(1, { x: 0, y: 0 }, { botDifficulty: 'normal' }), tank(2, { x: 4, y: 0 })]);
     expect(commitBotTarget(w, w.tanks[0])).toBe('acquired');
-    expect(commitBotTarget(w, w.tanks[0]), 'no change inside the window').toBeNull();
+    expect(commitBotTarget(w, w.tanks[0]), 'no change inside the span').toBeNull();
     expect(w.tanks[0].aiRetargetAgeTicks, 'ages once a reason exists').toBe(1);
   });
 });
